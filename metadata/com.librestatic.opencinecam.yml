@@ -1,0 +1,21 @@
+Categories:
+  - Multimedia
+License: Apache-2.0
+WebSite: https://librestatic.com/opencinecam
+SourceCode: https://github.com/librestatic/opencinecam
+IssueTracker: https://github.com/librestatic/opencinecam/issues
+Changelog: https://github.com/librestatic/opencinecam/releases
+AutoName: OpenCineCam
+Summary: Capability-honest Camera2 recorder
+Description: |
+  Local-first Camera2 capture with explicit hardware evidence, bounded queues,
+  accessible controls, and no analytics or remote crash collection.
+RepoType: git
+Repo: https://github.com/librestatic/opencinecam.git
+Builds:
+  - versionName: 0.1.0
+    versionCode: 1
+    commit: v0.1.0
+    gradle:
+      - yes
+    subdir: app
