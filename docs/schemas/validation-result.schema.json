@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "stage": {
+      "type": "string",
+      "enum": [
+        "Advertised",
+        "Candidate",
+        "SessionCreated",
+        "FirstFrameReceived",
+        "Recorded",
+        "FileVerified",
+        "Sustained",
+        "EmpiricallyVerified",
+        "Failed",
+        "Certified"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "stage",
+        "status",
+        "observedAt"
+      ],
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "stale",
+            "notRun"
+          ]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "knownValue": {
+      "type": "object",
+      "required": [
+        "knowledge"
+      ],
+      "properties": {
+        "knowledge": {
+          "enum": [
+            "unknown",
+            "unsupported",
+            "known"
+          ]
+        },
+        "value": {},
+        "unit": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$id": "https://opencinecam.org/schema/validation-result.schema.json",
+  "title": "Validation Result",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "validationId",
+    "createdAt",
+    "subject",
+    "protocolVersion",
+    "checks",
+    "finalStage"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "validationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "type": "object"
+    },
+    "protocolVersion": {
+      "type": "string"
+    },
+    "checks": {
+      "type": "array"
+    },
+    "finalStage": {
+      "$ref": "#/$defs/stage"
+    }
+  },
+  "additionalProperties": true
+}

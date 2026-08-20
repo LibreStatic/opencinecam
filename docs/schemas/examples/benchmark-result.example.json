@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "benchmarkId": "123e4567-e89b-42d3-a456-426614174002",
+  "createdAt": "2026-08-20T00:00:00Z",
+  "destination": {
+    "kind": "internal"
+  },
+  "bytesWritten": 268435456,
+  "windows": [
+    {
+      "durationMs": 1000,
+      "bytesPerSecond": 100000000
+    }
+  ],
+  "requiredBytesPerSecond": 50000000,
+  "outcome": "pass"
+}

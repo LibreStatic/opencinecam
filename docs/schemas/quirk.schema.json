@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "stage": {
+      "type": "string",
+      "enum": [
+        "Advertised",
+        "Candidate",
+        "SessionCreated",
+        "FirstFrameReceived",
+        "Recorded",
+        "FileVerified",
+        "Sustained",
+        "EmpiricallyVerified",
+        "Failed",
+        "Certified"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "stage",
+        "status",
+        "observedAt"
+      ],
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "stale",
+            "notRun"
+          ]
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "knownValue": {
+      "type": "object",
+      "required": [
+        "knowledge"
+      ],
+      "properties": {
+        "knowledge": {
+          "enum": [
+            "unknown",
+            "unsupported",
+            "known"
+          ]
+        },
+        "value": {},
+        "unit": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$id": "https://opencinecam.org/schema/quirk.schema.json",
+  "title": "Quirk",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "quirkId",
+    "scope",
+    "effect",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "quirkId": {
+      "type": "string",
+      "pattern": "^OCC-QUIRK-[0-9]{4}$"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "buildFingerprintPattern"
+      ]
+    },
+    "effect": {
+      "type": "object",
+      "required": [
+        "kind"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  },
+  "additionalProperties": true
+}

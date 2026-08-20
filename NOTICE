@@ -1,0 +1,10 @@
+OpenCineCam
+Copyright 2026 OpenCineCam contributors
+
+OpenCineCam is distributed under the Apache License, Version 2.0. See
+LICENSE for the full license text.
+
+Third-party dependencies are resolved from the pinned Gradle version catalog,
+verified by Gradle dependency verification, and reported by the deterministic
+SBOM generator in tools/generate_sbom.py. Their own license terms remain in
+their published artifacts and are not replaced by this notice.

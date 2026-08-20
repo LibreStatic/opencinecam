@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "recordingId": "123e4567-e89b-42d3-a456-426614174001",
+  "createdAt": "2026-08-20T00:00:00Z",
+  "intent": {
+    "policy": "Strict"
+  },
+  "resolvedGraph": {
+    "video": "AVC/SDR8"
+  },
+  "events": [],
+  "validation": []
+}

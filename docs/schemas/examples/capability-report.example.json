@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "reportId": "123e4567-e89b-42d3-a456-426614174000",
+  "createdAt": "2026-08-20T00:00:00Z",
+  "device": {
+    "buildFingerprint": "redacted",
+    "sdkInt": 37,
+    "characteristicsDigest": "sha256:example"
+  },
+  "cameras": [],
+  "codecs": [],
+  "audio": {
+    "unprocessed": {
+      "knowledge": "unknown"
+    }
+  },
+  "evidence": []
+}
