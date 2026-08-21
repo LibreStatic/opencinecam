@@ -1,0 +1,795 @@
+plans:
+  - id: OCC-PLAN-001
+    title: "Repository and Android build bootstrap"
+    status: Done
+    revision: 1
+    milestone: M0
+    path: docs/plans/PLAN-001-repository-and-android-build-bootstrap.md
+    depends_on: []
+    blocks: [OCC-PLAN-002, OCC-PLAN-003, OCC-PLAN-004]
+    requirements: [OCC-NFR-001, OCC-PRIV-001, OCC-DIST-001, OCC-NFR-002]
+    adrs: [ADR-0001, ADR-0002, ADR-0027, ADR-0028]
+    risks: [RISK-016, RISK-018, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-002
+    title: "CI quality and test baseline"
+    status: Done
+    revision: 1
+    milestone: M0
+    path: docs/plans/PLAN-002-ci-quality-and-test-baseline.md
+    depends_on: [OCC-PLAN-001]
+    blocks: [OCC-PLAN-037, OCC-PLAN-059]
+    requirements: [OCC-NFR-001, OCC-PRIV-001, OCC-DIST-001, OCC-NFR-002]
+    adrs: [ADR-0001, ADR-0002, ADR-0027, ADR-0028]
+    risks: [RISK-016, RISK-018, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-003
+    title: "Licensing provenance and reproducibility"
+    status: Done
+    revision: 1
+    milestone: M0
+    path: docs/plans/PLAN-003-licensing-provenance-and-reproducibility.md
+    depends_on: [OCC-PLAN-001]
+    blocks: [OCC-PLAN-058, OCC-PLAN-059]
+    requirements: [OCC-NFR-001, OCC-PRIV-001, OCC-DIST-001, OCC-NFR-002]
+    adrs: [ADR-0001, ADR-0002, ADR-0027, ADR-0028]
+    risks: [RISK-016, RISK-018, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-004
+    title: "Capability and evidence domain model"
+    status: Done
+    revision: 1
+    milestone: M1
+    path: docs/plans/PLAN-004-capability-and-evidence-domain-model.md
+    depends_on: [OCC-PLAN-001]
+    blocks: [OCC-PLAN-005, OCC-PLAN-006, OCC-PLAN-007, OCC-PLAN-009, OCC-PLAN-013, OCC-PLAN-037, OCC-PLAN-045]
+    requirements: [OCC-FUNC-001, OCC-NFR-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0015, ADR-0026]
+    risks: [RISK-018, RISK-019, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-005
+    title: "Report sidecar and profile serialization"
+    status: Done
+    revision: 1
+    milestone: M1
+    path: docs/plans/PLAN-005-report-sidecar-and-profile-serialization.md
+    depends_on: [OCC-PLAN-004]
+    blocks: [OCC-PLAN-006, OCC-PLAN-011, OCC-PLAN-012, OCC-PLAN-019, OCC-PLAN-043, OCC-PLAN-054]
+    requirements: [OCC-FUNC-001, OCC-NFR-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0015, ADR-0026]
+    risks: [RISK-018, RISK-019, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-006
+    title: "Error taxonomy and Strict Adaptive policy engine"
+    status: Done
+    revision: 1
+    milestone: M1
+    path: docs/plans/PLAN-006-error-taxonomy-and-strict-adaptive-policy-engine.md
+    depends_on: [OCC-PLAN-004, OCC-PLAN-005]
+    blocks: [OCC-PLAN-010, OCC-PLAN-013, OCC-PLAN-017, OCC-PLAN-021, OCC-PLAN-024, OCC-PLAN-043]
+    requirements: [OCC-FUNC-001, OCC-NFR-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0015, ADR-0026]
+    risks: [RISK-018, RISK-019, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-007
+    title: "Camera enumeration and characteristics probe"
+    status: Done
+    revision: 1
+    milestone: M2
+    path: docs/plans/PLAN-007-camera-enumeration-and-characteristics-probe.md
+    depends_on: [OCC-PLAN-004]
+    blocks: [OCC-PLAN-008, OCC-PLAN-009, OCC-PLAN-010, OCC-PLAN-013, OCC-PLAN-015]
+    requirements: [OCC-CAM-001, OCC-CODEC-001, OCC-AUDIO-001, OCC-CAM-002]
+    adrs: [ADR-0005, ADR-0006, ADR-0007, ADR-0010, ADR-0029]
+    risks: [RISK-001, RISK-002, RISK-003, RISK-004, RISK-006]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-008
+    title: "Stream manual and HDR capability probe"
+    status: Done
+    revision: 1
+    milestone: M2
+    path: docs/plans/PLAN-008-stream-manual-and-hdr-capability-probe.md
+    depends_on: [OCC-PLAN-007]
+    blocks: [OCC-PLAN-009, OCC-PLAN-010, OCC-PLAN-015, OCC-PLAN-024, OCC-PLAN-030, OCC-PLAN-034, OCC-PLAN-040]
+    requirements: [OCC-CAM-001, OCC-CODEC-001, OCC-AUDIO-001, OCC-CAM-002]
+    adrs: [ADR-0005, ADR-0006, ADR-0007, ADR-0010, ADR-0029]
+    risks: [RISK-001, RISK-002, RISK-003, RISK-004, RISK-006]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-009
+    title: "Codec audio probe and cache invalidation"
+    status: Done
+    revision: 1
+    milestone: M2
+    path: docs/plans/PLAN-009-codec-audio-probe-and-cache-invalidation.md
+    depends_on: [OCC-PLAN-004, OCC-PLAN-007, OCC-PLAN-008]
+    blocks: [OCC-PLAN-010, OCC-PLAN-011, OCC-PLAN-012, OCC-PLAN-017, OCC-PLAN-021, OCC-PLAN-025, OCC-PLAN-051, OCC-PLAN-054]
+    requirements: [OCC-CAM-001, OCC-CODEC-001, OCC-AUDIO-001, OCC-CAM-002]
+    adrs: [ADR-0005, ADR-0006, ADR-0007, ADR-0010, ADR-0029]
+    risks: [RISK-001, RISK-002, RISK-003, RISK-004, RISK-006]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-010
+    title: "Probe UI and adaptive foldable layout"
+    status: Done
+    revision: 1
+    milestone: M3
+    path: docs/plans/PLAN-010-probe-ui-and-adaptive-foldable-layout.md
+    depends_on: [OCC-PLAN-006, OCC-PLAN-007, OCC-PLAN-008, OCC-PLAN-009]
+    blocks: []
+    requirements: [OCC-UI-001, OCC-PRIV-001, OCC-STORAGE-001, OCC-UI-002]
+    adrs: [ADR-0013, ADR-0014, ADR-0017, ADR-0025]
+    risks: [RISK-007, RISK-013, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-011
+    title: "Manual private report export and sharing"
+    status: Done
+    revision: 1
+    milestone: M3
+    path: docs/plans/PLAN-011-manual-private-report-export-and-sharing.md
+    depends_on: [OCC-PLAN-005, OCC-PLAN-009]
+    blocks: [OCC-PLAN-053, OCC-PLAN-056, OCC-PLAN-058]
+    requirements: [OCC-UI-001, OCC-PRIV-001, OCC-STORAGE-001, OCC-UI-002]
+    adrs: [ADR-0013, ADR-0014, ADR-0017, ADR-0025]
+    risks: [RISK-007, RISK-013, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-012
+    title: "Storage benchmark and result persistence"
+    status: Done
+    revision: 1
+    milestone: M3
+    path: docs/plans/PLAN-012-storage-benchmark-and-result-persistence.md
+    depends_on: [OCC-PLAN-005, OCC-PLAN-009]
+    blocks: [OCC-PLAN-029, OCC-PLAN-042, OCC-PLAN-051]
+    requirements: [OCC-UI-001, OCC-PRIV-001, OCC-STORAGE-001, OCC-UI-002]
+    adrs: [ADR-0013, ADR-0014, ADR-0017, ADR-0025]
+    risks: [RISK-007, RISK-013, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-013
+    title: "CaptureService actor and state machine"
+    status: Done
+    revision: 1
+    milestone: M4
+    path: docs/plans/PLAN-013-captureservice-actor-and-state-machine.md
+    depends_on: [OCC-PLAN-004, OCC-PLAN-006, OCC-PLAN-007]
+    blocks: [OCC-PLAN-014, OCC-PLAN-015, OCC-PLAN-016, OCC-PLAN-024]
+    requirements: [OCC-CAM-001, OCC-LIFE-001, OCC-UI-001, OCC-CAM-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0006, ADR-0007]
+    risks: [RISK-001, RISK-003, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-014
+    title: "SurfaceView preview transforms and overlays"
+    status: Done
+    revision: 1
+    milestone: M4
+    path: docs/plans/PLAN-014-surfaceview-preview-transforms-and-overlays.md
+    depends_on: [OCC-PLAN-013]
+    blocks: [OCC-PLAN-015, OCC-PLAN-016, OCC-PLAN-026, OCC-PLAN-030]
+    requirements: [OCC-CAM-001, OCC-LIFE-001, OCC-UI-001, OCC-CAM-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0006, ADR-0007]
+    risks: [RISK-001, RISK-003, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-015
+    title: "Logical physical routing and graph negotiation"
+    status: Done
+    revision: 1
+    milestone: M4
+    path: docs/plans/PLAN-015-logical-physical-routing-and-graph-negotiation.md
+    depends_on: [OCC-PLAN-007, OCC-PLAN-008, OCC-PLAN-013, OCC-PLAN-014]
+    blocks: [OCC-PLAN-016, OCC-PLAN-017]
+    requirements: [OCC-CAM-001, OCC-LIFE-001, OCC-UI-001, OCC-CAM-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0006, ADR-0007]
+    risks: [RISK-001, RISK-003, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-016
+    title: "Lifecycle recreation disconnection recovery"
+    status: Done
+    revision: 1
+    milestone: M4
+    path: docs/plans/PLAN-016-lifecycle-recreation-disconnection-recovery.md
+    depends_on: [OCC-PLAN-013, OCC-PLAN-014, OCC-PLAN-015]
+    blocks: [OCC-PLAN-020, OCC-PLAN-027, OCC-PLAN-040]
+    requirements: [OCC-CAM-001, OCC-LIFE-001, OCC-UI-001, OCC-CAM-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0006, ADR-0007]
+    risks: [RISK-001, RISK-003, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-017
+    title: "Video encoder selector and configuration"
+    status: Done
+    revision: 1
+    milestone: M5
+    path: docs/plans/PLAN-017-video-encoder-selector-and-configuration.md
+    depends_on: [OCC-PLAN-006, OCC-PLAN-009, OCC-PLAN-015]
+    blocks: [OCC-PLAN-018, OCC-PLAN-020, OCC-PLAN-034]
+    requirements: [OCC-CODEC-001, OCC-STORAGE-001, OCC-FUNC-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0011, ADR-0013, ADR-0015]
+    risks: [RISK-004, RISK-009, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-018
+    title: "Asynchronous drain and single-owner muxer"
+    status: Done
+    revision: 1
+    milestone: M5
+    path: docs/plans/PLAN-018-asynchronous-drain-and-single-owner-muxer.md
+    depends_on: [OCC-PLAN-017]
+    blocks: [OCC-PLAN-019, OCC-PLAN-020, OCC-PLAN-022]
+    requirements: [OCC-CODEC-001, OCC-STORAGE-001, OCC-FUNC-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0011, ADR-0013, ADR-0015]
+    risks: [RISK-004, RISK-009, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-019
+    title: "MediaStore SAF finalization and clip sidecars"
+    status: Done
+    revision: 1
+    milestone: M5
+    path: docs/plans/PLAN-019-mediastore-saf-finalization-and-clip-sidecars.md
+    depends_on: [OCC-PLAN-005, OCC-PLAN-018]
+    blocks: [OCC-PLAN-020]
+    requirements: [OCC-CODEC-001, OCC-STORAGE-001, OCC-FUNC-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0011, ADR-0013, ADR-0015]
+    risks: [RISK-004, RISK-009, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-020
+    title: "AVC HEVC SDR recorder integration"
+    status: Done
+    revision: 1
+    milestone: M5
+    path: docs/plans/PLAN-020-avc-hevc-sdr-recorder-integration.md
+    depends_on: [OCC-PLAN-016, OCC-PLAN-017, OCC-PLAN-018, OCC-PLAN-019]
+    blocks: [OCC-PLAN-023, OCC-PLAN-027, OCC-PLAN-029, OCC-PLAN-034, OCC-PLAN-051]
+    requirements: [OCC-CODEC-001, OCC-STORAGE-001, OCC-FUNC-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0011, ADR-0013, ADR-0015]
+    risks: [RISK-004, RISK-009, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-021
+    title: "Audio source and effect negotiation"
+    status: Done
+    revision: 1
+    milestone: M6
+    path: docs/plans/PLAN-021-audio-source-and-effect-negotiation.md
+    depends_on: [OCC-PLAN-006, OCC-PLAN-009]
+    blocks: [OCC-PLAN-022]
+    requirements: [OCC-AUDIO-001, OCC-AUDIO-002, OCC-AUDIO-003, OCC-AUDIO-004, OCC-AUDIO-008, OCC-AUDIO-009, OCC-AUDIO-010, OCC-CODEC-001, OCC-TEST-001]
+    adrs: [ADR-0011, ADR-0012, ADR-0029, ADR-0015, ADR-0026]
+    risks: [RISK-006, RISK-010, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-022
+    title: "AAC encoding and muxer coordination"
+    status: Done
+    revision: 1
+    milestone: M6
+    path: docs/plans/PLAN-022-aac-encoding-and-muxer-coordination.md
+    depends_on: [OCC-PLAN-018, OCC-PLAN-021]
+    blocks: [OCC-PLAN-023]
+    requirements: [OCC-AUDIO-001, OCC-AUDIO-004, OCC-AUDIO-007, OCC-AUDIO-008, OCC-AUDIO-009, OCC-AUDIO-011, OCC-CODEC-001, OCC-TEST-001]
+    adrs: [ADR-0011, ADR-0029, ADR-0015, ADR-0026]
+    risks: [RISK-006, RISK-010, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-023
+    title: "A V clock drift and overrun diagnostics"
+    status: Done
+    revision: 1
+    milestone: M6
+    path: docs/plans/PLAN-023-a-v-clock-drift-and-overrun-diagnostics.md
+    depends_on: [OCC-PLAN-020, OCC-PLAN-022]
+    blocks: [OCC-PLAN-027, OCC-PLAN-029]
+    requirements: [OCC-AUDIO-001, OCC-CODEC-001, OCC-TEST-001, OCC-AUDIO-002]
+    adrs: [ADR-0011, ADR-0029, ADR-0015, ADR-0026]
+    risks: [RISK-006, RISK-010, RISK-011]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-024
+    title: "Deterministic CaptureRequest composition"
+    status: Done
+    revision: 1
+    milestone: M7
+    path: docs/plans/PLAN-024-deterministic-capturerequest-composition.md
+    depends_on: [OCC-PLAN-006, OCC-PLAN-008, OCC-PLAN-013]
+    blocks: [OCC-PLAN-025, OCC-PLAN-040]
+    requirements: [OCC-CAM-001, OCC-UI-001, OCC-FUNC-001, OCC-CAM-002]
+    adrs: [ADR-0008, ADR-0009, ADR-0015, ADR-0017]
+    risks: [RISK-001, RISK-009, RISK-012]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-025
+    title: "CaptureResult auditing and evidence events"
+    status: Done
+    revision: 1
+    milestone: M7
+    path: docs/plans/PLAN-025-captureresult-auditing-and-evidence-events.md
+    depends_on: [OCC-PLAN-009, OCC-PLAN-024]
+    blocks: [OCC-PLAN-026, OCC-PLAN-030]
+    requirements: [OCC-CAM-001, OCC-UI-001, OCC-FUNC-001, OCC-CAM-002]
+    adrs: [ADR-0008, ADR-0009, ADR-0015, ADR-0017]
+    risks: [RISK-001, RISK-009, RISK-012]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-026
+    title: "Manual controls and Hardware Truth HUD"
+    status: Done
+    revision: 1
+    milestone: M7
+    path: docs/plans/PLAN-026-manual-controls-and-hardware-truth-hud.md
+    depends_on: [OCC-PLAN-014, OCC-PLAN-025]
+    blocks: [OCC-PLAN-029]
+    requirements: [OCC-CAM-001, OCC-UI-001, OCC-FUNC-001, OCC-CAM-002]
+    adrs: [ADR-0008, ADR-0009, ADR-0015, ADR-0017]
+    risks: [RISK-001, RISK-009, RISK-012]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-027
+    title: "Recording foreground service and notification"
+    status: Done
+    revision: 1
+    milestone: M8
+    path: docs/plans/PLAN-027-recording-foreground-service-and-notification.md
+    depends_on: [OCC-PLAN-016, OCC-PLAN-020, OCC-PLAN-023]
+    blocks: [OCC-PLAN-028, OCC-PLAN-058]
+    requirements: [OCC-LIFE-001, OCC-NFR-001, OCC-STORAGE-001, OCC-LIFE-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0016, ADR-0025, ADR-0027]
+    risks: [RISK-007, RISK-008, RISK-009, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-028
+    title: "Foldable Activity and camera continuity"
+    status: Done
+    revision: 1
+    milestone: M8
+    path: docs/plans/PLAN-028-foldable-activity-and-camera-continuity.md
+    depends_on: [OCC-PLAN-027]
+    blocks: [OCC-PLAN-029]
+    requirements: [OCC-LIFE-001, OCC-NFR-001, OCC-STORAGE-001, OCC-LIFE-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0016, ADR-0025, ADR-0027]
+    risks: [RISK-007, RISK-008, RISK-009, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-029
+    title: "Thermal storage fault and soak hardening"
+    status: Done
+    revision: 1
+    milestone: M8
+    path: docs/plans/PLAN-029-thermal-storage-fault-and-soak-hardening.md
+    depends_on: [OCC-PLAN-012, OCC-PLAN-020, OCC-PLAN-023, OCC-PLAN-026, OCC-PLAN-028]
+    blocks: [OCC-PLAN-030, OCC-PLAN-039, OCC-PLAN-054, OCC-PLAN-057]
+    requirements: [OCC-LIFE-001, OCC-NFR-001, OCC-STORAGE-001, OCC-LIFE-002]
+    adrs: [ADR-0003, ADR-0004, ADR-0016, ADR-0025, ADR-0027]
+    risks: [RISK-007, RISK-008, RISK-009, RISK-012, RISK-013]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-030
+    title: "Analysis stream and performance governor"
+    status: Done
+    revision: 1
+    milestone: M9
+    path: docs/plans/PLAN-030-analysis-stream-and-performance-governor.md
+    depends_on: [OCC-PLAN-008, OCC-PLAN-014, OCC-PLAN-025, OCC-PLAN-029]
+    blocks: [OCC-PLAN-031, OCC-PLAN-032, OCC-PLAN-033, OCC-PLAN-037]
+    requirements: [OCC-COLOR-001, OCC-UI-001, OCC-NFR-001, OCC-COLOR-002]
+    adrs: [ADR-0016, ADR-0017, ADR-0018, ADR-0021]
+    risks: [RISK-008, RISK-009, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-031
+    title: "Histogram zebra and false color"
+    status: Done
+    revision: 1
+    milestone: M9
+    path: docs/plans/PLAN-031-histogram-zebra-and-false-color.md
+    depends_on: [OCC-PLAN-030]
+    blocks: [OCC-PLAN-033]
+    requirements: [OCC-COLOR-001, OCC-UI-001, OCC-NFR-001, OCC-COLOR-002]
+    adrs: [ADR-0016, ADR-0017, ADR-0018, ADR-0021]
+    risks: [RISK-008, RISK-009, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-032
+    title: "Focus peaking and waveform"
+    status: Done
+    revision: 1
+    milestone: M9
+    path: docs/plans/PLAN-032-focus-peaking-and-waveform.md
+    depends_on: [OCC-PLAN-030]
+    blocks: [OCC-PLAN-033]
+    requirements: [OCC-COLOR-001, OCC-UI-001, OCC-NFR-001, OCC-COLOR-002]
+    adrs: [ADR-0016, ADR-0017, ADR-0018, ADR-0021]
+    risks: [RISK-008, RISK-009, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-033
+    title: "Vectorscope and monitoring LUT insertion"
+    status: Done
+    revision: 1
+    milestone: M9
+    path: docs/plans/PLAN-033-vectorscope-and-monitoring-lut-insertion.md
+    depends_on: [OCC-PLAN-030, OCC-PLAN-031, OCC-PLAN-032]
+    blocks: [OCC-PLAN-034]
+    requirements: [OCC-COLOR-001, OCC-UI-001, OCC-NFR-001, OCC-COLOR-002]
+    adrs: [ADR-0016, ADR-0017, ADR-0018, ADR-0021]
+    risks: [RISK-008, RISK-009, RISK-020]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-034
+    title: "HLG10 Main10 candidate graph"
+    status: Done
+    revision: 1
+    milestone: M10
+    path: docs/plans/PLAN-034-hlg10-main10-candidate-graph.md
+    depends_on: [OCC-PLAN-008, OCC-PLAN-017, OCC-PLAN-020, OCC-PLAN-033]
+    blocks: [OCC-PLAN-035, OCC-PLAN-036]
+    requirements: [OCC-COLOR-001, OCC-CODEC-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0007, ADR-0010, ADR-0018, ADR-0026]
+    risks: [RISK-004, RISK-005, RISK-008]
+    conditional_gates:
+      - "Input: API 33+ device report with Camera2 HLG10 and a qualifying HEVC Main10 Surface encoder. Pass: execute HLG branch and record graph/file evidence. Fail: implement the exact unsupported reason and expose no recordable HLG mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-035
+    title: "HDR preview monitoring and recording"
+    status: Done
+    revision: 1
+    milestone: M10
+    path: docs/plans/PLAN-035-hdr-preview-monitoring-and-recording.md
+    depends_on: [OCC-PLAN-034]
+    blocks: [OCC-PLAN-036]
+    requirements: [OCC-COLOR-001, OCC-CODEC-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0007, ADR-0010, ADR-0018, ADR-0026]
+    risks: [RISK-004, RISK-005, RISK-008]
+    conditional_gates:
+      - "Input: API 33+ device report with Camera2 HLG10 and a qualifying HEVC Main10 Surface encoder. Pass: execute HLG branch and record graph/file evidence. Fail: implement the exact unsupported reason and expose no recordable HLG mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-036
+    title: "Main10 file and effective-depth qualification"
+    status: Done
+    revision: 1
+    milestone: M10
+    path: docs/plans/PLAN-036-main10-file-and-effective-depth-qualification.md
+    depends_on: [OCC-PLAN-034, OCC-PLAN-035]
+    blocks: [OCC-PLAN-047, OCC-PLAN-049, OCC-PLAN-057]
+    requirements: [OCC-COLOR-001, OCC-CODEC-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0007, ADR-0010, ADR-0018, ADR-0026]
+    risks: [RISK-004, RISK-005, RISK-008]
+    conditional_gates:
+      - "Input: API 33+ device report with Camera2 HLG10 and a qualifying HEVC Main10 Surface encoder. Pass: execute HLG branch and record graph/file evidence. Fail: implement the exact unsupported reason and expose no recordable HLG mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-037
+    title: "NDK JNI and AHardwareBuffer foundation"
+    status: Done
+    revision: 1
+    milestone: M11
+    path: docs/plans/PLAN-037-ndk-jni-and-ahardwarebuffer-foundation.md
+    depends_on: [OCC-PLAN-002, OCC-PLAN-004, OCC-PLAN-030]
+    blocks: [OCC-PLAN-038, OCC-PLAN-041, OCC-PLAN-043]
+    requirements: [OCC-NFR-001, OCC-COLOR-001, OCC-TEST-001, OCC-NFR-002]
+    adrs: [ADR-0016, ADR-0021, ADR-0026]
+    risks: [RISK-008, RISK-015]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-038
+    title: "OpenGL ES processing and encoder output"
+    status: Done
+    revision: 1
+    milestone: M11
+    path: docs/plans/PLAN-038-opengl-es-processing-and-encoder-output.md
+    depends_on: [OCC-PLAN-037]
+    blocks: [OCC-PLAN-039, OCC-PLAN-048]
+    requirements: [OCC-NFR-001, OCC-COLOR-001, OCC-TEST-001, OCC-NFR-002]
+    adrs: [ADR-0016, ADR-0021, ADR-0026]
+    risks: [RISK-008, RISK-015]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-039
+    title: "Native crash performance and thermal hardening"
+    status: Done
+    revision: 1
+    milestone: M11
+    path: docs/plans/PLAN-039-native-crash-performance-and-thermal-hardening.md
+    depends_on: [OCC-PLAN-029, OCC-PLAN-038]
+    blocks: [OCC-PLAN-047, OCC-PLAN-052]
+    requirements: [OCC-NFR-001, OCC-COLOR-001, OCC-TEST-001, OCC-NFR-002]
+    adrs: [ADR-0016, ADR-0021, ADR-0026]
+    risks: [RISK-008, RISK-015]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-040
+    title: "Camera2 RAW still and DNG"
+    status: Done
+    revision: 1
+    milestone: M12
+    path: docs/plans/PLAN-040-camera2-raw-still-and-dng.md
+    depends_on: [OCC-PLAN-008, OCC-PLAN-016, OCC-PLAN-024]
+    blocks: [OCC-PLAN-041]
+    requirements: [OCC-RAW-001, OCC-CAM-001, OCC-STORAGE-001, OCC-RAW-002]
+    adrs: [ADR-0007, ADR-0013, ADR-0019, ADR-0026]
+    risks: [RISK-003, RISK-007, RISK-009, RISK-014]
+    conditional_gates:
+      - "Input: public Camera2 RAW capability/stream and destination benchmark. Pass: execute RAW branch with zero lost frames and p01 throughput at least 1.25 times stream rate. Fail: retain applicable RAW still/unsupported reporting and expose no RAW-video mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-041
+    title: "RAW10 RAW12 buffers metadata and ring"
+    status: Done
+    revision: 1
+    milestone: M12
+    path: docs/plans/PLAN-041-raw10-raw12-buffers-metadata-and-ring.md
+    depends_on: [OCC-PLAN-037, OCC-PLAN-040]
+    blocks: [OCC-PLAN-042, OCC-PLAN-044, OCC-PLAN-049]
+    requirements: [OCC-RAW-001, OCC-CAM-001, OCC-STORAGE-001, OCC-RAW-002]
+    adrs: [ADR-0007, ADR-0013, ADR-0019, ADR-0026]
+    risks: [RISK-003, RISK-007, RISK-009, RISK-014]
+    conditional_gates:
+      - "Input: public Camera2 RAW capability/stream and destination benchmark. Pass: execute RAW branch with zero lost frames and p01 throughput at least 1.25 times stream rate. Fail: retain applicable RAW still/unsupported reporting and expose no RAW-video mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-042
+    title: "RAW throughput benchmark and device gate"
+    status: Done
+    revision: 1
+    milestone: M12
+    path: docs/plans/PLAN-042-raw-throughput-benchmark-and-device-gate.md
+    depends_on: [OCC-PLAN-012, OCC-PLAN-041]
+    blocks: [OCC-PLAN-046, OCC-PLAN-047, OCC-PLAN-057]
+    requirements: [OCC-RAW-001, OCC-CAM-001, OCC-STORAGE-001, OCC-RAW-002]
+    adrs: [ADR-0007, ADR-0013, ADR-0019, ADR-0026]
+    risks: [RISK-003, RISK-007, RISK-009, RISK-014]
+    conditional_gates:
+      - "Input: public Camera2 RAW capability/stream and destination benchmark. Pass: execute RAW branch with zero lost frames and p01 throughput at least 1.25 times stream rate. Fail: retain applicable RAW still/unsupported reporting and expose no RAW-video mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-043
+    title: "OpenCine RAW specification and fixtures"
+    status: Done
+    revision: 1
+    milestone: M13
+    path: docs/plans/PLAN-043-opencine-raw-specification-and-fixtures.md
+    depends_on: [OCC-PLAN-005, OCC-PLAN-006, OCC-PLAN-037]
+    blocks: [OCC-PLAN-044, OCC-PLAN-045, OCC-PLAN-047]
+    requirements: [OCC-RAW-001, OCC-STORAGE-001, OCC-TEST-001, OCC-RAW-002]
+    adrs: [ADR-0014, ADR-0020, ADR-0026]
+    risks: [RISK-007, RISK-011, RISK-014]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-044
+    title: "Append-only writer journaling and recovery"
+    status: Done
+    revision: 1
+    milestone: M13
+    path: docs/plans/PLAN-044-append-only-writer-journaling-and-recovery.md
+    depends_on: [OCC-PLAN-041, OCC-PLAN-043]
+    blocks: [OCC-PLAN-045, OCC-PLAN-046]
+    requirements: [OCC-RAW-001, OCC-STORAGE-001, OCC-TEST-001, OCC-RAW-002]
+    adrs: [ADR-0014, ADR-0020, ADR-0026]
+    risks: [RISK-007, RISK-011, RISK-014]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-045
+    title: "Desktop reader index recovery and DNG export"
+    status: Done
+    revision: 1
+    milestone: M13
+    path: docs/plans/PLAN-045-desktop-reader-index-recovery-and-dng-export.md
+    depends_on: [OCC-PLAN-004, OCC-PLAN-043, OCC-PLAN-044]
+    blocks: [OCC-PLAN-046, OCC-PLAN-050]
+    requirements: [OCC-RAW-001, OCC-STORAGE-001, OCC-TEST-001, OCC-RAW-002]
+    adrs: [ADR-0014, ADR-0020, ADR-0026]
+    risks: [RISK-007, RISK-011, RISK-014]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-046
+    title: "Container crash and interoperability validation"
+    status: Done
+    revision: 1
+    milestone: M13
+    path: docs/plans/PLAN-046-container-crash-and-interoperability-validation.md
+    depends_on: [OCC-PLAN-042, OCC-PLAN-044, OCC-PLAN-045]
+    blocks: [OCC-PLAN-050, OCC-PLAN-057]
+    requirements: [OCC-RAW-001, OCC-STORAGE-001, OCC-TEST-001, OCC-RAW-002]
+    adrs: [ADR-0014, ADR-0020, ADR-0026]
+    risks: [RISK-007, RISK-011, RISK-014]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-047
+    title: "OpenCine Log specification and test vectors"
+    status: ConditionalReady
+    revision: 1
+    milestone: M14
+    path: docs/plans/PLAN-047-opencine-log-specification-and-test-vectors.md
+    depends_on: [OCC-PLAN-036, OCC-PLAN-039, OCC-PLAN-042, OCC-PLAN-043]
+    blocks: [OCC-PLAN-048]
+    requirements: [OCC-COLOR-001, OCC-RAW-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0018, ADR-0021, ADR-0022, ADR-0026]
+    risks: [RISK-005, RISK-015, RISK-020]
+    conditional_gates:
+      - "Input: accepted OpenCine Log v1 specification inputs and verified RAW/P010/ISP provenance fixtures. Pass: publish and integrate only passing provenance branches. Fail: keep Flat8/HLG names and expose no OpenCine Log mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-048
+    title: "CPU GPU references LUT OCIO and DCTL"
+    status: ConditionalReady
+    revision: 1
+    milestone: M14
+    path: docs/plans/PLAN-048-cpu-gpu-references-lut-ocio-and-dctl.md
+    depends_on: [OCC-PLAN-038, OCC-PLAN-047]
+    blocks: [OCC-PLAN-049]
+    requirements: [OCC-COLOR-001, OCC-RAW-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0018, ADR-0021, ADR-0022, ADR-0026]
+    risks: [RISK-005, RISK-015, RISK-020]
+    conditional_gates:
+      - "Input: accepted OpenCine Log v1 specification inputs and verified RAW/P010/ISP provenance fixtures. Pass: publish and integrate only passing provenance branches. Fail: keep Flat8/HLG names and expose no OpenCine Log mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-049
+    title: "RAW P010 ISP-derived Log integration"
+    status: ConditionalReady
+    revision: 1
+    milestone: M14
+    path: docs/plans/PLAN-049-raw-p010-isp-derived-log-integration.md
+    depends_on: [OCC-PLAN-036, OCC-PLAN-041, OCC-PLAN-048]
+    blocks: [OCC-PLAN-050]
+    requirements: [OCC-COLOR-001, OCC-RAW-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0018, ADR-0021, ADR-0022, ADR-0026]
+    risks: [RISK-005, RISK-015, RISK-020]
+    conditional_gates:
+      - "Input: accepted OpenCine Log v1 specification inputs and verified RAW/P010/ISP provenance fixtures. Pass: publish and integrate only passing provenance branches. Fail: keep Flat8/HLG names and expose no OpenCine Log mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-050
+    title: "Numerical editor and device Log qualification"
+    status: ConditionalReady
+    revision: 1
+    milestone: M14
+    path: docs/plans/PLAN-050-numerical-editor-and-device-log-qualification.md
+    depends_on: [OCC-PLAN-045, OCC-PLAN-046, OCC-PLAN-049]
+    blocks: [OCC-PLAN-057]
+    requirements: [OCC-COLOR-001, OCC-RAW-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0018, ADR-0021, ADR-0022, ADR-0026]
+    risks: [RISK-005, RISK-015, RISK-020]
+    conditional_gates:
+      - "Input: accepted OpenCine Log v1 specification inputs and verified RAW/P010/ISP provenance fixtures. Pass: publish and integrate only passing provenance branches. Fail: keep Flat8/HLG names and expose no OpenCine Log mode."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-051
+    title: "APV probe and codec storage qualification"
+    status: Done
+    revision: 1
+    milestone: M15
+    path: docs/plans/PLAN-051-apv-probe-and-codec-storage-qualification.md
+    depends_on: [OCC-PLAN-009, OCC-PLAN-012, OCC-PLAN-020]
+    blocks: [OCC-PLAN-052]
+    requirements: [OCC-CODEC-001, OCC-FUNC-001, OCC-TEST-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0023, ADR-0026]
+    risks: [RISK-004, RISK-007, RISK-020]
+    conditional_gates:
+      - "Input: API 36+ `video/apv` codec, qualifying profile/chroma/rate/Surface, MP4, storage, and decode evidence. Pass: integrate the exact qualified configuration. Fail: retain probe/unsupported UI and do not expose APV recording."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-052
+    title: "APV Surface encode MP4 and file validation"
+    status: Done
+    revision: 1
+    milestone: M15
+    path: docs/plans/PLAN-052-apv-surface-encode-mp4-and-file-validation.md
+    depends_on: [OCC-PLAN-039, OCC-PLAN-051]
+    blocks: [OCC-PLAN-053]
+    requirements: [OCC-CODEC-001, OCC-FUNC-001, OCC-TEST-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0023, ADR-0026]
+    risks: [RISK-004, RISK-007, RISK-020]
+    conditional_gates:
+      - "Input: API 36+ `video/apv` codec, qualifying profile/chroma/rate/Surface, MP4, storage, and decode evidence. Pass: integrate the exact qualified configuration. Fail: retain probe/unsupported UI and do not expose APV recording."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-053
+    title: "APV UI fallback and APV RAW verdict"
+    status: Done
+    revision: 1
+    milestone: M15
+    path: docs/plans/PLAN-053-apv-ui-fallback-and-apv-raw-verdict.md
+    depends_on: [OCC-PLAN-011, OCC-PLAN-052]
+    blocks: [OCC-PLAN-057]
+    requirements: [OCC-CODEC-001, OCC-FUNC-001, OCC-TEST-001, OCC-CODEC-002]
+    adrs: [ADR-0010, ADR-0023, ADR-0026]
+    risks: [RISK-004, RISK-007, RISK-020]
+    conditional_gates:
+      - "Input: API 36+ `video/apv` codec, qualifying profile/chroma/rate/Surface, MP4, storage, and decode evidence. Pass: integrate the exact qualified configuration. Fail: retain probe/unsupported UI and do not expose APV recording."
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-054
+    title: "Device profile schema trust and invalidation"
+    status: Done
+    revision: 1
+    milestone: M16
+    path: docs/plans/PLAN-054-device-profile-schema-trust-and-invalidation.md
+    depends_on: [OCC-PLAN-005, OCC-PLAN-009, OCC-PLAN-029]
+    blocks: [OCC-PLAN-055, OCC-PLAN-056]
+    requirements: [OCC-FUNC-001, OCC-PRIV-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0024, ADR-0025]
+    risks: [RISK-001, RISK-018, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-055
+    title: "Bundled imported quirks and user overrides"
+    status: Done
+    revision: 1
+    milestone: M16
+    path: docs/plans/PLAN-055-bundled-imported-quirks-and-user-overrides.md
+    depends_on: [OCC-PLAN-054]
+    blocks: [OCC-PLAN-056]
+    requirements: [OCC-FUNC-001, OCC-PRIV-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0024, ADR-0025]
+    risks: [RISK-001, RISK-018, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-056
+    title: "Community validation contribution and regression"
+    status: Done
+    revision: 1
+    milestone: M16
+    path: docs/plans/PLAN-056-community-validation-contribution-and-regression.md
+    depends_on: [OCC-PLAN-011, OCC-PLAN-054, OCC-PLAN-055]
+    blocks: [OCC-PLAN-057, OCC-PLAN-058]
+    requirements: [OCC-FUNC-001, OCC-PRIV-001, OCC-TEST-001, OCC-FUNC-002]
+    adrs: [ADR-0005, ADR-0014, ADR-0024, ADR-0025]
+    risks: [RISK-001, RISK-018, RISK-019]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-057
+    title: "Complete device fault and soak protocol"
+    status: Ready
+    revision: 1
+    milestone: M17
+    path: docs/plans/PLAN-057-complete-device-fault-and-soak-protocol.md
+    depends_on: [OCC-PLAN-029, OCC-PLAN-036, OCC-PLAN-042, OCC-PLAN-046, OCC-PLAN-050, OCC-PLAN-053, OCC-PLAN-056]
+    blocks: [OCC-PLAN-060]
+    requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
+    adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
+    risks: [RISK-011, RISK-016, RISK-017, RISK-018]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-058
+    title: "Security privacy and accessibility review"
+    status: Done
+    revision: 1
+    milestone: M17
+    path: docs/plans/PLAN-058-security-privacy-and-accessibility-review.md
+    depends_on: [OCC-PLAN-003, OCC-PLAN-011, OCC-PLAN-027, OCC-PLAN-056]
+    blocks: [OCC-PLAN-059, OCC-PLAN-060]
+    requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
+    adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
+    risks: [RISK-011, RISK-016, RISK-017, RISK-018]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-059
+    title: "F-Droid direct Google Play release and SBOM"
+    status: Done
+    revision: 1
+    milestone: M17
+    path: docs/plans/PLAN-059-f-droid-direct-google-play-release-and-sbom.md
+    depends_on: [OCC-PLAN-002, OCC-PLAN-003, OCC-PLAN-058]
+    blocks: [OCC-PLAN-060]
+    requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
+    adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
+    risks: [RISK-011, RISK-016, RISK-017, RISK-018]
+    conditional_gates: []
+    intended_executor: GPT-5.6 Luna
+  - id: OCC-PLAN-060
+    title: "Release candidate certification checklist"
+    status: ConditionalReady
+    revision: 1
+    milestone: M17
+    path: docs/plans/PLAN-060-release-candidate-certification-checklist.md
+    depends_on: [OCC-PLAN-057, OCC-PLAN-058, OCC-PLAN-059]
+    blocks: []
+    requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
+    adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
+    risks: [RISK-011, RISK-016, RISK-017, RISK-018]
+    conditional_gates:
+      - "Input: exact release artifacts plus physical target devices and all M17 evidence. Pass: mark only passing fingerprint/artifact pairs Certified. Fail: keep lower evidence stages, publish failures, and do not claim certification."
+    intended_executor: GPT-5.6 Luna
