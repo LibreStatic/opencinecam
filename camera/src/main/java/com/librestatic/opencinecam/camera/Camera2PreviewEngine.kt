@@ -191,6 +191,9 @@ interface Camera2PreviewListener {
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
     fun onAfLockChanged(state: LockState) = Unit
+    fun onFocusPullFinished() = Unit
+    fun onFocusPullStarted(targetDiopters: Float) = Unit
+    fun onFocusPullCancelled() = Unit
 }
 
 /**
@@ -283,6 +286,25 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     private var previousSensorTimestampNs: Long? = null
     private var effectiveFps: Double? = null
     private var lastReportedFocusDiopters: Float? = null
+    private val focusPullAnimator = FocusPullAnimator()
+    private val focusPullCallback = object : Runnable {
+        override fun run() {
+            if (!focusPullAnimator.isActive) return
+            val now = android.os.SystemClock.elapsedRealtime()
+            val diopters = focusPullAnimator.tick(now)
+            if (diopters != null) {
+                requestedFocusDiopters = diopters
+                reapplyRepeating()
+            }
+            if (focusPullAnimator.isComplete(now)) {
+                focusPullAnimator.complete()
+                listener?.onFocusPullFinished()
+            } else {
+                imageHandler.postDelayed(this, FOCUS_PULL_TICK_MS)
+            }
+        }
+    }
+    private val perCameraFocusMarks = mutableMapOf<String, Map<String, Float>>()
     private val avcSurfaceEncoderCapabilities by lazy {
         MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
             .asSequence()
@@ -562,6 +584,11 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
 
     fun setManualControls(iso: Int?, exposureTimeNs: Long?, focusDiopters: Float?) {
         cameraExecutor.execute {
+            // Manual focus override cancels any active focus pull.
+            if (focusDiopters != null) {
+                imageHandler.removeCallbacks(focusPullCallback)
+                focusPullAnimator.cancel()
+            }
             val descriptor = activeDescriptor
             requestedIso = iso?.let { value -> descriptor?.sensitivityRange?.let { value.coerceIn(it.lower, it.upper) } ?: value }
             requestedExposureNs = exposureTimeNs?.let { value -> descriptor?.exposureTimeRangeNs?.let { value.coerceIn(it.lower, it.upper) } ?: value }
@@ -586,12 +613,90 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     }
 
     /**
+     * Saves a focus mark for the active camera. Up to 4 marks (A-D) are remembered per camera
+     * for the lifetime of this engine. Returns false when no camera is active or the
+     * distance is invalid.
+     */
+    fun setFocusMark(label: String, diopters: Float): Boolean {
+        val cameraId = activeDescriptor?.cameraId ?: return false
+        val minDistance = activeDescriptor?.minimumFocusDistance ?: return false
+        if (minDistance <= 0f) return false
+        val clamped = diopters.coerceIn(0f, minDistance)
+        val marks = perCameraFocusMarks[cameraId] ?: emptyMap()
+        if (marks.size >= 4 && label !in marks) return false
+        perCameraFocusMarks[cameraId] = marks + (label to clamped)
+        return true
+    }
+
+    /** Removes a single focus mark. Returns false when the mark does not exist. */
+    fun clearFocusMark(label: String): Boolean {
+        val cameraId = activeDescriptor?.cameraId ?: return false
+        val marks = perCameraFocusMarks[cameraId] ?: return false
+        if (label !in marks) return false
+        perCameraFocusMarks[cameraId] = marks - label
+        return true
+    }
+
+    /** Returns the focus marks saved for the active camera, or an empty map when none exist. */
+    fun getFocusMarks(): Map<String, Float> {
+        val cameraId = activeDescriptor?.cameraId ?: return emptyMap()
+        return perCameraFocusMarks[cameraId] ?: emptyMap()
+    }
+
+    /**
+     * Starts an animated focus pull from the current focus distance to [toDiopters] over
+     * [durationMs] with the given [easing]. Returns false when manual focus is unsupported,
+     * the session is constrained high-speed, or no camera is active.
+     */
+    fun startFocusPull(toDiopters: Float, durationMs: Long, easing: FocusPullEasing): Boolean {
+        val descriptor = activeDescriptor ?: return false
+        val minDistance = descriptor.minimumFocusDistance ?: return false
+        if (minDistance <= 0f || isHighSpeedSession()) return false
+        val to = toDiopters.coerceIn(0f, minDistance)
+        val from = requestedFocusDiopters ?: lastReportedFocusDiopters ?: 0f
+        cameraExecutor.execute {
+            // Cancel any active tap-to-focus or AF lock before starting the pull.
+            if (activeTapFocusToken != null) {
+                clearTapFocusLocked(notify = true)
+            }
+            if (afLockState != LockState.OFF) {
+                disableAfLock(notify = true)
+            }
+            imageHandler.removeCallbacks(focusPullCallback)
+            focusPullAnimator.start(
+                FocusPullPlan(
+                    fromDiopters = from,
+                    toDiopters = to,
+                    durationMs = durationMs,
+                    easing = easing,
+                ),
+                android.os.SystemClock.elapsedRealtime(),
+            )
+            listener?.onFocusPullStarted(to)
+            imageHandler.post(focusPullCallback)
+        }
+        return true
+    }
+
+    /** Cancels any active focus pull and clears the animator state. */
+    fun cancelFocusPull() {
+        cameraExecutor.execute {
+            imageHandler.removeCallbacks(focusPullCallback)
+            focusPullAnimator.cancel()
+            listener?.onFocusPullCancelled()
+        }
+    }
+
+    /**
      * Starts point autofocus using coordinates normalized to the displayed preview.
      * Returns false without enqueuing work when the active graph cannot truthfully support it.
      */
     fun tapToFocus(normalizedX: Float, normalizedY: Float, meterExposure: Boolean): Boolean {
         val descriptor = activeDescriptor ?: return false
         val configured = session ?: return false
+        // Cancel any active focus pull before starting tap-to-focus.
+        imageHandler.removeCallbacks(focusPullCallback)
+        focusPullAnimator.cancel()
         if (configured is CameraConstrainedHighSpeedCaptureSession ||
             descriptor.sensorActiveArray == null || descriptor.maxAfRegions <= 0 ||
             CaptureRequest.CONTROL_AF_MODE_AUTO !in descriptor.availableAfModes
@@ -739,6 +844,9 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     fun setAfLock(enabled: Boolean, behavior: AfLockBehavior) {
         cameraExecutor.execute {
             val descriptor = activeDescriptor ?: return@execute
+            // AF lock and focus pull are mutually exclusive.
+            imageHandler.removeCallbacks(focusPullCallback)
+            focusPullAnimator.cancel()
             if (!enabled) {
                 disableAfLock(notify = true)
                 reapplyRepeating()
@@ -2418,6 +2526,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     }
 
     companion object {
+        const val FOCUS_PULL_TICK_MS = 33L
         const val DEFAULT_TARGET_FPS = 30
         private const val MIN_SELECTABLE_FPS = 10
         private const val MAX_SELECTABLE_FPS = 60

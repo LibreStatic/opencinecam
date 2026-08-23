@@ -11,6 +11,9 @@ import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
+import com.librestatic.opencinecam.camera.FocusPullEasing
+import com.librestatic.opencinecam.camera.AnamorphicSqueeze
+import com.librestatic.opencinecam.camera.AnamorphicOutputMode
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
 enum class HistogramMode { RGB, LUMA }
@@ -48,6 +51,10 @@ data class CameraSettings(
     val logHeight: Int = 1080,
     val logFps: Int = 30,
     val zoomLensSwitchMode: ZoomLensSwitchMode = ZoomLensSwitchMode.MANUAL_PRESETS,
+    val focusPullDurationMs: Long = 2000L,
+    val focusPullEasing: FocusPullEasing = FocusPullEasing.EASE_IN_OUT,
+    val anamorphicSqueeze: AnamorphicSqueeze = AnamorphicSqueeze.NONE,
+    val anamorphicOutputMode: AnamorphicOutputMode = AnamorphicOutputMode.SQUEEZED,
     val timelapseIntervalMs: Long = 500L,
     val timelapseLimitMode: TimeLapseLimitMode = TimeLapseLimitMode.UNLIMITED,
     val timelapseFrameCount: Int = 300,
@@ -65,6 +72,7 @@ data class CameraSettings(
         require(audioBitrateKbps in setOf(64, 96, 128, 160, 192, 256, 320))
         require(videoWidth > 0 && videoHeight > 0 && videoFps > 0)
         require(logWidth > 0 && logHeight > 0 && logFps > 0)
+        require(focusPullDurationMs in 500L..10_000L)
         require(timelapseIntervalMs in 100L..3_600_000L)
         require(timelapseFrameCount in 2..100_000)
         require(timelapseDurationMs in 1_000L..86_400_000L)
@@ -158,6 +166,10 @@ class CameraSettingsStore(context: Context) {
         logHeight = preferences.getInt(KEY_LOG_HEIGHT, 1080).takeUnless { it <= 0 } ?: 1080,
         logFps = preferences.getInt(KEY_LOG_FPS, 30).takeUnless { it <= 0 } ?: 30,
         zoomLensSwitchMode = enumPreference(KEY_ZOOM_LENS_SWITCH_MODE, ZoomLensSwitchMode.MANUAL_PRESETS),
+        focusPullDurationMs = preferences.getLong(KEY_FOCUS_PULL_DURATION_MS, 2000L).coerceIn(500L, 10_000L),
+        focusPullEasing = enumPreference(KEY_FOCUS_PULL_EASING, FocusPullEasing.EASE_IN_OUT),
+        anamorphicSqueeze = enumPreference(KEY_ANAMORPHIC_SQUEEZE, AnamorphicSqueeze.NONE),
+        anamorphicOutputMode = enumPreference(KEY_ANAMORPHIC_OUTPUT_MODE, AnamorphicOutputMode.SQUEEZED),
         timelapseIntervalMs = preferences.getLong(KEY_TIMELAPSE_INTERVAL_MS, 500L).coerceIn(100L, 3_600_000L),
         timelapseLimitMode = enumPreference(KEY_TIMELAPSE_LIMIT_MODE, TimeLapseLimitMode.UNLIMITED),
         timelapseFrameCount = preferences.getInt(KEY_TIMELAPSE_FRAME_COUNT, 300).coerceIn(2, 100_000),
@@ -200,6 +212,10 @@ class CameraSettingsStore(context: Context) {
             .putInt(KEY_LOG_HEIGHT, settings.logHeight)
             .putInt(KEY_LOG_FPS, settings.logFps)
             .putString(KEY_ZOOM_LENS_SWITCH_MODE, settings.zoomLensSwitchMode.name)
+            .putLong(KEY_FOCUS_PULL_DURATION_MS, settings.focusPullDurationMs)
+            .putString(KEY_FOCUS_PULL_EASING, settings.focusPullEasing.name)
+            .putString(KEY_ANAMORPHIC_SQUEEZE, settings.anamorphicSqueeze.name)
+            .putString(KEY_ANAMORPHIC_OUTPUT_MODE, settings.anamorphicOutputMode.name)
             .putLong(KEY_TIMELAPSE_INTERVAL_MS, settings.timelapseIntervalMs)
             .putString(KEY_TIMELAPSE_LIMIT_MODE, settings.timelapseLimitMode.name)
             .putInt(KEY_TIMELAPSE_FRAME_COUNT, settings.timelapseFrameCount)
@@ -272,6 +288,8 @@ class CameraSettingsStore(context: Context) {
         const val KEY_LOG_HEIGHT = "log-geometry-height"
         const val KEY_LOG_FPS = "log-geometry-fps"
         const val KEY_ZOOM_LENS_SWITCH_MODE = "zoom-lens-switch-mode"
+        const val KEY_FOCUS_PULL_DURATION_MS = "focus-pull-duration-ms"
+        const val KEY_FOCUS_PULL_EASING = "focus-pull-easing"
         const val KEY_TIMELAPSE_INTERVAL_MS = "timelapse-interval-ms"
         const val KEY_TIMELAPSE_LIMIT_MODE = "timelapse-limit-mode"
         const val KEY_TIMELAPSE_FRAME_COUNT = "timelapse-frame-count"

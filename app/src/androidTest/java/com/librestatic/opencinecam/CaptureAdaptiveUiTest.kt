@@ -26,6 +26,7 @@ import java.io.FileOutputStream
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.AudioChannelLevel
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
+import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import org.junit.Rule
 import org.junit.Test
@@ -167,6 +168,31 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithTag("zoom-ratio", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    @Test
+    fun aeLockToggleIsDisplayedWhenSupported() {
+        setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, aeLockSupported = true)
+        composeRule.onNodeWithTag("ae-lock-toggle", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun afLockToggleIsDisplayedWhenSupported() {
+        setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, afLockSupported = true)
+        composeRule.onNodeWithTag("af-lock-toggle", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun lockTogglesAreAbsentWhenUnsupported() {
+        setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, aeLockSupported = false, afLockSupported = false)
+        composeRule.onNodeWithTag("ae-lock-toggle", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("af-lock-toggle", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun afLockToggleShowsPendingState() {
+        setChrome(landscape = false, selectorStyle = ModeSelectorStyle.DIAL, afLockSupported = true, afLockState = LockState.PENDING)
+        composeRule.onNodeWithTag("af-lock-toggle", useUnmergedTree = true).assertIsDisplayed()
+    }
+
     private fun setChrome(
         landscape: Boolean,
         selectorStyle: ModeSelectorStyle,
@@ -178,6 +204,10 @@ class CaptureAdaptiveUiTest {
         zoomMaxRatio: Float = 1f,
         zoomRatio: Float = 1f,
         anchors: List<ZoomAnchor> = emptyList(),
+        aeLockSupported: Boolean = false,
+        aeLockActive: Boolean = false,
+        afLockSupported: Boolean = false,
+        afLockState: LockState = LockState.OFF,
     ) {
         composeRule.setContent {
             MaterialTheme {
@@ -193,6 +223,10 @@ class CaptureAdaptiveUiTest {
                         zoomMaxRatio = if (zoomSupported) 10f else 1f,
                         zoomRatio = zoomRatio,
                         opticalAnchors = anchors,
+                        aeLockSupported = aeLockSupported,
+                        aeLockActive = aeLockActive,
+                        afLockSupported = afLockSupported,
+                        afLockState = afLockState,
                     ),
                     binder = null,
                     settings = CameraSettings(modeSelectorStyle = selectorStyle),

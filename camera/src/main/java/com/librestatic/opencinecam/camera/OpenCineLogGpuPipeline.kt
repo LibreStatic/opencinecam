@@ -204,6 +204,7 @@ internal object OpenCineLogPreviewGeometryCalculator {
         sensorOrientationDegrees: Int,
         displayRotationDegrees: Int,
         frontFacing: Boolean,
+        squeezeFactor: Float = 1f,
     ): OpenCineLogPreviewGeometry {
         require(sourceWidth > 0 && sourceHeight > 0)
         require(targetWidth > 0 && targetHeight > 0)
@@ -227,15 +228,17 @@ internal object OpenCineLogPreviewGeometryCalculator {
         val quarterTurn = currentSensorToDisplay == 90 || currentSensorToDisplay == 270
         val contentWidth = if (quarterTurn) sourceHeight else sourceWidth
         val contentHeight = if (quarterTurn) sourceWidth else sourceHeight
-        val contentAspect = contentWidth.toFloat() / contentHeight
+        // When a squeeze factor > 1 is active, the content is horizontally compressed.
+        // De-squeeze by dividing the content aspect by the factor before aspect-fit.
+        val effectiveContentAspect = contentWidth.toFloat() / contentHeight / squeezeFactor.coerceAtLeast(1f)
         val targetAspect = targetWidth.toFloat() / targetHeight
         val scaleX: Float
         val scaleY: Float
-        if (contentAspect > targetAspect) {
+        if (effectiveContentAspect > targetAspect) {
             scaleX = 1f
-            scaleY = targetAspect / contentAspect
+            scaleY = targetAspect / effectiveContentAspect
         } else {
-            scaleX = contentAspect / targetAspect
+            scaleX = effectiveContentAspect / targetAspect
             scaleY = 1f
         }
         return OpenCineLogPreviewGeometry(
@@ -299,6 +302,7 @@ class OpenCineLogGpuPipeline(
     private var surfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
     @Volatile private var viewAssistEnabled = viewAssist
+    @Volatile private var previewSqueezeFactor = 1f
     @Volatile private var previewDisplayRotationDegrees = displayRotationDegrees
     @Volatile private var recording: Recording? = null
     @Volatile private var lastSourceDataSpace: Int? = null
@@ -314,6 +318,10 @@ class OpenCineLogGpuPipeline(
 
     fun setViewAssist(enabled: Boolean) {
         viewAssistEnabled = enabled
+    }
+
+    fun setPreviewSqueezeFactor(factor: Float) {
+        previewSqueezeFactor = factor.coerceAtLeast(1f)
     }
 
     fun attachPreview(surface: Surface, displayRotationDegrees: Int): Boolean {
@@ -618,6 +626,7 @@ class OpenCineLogGpuPipeline(
                 sensorOrientationDegrees = sensorOrientationDegrees,
                 displayRotationDegrees = previewDisplayRotationDegrees,
                 frontFacing = frontFacing,
+                squeezeFactor = previewSqueezeFactor,
             )
         } else if (recordingGeometry != null) {
             OpenCineLogPreviewGeometry(

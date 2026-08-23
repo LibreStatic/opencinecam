@@ -82,7 +82,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -139,6 +142,9 @@ import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.TapFocusState
+import com.librestatic.opencinecam.camera.WhiteBalanceSelection
+import com.librestatic.opencinecam.camera.label
+import com.librestatic.opencinecam.camera.FocusPullEasing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -157,7 +163,7 @@ private val RecordRed = Color(0xFFE23A3A)
 private val Muted = Color(0xFF9CA6AA)
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
-private enum class ControlDial { RESOLUTION, FPS, ISO, SHUTTER, FOCUS, WB, EV }
+private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
 fun CameraRootScreen() {
@@ -202,6 +208,11 @@ fun CameraRootScreen() {
                 logWidth = state.targetVideoWidth,
                 logHeight = state.targetVideoHeight,
                 logFps = state.targetFps,
+            )
+            CaptureMode.TIME_LAPSE -> settings.copy(
+                timelapseWidth = state.targetVideoWidth,
+                timelapseHeight = state.targetVideoHeight,
+                timelapseFps = state.targetFps,
             )
             in CameraUiState.videoProfileModes -> settings.copy(
                 videoWidth = state.targetVideoWidth,
@@ -414,6 +425,7 @@ private fun CaptureSurface(
                 showHorizon = updated
                 onSettingsChanged(settings.copy(horizonLevelEnabled = updated))
             },
+            onSettingsChanged = onSettingsChanged,
             onOpenMedia = onOpenMedia,
             onOpenSettings = onOpenSettings,
         )
@@ -747,6 +759,7 @@ internal fun AdaptiveCaptureChrome(
     onToggleGrid: () -> Unit,
     onCycleGridMode: () -> Unit,
     onToggleHorizon: () -> Unit,
+    onSettingsChanged: (CameraSettings) -> Unit,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -1027,7 +1040,7 @@ internal fun AdaptiveCaptureChrome(
 
         if (chromeVisible) manualControl?.let { control ->
             ContextualPanel(landscape, onDismiss = { manualControl = null }) {
-                ManualControlDial(control, state, binder) { manualControl = null }
+                ManualControlDial(control, state, binder, settings, onSettingsChanged) { manualControl = null }
             }
         }
         if (chromeVisible && showModeGrid) {
@@ -1263,6 +1276,7 @@ private fun LandscapeControlDeck(
 private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit, landscape: Boolean) {
     val controls = buildList {
         if (state.selectedMode in CameraUiState.resolutionProfileModes) add(ControlDial.RESOLUTION)
+        if (state.selectedMode == CaptureMode.TIME_LAPSE) add(ControlDial.INT)
         add(ControlDial.FPS)
         add(ControlDial.SHUTTER)
         add(ControlDial.ISO)
@@ -1286,13 +1300,6 @@ private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit
     }
 }
 
-@Composable
-private fun QuickControlButton(
-    control: ControlDial,
-    state: CameraUiState,
-    onControl: (ControlDial) -> Unit,
-    modifier: Modifier = Modifier,
-) {
 @Composable
 private fun LockToggles(
     state: CameraUiState,
@@ -1367,6 +1374,13 @@ private fun LockButton(
     }
 }
 
+@Composable
+private fun QuickControlButton(
+    control: ControlDial,
+    state: CameraUiState,
+    onControl: (ControlDial) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val constrained = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
     val enabled = !constrained || control in setOf(ControlDial.RESOLUTION, ControlDial.FPS)
     val value = when (control) {
@@ -1374,9 +1388,10 @@ private fun LockButton(
         ControlDial.FPS -> state.targetFps.toString()
         ControlDial.SHUTTER -> if (constrained) "AUTO·HS" else state.exposureTimeNs?.let(::formatShutter) ?: "AUTO"
         ControlDial.ISO -> if (constrained) "AUTO·HS" else state.sensitivityIso?.toString() ?: "AUTO"
-        ControlDial.WB -> if (constrained) "AUTO·HS" else awbLabel(state.requestedAwbMode)
+        ControlDial.WB -> if (constrained) "AUTO·HS" else state.requestedWhiteBalance.label()
         ControlDial.FOCUS -> if (constrained) "AUTO·HS" else state.focusDistanceDiopters?.let { "%.1fD".format(it) } ?: "AUTO"
         ControlDial.EV -> if (constrained) "0" else formatEv(state.aeCompensationEv)
+        ControlDial.INT -> formatIntervalShort(state.timelapseIntervalMs)
     }
     Column(
         modifier
@@ -1787,7 +1802,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
     val free = formatBytes(state.availableStorageBytes) + " libre"
     val battery = batteryPercent?.let { "$it%" } ?: "--"
     val lut = if (state.selectedMode == CaptureMode.LOG) (if (settings.logViewAssistEnabled) "Rec.709" else "Flat") else "--"
-    val wb = awbLabel(state.requestedAwbMode)
+    val wb = state.requestedWhiteBalance.label()
     val focus = if (state.requestedFocusDiopters != null) "MF" else "AF-C"
     val primary = buildList {
         add(codec)
@@ -1955,6 +1970,8 @@ private fun ManualControlDial(
     control: ControlDial,
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
     onClose: () -> Unit,
 ) {
     val descriptor = state.descriptor ?: return
@@ -1967,11 +1984,19 @@ private fun ManualControlDial(
         return
     }
     if (control == ControlDial.WB) {
-        AwbDial(state.requestedAwbMode, binder, onClose)
+        AwbDial(state.requestedWhiteBalance, binder, onClose)
         return
     }
     if (control == ControlDial.EV) {
         EvDial(state, binder, onClose)
+        return
+    }
+    if (control == ControlDial.FOCUS) {
+        FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
+        return
+    }
+    if (control == ControlDial.INT) {
+        IntervalometerDial(settings, onSettingsChanged, onClose)
         return
     }
     val value = when (control) {
@@ -1982,6 +2007,7 @@ private fun ManualControlDial(
         ControlDial.FOCUS -> ((state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f) / (descriptor.minimumFocusDistance ?: 1f)).coerceIn(0f, 1f)
         ControlDial.WB -> 0f
         ControlDial.EV -> 0f
+        ControlDial.INT -> 0f
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(control.name, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -2002,6 +2028,7 @@ private fun ManualControlDial(
                     ControlDial.FOCUS -> binder?.setManualFocus(position * (descriptor.minimumFocusDistance ?: 1f))
                     ControlDial.WB -> Unit
                     ControlDial.EV -> Unit
+                    ControlDial.INT -> Unit
                 }
             },
             modifier = Modifier.weight(1f).height(28.dp),
@@ -2012,8 +2039,9 @@ private fun ManualControlDial(
                 ControlDial.FPS -> Unit
                 ControlDial.ISO, ControlDial.SHUTTER -> binder?.setManualExposure(null, null)
                 ControlDial.FOCUS -> binder?.setManualFocus(null)
-                ControlDial.WB -> binder?.setAwbMode(null)
+                ControlDial.WB -> binder?.setWhiteBalance(com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto)
                 ControlDial.EV -> binder?.setExposureCompensation(0)
+                ControlDial.INT -> Unit
             }
             onClose()
         }) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
@@ -2130,7 +2158,7 @@ private fun FpsDial(
 }
 
 @Composable
-private fun AwbDial(selected: Int?, binder: CaptureService.LocalBinder?, onClose: () -> Unit) {
+private fun AwbDial(selected: WhiteBalanceSelection, binder: CaptureService.LocalBinder?, onClose: () -> Unit) {
     val choices = listOf(
         null to "AUTO",
         CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to "DAY",
@@ -2143,13 +2171,186 @@ private fun AwbDial(selected: Int?, binder: CaptureService.LocalBinder?, onClose
         choices.chunked(3).forEach { rowChoices ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowChoices.forEach { (mode, label) ->
-                    ChoiceTile(label, selected == mode, Modifier.weight(1f)) { binder?.setAwbMode(mode) }
+                    val isSelected = if (mode == null) selected is com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto
+                        else selected is com.librestatic.opencinecam.camera.WhiteBalanceSelection.Preset && selected.awbMode == mode
+                    ChoiceTile(label, isSelected, Modifier.weight(1f)) { binder?.setWhiteBalance(if (mode != null) com.librestatic.opencinecam.camera.WhiteBalanceSelection.Preset(mode) else com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto) }
                 }
                 repeat(3 - rowChoices.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
+
+@Composable
+private fun IntervalometerDial(
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    var customText by remember { mutableStateOf("") }
+    var customError by remember { mutableStateOf(false) }
+    val presets = listOf(100L, 500L, 1_000L, 2_000L, 5_000L, 10_000L, 30_000L, 60_000L)
+    val limitModes = TimeLapseLimitMode.entries
+
+    Column(
+        Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        PanelHeader(stringResource(R.string.timelapse_interval), onClose)
+        Text(stringResource(R.string.timelapse_interval_summary), color = Muted, fontSize = 10.sp)
+
+        // Interval presets
+        presets.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { ms ->
+                    val selected = settings.timelapseIntervalMs == ms
+                    ChoiceTile(formatIntervalShort(ms), selected, Modifier.weight(1f)) {
+                        onSettingsChanged(settings.copy(timelapseIntervalMs = ms))
+                    }
+                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+
+        // Custom interval input
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = customText,
+                onValueChange = { customText = it; customError = false },
+                label = { Text(stringResource(R.string.timelapse_custom_interval), fontSize = 10.sp) },
+                placeholder = { Text(stringResource(R.string.timelapse_custom_hint), fontSize = 10.sp, color = Muted) },
+                isError = customError,
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+            TextButton(onClick = {
+                val parsed = customText.trim().replace(',', '.').toDoubleOrNull()
+                if (parsed != null && parsed >= 0.1 && parsed <= 3600.0) {
+                    val ms = (parsed * 1000).toLong().coerceIn(100L, 3_600_000L)
+                    onSettingsChanged(settings.copy(timelapseIntervalMs = ms))
+                    customText = ""
+                } else {
+                    customError = true
+                }
+            }) { Text(stringResource(R.string.timelapse_custom_interval), color = Amber, fontSize = 10.sp) }
+        }
+        if (customError) {
+            Text(stringResource(R.string.timelapse_custom_invalid), color = RecordRed, fontSize = 10.sp)
+        }
+
+        Spacer(Modifier.height(4.dp))
+        Text(stringResource(R.string.timelapse_limit), color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+
+        // Limit mode selector
+        limitModes.forEach { mode ->
+            val label = when (mode) {
+                TimeLapseLimitMode.UNLIMITED -> stringResource(R.string.timelapse_limit_unlimited)
+                TimeLapseLimitMode.FRAME_COUNT -> stringResource(R.string.timelapse_limit_frame_count)
+                TimeLapseLimitMode.DURATION -> stringResource(R.string.timelapse_limit_duration)
+            }
+            ChoiceTile(label, settings.timelapseLimitMode == mode, Modifier.fillMaxWidth()) {
+                onSettingsChanged(settings.copy(timelapseLimitMode = mode))
+            }
+        }
+
+        // Frame count input
+        if (settings.timelapseLimitMode == TimeLapseLimitMode.FRAME_COUNT) {
+            var frameText by remember { mutableStateOf(settings.timelapseFrameCount.toString()) }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = frameText,
+                    onValueChange = { frameText = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.timelapse_frame_count), fontSize = 10.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                TextButton(onClick = {
+                    val count = frameText.toIntOrNull()?.coerceIn(2, 100_000)
+                    if (count != null) onSettingsChanged(settings.copy(timelapseFrameCount = count))
+                }) { Text("OK", color = Amber, fontSize = 10.sp) }
+            }
+            Text("2\u2013100.000", color = Muted, fontSize = 9.sp)
+        }
+
+        // Duration input
+        if (settings.timelapseLimitMode == TimeLapseLimitMode.DURATION) {
+            val totalSeconds = settings.timelapseDurationMs / 1000
+            var hours by remember { mutableStateOf((totalSeconds / 3600).toString()) }
+            var minutes by remember { mutableStateOf(((totalSeconds % 3600) / 60).toString()) }
+            var seconds by remember { mutableStateOf((totalSeconds % 60).toString()) }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = hours,
+                    onValueChange = { hours = it.filter { c -> c.isDigit() } },
+                    label = { Text("h", fontSize = 10.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = minutes,
+                    onValueChange = { minutes = it.filter { c -> c.isDigit() } },
+                    label = { Text("min", fontSize = 10.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = seconds,
+                    onValueChange = { seconds = it.filter { c -> c.isDigit() } },
+                    label = { Text("s", fontSize = 10.sp) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                TextButton(onClick = {
+                    val h = hours.toIntOrNull()?.coerceIn(0, 24) ?: 0
+                    val m = minutes.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                    val sec = seconds.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                    val totalMs = (h * 3600 + m * 60 + sec) * 1000L
+                    if (totalMs in 1_000L..86_400_000L) {
+                        onSettingsChanged(settings.copy(timelapseDurationMs = totalMs))
+                    }
+                }) { Text("OK", color = Amber, fontSize = 10.sp) }
+            }
+            Text("1 s\u201324 h", color = Muted, fontSize = 9.sp)
+        }
+    }
+}
+
+private fun formatIntervalShort(intervalMs: Long): String {
+    val totalSeconds = intervalMs / 1000.0
+    return when {
+        totalSeconds < 1.0 -> "%.1fs".format(totalSeconds)
+        totalSeconds < 60.0 -> "%ds".format(totalSeconds.toInt())
+        totalSeconds < 3600.0 -> {
+            val m = totalSeconds.toInt() / 60
+            val s = totalSeconds.toInt() % 60
+            if (s == 0) "${m}min" else "${m}m${s}s"
+        }
+        else -> {
+            val h = totalSeconds.toInt() / 3600
+            val m = (totalSeconds.toInt() % 3600) / 60
+            if (m == 0) "${h}h" else "${h}h${m}m"
+        }
+    }
+}
+
 
 @Composable
 private fun PanelHeader(title: String, onClose: () -> Unit) {
@@ -2385,6 +2586,24 @@ private fun SettingsScreen(
                 enabled = state.descriptor?.supportsOpenCineLog == true,
                 onCheckedChange = { onSettingsChange(settings.copy(logViewAssistEnabled = it)) },
             )
+        }
+        item {
+            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.af_lock_behavior), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 10.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AfLockBehavior.entries.forEach { behavior ->
+                        TextButton(onClick = { onSettingsChange(settings.copy(afLockBehavior = behavior)) }) {
+                            Text(
+                                if (behavior == AfLockBehavior.FREEZE_CURRENT) stringResource(R.string.af_lock_freeze_current)
+                                else stringResource(R.string.af_lock_focus_and_lock),
+                                color = if (settings.afLockBehavior == behavior) Amber else Color.White,
+                                fontWeight = if (settings.afLockBehavior == behavior) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+            }
         }
         item {
             val descriptor = state.descriptor
@@ -2697,15 +2916,6 @@ private fun formatShutter(exposureTimeNs: Long): String {
     return if (denominator >= 1.0) "1/${denominator.toInt()}" else "${exposureTimeNs / 1_000_000}ms"
 }
 
-private fun awbLabel(mode: Int?): String = when (mode) {
-    null, CaptureRequest.CONTROL_AWB_MODE_AUTO -> "AUTO"
-    CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT -> "DAY"
-    CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT -> "CLOUD"
-    CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT -> "TUNG"
-    CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT -> "FLUO"
-    else -> "WB$mode"
-}
-
 /** Formats an EV value (e.g. -1.33, +0.5, 0). Returns "0" for null/zero. */
 private fun formatEv(ev: Float?): String {
     val value = ev ?: 0f
@@ -2714,6 +2924,173 @@ private fun formatEv(ev: Float?): String {
     val rounded = (value * 100).roundToInt() / 100f
     val formatted = if (rounded == rounded.toInt().toFloat()) rounded.toInt().toString() else "%.2f".format(rounded)
     return "$sign$formatted"
+}
+
+@Composable
+private fun FocusPullDial(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
+    onClose: () -> Unit,
+) {
+    val descriptor = state.descriptor ?: return
+    val minDistance = descriptor.minimumFocusDistance ?: 0f
+    val supportsManualFocus = minDistance > 0f
+    val currentDiopters = state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f
+    val focusSliderPos = if (supportsManualFocus) (currentDiopters / minDistance).coerceIn(0f, 1f) else 0f
+    val marks = state.focusMarks
+    val markLabels = listOf("A", "B", "C", "D")
+    val pullActive = state.focusPullActive
+
+    Column(
+        Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        PanelHeader(if (pullActive) "FOCUS PULL" else "FOCO", onClose)
+
+        Text(
+            if (supportsManualFocus) {
+                val effective = state.focusDistanceDiopters
+                val requested = state.requestedFocusDiopters
+                if (pullActive) {
+                    "-> %.1fD".format(state.focusPullTargetDiopters ?: 0f)
+                } else if (requested != null) {
+                    "%.1fD".format(requested) + (effective?.let { " (%.1fD)".format(it) } ?: "")
+                } else if (effective != null) {
+                    "%.1fD".format(effective)
+                } else "AUTO"
+            } else "AUTO (lente fija)",
+            color = if (pullActive) RecordRed else Amber,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+
+        if (supportsManualFocus) {
+            Slider(
+                value = focusSliderPos,
+                onValueChange = { pos ->
+                    binder?.setManualFocus(pos * minDistance)
+                },
+                modifier = Modifier.fillMaxWidth().height(28.dp),
+                enabled = !pullActive,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("0D", color = Muted, fontSize = 9.sp)
+                TextButton(
+                    onClick = { binder?.setManualFocus(null) },
+                    contentPadding = PaddingValues(0.dp),
+                ) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
+                Text("%.1fD".format(minDistance), color = Muted, fontSize = 9.sp)
+            }
+        }
+
+        if (supportsManualFocus && !pullActive) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
+
+            Text("MARCAS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                markLabels.forEach { label ->
+                    val savedDiopters = marks[label]
+                    val hasMark = savedDiopters != null
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .background(
+                                if (hasMark) Color(0xFF1A3A1A) else Color(0xFF1A1F21),
+                                RoundedCornerShape(6.dp),
+                            )
+                            .pointerInput(label, hasMark, currentDiopters) {
+                                detectTapGestures(
+                                    onTap = {
+                                        if (hasMark) {
+                                            binder?.startFocusPull(
+                                                savedDiopters!!,
+                                                settings.focusPullDurationMs,
+                                                settings.focusPullEasing,
+                                            )
+                                        }
+                                    },
+                                    onLongPress = {
+                                        if (hasMark) {
+                                            binder?.clearFocusMark(label)
+                                        } else {
+                                            binder?.setFocusMark(label, currentDiopters)
+                                        }
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                label,
+                                color = if (hasMark) VerifiedCyan else Muted,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            if (hasMark) {
+                                Text("%.1fD".format(savedDiopters), color = Muted, fontSize = 7.sp)
+                            } else {
+                                Text("SET", color = Color(0xFF444444), fontSize = 7.sp)
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                "Tap: pull - Long: guardar/borrar",
+                color = Color(0xFF555555),
+                fontSize = 8.sp,
+            )
+
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
+
+            Text("DURACION %.1fs".format(settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Slider(
+                value = settings.focusPullDurationMs.toFloat(),
+                onValueChange = { v ->
+                    onSettingsChanged(settings.copy(focusPullDurationMs = (v / 500).toInt() * 500L))
+                },
+                valueRange = 500f..10_000f,
+                steps = 18,
+                modifier = Modifier.fillMaxWidth().height(28.dp),
+            )
+
+            Text("CURVA", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FocusPullEasing.entries.forEach { easing ->
+                    TextButton(
+                        onClick = { onSettingsChanged(settings.copy(focusPullEasing = easing)) },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(0.dp),
+                    ) {
+                        Text(
+                            when (easing) {
+                                FocusPullEasing.LINEAR -> "LIN"
+                                FocusPullEasing.EASE_IN -> "IN"
+                                FocusPullEasing.EASE_OUT -> "OUT"
+                                FocusPullEasing.EASE_IN_OUT -> "S-CURVE"
+                            },
+                            color = if (settings.focusPullEasing == easing) Amber else Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = if (settings.focusPullEasing == easing) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (pullActive) {
+            Button(
+                onClick = { binder?.cancelFocusPull() },
+                colors = ButtonDefaults.buttonColors(containerColor = RecordRed, contentColor = Color.White),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("CANCELAR PULL", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+        }
+    }
 }
 
 private fun logPosition(value: Double, minimum: Double, maximum: Double): Float {

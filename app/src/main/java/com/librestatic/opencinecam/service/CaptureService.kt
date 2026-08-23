@@ -33,6 +33,7 @@ import com.librestatic.opencinecam.camera.Camera2EmbeddedAudioConfig
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
+import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
@@ -351,6 +352,9 @@ class CaptureService : Service() {
                         "HFR ISP-derived · source depth not claimed"
                     } else "HLG-derived 10-bit"
                     "REC ${width}×$height · OCLog2 · HEVC Main10 · $source · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
+                } else if (cameraState.value.selectedMode == CaptureMode.TIME_LAPSE) {
+                    val intervalMs = cameraState.value.timelapseIntervalMs; val intervalLabel = if (intervalMs < 1000L) intervalMs.toString() + "ms" else (intervalMs / 1000L).toString() + "s"
+                    getString(R.string.timelapse_recording, intervalLabel, cameraState.value.targetFps)
                 } else {
                     "REC ${width}×$height · H.264 · $activeRecordingAudioLabel"
                 },
@@ -420,6 +424,30 @@ class CaptureService : Service() {
 
         override fun onAfLockChanged(state: LockState) {
             cameraState.value = cameraState.value.copy(afLockState = state)
+        }
+
+        override fun onFocusPullStarted(targetDiopters: Float) {
+            cameraState.value = cameraState.value.copy(
+                focusPullActive = true,
+                focusPullTargetDiopters = targetDiopters,
+                requestedFocusDiopters = targetDiopters,
+                tapFocusState = TapFocusState.IDLE,
+            )
+        }
+
+        override fun onFocusPullFinished() {
+            cameraState.value = cameraState.value.copy(
+                focusPullActive = false,
+                focusPullTargetDiopters = null,
+                focusMarks = previewEngine.getFocusMarks(),
+            )
+        }
+
+        override fun onFocusPullCancelled() {
+            cameraState.value = cameraState.value.copy(
+                focusPullActive = false,
+                focusPullTargetDiopters = null,
+            )
         }
 
         override fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) {
@@ -967,8 +995,30 @@ class CaptureService : Service() {
             cameraState.value = current.copy(
                 requestedFocusDiopters = focusDiopters,
                 tapFocusState = TapFocusState.IDLE,
+                focusPullActive = false,
+                focusPullTargetDiopters = null,
             )
             previewEngine.setManualControls(current.requestedIso, current.requestedExposureTimeNs, focusDiopters)
+        }
+
+        fun setFocusMark(label: String, diopters: Float): Boolean {
+            val ok = previewEngine.setFocusMark(label, diopters)
+            if (ok) cameraState.value = cameraState.value.copy(focusMarks = previewEngine.getFocusMarks())
+            return ok
+        }
+
+        fun clearFocusMark(label: String): Boolean {
+            val ok = previewEngine.clearFocusMark(label)
+            if (ok) cameraState.value = cameraState.value.copy(focusMarks = previewEngine.getFocusMarks())
+            return ok
+        }
+
+        fun startFocusPull(toDiopters: Float, durationMs: Long, easing: FocusPullEasing): Boolean {
+            return previewEngine.startFocusPull(toDiopters, durationMs, easing)
+        }
+
+        fun cancelFocusPull() {
+            previewEngine.cancelFocusPull()
         }
 
         fun setAeLock(enabled: Boolean) {
