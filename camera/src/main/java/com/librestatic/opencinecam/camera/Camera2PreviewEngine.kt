@@ -88,11 +88,14 @@ data class Camera2CameraDescriptor(
     val availableAfModes: List<Int> = emptyList(),
     val maxAfRegions: Int = 0,
     val maxAeRegions: Int = 0,
+    val aeLockSupported: Boolean = false,
+    val afLockSupported: Boolean = false,
     val zoomRatioRange: ClosedFloatingPointRange<Float>? = null,
     val supportsZoomRatioApi: Boolean = false,
     val digitalZoomMaxRatio: Float? = null,
     val opticalAnchors: List<ZoomAnchor> = emptyList(),
     val supportsHfrZoom: Boolean = false,
+    val kelvinRange: IntRange? = null,
 ) {
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
@@ -124,6 +127,19 @@ data class Camera2CameraDescriptor(
 }
 
 enum class TapFocusState { IDLE, SEARCHING, FOCUSED, NOT_FOCUSED }
+/**
+ * State of an AE/AF lock toggle. OFF = automation running, PENDING = a focus-and-lock scan is in
+ * progress, LOCKED = the automatism is frozen and reapplied to every repeating/still request.
+ */
+enum class LockState { OFF, PENDING, LOCKED }
+
+/**
+ * Behaviour of [Camera2PreviewEngine.setAfLock] when engaging the lock.
+ * FREEZE_CURRENT captures the last effective focus distance and holds the lens in place.
+ * FOCUS_AND_LOCK performs a one-shot AF scan at the last tap point (or center) and freezes once
+ * focus is confirmed.
+ */
+enum class AfLockBehavior { FREEZE_CURRENT, FOCUS_AND_LOCK }
 
 data class Camera2PreviewMetadata(
     val frameNumber: Long,
@@ -133,6 +149,7 @@ data class Camera2PreviewMetadata(
     val focusDistanceDiopters: Float?,
     val afState: Int?,
     val awbState: Int?,
+    val colorTemperatureK: Int? = null,
     val effectiveFps: Double?,
 )
 
@@ -172,6 +189,8 @@ interface Camera2PreviewListener {
     fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
+    fun onAeLockChanged(active: Boolean) = Unit
+    fun onAfLockChanged(state: LockState) = Unit
 }
 
 /**
@@ -233,8 +252,15 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     private var requestedIso: Int? = null
     private var requestedExposureNs: Long? = null
     private var requestedFocusDiopters: Float? = null
-    private var requestedAwbMode: Int? = null
+    private var requestedWhiteBalance: WhiteBalanceSelection = WhiteBalanceSelection.Auto
+    private var requestedAeCompensationIndex: Int? = null
     private var requestedTorchEnabled = false
+    private var aeLockActive = false
+    private var afLockState = LockState.OFF
+    private var afLockFrozenDiopters: Float? = null
+    private var afLockScanToken: Long? = null
+    private var afLockResultReported = false
+    private var lastTapFocusForAfLock: MeteringRectangle? = null
     private var tapFocusGeneration = 0L
     private var activeTapFocusToken: Long? = null
     private var tapAfRegion: MeteringRectangle? = null
@@ -256,6 +282,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     private var activeLogProfile: Camera2LogProfile? = null
     private var previousSensorTimestampNs: Long? = null
     private var effectiveFps: Double? = null
+    private var lastReportedFocusDiopters: Float? = null
     private val avcSurfaceEncoderCapabilities by lazy {
         MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
             .asSequence()
@@ -540,6 +567,15 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             requestedExposureNs = exposureTimeNs?.let { value -> descriptor?.exposureTimeRangeNs?.let { value.coerceIn(it.lower, it.upper) } ?: value }
             requestedFocusDiopters = focusDiopters?.let { value -> value.coerceIn(0f, descriptor?.minimumFocusDistance ?: value) }
             clearTapFocusLocked(notify = true)
+            // Locks are mutually exclusive with manual controls: engaging manual exposure
+            // releases AE lock, and engaging manual focus releases AF lock.
+            if ((requestedIso != null && requestedExposureNs != null) && aeLockActive) {
+                aeLockActive = false
+                listener?.onAeLockChanged(false)
+            }
+            if (requestedFocusDiopters != null && afLockState != LockState.OFF) {
+                disableAfLock(notify = true)
+            }
             val builder = repeatingBuilder ?: return@execute
             val configured = session ?: return@execute
             applyManualControls(builder)
@@ -566,6 +602,8 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             val currentSession = session ?: return@execute
             val builder = repeatingBuilder ?: return@execute
             if (currentSession is CameraConstrainedHighSpeedCaptureSession) return@execute
+            // AF lock freezes the lens; reject tap-to-focus while locked so the lock survives.
+            if (afLockState == LockState.LOCKED) return@execute
             val active = currentDescriptor.sensorActiveArray ?: return@execute
             val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: currentDescriptor.previewSize
             // When the API 29 crop-region fallback is active, map the tap into the visible crop
@@ -592,12 +630,13 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                 Rect(area.left, area.top, area.right, area.bottom),
                 MeteringRectangle.METERING_WEIGHT_MAX,
             )
+            lastTapFocusForAfLock = metering
             imageHandler.removeCallbacks(restoreTapFocus)
             val token = ++tapFocusGeneration
             activeTapFocusToken = token
             tapAfRegion = metering
             tapAeRegion = metering.takeIf {
-                meterExposure && currentDescriptor.maxAeRegions > 0 &&
+                meterExposure && currentDescriptor.maxAeRegions > 0 && !aeLockActive &&
                     (requestedIso == null || requestedExposureNs == null)
             }
             tapFocusResultReported = false
@@ -623,14 +662,33 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         return true
     }
 
-    fun setAwbMode(mode: Int?) {
+    fun setWhiteBalance(selection: WhiteBalanceSelection) {
         cameraExecutor.execute {
-            requestedAwbMode = mode
+            requestedWhiteBalance = selection
             val builder = repeatingBuilder ?: return@execute
             val configured = session ?: return@execute
             applyManualControls(builder)
             runCatching { configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
                 .onFailure { listener?.onFailure("white-balance-failed", it.message ?: "White balance update failed.", true) }
+        }
+    }
+
+    /**
+     * Sets the discrete AE exposure compensation index reported by the active camera's
+     * CONTROL_AE_COMPENSATION_RANGE. Passing null clears the request so the camera uses its
+     * default metering. When the device advertises no compensation range the call is ignored.
+     */
+    fun setExposureCompensation(index: Int?) {
+        cameraExecutor.execute {
+            val descriptor = activeDescriptor ?: return@execute
+            requestedAeCompensationIndex = descriptor.aeCompensationRange?.let { range ->
+                index?.coerceIn(range.lower, range.upper)
+            }
+            val builder = repeatingBuilder ?: return@execute
+            val configured = session ?: return@execute
+            applyManualControls(builder)
+            runCatching { configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
+                .onFailure { listener?.onFailure("exposure-compensation-failed", it.message ?: "Exposure compensation update failed.", true) }
         }
     }
 
@@ -642,6 +700,75 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             applyManualControls(builder)
             runCatching { configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
                 .onFailure { listener?.onFailure("flash-control-failed", it.message ?: "Flash control update failed.", true) }
+        }
+    }
+
+    /**
+     * Toggles AE lock. When [enabled] the active AE algorithm freezes its current exposure and
+     * that lock is reapplied to every repeating, still, and recording request. Manual exposure
+     * overrides (ISO/shutter) and constrained high-speed sessions are incompatible with the lock
+     * and leave it inactive.
+     */
+    fun setAeLock(enabled: Boolean) {
+        cameraExecutor.execute {
+            val descriptor = activeDescriptor ?: return@execute
+            val desired = enabled && descriptor.aeLockSupported && requestedIso == null &&
+                requestedExposureNs == null && !isHighSpeedSession()
+            if (desired == aeLockActive) return@execute
+            aeLockActive = desired
+            listener?.onAeLockChanged(desired)
+            val builder = repeatingBuilder ?: return@execute
+            val configured = session ?: return@execute
+            applyManualControls(builder)
+            runCatching { configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
+                .onFailure {
+                    aeLockActive = false
+                    listener?.onAeLockChanged(false)
+                    listener?.onFailure("ae-lock-failed", it.message ?: "AE lock update failed.", true)
+                }
+        }
+    }
+
+    /**
+     * Toggles AF lock. With [AfLockBehavior.FREEZE_CURRENT] the engine takes the last effective
+     * focus distance and switches AF to OFF so the lens holds position. With
+     * [AfLockBehavior.FOCUS_AND_LOCK] it performs a one-shot AF scan at the last tap point (or
+     * center) and freezes the distance once focus is confirmed. Constrained high-speed sessions,
+     * manual focus, and an active tap-to-focus scan are incompatible and leave the lock inactive.
+     */
+    fun setAfLock(enabled: Boolean, behavior: AfLockBehavior) {
+        cameraExecutor.execute {
+            val descriptor = activeDescriptor ?: return@execute
+            if (!enabled) {
+                disableAfLock(notify = true)
+                reapplyRepeating()
+                return@execute
+            }
+            if (!descriptor.afLockSupported || isHighSpeedSession()) {
+                listener?.onFailure("af-lock-unsupported", "AF lock is not supported in this session.", true)
+                return@execute
+            }
+            if (requestedFocusDiopters != null || activeTapFocusToken != null) {
+                listener?.onFailure("af-lock-conflict", "AF lock is incompatible with manual or tap focus.", true)
+                return@execute
+            }
+            when (behavior) {
+                AfLockBehavior.FREEZE_CURRENT -> {
+                    val frozen = lastReportedFocusDiopters
+                        ?: descriptor.minimumFocusDistance?.takeIf { it > 0f }?.let { 0f }
+                    if (frozen == null) {
+                        listener?.onFailure("af-lock-no-distance", "No focus distance to freeze yet.", true)
+                        return@execute
+                    }
+                    afLockFrozenDiopters = frozen
+                    afLockState = LockState.LOCKED
+                    afLockScanToken = null
+                    afLockResultReported = false
+                    listener?.onAfLockChanged(LockState.LOCKED)
+                    reapplyRepeating()
+                }
+                AfLockBehavior.FOCUS_AND_LOCK -> startAfLockScan(descriptor)
+            }
         }
     }
 
@@ -1572,6 +1699,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
                     reportTapFocusResult(request, result)
+                    reportAfLockResult(request, result)
                     reportEffectiveZoom(result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
@@ -1582,9 +1710,14 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                                 sensorTimestamp,
                                 result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY),
                                 result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
-                                result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE),
+                                result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE).also {
+                                    it?.let { distance -> lastReportedFocusDiopters = distance }
+                                },
                                 result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE),
                                 result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_STATE),
+                                if (Build.VERSION.SDK_INT >= 36) {
+                                    result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_COLOR_TEMPERATURE)
+                                } else null,
                                 effectiveFps,
                             ),
                         )
@@ -1634,22 +1767,65 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure.coerceAtMost(frameDurationNs - 100_000L))
         } else {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            builder.set(CaptureRequest.CONTROL_AE_LOCK, if (aeLockActive) java.lang.Boolean.TRUE else java.lang.Boolean.FALSE)
+            requestedAeCompensationIndex?.let { index ->
+                if (activeDescriptor?.aeCompensationRange != null) {
+                    builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, index)
+                }
+            }
         }
-        requestedFocusDiopters?.let {
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-            builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, it)
-            builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
-            builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
-        } ?: activeTapFocusToken?.let {
-            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
-            builder.set(CaptureRequest.CONTROL_AF_REGIONS, tapAfRegion?.let { arrayOf(it) })
-            builder.set(CaptureRequest.CONTROL_AE_REGIONS, tapAeRegion?.let { arrayOf(it) })
-        } ?: run {
-            builder.set(CaptureRequest.CONTROL_AF_MODE, defaultAfMode)
-            builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
-            builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+        when {
+            requestedFocusDiopters != null -> {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, requestedFocusDiopters!!)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+            }
+            afLockState == LockState.LOCKED -> {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, afLockFrozenDiopters ?: 0f)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+            }
+            activeTapFocusToken != null -> {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, tapAfRegion?.let { arrayOf(it) })
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, tapAeRegion?.let { arrayOf(it) })
+            }
+            else -> {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, defaultAfMode)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+            }
         }
-        builder.set(CaptureRequest.CONTROL_AWB_MODE, requestedAwbMode ?: CaptureRequest.CONTROL_AWB_MODE_AUTO)
+        when (val wb = requestedWhiteBalance) {
+            is WhiteBalanceSelection.Auto -> {
+                builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                if (Build.VERSION.SDK_INT >= 36) {
+                    builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_FAST)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TEMPERATURE, null)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TINT, null)
+                }
+            }
+            is WhiteBalanceSelection.Kelvin -> {
+                builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+                if (Build.VERSION.SDK_INT >= 36) {
+                    val range = activeDescriptor?.kelvinRange
+                    val clamped = if (range != null) wb.kelvin.coerceIn(range.first, range.last) else wb.kelvin
+                    builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_CCT)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TEMPERATURE, clamped)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TINT, 0)
+                }
+            }
+            is WhiteBalanceSelection.Preset -> {
+                builder.set(CaptureRequest.CONTROL_AWB_MODE, wb.awbMode)
+                if (Build.VERSION.SDK_INT >= 36) {
+                    builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_FAST)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TEMPERATURE, null)
+                    builder.set(CaptureRequest.COLOR_CORRECTION_COLOR_TINT, null)
+                }
+            }
+        }
         builder.set(
             CaptureRequest.FLASH_MODE,
             if (requestedTorchEnabled && activeDescriptor?.flashAvailable == true) {
@@ -1716,6 +1892,97 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         descriptor.targetFpsRanges
             .firstOrNull { it.lower == requestedTargetFps && it.upper == requestedTargetFps }
             ?.let { builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+    }
+
+    /** True when the active repeating session is constrained high-speed and rejects control locks. */
+    private fun isHighSpeedSession(): Boolean =
+        session is CameraConstrainedHighSpeedCaptureSession ||
+            activeVideoProfile?.constrainedHighSpeed == true ||
+            activeLogProfile?.constrainedHighSpeed == true
+
+    private fun reapplyRepeating() {
+        val builder = repeatingBuilder ?: return
+        val configured = session ?: return
+        applyManualControls(builder)
+        runCatching {
+            configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
+        }.onFailure {
+            listener?.onFailure("lock-reapply-failed", it.message ?: "Lock update could not be applied.", true)
+        }
+    }
+
+    private fun disableAfLock(notify: Boolean) {
+        if (afLockState == LockState.OFF && afLockFrozenDiopters == null && afLockScanToken == null) return
+        afLockState = LockState.OFF
+        afLockFrozenDiopters = null
+        afLockScanToken = null
+        afLockResultReported = false
+        repeatingBuilder?.setTag(null)
+        if (notify) listener?.onAfLockChanged(LockState.OFF)
+    }
+
+    private fun startAfLockScan(descriptor: Camera2CameraDescriptor) {
+        val configured = session ?: return
+        val builder = repeatingBuilder ?: return
+        if (configured is CameraConstrainedHighSpeedCaptureSession) return
+        val active = descriptor.sensorActiveArray ?: return
+        val region = lastTapFocusForAfLock ?: run {
+            val cx = active.width() / 2
+            val cy = active.height() / 2
+            val half = (minOf(active.width(), active.height()) / 6).coerceAtLeast(1)
+            MeteringRectangle(
+                (cx - half).coerceAtLeast(0),
+                (cy - half).coerceAtLeast(0),
+                half * 2,
+                half * 2,
+                MeteringRectangle.METERING_WEIGHT_MAX,
+            )
+        }
+        imageHandler.removeCallbacks(restoreTapFocus)
+        afLockState = LockState.PENDING
+        afLockScanToken = ++tapFocusGeneration
+        afLockResultReported = false
+        listener?.onAfLockChanged(LockState.PENDING)
+        try {
+            builder.setTag(TapFocusRequestTag(afLockScanToken!!))
+            tapAfRegion = region
+            applyManualControls(builder)
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_CANCEL)
+            configured.captureSingleRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            configured.captureSingleRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
+        } catch (failure: Exception) {
+            disableAfLock(notify = true)
+            listener?.onFailure("af-lock-scan-failed", failure.message ?: "AF lock scan failed.", true)
+        }
+    }
+
+    private fun reportAfLockResult(request: CaptureRequest, result: TotalCaptureResult) {
+        if (afLockState != LockState.PENDING) return
+        val token = afLockScanToken ?: return
+        if ((request.tag as? TapFocusRequestTag)?.token != token || afLockResultReported) return
+        when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)) {
+            android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED -> {
+                afLockResultReported = true
+                afLockFrozenDiopters = result.get(android.hardware.camera2.CaptureResult.LENS_FOCUS_DISTANCE)
+                    ?: lastReportedFocusDiopters ?: 0f
+                afLockState = LockState.LOCKED
+                tapAfRegion = null
+                afLockScanToken = null
+                listener?.onAfLockChanged(LockState.LOCKED)
+                reapplyRepeating()
+            }
+            android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> {
+                afLockResultReported = true
+                disableAfLock(notify = true)
+                reapplyRepeating()
+                listener?.onFailure("af-lock-unfocused", "AF lock failed: focus could not be confirmed.", true)
+            }
+        }
     }
 
     /** Constrained high-speed sessions accept only a restricted request-control subset. */
@@ -1916,6 +2183,20 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             } else emptyList()
             val supportsHfrZoom = supportsZoomRatioApi &&
                 hfrZoomKeys.any { it.name == "zoomRatio" }
+            // Direct Kelvin (COLOR_CORRECTION_MODE_CCT) requires API 36+, the CCT mode advertised
+            // in available color-correction modes, the temperature key present in the request
+            // keys, and a non-empty COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE with lower < upper.
+            val kelvinRange: IntRange? = if (Build.VERSION.SDK_INT >= 36) {
+                runCatching {
+                    val cctSupported = characteristics.get(CameraCharacteristics.COLOR_CORRECTION_AVAILABLE_MODES)
+                        ?.contains(CaptureRequest.COLOR_CORRECTION_MODE_CCT) == true
+                    val tempKeyPresent = characteristics.availableCaptureRequestKeys
+                        .any { it == CaptureRequest.COLOR_CORRECTION_COLOR_TEMPERATURE }
+                    val range = characteristics.get(CameraCharacteristics.COLOR_CORRECTION_COLOR_TEMPERATURE_RANGE)
+                    val valid = range != null && range.lower < range.upper
+                    if (cctSupported && tempKeyPresent && valid) range!!.lower..range.upper else null
+                }.getOrNull()
+            } else null
             Camera2CameraDescriptor(
                 cameraId = cameraId,
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
@@ -1940,11 +2221,17 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                 availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty(),
                 maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
                 maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
+                aeLockSupported = characteristics.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) != null,
+                afLockSupported = runCatching {
+                    val afModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty()
+                    CaptureRequest.CONTROL_AF_MODE_OFF in afModes && CaptureRequest.CONTROL_AF_MODE_AUTO in afModes
+                }.getOrDefault(false),
                 zoomRatioRange = zoomRange,
                 supportsZoomRatioApi = supportsZoomRatioApi,
                 digitalZoomMaxRatio = if (!supportsZoomRatioApi) zoomRange?.endInclusive else null,
                 opticalAnchors = anchors,
                 supportsHfrZoom = supportsHfrZoom,
+                kelvinRange = kelvinRange,
             )
         }.getOrNull()
 
@@ -2009,9 +2296,18 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         activeLogProfile = null
         previewSurface = null
         activeDescriptor = null
+        requestedAeCompensationIndex = null
+        requestedWhiteBalance = WhiteBalanceSelection.Auto
         requestedZoomRatio = 1f
         lastAcceptedZoomRatio = 1f
         effectiveZoomRatio = 1f
+        aeLockActive = false
+        afLockState = LockState.OFF
+        afLockFrozenDiopters = null
+        afLockScanToken = null
+        afLockResultReported = false
+        lastTapFocusForAfLock = null
+        lastReportedFocusDiopters = null
     }
 
     private fun releaseRecorder() {

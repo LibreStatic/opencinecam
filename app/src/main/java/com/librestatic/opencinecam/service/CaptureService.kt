@@ -26,9 +26,13 @@ import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import com.librestatic.opencinecam.camera.Camera2PreviewListener
 import com.librestatic.opencinecam.camera.Camera2PreviewMetadata
+import com.librestatic.opencinecam.camera.WhiteBalanceSelection
+import com.librestatic.opencinecam.camera.adaptTo
 import com.librestatic.opencinecam.camera.Camera2Analysis
 import com.librestatic.opencinecam.camera.Camera2EmbeddedAudioConfig
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
+import com.librestatic.opencinecam.camera.AfLockBehavior
+import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
@@ -90,6 +94,7 @@ class CaptureService : Service() {
     private var pendingSwitchPrevious: String? = null
     private var pendingStatusMessage: String? = null
     private val perCameraZoom = mutableMapOf<String, Float>()
+    private val perCameraWhiteBalance = mutableMapOf<String, WhiteBalanceSelection>()
     private var settings = CameraSettings()
     private var geometrySeeds = GeometrySeeds()
     private lateinit var physicalOrientationTracker: PhysicalOrientationTracker
@@ -232,6 +237,17 @@ class CaptureService : Service() {
             if (remembered != null && remembered != 1f && descriptor.zoomSupported) {
                 previewEngine.setZoomRatio(remembered)
             }
+            // Restore the remembered white-balance selection for this camera, adapting it to
+            // the new camera's Kelvin capability (a Kelvin request falls back to Auto when the
+            // camera has no direct CCT support).
+            val rememberedWb = perCameraWhiteBalance[descriptor.cameraId]
+            if (rememberedWb != null && rememberedWb != WhiteBalanceSelection.Auto) {
+                val adapted = rememberedWb.adaptTo(descriptor.kelvinRange)
+                if (adapted != WhiteBalanceSelection.Auto) {
+                    cameraState.value = cameraState.value.copy(requestedWhiteBalance = adapted)
+                    previewEngine.setWhiteBalance(adapted)
+                }
+            }
         }
 
         override fun onMetadata(metadata: Camera2PreviewMetadata) {
@@ -241,6 +257,7 @@ class CaptureService : Service() {
                 focusDistanceDiopters = metadata.focusDistanceDiopters,
                 afState = metadata.afState,
                 awbState = metadata.awbState,
+                reportedColorTemperatureK = metadata.colorTemperatureK,
                 effectiveFps = metadata.effectiveFps,
             )
         }
@@ -395,6 +412,14 @@ class CaptureService : Service() {
 
         override fun onTapFocusState(state: TapFocusState) {
             cameraState.value = cameraState.value.copy(tapFocusState = state)
+        }
+
+        override fun onAeLockChanged(active: Boolean) {
+            cameraState.value = cameraState.value.copy(aeLockActive = active)
+        }
+
+        override fun onAfLockChanged(state: LockState) {
+            cameraState.value = cameraState.value.copy(afLockState = state)
         }
 
         override fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) {
@@ -604,7 +629,7 @@ class CaptureService : Service() {
             if (current.phase == CameraUiPhase.RECORDING) return
             val descriptor = current.cameras.firstOrNull { it.cameraId == cameraId } ?: return
             val videoProfile = normalizedVideoProfile(
-                descriptor, geometrySeeds.videoWidth, geometrySeeds.videoHeight, geometrySeeds.videoFps,
+                descriptor, geometrySeeds.width(current.selectedMode), geometrySeeds.height(current.selectedMode), geometrySeeds.fps(current.selectedMode),
             )
             val logProfile = normalizedLogProfile(
                 descriptor, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps,
@@ -626,6 +651,8 @@ class CaptureService : Service() {
                 targetVideoWidth = selectedWidth,
                 targetVideoHeight = selectedHeight,
                 effectiveFps = null,
+                requestedAeCompensationIndex = 0,
+                requestedWhiteBalance = WhiteBalanceSelection.Auto,
                 phase = CameraUiPhase.OPENING,
                 message = "Camera $cameraId selected",
                 modeGates = current.modeGates + mapOf(
@@ -696,7 +723,7 @@ class CaptureService : Service() {
                 normalizedLogProfile(it, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
             }.takeIf { mode == CaptureMode.LOG }
             val selectedVideoProfile = descriptor?.let {
-                normalizedVideoProfile(it, geometrySeeds.videoWidth, geometrySeeds.videoHeight, geometrySeeds.videoFps)
+                normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
             val selectedWidth = selectedLogProfile?.size?.width ?: selectedVideoProfile?.size?.width
                 ?: geometrySeeds.width(mode)
@@ -859,7 +886,7 @@ class CaptureService : Service() {
                 ) ?: return
                 selectedFps = selected.fps
                 selectedHighSpeed = choices.first { it.size.width == width && it.size.height == height && it.fps == selected.fps }.constrainedHighSpeed
-                sourceLabel = "Video"
+                sourceLabel = if (current.selectedMode == CaptureMode.TIME_LAPSE) "Timelapse" else "Video"
             }
             cameraState.value = current.copy(
                 phase = if (attachedPreviewSurface?.isValid == true) CameraUiPhase.OPENING else current.phase,
@@ -919,6 +946,22 @@ class CaptureService : Service() {
             previewEngine.setManualControls(iso, exposureTimeNs, current.requestedFocusDiopters)
         }
 
+        fun setExposureCompensation(index: Int) {
+            val current = cameraState.value
+            val descriptor = current.descriptor
+            val clamped = descriptor?.aeCompensationRange?.let { range ->
+                index.coerceIn(range.lower, range.upper)
+            } ?: return
+            // Adjusting EV returns exposure to AE so the compensation can take effect.
+            cameraState.value = current.copy(
+                requestedAeCompensationIndex = clamped,
+                requestedIso = null,
+                requestedExposureTimeNs = null,
+            )
+            previewEngine.setManualControls(null, null, current.requestedFocusDiopters)
+            previewEngine.setExposureCompensation(clamped)
+        }
+
         fun setManualFocus(focusDiopters: Float?) {
             val current = cameraState.value
             cameraState.value = current.copy(
@@ -926,6 +969,18 @@ class CaptureService : Service() {
                 tapFocusState = TapFocusState.IDLE,
             )
             previewEngine.setManualControls(current.requestedIso, current.requestedExposureTimeNs, focusDiopters)
+        }
+
+        fun setAeLock(enabled: Boolean) {
+            val current = cameraState.value
+            if (current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)) return
+            previewEngine.setAeLock(enabled)
+        }
+
+        fun setAfLock(enabled: Boolean, behavior: AfLockBehavior) {
+            val current = cameraState.value
+            if (current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)) return
+            previewEngine.setAfLock(enabled, behavior)
         }
 
         fun tapToFocus(normalizedX: Float, normalizedY: Float, meterExposure: Boolean): Boolean {
@@ -966,9 +1021,11 @@ class CaptureService : Service() {
             setZoomRatio(target)
         }
 
-        fun setAwbMode(mode: Int?) {
-            cameraState.value = cameraState.value.copy(requestedAwbMode = mode)
-            previewEngine.setAwbMode(mode)
+        fun setWhiteBalance(selection: WhiteBalanceSelection) {
+            val current = cameraState.value
+            cameraState.value = current.copy(requestedWhiteBalance = selection)
+            current.selectedCameraId?.let { perCameraWhiteBalance[it] = selection }
+            previewEngine.setWhiteBalance(selection)
         }
 
         /** [audioForThisTake] overrides the persisted audio switch for one recording only. */
@@ -1214,11 +1271,20 @@ class CaptureService : Service() {
                         }
                         val output = VideoOutput.create(this@CaptureService)
                         videoOutput = output
-                        cameraState.value = current.copy(phase = CameraUiPhase.CAPTURING, message = "Preparing timelapse · 2 fps → ${current.targetFps} fps…")
+                        val captureRate = 1000.0 / settings.timelapseIntervalMs
+                        cameraState.value = current.copy(
+                            phase = CameraUiPhase.CAPTURING,
+                            message = getString(R.string.timelapse_preparing, captureRate, current.targetFps),
+                            timelapseIntervalMs = settings.timelapseIntervalMs,
+                            timelapseLimitMode = settings.timelapseLimitMode,
+                            timelapseFrameCount = settings.timelapseFrameCount,
+                            timelapseDurationMs = settings.timelapseDurationMs,
+                            timelapseFramesCaptured = 0,
+                        )
                         previewEngine.startVideo(
                             output.descriptor,
                             null,
-                            captureRate = 2.0,
+                            captureRate = captureRate,
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
                         ).also { accepted ->
                             if (!accepted) {

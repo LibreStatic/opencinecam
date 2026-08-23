@@ -16,6 +16,11 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.SystemClock
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.hardware.camera2.CaptureRequest
@@ -131,6 +136,8 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
+import com.librestatic.opencinecam.camera.AfLockBehavior
+import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.TapFocusState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
@@ -150,7 +157,7 @@ private val RecordRed = Color(0xFFE23A3A)
 private val Muted = Color(0xFF9CA6AA)
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
-private enum class ControlDial { RESOLUTION, FPS, ISO, SHUTTER, FOCUS, WB }
+private enum class ControlDial { RESOLUTION, FPS, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
 fun CameraRootScreen() {
@@ -305,6 +312,9 @@ private fun CaptureSurface(
     var peaking by remember { mutableStateOf(false) }
     var histogram by rememberSaveable { mutableStateOf(settings.histogramEnabled) }
     var histogramMode by rememberSaveable { mutableStateOf(settings.histogramMode) }
+    var showGrid by rememberSaveable { mutableStateOf(settings.compositionGridEnabled) }
+    var gridMode by rememberSaveable { mutableStateOf(settings.compositionGridMode) }
+    var showHorizon by rememberSaveable { mutableStateOf(settings.horizonLevelEnabled) }
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.roundToPx() }
@@ -350,6 +360,9 @@ private fun CaptureSurface(
                 showPeaking = peaking,
                 showHistogram = histogram,
                 histogramMode = histogramMode,
+                showGrid = showGrid,
+                gridMode = gridMode,
+                showHorizon = showHorizon,
                 reserveAudioMeterSpace = settings.audioEnabled &&
                     state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG),
                 landscape = landscape,
@@ -370,6 +383,9 @@ private fun CaptureSurface(
             peaking = peaking,
             histogram = histogram,
             histogramMode = histogramMode,
+            showGrid = showGrid,
+            gridMode = gridMode,
+            showHorizon = showHorizon,
             onToggleZebra = { zebra = !zebra },
             onTogglePeaking = { peaking = !peaking },
             onToggleHistogram = {
@@ -381,6 +397,22 @@ private fun CaptureSurface(
                 val updated = if (histogramMode == HistogramMode.RGB) HistogramMode.LUMA else HistogramMode.RGB
                 histogramMode = updated
                 onSettingsChanged(settings.copy(histogramEnabled = histogram, histogramMode = updated))
+            },
+            onToggleGrid = {
+                val updated = !showGrid
+                showGrid = updated
+                onSettingsChanged(settings.copy(compositionGridEnabled = updated, compositionGridMode = gridMode))
+            },
+            onCycleGridMode = {
+                val updated = CompositionGridMode.entries[(gridMode.ordinal + 1) % CompositionGridMode.entries.size]
+                gridMode = updated
+                showGrid = true
+                onSettingsChanged(settings.copy(compositionGridEnabled = true, compositionGridMode = updated))
+            },
+            onToggleHorizon = {
+                val updated = !showHorizon
+                showHorizon = updated
+                onSettingsChanged(settings.copy(horizonLevelEnabled = updated))
             },
             onOpenMedia = onOpenMedia,
             onOpenSettings = onOpenSettings,
@@ -422,10 +454,26 @@ private fun MonitoringOverlay(
     showPeaking: Boolean,
     showHistogram: Boolean,
     histogramMode: HistogramMode,
+    showGrid: Boolean,
+    gridMode: CompositionGridMode,
+    showHorizon: Boolean,
     reserveAudioMeterSpace: Boolean,
     landscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val displayRotationProvider = remember(context) {
+        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+        { windowManager.defaultDisplay.rotation }
+    }
+    var rollSnapshot by remember { mutableStateOf<HorizonRollSnapshot?>(null) }
+    val horizonSensorAvailable = remember(context, showHorizon) {
+        if (!showHorizon) null
+        else HorizonRollSensor(context, displayRotationProvider) { rollSnapshot = it }.also { it.start() }
+    }
+    DisposableEffect(horizonSensorAvailable) {
+        onDispose { horizonSensorAvailable?.close() }
+    }
     var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -457,6 +505,46 @@ private fun MonitoringOverlay(
             }
             if (showPeaking) state.focusCells.forEachIndexed { index, active ->
                 if (active) displayCell(index).let { (x, y) -> drawRect(VerifiedCyan.copy(alpha = .85f), topLeft = androidx.compose.ui.geometry.Offset(x * cellWidth, y * cellHeight), size = androidx.compose.ui.geometry.Size(cellWidth, cellHeight), style = Stroke(width = 2.dp.toPx())) }
+            }
+            if (showGrid) {
+                val gridColor = Color.White.copy(alpha = .45f)
+                val gridStroke = Stroke(width = 1.dp.toPx())
+                if (CompositionGridGeometry.isDiagonal(gridMode)) {
+                    CompositionGridGeometry.diagonals(size).forEach { (a, b) ->
+                        drawLine(gridColor, a, b, strokeWidth = 1.dp.toPx())
+                    }
+                } else {
+                    CompositionGridGeometry.verticalDivisions(gridMode).forEach { ratio ->
+                        val x = size.width * ratio
+                        drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+                    }
+                    CompositionGridGeometry.horizontalDivisions(gridMode).forEach { ratio ->
+                        val y = size.height * ratio
+                        drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    }
+                }
+            }
+            if (showHorizon) {
+                val snap = rollSnapshot
+                if (snap != null && !snap.degrees.isNaN()) {
+                    val degrees = snap.degrees.coerceIn(-90f, 90f)
+                    val color = when {
+                        kotlin.math.abs(degrees) <= HorizonRollColors.LEVEL_BAND -> VerifiedCyan
+                        kotlin.math.abs(degrees) <= HorizonRollColors.WARNING_BAND -> Amber
+                        else -> Color.White
+                    }
+                    val centerY = size.height / 2f
+                    val halfLen = size.width * 0.35f
+                    val angleRad = Math.toRadians(degrees.toDouble())
+                    val cos = kotlin.math.cos(angleRad).toFloat()
+                    val sin = kotlin.math.sin(angleRad).toFloat()
+                    val cx = size.width / 2f
+                    val cy = centerY
+                    val a = Offset(cx - halfLen * cos, cy - halfLen * sin)
+                    val b = Offset(cx + halfLen * cos, cy + halfLen * sin)
+                    drawLine(color, a, b, strokeWidth = 2.dp.toPx())
+                    drawCircle(color, radius = 4.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 1.dp.toPx()))
+                }
             }
         }
         val analysisFresh = state.analysisUpdatedAtMs > 0L && analysisClockMs - state.analysisUpdatedAtMs <= 1_000L
@@ -649,10 +737,16 @@ internal fun AdaptiveCaptureChrome(
     peaking: Boolean,
     histogram: Boolean,
     histogramMode: HistogramMode,
+    showGrid: Boolean,
+    gridMode: CompositionGridMode,
+    showHorizon: Boolean,
     onToggleZebra: () -> Unit,
     onTogglePeaking: () -> Unit,
     onToggleHistogram: () -> Unit,
     onCycleHistogramMode: () -> Unit,
+    onToggleGrid: () -> Unit,
+    onCycleGridMode: () -> Unit,
+    onToggleHorizon: () -> Unit,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -853,6 +947,12 @@ internal fun AdaptiveCaptureChrome(
         }
 
         if (chromeVisible) {
+            LockToggles(
+                state = state,
+                binder = binder,
+                afLockBehavior = settings.afLockBehavior,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = 62.dp),
+            )
             CaptureTopBar(
                 state = state,
                 binder = binder,
@@ -911,10 +1011,16 @@ internal fun AdaptiveCaptureChrome(
                 peaking = peaking,
                 histogram = histogram,
                 histogramMode = histogramMode,
+                showGrid = showGrid,
+                gridMode = gridMode,
+                showHorizon = showHorizon,
                 onToggleZebra = onToggleZebra,
                 onTogglePeaking = onTogglePeaking,
                 onToggleHistogram = onToggleHistogram,
                 onCycleHistogramMode = onCycleHistogramMode,
+                onToggleGrid = onToggleGrid,
+                onCycleGridMode = onCycleGridMode,
+                onToggleHorizon = onToggleHorizon,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop),
             )
         }
@@ -938,6 +1044,11 @@ internal fun AdaptiveCaptureChrome(
                         MonitorToggle("P", peaking, onTogglePeaking)
                         MonitorToggle("H", histogram, onToggleHistogram)
                         MonitorToggle(if (histogramMode == HistogramMode.RGB) "RGB" else "Y", true, onCycleHistogramMode)
+                        Spacer(Modifier.width(4.dp))
+                        MonitorToggle("G", showGrid, onToggleGrid)
+                        MonitorToggle(gridModeLabel(gridMode), true, onCycleGridMode)
+                        Spacer(Modifier.width(4.dp))
+                        MonitorToggle("L", showHorizon, onToggleHorizon)
                     }
                 }
             }
@@ -1156,6 +1267,7 @@ private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit
         add(ControlDial.SHUTTER)
         add(ControlDial.ISO)
         add(ControlDial.WB)
+        if (state.aeCompensationSupported) add(ControlDial.EV)
         add(ControlDial.FOCUS)
     }
     if (landscape) {
@@ -1181,6 +1293,80 @@ private fun QuickControlButton(
     onControl: (ControlDial) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+@Composable
+private fun LockToggles(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    afLockBehavior: AfLockBehavior,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = LocalHapticFeedback.current
+    val manualExposure = state.requestedIso != null || state.requestedExposureTimeNs != null
+    val manualFocus = state.requestedFocusDiopters != null
+    val aeAvailable = state.aeLockSupported && !manualExposure
+    val afAvailable = state.afLockSupported && !manualFocus
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        LockButton(
+            label = stringResource(R.string.ae_lock),
+            active = state.aeLockActive,
+            enabled = aeAvailable,
+            testTag = "ae-lock-toggle",
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                binder?.setAeLock(!state.aeLockActive)
+            },
+        )
+        val afPending = state.afLockState == LockState.PENDING
+        val afLocked = state.afLockState == LockState.LOCKED
+        LockButton(
+            label = if (afPending) stringResource(R.string.af_lock_pending) else stringResource(R.string.af_lock),
+            active = afLocked,
+            pending = afPending,
+            enabled = afAvailable,
+            testTag = "af-lock-toggle",
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                if (afLocked || afPending) binder?.setAfLock(false, afLockBehavior)
+                else binder?.setAfLock(true, afLockBehavior)
+            },
+        )
+    }
+}
+
+@Composable
+private fun LockButton(
+    label: String,
+    active: Boolean,
+    enabled: Boolean = true,
+    pending: Boolean = false,
+    testTag: String,
+    onClick: () -> Unit,
+) {
+    val bg = when {
+        active -> VerifiedCyan
+        pending -> Amber
+        enabled -> Color(0xFF1B2023)
+        else -> Color(0xFF161A1C)
+    }
+    val fg = if (active) Color.Black else if (enabled) Color.White else Color(0xFF626A6D)
+    val border = if (active) VerifiedCyan else if (pending) Amber else if (enabled) Color(0xFF41494C) else Color(0xFF2A3033)
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag(testTag)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
     val constrained = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
     val enabled = !constrained || control in setOf(ControlDial.RESOLUTION, ControlDial.FPS)
     val value = when (control) {
@@ -1190,6 +1376,7 @@ private fun QuickControlButton(
         ControlDial.ISO -> if (constrained) "AUTO·HS" else state.sensitivityIso?.toString() ?: "AUTO"
         ControlDial.WB -> if (constrained) "AUTO·HS" else awbLabel(state.requestedAwbMode)
         ControlDial.FOCUS -> if (constrained) "AUTO·HS" else state.focusDistanceDiopters?.let { "%.1fD".format(it) } ?: "AUTO"
+        ControlDial.EV -> if (constrained) "0" else formatEv(state.aeCompensationEv)
     }
     Column(
         modifier
@@ -1621,8 +1808,10 @@ private fun RecordingOverlay(
     showStop: Boolean,
     zebra: Boolean, peaking: Boolean, histogram: Boolean,
     histogramMode: HistogramMode,
+    showGrid: Boolean, gridMode: CompositionGridMode, showHorizon: Boolean,
     onToggleZebra: () -> Unit, onTogglePeaking: () -> Unit, onToggleHistogram: () -> Unit,
     onCycleHistogramMode: () -> Unit,
+    onToggleGrid: () -> Unit, onCycleGridMode: () -> Unit, onToggleHorizon: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showMonitors by remember { mutableStateOf(false) }
@@ -1662,6 +1851,11 @@ private fun RecordingOverlay(
             MonitorToggle("P", peaking, onTogglePeaking)
             MonitorToggle("H", histogram, onToggleHistogram)
             MonitorToggle(if (histogramMode == HistogramMode.RGB) "RGB" else "Y", true, onCycleHistogramMode)
+            Spacer(Modifier.width(4.dp))
+            MonitorToggle("G", showGrid, onToggleGrid)
+            MonitorToggle(gridModeLabel(gridMode), true, onCycleGridMode)
+            Spacer(Modifier.width(4.dp))
+            MonitorToggle("L", showHorizon, onToggleHorizon)
         }
     }
 }
@@ -1776,6 +1970,10 @@ private fun ManualControlDial(
         AwbDial(state.requestedAwbMode, binder, onClose)
         return
     }
+    if (control == ControlDial.EV) {
+        EvDial(state, binder, onClose)
+        return
+    }
     val value = when (control) {
         ControlDial.RESOLUTION -> 0f
         ControlDial.FPS -> 0f
@@ -1783,6 +1981,7 @@ private fun ManualControlDial(
         ControlDial.SHUTTER -> logPosition((state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L).toDouble(), descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0)
         ControlDial.FOCUS -> ((state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f) / (descriptor.minimumFocusDistance ?: 1f)).coerceIn(0f, 1f)
         ControlDial.WB -> 0f
+        ControlDial.EV -> 0f
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(control.name, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -1802,6 +2001,7 @@ private fun ManualControlDial(
                     }
                     ControlDial.FOCUS -> binder?.setManualFocus(position * (descriptor.minimumFocusDistance ?: 1f))
                     ControlDial.WB -> Unit
+                    ControlDial.EV -> Unit
                 }
             },
             modifier = Modifier.weight(1f).height(28.dp),
@@ -1813,10 +2013,51 @@ private fun ManualControlDial(
                 ControlDial.ISO, ControlDial.SHUTTER -> binder?.setManualExposure(null, null)
                 ControlDial.FOCUS -> binder?.setManualFocus(null)
                 ControlDial.WB -> binder?.setAwbMode(null)
+                ControlDial.EV -> binder?.setExposureCompensation(0)
             }
             onClose()
         }) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
         TextButton(onClick = onClose) { Text("×", color = Color.White, fontSize = 14.sp) }
+    }
+}
+
+@Composable
+private fun EvDial(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    onClose: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        PanelHeader("EV", onClose)
+        val range = state.aeCompensationIndexRange ?: return@Column
+        val step = state.descriptor?.aeCompensationStep?.takeIf { it > 0f } ?: 1f
+        val minEv = range.first * step
+        val maxEv = range.last * step
+        val current = state.requestedAeCompensationIndex.coerceIn(range.first, range.last)
+        Text(
+            formatEv(current * step),
+            color = Amber,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+        Slider(
+            value = current.toFloat(),
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            onValueChange = { index -> binder?.setExposureCompensation(index.roundToInt()) },
+            modifier = Modifier.fillMaxWidth().height(28.dp),
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(formatEv(minEv), color = Muted, fontSize = 10.sp)
+            TextButton(onClick = { binder?.setExposureCompensation(0); onClose() }) {
+                Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
+            }
+            Text(formatEv(maxEv), color = Muted, fontSize = 10.sp)
+        }
     }
 }
 
@@ -2087,6 +2328,45 @@ private fun SettingsScreen(
                 summary = null,
                 checked = settings.histogramEnabled,
                 onCheckedChange = { onSettingsChange(settings.copy(histogramEnabled = it)) },
+            )
+        }
+        item {
+            SettingsToggleRow(
+                title = stringResource(R.string.composition_grid),
+                summary = stringResource(R.string.composition_grid_summary),
+                checked = settings.compositionGridEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(compositionGridEnabled = it)) },
+            )
+        }
+        item {
+            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.composition_grid_mode), color = Color.White, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CompositionGridMode.entries.forEach { mode ->
+                        TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
+                            Text(
+                                stringResource(
+                                    when (mode) {
+                                        CompositionGridMode.THIRDS -> R.string.composition_grid_thirds
+                                        CompositionGridMode.FOUR_BY_FOUR -> R.string.composition_grid_quarters
+                                        CompositionGridMode.DIAGONAL -> R.string.composition_grid_diagonal
+                                        CompositionGridMode.GOLDEN_RATIO -> R.string.composition_grid_golden
+                                    }
+                                ),
+                                color = if (settings.compositionGridMode == mode) Amber else Color.White,
+                                fontWeight = if (settings.compositionGridMode == mode) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SettingsToggleRow(
+                title = stringResource(R.string.horizon_level),
+                summary = stringResource(R.string.horizon_level_summary),
+                checked = settings.horizonLevelEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(horizonLevelEnabled = it)) },
             )
         }
         item {
@@ -2426,6 +2706,16 @@ private fun awbLabel(mode: Int?): String = when (mode) {
     else -> "WB$mode"
 }
 
+/** Formats an EV value (e.g. -1.33, +0.5, 0). Returns "0" for null/zero. */
+private fun formatEv(ev: Float?): String {
+    val value = ev ?: 0f
+    if (value == 0f) return "0"
+    val sign = if (value > 0f) "+" else "−"
+    val rounded = (value * 100).roundToInt() / 100f
+    val formatted = if (rounded == rounded.toInt().toFloat()) rounded.toInt().toString() else "%.2f".format(rounded)
+    return "$sign$formatted"
+}
+
 private fun logPosition(value: Double, minimum: Double, maximum: Double): Float {
     if (minimum <= 0.0 || maximum <= minimum) return 0f
     return ((ln(value.coerceIn(minimum, maximum)) - ln(minimum)) / (ln(maximum) - ln(minimum))).toFloat().coerceIn(0f, 1f)
@@ -2481,6 +2771,13 @@ private fun ModeWheelPortraitPreview() {
             compact = false,
         )
     }
+}
+
+private fun gridModeLabel(mode: CompositionGridMode): String = when (mode) {
+    CompositionGridMode.THIRDS -> "T"
+    CompositionGridMode.FOUR_BY_FOUR -> "4"
+    CompositionGridMode.DIAGONAL -> "D"
+    CompositionGridMode.GOLDEN_RATIO -> "G"
 }
 
 private fun rotationDegrees(rotation: Int): Int = when (rotation) {

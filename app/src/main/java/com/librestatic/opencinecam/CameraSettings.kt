@@ -9,10 +9,13 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
+import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
 enum class HistogramMode { RGB, LUMA }
+
+enum class TimeLapseLimitMode { UNLIMITED, FRAME_COUNT, DURATION }
 
 data class CameraSettings(
     val audioEnabled: Boolean = true,
@@ -31,6 +34,9 @@ data class CameraSettings(
     val flashEnabled: Boolean = false,
     val histogramEnabled: Boolean = true,
     val histogramMode: HistogramMode = HistogramMode.RGB,
+    val compositionGridEnabled: Boolean = true,
+    val compositionGridMode: CompositionGridMode = CompositionGridMode.THIRDS,
+    val horizonLevelEnabled: Boolean = false,
     val tapExposureMeteringEnabled: Boolean = true,
     val logViewAssistEnabled: Boolean = false,
     val modeSelectorStyle: ModeSelectorStyle = ModeSelectorStyle.DIAL,
@@ -42,6 +48,14 @@ data class CameraSettings(
     val logHeight: Int = 1080,
     val logFps: Int = 30,
     val zoomLensSwitchMode: ZoomLensSwitchMode = ZoomLensSwitchMode.MANUAL_PRESETS,
+    val timelapseIntervalMs: Long = 500L,
+    val timelapseLimitMode: TimeLapseLimitMode = TimeLapseLimitMode.UNLIMITED,
+    val timelapseFrameCount: Int = 300,
+    val timelapseDurationMs: Long = 3_600_000L,
+    val timelapseWidth: Int = 1920,
+    val timelapseHeight: Int = 1080,
+    val timelapseFps: Int = 30,
+    val afLockBehavior: AfLockBehavior = AfLockBehavior.FREEZE_CURRENT,
 ) {
     init {
         require(burstCount in 3..10)
@@ -51,6 +65,10 @@ data class CameraSettings(
         require(audioBitrateKbps in setOf(64, 96, 128, 160, 192, 256, 320))
         require(videoWidth > 0 && videoHeight > 0 && videoFps > 0)
         require(logWidth > 0 && logHeight > 0 && logFps > 0)
+        require(timelapseIntervalMs in 100L..3_600_000L)
+        require(timelapseFrameCount in 2..100_000)
+        require(timelapseDurationMs in 1_000L..86_400_000L)
+        require(timelapseWidth > 0 && timelapseHeight > 0 && timelapseFps > 0)
     }
 }
 
@@ -126,6 +144,9 @@ class CameraSettingsStore(context: Context) {
         flashEnabled = preferences.getBoolean(KEY_FLASH, false),
         histogramEnabled = preferences.getBoolean(KEY_HISTOGRAM, true),
         histogramMode = enumPreference(KEY_HISTOGRAM_MODE, HistogramMode.RGB),
+        compositionGridEnabled = preferences.getBoolean(KEY_COMPOSITION_GRID, true),
+        compositionGridMode = enumPreference(KEY_COMPOSITION_GRID_MODE, CompositionGridMode.THIRDS),
+        horizonLevelEnabled = preferences.getBoolean(KEY_HORIZON_LEVEL, false),
         tapExposureMeteringEnabled = preferences.getBoolean(KEY_TAP_EXPOSURE_METERING, true),
         logViewAssistEnabled = preferences.getBoolean(KEY_LOG_VIEW_ASSIST, false),
         modeSelectorStyle = migratedModeSelectorStyle(),
@@ -137,6 +158,14 @@ class CameraSettingsStore(context: Context) {
         logHeight = preferences.getInt(KEY_LOG_HEIGHT, 1080).takeUnless { it <= 0 } ?: 1080,
         logFps = preferences.getInt(KEY_LOG_FPS, 30).takeUnless { it <= 0 } ?: 30,
         zoomLensSwitchMode = enumPreference(KEY_ZOOM_LENS_SWITCH_MODE, ZoomLensSwitchMode.MANUAL_PRESETS),
+        timelapseIntervalMs = preferences.getLong(KEY_TIMELAPSE_INTERVAL_MS, 500L).coerceIn(100L, 3_600_000L),
+        timelapseLimitMode = enumPreference(KEY_TIMELAPSE_LIMIT_MODE, TimeLapseLimitMode.UNLIMITED),
+        timelapseFrameCount = preferences.getInt(KEY_TIMELAPSE_FRAME_COUNT, 300).coerceIn(2, 100_000),
+        timelapseDurationMs = preferences.getLong(KEY_TIMELAPSE_DURATION_MS, 3_600_000L).coerceIn(1_000L, 86_400_000L),
+        timelapseWidth = preferences.getInt(KEY_TIMELAPSE_WIDTH, 1920).takeUnless { it <= 0 } ?: 1920,
+        timelapseHeight = preferences.getInt(KEY_TIMELAPSE_HEIGHT, 1080).takeUnless { it <= 0 } ?: 1080,
+        timelapseFps = preferences.getInt(KEY_TIMELAPSE_FPS, 30).takeUnless { it <= 0 } ?: 30,
+        afLockBehavior = enumPreference(KEY_AF_LOCK_BEHAVIOR, AfLockBehavior.FREEZE_CURRENT),
     )
 
     fun save(settings: CameraSettings) {
@@ -157,6 +186,9 @@ class CameraSettingsStore(context: Context) {
             .putBoolean(KEY_FLASH, settings.flashEnabled)
             .putBoolean(KEY_HISTOGRAM, settings.histogramEnabled)
             .putString(KEY_HISTOGRAM_MODE, settings.histogramMode.name)
+            .putBoolean(KEY_COMPOSITION_GRID, settings.compositionGridEnabled)
+            .putString(KEY_COMPOSITION_GRID_MODE, settings.compositionGridMode.name)
+            .putBoolean(KEY_HORIZON_LEVEL, settings.horizonLevelEnabled)
             .putBoolean(KEY_TAP_EXPOSURE_METERING, settings.tapExposureMeteringEnabled)
             .putBoolean(KEY_LOG_VIEW_ASSIST, settings.logViewAssistEnabled)
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
@@ -168,6 +200,14 @@ class CameraSettingsStore(context: Context) {
             .putInt(KEY_LOG_HEIGHT, settings.logHeight)
             .putInt(KEY_LOG_FPS, settings.logFps)
             .putString(KEY_ZOOM_LENS_SWITCH_MODE, settings.zoomLensSwitchMode.name)
+            .putLong(KEY_TIMELAPSE_INTERVAL_MS, settings.timelapseIntervalMs)
+            .putString(KEY_TIMELAPSE_LIMIT_MODE, settings.timelapseLimitMode.name)
+            .putInt(KEY_TIMELAPSE_FRAME_COUNT, settings.timelapseFrameCount)
+            .putLong(KEY_TIMELAPSE_DURATION_MS, settings.timelapseDurationMs)
+            .putInt(KEY_TIMELAPSE_WIDTH, settings.timelapseWidth)
+            .putInt(KEY_TIMELAPSE_HEIGHT, settings.timelapseHeight)
+            .putInt(KEY_TIMELAPSE_FPS, settings.timelapseFps)
+            .putString(KEY_AF_LOCK_BEHAVIOR, settings.afLockBehavior.name)
             .apply()
     }
 
@@ -217,6 +257,9 @@ class CameraSettingsStore(context: Context) {
         const val KEY_FLASH = "flash-enabled"
         const val KEY_HISTOGRAM = "histogram-enabled"
         const val KEY_HISTOGRAM_MODE = "histogram-mode"
+        const val KEY_COMPOSITION_GRID = "composition-grid-enabled"
+        const val KEY_COMPOSITION_GRID_MODE = "composition-grid-mode"
+        const val KEY_HORIZON_LEVEL = "horizon-level-enabled"
         const val KEY_TAP_EXPOSURE_METERING = "tap-exposure-metering-enabled"
         const val KEY_LOG_VIEW_ASSIST = "log-view-assist-enabled"
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
@@ -229,6 +272,14 @@ class CameraSettingsStore(context: Context) {
         const val KEY_LOG_HEIGHT = "log-geometry-height"
         const val KEY_LOG_FPS = "log-geometry-fps"
         const val KEY_ZOOM_LENS_SWITCH_MODE = "zoom-lens-switch-mode"
+        const val KEY_TIMELAPSE_INTERVAL_MS = "timelapse-interval-ms"
+        const val KEY_TIMELAPSE_LIMIT_MODE = "timelapse-limit-mode"
+        const val KEY_TIMELAPSE_FRAME_COUNT = "timelapse-frame-count"
+        const val KEY_TIMELAPSE_DURATION_MS = "timelapse-duration-ms"
+        const val KEY_TIMELAPSE_WIDTH = "timelapse-geometry-width"
+        const val KEY_TIMELAPSE_HEIGHT = "timelapse-geometry-height"
+        const val KEY_TIMELAPSE_FPS = "timelapse-geometry-fps"
+        const val KEY_AF_LOCK_BEHAVIOR = "af-lock-behavior"
         const val NO_DEVICE = Int.MIN_VALUE
     }
 }
