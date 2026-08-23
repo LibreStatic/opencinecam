@@ -314,6 +314,15 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             .mapNotNull { it.videoCapabilities }
             .toList()
     }
+    private val hevcSurfaceEncoderCapabilities by lazy {
+        MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+            .asSequence()
+            .filter { it.isEncoder && !it.isAlias }
+            .mapNotNull { info -> runCatching { info.getCapabilitiesForType("video/hevc") }.getOrNull() }
+            .filter { it.colorFormats.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) }
+            .mapNotNull { it.videoCapabilities }
+            .toList()
+    }
     @Volatile private var lastLogRecordingEvidence: OpenCineLogRecordingEvidence? = null
 
     fun descriptors(targetWidth: Int, targetHeight: Int): List<Camera2CameraDescriptor> =
@@ -2370,10 +2379,22 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         return minimumDuration <= 0L || minimumDuration <= 1_000_000_000L / fps.coerceAtLeast(1)
     }
 
-    private fun encoderCanReachFps(size: Size, fps: Int): Boolean =
-        avcSurfaceEncoderCapabilities.any {
+    private fun encoderCanReachFps(size: Size, fps: Int, mime: String = MIME_AVC): Boolean {
+        val caps = when (mime) {
+            MIME_HEVC -> hevcSurfaceEncoderCapabilities
+            else -> avcSurfaceEncoderCapabilities
+        }
+        return caps.any {
             it.areSizeAndRateSupported(size.width, size.height, fps.toDouble())
         }
+    }
+
+    /** Public wrapper so the service can validate recording geometry against encoder caps. */
+    fun encoderCanReachFps(size: Size): Boolean = encoderCanReachFps(size, requestedTargetFps)
+
+    /** HEVC variant for pipelines that encode Main10 (LOG mode). */
+    fun hevcEncoderCanReachFps(size: Size): Boolean =
+        encoderCanReachFps(size, requestedTargetFps, MIME_HEVC)
 
     private fun jpegOrientation(descriptor: Camera2CameraDescriptor): Int =
         if (descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
@@ -2532,6 +2553,8 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     companion object {
         const val FOCUS_PULL_TICK_MS = 33L
         const val DEFAULT_TARGET_FPS = 30
+        internal const val MIME_AVC = "video/avc"
+        internal const val MIME_HEVC = "video/hevc"
         private const val MIN_SELECTABLE_FPS = 10
         private const val MAX_SELECTABLE_FPS = 60
         private const val METADATA_PERIOD_MS = 500L

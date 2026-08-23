@@ -61,6 +61,7 @@ object RecordingGeometryCalculator {
         mode: RecordingGeometryMode,
         anamorphicSqueeze: AnamorphicSqueeze = AnamorphicSqueeze.NONE,
         anamorphicOutputMode: AnamorphicOutputMode = AnamorphicOutputMode.SQUEEZED,
+        supportsEncodedSize: (RecordingFrameSize) -> Boolean = { true },
     ): RecordingGeometry = calculate(
         sourceWidth = sourceSize.width,
         sourceHeight = sourceSize.height,
@@ -68,6 +69,9 @@ object RecordingGeometryCalculator {
         deviceOrientationDegrees = deviceOrientationDegrees,
         lensFacing = lensFacing,
         mode = mode,
+        anamorphicSqueeze = anamorphicSqueeze,
+        anamorphicOutputMode = anamorphicOutputMode,
+        supportsEncodedSize = supportsEncodedSize,
     )
 
     fun calculate(
@@ -79,6 +83,7 @@ object RecordingGeometryCalculator {
         mode: RecordingGeometryMode,
         anamorphicSqueeze: AnamorphicSqueeze = AnamorphicSqueeze.NONE,
         anamorphicOutputMode: AnamorphicOutputMode = AnamorphicOutputMode.SQUEEZED,
+        supportsEncodedSize: (RecordingFrameSize) -> Boolean = { true },
     ): RecordingGeometry {
         val sourceSize = RecordingFrameSize(sourceWidth, sourceHeight)
         val sensor = normalize(sensorOrientationDegrees)
@@ -105,8 +110,8 @@ object RecordingGeometryCalculator {
         val baseEncodedSize = if (pixelRotation.isQuarterTurn()) sourceSize.swapped() else sourceSize
         val quarterTurn = pixelRotation.isQuarterTurn()
         val squeeze = anamorphicSqueeze
-        val sarW: Int
-        val sarH: Int
+        var sarW: Int
+        var sarH: Int
         val encodedSize: RecordingFrameSize
         val displaySize: RecordingFrameSize
         if (!squeeze.isActive) {
@@ -117,12 +122,19 @@ object RecordingGeometryCalculator {
         } else if (anamorphicOutputMode == AnamorphicOutputMode.DESQUEEZED) {
             // Expand the raster along the horizontal display axis. After a quarter-turn pixel
             // rotation the horizontal axis maps to the source height, so we expand height.
+            // Integer SAR math keeps common factors exact (1080 -> 1440 at 1.33x, not 1436).
             sarW = 1
             sarH = 1
             encodedSize = if (quarterTurn) {
-                RecordingFrameSize(baseEncodedSize.width, (baseEncodedSize.height * squeeze.factor).toInt())
+                RecordingFrameSize(
+                    baseEncodedSize.width,
+                    baseEncodedSize.height * squeeze.sarWidth / squeeze.sarHeight,
+                )
             } else {
-                RecordingFrameSize((baseEncodedSize.width * squeeze.factor).toInt(), baseEncodedSize.height)
+                RecordingFrameSize(
+                    baseEncodedSize.width * squeeze.sarWidth / squeeze.sarHeight,
+                    baseEncodedSize.height,
+                )
             }
             displaySize = if (containerRotation.isQuarterTurn()) encodedSize.swapped() else encodedSize
         } else {
@@ -136,6 +148,29 @@ object RecordingGeometryCalculator {
             }
             encodedSize = baseEncodedSize
             displaySize = if (containerRotation.isQuarterTurn()) encodedSize.swapped() else encodedSize
+        }
+        // Desqueeze that exceeds the hardware encoder's raster limits degrades to SQUEEZED:
+        // the file keeps the sensor raster and declares the stretch as pixel aspect ratio,
+        // so players still show correct geometry instead of failing to configure a codec.
+        if (squeeze.isActive && anamorphicOutputMode == AnamorphicOutputMode.DESQUEEZED) {
+            val desqueezed = if (quarterTurn) {
+                RecordingFrameSize(
+                    baseEncodedSize.width,
+                    baseEncodedSize.height * squeeze.sarWidth / squeeze.sarHeight,
+                )
+            } else {
+                RecordingFrameSize(
+                    baseEncodedSize.width * squeeze.sarWidth / squeeze.sarHeight,
+                    baseEncodedSize.height,
+                )
+            }
+            if (!supportsEncodedSize(desqueezed)) {
+                // Fall back to the SQUEEZED representation: keep the sensor raster and
+                // declare the stretch as pixel aspect ratio so players still show the
+                // correct display geometry instead of failing to configure a codec.
+                sarW = squeeze.sarWidth
+                sarH = squeeze.sarHeight
+            }
         }
         return RecordingGeometry(
             mode = mode,

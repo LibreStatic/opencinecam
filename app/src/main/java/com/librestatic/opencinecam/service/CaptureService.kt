@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.StatFs
+import android.util.Size
 import android.view.Surface
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
@@ -40,9 +41,11 @@ import com.librestatic.opencinecam.camera.TimecodeRate
 import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.TimecodeTracker
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
+import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.camera.RecordingGeometryCalculator
+import com.librestatic.opencinecam.camera.RecordingFrameSize
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.camera.ZoomMath
@@ -1163,6 +1166,7 @@ class CaptureService : Service() {
                             mode = settings.recordingGeometryMode,
                             anamorphicSqueeze = settings.anamorphicSqueeze,
                             anamorphicOutputMode = settings.anamorphicOutputMode,
+                            supportsEncodedSize = ::encoderSupportsRaster,
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1257,6 +1261,7 @@ class CaptureService : Service() {
                             mode = settings.recordingGeometryMode,
                             anamorphicSqueeze = settings.anamorphicSqueeze,
                             anamorphicOutputMode = settings.anamorphicOutputMode,
+                            supportsEncodedSize = ::hevcEncoderSupportsRaster,
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1422,6 +1427,24 @@ class CaptureService : Service() {
             message = message,
         )
     }
+
+    /**
+     * True when at least one hardware encoder can raster the given encoded frame size at 30 fps.
+     * Used by [RecordingGeometryCalculator.calculate] to decide whether a DESQUEEZED
+     * anamorphic output fits the SoC codec limits or must degrade to SQUEEZED + SAR.
+     * Uses the same predicate as profile enumeration; AVC because the VIDEO branch
+     * goes through the passthrough-SDR GPU pipeline, which encodes H.264.
+     */
+    private fun encoderSupportsRaster(size: RecordingFrameSize): Boolean =
+        previewEngine.encoderCanReachFps(Size(size.width, size.height))
+
+    /**
+     * Same as [encoderSupportsRaster] but validates against HEVC surface-encoder caps,
+     * because the LOG pipeline ([OpenCineLogGpuPipeline] with passthroughSdr=false)
+     * encodes Main10/HEVC, not AVC.
+     */
+    private fun hevcEncoderSupportsRaster(size: RecordingFrameSize): Boolean =
+        previewEngine.hevcEncoderCanReachFps(Size(size.width, size.height))
 
     private fun logSidecarJson(evidence: OpenCineLogRecordingEvidence): String = JSONObject()
         .put("schema", "opencinecam-oclog-sidecar-v2")
