@@ -88,6 +88,11 @@ data class Camera2CameraDescriptor(
     val availableAfModes: List<Int> = emptyList(),
     val maxAfRegions: Int = 0,
     val maxAeRegions: Int = 0,
+    val zoomRatioRange: ClosedFloatingPointRange<Float>? = null,
+    val supportsZoomRatioApi: Boolean = false,
+    val digitalZoomMaxRatio: Float? = null,
+    val opticalAnchors: List<ZoomAnchor> = emptyList(),
+    val supportsHfrZoom: Boolean = false,
 ) {
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
@@ -108,6 +113,14 @@ data class Camera2CameraDescriptor(
         get() = preferredLogProfile?.size?.let { preferredSize ->
             logProfiles.filter { it.size == preferredSize }.map { it.fps }.distinct().sorted()
         }.orEmpty()
+
+    /** Advertised zoom range coerced to a valid ClosedFloatingPointRange, or null when zoom is unsupported. */
+    val effectiveZoomRange: ClosedFloatingPointRange<Float>?
+        get() = zoomRatioRange?.takeIf { it.start < it.endInclusive }
+
+    /** True when the camera advertises any usable zoom (optical anchors or a digital range beyond 1x). */
+    val zoomSupported: Boolean
+        get() = effectiveZoomRange != null
 }
 
 enum class TapFocusState { IDLE, SEARCHING, FOCUSED, NOT_FOCUSED }
@@ -156,6 +169,9 @@ interface Camera2PreviewListener {
     fun onRecordingStopped(success: Boolean)
     fun onFailure(code: String, message: String, recoverable: Boolean)
     fun onTapFocusState(state: TapFocusState) = Unit
+    fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) = Unit
+    fun onZoomEffective(ratio: Float) = Unit
+    fun onZoomRejected(requested: Float, accepted: Float) = Unit
 }
 
 /**
@@ -224,6 +240,10 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     private var tapAfRegion: MeteringRectangle? = null
     private var tapAeRegion: MeteringRectangle? = null
     private var tapFocusResultReported = false
+    private var requestedZoomRatio: Float = 1f
+    private var lastAcceptedZoomRatio: Float = 1f
+    private var effectiveZoomRatio: Float = 1f
+    private var lastZoomReportedAtMs = 0L
     private val restoreTapFocus = Runnable {
         cameraExecutor.execute { restoreContinuousFocusLocked() }
     }
@@ -548,6 +568,15 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             if (currentSession is CameraConstrainedHighSpeedCaptureSession) return@execute
             val active = currentDescriptor.sensorActiveArray ?: return@execute
             val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: currentDescriptor.previewSize
+            // When the API 29 crop-region fallback is active, map the tap into the visible crop
+            // so the focus point matches the zoomed viewfinder. With CONTROL_ZOOM_RATIO (API 30+)
+            // the HAL applies the crop itself, so we map into the full active array as before.
+            val zoomCrop: SensorBounds? = if (!currentDescriptor.supportsZoomRatioApi &&
+                currentDescriptor.zoomSupported && requestedZoomRatio > 1f) {
+                ZoomMath.cropRegionFor(active, requestedZoomRatio)?.let { rect ->
+                    SensorBounds(rect.left, rect.top, rect.right, rect.bottom)
+                }
+            } else null
             val area = FocusMeteringMapper.map(
                 normalizedX = normalizedX,
                 normalizedY = normalizedY,
@@ -557,6 +586,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                 sensorOrientationDegrees = currentDescriptor.sensorOrientation,
                 displayRotationDegrees = displayRotationDegrees,
                 frontFacing = currentDescriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT,
+                cropRegion = zoomCrop,
             )
             val metering = MeteringRectangle(
                 Rect(area.left, area.top, area.right, area.bottom),
@@ -613,6 +643,99 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             runCatching { configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
                 .onFailure { listener?.onFailure("flash-control-failed", it.message ?: "Flash control update failed.", true) }
         }
+    }
+
+    /**
+     * Applies the requested zoom ratio to the active repeating request. Returns false when no
+     * descriptor/session is active or the descriptor advertises no zoom range; in those cases the
+     * internal state is left untouched. Coerces [ratio] into the active descriptor's range.
+     */
+    fun setZoomRatio(ratio: Float): Boolean {
+        val descriptor = activeDescriptor ?: return false
+        val range = descriptor.effectiveZoomRange ?: return false
+        cameraExecutor.execute {
+            requestedZoomRatio = ZoomMath.coerce(ratio, range)
+            val builder = repeatingBuilder ?: return@execute
+            val configured = session ?: return@execute
+            reissueRepeating(builder, configured, descriptor)
+        }
+        return true
+    }
+
+    /** Current effective (last-accepted) zoom ratio, or 1f when no session is active. */
+    fun currentEffectiveZoomRatio(): Float = effectiveZoomRatio
+
+    private fun applyZoom(builder: CaptureRequest.Builder) {
+        val descriptor = activeDescriptor ?: return
+        val range = descriptor.effectiveZoomRange ?: return
+        val ratio = requestedZoomRatio
+        if (ratio <= range.start && range.start >= 1f) {
+            // At or below the wide end: no crop needed.
+            if (descriptor.supportsZoomRatioApi) {
+                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, range.start)
+            } else {
+                builder.set(CaptureRequest.SCALER_CROP_REGION, null)
+            }
+            return
+        }
+        if (descriptor.supportsZoomRatioApi) {
+            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, ratio)
+        } else {
+            // API 29 fallback: only digital zoom >= 1x is representable via SCALER_CROP_REGION.
+            val cropRatio = ratio.coerceAtLeast(1f)
+            builder.set(CaptureRequest.SCALER_CROP_REGION, ZoomMath.cropRegionFor(descriptor.sensorActiveArray, cropRatio))
+        }
+    }
+
+    private fun reissueRepeating(
+        builder: CaptureRequest.Builder,
+        configured: CameraCaptureSession,
+        descriptor: Camera2CameraDescriptor,
+    ) {
+        applyManualControls(builder)
+        try {
+            configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
+            lastAcceptedZoomRatio = requestedZoomRatio
+        } catch (failure: Throwable) {
+            if (isZoomRejection(failure)) {
+                requestedZoomRatio = lastAcceptedZoomRatio
+                listener?.onZoomRejected(requestedZoomRatio, lastAcceptedZoomRatio)
+            } else {
+                listener?.onFailure("zoom-request-failed", failure.message ?: "Zoom update failed.", true)
+            }
+        }
+    }
+
+    private fun isZoomRejection(failure: Throwable): Boolean {
+        val message = failure.message.orEmpty()
+        return message.contains("SCALER_CROP_REGION", ignoreCase = true) ||
+            message.contains("CONTROL_ZOOM_RATIO", ignoreCase = true) ||
+            message.contains("zoom", ignoreCase = true)
+    }
+
+    private fun reportEffectiveZoom(result: TotalCaptureResult) {
+        val descriptor = activeDescriptor ?: return
+        val range = descriptor.effectiveZoomRange ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastZoomReportedAtMs < ZOOM_REPORT_PERIOD_MS) return
+        lastZoomReportedAtMs = now
+        val ratio = if (descriptor.supportsZoomRatioApi) {
+            result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+        } else {
+            ZoomMath.ratioFromCropRegion(
+                descriptor.sensorActiveArray,
+                result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION),
+            )
+        } ?: return
+        val coerced = ZoomMath.coerce(ratio, range)
+        effectiveZoomRatio = coerced
+        listener?.onZoomEffective(coerced)
+    }
+
+    private fun notifyZoomRange() {
+        val descriptor = activeDescriptor ?: return
+        val range = descriptor.effectiveZoomRange ?: return
+        listener?.onZoomRangeAvailable(range.start, range.endInclusive, descriptor.opticalAnchors)
     }
 
     fun startVideo(
@@ -1067,6 +1190,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                         val burst = configured.createHighSpeedRequestList(builder.build())
                         configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
                         listener?.onPreviewStarted(descriptor)
+                        notifyZoomRange()
                     } catch (failure: Throwable) {
                         listener?.onFailure("high-speed-preview-request-failed", failure.message ?: "High-speed preview request failed.", true)
                     }
@@ -1228,6 +1352,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                             cameraExecutor,
                             previewCaptureCallback(descriptor, true),
                         )
+                        notifyZoomRange()
                     } catch (failure: Throwable) {
                         listener?.onFailure("log-request-failed", failure.message ?: "The HLG10 source request failed.", false)
                     }
@@ -1293,6 +1418,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                             cameraExecutor,
                             previewCaptureCallback(descriptor, true),
                         )
+                        notifyZoomRange()
                     } catch (failure: Throwable) {
                         listener?.onFailure(
                             "log-hfr-request-failed",
@@ -1423,6 +1549,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
             }
             repeatingBuilder = builder
             configured.setSingleRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, true))
+            notifyZoomRange()
         } catch (failure: Exception) {
             listener?.onFailure("preview-request-failed", failure.message ?: "Camera preview request failed.", true)
         }
@@ -1445,6 +1572,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
                     reportTapFocusResult(request, result)
+                    reportEffectiveZoom(result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
                         lastMetadataAtMs = now
@@ -1530,6 +1658,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                 CaptureRequest.FLASH_MODE_OFF
             },
         )
+        applyZoom(builder)
     }
 
     private fun reportTapFocusResult(request: CaptureRequest, result: TotalCaptureResult) {
@@ -1595,6 +1724,10 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         // reject an HFR request when AF/AWB/AE mode is redundantly overridden.
         builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(requestedTargetFps, requestedTargetFps))
         applyMotorolaHighSpeedSessionControls(builder)
+        // Constrained high-speed sessions accept only a restricted request-control subset; only
+        // apply zoom when the descriptor explicitly advertises HFR zoom support, otherwise the
+        // HAL may reject the entire burst.
+        if (activeDescriptor?.supportsHfrZoom == true) applyZoom(builder)
     }
 
     /**
@@ -1745,6 +1878,44 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                         .thenBy { it.size.width }
                         .thenBy { it.fps },
                 )
+            val zoomRatioRangeArr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+            } else null
+            val supportsZoomRatioApi = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                zoomRatioRangeArr != null &&
+                zoomRatioRangeArr.lower < zoomRatioRangeArr.upper
+            val zoomRange: ClosedFloatingPointRange<Float>? = if (supportsZoomRatioApi) {
+                zoomRatioRangeArr!!.lower..zoomRatioRangeArr.upper
+            } else {
+                // API 29 fallback: digital zoom only (>= 1x) via SCALER_CROP_REGION.
+                val maxDigitalZoom = characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)
+                    ?.takeIf { it > 1f }
+                if (maxDigitalZoom != null) 1f..maxDigitalZoom else null
+            }
+            val logicalFocal = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                ?.firstOrNull()
+            val physicalFocals = runCatching { characteristics.physicalCameraIds }.getOrDefault(emptySet())
+                .filter { it != cameraId }
+                .mapNotNull { id ->
+                    runCatching {
+                        manager.getCameraCharacteristics(id)
+                            .get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                            ?.firstOrNull()
+                    }.getOrNull()?.let { focal -> id to focal }
+                }
+            val anchors = ZoomMath.deriveAnchors(
+                logicalFocal, physicalFocals,
+                rangeMin = zoomRange?.start ?: Float.NEGATIVE_INFINITY,
+                rangeMax = zoomRange?.endInclusive ?: Float.POSITIVE_INFINITY,
+            )
+            // HFR zoom is only safe when the camera uses the CONTROL_ZOOM_RATIO API (API 30+)
+            // and the key is present in availableCaptureRequestKeys. Constrained sessions reject
+            // unknown keys, so we gate this conservatively.
+            val hfrZoomKeys = if (supportsZoomRatioApi) {
+                runCatching { characteristics.availableCaptureRequestKeys }.getOrDefault(emptyList())
+            } else emptyList()
+            val supportsHfrZoom = supportsZoomRatioApi &&
+                hfrZoomKeys.any { it.name == "zoomRatio" }
             Camera2CameraDescriptor(
                 cameraId = cameraId,
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
@@ -1769,6 +1940,11 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
                 availableAfModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty(),
                 maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
                 maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
+                zoomRatioRange = zoomRange,
+                supportsZoomRatioApi = supportsZoomRatioApi,
+                digitalZoomMaxRatio = if (!supportsZoomRatioApi) zoomRange?.endInclusive else null,
+                opticalAnchors = anchors,
+                supportsHfrZoom = supportsHfrZoom,
             )
         }.getOrNull()
 
@@ -1833,6 +2009,9 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         activeLogProfile = null
         previewSurface = null
         activeDescriptor = null
+        requestedZoomRatio = 1f
+        lastAcceptedZoomRatio = 1f
+        effectiveZoomRatio = 1f
     }
 
     private fun releaseRecorder() {
@@ -1947,6 +2126,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         private const val MIN_SELECTABLE_FPS = 10
         private const val MAX_SELECTABLE_FPS = 60
         private const val METADATA_PERIOD_MS = 500L
+        private const val ZOOM_REPORT_PERIOD_MS = 33L
         private const val ANALYSIS_PERIOD_MS = 250L
         private const val TAP_FOCUS_HOLD_MS = 3_000L
         internal const val SCOPE_HISTOGRAM_BINS = 64

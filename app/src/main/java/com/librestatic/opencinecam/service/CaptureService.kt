@@ -34,6 +34,8 @@ import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.camera.RecordingGeometryCalculator
 import com.librestatic.opencinecam.camera.TapFocusState
+import com.librestatic.opencinecam.camera.ZoomAnchor
+import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.core.model.CaptureCommand
 import com.librestatic.opencinecam.core.model.CaptureState
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
@@ -87,6 +89,7 @@ class CaptureService : Service() {
     private var pendingSwitchTarget: String? = null
     private var pendingSwitchPrevious: String? = null
     private var pendingStatusMessage: String? = null
+    private val perCameraZoom = mutableMapOf<String, Float>()
     private var settings = CameraSettings()
     private var geometrySeeds = GeometrySeeds()
     private lateinit var physicalOrientationTracker: PhysicalOrientationTracker
@@ -224,6 +227,11 @@ class CaptureService : Service() {
                 message = pendingStatusMessage.also { pendingStatusMessage = null },
             )
             startPreviewAudioMonitorIfEligible()
+            // Restore the remembered zoom for this camera after the session starts.
+            val remembered = perCameraZoom[descriptor.cameraId]
+            if (remembered != null && remembered != 1f && descriptor.zoomSupported) {
+                previewEngine.setZoomRatio(remembered)
+            }
         }
 
         override fun onMetadata(metadata: Camera2PreviewMetadata) {
@@ -387,6 +395,31 @@ class CaptureService : Service() {
 
         override fun onTapFocusState(state: TapFocusState) {
             cameraState.value = cameraState.value.copy(tapFocusState = state)
+        }
+
+        override fun onZoomRangeAvailable(min: Float, max: Float, anchors: List<ZoomAnchor>) {
+            val current = cameraState.value
+            cameraState.value = current.copy(
+                zoomMinRatio = min,
+                zoomMaxRatio = max,
+                opticalAnchors = anchors,
+                zoomSupported = min < max,
+                zoomHfrSupported = current.descriptor?.supportsHfrZoom == true,
+                zoomRatio = perCameraZoom[current.selectedCameraId] ?: 1f,
+            )
+        }
+
+        override fun onZoomEffective(ratio: Float) {
+            cameraState.value = cameraState.value.copy(zoomEffectiveRatio = ratio)
+        }
+
+        override fun onZoomRejected(requested: Float, accepted: Float) {
+            cameraState.value = cameraState.value.copy(
+                zoomRatio = accepted,
+                zoomEffectiveRatio = accepted,
+                message = "Zoom $requested× not accepted; kept ${accepted}×",
+                messageTransient = true,
+            )
         }
 
         override fun onFailure(code: String, message: String, recoverable: Boolean) {
@@ -912,6 +945,25 @@ class CaptureService : Service() {
                 )
             }
             return accepted
+        }
+
+        fun setZoomRatio(ratio: Float) {
+            val current = cameraState.value
+            if (!current.zoomSupported) return
+            val min = current.zoomMinRatio
+            val max = current.zoomMaxRatio
+            val coerced = ratio.coerceIn(min, max)
+            cameraState.value = current.copy(zoomRatio = coerced, zoomEffectiveRatio = coerced)
+            current.selectedCameraId?.let { perCameraZoom[it] = coerced }
+            previewEngine.setZoomRatio(coerced)
+        }
+
+        fun selectZoomAnchor(ratio: Float) {
+            val current = cameraState.value
+            if (!current.zoomSupported) return
+            val anchors = current.opticalAnchors
+            val target = if (anchors.isNotEmpty()) ZoomMath.nearestAnchor(ratio, anchors).ratio else ratio
+            setZoomRatio(target)
         }
 
         fun setAwbMode(mode: Int?) {

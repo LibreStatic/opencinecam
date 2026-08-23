@@ -9,6 +9,7 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
+import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
 enum class HistogramMode { RGB, LUMA }
@@ -40,6 +41,7 @@ data class CameraSettings(
     val logWidth: Int = 1920,
     val logHeight: Int = 1080,
     val logFps: Int = 30,
+    val zoomLensSwitchMode: ZoomLensSwitchMode = ZoomLensSwitchMode.MANUAL_PRESETS,
 ) {
     init {
         require(burstCount in 3..10)
@@ -134,6 +136,7 @@ class CameraSettingsStore(context: Context) {
         logWidth = preferences.getInt(KEY_LOG_WIDTH, 1920).takeUnless { it <= 0 } ?: 1920,
         logHeight = preferences.getInt(KEY_LOG_HEIGHT, 1080).takeUnless { it <= 0 } ?: 1080,
         logFps = preferences.getInt(KEY_LOG_FPS, 30).takeUnless { it <= 0 } ?: 30,
+        zoomLensSwitchMode = enumPreference(KEY_ZOOM_LENS_SWITCH_MODE, ZoomLensSwitchMode.MANUAL_PRESETS),
     )
 
     fun save(settings: CameraSettings) {
@@ -164,6 +167,7 @@ class CameraSettingsStore(context: Context) {
             .putInt(KEY_LOG_WIDTH, settings.logWidth)
             .putInt(KEY_LOG_HEIGHT, settings.logHeight)
             .putInt(KEY_LOG_FPS, settings.logFps)
+            .putString(KEY_ZOOM_LENS_SWITCH_MODE, settings.zoomLensSwitchMode.name)
             .apply()
     }
 
@@ -224,6 +228,7 @@ class CameraSettingsStore(context: Context) {
         const val KEY_LOG_WIDTH = "log-geometry-width"
         const val KEY_LOG_HEIGHT = "log-geometry-height"
         const val KEY_LOG_FPS = "log-geometry-fps"
+        const val KEY_ZOOM_LENS_SWITCH_MODE = "zoom-lens-switch-mode"
         const val NO_DEVICE = Int.MIN_VALUE
     }
 }

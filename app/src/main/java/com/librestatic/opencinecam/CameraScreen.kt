@@ -81,14 +81,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -97,11 +101,18 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import com.librestatic.opencinecam.camera.ZoomMath
+import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
+import com.librestatic.opencinecam.ui.viewfinder.ZoomAnchorBar
+import com.librestatic.opencinecam.ui.viewfinder.ZoomRocker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -113,17 +124,20 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.toSpec
 import com.librestatic.opencinecam.storage.LocalMediaItem
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
+import com.librestatic.opencinecam.camera.TapFocusState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.exp
+import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.max
@@ -172,6 +186,26 @@ fun CameraRootScreen() {
                 settings = normalized
                 settingsStore.save(normalized)
             }
+        }
+    }
+    LaunchedEffect(state.selectedMode, state.targetVideoWidth, state.targetVideoHeight, state.targetFps) {
+        if (state.phase == CameraUiPhase.RECORDING) return@LaunchedEffect
+        val updated = when (state.selectedMode) {
+            CaptureMode.LOG -> settings.copy(
+                logWidth = state.targetVideoWidth,
+                logHeight = state.targetVideoHeight,
+                logFps = state.targetFps,
+            )
+            in CameraUiState.videoProfileModes -> settings.copy(
+                videoWidth = state.targetVideoWidth,
+                videoHeight = state.targetVideoHeight,
+                videoFps = state.targetFps,
+            )
+            else -> settings
+        }
+        if (updated != settings) {
+            settings = updated
+            settingsStore.save(updated)
         }
     }
 
@@ -280,21 +314,27 @@ private fun CaptureSurface(
         }
 
         val descriptor = state.descriptor
-        if (descriptor != null && binder != null) {
-            val landscape = maxWidth > maxHeight
-            val previewStreamSize = if (state.selectedMode == CaptureMode.LOG) {
-                state.activeLogProfile?.size ?: descriptor.preferredLogProfile?.size ?: descriptor.previewSize
+        val landscape = maxWidth > maxHeight
+        val previewStreamSize = descriptor?.let {
+            if (state.selectedMode == CaptureMode.LOG) {
+                state.activeLogProfile?.size ?: it.preferredLogProfile?.size ?: it.previewSize
             } else if (state.selectedMode in CameraUiState.videoProfileModes) {
-                state.activeVideoProfile?.size ?: descriptor.previewSize
+                state.activeVideoProfile?.size ?: it.previewSize
             } else {
-                descriptor.previewSize
+                it.previewSize
             }
-            val ratio = previewStreamSize.width.toFloat() / previewStreamSize.height
-            val displayRatio = if (landscape) ratio else 1f / ratio
+        }
+        val previewDisplayRatio = previewStreamSize?.let { size ->
+            val ratio = size.width.toFloat() / size.height
+            if (landscape) ratio else 1f / ratio
+        }
+        if (descriptor != null && binder != null) {
+            val streamSize = requireNotNull(previewStreamSize)
+            val displayRatio = requireNotNull(previewDisplayRatio)
             PreviewSurfaceView(
                 descriptor.cameraId,
-                previewStreamSize.width,
-                previewStreamSize.height,
+                streamSize.width,
+                streamSize.height,
                 displayRatio,
                 state.selectedMode == CaptureMode.LOG,
                 state.targetFps,
@@ -310,6 +350,8 @@ private fun CaptureSurface(
                 showPeaking = peaking,
                 showHistogram = histogram,
                 histogramMode = histogramMode,
+                reserveAudioMeterSpace = settings.audioEnabled &&
+                    state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG),
                 landscape = landscape,
                 // aspectRatio must receive the unconstrained Box bounds. Applying fillMaxWidth
                 // first can force a too-wide landscape view and make Compose violate the ratio
@@ -322,7 +364,8 @@ private fun CaptureSurface(
             state = state,
             binder = binder,
             settings = settings,
-            landscape = maxWidth > maxHeight,
+            landscape = landscape,
+            previewAspectRatio = previewDisplayRatio,
             zebra = zebra,
             peaking = peaking,
             histogram = histogram,
@@ -379,6 +422,7 @@ private fun MonitoringOverlay(
     showPeaking: Boolean,
     showHistogram: Boolean,
     histogramMode: HistogramMode,
+    reserveAudioMeterSpace: Boolean,
     landscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -419,10 +463,15 @@ private fun MonitoringOverlay(
         if (showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
             val graphWidth = maxWidth * .28f
             val graphHeight = maxHeight * .09f
-            // The preview starts behind the chrome. Keep the scope below the top bar and
-            // preview HUD instead of always drawing it at (12, 12), where it collided with
-            // the microphone meter in both orientations.
-            val desiredTop = if (landscape) 140.dp else 92.dp
+            // The histogram belongs at the top of the usable preview. In landscape the
+            // preview reaches behind the 56 dp top bar, so clear that bar even without audio;
+            // reserve the larger HUD footprint only when the microphone meter is enabled.
+            val desiredTop = when {
+                reserveAudioMeterSpace && landscape -> 140.dp
+                reserveAudioMeterSpace -> 92.dp
+                landscape -> 64.dp
+                else -> 12.dp
+            }
             val graphTop = desiredTop.coerceAtMost((maxHeight - graphHeight - 12.dp).coerceAtLeast(12.dp))
             Canvas(
                 Modifier
@@ -595,6 +644,7 @@ internal fun AdaptiveCaptureChrome(
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     landscape: Boolean,
+    previewAspectRatio: Float? = null,
     zebra: Boolean,
     peaking: Boolean,
     histogram: Boolean,
@@ -611,6 +661,8 @@ internal fun AdaptiveCaptureChrome(
     var showMonitoring by remember { mutableStateOf(false) }
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
+    var tapPoint by remember { mutableStateOf<Offset?>(null) }
+    var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
     // it again; it re-hides after a short idle period unless the user keeps interacting.
     LaunchedEffect(recording, manualReveal) {
@@ -620,6 +672,9 @@ internal fun AdaptiveCaptureChrome(
         }
     }
     val chromeVisible = !recording || manualReveal
+    LaunchedEffect(state.tapFocusState) {
+        if (state.tapFocusState == TapFocusState.IDLE) tapPoint = null
+    }
 
     BackHandler(enabled = manualControl != null || showModeGrid || showMonitoring) {
         manualControl = null
@@ -627,27 +682,173 @@ internal fun AdaptiveCaptureChrome(
         showMonitoring = false
     }
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.displayCutout)
-            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-            .pointerInput(recording) {
-                detectTapGestures {
-                    if (recording) manualReveal = true
-                }
-            },
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)),
     ) {
-        // SurfaceView owns a native surface and can consume taps before a pointerInput modifier
-        // on its Compose parent sees them. Keep an explicit Compose hit target above the
-        // viewfinder while the console is hidden; controls composed below are later siblings and
-        // therefore retain priority (notably the compact Stop button).
-        if (recording && !chromeVisible) {
-            Box(
+        // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
+        // This is the first child: controls composed later remain the winning hit targets.
+        val width = constraints.maxWidth.toFloat()
+        val height = constraints.maxHeight.toFloat()
+        val ratio = previewAspectRatio
+        val previewWidth = if (ratio != null && width / height > ratio) height * ratio else width
+        val previewHeight = if (ratio != null && width / height > ratio) height else if (ratio != null) width / ratio else height
+        val previewLeft = (width - previewWidth) / 2f
+        val previewTop = (height - previewHeight) / 2f
+        Box(
+            Modifier
+                .matchParentSize()
+                .testTag(if (recording && !chromeVisible) "recording-reveal-surface" else "viewfinder-interaction-surface")
+                .semantics {
+                    onClick {
+                        if (recording) manualReveal = true
+                        true
+                    }
+                }
+                .pointerInput(recording, ratio, state.zoomSupported, state.zoomRatio) {
+                    // Pinch-to-zoom. Consumed by this detector so it never reaches tap-focus.
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        if (!state.zoomSupported) return@detectTransformGestures
+                        if (zoom == 1f) {
+                            // Pan or idle: reset the accumulated base so the next pinch starts fresh.
+                            pinchStartRatio = -1f
+                            return@detectTransformGestures
+                        }
+                        if (pinchStartRatio <= 0f) pinchStartRatio = state.zoomRatio
+                        val candidate = pinchStartRatio * zoom
+                        val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
+                            state.opticalAnchors.size > 1) {
+                            ZoomMath.sectorBounds(
+                                state.zoomRatio,
+                                state.opticalAnchors,
+                                settings.zoomLensSwitchMode,
+                                state.zoomMinRatio,
+                                state.zoomMaxRatio,
+                            )
+                        } else {
+                            state.zoomMinRatio..state.zoomMaxRatio
+                        }
+                        val coerced = ZoomMath.coerce(candidate, range)
+                        binder?.setZoomRatio(coerced)
+                        pinchStartRatio = coerced
+                    }
+                }
+                .pointerInput(recording, ratio, settings.tapExposureMeteringEnabled, state.phase) {
+                    detectTapGestures { position ->
+                        if (recording) manualReveal = true
+                        if (ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
+                            position.y !in previewTop..(previewTop + previewHeight)
+                        ) return@detectTapGestures
+                        val accepted = binder?.tapToFocus(
+                            (position.x - previewLeft) / previewWidth,
+                            (position.y - previewTop) / previewHeight,
+                            settings.tapExposureMeteringEnabled,
+                        ) == true
+                        if (accepted) tapPoint = position
+                    }
+                },
+        )
+
+        tapPoint?.let { point ->
+            val color = when (state.tapFocusState) {
+                TapFocusState.SEARCHING -> Amber
+                TapFocusState.FOCUSED -> VerifiedCyan
+                TapFocusState.NOT_FOCUSED -> RecordRed
+                TapFocusState.IDLE -> Color.Transparent
+            }
+            val reticleDescription = stringResource(
+                when (state.tapFocusState) {
+                    TapFocusState.SEARCHING -> R.string.tap_focus_searching
+                    TapFocusState.FOCUSED -> R.string.tap_focus_locked
+                    TapFocusState.NOT_FOCUSED -> R.string.tap_focus_failed
+                    TapFocusState.IDLE -> R.string.tap_focus_idle
+                },
+            )
+            Canvas(
                 Modifier
                     .matchParentSize()
-                    .testTag("recording-reveal-surface")
-                    .clickable { manualReveal = true },
+                    .testTag("tap-focus-reticle")
+                    .semantics {
+                        contentDescription = reticleDescription
+                    },
+            ) {
+                val side = minOf(48.dp.toPx(), previewWidth, previewHeight)
+                val left = (point.x - side / 2f).coerceIn(previewLeft, previewLeft + previewWidth - side)
+                val top = (point.y - side / 2f).coerceIn(previewTop, previewTop + previewHeight - side)
+                drawRect(
+                    color = color,
+                    topLeft = Offset(left, top),
+                    size = androidx.compose.ui.geometry.Size(side, side),
+                    style = Stroke(width = 2.dp.toPx()),
+                )
+            }
+        }
+
+        // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
+        // visible during recording even when the rest of the chrome hides.
+        if (state.zoomSupported) {
+            var rockerOffset by remember { mutableFloatStateOf(0f) }
+            var lastRockerMs by remember { mutableLongStateOf(0L) }
+            if (chromeVisible) {
+                ZoomAnchorBar(
+                    anchors = state.opticalAnchors,
+                    activeRatio = state.zoomEffectiveRatio ?: state.zoomRatio,
+                    onSelect = { ratio -> binder?.selectZoomAnchor(ratio) },
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp),
+                )
+                val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
+                val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = 52.dp)
+                        .testTag("zoom-ratio")
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Panel)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        "%.1f×".format(ratioValue) +
+                            if (isDigital) " " + stringResource(R.string.zoom_digital) else "",
+                        color = Amber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            ZoomRocker(
+                onSpeed = { offset ->
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val dt = ((now - lastRockerMs).coerceAtLeast(1L)) / 1000f
+                    lastRockerMs = now
+                    rockerOffset = offset
+                    val speed = ZoomMath.rockerSpeedOctavesPerSecond(offset)
+                    if (speed != 0f) {
+ val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
+                            state.opticalAnchors.size > 1) {
+                            ZoomMath.sectorBounds(
+                                state.zoomRatio,
+                                state.opticalAnchors,
+                                settings.zoomLensSwitchMode,
+                                state.zoomMinRatio,
+                                state.zoomMaxRatio,
+                            )
+                        } else {
+                            state.zoomMinRatio..state.zoomMaxRatio
+                        }
+                        val factor = ZoomMath.rockerFactor(speed, dt)
+                        val candidate = ZoomMath.multiply(state.zoomRatio, factor, range)
+                        binder?.setZoomRatio(candidate)
+                    }
+                },
+                onRelease = { rockerOffset = 0f },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+                    .width(28.dp)
+                    .height(120.dp),
             )
         }
 
@@ -1028,19 +1229,32 @@ private fun ModeDial(
         val itemHeight = 28.dp
         val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
         val fling = rememberSnapFlingBehavior(listState, SnapPosition.Center)
+        val focusedIndex by remember(listState, selectedIndex) {
+            derivedStateOf {
+                listState.layoutInfo.visibleItemsInfo
+                    .minByOrNull { item ->
+                        val viewportCenter =
+                            (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
+                        abs(item.offset + item.size / 2 - viewportCenter)
+                    }
+                    ?.index
+                    ?: selectedIndex
+            }
+        }
         LaunchedEffect(selectedIndex) {
-            if (!listState.isScrollInProgress && listState.firstVisibleItemIndex != selectedIndex) {
+            if (!listState.isScrollInProgress && focusedIndex != selectedIndex) {
                 if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
-                listState.scrollToItem(selectedIndex)
                 listState.animateScrollToItem(selectedIndex)
             }
         }
         LaunchedEffect(listState.isScrollInProgress) {
             if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
-                val idx = listState.firstVisibleItemIndex.coerceIn(0, modes.lastIndex)
+                val idx = focusedIndex.coerceIn(0, modes.lastIndex)
                 if (idx != selectedIndex && modes[idx] != state.selectedMode && selectable(modes[idx])) {
                     binder?.selectMode(modes[idx])
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } else if (idx != selectedIndex && !selectable(modes[idx])) {
+                    listState.animateScrollToItem(selectedIndex)
                 }
             }
         }
@@ -1060,12 +1274,13 @@ private fun ModeDial(
                 ) {
                     items(modes.size) { index ->
                         val mode = modes[index]
-                        val isSelected = index == selectedIndex
+                        val isSelected = index == focusedIndex
                         val enabled = selectable(mode)
                         Box(
                             Modifier
                                 .fillMaxWidth()
                                 .height(itemHeight)
+                                .semantics { selected = isSelected }
                                 .clickable(enabled = enabled && !isSelected) { binder?.selectMode(mode) },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -1091,7 +1306,7 @@ private fun ModeDial(
                         .height(itemHeight),
                 )
             }
-            ModePositionDots(modes, selectedIndex)
+            ModePositionDots(modes, focusedIndex)
         }
     } else {
         // Horizontal mode wheel, full width so several modes stay visible with room to breathe.
@@ -1106,19 +1321,32 @@ private fun ModeDial(
             val itemWidth = (totalWidth / 3.3f).coerceIn(88.dp, 150.dp)
             val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
             val fling = rememberSnapFlingBehavior(listState, SnapPosition.Center)
+            val focusedIndex by remember(listState, selectedIndex) {
+                derivedStateOf {
+                    listState.layoutInfo.visibleItemsInfo
+                        .minByOrNull { item ->
+                            val viewportCenter =
+                                (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
+                            abs(item.offset + item.size / 2 - viewportCenter)
+                        }
+                        ?.index
+                        ?: selectedIndex
+                }
+            }
             LaunchedEffect(selectedIndex, totalWidth) {
-                if (!listState.isScrollInProgress && listState.firstVisibleItemIndex != selectedIndex) {
+                if (!listState.isScrollInProgress && focusedIndex != selectedIndex) {
                     if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
-                    listState.scrollToItem(selectedIndex)
                     listState.animateScrollToItem(selectedIndex)
                 }
             }
             LaunchedEffect(listState.isScrollInProgress) {
                 if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
-                    val idx = listState.firstVisibleItemIndex.coerceIn(0, modes.lastIndex)
+                    val idx = focusedIndex.coerceIn(0, modes.lastIndex)
                     if (idx != selectedIndex && modes[idx] != state.selectedMode && selectable(modes[idx])) {
                         binder?.selectMode(modes[idx])
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    } else if (idx != selectedIndex && !selectable(modes[idx])) {
+                        listState.animateScrollToItem(selectedIndex)
                     }
                 }
             }
@@ -1132,12 +1360,13 @@ private fun ModeDial(
                     ) {
                         items(modes.size) { index ->
                             val mode = modes[index]
-                            val isSelected = index == selectedIndex
+                            val isSelected = index == focusedIndex
                             val enabled = selectable(mode)
                             Box(
                                 Modifier
                                     .width(itemWidth)
                                     .height(38.dp)
+                                    .semantics { selected = isSelected }
                                     .clickable(enabled = enabled && !isSelected) { binder?.selectMode(mode) },
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -1163,7 +1392,7 @@ private fun ModeDial(
                             .height(38.dp),
                     )
                 }
-                ModePositionDots(modes, selectedIndex)
+                ModePositionDots(modes, focusedIndex)
             }
         }
     }
@@ -1502,11 +1731,21 @@ private fun AudioMeterHud(
 
 @Composable
 private fun CaptureStatus(state: CameraUiState) {
+    var noticeVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(state.message, state.messageTransient) {
+        if (state.messageTransient) {
+            noticeVisible = true
+            delay(2_500)
+            noticeVisible = false
+        } else {
+            noticeVisible = true
+        }
+    }
     val status = when {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
             "REC ${state.recordingWidth}×${state.recordingHeight} · ${state.targetFps} fps · ${formatDuration(state.recordingElapsedMs)} · ${formatBytes(state.availableStorageBytes)} free"
         else -> state.message
-    } ?: return
+    }?.takeIf { !state.messageTransient || noticeVisible } ?: return
     Text(
         status,
         color = if (state.errorCode == null) Color.White else RecordRed,
@@ -1593,13 +1832,7 @@ private fun ResolutionDial(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 sizes.forEach { (width, height) ->
                     val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
-                    val rates = if (state.selectedMode == CaptureMode.LOG) {
-                        state.availableLogProfiles.filter { it.size.width == width && it.size.height == height }
-                            .map { if (it.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) "${it.fps} HFR/ISP" else it.fps.toString() }
-                    } else {
-                        state.availableVideoProfiles.filter { it.size.width == width && it.size.height == height }.map { it.fps.toString() }
-                    }.distinct()
-                    ChoiceTile("${width}×$height\n${rates.joinToString("/")} fps", selected, Modifier.weight(1f)) {
+                    ChoiceTile("${width}×$height", selected, Modifier.weight(1f)) {
                         binder?.selectVideoResolution(width, height)
                         onClose()
                     }
@@ -1618,7 +1851,14 @@ private fun FpsDial(
 ) {
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         PanelHeader("FPS FIJO", onClose)
-        state.availableTargetFps.chunked(4).forEach { rates ->
+        val modeRates = if (state.selectedMode == CaptureMode.LOG) {
+            VideoGeometryPolicy.unionLogFps(state.availableLogProfiles.map { it.toSpec() })
+        } else if (state.selectedMode in CameraUiState.videoProfileModes) {
+            VideoGeometryPolicy.unionFps(state.availableVideoProfiles.map { it.toSpec() })
+        } else {
+            state.availableTargetFps
+        }
+        modeRates.chunked(4).forEach { rates ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rates.forEach { fps ->
                     val logProfile = state.availableLogProfiles.firstOrNull {
@@ -1632,7 +1872,12 @@ private fun FpsDial(
                         highSpeed -> "$fps HS"
                         else -> fps.toString()
                     }
-                    ChoiceTile(label, fps == state.targetFps, Modifier.weight(1f)) {
+                    val supported = if (state.selectedMode == CaptureMode.LOG) {
+                        VideoGeometryPolicy.supportedLogFps(state.availableLogProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
+                    } else {
+                        VideoGeometryPolicy.supportedFps(state.availableVideoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
+                    }
+                    ChoiceTile(label, fps == state.targetFps, Modifier.weight(1f), enabled = supported) {
                         binder?.selectTargetFps(fps)
                         onClose()
                     }
@@ -1674,17 +1919,23 @@ private fun PanelHeader(title: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         modifier
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) Amber else Color(0xFF303638))
+            .background(
+                when {
+                    selected -> Amber
+                    !enabled -> Color(0xFF22272A)
+                    else -> Color(0xFF303638)
+                },
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (selected) Color.Black else Color.White, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (selected) Color.Black else if (!enabled) Color(0xFF6E7A80) else Color.White, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1836,6 +2087,14 @@ private fun SettingsScreen(
                 summary = null,
                 checked = settings.histogramEnabled,
                 onCheckedChange = { onSettingsChange(settings.copy(histogramEnabled = it)) },
+            )
+        }
+        item {
+            SettingsToggleRow(
+                title = stringResource(R.string.tap_exposure_metering),
+                summary = stringResource(R.string.tap_exposure_metering_summary),
+                checked = settings.tapExposureMeteringEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(tapExposureMeteringEnabled = it)) },
             )
         }
         item {
