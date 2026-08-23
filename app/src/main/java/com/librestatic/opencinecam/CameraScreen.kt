@@ -145,6 +145,8 @@ import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.camera.label
 import com.librestatic.opencinecam.camera.FocusPullEasing
+import com.librestatic.opencinecam.camera.AnamorphicSqueeze
+import com.librestatic.opencinecam.camera.AnamorphicOutputMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -345,8 +347,9 @@ private fun CaptureSurface(
                 it.previewSize
             }
         }
+        val squeezeFactor = settings.anamorphicSqueeze.factor
         val previewDisplayRatio = previewStreamSize?.let { size ->
-            val ratio = size.width.toFloat() / size.height
+            val ratio = size.width.toFloat() / size.height / squeezeFactor
             if (landscape) ratio else 1f / ratio
         }
         if (descriptor != null && binder != null) {
@@ -1802,12 +1805,23 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
     val free = formatBytes(state.availableStorageBytes) + " libre"
     val battery = batteryPercent?.let { "$it%" } ?: "--"
     val lut = if (state.selectedMode == CaptureMode.LOG) (if (settings.logViewAssistEnabled) "Rec.709" else "Flat") else "--"
-    val wb = state.requestedWhiteBalance.label()
-    val focus = if (state.requestedFocusDiopters != null) "MF" else "AF-C"
+   val wb = state.requestedWhiteBalance.label()
+   val focus = if (state.requestedFocusDiopters != null) "MF" else "AF-C"
+    val ana = if (settings.anamorphicSqueeze.isActive) {
+        val squeezeLabel = when (settings.anamorphicSqueeze) {
+            AnamorphicSqueeze.SQUEEZE_1_33X -> "1.33x"
+            AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
+            AnamorphicSqueeze.SQUEEZE_2X -> "2x"
+            else -> ""
+        }
+        val modeLabel = if (settings.anamorphicOutputMode == AnamorphicOutputMode.DESQUEEZED) "DQ" else "SQ"
+        "ANA $squeezeLabel/$modeLabel"
+    } else null
     val primary = buildList {
         add(codec)
         if (!isStill) { add(bitrate); add(audio) }
-        add(time)
+           add(time)
+            if (ana != null) add(ana)
     }.joinToString(" \u00b7 ")
     val secondary = listOf(free, battery, "LUT: $lut", "WB: $wb", "FOCUS: $focus").joinToString(" \u00b7 ")
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -2509,6 +2523,53 @@ private fun SettingsScreen(
                                 color = if (settings.recordingGeometryMode == mode) Amber else Color.White,
                                 fontWeight = if (settings.recordingGeometryMode == mode) FontWeight.Bold else FontWeight.Normal,
                             )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text("Anamorphic", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Adapter lens de-squeeze in preview and file.", color = Muted, fontSize = 10.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AnamorphicSqueeze.entries.forEach { squeeze ->
+                        TextButton(
+                            onClick = { onSettingsChange(settings.copy(anamorphicSqueeze = squeeze)) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) {
+                            Text(
+                                when (squeeze) {
+                                    AnamorphicSqueeze.NONE -> "OFF"
+                                    AnamorphicSqueeze.SQUEEZE_1_33X -> "1.33x"
+                                    AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
+                                    AnamorphicSqueeze.SQUEEZE_2X -> "2x"
+                                },
+                                color = if (settings.anamorphicSqueeze == squeeze) Amber else Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = if (settings.anamorphicSqueeze == squeeze) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+                if (settings.anamorphicSqueeze.isActive) {
+                    Text("Salida", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        AnamorphicOutputMode.entries.forEach { mode ->
+                            TextButton(
+                                onClick = { onSettingsChange(settings.copy(anamorphicOutputMode = mode)) },
+                                contentPadding = PaddingValues(0.dp),
+                            ) {
+                                Text(
+                                    when (mode) {
+                                        AnamorphicOutputMode.SQUEEZED -> "SQUEEZE+SAR"
+                                        AnamorphicOutputMode.DESQUEEZED -> "DESQUEEZE"
+                                    },
+                                    color = if (settings.anamorphicOutputMode == mode) Amber else Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = if (settings.anamorphicOutputMode == mode) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            }
                         }
                     }
                 }

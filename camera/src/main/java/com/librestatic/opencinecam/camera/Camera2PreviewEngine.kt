@@ -1170,9 +1170,13 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
     fun consumeLastOpenCineLogEvidence(): OpenCineLogRecordingEvidence? =
         lastLogRecordingEvidence.also { lastLogRecordingEvidence = null }
 
-    fun setOpenCineLogViewAssist(enabled: Boolean) {
-        logViewAssistEnabled = enabled
-        logPipeline?.setViewAssist(enabled)
+   fun setOpenCineLogViewAssist(enabled: Boolean) {
+       logViewAssistEnabled = enabled
+       logPipeline?.setViewAssist(enabled)
+   }
+
+    fun setOpenCineLogSqueezeFactor(factor: Float) {
+        logPipeline?.setPreviewSqueezeFactor(factor)
     }
 
     fun stopVideo(): Boolean {

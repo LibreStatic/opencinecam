@@ -18,6 +18,7 @@ import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
+import com.librestatic.opencinecam.TimeLapseLimitMode
 import com.librestatic.opencinecam.normalizedFor
 import com.librestatic.opencinecam.toSpec
 import com.librestatic.opencinecam.VideoGeometryPolicy
@@ -87,6 +88,7 @@ class CaptureService : Service() {
     private var audioStartFailure: String? = null
     private var activeRecordingAudioLabel: String = "no audio"
     private var recordingStartedAtMs = 0L
+    private var timelapseAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
     private var attachedPreviewRotationDegrees: Int = 0
     private var cameraSwitchGeneration = 0L
@@ -333,6 +335,7 @@ class CaptureService : Service() {
 
         override fun onRecordingStarted(width: Int, height: Int) {
             recordingStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            scheduleTimelapseAutoStop()
             audioSidecarRecorder?.let { sidecar ->
                 try {
                     sidecar.start()
@@ -353,7 +356,7 @@ class CaptureService : Service() {
                     } else "HLG-derived 10-bit"
                     "REC ${width}×$height · OCLog2 · HEVC Main10 · $source · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
                 } else if (cameraState.value.selectedMode == CaptureMode.TIME_LAPSE) {
-                    val intervalMs = cameraState.value.timelapseIntervalMs; val intervalLabel = if (intervalMs < 1000L) intervalMs.toString() + "ms" else (intervalMs / 1000L).toString() + "s"
+                    val intervalLabel = formatTimelapseInterval(cameraState.value.timelapseIntervalMs)
                     getString(R.string.timelapse_recording, intervalLabel, cameraState.value.targetFps)
                 } else {
                     "REC ${width}×$height · H.264 · $activeRecordingAudioLabel"
@@ -369,6 +372,7 @@ class CaptureService : Service() {
 
         override fun onRecordingStopped(success: Boolean) {
             mainHandler.removeCallbacks(recordingTicker)
+            cancelTimelapseAutoStop()
             val output = videoOutput
             videoOutput = null
             val durationMs = (android.os.SystemClock.elapsedRealtime() - recordingStartedAtMs).coerceAtLeast(0L)
@@ -478,6 +482,7 @@ class CaptureService : Service() {
         override fun onFailure(code: String, message: String, recoverable: Boolean) {
             stopPreviewAudioMonitor(clearLevels = false)
             mainHandler.removeCallbacks(recordingTicker)
+            cancelTimelapseAutoStop()
             videoOutput?.finish(false)
             videoOutput = null
             activeRecordingGeometry = null
@@ -960,6 +965,7 @@ class CaptureService : Service() {
                 cameraState.value.descriptor?.flashAvailable == true
             previewEngine.setTorchEnabled(torchAllowed)
             previewEngine.setOpenCineLogViewAssist(updated.logViewAssistEnabled)
+            previewEngine.setOpenCineLogSqueezeFactor(updated.anamorphicSqueeze.factor)
             cameraState.value = cameraState.value.copy(torchEnabled = torchAllowed)
             if (cameraState.value.phase != CameraUiPhase.RECORDING) startPreviewAudioMonitorIfEligible()
         }
@@ -1143,6 +1149,8 @@ class CaptureService : Service() {
                             deviceOrientationDegrees = orientation,
                             lensFacing = descriptor.lensFacing,
                             mode = settings.recordingGeometryMode,
+                            anamorphicSqueeze = settings.anamorphicSqueeze,
+                            anamorphicOutputMode = settings.anamorphicOutputMode,
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1235,6 +1243,8 @@ class CaptureService : Service() {
                             deviceOrientationDegrees = orientation,
                             lensFacing = descriptor.lensFacing,
                             mode = settings.recordingGeometryMode,
+                            anamorphicSqueeze = settings.anamorphicSqueeze,
+                            anamorphicOutputMode = settings.anamorphicOutputMode,
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1471,6 +1481,51 @@ class CaptureService : Service() {
             },
         )
         .toString(2)
+
+    private fun scheduleTimelapseAutoStop() {
+        cancelTimelapseAutoStop()
+        if (cameraState.value.selectedMode != CaptureMode.TIME_LAPSE) return
+        val delayMs = when (cameraState.value.timelapseLimitMode) {
+            TimeLapseLimitMode.UNLIMITED -> return
+            TimeLapseLimitMode.FRAME_COUNT -> {
+                val intervalMs = cameraState.value.timelapseIntervalMs.coerceAtLeast(1L)
+                cameraState.value.timelapseFrameCount.toLong() * intervalMs
+            }
+            TimeLapseLimitMode.DURATION -> cameraState.value.timelapseDurationMs
+        }.coerceAtLeast(1L)
+        val runnable = Runnable {
+            if (cameraState.value.phase == CameraUiPhase.RECORDING &&
+                cameraState.value.selectedMode == CaptureMode.TIME_LAPSE
+            ) {
+                previewEngine.stopVideo()
+            }
+        }
+        timelapseAutoStopRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMs)
+    }
+
+    private fun cancelTimelapseAutoStop() {
+        timelapseAutoStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        timelapseAutoStopRunnable = null
+    }
+
+    private fun formatTimelapseInterval(intervalMs: Long): String {
+        val totalSeconds = intervalMs / 1000.0
+        return when {
+            totalSeconds < 1.0 -> "${"%.1f".format(totalSeconds)} s"
+            totalSeconds < 60.0 -> "${totalSeconds.toInt()} s"
+            totalSeconds < 3600.0 -> {
+                val minutes = totalSeconds.toInt() / 60
+                val seconds = totalSeconds.toInt() % 60
+                if (seconds == 0) "$minutes min" else "$minutes min $seconds s"
+            }
+            else -> {
+                val hours = totalSeconds.toInt() / 3600
+                val minutes = (totalSeconds.toInt() % 3600) / 60
+                if (minutes == 0) "$hours h" else "$hours h $minutes min"
+            }
+        }
+    }
 
     private fun fpsUnavailableNotice(transient: Boolean, mode: CaptureMode, requestedFps: Int, effectiveFps: Int): String? {
         if (!transient) return null
