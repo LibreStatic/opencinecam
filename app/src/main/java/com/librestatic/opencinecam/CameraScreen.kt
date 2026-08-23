@@ -1970,7 +1970,7 @@ private fun ProfessionalAudioSettings(
                 choices = capabilities.aacBitratesKbps.map { it.toString() to "$it kbps" },
                 selected = settings.audioBitrateKbps.toString(),
             ) { bitrate -> update(settings.copy(audioBitrateKbps = bitrate.toInt())) }
-            Text("AAC-LC is embedded in the MP4. NS/AGC/AEC effects are not exposed because MediaRecorder does not publish its audio session.", color = Muted, fontSize = 10.sp)
+            Text("AAC-LC is embedded in the MP4. AGC applies to LOG recording; it does not apply to standard video (MediaRecorder).", color = Muted, fontSize = 10.sp)
         } else {
             val derived = settings.audioSampleRateHz * settings.audioBitDepth.bits * settings.audioChannels / 1_000
             val container = if (settings.audioOutputFormat == AudioOutputFormat.FLAC) "Lossless compressed FLAC" else "WAV PCM"
@@ -1999,13 +1999,6 @@ private fun ProfessionalAudioSettings(
                 onCheckedChange = { update(settings.copy(noiseSuppressorEnabled = it)) },
             )
             SettingsToggleRow(
-                title = "Automatic gain (AGC)",
-                summary = "Off by default to preserve dynamics.",
-                checked = settings.automaticGainControlEnabled,
-                enabled = capabilities.automaticGainControlAvailable,
-                onCheckedChange = { update(settings.copy(automaticGainControlEnabled = it)) },
-            )
-            SettingsToggleRow(
                 title = "Echo cancellation (AEC)",
                 summary = "Useful for speech; off by default.",
                 checked = settings.acousticEchoCancelerEnabled,
@@ -2013,6 +2006,15 @@ private fun ProfessionalAudioSettings(
                 onCheckedChange = { update(settings.copy(acousticEchoCancelerEnabled = it)) },
             )
         }
+        SettingsToggleRow(
+                title = "Automatic gain (AGC)",
+                summary = "On by default for a consistent level; turn it off to preserve dynamics.",
+                checked = settings.automaticGainControlEnabled,
+                // Always interactive: hardware AGC when the HAL exposes it, in-process
+                // SoftAgc otherwise.
+                enabled = true,
+                onCheckedChange = { update(settings.copy(automaticGainControlEnabled = it)) },
+        )
         Text("AAC is embedded in the MP4. WAV and FLAC are saved as synchronized sidecars with capture metadata.", color = Muted, fontSize = 10.sp)
     }
 }
