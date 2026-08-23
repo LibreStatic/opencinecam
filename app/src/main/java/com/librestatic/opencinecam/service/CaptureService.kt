@@ -35,6 +35,10 @@ import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.FocusPullEasing
+import com.librestatic.opencinecam.camera.SmpteTimecode
+import com.librestatic.opencinecam.camera.TimecodeRate
+import com.librestatic.opencinecam.camera.TimecodeMode
+import com.librestatic.opencinecam.camera.TimecodeTracker
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
@@ -97,6 +101,7 @@ class CaptureService : Service() {
     private var pendingSwitchPrevious: String? = null
     private var pendingStatusMessage: String? = null
     private val perCameraZoom = mutableMapOf<String, Float>()
+    private val timecodeTracker = TimecodeTracker()
     private val perCameraWhiteBalance = mutableMapOf<String, WhiteBalanceSelection>()
     private var settings = CameraSettings()
     private var geometrySeeds = GeometrySeeds()
@@ -117,6 +122,7 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(
                 recordingElapsedMs = (android.os.SystemClock.elapsedRealtime() - recordingStartedAtMs).coerceAtLeast(0L),
                 availableStorageBytes = runCatching { StatFs(filesDir.absolutePath).availableBytes }.getOrNull(),
+                timecodeDisplay = timecodeTracker.currentDisplayTc()?.format(),
             )
             mainHandler.postDelayed(this, RECORDING_TICK_MS)
         }
@@ -966,6 +972,12 @@ class CaptureService : Service() {
             previewEngine.setTorchEnabled(torchAllowed)
             previewEngine.setOpenCineLogViewAssist(updated.logViewAssistEnabled)
             previewEngine.setOpenCineLogSqueezeFactor(updated.anamorphicSqueeze.factor)
+            timecodeTracker.configure(
+                TimecodeRate(updated.timecodeNominalFps, updated.timecodeDropFrame),
+                updated.timecodeMode,
+                SmpteTimecode(updated.timecodeStartHours, updated.timecodeStartMinutes, updated.timecodeStartSeconds, updated.timecodeStartFrames, updated.timecodeDropFrame),
+                updated.timecodeEnabled,
+            )
             cameraState.value = cameraState.value.copy(torchEnabled = torchAllowed)
             if (cameraState.value.phase != CameraUiPhase.RECORDING) startPreviewAudioMonitorIfEligible()
         }
@@ -1472,6 +1484,12 @@ class CaptureService : Service() {
         .put("targetFps", evidence.targetFps)
         .put("firstPtsUs", evidence.firstPtsUs)
         .put("lastPtsUs", evidence.lastPtsUs)
+        .put("timecode", JSONObject()
+            .put("mode", settings.timecodeMode.name)
+            .put("nominalFps", settings.timecodeNominalFps)
+            .put("dropFrame", settings.timecodeDropFrame)
+            .put("startTc", SmpteTimecode(settings.timecodeStartHours, settings.timecodeStartMinutes, settings.timecodeStartSeconds, settings.timecodeStartFrames, settings.timecodeDropFrame).format())
+            .put("enabled", settings.timecodeEnabled))
         .put(
             "qualification",
             if (evidence.sourcePath == OpenCineLogSourcePath.HLG10_BT2020) {

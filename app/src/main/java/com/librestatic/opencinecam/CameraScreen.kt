@@ -144,9 +144,13 @@ import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.camera.label
+import com.librestatic.opencinecam.camera.snapKelvinTo100
+import com.librestatic.opencinecam.camera.KELVIN_PRESETS
+import com.librestatic.opencinecam.camera.adaptTo
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
+import com.librestatic.opencinecam.camera.TimecodeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1822,6 +1826,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
         if (!isStill) { add(bitrate); add(audio) }
            add(time)
             if (ana != null) add(ana)
+            if (state.timecodeDisplay != null) add(state.timecodeDisplay!!)
     }.joinToString(" \u00b7 ")
     val secondary = listOf(free, battery, "LUT: $lut", "WB: $wb", "FOCUS: $focus").joinToString(" \u00b7 ")
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -1998,7 +2003,7 @@ private fun ManualControlDial(
         return
     }
     if (control == ControlDial.WB) {
-        AwbDial(state.requestedWhiteBalance, binder, onClose)
+        WbDial(state, binder, onClose)
         return
     }
     if (control == ControlDial.EV) {
@@ -2663,6 +2668,47 @@ private fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text("Timecode SMPTE", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Generates timecode for VIDEO and LOG. Saved in the sidecar.", color = Muted, fontSize = 10.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onSettingsChange(settings.copy(timecodeEnabled = !settings.timecodeEnabled)) }) {
+                        Text(if (settings.timecodeEnabled) "ON" else "OFF", color = if (settings.timecodeEnabled) Amber else Color.White, fontWeight = if (settings.timecodeEnabled) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+                if (settings.timecodeEnabled) {
+                    Text("Modo", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TimecodeMode.entries.forEach { mode ->
+                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeMode = mode)) }, contentPadding = PaddingValues(0.dp)) {
+                                Text(when (mode) {
+                                    TimecodeMode.FREE_RUN -> "FREE"
+                                    TimecodeMode.RECORD_RUN -> "REC"
+                                    TimecodeMode.REGEN -> "REGEN"
+                                }, color = if (settings.timecodeMode == mode) Amber else Color.White, fontSize = 9.sp, fontWeight = if (settings.timecodeMode == mode) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    Text("Tasa", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(24, 25, 30, 50, 60).forEach { fps ->
+                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeNominalFps = fps, timecodeDropFrame = false)) }, contentPadding = PaddingValues(0.dp)) {
+                                Text("", color = if (settings.timecodeNominalFps == fps && !settings.timecodeDropFrame) Amber else Color.White, fontSize = 9.sp)
+                            }
+                        }
+                    }
+                    if (settings.timecodeNominalFps in setOf(30, 60)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeDropFrame = !settings.timecodeDropFrame)) }, contentPadding = PaddingValues(0.dp)) {
+                                Text(if (settings.timecodeDropFrame) "DF" else "NDF", color = if (settings.timecodeDropFrame) Amber else Color.White, fontSize = 9.sp, fontWeight = if (settings.timecodeDropFrame) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    Text("Start TC: %02d:%02d:%02d%s%02d".format(settings.timecodeStartHours, settings.timecodeStartMinutes, settings.timecodeStartSeconds, if (settings.timecodeDropFrame) ";" else ":", settings.timecodeStartFrames), color = VerifiedCyan, fontSize = 11.sp)
                 }
             }
         }

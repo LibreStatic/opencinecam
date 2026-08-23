@@ -14,6 +14,7 @@ import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
+import com.librestatic.opencinecam.camera.TimecodeMode
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
 enum class HistogramMode { RGB, LUMA }
@@ -63,6 +64,14 @@ data class CameraSettings(
     val timelapseHeight: Int = 1080,
     val timelapseFps: Int = 30,
     val afLockBehavior: AfLockBehavior = AfLockBehavior.FREEZE_CURRENT,
+    val timecodeEnabled: Boolean = false,
+    val timecodeMode: TimecodeMode = TimecodeMode.RECORD_RUN,
+    val timecodeNominalFps: Int = 30,
+    val timecodeDropFrame: Boolean = false,
+    val timecodeStartHours: Int = 1,
+    val timecodeStartMinutes: Int = 0,
+    val timecodeStartSeconds: Int = 0,
+    val timecodeStartFrames: Int = 0,
 ) {
     init {
         require(burstCount in 3..10)

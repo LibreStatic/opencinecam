@@ -12,6 +12,8 @@ import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.camera.FocusPullEasing
+import com.librestatic.opencinecam.camera.SmpteTimecode
+import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 
 enum class CameraUiPhase {
@@ -93,6 +95,7 @@ data class CameraUiState(
     val focusPullActive: Boolean = false,
     val focusPullTargetDiopters: Float? = null,
     val focusMarks: Map<String, Float> = emptyMap(),
+    val timecodeDisplay: String? = null,
     val zoomMinRatio: Float = 1f,
     val zoomMaxRatio: Float = 1f,
     val zoomRatio: Float = 1f,
