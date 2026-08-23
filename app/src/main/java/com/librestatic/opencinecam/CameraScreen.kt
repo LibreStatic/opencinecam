@@ -482,8 +482,8 @@ private fun MonitoringOverlay(
 ) {
     val context = LocalContext.current
     val displayRotationProvider = remember(context) {
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-        { windowManager.defaultDisplay.rotation }
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        { displayManager.displays.firstOrNull()?.rotation ?: 0 }
     }
     var rollSnapshot by remember { mutableStateOf<HorizonRollSnapshot?>(null) }
     val horizonSensorAvailable = remember(context, showHorizon) {
@@ -2177,24 +2177,94 @@ private fun FpsDial(
 }
 
 @Composable
-private fun AwbDial(selected: WhiteBalanceSelection, binder: CaptureService.LocalBinder?, onClose: () -> Unit) {
-    val choices = listOf(
-        null to "AUTO",
-        CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to "DAY",
-        CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to "CLOUD",
-        CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to "TUNG",
-        CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to "FLUO",
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader("BALANCE DE BLANCOS", onClose)
-        choices.chunked(3).forEach { rowChoices ->
+private fun WbDial(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    onClose: () -> Unit,
+) {
+    val descriptor = state.descriptor
+    val kelvinRange = descriptor?.kelvinRange
+    val selection = state.requestedWhiteBalance
+
+    if (kelvinRange != null) {
+        // Direct Kelvin (CCT) path - slider + presets
+        val currentK = (selection as? WhiteBalanceSelection.Kelvin)?.kelvin
+            ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange }
+            ?: kelvinRange.first
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            PanelHeader("BALANCE DE BLANCOS", onClose)
+
+            // Live Kelvin readout
+            val displayK = if (selection is WhiteBalanceSelection.Kelvin) selection.kelvin else currentK
+            Text(
+                if (selection is WhiteBalanceSelection.Auto) "AUTO" else "${displayK}K",
+                color = if (selection is WhiteBalanceSelection.Auto) VerifiedCyan else Amber,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+
+            // Kelvin slider - 100K steps within device range
+            if (selection !is WhiteBalanceSelection.Auto) {
+                Slider(
+                    value = displayK.toFloat(),
+                    valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
+                    steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
+                    onValueChange = { raw ->
+                        val snapped = snapKelvinTo100(raw.toInt(), kelvinRange)
+                        if (snapped != null) binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(snapped))
+                    },
+                    modifier = Modifier.fillMaxWidth().height(28.dp),
+                )
+            }
+
+            // Preset Kelvin chips
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rowChoices.forEach { (mode, label) ->
-                    val isSelected = if (mode == null) selected is com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto
-                        else selected is com.librestatic.opencinecam.camera.WhiteBalanceSelection.Preset && selected.awbMode == mode
-                    ChoiceTile(label, isSelected, Modifier.weight(1f)) { binder?.setWhiteBalance(if (mode != null) com.librestatic.opencinecam.camera.WhiteBalanceSelection.Preset(mode) else com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto) }
+                KELVIN_PRESETS.forEach { preset ->
+                    val inRange = preset in kelvinRange
+                    val presetSel = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
+                    ChoiceTile("${preset}K", presetSel, Modifier.weight(1f), enabled = inRange) {
+                        binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset))
+                    }
                 }
-                repeat(3 - rowChoices.size) { Spacer(Modifier.weight(1f)) }
+            }
+
+            // AUTO + range labels row
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("${kelvinRange.first}K", color = Muted, fontSize = 10.sp)
+                TextButton(onClick = { binder?.setWhiteBalance(WhiteBalanceSelection.Auto) }) {
+                    Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
+                }
+                Text("${kelvinRange.last}K", color = Muted, fontSize = 10.sp)
+            }
+        }
+    } else {
+        // Legacy AWB preset path - devices without CCT support
+        val choices = listOf(
+            null to "AUTO",
+            CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to "DAY",
+            CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to "CLOUD",
+            CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to "TUNG",
+            CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to "FLUO",
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            PanelHeader("BALANCE DE BLANCOS", onClose)
+            choices.chunked(3).forEach { rowChoices ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rowChoices.forEach { (mode, label) ->
+                        val isSelected = if (mode == null) selection is WhiteBalanceSelection.Auto
+                            else selection is WhiteBalanceSelection.Preset && selection.awbMode == mode
+                        ChoiceTile(label, isSelected, Modifier.weight(1f)) {
+                            binder?.setWhiteBalance(
+                                if (mode != null) WhiteBalanceSelection.Preset(mode) else WhiteBalanceSelection.Auto,
+                            )
+                        }
+                    }
+                    repeat(3 - rowChoices.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
     }
