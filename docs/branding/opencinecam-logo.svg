@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <path d="M 697.99 697.99 L 768.70 768.70 A 380 380 0 1 1 768.70 231.30 L 697.99 302.01 A 280 280 0 1 0 697.99 697.99 Z" fill="#FFB300" />
+  <path d="M 627.50 720.84 A 255 255 0 1 1 627.50 279.16" fill="none" stroke="#9CA6AA" stroke-width="12" stroke-linecap="butt" />
+  <path d="M 646.26 291.12 A 255 255 0 0 1 746.31 434.00" fill="none" stroke="#45D6E8" stroke-width="12" stroke-linecap="butt" />
+  <path d="M 746.31 566.00 A 255 255 0 0 1 646.26 708.88" fill="none" stroke="#45D6E8" stroke-width="12" stroke-linecap="butt" />
+  <circle cx="755.00" cy="500.00" r="16" fill="#E23A3A" />
+  <defs>
+    <clipPath id="iris-clip"><circle cx="500" cy="500" r="215"/></clipPath>
+  </defs>
+  <g clip-path="url(#iris-clip)">
+    <polygon points="564.95,537.50 500.00,575.00 -149.52,950.00 564.95,1287.50" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+    <polygon points="500.00,575.00 435.05,537.50 -214.47,162.50 -149.52,950.00" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+    <polygon points="435.05,537.50 435.05,462.50 435.05,-287.50 -214.47,162.50" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+    <polygon points="435.05,462.50 500.00,425.00 1149.52,50.00 435.05,-287.50" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+    <polygon points="500.00,425.00 564.95,462.50 1214.47,837.50 1149.52,50.00" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+    <polygon points="564.95,462.50 564.95,537.50 564.95,1287.50 1214.47,837.50" fill="#FFB300" stroke="#0B0D0E" stroke-width="8" stroke-linejoin="miter"/>
+  </g>
+</svg>
