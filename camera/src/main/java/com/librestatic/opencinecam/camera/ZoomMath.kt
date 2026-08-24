@@ -3,8 +3,8 @@
 
 package com.librestatic.opencinecam.camera
 
-import kotlin.math.exp
 import kotlin.math.abs
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -100,7 +100,8 @@ object ZoomMath {
      * The boundary between two adjacent anchors is their geometric mean so movement feels
      * symmetric in the log (octave) domain. When [ratio] is beyond the extreme anchors the
      * boundary is the anchor itself (no further sector jump via pinch). Returns the full range
-     * in AUTOMATIC mode.
+     * in AUTOMATIC mode. [direction] resolves an exact boundary toward the user's movement:
+     * negative selects the wider/lower sector and positive selects the tighter/upper sector.
      */
     fun sectorBounds(
         ratio: Float,
@@ -108,9 +109,23 @@ object ZoomMath {
         mode: ZoomLensSwitchMode,
         rangeMin: Float,
         rangeMax: Float,
+        direction: Float = 0f,
     ): ClosedFloatingPointRange<Float> {
         if (mode == ZoomLensSwitchMode.AUTOMATIC || anchors.size <= 1) return rangeMin..rangeMax
         val sorted = anchors.sortedBy { it.ratio }
+
+        // lastOrNull { <= ratio } assigns an exact anchor to the tighter sector. That is fine
+        // while zooming in, but used to trap zoom-out forever at 2x, 1x, etc. Select the sector
+        // immediately below an exact anchor when movement is toward the wide end.
+        if (direction < 0f) {
+            val exactAnchorIndex = sorted.indexOfFirst { abs(it.ratio - ratio) <= 0.0001f }
+            if (exactAnchorIndex > 0) {
+                val previous = sorted[exactAnchorIndex - 1].ratio
+                val current = sorted[exactAnchorIndex].ratio
+                return geometricMean(previous, current)..current
+            }
+        }
+
         val lower = sorted.lastOrNull { it.ratio <= ratio } ?: sorted.first()
         val upper = sorted.firstOrNull { it.ratio > ratio } ?: sorted.last()
         if (lower === upper) {
@@ -118,7 +133,7 @@ object ZoomMath {
             return lower.ratio..rangeMax
         }
         val mid = geometricMean(lower.ratio, upper.ratio)
-        return if (ratio < mid) {
+        return if (ratio < mid || direction < 0f && abs(ratio - mid) <= 0.0001f) {
             lower.ratio..mid
         } else {
             mid..upper.ratio
@@ -160,7 +175,7 @@ object ZoomMath {
      * factor for the current ratio. Positive speed zooms in (factor > 1), negative zooms out.
      */
     fun rockerFactor(speedOctavesPerSecond: Float, deltaSeconds: Float): Float {
-        return exp(speedOctavesPerSecond * deltaSeconds)
+        return 2.0.pow((speedOctavesPerSecond * deltaSeconds).toDouble()).toFloat()
     }
 
     /** Geometric mean used as the sector boundary between adjacent anchors. */

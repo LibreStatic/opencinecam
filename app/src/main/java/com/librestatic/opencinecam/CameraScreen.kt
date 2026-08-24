@@ -91,7 +91,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -912,6 +911,7 @@ internal fun AdaptiveCaptureChrome(
                                 settings.zoomLensSwitchMode,
                                 state.zoomMinRatio,
                                 state.zoomMaxRatio,
+                                direction = candidate - state.zoomRatio,
                             )
                         } else {
                             state.zoomMinRatio..state.zoomMaxRatio
@@ -975,8 +975,6 @@ internal fun AdaptiveCaptureChrome(
         // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
         // visible during recording even when the rest of the chrome hides.
         if (state.zoomSupported) {
-            var rockerOffset by remember { mutableFloatStateOf(0f) }
-            var lastRockerMs by remember { mutableLongStateOf(0L) }
             if (chromeVisible) {
                 val anchorTop = if (compactPortrait) 112.dp else 62.dp
                 ZoomAnchorBar(
@@ -1006,14 +1004,10 @@ internal fun AdaptiveCaptureChrome(
                 }
             }
             ZoomRocker(
-                onSpeed = { offset ->
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    val dt = ((now - lastRockerMs).coerceAtLeast(1L)) / 1000f
-                    lastRockerMs = now
-                    rockerOffset = offset
+                onStep = { offset, deltaSeconds ->
                     val speed = ZoomMath.rockerSpeedOctavesPerSecond(offset)
                     if (speed != 0f) {
- val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
+                        val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
                             state.opticalAnchors.size > 1) {
                             ZoomMath.sectorBounds(
                                 state.zoomRatio,
@@ -1021,16 +1015,17 @@ internal fun AdaptiveCaptureChrome(
                                 settings.zoomLensSwitchMode,
                                 state.zoomMinRatio,
                                 state.zoomMaxRatio,
+                                direction = speed,
                             )
                         } else {
                             state.zoomMinRatio..state.zoomMaxRatio
                         }
-                        val factor = ZoomMath.rockerFactor(speed, dt)
+                        val factor = ZoomMath.rockerFactor(speed, deltaSeconds)
                         val candidate = ZoomMath.multiply(state.zoomRatio, factor, range)
                         binder?.setZoomRatio(candidate)
                     }
                 },
-                onRelease = { rockerOffset = 0f },
+                onRelease = {},
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 8.dp)

@@ -83,6 +83,72 @@ class ZoomMathTest {
     }
 
     @Test
+    fun manualPresetsZoomOutLeavesExactTeleAnchor() {
+        val anchors = sampleAnchors()
+        val bounds = ZoomMath.sectorBounds(
+            ratio = 2f,
+            anchors = anchors,
+            mode = ZoomLensSwitchMode.MANUAL_PRESETS,
+            rangeMin = 0.5f,
+            rangeMax = 10f,
+            direction = -1f,
+        )
+
+        assertEquals(ZoomMath.geometricMean(1f, 2f), bounds.start, 0.001f)
+        assertEquals(2f, bounds.endInclusive, 0.001f)
+    }
+
+    @Test
+    fun manualPresetsZoomOutCrossesExactMidpoint() {
+        val anchors = sampleAnchors()
+        val midpoint = ZoomMath.geometricMean(1f, 2f)
+        val bounds = ZoomMath.sectorBounds(
+            ratio = midpoint,
+            anchors = anchors,
+            mode = ZoomLensSwitchMode.MANUAL_PRESETS,
+            rangeMin = 0.5f,
+            rangeMax = 10f,
+            direction = -1f,
+        )
+
+        assertEquals(1f, bounds.start, 0.001f)
+        assertEquals(midpoint, bounds.endInclusive, 0.001f)
+    }
+
+    @Test
+    fun manualPresetsRockerTraversesAllSampleSensorsInBothDirections() {
+        val anchors = sampleAnchors()
+        var ratio = 0.5f
+        repeat(400) {
+            val speed = ZoomMath.rockerSpeedOctavesPerSecond(1f)
+            val bounds = ZoomMath.sectorBounds(
+                ratio,
+                anchors,
+                ZoomLensSwitchMode.MANUAL_PRESETS,
+                0.5f,
+                10f,
+                direction = speed,
+            )
+            ratio = ZoomMath.multiply(ratio, ZoomMath.rockerFactor(speed, 0.033f), bounds)
+        }
+        assertEquals(10f, ratio, 0.001f)
+
+        repeat(400) {
+            val speed = ZoomMath.rockerSpeedOctavesPerSecond(-1f)
+            val bounds = ZoomMath.sectorBounds(
+                ratio,
+                anchors,
+                ZoomLensSwitchMode.MANUAL_PRESETS,
+                0.5f,
+                10f,
+                direction = speed,
+            )
+            ratio = ZoomMath.multiply(ratio, ZoomMath.rockerFactor(speed, 0.033f), bounds)
+        }
+        assertEquals(0.5f, ratio, 0.001f)
+    }
+
+    @Test
     fun coerceHandlesInvertedRange() {
         assertEquals(1f, ZoomMath.coerce(5f, 1f..1f), 0.001f)
         assertEquals(1.5f, ZoomMath.coerce(1.5f, 0.5f..10f), 0.001f)
@@ -121,15 +187,15 @@ class ZoomMathTest {
 
     @Test
     fun rockerFactorPositiveZoomsIn() {
-        val factor = ZoomMath.rockerFactor(1f, 1f) // 1 octave/sec for 1 sec = e^1
-        assertEquals(Math.E, factor.toDouble(), 0.001)
+        val factor = ZoomMath.rockerFactor(1f, 1f)
+        assertEquals(2f, factor, 0.001f)
         assertTrue(factor > 1f)
     }
 
     @Test
     fun rockerFactorNegativeZoomsOut() {
         val factor = ZoomMath.rockerFactor(-1f, 1f)
-        assertEquals(1f / Math.E, factor.toDouble(), 0.001)
+        assertEquals(0.5f, factor, 0.001f)
         assertTrue(factor < 1f)
     }
 
@@ -166,4 +232,10 @@ class ZoomMathTest {
         assertNull(ZoomMath.ratioFromCropRegionPure(CropRect(0, 0, 1, 1), null))
         assertNull(ZoomMath.ratioFromCropRegionPure(null, CropRect(0, 0, 1, 1)))
     }
+
+    private fun sampleAnchors() = listOf(
+        ZoomAnchor(0.5f, 1.826f, "3"),
+        ZoomAnchor(1f, 6.57f, "2"),
+        ZoomAnchor(2f, 13.3f, "5"),
+    )
 }
