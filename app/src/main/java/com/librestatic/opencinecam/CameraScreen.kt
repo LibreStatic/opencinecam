@@ -38,7 +38,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,14 +54,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -93,10 +90,12 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +107,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import com.librestatic.opencinecam.camera.ZoomMath
@@ -252,7 +252,7 @@ fun CameraRootScreen() {
                 onOpenSettings = { section = AppSection.SETTINGS },
             )
         } else {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Box(Modifier.weight(1f)) {
                     when (section) {
                         AppSection.MEDIA -> MediaScreen()
@@ -302,7 +302,7 @@ private fun rememberCaptureServiceBinder(enabled: Boolean): CaptureService.Local
 @Composable
 private fun PermissionScreen(onGrant: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Graphite).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(Graphite).windowInsetsPadding(WindowInsets.safeDrawing).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -342,6 +342,7 @@ private fun CaptureSurface(
 
         val descriptor = state.descriptor
         val landscape = maxWidth > maxHeight
+        val compactPortrait = captureWindowProfile(maxWidth.value, maxHeight.value) == CaptureWindowProfile.COMPACT_PORTRAIT
         val previewStreamSize = descriptor?.let {
             if (state.selectedMode == CaptureMode.LOG) {
                 state.activeLogProfile?.size ?: it.preferredLogProfile?.size ?: it.previewSize
@@ -353,8 +354,7 @@ private fun CaptureSurface(
         }
         val squeezeFactor = settings.anamorphicSqueeze.factor
         val previewDisplayRatio = previewStreamSize?.let { size ->
-            val ratio = size.width.toFloat() / size.height / squeezeFactor
-            if (landscape) ratio else 1f / ratio
+            previewDisplayRatio(size.width, size.height, squeezeFactor, landscape)
         }
         if (descriptor != null && binder != null) {
             val streamSize = requireNotNull(previewStreamSize)
@@ -383,6 +383,8 @@ private fun CaptureSurface(
                 showHorizon = showHorizon,
                 reserveAudioMeterSpace = settings.audioEnabled &&
                     state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG),
+                reserveZoomChromeSpace = state.zoomSupported,
+                compactPortrait = compactPortrait,
                 landscape = landscape,
                 // aspectRatio must receive the unconstrained Box bounds. Applying fillMaxWidth
                 // first can force a too-wide landscape view and make Compose violate the ratio
@@ -459,11 +461,56 @@ private fun CaptureSurface(
 }
 
 @Composable
-private fun MonitorToggle(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun MonitorToggle(label: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(32.dp).clip(RoundedCornerShape(5.dp)).background(if (enabled) Amber else Color(0xFF303638)).clickable(onClick = onClick),
+        Modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics {
+                contentDescription = description
+                selected = enabled
+            }
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (enabled) Amber else Color(0xFF303638))
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = if (enabled) Color.Black else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun MonitoringToggleGrid(
+    zebra: Boolean,
+    peaking: Boolean,
+    histogram: Boolean,
+    histogramMode: HistogramMode,
+    showGrid: Boolean,
+    gridMode: CompositionGridMode,
+    showHorizon: Boolean,
+    onToggleZebra: () -> Unit,
+    onTogglePeaking: () -> Unit,
+    onToggleHistogram: () -> Unit,
+    onCycleHistogramMode: () -> Unit,
+    onToggleGrid: () -> Unit,
+    onCycleGridMode: () -> Unit,
+    onToggleHorizon: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle("Z", stringResource(R.string.monitor_zebra), zebra, onToggleZebra)
+            MonitorToggle("P", stringResource(R.string.monitor_peaking), peaking, onTogglePeaking)
+            MonitorToggle("H", stringResource(R.string.monitor_histogram), histogram, onToggleHistogram)
+            MonitorToggle(
+                if (histogramMode == HistogramMode.RGB) "RGB" else "Y",
+                stringResource(R.string.monitor_histogram_mode),
+                true,
+                onCycleHistogramMode,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle("G", stringResource(R.string.monitor_grid), showGrid, onToggleGrid)
+            MonitorToggle(gridModeLabel(gridMode), stringResource(R.string.monitor_grid_mode), true, onCycleGridMode)
+            MonitorToggle("L", stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon)
+        }
+    }
 }
 
 @Composable
@@ -477,6 +524,8 @@ private fun MonitoringOverlay(
     gridMode: CompositionGridMode,
     showHorizon: Boolean,
     reserveAudioMeterSpace: Boolean,
+    reserveZoomChromeSpace: Boolean,
+    compactPortrait: Boolean,
     landscape: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -573,12 +622,20 @@ private fun MonitoringOverlay(
             // The histogram belongs at the top of the usable preview. In landscape the
             // preview reaches behind the 56 dp top bar, so clear that bar even without audio;
             // reserve the larger HUD footprint only when the microphone meter is enabled.
-            val desiredTop = when {
-                reserveAudioMeterSpace && landscape -> 140.dp
-                reserveAudioMeterSpace -> 92.dp
-                landscape -> 64.dp
-                else -> 12.dp
-            }
+            val desiredTop = maxOf(
+                if (landscape) 64.dp else 12.dp,
+                when {
+                    reserveAudioMeterSpace && landscape -> 140.dp
+                    reserveAudioMeterSpace -> 92.dp
+                    else -> 0.dp
+                },
+                when {
+                    !reserveZoomChromeSpace -> 0.dp
+                    compactPortrait -> 128.dp
+                    landscape -> 124.dp
+                    else -> 184.dp
+                },
+            )
             val graphTop = desiredTop.coerceAtMost((maxHeight - graphHeight - 12.dp).coerceAtLeast(12.dp))
             Canvas(
                 Modifier
@@ -636,6 +693,7 @@ private fun PreviewSurfaceView(
         SurfaceView(context)
     }
     val currentTargetFps by rememberUpdatedState(targetFps)
+    var surfaceGeneration by remember { mutableIntStateOf(0) }
     fun voteForViewfinderRate() {
         val display = view.display ?: return
         val mode = display.supportedModes
@@ -668,36 +726,39 @@ private fun PreviewSurfaceView(
             view.holder.setFixedSize(bufferWidth, bufferHeight)
         }
     }
-    LaunchedEffect(view, targetFps, displayWidthPx, displayHeightPx) {
+    LaunchedEffect(view, targetFps) {
         voteForViewfinderRate()
     }
-    LaunchedEffect(view, binder, cameraId, displayWidthPx, displayHeightPx) {
+    // A resize and a rotation can emit several SurfaceHolder callbacks carrying geometry from
+    // the previous window. Cancelling/restarting this effect makes attachment latest-layout-wins:
+    // the camera only sees the surface after Compose and AndroidView have completed two frames.
+    LaunchedEffect(
+        view,
+        binder,
+        cameraId,
+        bufferWidth,
+        bufferHeight,
+        layoutSizedBuffer,
+        displayWidthPx,
+        displayHeightPx,
+        surfaceGeneration,
+    ) {
+        withFrameNanos { }
+        withFrameNanos { }
         val surface = view.holder.surface
-        if (displayWidthPx > 0 && displayHeightPx > 0 && surface?.isValid == true) {
+        if (
+            displayWidthPx > 0 && displayHeightPx > 0 &&
+            view.width > 0 && view.height > 0 &&
+            surface?.isValid == true
+        ) {
             binder.attachPreview(surface, rotationDegrees(view.display?.rotation ?: Surface.ROTATION_0))
         }
     }
     DisposableEffect(view, binder) {
-        var lastWidth = -1
-        var lastHeight = -1
-        var lastRotation = Int.MIN_VALUE
-
-        fun attachIfChanged(holder: SurfaceHolder, width: Int, height: Int, force: Boolean = false) {
-            if (!holder.surface.isValid) return
-            val viewWidth = view.width.takeIf { it > 0 } ?: width
-            val viewHeight = view.height.takeIf { it > 0 } ?: height
-            val rotation = rotationDegrees(view.display?.rotation ?: Surface.ROTATION_0)
-            if (!force && viewWidth == lastWidth && viewHeight == lastHeight && rotation == lastRotation) return
-            lastWidth = viewWidth
-            lastHeight = viewHeight
-            lastRotation = rotation
-            binder.attachPreview(holder.surface, rotation)
-        }
-
         val callback = object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 voteForViewfinderRate()
-                attachIfChanged(holder, view.width, view.height, force = true)
+                surfaceGeneration++
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -705,28 +766,33 @@ private fun PreviewSurfaceView(
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                attachIfChanged(holder, width, height)
+                surfaceGeneration++
             }
         }
         val displayManager = context.getSystemService(DisplayManager::class.java)
+        var lastObservedRotation: Int? = view.display?.rotation
         val displayListener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) = Unit
             override fun onDisplayRemoved(displayId: Int) = Unit
 
             override fun onDisplayChanged(displayId: Int) {
                 if (displayId != view.display?.displayId) return
+                val currentRotation = view.display?.rotation
+                if (!previewDisplayRotationChanged(lastObservedRotation, currentRotation)) return
+                lastObservedRotation = currentRotation
                 // 0°↔180° and 90°↔270° keep the same layout dimensions, so neither Compose's
                 // size keys nor SurfaceHolder.surfaceChanged are guaranteed to fire. Observe the
-                // display itself to refresh Camera2/LOG orientation in those cases.
+                // display rotation itself to refresh Camera2/LOG orientation in those cases.
+                // Do not invalidate on refresh-rate callbacks: voting for the camera frame rate
+                // changes the physical display mode on some foldables and used to create an attach loop.
                 view.post {
-                    voteForViewfinderRate()
-                    attachIfChanged(view.holder, view.width, view.height)
+                    surfaceGeneration++
                 }
             }
         }
         view.holder.addCallback(callback)
         displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
-        if (view.holder.surface?.isValid == true) callback.surfaceCreated(view.holder)
+        if (view.holder.surface?.isValid == true) surfaceGeneration++
         onDispose {
             (context as? Activity)?.window?.let { window ->
                 window.attributes = window.attributes.apply { preferredDisplayModeId = 0 }
@@ -741,7 +807,7 @@ private fun PreviewSurfaceView(
         update = { it.scaleX = if (mirrorViewfinder) -1f else 1f },
         // Let aspectRatio choose the largest rectangle that fits both width and height. A
         // preceding fillMaxWidth would lock the landscape width and squeeze the EGL output.
-        modifier = modifier.aspectRatio(displayRatio),
+        modifier = modifier.aspectRatio(displayRatio).testTag("preview-surface"),
     )
 }
 
@@ -777,6 +843,7 @@ internal fun AdaptiveCaptureChrome(
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
     var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
+    var controlDeckHeightPx by remember { mutableIntStateOf(0) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
     // it again; it re-hides after a short idle period unless the user keeps interacting.
     LaunchedEffect(recording, manualReveal) {
@@ -799,18 +866,23 @@ internal fun AdaptiveCaptureChrome(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.displayCutout)
-            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)),
+            .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
+        val density = LocalDensity.current
+        val windowProfile = captureWindowProfile(maxWidth.value, maxHeight.value)
+        val horizontalDeck = windowProfile != CaptureWindowProfile.COMPACT_PORTRAIT
+        val compactPortrait = windowProfile == CaptureWindowProfile.COMPACT_PORTRAIT
+        val controlDeckHeight = with(density) { controlDeckHeightPx.toDp() }
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         val width = constraints.maxWidth.toFloat()
         val height = constraints.maxHeight.toFloat()
         val ratio = previewAspectRatio
-        val previewWidth = if (ratio != null && width / height > ratio) height * ratio else width
-        val previewHeight = if (ratio != null && width / height > ratio) height else if (ratio != null) width / ratio else height
-        val previewLeft = (width - previewWidth) / 2f
-        val previewTop = (height - previewHeight) / 2f
+        val previewViewport = fittedPreviewViewport(width, height, ratio)
+        val previewWidth = previewViewport.width
+        val previewHeight = previewViewport.height
+        val previewLeft = previewViewport.left
+        val previewTop = previewViewport.top
         Box(
             Modifier
                 .matchParentSize()
@@ -906,18 +978,19 @@ internal fun AdaptiveCaptureChrome(
             var rockerOffset by remember { mutableFloatStateOf(0f) }
             var lastRockerMs by remember { mutableLongStateOf(0L) }
             if (chromeVisible) {
+                val anchorTop = if (compactPortrait) 112.dp else 62.dp
                 ZoomAnchorBar(
                     anchors = state.opticalAnchors,
                     activeRatio = state.zoomEffectiveRatio ?: state.zoomRatio,
                     onSelect = { ratio -> binder?.selectZoomAnchor(ratio) },
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp),
+                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = anchorTop),
                 )
                 val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
                 val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
                 Box(
                     Modifier
                         .align(Alignment.TopStart)
-                        .padding(start = 12.dp, top = 52.dp)
+                        .padding(start = 12.dp, top = anchorTop + 56.dp)
                         .testTag("zoom-ratio")
                         .clip(RoundedCornerShape(6.dp))
                         .background(Panel)
@@ -992,9 +1065,9 @@ internal fun AdaptiveCaptureChrome(
             visible = chromeVisible,
             enter = fadeIn() + slideInVertically { it / 3 },
             exit = fadeOut() + slideOutVertically { it / 3 },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { controlDeckHeightPx = it.height },
         ) {
-            if (landscape) {
+            if (horizontalDeck) {
                 LandscapeControlDeck(
                     state = state,
                     binder = binder,
@@ -1046,30 +1119,24 @@ internal fun AdaptiveCaptureChrome(
         }
 
         if (chromeVisible) manualControl?.let { control ->
-            ContextualPanel(landscape, onDismiss = { manualControl = null }) {
+            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { manualControl = null }) {
                 ManualControlDial(control, state, binder, settings, onSettingsChanged) { manualControl = null }
             }
         }
         if (chromeVisible && showModeGrid) {
-            ContextualPanel(landscape, onDismiss = { showModeGrid = false }) {
+            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { showModeGrid = false }) {
                 ModeButtonGrid(state, binder) { showModeGrid = false }
             }
         }
         if (chromeVisible && showMonitoring) {
-            ContextualPanel(landscape, onDismiss = { showMonitoring = false }) {
+            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { showMonitoring = false }) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("MONITOR", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MonitorToggle("Z", zebra, onToggleZebra)
-                        MonitorToggle("P", peaking, onTogglePeaking)
-                        MonitorToggle("H", histogram, onToggleHistogram)
-                        MonitorToggle(if (histogramMode == HistogramMode.RGB) "RGB" else "Y", true, onCycleHistogramMode)
-                        Spacer(Modifier.width(4.dp))
-                        MonitorToggle("G", showGrid, onToggleGrid)
-                        MonitorToggle(gridModeLabel(gridMode), true, onCycleGridMode)
-                        Spacer(Modifier.width(4.dp))
-                        MonitorToggle("L", showHorizon, onToggleHorizon)
-                    }
+                    Text(stringResource(R.string.monitor_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    MonitoringToggleGrid(
+                        zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
+                        onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
+                        onToggleGrid, onCycleGridMode, onToggleHorizon,
+                    )
                 }
             }
         }
@@ -1235,7 +1302,7 @@ private fun PortraitControlDeck(
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             CaptureButton(state, binder, settings, 72.dp)
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)) {
-                TopAction("\u25eb", "Monitoring tools", onShowMonitoring)
+                TopAction("\u25eb", stringResource(R.string.monitoring_tools), onShowMonitoring)
             }
         }
         CaptureStatus(state)
@@ -1271,7 +1338,7 @@ private fun LandscapeControlDeck(
                 if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = false)
                 else SelectedModeButton(state, onShowModes)
             }
-            TopAction("◫", "Monitoring tools", onShowMonitoring)
+            TopAction("◫", stringResource(R.string.monitoring_tools), onShowMonitoring)
             CaptureButton(state, binder, settings, 62.dp)
         }
         Spacer(Modifier.height(6.dp))
@@ -1323,30 +1390,34 @@ private fun LockToggles(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        LockButton(
-            label = stringResource(R.string.ae_lock),
-            active = state.aeLockActive,
-            enabled = aeAvailable,
-            testTag = "ae-lock-toggle",
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                binder?.setAeLock(!state.aeLockActive)
-            },
-        )
+        if (state.aeLockSupported) {
+            LockButton(
+                label = stringResource(R.string.ae_lock),
+                active = state.aeLockActive,
+                enabled = aeAvailable,
+                testTag = "ae-lock-toggle",
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    binder?.setAeLock(!state.aeLockActive)
+                },
+            )
+        }
         val afPending = state.afLockState == LockState.PENDING
         val afLocked = state.afLockState == LockState.LOCKED
-        LockButton(
-            label = if (afPending) stringResource(R.string.af_lock_pending) else stringResource(R.string.af_lock),
-            active = afLocked,
-            pending = afPending,
-            enabled = afAvailable,
-            testTag = "af-lock-toggle",
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                if (afLocked || afPending) binder?.setAfLock(false, afLockBehavior)
-                else binder?.setAfLock(true, afLockBehavior)
-            },
-        )
+        if (state.afLockSupported) {
+            LockButton(
+                label = if (afPending) stringResource(R.string.af_lock_pending) else stringResource(R.string.af_lock),
+                active = afLocked,
+                pending = afPending,
+                enabled = afAvailable,
+                testTag = "af-lock-toggle",
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    if (afLocked || afPending) binder?.setAfLock(false, afLockBehavior)
+                    else binder?.setAfLock(true, afLockBehavior)
+                },
+            )
+        }
     }
 }
 
@@ -1369,6 +1440,7 @@ private fun LockButton(
     val border = if (active) VerifiedCyan else if (pending) Amber else if (enabled) Color(0xFF41494C) else Color(0xFF2A3033)
     Column(
         Modifier
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .border(1.dp, border, RoundedCornerShape(8.dp))
@@ -1653,7 +1725,7 @@ private fun SelectedModeButton(state: CameraUiState, onClick: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("MODE", color = Muted, fontSize = 8.sp)
+        Text(stringResource(R.string.mode_title), color = Muted, fontSize = 8.sp)
         Text(modeLabel(state.selectedMode), color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
@@ -1661,7 +1733,7 @@ private fun SelectedModeButton(state: CameraUiState, onClick: () -> Unit) {
 @Composable
 private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBinder?, onSelected: () -> Unit) {
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("MODOS", color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Text(stringResource(R.string.modes_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         CaptureMode.entries.chunked(2).forEach { rowModes ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowModes.forEach { mode ->
@@ -1692,7 +1764,16 @@ private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBin
 }
 
 @Composable
-private fun ContextualPanel(landscape: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun ContextualPanel(
+    horizontalDeck: Boolean,
+    controlDeckHeight: androidx.compose.ui.unit.Dp,
+    availableHeight: androidx.compose.ui.unit.Dp,
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val maximumHeight = (availableHeight - controlDeckHeight - 72.dp)
+        .coerceAtLeast(160.dp)
+        .coerceAtMost(if (horizontalDeck) 380.dp else 440.dp)
     Box(
         Modifier
             .fillMaxSize()
@@ -1700,13 +1781,16 @@ private fun ContextualPanel(landscape: Boolean, onDismiss: () -> Unit, content: 
     ) {
         Column(
             Modifier
-                .align(if (landscape) Alignment.CenterEnd else Alignment.BottomCenter)
-                .then(if (landscape) Modifier.padding(end = 184.dp) else Modifier.padding(bottom = 170.dp))
+                .align(if (horizontalDeck) Alignment.BottomEnd else Alignment.BottomCenter)
+                .padding(
+                    end = if (horizontalDeck) 12.dp else 0.dp,
+                    bottom = controlDeckHeight + 12.dp,
+                )
                 .widthIn(min = 260.dp, max = 380.dp)
-                .heightIn(max = if (landscape) 280.dp else 440.dp)
+                .heightIn(max = maximumHeight)
                 .background(Color(0xF21A1F21), RoundedCornerShape(10.dp))
                 .border(1.dp, Color(0xFF4A5154), RoundedCornerShape(10.dp))
-                .clickable(enabled = false) { }
+                .clickable { }
                 .padding(12.dp),
         ) { content() }
     }
@@ -1746,15 +1830,18 @@ private fun CaptureButton(
         )
     }
     val recording = state.phase == CameraUiPhase.RECORDING
+    val captureDescription = stringResource(
+        when {
+            recording -> R.string.stop_recording
+            state.selectedMode.isStillMode() -> R.string.capture_photo
+            else -> R.string.start_recording
+        },
+    )
     Box(
         Modifier
             .size(size)
             .semantics {
-                contentDescription = when {
-                    state.phase == CameraUiPhase.RECORDING -> "Stop recording"
-                    state.selectedMode.isStillMode() -> "Capture photo"
-                    else -> "Start recording"
-                }
+                contentDescription = captureDescription
             }
             .border(3.dp, Color.White, CircleShape)
             .clip(CircleShape)
@@ -1802,7 +1889,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
         isStill -> "--"
         else -> "H.264 AVC"
     }
-    val audio = if (settings.audioEnabled) settings.audioOutputFormat.label + " " + (settings.audioSampleRateHz / 1000) + " kHz" else "Audio OFF"
+    val audio = if (settings.audioEnabled) audioOutputLabel(settings.audioOutputFormat) + " " + (settings.audioSampleRateHz / 1000) + " kHz" else "Audio OFF"
     val bitrate = settings.videoBitrateMbps.toString() + " Mbps"
     val time = if (state.phase == CameraUiPhase.RECORDING) formatDuration(state.recordingElapsedMs)
         else state.availableStorageBytes?.takeIf { it > 0 }?.let { formatDuration(it * 8L * 1000L / (settings.videoBitrateMbps * 1_000_000L)) } ?: "--"
@@ -1849,6 +1936,7 @@ private fun RecordingOverlay(
     modifier: Modifier = Modifier,
 ) {
     var showMonitors by remember { mutableStateOf(false) }
+    val stopRecordingDescription = stringResource(R.string.stop_recording)
     BoxWithConstraints(modifier.padding(top = 8.dp, start = 10.dp, end = 10.dp).fillMaxWidth()) {
         val compact = maxWidth < 500.dp
         Row(
@@ -1869,27 +1957,22 @@ private fun RecordingOverlay(
             }
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
             Spacer(Modifier.weight(1f))
-            if (!compact) TopAction("\u25eb", "Monitoring tools") { showMonitors = !showMonitors }
+            if (!compact) TopAction("\u25eb", stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {
                 Box(
-                    Modifier.size(44.dp).semantics { contentDescription = "Stop recording" }.border(2.dp, Color.White, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
+                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, Color.White, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
             }
         }
     }
     if (showMonitors) {
-        Row(modifier.padding(top = 52.dp, start = 10.dp, end = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Spacer(Modifier.weight(1f))
-            MonitorToggle("Z", zebra, onToggleZebra)
-            MonitorToggle("P", peaking, onTogglePeaking)
-            MonitorToggle("H", histogram, onToggleHistogram)
-            MonitorToggle(if (histogramMode == HistogramMode.RGB) "RGB" else "Y", true, onCycleHistogramMode)
-            Spacer(Modifier.width(4.dp))
-            MonitorToggle("G", showGrid, onToggleGrid)
-            MonitorToggle(gridModeLabel(gridMode), true, onCycleGridMode)
-            Spacer(Modifier.width(4.dp))
-            MonitorToggle("L", showHorizon, onToggleHorizon)
+        Box(modifier.fillMaxWidth().padding(top = 60.dp, start = 10.dp, end = 10.dp), contentAlignment = Alignment.TopEnd) {
+            MonitoringToggleGrid(
+                zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
+                onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
+                onToggleGrid, onCycleGridMode, onToggleHorizon,
+            )
         }
     }
 }
@@ -2443,9 +2526,17 @@ private fun formatIntervalShort(intervalMs: Long): String {
 
 @Composable
 private fun PanelHeader(title: String, onClose: () -> Unit) {
+    val closeDescription = stringResource(R.string.close_panel, title)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text("×", color = Color.White, fontSize = 16.sp, modifier = Modifier.clickable(onClick = onClose).padding(8.dp))
+        Box(
+            Modifier
+                .size(48.dp)
+                .semantics { contentDescription = closeDescription }
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) { Text("×", color = Color.White, fontSize = 20.sp) }
     }
 }
 
@@ -2490,20 +2581,24 @@ private fun NavigationBar(selected: AppSection, onSelect: (AppSection) -> Unit) 
 }
 
 @Composable
-private fun SettingsScreen(
+internal fun SettingsScreen(
     state: CameraUiState,
     settings: CameraSettings,
     audioPermissionGranted: Boolean,
     onRequestAudioPermission: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize().background(Graphite).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(Graphite).testTag("settings-list"),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(stringResource(R.string.settings_tab), color = Amber, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.settings_privacy), color = Color.White)
                 Text(stringResource(R.string.settings_language), color = Muted)
-                Text("Camera2 · local MediaStore · 16:9 default", color = VerifiedCyan, fontSize = 12.sp)
+                Text(stringResource(R.string.settings_technology), color = VerifiedCyan, fontSize = 12.sp)
                 Text(stringResource(R.string.settings_saved), color = Muted, fontSize = 11.sp)
             }
         }
@@ -2528,8 +2623,8 @@ private fun SettingsScreen(
             SettingsToggleRow(
                 title = stringResource(R.string.audio_recording),
                 summary = if (audioPermissionGranted) {
-                    "${settings.audioOutputFormat.label} · visible values come from the hardware"
-                } else "Microphone permission is required to meter and record audio.",
+                    stringResource(R.string.audio_hardware_summary, audioOutputLabel(settings.audioOutputFormat))
+                } else stringResource(R.string.audio_permission_summary),
                 checked = settings.audioEnabled,
                 onCheckedChange = {
                     if (it && !audioPermissionGranted) onRequestAudioPermission()
@@ -2542,7 +2637,7 @@ private fun SettingsScreen(
                 Button(
                     onClick = onRequestAudioPermission,
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
-                ) { Text("Grant microphone access") }
+                ) { Text(stringResource(R.string.grant_microphone)) }
             }
         } else {
             item {
@@ -2605,8 +2700,8 @@ private fun SettingsScreen(
         }
         item {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text("Anamorphic", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Adapter lens de-squeeze in preview and file.", color = Muted, fontSize = 10.sp)
+                Text(stringResource(R.string.anamorphic), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 10.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     AnamorphicSqueeze.entries.forEach { squeeze ->
                         TextButton(
@@ -2628,7 +2723,7 @@ private fun SettingsScreen(
                     }
                 }
                 if (settings.anamorphicSqueeze.isActive) {
-                    Text("Salida", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.anamorphic_output), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         AnamorphicOutputMode.entries.forEach { mode ->
                             TextButton(
@@ -2823,13 +2918,13 @@ private fun ProfessionalAudioSettings(
         Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Audio profesional", color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.professional_audio), color = VerifiedCyan, fontWeight = FontWeight.Bold)
         if (capabilities == null) {
-            Text("Measuring real combinations with AudioRecord…", color = Muted, fontSize = 11.sp)
+            Text(stringResource(R.string.audio_measuring), color = Muted, fontSize = 11.sp)
             return@Column
         }
         if (capabilities.formats.isEmpty()) {
-            Text("The hardware did not initialize a compatible audio route.", color = RecordRed, fontSize = 11.sp)
+            Text(stringResource(R.string.audio_no_route), color = RecordRed, fontSize = 11.sp)
             return@Column
         }
         fun update(candidate: CameraSettings) = onSettingsChange(candidate.normalizedFor(capabilities))
@@ -2841,8 +2936,8 @@ private fun ProfessionalAudioSettings(
                 audioChannels = configuration.channels,
             ))
         AudioChoiceRow(
-            title = "Formato de salida",
-            choices = capabilities.formats.map { it.name to it.label },
+            title = stringResource(R.string.audio_output_format),
+            choices = capabilities.formats.map { it.name to audioOutputLabel(it) },
             selected = settings.audioOutputFormat.name,
         ) { name -> update(settings.copy(audioOutputFormat = AudioOutputFormat.valueOf(name))) }
 
@@ -2850,7 +2945,7 @@ private fun ProfessionalAudioSettings(
             capabilities.aacSampleRates
         } else capabilities.pcmConfigurations.map { it.sampleRate }.distinct().sorted()
         AudioChoiceRow(
-            title = "Frecuencia de muestreo",
+            title = stringResource(R.string.audio_sample_rate),
             choices = rates.map { it.toString() to formatAudioRate(it) },
             selected = settings.audioSampleRateHz.toString(),
         ) { rate ->
@@ -2866,7 +2961,7 @@ private fun ProfessionalAudioSettings(
 
         if (settings.audioOutputFormat != AudioOutputFormat.AAC_MP4) {
             AudioChoiceRow(
-                title = "Profundidad",
+                title = stringResource(R.string.audio_bit_depth),
                 choices = capabilities.bitDepths
                     .filter { settings.audioOutputFormat != AudioOutputFormat.FLAC || it == AudioBitDepth.PCM_16 }
                     .map { it.name to it.label },
@@ -2885,8 +2980,8 @@ private fun ProfessionalAudioSettings(
             capabilities.aacChannelCounts
         } else capabilities.channelCounts
         AudioChoiceRow(
-            title = "Canales",
-            choices = channels.map { it.toString() to if (it == 1) "Mono" else "Stereo" },
+            title = stringResource(R.string.audio_channels),
+            choices = channels.map { it.toString() to stringResource(if (it == 1) R.string.audio_mono else R.string.audio_stereo) },
             selected = settings.audioChannels.toString(),
         ) { count ->
             val selectedChannels = count.toInt()
@@ -2901,7 +2996,7 @@ private fun ProfessionalAudioSettings(
 
         if (settings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
             AudioChoiceRow(
-                title = "Tasa de bits AAC",
+                title = stringResource(R.string.audio_aac_bitrate),
                 choices = capabilities.aacBitratesKbps.map { it.toString() to "$it kbps" },
                 selected = settings.audioBitrateKbps.toString(),
             ) { bitrate -> update(settings.copy(audioBitrateKbps = bitrate.toInt())) }
@@ -2913,14 +3008,14 @@ private fun ProfessionalAudioSettings(
         }
 
         AudioChoiceRow(
-            title = "Public source",
-            choices = capabilities.sources.map { it.name to it.label },
+            title = stringResource(R.string.audio_public_source),
+            choices = capabilities.sources.map { it.name to audioSourceLabel(it) },
             selected = settings.audioSource.name,
         ) { source -> update(settings.copy(audioSource = com.librestatic.opencinecam.media.audio.AudioSourceSelection.valueOf(source))) }
 
         AudioChoiceRow(
-            title = "Dispositivo de entrada",
-            choices = listOf("auto" to "Automatic") + capabilities.inputs.map { it.id.toString() to "${it.label} · ID ${it.id}" },
+            title = stringResource(R.string.audio_input_device),
+            choices = listOf("auto" to stringResource(R.string.audio_automatic)) + capabilities.inputs.map { it.id.toString() to "${it.label} · ID ${it.id}" },
             selected = settings.audioInputDeviceId?.toString() ?: "auto",
         ) { id -> update(settings.copy(audioInputDeviceId = id.takeUnless { it == "auto" }?.toInt())) }
         Text("Android lets you choose the input device; it does not guarantee selecting an individual internal capsule.", color = Muted, fontSize = 10.sp)
@@ -2963,15 +3058,27 @@ private fun AudioChoiceRow(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            choices.forEach { (value, label) ->
-                TextButton(onClick = { onSelected(value) }) {
-                    Text(
-                        label,
-                        color = if (selected == value) Amber else Color.White,
-                        fontWeight = if (selected == value) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 11.sp,
-                    )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val columns = if (maxWidth < 600.dp) 2 else 3
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                choices.chunked(columns).forEach { rowChoices ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        rowChoices.forEach { (value, label) ->
+                            TextButton(
+                                onClick = { onSelected(value) },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            ) {
+                                Text(
+                                    label,
+                                    color = if (selected == value) Amber else Color.White,
+                                    fontWeight = if (selected == value) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 11.sp,
+                                    maxLines = 2,
+                                )
+                            }
+                        }
+                        repeat(columns - rowChoices.size) { Spacer(Modifier.weight(1f)) }
+                    }
                 }
             }
         }
@@ -2979,6 +3086,24 @@ private fun AudioChoiceRow(
 }
 
 private fun formatAudioRate(rate: Int): String = if (rate % 1_000 == 0) "${rate / 1_000} kHz" else "${rate / 1_000.0} kHz"
+
+@Composable
+private fun audioOutputLabel(format: AudioOutputFormat): String = stringResource(
+    when (format) {
+        AudioOutputFormat.AAC_MP4 -> R.string.audio_aac_mp4
+        AudioOutputFormat.WAV_PCM -> R.string.audio_wav_pcm
+        AudioOutputFormat.FLAC -> R.string.audio_flac
+    },
+)
+
+@Composable
+private fun audioSourceLabel(source: com.librestatic.opencinecam.media.audio.AudioSourceSelection): String = stringResource(
+    when (source) {
+        com.librestatic.opencinecam.media.audio.AudioSourceSelection.UNPROCESSED -> R.string.audio_source_unprocessed
+        com.librestatic.opencinecam.media.audio.AudioSourceSelection.VOICE_RECOGNITION -> R.string.audio_source_voice_recognition
+        com.librestatic.opencinecam.media.audio.AudioSourceSelection.MIC -> R.string.audio_source_microphone
+    },
+)
 
 @Composable
 private fun SettingsToggleRow(

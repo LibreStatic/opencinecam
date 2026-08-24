@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.ZoomAnchor
+import java.util.Locale
 
 private val ZoomPanel = Color(0xD914181A)
 private val ZoomAccent = Color(0xFFFFB300)
@@ -66,7 +68,7 @@ fun ZoomAnchorBar(
     ) {
         anchors.forEach { anchor ->
             val isActive = (activeRatio - anchor.ratio).let { it >= -0.05f && it <= 0.05f }
-            val label = "%.1f".format(anchor.ratio)
+            val label = String.format(Locale.US, "%.1f", anchor.ratio)
             val description = stringResource(
                 if (isActive) com.librestatic.opencinecam.R.string.zoom_anchor_active
                 else com.librestatic.opencinecam.R.string.zoom_anchor,
@@ -76,6 +78,7 @@ fun ZoomAnchorBar(
                 Modifier
                     .testTag("zoom-anchor-$label")
                     .semantics { contentDescription = description }
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(CircleShape)
                     .background(if (isActive) ZoomAccent else Color.Transparent)
                     .border(1.dp, if (isActive) ZoomAccent else Color(0xFF4A5258), CircleShape)
@@ -111,10 +114,11 @@ fun ZoomRocker(
     var dragPx by remember { mutableFloatStateOf(0f) }
     var lastEmitMs by remember { mutableLongStateOf(0L) }
     var trackHeightPx by remember { mutableFloatStateOf(1f) }
+    val description = stringResource(R.string.zoom_rocker)
     Box(
         modifier = modifier
             .testTag("zoom-rocker")
-            .semantics { contentDescription = "Zoom rocker" }
+            .semantics { contentDescription = description }
             .onSizeChanged { trackHeightPx = it.height.toFloat().coerceAtLeast(1f) }
             .clip(RoundedCornerShape(8.dp))
             .background(ZoomPanel)

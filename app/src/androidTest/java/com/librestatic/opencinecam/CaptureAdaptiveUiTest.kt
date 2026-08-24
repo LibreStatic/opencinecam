@@ -19,6 +19,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import java.io.File
@@ -31,6 +33,7 @@ import com.librestatic.opencinecam.camera.ZoomAnchor
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 
 class CaptureAdaptiveUiTest {
     @get:Rule
@@ -90,8 +93,10 @@ class CaptureAdaptiveUiTest {
     fun landscapeButtonsOpenAdaptiveModeGrid() {
         setChrome(landscape = true, selectorStyle = ModeSelectorStyle.BUTTONS)
 
-        composeRule.onNodeWithText("MODE").performClick()
-        composeRule.onNodeWithText("MODOS").assertIsDisplayed()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithText(context.getString(R.string.mode_title)).performClick()
+        val modesLabel = context.getString(R.string.modes_title)
+        composeRule.onNodeWithText(modesLabel).assertIsDisplayed()
         val rawVideoLabel = InstrumentationRegistry.getInstrumentation().targetContext
             .getString(R.string.raw_video_mode)
         composeRule.onNodeWithText(rawVideoLabel).performScrollTo().assertIsDisplayed()
@@ -140,7 +145,7 @@ class CaptureAdaptiveUiTest {
 
     @Test
     fun zoomAnchorBarShowsOpticalAnchors() {
-        setChrome(landscape = false, selectorStyle = ModeSelectorStyle.DIAL, anchors = listOf(
+        setChrome(landscape = false, selectorStyle = ModeSelectorStyle.DIAL, zoomSupported = true, anchors = listOf(
             ZoomAnchor(0.5f, 1.826f, "3"),
             ZoomAnchor(1f, 6.57f, null),
             ZoomAnchor(2f, 13.3f, "5"),
@@ -148,6 +153,27 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithTag("zoom-anchor-0.5", useUnmergedTree = true).assertIsEnabled()
         composeRule.onNodeWithTag("zoom-anchor-1.0", useUnmergedTree = true).assertIsEnabled()
         composeRule.onNodeWithTag("zoom-anchor-2.0", useUnmergedTree = true).assertIsEnabled()
+    }
+
+    @Test
+    fun compactPortraitZoomChromeClearsTheTopBar() {
+        setChrome(
+            landscape = false,
+            selectorStyle = ModeSelectorStyle.DIAL,
+            zoomSupported = true,
+            anchors = listOf(
+                ZoomAnchor(0.5f, 1.826f, "3"),
+                ZoomAnchor(1f, 6.57f, null),
+                ZoomAnchor(2f, 13.3f, "5"),
+            ),
+        )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val media = composeRule.onNodeWithContentDescription(context.getString(R.string.media_tab)).fetchSemanticsNode().boundsInRoot
+        val settings = composeRule.onNodeWithContentDescription(context.getString(R.string.settings_tab)).fetchSemanticsNode().boundsInRoot
+        val anchor = composeRule.onNodeWithTag("zoom-anchor-0.5", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ratio = composeRule.onNodeWithTag("zoom-ratio", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("Zoom anchors overlap the top bar", anchor.top >= maxOf(media.bottom, settings.bottom))
+        assertTrue("Zoom ratio overlaps the anchor bar", ratio.top >= anchor.bottom)
     }
 
     @Test
@@ -193,6 +219,65 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithTag("af-lock-toggle", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    @Test
+    fun customLockAndMonitorControlsMeetTouchTargetsAndStayInBounds() {
+        setChrome(
+            landscape = false,
+            selectorStyle = ModeSelectorStyle.DIAL,
+            aeLockSupported = true,
+            afLockSupported = true,
+        )
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val minimumPx = 48f * density - 1f
+        listOf("ae-lock-toggle", "af-lock-toggle").forEach { tag ->
+            val bounds = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag width is below 48dp", bounds.width >= minimumPx)
+            assertTrue("$tag height is below 48dp", bounds.height >= minimumPx)
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithContentDescription(context.getString(R.string.monitoring_tools)).performClick()
+        composeRule.waitForIdle()
+        val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        listOf(
+            R.string.monitor_zebra,
+            R.string.monitor_peaking,
+            R.string.monitor_histogram,
+            R.string.monitor_histogram_mode,
+            R.string.monitor_grid,
+            R.string.monitor_grid_mode,
+            R.string.monitor_horizon,
+        ).map(context::getString).forEach { description ->
+            val bounds = composeRule.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot
+            assertTrue("$description width is below 48dp", bounds.width >= minimumPx)
+            assertTrue("$description height is below 48dp", bounds.height >= minimumPx)
+            assertTrue("$description is horizontally clipped", bounds.left >= root.left && bounds.right <= root.right)
+            assertTrue("$description is vertically clipped", bounds.top >= root.top && bounds.bottom <= root.bottom)
+        }
+    }
+
+    @Test
+    fun settingsLastControlCanScrollFullyIntoTheSafeViewport() {
+        composeRule.setContent {
+            MaterialTheme {
+                SettingsScreen(
+                    state = CameraUiState(),
+                    settings = CameraSettings(),
+                    audioPermissionGranted = false,
+                    onRequestAudioPermission = {},
+                    onSettingsChange = {},
+                )
+            }
+        }
+
+        val flashLabel = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.flash_torch)
+        composeRule.onNodeWithTag("settings-list").performScrollToNode(hasText(flashLabel))
+        val flash = composeRule.onNodeWithText(flashLabel).assertIsDisplayed()
+        val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        val bounds = flash.fetchSemanticsNode().boundsInRoot
+        assertTrue("Last settings row is clipped at the bottom", bounds.bottom <= root.bottom)
+    }
+
     private fun setChrome(
         landscape: Boolean,
         selectorStyle: ModeSelectorStyle,
@@ -235,10 +320,17 @@ class CaptureAdaptiveUiTest {
                     peaking = false,
                     histogram = true,
                     histogramMode = HistogramMode.RGB,
+                    showGrid = false,
+                    gridMode = CompositionGridMode.THIRDS,
+                    showHorizon = false,
                     onToggleZebra = {},
                     onTogglePeaking = {},
                     onToggleHistogram = {},
                     onCycleHistogramMode = {},
+                    onToggleGrid = {},
+                    onCycleGridMode = {},
+                    onToggleHorizon = {},
+                    onSettingsChanged = {},
                     onOpenMedia = {},
                     onOpenSettings = {},
                 )
