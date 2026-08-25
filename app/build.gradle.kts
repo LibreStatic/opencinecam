@@ -54,6 +54,28 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
+val verifyThirdPartyLicenses by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Verifies the bundled license catalog against releaseRuntimeClasspath."
+    workingDir(rootProject.projectDir)
+    commandLine(
+        "python3",
+        "tools/generate_third_party_licenses.py",
+        "--lockfile",
+        "app/gradle.lockfile",
+        "--output",
+        "app/src/main/assets/third_party_licenses.json",
+        "--check",
+    )
+    inputs.file("gradle.lockfile")
+    inputs.file(rootProject.file("tools/generate_third_party_licenses.py"))
+    inputs.file("src/main/assets/third_party_licenses.json")
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(verifyThirdPartyLicenses)
+}
+
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":camera"))

@@ -33,6 +33,7 @@ import com.librestatic.opencinecam.camera.ZoomAnchor
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
 class CaptureAdaptiveUiTest {
@@ -265,6 +266,7 @@ class CaptureAdaptiveUiTest {
                     settings = CameraSettings(),
                     audioPermissionGranted = false,
                     onRequestAudioPermission = {},
+                    onOpenAbout = {},
                     onSettingsChange = {},
                 )
             }
@@ -276,6 +278,68 @@ class CaptureAdaptiveUiTest {
         val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
         val bounds = flash.fetchSemanticsNode().boundsInRoot
         assertTrue("Last settings row is clipped at the bottom", bounds.bottom <= root.bottom)
+    }
+
+    @Test
+    fun settingsAboutEntryOpensTheAboutDestination() {
+        var opened = false
+        composeRule.setContent {
+            MaterialTheme {
+                SettingsScreen(
+                    state = CameraUiState(),
+                    settings = CameraSettings(),
+                    audioPermissionGranted = false,
+                    onRequestAudioPermission = {},
+                    onOpenAbout = { opened = true },
+                    onSettingsChange = {},
+                )
+            }
+        }
+
+        val about = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.about_title)
+        val aboutSummary = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.about_settings_summary)
+        composeRule.onNodeWithTag("settings-list").performScrollToNode(hasText(about))
+        composeRule.onNodeWithContentDescription(aboutSummary).performClick()
+        composeRule.runOnIdle { assertTrue(opened) }
+    }
+
+    @Test
+    fun aboutScreenShowsContributorVersionAndOpensProjectLink() {
+        var openedUrl: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                AboutScreen(onBack = {}, onOpenUri = { openedUrl = it })
+            }
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        @Suppress("DEPRECATION")
+        val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        composeRule.onNodeWithText("OpenCineCam contributors", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.about_version, version)).assertIsDisplayed()
+        composeRule.onNodeWithText(context.getString(R.string.about_source_code)).performClick()
+        composeRule.runOnIdle {
+            assertEquals("https://github.com/librestatic/opencinecam", openedUrl)
+        }
+    }
+
+    @Test
+    fun aboutScreenIncludesAndExpandsTheCompleteOfflineCatalog() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val components = loadThirdPartyComponents(context)
+        assertEquals(100, components.size)
+        assertEquals(components.size, components.map { it.coordinate }.toSet().size)
+        assertTrue(components.all { it.licenseId.isNotBlank() && it.licenseTextAsset.isNotBlank() })
+
+        composeRule.setContent {
+            MaterialTheme { AboutScreen(onBack = {}, onOpenUri = {}) }
+        }
+        val component = components.first()
+        composeRule.onNodeWithTag("about-list").performScrollToNode(hasText(component.name))
+        composeRule.onNodeWithContentDescription(
+            context.getString(R.string.about_expand_license, component.name),
+        ).performClick()
+        composeRule.onNodeWithText("Apache License", substring = true).assertIsDisplayed()
     }
 
     private fun setChrome(

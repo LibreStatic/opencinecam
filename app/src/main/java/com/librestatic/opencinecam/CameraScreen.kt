@@ -168,6 +168,7 @@ private val RecordRed = Color(0xFFE23A3A)
 private val Muted = Color(0xFF9CA6AA)
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
+private enum class SettingsPage { MAIN, ABOUT }
 private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
@@ -193,6 +194,11 @@ fun CameraRootScreen() {
     val settingsStore = remember(context) { CameraSettingsStore(context) }
     var settings by remember { mutableStateOf(settingsStore.load()) }
     var section by rememberSaveable { mutableStateOf(AppSection.CAPTURE) }
+    var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+
+    BackHandler(enabled = section == AppSection.SETTINGS && settingsPage == SettingsPage.ABOUT) {
+        settingsPage = SettingsPage.MAIN
+    }
 
     LaunchedEffect(binder, settings) {
         binder?.updateSettings(settings)
@@ -248,26 +254,37 @@ fun CameraRootScreen() {
                     settingsStore.save(updated)
                 },
                 onOpenMedia = { section = AppSection.MEDIA },
-                onOpenSettings = { section = AppSection.SETTINGS },
+                onOpenSettings = {
+                    settingsPage = SettingsPage.MAIN
+                    section = AppSection.SETTINGS
+                },
             )
         } else {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Box(Modifier.weight(1f)) {
                     when (section) {
                         AppSection.MEDIA -> MediaScreen()
-                        AppSection.SETTINGS -> SettingsScreen(
-                    state = state,
-                    settings = settings,
-                    audioPermissionGranted = audioPermissionGranted,
-                    onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                        ) { updated ->
-                            settings = updated
-                            settingsStore.save(updated)
+                        AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
+                            AboutScreen(onBack = { settingsPage = SettingsPage.MAIN })
+                        } else {
+                            SettingsScreen(
+                                state = state,
+                                settings = settings,
+                                audioPermissionGranted = audioPermissionGranted,
+                                onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                                onOpenAbout = { settingsPage = SettingsPage.ABOUT },
+                            ) { updated ->
+                                settings = updated
+                                settingsStore.save(updated)
+                            }
                         }
                         AppSection.CAPTURE -> Unit
                     }
                 }
-                NavigationBar(section) { section = it }
+                NavigationBar(section) {
+                    settingsPage = SettingsPage.MAIN
+                    section = it
+                }
             }
         }
     }
@@ -2581,6 +2598,7 @@ internal fun SettingsScreen(
     settings: CameraSettings,
     audioPermissionGranted: Boolean,
     onRequestAudioPermission: () -> Unit,
+    onOpenAbout: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
 ) {
     LazyColumn(
@@ -2897,6 +2915,27 @@ internal fun SettingsScreen(
             Row(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(7.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(modeLabel(mode), color = Color.White, fontSize = 12.sp)
                 Text(gateLabel(gate), color = gateColor(gate), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        item {
+            val aboutDescription = stringResource(R.string.about_settings_summary)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1A1F21))
+                    .clickable(onClick = onOpenAbout)
+                    .semantics { contentDescription = aboutDescription }
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.about_title), color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(aboutDescription, color = Muted, fontSize = 10.sp)
+                }
+                Text("›", color = Amber, fontSize = 22.sp)
             }
         }
     }
