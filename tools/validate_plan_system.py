@@ -165,8 +165,11 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
     ids = [str(r["id"]) for r in records]
     if len(ids) != len(set(ids)):
         errors.append("duplicate plan ID")
-    if len(records) != 60:
-        errors.append(f"expected 60 plans, found {len(records)}")
+    if len(records) < 60:
+        errors.append(f"expected at least 60 plans, found {len(records)}")
+    numeric_ids = sorted(int(plan_id.rsplit("-", 1)[1]) for plan_id in ids)
+    if numeric_ids != list(range(1, numeric_ids[-1] + 1)):
+        errors.append("plan IDs must remain contiguous and monotonically increasing")
     known = set(ids)
     statuses = Counter(str(r.get("status")) for r in records)
     if statuses["Draft"]:
@@ -255,6 +258,16 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
         except json.JSONDecodeError as exc:
             errors.append(f"{schema.relative_to(root)}: invalid JSON: {exc}")
 
+    status_by_id = {str(r["id"]): str(r.get("status")) for r in records}
+    next_plan = next(
+        (
+            str(r["id"])
+            for r in records
+            if str(r.get("status")) in {"Ready", "ConditionalReady"}
+            and all(status_by_id.get(str(dep)) in {"Done", "Superseded"} for dep in r.get("depends_on", []))
+        ),
+        "none",
+    )
     stats: dict[str, int | str] = {
         "requirements": len(requirements),
         "adrs": len(adrs),
@@ -264,13 +277,11 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
         "conditional_ready": statuses["ConditionalReady"],
         "in_progress": statuses["InProgress"],
         "done": statuses["Done"],
+        "superseded": statuses["Superseded"],
         "blocked": statuses["Blocked"],
         "traceability_coverage": "100%" if not missing_trace else "incomplete",
         "dependency_cycles": "none" if not cycle else "present",
-        "next_plan": next(
-            (str(r["id"]) for r in records if str(r.get("status")) in {"Ready", "ConditionalReady"}),
-            "none",
-        ),
+        "next_plan": next_plan,
     }
     return errors, stats
 
@@ -279,13 +290,15 @@ def write_quality_report(root: Path, stats: dict[str, int | str], errors: list[s
     outcome = "PASS" if not errors else "FAIL"
     remaining = (
         "Physical-device HLG10/effective precision, RAW throughput, OEM audio/ISP behavior, "
-        "APV availability, fold posture, thermal endurance, and release certification."
+        "OCLog2 interchange/provenance, APV availability, fold posture, thermal endurance, "
+        "and release certification."
     )
     lines = [
         "# Plan Quality Report", "", f"- Result: **{outcome}**",
         f"- Requirements: {stats.get('requirements', 0)}",
         f"- ADRs: {stats.get('adrs', 0)}", f"- Risks: {stats.get('risks', 0)}",
         f"- Plans: {stats.get('plans', 0)}", f"- Done: {stats.get('done', 0)}",
+        f"- Superseded: {stats.get('superseded', 0)}",
         f"- InProgress: {stats.get('in_progress', 0)}", f"- Ready: {stats.get('ready', 0)}",
         f"- ConditionalReady: {stats.get('conditional_ready', 0)}",
         f"- Blocked: {stats.get('blocked', 0)}",

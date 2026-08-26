@@ -1,7 +1,7 @@
 ---
 plan_id: OCC-PLAN-047
 title: "OpenCine Log specification and test vectors"
-status: ConditionalReady
+status: Superseded
 revision: 1
 milestone: M14
 intended_executor: GPT-5.6 Luna
@@ -144,11 +144,11 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (host contract implemented; provenance gate pending)
+- Status: Superseded by OCC-PLAN-061 (host OCLog1 record retained)
 - Started: 2026-08-20T08:05:00-03:00
 - Completed:
 - Executor: GPT-5.6 Luna
 - Commits:
 - Evidence: `evidence/plan-047/gradle-build.log`, `evidence/plan-047/python-tests.log`, `evidence/plan-047/format.log`, `evidence/plan-047/validator.log`, `evidence/plan-047/ffprobe.log`, `evidence/plan-047/provenance-gate.json`, `evidence/plan-047/provenance-gate.log`
-- Deviations: Host OpenCine Log v1 curve, numeric vectors, provenance gate, and unsupported branches are implemented and tested. RAW/P010/ISP verified fixtures are unavailable, so vectors are not promoted as device/file evidence and the plan remains ConditionalReady.
-- Follow-up plans: Re-evaluate the provenance gate after RAW/P010/ISP fixtures and upstream qualification pass.
+- Deviations: Host OpenCine Log v1 curve, numeric vectors, provenance gate, and unsupported branches were implemented and tested. RAW/P010/ISP verified fixtures were unavailable, so vectors were never promoted as device/file evidence; OCLog1 was later superseded for live capture by OCLog2 and OCC-PLAN-061.
+- Superseded by: OCC-PLAN-061, which validates the launcher-reachable OCLog2 signal path instead of reviving OCLog1.

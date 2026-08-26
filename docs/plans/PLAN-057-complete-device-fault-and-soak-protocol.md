@@ -11,7 +11,7 @@ depends_on:
   - OCC-PLAN-036
   - OCC-PLAN-042
   - OCC-PLAN-046
-  - OCC-PLAN-050
+  - OCC-PLAN-061
   - OCC-PLAN-053
   - OCC-PLAN-056
 blocks:
@@ -47,7 +47,7 @@ This is the bounded M17 slice that converts accepted architecture into executabl
 
 ## 3. Prerequisites
 
-OCC-PLAN-029, OCC-PLAN-036, OCC-PLAN-042, OCC-PLAN-046, OCC-PLAN-050, OCC-PLAN-053, OCC-PLAN-056
+OCC-PLAN-029, OCC-PLAN-036, OCC-PLAN-042, OCC-PLAN-046, OCC-PLAN-061, OCC-PLAN-053, OCC-PLAN-056
 
 Conditional gate: None; this plan is Ready once its dependency plans are Done.
 

@@ -10,6 +10,7 @@ depends_on:
   - OCC-PLAN-057
   - OCC-PLAN-058
   - OCC-PLAN-059
+  - OCC-PLAN-062
 blocks: []
 requirements:
   - OCC-DIST-001
@@ -42,7 +43,7 @@ This is the bounded M17 slice that converts accepted architecture into executabl
 
 ## 3. Prerequisites
 
-OCC-PLAN-057, OCC-PLAN-058, OCC-PLAN-059
+OCC-PLAN-057, OCC-PLAN-058, OCC-PLAN-059, OCC-PLAN-062
 
 Conditional gate: Input: exact release artifacts plus physical target devices and all M17 evidence. Pass: mark only passing fingerprint/artifact pairs Certified. Fail: keep lower evidence stages, publish failures, and do not claim certification.
 

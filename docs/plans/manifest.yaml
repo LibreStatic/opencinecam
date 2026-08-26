@@ -605,7 +605,7 @@ plans:
     intended_executor: GPT-5.6 Luna
   - id: OCC-PLAN-047
     title: "OpenCine Log specification and test vectors"
-    status: ConditionalReady
+    status: Superseded
     revision: 1
     milestone: M14
     path: docs/plans/PLAN-047-opencine-log-specification-and-test-vectors.md
@@ -619,7 +619,7 @@ plans:
     intended_executor: GPT-5.6 Luna
   - id: OCC-PLAN-048
     title: "CPU GPU references LUT OCIO and DCTL"
-    status: ConditionalReady
+    status: Superseded
     revision: 1
     milestone: M14
     path: docs/plans/PLAN-048-cpu-gpu-references-lut-ocio-and-dctl.md
@@ -633,7 +633,7 @@ plans:
     intended_executor: GPT-5.6 Luna
   - id: OCC-PLAN-049
     title: "RAW P010 ISP-derived Log integration"
-    status: ConditionalReady
+    status: Superseded
     revision: 1
     milestone: M14
     path: docs/plans/PLAN-049-raw-p010-isp-derived-log-integration.md
@@ -647,7 +647,7 @@ plans:
     intended_executor: GPT-5.6 Luna
   - id: OCC-PLAN-050
     title: "Numerical editor and device Log qualification"
-    status: ConditionalReady
+    status: Superseded
     revision: 1
     milestone: M14
     path: docs/plans/PLAN-050-numerical-editor-and-device-log-qualification.md
@@ -746,7 +746,7 @@ plans:
     revision: 1
     milestone: M17
     path: docs/plans/PLAN-057-complete-device-fault-and-soak-protocol.md
-    depends_on: [OCC-PLAN-029, OCC-PLAN-036, OCC-PLAN-042, OCC-PLAN-046, OCC-PLAN-050, OCC-PLAN-053, OCC-PLAN-056]
+    depends_on: [OCC-PLAN-029, OCC-PLAN-036, OCC-PLAN-042, OCC-PLAN-046, OCC-PLAN-061, OCC-PLAN-053, OCC-PLAN-056]
     blocks: [OCC-PLAN-060]
     requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
     adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
@@ -785,11 +785,41 @@ plans:
     revision: 1
     milestone: M17
     path: docs/plans/PLAN-060-release-candidate-certification-checklist.md
-    depends_on: [OCC-PLAN-057, OCC-PLAN-058, OCC-PLAN-059]
+    depends_on: [OCC-PLAN-057, OCC-PLAN-058, OCC-PLAN-059, OCC-PLAN-062]
     blocks: []
     requirements: [OCC-DIST-001, OCC-PRIV-001, OCC-TEST-001, OCC-DIST-002]
     adrs: [ADR-0025, ADR-0026, ADR-0027, ADR-0028]
     risks: [RISK-011, RISK-016, RISK-017, RISK-018]
     conditional_gates:
       - "Input: exact release artifacts plus physical target devices and all M17 evidence. Pass: mark only passing fingerprint/artifact pairs Certified. Fail: keep lower evidence stages, publish failures, and do not claim certification."
+    intended_executor: GPT-5.6 Luna
+
+  - id: OCC-PLAN-061
+    title: "OCLog2 specification interchange and device qualification"
+    status: ConditionalReady
+    revision: 1
+    milestone: M14
+    path: docs/plans/PLAN-061-oclog2-specification-interchange-and-device-qualification.md
+    depends_on: [OCC-PLAN-036, OCC-PLAN-038, OCC-PLAN-039, OCC-PLAN-041, OCC-PLAN-045, OCC-PLAN-046]
+    blocks: [OCC-PLAN-057]
+    requirements: [OCC-COLOR-001, OCC-RAW-001, OCC-TEST-001, OCC-COLOR-002]
+    adrs: [ADR-0018, ADR-0021, ADR-0022, ADR-0026]
+    risks: [RISK-005, RISK-015, RISK-020]
+    conditional_gates:
+      - "Input: immutable OCLog2 specification and hashes, independent CPU/GPU/LUT/OCIO/DCTL agreement, exact physical recorded-file fixtures, and source-provenance metadata. Pass: qualify only exact size/FPS/source/fingerprint tuples whose numerical, file, editor, and sustained-device checks pass. Fail: retain the runtime branch as explicitly experimental or unavailable and make no verified Log claim."
+    intended_executor: GPT-5.6 Luna
+
+  - id: OCC-PLAN-062
+    title: "F-Droid and Google Play channel activation"
+    status: ConditionalReady
+    revision: 1
+    milestone: M17
+    path: docs/plans/PLAN-062-f-droid-and-google-play-channel-activation.md
+    depends_on: [OCC-PLAN-058, OCC-PLAN-059]
+    blocks: [OCC-PLAN-060]
+    requirements: [OCC-DIST-001, OCC-DIST-002, OCC-DIST-003, OCC-DIST-004]
+    adrs: [ADR-0027, ADR-0028]
+    risks: [RISK-016, RISK-018]
+    conditional_gates:
+      - "Input: a publicly fetchable immutable source tag accepted by F-Droid, an authorized Google Play application with Play App Signing/upload credentials, current store metadata, and an exact releasable version. Pass: build and publish the same source/runtime policy through both channels with recorded checksums and track state. Fail: retain only the operational direct GitHub channel and do not claim three-channel availability."
     intended_executor: GPT-5.6 Luna

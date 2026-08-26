@@ -4,16 +4,17 @@
 - Requirements: 96
 - ADRs: 29
 - Risks: 20
-- Plans: 60
+- Plans: 62
 - Done: 54
+- Superseded: 4
 - InProgress: 0
 - Ready: 1
-- ConditionalReady: 5
+- ConditionalReady: 3
 - Blocked: 0
 - Traceability coverage: 100%
 - Dependency cycles: none
-- Remaining external conditions: Physical-device HLG10/effective precision, RAW throughput, OEM audio/ISP behavior, APV availability, fold posture, thermal endurance, and release certification.
-- Current execution starts at: OCC-PLAN-047
+- Remaining external conditions: Physical-device HLG10/effective precision, RAW throughput, OEM audio/ISP behavior, OCLog2 interchange/provenance, APV availability, fold posture, thermal endurance, and release certification.
+- Current execution starts at: OCC-PLAN-061
 
 ## Checks
 

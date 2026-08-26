@@ -1,7 +1,7 @@
 ---
 plan_id: OCC-PLAN-048
 title: "CPU GPU references LUT OCIO and DCTL"
-status: ConditionalReady
+status: Superseded
 revision: 1
 milestone: M14
 intended_executor: GPT-5.6 Luna
@@ -142,11 +142,11 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (host contract implemented; provenance gate pending)
+- Status: Superseded by OCC-PLAN-061 (host OCLog1 record retained)
 - Started: 2026-08-20T08:05:00-03:00
 - Completed:
 - Executor: GPT-5.6 Luna
 - Commits:
 - Evidence: `evidence/plan-048/gradle-build.log`, `evidence/plan-048/python-tests.log`, `evidence/plan-048/format.log`, `evidence/plan-048/validator.log`, `evidence/plan-048/ffprobe.log`, `evidence/plan-048/provenance-gate.json`, `evidence/plan-048/provenance-gate.log`
 - Deviations: Host reference CPU/GPU transforms, inverse round-trip, bounded LUT, metadata hash, and DCTL descriptor contracts are tested. No accepted Log provenance fixture exists, so no OpenCine Log mode is integrated or promoted.
-- Follow-up plans: Execute the pass branch only after OCC-PLAN-047's conditional inputs are accepted.
+- Superseded by: OCC-PLAN-061, which validates the launcher-reachable OCLog2 signal path instead of reviving OCLog1.

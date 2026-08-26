@@ -66,7 +66,7 @@ M11 adds C++/JNI only for measurable buffer/GPU work. OpenGL ES 3.1/EGL is the f
 
 RAW still uses public formats and DngCreator. RAW video uses a byte-bounded ring and stops before ImageReader saturation. OpenCine RAW v1 (`.ocraw`) is append-only: fixed header/UUID, typed length-delimited chunks, canonical CBOR metadata, payload CRC32C, periodic indexes, PCM16 audio, final index/footer, and recovery scan to the last valid chunk. V1 sensor payload is uncompressed.
 
-OpenCine Log stays unavailable until a versioned specification, scene-linear domain/gamut, transfer function, middle gray, range, vectors, CPU/GPU references, LUT/OCIO/DCTL, metadata, and tolerances pass. Provenance is mandatory. APV requires API 36+, `video/apv`, qualifying profile/chroma/rate/Surface input, MP4 support, storage, independent extraction/decoding, and device qualification. APV RAW is a separate research verdict.
+OCLog2 has a launcher-reachable experimental runtime with distinct HLG10-derived and SDR ISP-derived source tiers, but it cannot be described as qualified until its versioned specification, scene-linear domain/gamut, transfer function, middle gray, range, independent vectors, CPU/GPU references, LUT/OCIO/DCTL, metadata, tolerances, editor workflow, and exact physical fixtures pass OCC-PLAN-061. Provenance is mandatory, and Main10 output never proves source precision. APV requires API 36+, `video/apv`, qualifying profile/chroma/rate/Surface input, MP4 support, storage, independent extraction/decoding, and device qualification. APV RAW is a separate research verdict.
 
 ## Privacy, diagnostics, and trust
 

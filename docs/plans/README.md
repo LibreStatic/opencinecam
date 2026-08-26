@@ -2,7 +2,8 @@
 
 Production reachability remediation is recorded in
 [`PRODUCTION-REMEDIATION-2026-08-20.md`](PRODUCTION-REMEDIATION-2026-08-20.md) without renumbering
-the canonical 60-plan dependency graph.
+the original 60-plan dependency graph. Follow-up plans retain monotonically increasing IDs and
+supersede obsolete work without rewriting its historical execution record.
 
 ## Purpose and source hierarchy
 
@@ -27,11 +28,11 @@ Plans are never renumbered. Supersede through a new ID and links. Unplanned expa
 - M13 container tooling uses M12 contracts; M14 Log uses M10–M13 evidence; M15 APV parallels RAW/Log after media/native foundations.
 - M17 release consumes every shipped branch.
 
-Critical path: 001 → 004 → 007 → 013 → 014 → 015 → 016 → 017 → 018 → 020 → 027 → 029 → 030 → 033 → 034 → 035 → 036 → 047 → 048 → 049 → 050 → 057 → 060.
+Capture-certification path: 001 → 004 → 007 → 013 → 014 → 015 → 016 → 017 → 018 → 020 → 027 → 029 → 030 → 033 → 034 → 035 → 036 → 061 → 057 → 060. Distribution branch: 058 → 059 → 062 → 060.
 
 ## Current execution
 
-Current execution: OCC-PLAN-001 through OCC-PLAN-046, OCC-PLAN-054–056, and OCC-PLAN-058–059 are Done. A physical reference foldable has recorded OCC-PLAN-035 HLG10/BT2020_HLG/Main10 graph/file evidence; OCC-PLAN-036 independently validates file signaling and a controlled 10-bit fixture while retaining effective precision UNKNOWN for the uncontrolled camera scene; OCC-PLAN-040 captures public RAW_SENSOR and validates a DNG with required tags/payload; OCC-PLAN-041 parses one public RAW10 frame while preserving its zero packed pixel stride; OCC-PLAN-042 records the required 60-second RAW10 throughput fail branch and keeps RAW-video mode disabled. OCC-PLAN-044 validates bounded append journaling, periodic/final indexes, END footer, interruption recovery, and duplicate/cancellation outcomes on host; OCC-PLAN-045 validates desktop reader/index rebuild, recovery scanning, PCM16 extraction, and DNG fixture export; OCC-PLAN-046 validates truncation, bit-flip, interruption, unknown-chunk, bounded-large-chunk, and writer/reader interoperability matrices. Host contracts for OCC-PLAN-047–050, OCC-PLAN-051–053, OCC-PLAN-060, and dependent OCC-PLAN-057 tooling (including the soak-matrix CLI) are implemented. RAW-video promotion, Log/APV provenance, and broader device certification gates remain open. Blocked plans: none. Conditional ranges: 047–053 and 060.
+Current execution: OCC-PLAN-001 through OCC-PLAN-046, OCC-PLAN-051–056, and OCC-PLAN-058–059 are Done. OCC-PLAN-047–050 are Superseded historical OCLog1 host contracts; OCC-PLAN-061 is now the conditional handoff for the launcher-reachable OCLog2 specification, interchange artifacts, source provenance, editor workflow, and exact physical qualification. A physical reference foldable has recorded OCC-PLAN-035 HLG10/BT2020_HLG/Main10 graph/file evidence; OCC-PLAN-036 independently validates file signaling and a controlled 10-bit fixture while retaining effective precision UNKNOWN for the uncontrolled camera scene; OCC-PLAN-040 captures public RAW_SENSOR and validates a DNG with required tags/payload; OCC-PLAN-041 parses one public RAW10 frame while preserving its zero packed pixel stride; OCC-PLAN-042 records the required 60-second RAW10 throughput fail branch and keeps RAW-video mode disabled. Host contracts for OCC-PLAN-057 soak evaluation and OCC-PLAN-060 certification evaluation are implemented, but their exact physical execution remains open. The signed direct GitHub channel is operational; OCC-PLAN-062 owns the still-unexecuted F-Droid build-server and Google Play activation. APV correctly completed through its unsupported hardware branch. Blocked plans: none. Conditional plans: 060–062; Ready plan: 057, pending 061.
 
 Conditional-gate identity evidence can be collected with `python3 tools/device_gate.py`; it records exact serial/API/fingerprint facts when a device is attached and emits `NOT_RUN` without fabricating capability promotion when none is available.
 
@@ -83,13 +84,13 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 - [OCC-PLAN-044: Append-only writer journaling and recovery](PLAN-044-append-only-writer-journaling-and-recovery.md) — M13 / Done
 - [OCC-PLAN-045: Desktop reader index recovery and DNG export](PLAN-045-desktop-reader-index-recovery-and-dng-export.md) — M13 / Done
 - [OCC-PLAN-046: Container crash and interoperability validation](PLAN-046-container-crash-and-interoperability-validation.md) — M13 / Done
-- [OCC-PLAN-047: OpenCine Log specification and test vectors](PLAN-047-opencine-log-specification-and-test-vectors.md) — M14 / ConditionalReady
-- [OCC-PLAN-048: CPU GPU references LUT OCIO and DCTL](PLAN-048-cpu-gpu-references-lut-ocio-and-dctl.md) — M14 / ConditionalReady
-- [OCC-PLAN-049: RAW P010 ISP-derived Log integration](PLAN-049-raw-p010-isp-derived-log-integration.md) — M14 / ConditionalReady
-- [OCC-PLAN-050: Numerical editor and device Log qualification](PLAN-050-numerical-editor-and-device-log-qualification.md) — M14 / ConditionalReady
-- [OCC-PLAN-051: APV probe and codec storage qualification](PLAN-051-apv-probe-and-codec-storage-qualification.md) — M15 / ConditionalReady
-- [OCC-PLAN-052: APV Surface encode MP4 and file validation](PLAN-052-apv-surface-encode-mp4-and-file-validation.md) — M15 / ConditionalReady
-- [OCC-PLAN-053: APV UI fallback and APV RAW verdict](PLAN-053-apv-ui-fallback-and-apv-raw-verdict.md) — M15 / ConditionalReady
+- [OCC-PLAN-047: OpenCine Log specification and test vectors](PLAN-047-opencine-log-specification-and-test-vectors.md) — M14 / Superseded by OCC-PLAN-061
+- [OCC-PLAN-048: CPU GPU references LUT OCIO and DCTL](PLAN-048-cpu-gpu-references-lut-ocio-and-dctl.md) — M14 / Superseded by OCC-PLAN-061
+- [OCC-PLAN-049: RAW P010 ISP-derived Log integration](PLAN-049-raw-p010-isp-derived-log-integration.md) — M14 / Superseded by OCC-PLAN-061
+- [OCC-PLAN-050: Numerical editor and device Log qualification](PLAN-050-numerical-editor-and-device-log-qualification.md) — M14 / Superseded by OCC-PLAN-061
+- [OCC-PLAN-051: APV probe and codec storage qualification](PLAN-051-apv-probe-and-codec-storage-qualification.md) — M15 / Done (accepted unsupported branch)
+- [OCC-PLAN-052: APV Surface encode MP4 and file validation](PLAN-052-apv-surface-encode-mp4-and-file-validation.md) — M15 / Done (accepted unsupported branch)
+- [OCC-PLAN-053: APV UI fallback and APV RAW verdict](PLAN-053-apv-ui-fallback-and-apv-raw-verdict.md) — M15 / Done (accepted unsupported branch)
 - [OCC-PLAN-054: Device profile schema trust and invalidation](PLAN-054-device-profile-schema-trust-and-invalidation.md) — M16 / Done
 - [OCC-PLAN-055: Bundled imported quirks and user overrides](PLAN-055-bundled-imported-quirks-and-user-overrides.md) — M16 / Done
 - [OCC-PLAN-056: Community validation contribution and regression](PLAN-056-community-validation-contribution-and-regression.md) — M16 / Done
@@ -97,3 +98,5 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 - [OCC-PLAN-058: Security privacy and accessibility review](PLAN-058-security-privacy-and-accessibility-review.md) — M17 / Done
 - [OCC-PLAN-059: F-Droid direct Google Play release and SBOM](PLAN-059-f-droid-direct-google-play-release-and-sbom.md) — M17 / Done
 - [OCC-PLAN-060: Release candidate certification checklist](PLAN-060-release-candidate-certification-checklist.md) — M17 / ConditionalReady
+- [OCC-PLAN-061: OCLog2 specification interchange and device qualification](PLAN-061-oclog2-specification-interchange-and-device-qualification.md) — M14 follow-up / ConditionalReady
+- [OCC-PLAN-062: F-Droid and Google Play channel activation](PLAN-062-f-droid-and-google-play-channel-activation.md) — M17 follow-up / ConditionalReady

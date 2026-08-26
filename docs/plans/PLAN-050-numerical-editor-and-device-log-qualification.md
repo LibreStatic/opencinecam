@@ -1,7 +1,7 @@
 ---
 plan_id: OCC-PLAN-050
 title: "Numerical editor and device Log qualification"
-status: ConditionalReady
+status: Superseded
 revision: 1
 milestone: M14
 intended_executor: GPT-5.6 Luna
@@ -143,11 +143,11 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (host contract implemented; provenance/device gate pending)
+- Status: Superseded by OCC-PLAN-061 (host OCLog1 record retained)
 - Started: 2026-08-20T08:05:00-03:00
 - Completed:
 - Executor: GPT-5.6 Luna
 - Commits:
 - Evidence: `evidence/plan-050/gradle-build.log`, `evidence/plan-050/python-tests.log`, `evidence/plan-050/format.log`, `evidence/plan-050/validator.log`, `evidence/plan-050/ffprobe.log`, `evidence/plan-050/provenance-gate.json`, `evidence/plan-050/provenance-gate.log`
 - Deviations: Host numerical editor and transform round-trip contracts are tested. [redacted editor]/FFmpeg workflow, controlled device, clipping/file metadata qualification, and recorded fixtures are unavailable; no Log qualification claim is promoted.
-- Follow-up plans: Run full external workflow only after OCC-PLAN-049 and container reader/validation dependencies are qualified.
+- Superseded by: OCC-PLAN-061, which validates the launcher-reachable OCLog2 signal path instead of reviving OCLog1.

@@ -1,7 +1,7 @@
 ---
 plan_id: OCC-PLAN-049
 title: "RAW P010 ISP-derived Log integration"
-status: ConditionalReady
+status: Superseded
 revision: 1
 milestone: M14
 intended_executor: GPT-5.6 Luna
@@ -143,11 +143,11 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (host contract implemented; provenance gate pending)
+- Status: Superseded by OCC-PLAN-061 (host OCLog1 record retained)
 - Started: 2026-08-20T08:05:00-03:00
 - Completed:
 - Executor: GPT-5.6 Luna
 - Commits:
 - Evidence: `evidence/plan-049/gradle-build.log`, `evidence/plan-049/python-tests.log`, `evidence/plan-049/format.log`, `evidence/plan-049/validator.log`, `evidence/plan-049/ffprobe.log`, `evidence/plan-049/provenance-gate.json`, `evidence/plan-049/provenance-gate.log`
 - Deviations: Host integration labels RAW/P010/ISP provenance and rejects unverified branches. Physical RAW/P010/ISP fixtures and upstream effective-depth/RAW gates are unavailable; Flat8/HLG remain the only promoted names.
-- Follow-up plans: Integrate only branches whose exact provenance fixtures pass OCC-PLAN-047/048 gates.
+- Superseded by: OCC-PLAN-061, which validates the launcher-reachable OCLog2 signal path instead of reviving OCLog1.
