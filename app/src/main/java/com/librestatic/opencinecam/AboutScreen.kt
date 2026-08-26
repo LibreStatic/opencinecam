@@ -6,6 +6,7 @@ package com.librestatic.opencinecam
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -134,11 +135,18 @@ internal fun AboutScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(Modifier.size(84.dp).clip(CircleShape).background(AboutAmber), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(96.dp)
+                        .clip(CircleShape)
+                        .background(AboutGraphite)
+                        .border(1.dp, AboutAmber.copy(alpha = 0.45f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
                         contentDescription = stringResource(R.string.app_name),
-                        modifier = Modifier.size(76.dp),
+                        modifier = Modifier.size(92.dp),
                     )
                 }
                 Text(stringResource(R.string.app_name), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
