@@ -1,15 +1,19 @@
-# Signing handoff (keyless repository)
+# Signing handoff
 
-The repository produces unsigned/reproducible inputs only. The release operator
-receives:
+Tagged direct APK releases are built and signed by GitHub Actions. The release
+keystore is stored as an encrypted repository secret and reconstructed only in
+the ephemeral release runner. Its passwords and alias are separate secrets.
+A recovery copy exists outside the repository with owner-only permissions.
+
+Each release provides:
 
 - source tag and commit/archive digest;
 - Gradle wrapper, JDK, SDK, dependency-lock, and build-task versions;
-- unsigned APK/AAB SHA-256 checksums;
+- signed ARM64 release and debug APK SHA-256 checksums;
 - SPDX SBOM and `NOTICE`/Apache-2.0 files;
 - artifact comparison output and release notes.
 
-The operator signs the direct APK in an offline keystore and uploads the Play
-artifact through Play App Signing. F-Droid performs its own source build and
-signing. Keys, passwords, Play service credentials, and device identifiers are
-never stored in this repository or CI logs.
+The direct release key is not used for Google Play or F-Droid. Play App Signing
+owns the Play key boundary, and F-Droid performs its own source build and
+signing. Keystore bytes, passwords, Play credentials, and device identifiers
+must never be committed or printed in CI logs.

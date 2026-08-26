@@ -915,14 +915,14 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         val ratio = requestedZoomRatio
         if (ratio <= range.start && range.start >= 1f) {
             // At or below the wide end: no crop needed.
-            if (descriptor.supportsZoomRatioApi) {
+            if (descriptor.supportsZoomRatioApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, range.start)
             } else {
                 builder.set(CaptureRequest.SCALER_CROP_REGION, null)
             }
             return
         }
-        if (descriptor.supportsZoomRatioApi) {
+        if (descriptor.supportsZoomRatioApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, ratio)
         } else {
             // API 29 fallback: only digital zoom >= 1x is representable via SCALER_CROP_REGION.
@@ -963,7 +963,7 @@ class Camera2PreviewEngine(context: Context) : AutoCloseable {
         val now = SystemClock.elapsedRealtime()
         if (now - lastZoomReportedAtMs < ZOOM_REPORT_PERIOD_MS) return
         lastZoomReportedAtMs = now
-        val ratio = if (descriptor.supportsZoomRatioApi) {
+        val ratio = if (descriptor.supportsZoomRatioApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
         } else {
             ZoomMath.ratioFromCropRegion(

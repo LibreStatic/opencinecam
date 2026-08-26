@@ -17,6 +17,10 @@ android {
         versionCode = 8
         versionName = "0.3.3"
 
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

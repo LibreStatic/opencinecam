@@ -10,6 +10,7 @@ local.properties
 *.iml
 .DS_Store
 local-evidence/
+evidence/
 *.jks
 *.keystore
 keystore.properties

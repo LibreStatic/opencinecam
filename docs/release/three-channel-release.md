@@ -1,12 +1,12 @@
 # Three-channel release contract
 
 OpenCineCam ships the same versioned source and dependency-locked build through
-three channels. Signing keys never enter the repository.
+three channels. Signing keys never enter the Git repository.
 
 | Channel | Build/signing owner | Runtime policy |
 | --- | --- | --- |
 | F-Droid | F-Droid reproducible build from the tagged source and lockfiles | No proprietary runtime dependency; reproducible unsigned input is verified before F-Droid signing |
-| Direct APK | Release operator signs the reproducible release artifact offline | Key material stays in an offline signing system; checksum and SBOM accompany the handoff |
+| Direct APK | GitHub Actions signs tagged ARM64 APKs from encrypted repository secrets | The runner is ephemeral; checksums accompany the GitHub Release and a recovery key stays outside GitHub |
 | Google Play | Play App Signing owns the upload/release key boundary | Play metadata/tracks are reviewed explicitly; no analytics or remote-crash SDK is added |
 
 ## Reproducibility and provenance
@@ -18,7 +18,7 @@ three channels. Signing keys never enter the repository.
    ```sh
    python3 tools/generate_sbom.py \
      --lockfile app/gradle.lockfile \
-     --output evidence/plan-059/opencinecam.spdx.json
+     --output build/release/opencinecam.spdx.json
    ```
 
 4. Compare independently produced APKs with
