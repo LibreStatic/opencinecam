@@ -13,9 +13,9 @@ Description: |
 RepoType: git
 Repo: https://github.com/librestatic/opencinecam.git
 Builds:
-  - versionName: 0.1.0
-    versionCode: 1
-    commit: v0.1.0
+  - versionName: 0.3.3
+    versionCode: 8
+    commit: v0.3.3
     gradle:
       - yes
     subdir: app
