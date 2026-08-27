@@ -797,7 +797,7 @@ plans:
   - id: OCC-PLAN-061
     title: "OCLog2 specification interchange and device qualification"
     status: ConditionalReady
-    revision: 1
+    revision: 2
     milestone: M14
     path: docs/plans/PLAN-061-oclog2-specification-interchange-and-device-qualification.md
     depends_on: [OCC-PLAN-036, OCC-PLAN-038, OCC-PLAN-039, OCC-PLAN-041, OCC-PLAN-045, OCC-PLAN-046]

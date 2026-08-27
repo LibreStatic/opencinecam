@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// OpenCineCam OCLog2 v2.0.0 inverse transform.
+__DEVICE__ float oclog2_encode(float x) {
+    x = _clampf(x, 0.0f, 1.0f);
+    return 0.10f + 0.80f * _logf(1.0f + 50.0f * x) / _logf(51.0f);
+}
+__DEVICE__ float oclog2_decode(float y) {
+    y = _clampf(y, 0.10f, 0.90f);
+    return (_powf(51.0f, (y - 0.10f) / 0.80f) - 1.0f) / 50.0f;
+}
+__DEVICE__ float3 transform(int width, int height, int x, int y, float r, float g, float b) {
+    return make_float3(oclog2_decode(r), oclog2_decode(g), oclog2_decode(b));
+}

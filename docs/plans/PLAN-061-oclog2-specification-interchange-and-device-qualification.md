@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-061
 title: "OCLog2 specification interchange and device qualification"
 status: ConditionalReady
-revision: 1
+revision: 2
 milestone: M14
 intended_executor: GPT-5.6 Luna
 execution_mode: implementation
@@ -128,10 +128,10 @@ Record skips as explicit `NOT_RUN`; never report an unexecuted interoperability 
 
 ## 16. Acceptance Criteria
 
-- [ ] The OCLog2 normative specification and independent versioned vectors/artifacts are complete and hash-pinned.
+- [x] The OCLog2 normative specification and independent versioned vectors/artifacts are complete and hash-pinned.
 - [ ] CPU, GPU/shader, LUT, OCIO, and DCTL implementations pass declared forward/inverse tolerances.
 - [ ] Every promoted source tier has exact physical sustained-recording, sidecar, file, and editor evidence for its fingerprint/profile tuple.
-- [ ] Runtime gating and UI language expose no broader provenance, precision, gamut, range, or device claim than the accepted evidence.
+- [x] Runtime gating and UI language expose no broader provenance, precision, gamut, range, or device claim than the accepted evidence.
 - [ ] Required host/build/device/editor commands pass and privacy-safe evidence manifests remain verifiable.
 
 ## 17. Evidence to Record
@@ -152,12 +152,12 @@ Mark individual criteria, update `manifest.yaml`, `README.md`, `TRACEABILITY.md`
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (reconciliation plan created; specification/interchange/device gate pending)
+- Status: ConditionalReady (host specification, artifacts, qualifier, and fail-closed runtime gating complete; physical/editor gate pending)
 - Started: 2026-08-26T22:55:00-03:00
 - Completed:
 - Executor: GPT-5.6 Sol
 - Commits:
-- Evidence:
-- Deviations: The launcher-reachable OCLog2 implementation and host shader contracts predate this plan. They are inputs, not proof that interchange or any physical source tier is qualified.
+- Evidence: `docs/color/oclog2-v2/manifest.json`, `evidence/plan-061/qualification-input.json`, `evidence/plan-061/qualification-result.json`, `evidence/plan-061/qualifier.log`.
+- Deviations: The available target is the API 33 `sdk_gphone64_x86_64` emulator and no independent editor is installed. The qualifier therefore records `NOT_RUN` for the physical target, GPU/3D LUT/OCIO/DCTL execution, sustained clip, hashed sidecar/file metadata, FFmpeg clip workflow, and editor workflow. The launcher-reachable runtime remains experimental; no source/profile tuple is promoted.
 - Supersedes: OCC-PLAN-047, OCC-PLAN-048, OCC-PLAN-049, OCC-PLAN-050.
 - Follow-up plans: OCC-PLAN-057 consumes only the source/profile tiers that this plan qualifies.

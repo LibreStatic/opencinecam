@@ -1,0 +1,46 @@
+{
+  "reference": {
+    "generatorSha256": "ccbf8e6c74a0d08ca616c29096474ad7450d81945ff8eed32cb10c11c349b3f2",
+    "method": "Python Decimal analytic equation",
+    "precision": 50
+  },
+  "schema": "opencinecam-oclog2-vectors-v1",
+  "specVersion": "2.0.0",
+  "vectors": [
+    {
+      "inverseSceneLinear": 0.0,
+      "oclog2": 0.1,
+      "sceneLinear": 0.0
+    },
+    {
+      "inverseSceneLinear": 0.0009765625,
+      "oclog2": 0.10970001702467652,
+      "sceneLinear": 0.0009765625
+    },
+    {
+      "inverseSceneLinear": 0.01,
+      "oclog2": 0.18249910265267208,
+      "sceneLinear": 0.01
+    },
+    {
+      "inverseSceneLinear": 0.18,
+      "oclog2": 0.5685019750275356,
+      "sceneLinear": 0.18
+    },
+    {
+      "inverseSceneLinear": 0.5,
+      "oclog2": 0.7629178081356527,
+      "sceneLinear": 0.5
+    },
+    {
+      "inverseSceneLinear": 0.9,
+      "oclog2": 0.8790053281353201,
+      "sceneLinear": 0.9
+    },
+    {
+      "inverseSceneLinear": 1.0,
+      "oclog2": 0.9,
+      "sceneLinear": 1.0
+    }
+  ]
+}

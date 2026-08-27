@@ -250,8 +250,8 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
 
     schema_dir = root / "docs/schemas"
     schema_files = sorted(schema_dir.glob("*.schema.json"))
-    if len(schema_files) != 6:
-        errors.append(f"expected 6 schemas, found {len(schema_files)}")
+    if len(schema_files) < 6:
+        errors.append(f"expected at least 6 schemas, found {len(schema_files)}")
     for schema in schema_files:
         try:
             json.loads(schema.read_text(encoding="utf-8"))
@@ -312,7 +312,7 @@ def write_quality_report(root: Path, stats: dict[str, int | str], errors: list[s
         lines.extend(f"- FAIL: {error}" for error in errors)
     else:
         lines.extend([
-            "- PASS: required files and six JSON schemas exist and parse.",
+            f"- PASS: required files and {len(schema_files)} JSON schemas exist and parse.",
             "- PASS: IDs, paths, dependencies, references, and statuses resolve.",
             "- PASS: dependency graph is acyclic and every plan has 21 sections.",
             "- PASS: all accepted requirements, ADRs, and risks are traceable.",

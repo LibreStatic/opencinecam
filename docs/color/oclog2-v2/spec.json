@@ -1,0 +1,67 @@
+{
+  "curve": {
+    "forward": "0.10 + 0.80 * ln(1 + 50*x) / ln(51)",
+    "inverse": "(exp(ln(51) * ((y - 0.10) / 0.80)) - 1) / 50",
+    "middleGrayCode": 0.5685019750275356,
+    "middleGrayLinear": 0.18
+  },
+  "domain": {
+    "componentApplication": "independent RGB components",
+    "encoding": "scene-linear",
+    "gamut": "ITU-R BT.2020",
+    "invalidInput": "reject non-finite or out-of-domain values in the normative reference",
+    "maximum": 1,
+    "minimum": 0
+  },
+  "id": "com.librestatic.opencinecam.color.oclog2",
+  "precision": {
+    "cpuAbsoluteTolerance": 1e-12,
+    "gpuAbsoluteTolerance": 2e-05,
+    "lut1dAbsoluteTolerance": 2e-05,
+    "lut3dAbsoluteTolerance": 2e-05,
+    "reference": "decimal-50",
+    "rounding": "no normative quantization; generated text uses 15 fractional decimal places",
+    "transportBoundary": "GLSL, DCTL, and LUT transports clamp to their declared domains"
+  },
+  "range": {
+    "blackCode": 0.1,
+    "container": "full",
+    "whiteCode": 0.9
+  },
+  "runtimeShaderSha256": {
+    "HLG10_BT2020": "21ad5d65afb57b87377eac537c3e2cb33a362f25757069dfea6c22dc480bd8f4",
+    "SDR_BT709_ISP": "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b"
+  },
+  "schema": "opencinecam-oclog2-spec-v1",
+  "sourceTiers": {
+    "HLG10_BT2020": {
+      "claimBoundary": "exact tuple requires physical qualification",
+      "input": "Camera2 HLG10 + BT2020_HLG PRIVATE surface",
+      "preTransform": "inverse HLG OETF"
+    },
+    "SDR_BT709_ISP": {
+      "bt709ToBt2020GlslColumnMajor": [
+        [
+          0.627404,
+          0.069097,
+          0.016391
+        ],
+        [
+          0.329283,
+          0.91954,
+          0.088013
+        ],
+        [
+          0.043313,
+          0.011362,
+          0.895595
+        ]
+      ],
+      "claimBoundary": "ISP-derived; no source HDR, gamut, or bit-depth claim",
+      "input": "Camera2 STANDARD PRIVATE surface",
+      "preTransform": "assumed inverse BT.709 OETF and BT.709-to-BT.2020 matrix"
+    }
+  },
+  "status": "normative-host-contract",
+  "version": "2.0.0"
+}

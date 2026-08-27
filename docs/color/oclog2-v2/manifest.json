@@ -1,0 +1,40 @@
+{
+  "artifacts": {
+    "oclog2-v2-17.cube": {
+      "bytes": 486623,
+      "sha256": "e399ecc4fcb8db49f025f2789937f6e6afe6990073fd3bba148982c817cef3e2"
+    },
+    "oclog2-v2-4096.cube": {
+      "bytes": 221312,
+      "sha256": "0322810fd04b8c2d0ddd0248141f36840ea96c87a13b4d121b9dc4aea9f10f7f"
+    },
+    "oclog2-v2-inverse.dctl": {
+      "bytes": 545,
+      "sha256": "1ec8cd6580c8c0b5582d4871b438ef4b45367eb761c3a43ecfa4c2a0fa617b4e"
+    },
+    "oclog2-v2.dctl": {
+      "bytes": 545,
+      "sha256": "80d409b799aa3f53c3c35e3baa16e1b745ff9d0eff7e17c01ed0dafce8bff5f6"
+    },
+    "oclog2-v2.glsl": {
+      "bytes": 664,
+      "sha256": "c88f741eece597ad8a5bab40b3ba7d4c7aaba1be66c849d106514fbfa02ef34a"
+    },
+    "oclog2-v2.ocio": {
+      "bytes": 733,
+      "sha256": "0ef43258678d1e877d0b7ff7d4981b45aa491a471f0a2416c11c86f7c788ecd6"
+    },
+    "spec.json": {
+      "bytes": 2059,
+      "sha256": "a6d0e849bc3d97c22f5d1faa8819be0003fc7aed1276a2c1242a3d8dd4c6f308"
+    },
+    "vectors.json": {
+      "bytes": 1019,
+      "sha256": "c0abd3d73730139be940db55c6b82a281a40b7ca17cfa653286c78df162d32cc"
+    }
+  },
+  "generator": "tools/generate_oclog2_artifacts.py",
+  "generatorSha256": "ccbf8e6c74a0d08ca616c29096474ad7450d81945ff8eed32cb10c11c349b3f2",
+  "schema": "opencinecam-oclog2-artifacts-v1",
+  "specVersion": "2.0.0"
+}

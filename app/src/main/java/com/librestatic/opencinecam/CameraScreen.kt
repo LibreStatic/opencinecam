@@ -137,6 +137,7 @@ import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.camera.Camera2LogProfile
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
@@ -1236,18 +1237,20 @@ private fun MediaThumbnailAction(onClick: () -> Unit) {
 @Composable
 private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier) {
     if (state.selectedMode != CaptureMode.LOG) return
-    val sourcePath = state.activeLogProfile?.sourcePath
+    val profile = state.activeLogProfile
+    val sourcePath = profile?.sourcePath
+    val qualification = ocLogQualificationLabel(profile)
     val text = when {
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP && settings.logViewAssistEnabled ->
-            "OCLOG2 HFR · ISP SDR · VIEW ASSIST"
+            "OCLOG2 HFR · ISP SDR · VIEW ASSIST · $qualification"
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP ->
-            "OCLOG2 HFR · ISP-DERIVED SDR · MAIN10"
-        settings.logViewAssistEnabled -> "OCLOG2 · HLG10 · VIEW ASSIST REC.709"
-        else -> "OCLOG2 · HLG-DERIVED 10-BIT · FLAT MONITOR"
+            "OCLOG2 HFR · ISP-DERIVED SDR · MAIN10 · $qualification"
+        settings.logViewAssistEnabled -> "OCLOG2 · HLG10 · VIEW ASSIST REC.709 · $qualification"
+        else -> "OCLOG2 · HLG-DERIVED 10-BIT · FLAT · $qualification"
     }
     Text(
         text,
-        color = if (sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) Amber else VerifiedCyan,
+        color = if (profile?.isVerified == true) VerifiedCyan else Amber,
         fontSize = 9.sp,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
@@ -1258,6 +1261,9 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
             .padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }
+
+internal fun ocLogQualificationLabel(profile: Camera2LogProfile?): String =
+    if (profile?.isVerified == true) "VERIFIED" else "EXPERIMENTAL"
 
 @Composable
 private fun PreviewStatusHud(
@@ -2900,12 +2906,22 @@ internal fun SettingsScreen(
                     if (descriptor?.supportsOpenCineLog == true) {
                         val trueLog = descriptor.logProfiles.filter { it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020 }
                         val hfrLog = descriptor.logProfiles.filter { it.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP }
-                        "OCLog2 · HLG10 TRUE LOG ${trueLog.maxOfOrNull { it.size.width } ?: 0}×${trueLog.maxOfOrNull { it.size.height } ?: 0} @ ${trueLog.maxOfOrNull { it.fps } ?: 0} max" +
+                        val verifiedCount = descriptor.logProfiles.count { it.isVerified }
+                        val qualification = if (descriptor.allOpenCineLogProfilesVerified) {
+                            "VERIFIED"
+                        } else {
+                            "EXPERIMENTAL · $verifiedCount/${descriptor.logProfiles.size} profiles verified"
+                        }
+                        "OCLog2 $qualification · HLG10-DERIVED ${trueLog.maxOfOrNull { it.size.width } ?: 0}×${trueLog.maxOfOrNull { it.size.height } ?: 0} @ ${trueLog.maxOfOrNull { it.fps } ?: 0} max" +
                             if (hfrLog.isNotEmpty()) " · HFR ISP-DERIVED ${hfrLog.maxOf { it.fps }} max" else ""
                     } else {
                         "OCLog2 UNSUPPORTED · no capability-backed graph"
                     },
-                    color = if (descriptor?.supportsOpenCineLog == true) VerifiedCyan else RecordRed,
+                    color = when {
+                        descriptor?.allOpenCineLogProfilesVerified == true -> VerifiedCyan
+                        descriptor?.supportsOpenCineLog == true -> Amber
+                        else -> RecordRed
+                    },
                     fontSize = 11.sp,
                 )
             }

@@ -56,12 +56,22 @@ data class Camera2LogProfile(
     val fps: Int,
     val sourcePath: OpenCineLogSourcePath,
     val constrainedHighSpeed: Boolean,
+    val qualificationStage: OpenCineLogQualificationStage = OpenCineLogQualificationStage.EXPERIMENTAL,
+    val qualificationReason: String = OpenCineLogQualificationPolicy.NOT_RUN_REASON,
+    val qualificationEvidenceId: String? = null,
 ) {
     init {
         require(constrainedHighSpeed == sourcePath.highSpeedDerived) {
             "Only the explicitly disclosed ISP-derived LOG source may use constrained HFR."
         }
+        require(
+            qualificationStage != OpenCineLogQualificationStage.VERIFIED ||
+                OpenCineLogQualificationPolicy.isVerified(qualificationStage, qualificationEvidenceId),
+        ) { "A verified LOG profile must reference exact qualification evidence." }
     }
+
+    val isVerified: Boolean
+        get() = OpenCineLogQualificationPolicy.isVerified(qualificationStage, qualificationEvidenceId)
 }
 
 data class Camera2CameraDescriptor(
@@ -99,6 +109,14 @@ data class Camera2CameraDescriptor(
 ) {
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
+
+    /** True when at least one exact profile is explicitly tied to accepted evidence. */
+    val hasVerifiedOpenCineLog: Boolean
+        get() = logProfiles.any { it.isVerified }
+
+    /** Mode-wide promotion is safe only when every advertised LOG tuple is verified. */
+    val allOpenCineLogProfilesVerified: Boolean
+        get() = logProfiles.isNotEmpty() && logProfiles.all { it.isVerified }
 
     /** Compatibility view for callers that have not selected an explicit LOG profile yet. */
     val preferredLogProfile: Camera2LogProfile?

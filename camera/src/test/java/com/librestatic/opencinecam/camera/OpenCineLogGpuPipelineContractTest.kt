@@ -68,6 +68,55 @@ class OpenCineLogGpuPipelineContractTest {
     }
 
     @Test
+    fun runtimeCapabilityDoesNotImplyQualification() {
+        val experimental = Camera2LogProfile(
+            Size(1920, 1080),
+            30,
+            OpenCineLogSourcePath.HLG10_BT2020,
+            false,
+        )
+        val descriptor = descriptorWith(listOf(experimental))
+
+        assertTrue(descriptor.supportsOpenCineLog)
+        assertTrue(!descriptor.hasVerifiedOpenCineLog)
+        assertTrue(!descriptor.allOpenCineLogProfilesVerified)
+        assertEquals(OpenCineLogQualificationStage.EXPERIMENTAL, experimental.qualificationStage)
+        assertEquals(OpenCineLogQualificationPolicy.NOT_RUN_REASON, experimental.qualificationReason)
+    }
+
+    @Test
+    fun verifiedProfileRequiresExactEvidenceIdentity() {
+        assertThrows(IllegalArgumentException::class.java) {
+            Camera2LogProfile(
+                Size(1920, 1080),
+                30,
+                OpenCineLogSourcePath.HLG10_BT2020,
+                false,
+                qualificationStage = OpenCineLogQualificationStage.VERIFIED,
+            )
+        }
+        val verified = Camera2LogProfile(
+            Size(1920, 1080),
+            30,
+            OpenCineLogSourcePath.HLG10_BT2020,
+            false,
+            qualificationStage = OpenCineLogQualificationStage.VERIFIED,
+            qualificationReason = "qualified-exact-tuple",
+            qualificationEvidenceId = "plan-061/device-0/1920x1080-30-hlg10",
+        )
+        assertTrue(verified.isVerified)
+        val verifiedDescriptor = descriptorWith(listOf(verified))
+        assertTrue(verifiedDescriptor.hasVerifiedOpenCineLog)
+        assertTrue(verifiedDescriptor.allOpenCineLogProfilesVerified)
+        assertTrue(!descriptorWith(listOf(verified, Camera2LogProfile(
+            Size(1280, 720),
+            30,
+            OpenCineLogSourcePath.HLG10_BT2020,
+            false,
+        ))).allOpenCineLogProfilesVerified)
+    }
+
+    @Test
     fun inverseRec709IsMonotonicBeforeOcLogEncoding() {
         val codes = listOf(0.0, 0.04, 0.081, 0.5, 1.0)
         val linear = codes.map(::inverseRec709)
@@ -94,4 +143,26 @@ class OpenCineLogGpuPipelineContractTest {
     } else {
         ((code + 0.099) / 1.099).pow(1.0 / 0.45)
     }
+
+    private fun descriptorWith(logProfiles: List<Camera2LogProfile>) = Camera2CameraDescriptor(
+        cameraId = "0",
+        lensFacing = 1,
+        focalLengthsMm = emptyList(),
+        previewSize = Size(1920, 1080),
+        jpegSize = null,
+        rawSize = null,
+        analysisSize = null,
+        sensorOrientation = 90,
+        sensitivityRange = null,
+        exposureTimeRangeNs = null,
+        aeCompensationRange = null,
+        aeCompensationStep = 0f,
+        minimumFocusDistance = null,
+        supportsRaw = false,
+        flashAvailable = false,
+        targetFpsRanges = emptyList(),
+        availableFixedFps = emptyList(),
+        videoProfiles = emptyList(),
+        logProfiles = logProfiles,
+    )
 }

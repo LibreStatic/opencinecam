@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencinecam.org/schema/oclog2-sidecar-v2.schema.json",
+  "title": "OpenCineCam OCLog2 recording sidecar v2",
+  "type": "object",
+  "required": [
+    "schema",
+    "cameraId",
+    "source",
+    "transform",
+    "qualification"
+  ],
+  "properties": {
+    "schema": {
+      "const": "opencinecam-oclog-sidecar-v2"
+    },
+    "cameraId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "path",
+        "dynamicRange",
+        "colorSpace",
+        "precision"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "HLG10_BT2020",
+            "SDR_BT709_ISP"
+          ]
+        },
+        "dynamicRange": {
+          "type": "string"
+        },
+        "colorSpace": {
+          "type": "string"
+        },
+        "precision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "transform": {
+      "type": "object",
+      "required": [
+        "curve",
+        "version",
+        "domain",
+        "gamut",
+        "range",
+        "shaderSha256"
+      ],
+      "properties": {
+        "curve": {
+          "const": "OCLog2"
+        },
+        "version": {
+          "enum": [
+            "2.0",
+            "2.0.0"
+          ]
+        },
+        "domain": {
+          "const": "scene-linear"
+        },
+        "gamut": {
+          "const": "BT.2020"
+        },
+        "range": {
+          "type": "string"
+        },
+        "shaderSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": true
+    },
+    "qualification": {
+      "type": "object",
+      "required": [
+        "stage",
+        "reason",
+        "evidenceId",
+        "exactProfileVerified"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "UNKNOWN",
+            "EXPERIMENTAL",
+            "VERIFIED",
+            "FAILED",
+            "UNSUPPORTED"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exactProfileVerified": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "exactProfileVerified": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "stage": {
+                "const": "VERIFIED"
+              },
+              "evidenceId": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

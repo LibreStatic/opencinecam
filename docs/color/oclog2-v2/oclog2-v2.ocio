@@ -1,0 +1,23 @@
+ocio_profile_version: 2.4
+name: OpenCineCam OCLog2 v2.0.0
+description: Normative scene-linear BT.2020 to OCLog2 interchange config
+search_path: .
+strictparsing: true
+roles:
+  scene_linear: scene_linear_bt2020
+  reference: scene_linear_bt2020
+colorspaces:
+  - !<ColorSpace>
+    name: scene_linear_bt2020
+    family: OpenCineCam
+    bitdepth: 32f
+    isdata: false
+    allocation: lg2
+  - !<ColorSpace>
+    name: oclog2_bt2020
+    family: OpenCineCam
+    bitdepth: 32f
+    isdata: false
+    allocation: uniform
+    to_scene_reference: !<FileTransform> {src: oclog2-v2-4096.cube, interpolation: linear, direction: inverse}
+    from_scene_reference: !<FileTransform> {src: oclog2-v2-4096.cube, interpolation: linear, direction: forward}
