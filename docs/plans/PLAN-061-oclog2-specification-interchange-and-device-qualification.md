@@ -123,6 +123,10 @@ Missing specification/artifacts/fixtures yields `NOT_RUN` or `UNKNOWN`; numeric,
 - Native/desktop reference and artifact-generation test commands introduced by this plan.
 - `ffprobe -v error -show_streams -show_format <oclog2-fixture>` plus the documented independent editor workflow.
 - Exact connected-device collector and sustained-recording commands for every proposed tuple.
+- `OCLog2GpuNumericTest` on a physical GLES renderer and
+  `OpenCineLogSustainedRecordingDeviceTest` for the exact HLG-derived tuple. The sustained test
+  must observe a stable Camera2 cadence before opening its measured window and must still reject
+  any output PTS interval greater than the documented dropped-frame threshold.
 
 Record skips as explicit `NOT_RUN`; never report an unexecuted interoperability or device command as passing.
 
@@ -152,12 +156,12 @@ Mark individual criteria, update `manifest.yaml`, `README.md`, `TRACEABILITY.md`
 
 ## 21. Execution Record
 
-- Status: ConditionalReady (host specification, artifacts, qualifier, and fail-closed runtime gating complete; physical/editor gate pending)
+- Status: ConditionalReady (host closure and three-pass HLG physical cadence execution complete; editor/interchange and remaining source gate pending)
 - Started: 2026-08-26T22:55:00-03:00
 - Completed:
 - Executor: GPT-5.6 Sol
 - Commits:
-- Evidence: `docs/color/oclog2-v2/manifest.json`, `evidence/plan-061/qualification-input.json`, `evidence/plan-061/qualification-result.json`, `evidence/plan-061/qualifier.log`.
-- Deviations: The available target is the API 33 `sdk_gphone64_x86_64` emulator and no independent editor is installed. The qualifier therefore records `NOT_RUN` for the physical target, GPU/3D LUT/OCIO/DCTL execution, sustained clip, hashed sidecar/file metadata, FFmpeg clip workflow, and editor workflow. The launcher-reachable runtime remains experimental; no source/profile tuple is promoted.
+- Evidence: `docs/color/oclog2-v2/manifest.json`, `app/src/androidTest/java/com/librestatic/opencinecam/OCLog2GpuNumericTest.kt`, `app/src/androidTest/java/com/librestatic/opencinecam/OpenCineLogSustainedRecordingDeviceTest.kt`. Raw device clips/results remain local and uncommitted pending a privacy-safe durable evidence design.
+- Deviations: Physical-device evidence was collected on a local reference device and is not kept in the repository. The physical target passes the GLES encode/decode harness and, after a cadence-based preview barrier, three separate process cold-start executions of the exact HLG-derived camera 0 / 1920x1080 / 30 fps protocol pass with zero inferred drops and zero intervals above the 1.5× threshold. One pulled clip independently reports Main10/yuv420p10le/full-range/BT.2020/linear signaling and decoded cleanly with FFmpeg. Earlier immediate-start runs exposed an initial gap; those failures are retained as the reason the protocol now measures cadence before recording. The ISP-derived source tier, bound LUT3D/OCIO/DCTL evidence, clipping/range measurements, and independent editor remain `NOT_RUN`. The launcher-reachable runtime remains experimental; no source/profile tuple is promoted.
 - Supersedes: OCC-PLAN-047, OCC-PLAN-048, OCC-PLAN-049, OCC-PLAN-050.
 - Follow-up plans: OCC-PLAN-057 consumes only the source/profile tiers that this plan qualifies.

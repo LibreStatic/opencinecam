@@ -1515,6 +1515,8 @@ class CaptureService : Service() {
         .put("targetFps", evidence.targetFps)
         .put("firstPtsUs", evidence.firstPtsUs)
         .put("lastPtsUs", evidence.lastPtsUs)
+        .put("maxVideoPtsGapUs", evidence.maxVideoPtsGapUs)
+        .put("videoPtsGapsOverThreshold", evidence.videoPtsGapsOverThreshold)
         .put("timecode", JSONObject()
             .put("mode", settings.timecodeMode.name)
             .put("nominalFps", settings.timecodeNominalFps)

@@ -30,3 +30,22 @@ All six reference paths (`cpu`, `gpu`, `lut1d`, `lut3d`, `ocio`, `dctl`) must re
 
 An emulator, missing editor, missing fixture, hash mismatch, stale shader, or different tuple
 cannot promote a profile. `NOT_RUN` keeps it experimental; `FAILED` records the rejected bundle.
+
+The physical Android harnesses are:
+
+- `com.librestatic.opencinecam.OCLog2GpuNumericTest`, which requires a non-software GLES renderer
+  and writes `occ-plan-061-oclog2-gpu-numeric.json` to the app external-files directory.
+- `com.librestatic.opencinecam.OpenCineLogSustainedRecordingDeviceTest`, which exercises the
+  production HLG-derived OCLog2 graph, waits for three consecutive 500 ms effective-FPS samples
+  within ±2% of the requested cadence, records at least 30 seconds, and writes MP4, sidecar, and
+  result JSON to the same directory.
+
+Run them on an explicitly selected physical serial; never allow a second connected device or an
+emulator to satisfy the result. Validate the pulled MP4 independently with `ffprobe` frame PTS and
+an FFmpeg full decode. The cadence barrier establishes the measurement window; it does not erase
+or reclassify any gap found inside that window.
+
+On the reference device, three separate process cold starts of the cadence-gated HLG-derived
+1920x1080@30 protocol each produced 961/961 frames over a 32-second PTS span. The encoder-side
+maximum interval was 33,334 µs and no interval exceeded 1.5× the target period. A pulled clip was
+also checked independently as HEVC Main10/yuv420p10le at 30/1 with a complete FFmpeg decode.

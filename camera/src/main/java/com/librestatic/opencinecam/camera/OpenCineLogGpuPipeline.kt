@@ -98,6 +98,8 @@ data class OpenCineLogRecordingEvidence(
     val encodedFrames: Long,
     val firstPtsUs: Long?,
     val lastPtsUs: Long?,
+    val maxVideoPtsGapUs: Long?,
+    val videoPtsGapsOverThreshold: Long,
     val geometryMode: RecordingGeometryMode,
     val deviceOrientationDegrees: Int,
     val pixelRotationDegrees: Int,
@@ -736,6 +738,13 @@ class OpenCineLogGpuPipeline(
                         }
                         if (video) {
                             active.frames++
+                            active.lastPtsUs?.let { previousPtsUs ->
+                                val gapUs = (normalizedPtsUs - previousPtsUs).coerceAtLeast(0L)
+                                active.maxVideoPtsGapUs = maxOf(active.maxVideoPtsGapUs ?: 0L, gapUs)
+                                if (gapUs > 1_500_000L / targetFps) {
+                                    active.videoPtsGapsOverThreshold++
+                                }
+                            }
                             active.firstPtsUs = active.firstPtsUs ?: normalizedPtsUs
                             active.lastPtsUs = normalizedPtsUs
                         }
@@ -797,6 +806,8 @@ class OpenCineLogGpuPipeline(
                     encodedFrames = active.frames,
                     firstPtsUs = active.firstPtsUs,
                     lastPtsUs = active.lastPtsUs,
+                    maxVideoPtsGapUs = active.maxVideoPtsGapUs,
+                    videoPtsGapsOverThreshold = active.videoPtsGapsOverThreshold,
                     geometryMode = active.geometry.mode,
                     deviceOrientationDegrees = active.geometry.deviceOrientationDegrees,
                     pixelRotationDegrees = active.geometry.pixelRotationDegrees,
@@ -1053,6 +1064,8 @@ class OpenCineLogGpuPipeline(
         var frames = 0L
         var firstPtsUs: Long? = null
         var lastPtsUs: Long? = null
+        var maxVideoPtsGapUs: Long? = null
+        var videoPtsGapsOverThreshold = 0L
     }
 
     private data class PendingMuxSample(
