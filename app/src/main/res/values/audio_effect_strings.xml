@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_effect_title">Audio processing observations</string>
+    <string name="audio_effect_ns">Noise suppression (NS)</string>
+    <string name="audio_effect_agc">Automatic gain control (AGC)</string>
+    <string name="audio_effect_aec">Acoustic echo cancellation (AEC)</string>
+    <string name="audio_effect_help">Only the current PCM producer reports these observations. Availability and requests do not prove application. Without a PCM receipt, including MediaRecorder, processing is not observed; backend parity is not assumed.</string>
+    <string name="audio_effect_request_help">Request for the next audio configuration; observed state is shown separately.</string>
+    <string name="audio_effect_manual">Manual recording gain suspends the AGC request for the next configuration. The current receipt may still describe the frozen take.</string>
+    <string name="audio_effect_yes">Yes</string>
+    <string name="audio_effect_no">No</string>
+    <string name="audio_effect_requested">Current preference: %1$s</string>
+    <string name="audio_effect_receipt_requested">Current producer requested: %1$s</string>
+    <string name="audio_effect_unobserved">Not observed — no current PCM receipt</string>
+    <string name="audio_effect_observed">Observed state: %1$s</string>
+    <string name="audio_effect_unknown">Unknown</string>
+    <string name="audio_effect_unavailable">Unavailable</string>
+    <string name="audio_effect_enabled">Enabled</string>
+    <string name="audio_effect_disabled">Disabled</string>
+    <string name="audio_effect_failed">Failed</string>
+    <string name="audio_effect_implementation">Implementation: %1$s</string>
+    <string name="audio_effect_none">None</string>
+    <string name="audio_effect_platform">Android platform</string>
+    <string name="audio_effect_software">Software processing</string>
+    <string name="audio_effect_control">Platform control observed: %1$s</string>
+    <string name="audio_effect_control_unknown">Not observed / not applicable</string>
+    <string name="audio_effect_pending">Preference pending for the next take; the current observation is unchanged.</string>
+    <string name="audio_effect_configuration_failed">An effect configuration attempt failed. The observed state and any software fallback are shown separately.</string>
+</resources>

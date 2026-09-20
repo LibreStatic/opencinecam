@@ -16,14 +16,25 @@ import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.os.SystemClock
 import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.camera.PcmListeningSink
+import com.librestatic.opencinecam.camera.offerListening
 import com.librestatic.opencinecam.camera.AudioLevelMeter
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
+import com.librestatic.opencinecam.camera.AudioEffectObservationReader
+import com.librestatic.opencinecam.camera.AudioEffectsSnapshot
+import com.librestatic.opencinecam.camera.AudioEffectState
+import com.librestatic.opencinecam.camera.AudioEffectImplementation
+import com.librestatic.opencinecam.camera.requireExclusiveAgcObservation
+import com.librestatic.opencinecam.camera.DigitalRecordingGain
+import com.librestatic.opencinecam.camera.createDisabledManualAgc
 import com.librestatic.opencinecam.camera.SoftAgc
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
+import com.librestatic.opencinecam.storage.AudioRetirementGate
+import com.librestatic.opencinecam.storage.releaseAudioResources
 import com.librestatic.opencinecam.storage.toMeterEncoding
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CompletableFuture
 
 /** Non-recording mic owner used only while the Video/LOG viewfinder is active. */
 internal class PreviewAudioMonitor private constructor(
@@ -31,64 +42,87 @@ internal class PreviewAudioMonitor private constructor(
     private val levelMeter: AudioLevelMeter,
     private val softAgc: SoftAgc?,
     private val depth: AudioBitDepth,
+    private val recordingGain: DigitalRecordingGain,
+    private val channels: Int,
     private val effects: List<AudioEffect>,
+    private val effectReaders: List<AudioEffectObservationReader>,
+    private val hardwareAgcReader: AudioEffectObservationReader,
+    private val hasHardwareAgc: Boolean,
     private val onLevel: (AudioLevelSnapshot) -> Unit,
     private val onFailure: (Throwable) -> Unit,
+    private val listeningSink: PcmListeningSink?,
 ) : AutoCloseable {
-    private val running = AtomicBoolean(false)
-    private var thread: Thread? = null
+    private val lifecycle = PreviewAudioLifecycle(
+        startNative = {
+            audioRecord.startRecording()
+            check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                "Preview AudioRecord did not enter RECORDING state."
+            }
+        },
+        readLoop = ::readLoop,
+        stopNative = { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() },
+        releaseNative = { releaseAudioResources(effects.map { effect -> { effect.release() } } + { audioRecord.release() }) },
+        onFailure = onFailure,
+        retainRetirement = AudioRetirementGate::retain,
+        releaseRetirement = AudioRetirementGate::release,
+    )
 
-    fun start() {
-        check(running.compareAndSet(false, true)) { "Preview audio monitor is already running." }
-        audioRecord.startRecording()
-        check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-            "Preview AudioRecord did not enter RECORDING state."
-        }
-        thread = Thread(::readLoop, "OpenCineCamAudioMonitor").apply { start() }
-    }
+    fun start() = lifecycle.start()
 
     private fun readLoop() {
         val buffer = ByteBuffer.allocateDirect(audioRecord.bufferSizeInFrames.coerceAtLeast(2_048) * 8)
-        try {
-            while (running.get()) {
-                buffer.clear()
-                val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
-                if (read == AudioRecord.ERROR_DEAD_OBJECT || read == AudioRecord.ERROR_INVALID_OPERATION || read == AudioRecord.ERROR_BAD_VALUE) {
-                    error("Preview AudioRecord read failed with code $read.")
-                }
-                if (read > 0) levelMeter.analyze(buffer, read, SystemClock.elapsedRealtime())?.let(onLevel)
-                if (read > 0) softAgc?.let { agc ->
-                    when (depth) {
-                        AudioBitDepth.PCM_16 -> agc.processPcm16(buffer, read)
-                        AudioBitDepth.PCM_24 -> agc.processPcm24(buffer, read)
-                        AudioBitDepth.PCM_FLOAT -> Unit
-                    }
+        while (lifecycle.isRunning) {
+            buffer.clear()
+            val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
+            if (read == AudioRecord.ERROR_DEAD_OBJECT || read == AudioRecord.ERROR_INVALID_OPERATION || read == AudioRecord.ERROR_BAD_VALUE) {
+                error("Preview AudioRecord read failed with code $read.")
+            }
+            val observedEffects = if (read > 0) {
+                val platformAgc = hardwareAgcReader.read()
+                requireExclusiveAgcObservation(platformAgc, hasHardwareAgc, recordingGain.enabled, softAgc != null)
+                // Derive software evidence from the exact HW observation that authorized this PCM,
+                // not a second getter after transformation. No atomicity across HAL changes is claimed.
+                val appliedAgc = if (softAgc == null) platformAgc else platformAgc.copy(
+                    state = AudioEffectState.ENABLED, implementation = AudioEffectImplementation.SOFTWARE, hasControl = null)
+                AudioEffectsSnapshot(effectReaders[0].read(), appliedAgc, effectReaders[2].read())
+            } else null
+            if (read > 0) levelMeter.observeInput(buffer, read)
+            if (read > 0) softAgc?.let { agc ->
+                when (depth) {
+                    AudioBitDepth.PCM_16 -> agc.processPcm16(buffer, read)
+                    AudioBitDepth.PCM_24 -> agc.processPcm24(buffer, read)
+                    AudioBitDepth.PCM_FLOAT -> Unit
                 }
             }
-        } catch (failure: Throwable) {
-            if (running.get()) onFailure(failure)
-        } finally {
-            running.set(false)
+            if (read > 0) {
+                recordingGain.process(buffer, read, depth.toMeterEncoding(), channels)
+                if (lifecycle.isRunning) listeningSink.offerListening(buffer, read, depth.toMeterEncoding(), audioRecord.sampleRate, channels)
+                levelMeter.analyze(buffer, read, SystemClock.elapsedRealtime())?.let {
+                    if (lifecycle.isRunning) onLevel(it.copy(appliedRecordingGain = recordingGain,
+                        effects = observedEffects))
+                }
+            }
         }
     }
 
-    override fun close() {
-        val wasRunning = running.getAndSet(false)
-        if (wasRunning) runCatching { audioRecord.stop() }
-        thread?.join(1_000)
-        if (thread?.isAlive == true) thread?.interrupt()
-        effects.forEach { runCatching { it.release() } }
-        runCatching { audioRecord.release() }
-    }
+    fun closeAsync(): CompletableFuture<Unit> = lifecycle.closeAsync()
+
+    /** AutoCloseable compatibility requests retirement; callers that need proof await closeAsync. */
+    override fun close() { closeAsync() }
 
     companion object {
+        fun create(context: Context, settings: CameraSettings, onLevel: (AudioLevelSnapshot) -> Unit,
+            onFailure: (Throwable) -> Unit): PreviewAudioMonitor = create(context, settings, onLevel, onFailure, null)
+
         @SuppressLint("MissingPermission")
         fun create(
             context: Context,
             settings: CameraSettings,
             onLevel: (AudioLevelSnapshot) -> Unit,
             onFailure: (Throwable) -> Unit,
+            listeningSink: PcmListeningSink?,
         ): PreviewAudioMonitor {
+            AudioRetirementGate.requireIdle()
             val appContext = context.applicationContext
             check(appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 "RECORD_AUDIO permission is required for live monitoring."
@@ -121,44 +155,65 @@ internal class PreviewAudioMonitor private constructor(
                         ?: error("Requested audio input $requestedId is no longer connected.")
                     check(record.setPreferredDevice(device)) { "AudioRecord rejected input $requestedId." }
                 }
-                fun attach(effect: AudioEffect?, requested: Boolean) {
-                    if (effect == null) return
-                    effects += effect
-                    effect.setEnabled(requested)
-                }
-                fun <T : AudioEffect> safeCreate(create: () -> T?, requested: Boolean) {
-                    val effect = try { create() } catch (failure: Throwable) { null } ?: return
-                    runCatching { effect.setEnabled(requested) }
-                    effects += effect
-                }
-                safeCreate({ NoiseSuppressor.create(record.audioSessionId) }, settings.noiseSuppressorEnabled)
-                safeCreate({ AcousticEchoCanceler.create(record.audioSessionId) }, settings.acousticEchoCancelerEnabled)
-                var softwareAgc: SoftAgc? = null
-                if (settings.automaticGainControlEnabled) {
-                    val hardwareEffect = runCatching { AutomaticGainControl.create(record.audioSessionId) }.getOrNull()
-                    if (hardwareEffect != null) {
-                        val status = runCatching { hardwareEffect.setEnabled(true) }.getOrDefault(AudioEffect.ERROR)
-                        if (status == AudioEffect.SUCCESS && hardwareEffect.enabled) effects += hardwareEffect
-                        else runCatching { hardwareEffect.release() }
+                fun observeOptional(available: () -> Boolean, create: () -> AudioEffect?, requested: Boolean): Pair<AudioEffect?, AudioEffectObservationReader> {
+                    var failed = false
+                    val supported = try { available() } catch (_: Throwable) { failed = true; null }
+                    val effect = try { create() } catch (_: Throwable) { failed = true; null }
+                    if (effect != null) {
+                        effects += effect
+                        try {
+                            val result = effect.setEnabled(requested)
+                            if (result != AudioEffect.SUCCESS || effect.enabled != requested) failed = true
+                        } catch (_: Throwable) { failed = true }
                     }
-                    if (effects.none { it is AutomaticGainControl }) {
-                        softwareAgc = SoftAgc(settings.audioSampleRateHz, settings.audioChannels)
-                    }
+                    return effect to AudioEffectObservationReader(requested, effect, supported, failed)
                 }
+                val ns = observeOptional(NoiseSuppressor::isAvailable, { NoiseSuppressor.create(record.audioSessionId) }, settings.noiseSuppressorEnabled)
+                val aec = observeOptional(AcousticEchoCanceler::isAvailable, { AcousticEchoCanceler.create(record.audioSessionId) }, settings.acousticEchoCancelerEnabled)
+                val agc = if (settings.audioRecordingGain.enabled) {
+                    val supported = AutomaticGainControl.isAvailable()
+                    var effect: AutomaticGainControl? = null
+                    createDisabledManualAgc(record.audioSessionId) { effects += it; effect = it }
+                    effect to AudioEffectObservationReader(settings.automaticGainControlEnabled, effect, supported)
+                } else observeOptional(AutomaticGainControl::isAvailable, { AutomaticGainControl.create(record.audioSessionId) }, settings.automaticGainControlEnabled)
+                val initialAgc = agc.second.read()
+                val softwareAgc = if (!settings.audioRecordingGain.enabled && settings.automaticGainControlEnabled &&
+                    depth != AudioBitDepth.PCM_FLOAT && (agc.first == null || initialAgc.state == AudioEffectState.DISABLED))
+                    SoftAgc(settings.audioSampleRateHz, settings.audioChannels) else null
                 return PreviewAudioMonitor(
                     record,
-                    AudioLevelMeter(depth.toMeterEncoding(), settings.audioChannels),
+                    AudioLevelMeter(depth.toMeterEncoding(), settings.audioChannels, sampleRateHz = record.sampleRate),
                     softwareAgc,
                     depth,
+                    settings.audioRecordingGain,
+                    settings.audioChannels,
                     effects,
+                    listOf(ns.second, agc.second, aec.second),
+                    agc.second,
+                    agc.first != null,
                     onLevel,
                     onFailure,
+                    listeningSink,
                 )
             } catch (failure: Throwable) {
-                effects.forEach { runCatching { it.release() } }
-                record.release()
-                throw failure
+                val cleanup = PreviewAudioLifecycle(
+                    startNative = {}, readLoop = {}, stopNative = {},
+                    releaseNative = { releaseAudioResources(effects.map { effect -> { effect.release() } } + { record.release() }) },
+                    onFailure = {},
+                    retainRetirement = AudioRetirementGate::retain,
+                    releaseRetirement = AudioRetirementGate::release,
+                ).closeAsync()
+                throw PreviewAudioMonitorCreationFailure(failure, cleanup)
             }
         }
     }
+}
+
+/** The factory retains failed preparation resources until this asynchronous receipt completes. */
+internal class PreviewAudioMonitorCreationFailure(
+    cause: Throwable,
+    retirement: CompletableFuture<Unit>,
+) : IllegalStateException("Preview audio monitor preparation failed: ${cause.message}", cause) {
+    private val ownedRetirement = retirement.thenApply { it }
+    val retirement: CompletableFuture<Unit> get() = ownedRetirement.thenApply { it }
 }

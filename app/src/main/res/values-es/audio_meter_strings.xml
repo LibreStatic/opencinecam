@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_meter_title">Medidores de audio</string>
+    <string name="audio_meter_help">Sólo visualización: los cambios en vivo no alteran el archivo ni reinician el micrófono. Pico/RMS muestra el pico de muestras y RMS instantáneo. VU usa balística de 300 ms; quasi-PPM usa ataque rápido y retorno lento. VU y PPM se calibran al pico de una senoide. La referencia fija 0 VU. La retención conserva el valor mostrado por canal. No mide LUFS, true-peak, calibración analógica ni conformidad del hardware. Sólo muestra PCM vigente de hasta 500 ms; el recorte es independiente del modo.</string>
+    <string name="audio_meter_visible">Mostrar medidor de audio</string>
+    <string name="audio_meter_peak_rms">Pico / RMS</string>
+    <string name="audio_meter_vu">VU</string>
+    <string name="audio_meter_ppm">Quasi-PPM</string>
+    <string name="audio_meter_reference">Referencia de 0 VU: %1$d dBFS</string>
+    <string name="audio_meter_hold">Retención del máximo mostrado: %1$d ms (0 desactiva)</string>
+    <string name="audio_meter_numbers">Mostrar valores numéricos</string>
+    <string name="audio_meter_reset_clip">Restablecer indicador de recorte de audio</string>
+    <string name="audio_meter_no_pcm">Sin PCM vigente</string>
+    <string name="audio_meter_peak_rms_values">Pico %1$s / RMS %2$s dBFS</string>
+    <string name="audio_meter_vu_value">%1$s VU</string>
+    <string name="audio_meter_ppm_value">%1$s dBFS</string>
+    <string name="audio_meter_hold_value">Retenido %1$s</string>
+</resources>

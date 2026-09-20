@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_rename_action">Renombrar archivos relacionados…</string>
+    <string name="media_rename_title">Renombrar esta toma local</string>
+    <string name="media_rename_help">Ingresá un nombre base y revisá cada nombre resultante. Sólo se actualizan los nombres locales y sus metadatos relacionados; los bytes de los originales, las URI y el espacio de la captura se conservan. Editar este campo no escribe archivos.</string>
+    <string name="media_rename_remote_warning">Renombrado LOCAL solamente: las copias remotas no se renombran. Los envíos pendientes de la versión anterior requieren atención y no continuarán automáticamente. El historial remoto verificado se conserva.</string>
+    <string name="media_rename_stem">Nuevo nombre base</string>
+    <string name="media_rename_invalid">Ingresá un nombre base válido para previsualizar cada nombre. El renombrado no está disponible para un conjunto de archivos no admitido o ambiguo.</string>
+    <string name="media_rename_old">Selección actual: %1$s</string>
+    <string name="media_rename_new">Nombre propuesto: %1$s</string>
+    <string name="media_rename_current">Nombre observado tras la operación: %1$s</string>
+    <string name="media_rename_unknown_name">Nombre actual desconocido; actualizá y revisá el archivo.</string>
+    <string name="media_rename_confirm">Confirmar renombrado local</string>
+    <string name="media_rename_cancel">Cancelar / cerrar</string>
+    <string name="media_rename_busy">El renombrado está en curso. La cancelación ya no está disponible; esperá el resultado verificado. Salir de esta pantalla no detiene una operación ya confirmada.</string>
+    <string name="media_rename_complete">Se renombró el conjunto local completo. Las copias remotas no se renombran.</string>
+    <string name="media_rename_compensated">El renombrado falló; se restauraron los nombres anteriores y los bytes de los metadatos relacionados. Revisá el resultado antes de un nuevo intento.</string>
+    <string name="media_rename_partial">El cambio local no se completó ni se restauró por completo. Revisá cada nombre observado antes de realizar otra acción.</string>
+    <string name="media_rename_rejected">El renombrado se rechazó antes de completar la actualización. Actualizá el catálogo y revisá la selección.</string>
+    <string name="media_rename_unknown">El resultado del renombrado es desconocido. No supongas que se restauraron los nombres o metadatos. Actualizá el catálogo y revisá cada archivo.</string>
+    <string name="media_rename_refresh">Se solicitó actualizar el catálogo. No se deduce ningún resultado de una carga pendiente o un error de lectura.</string>
+    <string name="media_rename_status_renamed">Renombrado</string>
+    <string name="media_rename_status_unchanged">Sin cambios</string>
+    <string name="media_rename_status_restored">Restaurado</string>
+    <string name="media_rename_status_partial">Cambio parcial</string>
+    <string name="media_rename_status_not_attempted">No se intentó</string>
+    <string name="media_rename_status_unknown">Resultado desconocido</string>
+</resources>
+

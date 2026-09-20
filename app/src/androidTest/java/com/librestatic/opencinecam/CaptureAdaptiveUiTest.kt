@@ -3,7 +3,13 @@
 
 package com.librestatic.opencinecam
 
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.DeviceConfigurationOverride
+import androidx.compose.ui.test.ForcedSize
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -37,6 +43,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 
 class CaptureAdaptiveUiTest {
+    private var chromeDensity = 1f
     @get:Rule
     val composeRule = createComposeRule()
 
@@ -228,8 +235,8 @@ class CaptureAdaptiveUiTest {
             aeLockSupported = true,
             afLockSupported = true,
         )
-        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
-        val minimumPx = 48f * density - 1f
+        composeRule.waitForIdle()
+        val minimumPx = 48f * chromeDensity - 1f
         listOf("ae-lock-toggle", "af-lock-toggle").forEach { tag ->
             val bounds = composeRule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             assertTrue("$tag width is below 48dp", bounds.width >= minimumPx)
@@ -272,6 +279,7 @@ class CaptureAdaptiveUiTest {
             }
         }
 
+        composeRule.onNodeWithTag("settings-category-CAPTURE").performClick()
         val flashLabel = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.flash_torch)
         composeRule.onNodeWithTag("settings-list").performScrollToNode(hasText(flashLabel))
         val flash = composeRule.onNodeWithText(flashLabel).assertIsDisplayed()
@@ -296,6 +304,7 @@ class CaptureAdaptiveUiTest {
             }
         }
 
+        composeRule.onNodeWithTag("settings-category-DIAGNOSTICS").performScrollTo().performClick()
         val about = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.about_title)
         val aboutSummary = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.about_settings_summary)
         composeRule.onNodeWithTag("settings-list").performScrollToNode(hasText(about))
@@ -339,7 +348,8 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithContentDescription(
             context.getString(R.string.about_expand_license, component.name),
         ).performClick()
-        composeRule.onNodeWithText("Apache License", substring = true).assertIsDisplayed()
+        val licenseText = context.assets.open(component.licenseTextAsset).bufferedReader().use { it.readText() }
+        composeRule.onNodeWithText(licenseText, useUnmergedTree = true).assertIsDisplayed()
     }
 
     private fun setChrome(
@@ -359,12 +369,24 @@ class CaptureAdaptiveUiTest {
         afLockState: LockState = LockState.OFF,
     ) {
         composeRule.setContent {
+            DeviceConfigurationOverride(DeviceConfigurationOverride.ForcedSize(
+                if (landscape) DpSize(800.dp, 360.dp) else DpSize(360.dp, 800.dp),
+            )) {
+            val density = LocalDensity.current.density
+            SideEffect { chromeDensity = density }
+            // This layout fixture models ongoing PCM; stale receipts have dedicated meter tests.
+            val liveAudioLevels = androidx.compose.runtime.produceState(audioLevels, audioLevels) {
+                while (audioLevels != null) {
+                    value = audioLevels.copy(capturedAtElapsedRealtimeMs = android.os.SystemClock.elapsedRealtime())
+                    kotlinx.coroutines.delay(50L)
+                }
+            }
             MaterialTheme {
                 AdaptiveCaptureChrome(
                     state = CameraUiState(
                         phase = phase,
                         selectedMode = selectedMode,
-                        audioLevels = audioLevels,
+                        audioLevels = liveAudioLevels.value,
                         audioClipLatched = audioLevels?.clipped == true,
                         audioMonitoringActive = audioLevels != null,
                         zoomSupported = zoomSupported,
@@ -398,6 +420,7 @@ class CaptureAdaptiveUiTest {
                     onOpenMedia = {},
                     onOpenSettings = {},
                 )
+            }
             }
         }
     }

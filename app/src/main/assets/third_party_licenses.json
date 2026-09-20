@@ -382,7 +382,7 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "concurrent-futures",
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     {
       "group": "androidx.core",
@@ -423,6 +423,14 @@
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "emoji2",
       "version": "1.4.0"
+    },
+    {
+      "group": "androidx.exifinterface",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "exifinterface",
+      "version": "1.4.2"
     },
     {
       "group": "androidx.graphics",
@@ -569,6 +577,86 @@
       "version": "2.11.0"
     },
     {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-common",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-container",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-database",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-datasource",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-decoder",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-effect",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-exoplayer",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-extractor",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-muxer",
+      "version": "1.11.0"
+    },
+    {
+      "group": "androidx.media3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "media3-transformer",
+      "version": "1.11.0"
+    },
+    {
       "group": "androidx.navigationevent",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
@@ -697,12 +785,60 @@
       "version": "1.5.1"
     },
     {
+      "group": "com.google.code.findbugs",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "jsr305",
+      "version": "3.0.2"
+    },
+    {
+      "group": "com.google.errorprone",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "error_prone_annotations",
+      "version": "2.28.0"
+    },
+    {
+      "group": "com.google.guava",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "failureaccess",
+      "version": "1.0.2"
+    },
+    {
+      "group": "com.google.guava",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "guava",
+      "version": "33.3.1-android"
+    },
+    {
       "group": "com.google.guava",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "listenablefuture",
-      "version": "1.0"
+      "version": "9999.0-empty-to-avoid-conflict-with-guava"
+    },
+    {
+      "group": "com.google.j2objc",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "j2objc-annotations",
+      "version": "3.0.0"
+    },
+    {
+      "group": "org.checkerframework",
+      "licenseId": "MIT",
+      "licenseName": "MIT License (Checker Framework annotations)",
+      "licenseTextAsset": "licenses/checker-qual-MIT.txt",
+      "name": "checker-qual",
+      "version": "3.43.0"
     },
     {
       "group": "org.jetbrains",
@@ -750,6 +886,14 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "kotlinx-coroutines-core-jvm",
+      "version": "1.9.0"
+    },
+    {
+      "group": "org.jetbrains.kotlinx",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "kotlinx-coroutines-guava",
       "version": "1.9.0"
     },
     {

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_rename_action">Rename related files…</string>
+    <string name="media_rename_title">Rename this local take</string>
+    <string name="media_rename_help">Enter a base name and review every resulting filename. Only local display names and their related metadata are updated; original media bytes, URIs and the capture namespace are preserved. Editing this field does not write any files.</string>
+    <string name="media_rename_remote_warning">LOCAL rename only: remote copies are not renamed. Pending transfers of the previous version require attention and will not continue automatically. Verified remote history is retained.</string>
+    <string name="media_rename_stem">New base name</string>
+    <string name="media_rename_invalid">Enter a valid base name to preview every filename. Renaming is unavailable for an unsupported or ambiguous file set.</string>
+    <string name="media_rename_old">Current selection: %1$s</string>
+    <string name="media_rename_new">Proposed name: %1$s</string>
+    <string name="media_rename_current">Observed name after operation: %1$s</string>
+    <string name="media_rename_unknown_name">Current name unknown; refresh and inspect the file.</string>
+    <string name="media_rename_confirm">Confirm local rename</string>
+    <string name="media_rename_cancel">Cancel / close</string>
+    <string name="media_rename_busy">Renaming is in progress. Cancellation is no longer available; wait for the verified result. Leaving this screen does not stop an operation already confirmed.</string>
+    <string name="media_rename_complete">The complete local file set was renamed. Remote copies were not renamed.</string>
+    <string name="media_rename_compensated">Renaming failed; the previous filenames and related metadata bytes were restored. Review the result before a new attempt.</string>
+    <string name="media_rename_partial">The local change was not completed or fully restored. Review each observed name before taking further action.</string>
+    <string name="media_rename_rejected">Renaming was rejected before a complete update. Refresh the catalog and review the selection.</string>
+    <string name="media_rename_unknown">The rename outcome is unknown. Do not assume that names or metadata were restored. Refresh the catalog and inspect every file.</string>
+    <string name="media_rename_refresh">A catalog refresh was requested. No result is inferred from a loading or read error.</string>
+    <string name="media_rename_status_renamed">Renamed</string>
+    <string name="media_rename_status_unchanged">Unchanged</string>
+    <string name="media_rename_status_restored">Restored</string>
+    <string name="media_rename_status_partial">Partial change</string>
+    <string name="media_rename_status_not_attempted">Not attempted</string>
+    <string name="media_rename_status_unknown">Unknown result</string>
+</resources>
+

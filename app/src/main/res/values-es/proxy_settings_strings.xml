@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_settings_title">Ajustes de proxy</string>
+    <string name="proxy_settings_help">Genera un proxy manualmente después de la captura desde la galería de medios. El original permanece intacto. Estos ajustes no inician trabajos ni activan procesamiento automático. Las fuentes más pequeñas no se amplían.</string>
+    <string name="proxy_settings_edge">Lado mayor máximo</string>
+    <string name="proxy_settings_edge_value">Hasta %1$d píxeles · sin ampliar</string>
+    <string name="proxy_settings_bitrate">Tasa de bits de vídeo solicitada · la tasa real puede variar</string>
+    <string name="proxy_settings_bitrate_value">%1$d Mbps solicitados</string>
+    <string name="proxy_settings_audio">Se conserva el audio del original. Los ajustes de proxy no cambian el audio de captura ni modifican el archivo original.</string>
+</resources>

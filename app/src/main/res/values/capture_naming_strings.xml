@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Capture file names</string>
+    <string name="capture_naming_enabled">Use a custom capture filename template</string>
+    <string name="capture_naming_template">Filename template</string>
+    <string name="capture_naming_help">Save these preferences for the next capture. They do not rename existing files or change a capture already admitted. Disabled naming preserves OCC_UUID.</string>
+    <string name="capture_naming_tokens">Tokens: {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Template limit: 128 characters. Date and time use UTC; take numbers have at least four digits.</string>
+    <string name="capture_naming_identity">Every name keeps the full capture UUID and its file extension/role suffix. Spaces and non-portable editorial characters become underscores in names only. The human prefix is limited to 160 UTF-8 bytes; an empty prefix becomes untitled. Slate metadata is not rewritten.</string>
+    <string name="capture_naming_example">Example only — current slate, fixed UTC instant 2 Jan 2026 03:04:05.006 and an example UUID. Actual captures use their admission instant and their own UUID.</string>
+    <string name="capture_naming_invalid">Invalid template. Use only the listed tokens and no paths, controls, blank text or trailing spaces/dots. Invalid drafts are not saved.</string>
+    <string name="capture_naming_save">Save for the next capture</string>
+    <string name="capture_naming_preview">Example filename stem: %1$s</string>
+</resources>

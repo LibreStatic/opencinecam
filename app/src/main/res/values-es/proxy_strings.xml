@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="proxy_title">Proxy</string>
+    <string name="proxy_help">Generación posterior a la captura. El original se conserva. Se preservan paquetes de audio y timestamps. Las solicitudes sobreviven al cierre de este diálogo y se retoman al abrir la app. Reintentar conserva los ajustes admitidos. Admite audio integrado; composición de sidecars y políticas automáticas pendientes.</string>
+    <string name="proxy_busy">Procesando y verificando medios…</string>
+    <string name="proxy_complete">Proxy y relación verificados. Original intacto.</string>
+    <string name="proxy_sizes">Original: %1$d B · Proxy: %2$d B. Los clips pequeños pueden crecer por el contenedor.</string>
+    <string name="proxy_open">Abrir proxy</string>
+    <string name="proxy_create">Generar proxy / reintentar</string>
+    <string name="proxy_cancel">Cancelar generación</string>
+    <string name="proxy_close">Cerrar</string>
+    <string name="proxy_queued">En cola</string>
+    <string name="proxy_running">Generando proxy</string>
+    <string name="proxy_cancelling">Cancelando — esperando limpieza</string>
+    <string name="proxy_succeeded">Completado</string>
+    <string name="proxy_failed">Falló — reintento disponible</string>
+    <string name="proxy_cancelled">Cancelado</string>
+    <string name="proxy_policy_help">La política se aplica al próximo intento; el trabajo activo termina. Cambiá estos ajustes locales para liberar solicitudes en espera.</string>
+    <string name="proxy_policy_charging">Exigir carga</string>
+    <string name="proxy_policy_battery">Batería mínima: %1$d%%</string>
+    <string name="proxy_policy_space">Espacio reservado: %1$d MiB</string>
+    <string name="proxy_wait_battery_unknown">En espera: lectura de batería ausente</string>
+    <string name="proxy_wait_charging">Esperando carga</string>
+    <string name="proxy_wait_battery">Esperando nivel de batería</string>
+    <string name="proxy_wait_storage_unknown">En espera: lectura de espacio ausente</string>
+    <string name="proxy_wait_storage">Esperando espacio de trabajo y reserva</string>
+</resources>

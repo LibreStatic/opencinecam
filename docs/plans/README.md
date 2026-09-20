@@ -102,3 +102,13 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 - [OCC-PLAN-060: Release candidate certification checklist](PLAN-060-release-candidate-certification-checklist.md) — M17 / ConditionalReady
 - [OCC-PLAN-061: OCLog2 specification interchange and device qualification](PLAN-061-oclog2-specification-interchange-and-device-qualification.md) — M14 follow-up / ConditionalReady
 - [OCC-PLAN-062: F-Droid and Google Play channel activation](PLAN-062-f-droid-and-google-play-channel-activation.md) — M17 follow-up / ConditionalReady
+
+## Approved camera and foldable program
+
+[OCC-PLAN-063](PLAN-063-settings-and-session-torch.md) is InProgress for the H1 settings/torch unit. The [approved proposal](../PROPOSAL-PRO-CAMERA-AND-FOLDABLES.md) retains H2–H5 and one final APK after completion of the whole program. Host/emulator checks do not close physical light or foldable acceptance.
+
+[OCC-PLAN-064](PLAN-064-fold-display-sessions-and-continuity.md) is InProgress for public fold-display sessions and roles. The [active goal ledger](GOAL-PROGRESS.md) records remaining H1–H5 work and evidence without presenting a partial APK as the final release.
+
+- [OCC-PLAN-065: Professional control intent and operation](PLAN-065-professional-control-intent-and-operation.md) — H3 / InProgress
+
+- [OCC-PLAN-067: Opt-in WebDAV transfers and finalized capture bundles](PLAN-067-opt-in-webdav-transfers.md) — InProgress; transport exists, app wiring and full H5 acceptance remain open.

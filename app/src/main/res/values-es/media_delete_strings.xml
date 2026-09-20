@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Borrar originales relacionados…</string>
+    <string name="media_delete_title">Borrar esta toma de forma permanente</string>
+    <string name="media_delete_help">Esta acción borra los archivos originales y los metadatos relacionados de la lista, no sólo una vista previa o un proxy. Esta acción es irreversible. Revisá todos los archivos antes de confirmar.</string>
+    <string name="media_delete_acknowledge">Entiendo que estos archivos originales y sus metadatos se borrarán de forma permanente.</string>
+    <string name="media_delete_sources">Archivos seleccionados — Originales: %1$d; Metadatos: %2$d</string>
+    <string name="media_delete_original">Original: %1$s</string>
+    <string name="media_delete_metadata">Metadatos: %1$s</string>
+    <string name="media_delete_confirm">Borrar permanentemente los archivos de la lista</string>
+    <string name="media_delete_cancel">Cancelar / cerrar</string>
+    <string name="media_delete_busy">El borrado está en curso. La cancelación ya no está disponible; esperá el resultado por archivo. Salir de esta pantalla no detiene una operación ya confirmada.</string>
+    <string name="media_delete_complete">Todos los archivos seleccionados se borraron.</string>
+    <string name="media_delete_partial">El borrado fue parcial. Revisá el resultado de cada archivo; no supongas que la toma se borró por completo.</string>
+    <string name="media_delete_rejected">El borrado se rechazó. Revisá el catálogo actualizado antes de elegir nuevamente.</string>
+    <string name="media_delete_unknown">El resultado del borrado es desconocido. Actualizá el catálogo y revisá los archivos restantes antes de realizar otra acción.</string>
+    <string name="media_delete_absent">Ausencia verificada</string>
+    <string name="media_delete_remaining">No borrado</string>
+    <string name="media_delete_member_unknown">Resultado desconocido</string>
+    <string name="media_delete_refresh">Se solicitó actualizar el catálogo. Una carga pendiente o un error de lectura no demuestran que un archivo esté ausente.</string>
+    <string name="media_delete_not_attempted">No se intentó</string>
+</resources>

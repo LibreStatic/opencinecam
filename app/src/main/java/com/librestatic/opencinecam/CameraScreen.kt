@@ -3,6 +3,11 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.camera.MonitoringOptions
+import com.librestatic.opencinecam.camera.monitoringSampleFresh
+import com.librestatic.opencinecam.camera.MonitoringSignalDomain
+import com.librestatic.opencinecam.camera.monitoringPreviewScale
+import com.librestatic.opencinecam.camera.monitoringDisplayPoint
 import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
@@ -37,6 +42,7 @@ import android.os.BatteryManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.verticalScroll
@@ -73,6 +79,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -83,6 +90,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -95,6 +103,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,6 +123,10 @@ import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.ui.viewfinder.ZoomAnchorBar
 import com.librestatic.opencinecam.ui.viewfinder.ZoomRocker
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -132,7 +145,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.toSpec
-import com.librestatic.opencinecam.storage.LocalMediaItem
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
@@ -142,6 +154,8 @@ import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.TapFocusState
+import com.librestatic.opencinecam.camera.ExposureMode
+import com.librestatic.opencinecam.camera.ShutterUnit
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.camera.label
 import com.librestatic.opencinecam.camera.snapKelvinTo100
@@ -192,24 +206,40 @@ fun CameraRootScreen() {
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
     val state by stateFlow.collectAsStateWithLifecycle()
-    val settingsStore = remember(context) { CameraSettingsStore(context) }
-    var settings by remember { mutableStateOf(settingsStore.load()) }
+    val settingsRepository = remember(context) { SettingsRepositories.get(context) }
+    val settings by settingsRepository.states.collectAsStateWithLifecycle()
+    val foldDisplays = LocalFoldDisplayCoordinator.current
+    val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
+    val foldState by (foldDisplays?.states ?: foldFallback).collectAsStateWithLifecycle()
+    LaunchedEffect(foldDisplays, state.phase, state.recordingFinalizing, state.recordingPauseStatus, state.recordingElapsedMs, state.errorCode, state.selectedMode, state.countdownSeconds) {
+        foldDisplays?.updateCameraState(state)
+    }
+    DisposableEffect(foldDisplays, binder) {
+        foldDisplays?.updatePreviewPort(binder?.subjectPreview)
+        foldDisplays?.updateSelfRoleObserver { binder?.setSelfRecordingActive(it) }
+        onDispose {
+            foldDisplays?.updatePreviewPort(null)
+            foldDisplays?.updateSelfRoleObserver(null)
+        }
+    }
+    LaunchedEffect(foldDisplays, settings.subjectDisplay.brightness) { foldDisplays?.applyBrightness() }
     var section by rememberSaveable { mutableStateOf(AppSection.CAPTURE) }
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+    val settingsStateHolder = rememberSaveableStateHolder()
+
+    BackHandler(enabled = section != AppSection.CAPTURE && settingsPage != SettingsPage.ABOUT) {
+        section = AppSection.CAPTURE
+    }
 
     BackHandler(enabled = section == AppSection.SETTINGS && settingsPage == SettingsPage.ABOUT) {
         settingsPage = SettingsPage.MAIN
     }
 
-    LaunchedEffect(binder, settings) {
-        binder?.updateSettings(settings)
-    }
     LaunchedEffect(state.audioCapabilities) {
         state.audioCapabilities?.let { capabilities ->
             val normalized = settings.normalizedFor(capabilities)
             if (normalized != settings) {
-                settings = normalized
-                settingsStore.save(normalized)
+                settingsRepository.set(normalized)
             }
         }
     }
@@ -224,7 +254,6 @@ fun CameraRootScreen() {
             CaptureMode.TIME_LAPSE -> settings.copy(
                 timelapseWidth = state.targetVideoWidth,
                 timelapseHeight = state.targetVideoHeight,
-                timelapseFps = state.targetFps,
             )
             in CameraUiState.videoProfileModes -> settings.copy(
                 videoWidth = state.targetVideoWidth,
@@ -234,8 +263,7 @@ fun CameraRootScreen() {
             else -> settings
         }
         if (updated != settings) {
-            settings = updated
-            settingsStore.save(updated)
+            settingsRepository.set(updated)
         }
     }
 
@@ -244,39 +272,52 @@ fun CameraRootScreen() {
         return
     }
 
+    val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
+    CompositionLocalProvider(LocalOperatorActions provides operatorActions,
+        LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
     Box(modifier = Modifier.fillMaxSize().background(Graphite)) {
         if (section == AppSection.CAPTURE) {
             CaptureSurface(
                 state = state,
+                fold = foldState,
                 binder = binder,
                 settings = settings,
                 onSettingsChanged = { updated ->
-                    settings = updated
-                    settingsStore.save(updated)
+                    settingsRepository.set(updated)
                 },
-                onOpenMedia = { section = AppSection.MEDIA },
+                onOpenMedia = { binder?.cancelSelfTimer(); section = AppSection.MEDIA },
                 onOpenSettings = {
+                    binder?.cancelSelfTimer()
                     settingsPage = SettingsPage.MAIN
                     section = AppSection.SETTINGS
                 },
             )
         } else {
+            HingeSafeSettingsPane(foldState.hinge) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Box(Modifier.weight(1f)) {
                     when (section) {
-                        AppSection.MEDIA -> MediaScreen()
+                        AppSection.MEDIA -> MediaCatalogScreen(settings.gallery,
+                            onSettings = { gallery -> settingsRepository.update { it.copy(gallery = gallery) } },
+                            sharingSettings = settings.mediaSharing,
+                            onSharingSettings = { sharing -> settingsRepository.update { it.copy(mediaSharing = sharing) } },
+                            proxySettings = settings.proxy,
+                            onProxySettings = { proxy -> settingsRepository.update { it.copy(proxy = proxy) } },
+                            playbackSettings = settings.playback,
+                            onPlaybackSettings = { playback -> settingsRepository.update { it.copy(playback = playback) } })
                         AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
                             AboutScreen(onBack = { settingsPage = SettingsPage.MAIN })
                         } else {
+                            settingsStateHolder.SaveableStateProvider("settings") {
                             SettingsScreen(
                                 state = state,
                                 settings = settings,
                                 audioPermissionGranted = audioPermissionGranted,
                                 onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
                                 onOpenAbout = { settingsPage = SettingsPage.ABOUT },
-                            ) { updated ->
-                                settings = updated
-                                settingsStore.save(updated)
+                                onSettingsChange = settingsRepository::set,
+                                onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
+                            )
                             }
                         }
                         AppSection.CAPTURE -> Unit
@@ -287,8 +328,10 @@ fun CameraRootScreen() {
                     section = it
                 }
             }
+            }
         }
     }
+}
 }
 
 @Composable
@@ -334,31 +377,42 @@ private fun PermissionScreen(onGrant: () -> Unit) {
 }
 
 @Composable
-private fun CaptureSurface(
+internal fun CaptureSurface(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
+    fold: FoldDisplayState = FoldDisplayState(),
 ) {
-    var zebra by remember { mutableStateOf(false) }
-    var peaking by remember { mutableStateOf(false) }
-    var histogram by rememberSaveable { mutableStateOf(settings.histogramEnabled) }
-    var histogramMode by rememberSaveable { mutableStateOf(settings.histogramMode) }
-    var showGrid by rememberSaveable { mutableStateOf(settings.compositionGridEnabled) }
-    var gridMode by rememberSaveable { mutableStateOf(settings.compositionGridMode) }
-    var showHorizon by rememberSaveable { mutableStateOf(settings.horizonLevelEnabled) }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    val zebra = settings.zebraEnabled
+    val peaking = settings.peakingEnabled
+    val histogram = settings.histogramEnabled
+    val histogramMode = settings.histogramMode
+    val showGrid = settings.compositionGridEnabled
+    val gridMode = settings.compositionGridMode
+    val showHorizon = settings.horizonLevelEnabled
+    var windowOrigin by remember { mutableStateOf(Offset.Zero) }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black).onGloballyPositioned { windowOrigin = it.positionInWindow() }) {
         val density = LocalDensity.current
-        val widthPx = with(density) { maxWidth.roundToPx() }
-        val heightPx = with(density) { maxHeight.roundToPx() }
+        val fullWidthPx = with(density) { maxWidth.roundToPx() }
+        val fullHeightPx = with(density) { maxHeight.roundToPx() }
+        val panes = if (settings.subjectDisplay.adaptToHinge) foldPanes(
+            fullWidthPx, fullHeightPx, windowOrigin.x.roundToInt(), windowOrigin.y.roundToInt(), fold.hinge,
+            with(density) { 16.dp.roundToPx() }, with(density) { 180.dp.roundToPx() }, settings.subjectDisplay.swapPanes,
+        ) else null
+        val widthPx = panes?.preview?.width ?: fullWidthPx
+        val heightPx = panes?.preview?.height ?: fullHeightPx
+        fun paneModifier(pane: FoldPane?): Modifier = if (pane == null) Modifier.fillMaxSize() else with(density) {
+            Modifier.offset(pane.left.toDp(), pane.top.toDp()).size(pane.width.toDp(), pane.height.toDp()).clipToBounds()
+        }
         LaunchedEffect(binder, widthPx, heightPx) {
             if (binder != null && widthPx > 0 && heightPx > 0 && state.cameras.isEmpty()) binder.prepare(widthPx, heightPx)
         }
 
         val descriptor = state.descriptor
-        val landscape = maxWidth > maxHeight
+        val landscape = widthPx > heightPx
         val compactPortrait = captureWindowProfile(maxWidth.value, maxHeight.value) == CaptureWindowProfile.COMPACT_PORTRAIT
         val previewStreamSize = descriptor?.let {
             if (state.selectedMode == CaptureMode.LOG) {
@@ -369,10 +423,12 @@ private fun CaptureSurface(
                 it.previewSize
             }
         }
-        val squeezeFactor = settings.anamorphicSqueeze.factor
+        val squeezeFactor = (state.effectiveSettings?.takeIf { state.phase == CameraUiPhase.RECORDING }
+            ?: settings).anamorphicSqueeze.factor
         val previewDisplayRatio = previewStreamSize?.let { size ->
             previewDisplayRatio(size.width, size.height, squeezeFactor, landscape)
         }
+        Box(paneModifier(panes?.preview).testTag("fold-preview-pane")) {
         if (descriptor != null && binder != null) {
             val streamSize = requireNotNull(previewStreamSize)
             val displayRatio = requireNotNull(previewDisplayRatio)
@@ -381,9 +437,9 @@ private fun CaptureSurface(
                 streamSize.width,
                 streamSize.height,
                 displayRatio,
-                state.selectedMode == CaptureMode.LOG,
+                state.gpuViewfinder || state.selectedMode == CaptureMode.LOG,
                 state.targetFps,
-                descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && state.selectedMode != CaptureMode.LOG,
+                descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && state.selectedMode != CaptureMode.LOG,
                 widthPx,
                 heightPx,
                 binder,
@@ -391,6 +447,10 @@ private fun CaptureSurface(
             )
             MonitoringOverlay(
                 state = state,
+                options = settings.monitoring,
+                sourceWidth = streamSize.width,
+                sourceHeight = streamSize.height,
+                squeezeFactor = squeezeFactor,
                 showZebra = zebra,
                 showPeaking = peaking,
                 showHistogram = histogram,
@@ -410,12 +470,17 @@ private fun CaptureSurface(
             )
         }
 
-        AdaptiveCaptureChrome(
+        }
+        Box(paneModifier(panes?.controls).testTag("fold-controls-pane")) {
+        if (state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls) {
+            SelfCaptureChrome(state, binder, settings, onSettingsChanged, onOpenSettings)
+        } else AdaptiveCaptureChrome(
             state = state,
             binder = binder,
             settings = settings,
             landscape = landscape,
             previewAspectRatio = previewDisplayRatio,
+            previewGesturesEnabled = panes == null,
             zebra = zebra,
             peaking = peaking,
             histogram = histogram,
@@ -423,32 +488,26 @@ private fun CaptureSurface(
             showGrid = showGrid,
             gridMode = gridMode,
             showHorizon = showHorizon,
-            onToggleZebra = { zebra = !zebra },
-            onTogglePeaking = { peaking = !peaking },
+            onToggleZebra = { onSettingsChanged(settings.copy(zebraEnabled = !zebra)) },
+            onTogglePeaking = { onSettingsChanged(settings.copy(peakingEnabled = !peaking)) },
             onToggleHistogram = {
                 val updated = !histogram
-                histogram = updated
                 onSettingsChanged(settings.copy(histogramEnabled = updated, histogramMode = histogramMode))
             },
             onCycleHistogramMode = {
                 val updated = if (histogramMode == HistogramMode.RGB) HistogramMode.LUMA else HistogramMode.RGB
-                histogramMode = updated
                 onSettingsChanged(settings.copy(histogramEnabled = histogram, histogramMode = updated))
             },
             onToggleGrid = {
                 val updated = !showGrid
-                showGrid = updated
                 onSettingsChanged(settings.copy(compositionGridEnabled = updated, compositionGridMode = gridMode))
             },
             onCycleGridMode = {
                 val updated = CompositionGridMode.entries[(gridMode.ordinal + 1) % CompositionGridMode.entries.size]
-                gridMode = updated
-                showGrid = true
                 onSettingsChanged(settings.copy(compositionGridEnabled = true, compositionGridMode = updated))
             },
             onToggleHorizon = {
                 val updated = !showHorizon
-                showHorizon = updated
                 onSettingsChanged(settings.copy(horizonLevelEnabled = updated))
             },
             onSettingsChanged = onSettingsChanged,
@@ -456,6 +515,9 @@ private fun CaptureSurface(
             onOpenSettings = onOpenSettings,
         )
 
+        }
+        Box(paneModifier(panes?.preview)) {
+        if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
         if (state.phase == CameraUiPhase.PREPARING || state.phase == CameraUiPhase.OPENING || state.phase == CameraUiPhase.READY) {
             Text(
                 stringResource(R.string.camera_loading),
@@ -473,6 +535,7 @@ private fun CaptureSurface(
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { binder?.recoverPreview(widthPx, heightPx) }) { Text(stringResource(R.string.retry)) }
             }
+        }
         }
     }
 }
@@ -533,6 +596,10 @@ private fun MonitoringToggleGrid(
 @Composable
 private fun MonitoringOverlay(
     state: CameraUiState,
+    options: MonitoringOptions,
+    sourceWidth: Int,
+    sourceHeight: Int,
+    squeezeFactor: Float,
     showZebra: Boolean,
     showPeaking: Boolean,
     showHistogram: Boolean,
@@ -547,12 +614,12 @@ private fun MonitoringOverlay(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val displayRotationProvider = remember(context) {
-        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
-        { displayManager.displays.firstOrNull()?.rotation ?: 0 }
+    val displayView = LocalView.current
+    val displayRotationProvider = remember(displayView) {
+        { displayView.display?.rotation ?: Surface.ROTATION_0 }
     }
     var rollSnapshot by remember { mutableStateOf<HorizonRollSnapshot?>(null) }
-    val horizonSensorAvailable = remember(context, showHorizon) {
+    val horizonSensorAvailable = remember(context, displayRotationProvider, showHorizon) {
         if (!showHorizon) null
         else HorizonRollSensor(context, displayRotationProvider) { rollSnapshot = it }.also { it.start() }
     }
@@ -566,30 +633,32 @@ private fun MonitoringOverlay(
             analysisClockMs = android.os.SystemClock.elapsedRealtime()
         }
     }
+    val analysisFresh = monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options) &&
+        (state.monitoringScopes == null || state.monitoringScopes.options == options)
     BoxWithConstraints(modifier) {
+        ProfessionalScopeImage(state, options, analysisFresh, displayRotationProvider() * 90, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
         Canvas(Modifier.matchParentSize()) {
-            val sensorColumns = 16
-            val sensorRows = 9
-            val rotation = state.descriptor?.sensorOrientation ?: 0
-            val rotated = size.height > size.width && rotation in setOf(90, 270)
-            val columns = if (rotated) sensorRows else sensorColumns
-            val rows = if (rotated) sensorColumns else sensorRows
-            val cellWidth = size.width / columns
-            val cellHeight = size.height / rows
-            fun displayCell(index: Int): Pair<Int, Int> {
-                val x = index % sensorColumns
-                val y = index / sensorColumns
-                return when {
-                    rotated && rotation == 90 -> (sensorRows - 1 - y) to x
-                    rotated && rotation == 270 -> y to (sensorColumns - 1 - x)
-                    else -> x to y
+            val gpuScale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
+                monitoringPreviewScale(sourceWidth, sourceHeight, size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1),
+                    state.descriptor?.sensorOrientation ?: 0, displayRotationProvider() * 90,
+                    state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT, squeezeFactor)
+                else 1f to 1f
+            fun cellRect(index: Int): androidx.compose.ui.geometry.Rect {
+                val domain = state.monitoringScopes?.domain ?: MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR
+                fun point(x: Float, y: Float): Offset {
+                    val p = monitoringDisplayPoint(x, y, domain, state.descriptor?.sensorOrientation ?: 0,
+                        displayRotationProvider() * 90, state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT)
+                    return Offset((.5f + (p.first - .5f) * gpuScale.first) * size.width, (.5f + (p.second - .5f) * gpuScale.second) * size.height)
                 }
+                val a = point((index % 16) / 16f, (index / 16) / 9f)
+                val b = point((index % 16 + 1) / 16f, (index / 16 + 1) / 9f)
+                return androidx.compose.ui.geometry.Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
             }
-            if (showZebra) state.zebraCells.forEachIndexed { index, active ->
-                if (active) displayCell(index).let { (x, y) -> drawRect(Amber.copy(alpha = .22f), topLeft = androidx.compose.ui.geometry.Offset(x * cellWidth, y * cellHeight), size = androidx.compose.ui.geometry.Size(cellWidth, cellHeight)) }
+            if (showZebra && analysisFresh) state.zebraCells.forEachIndexed { index, active ->
+                if (active) cellRect(index).let { drawRect(options.zebraColor.composeColor().copy(alpha = options.opacityPercent / 100f), it.topLeft, it.size) }
             }
-            if (showPeaking) state.focusCells.forEachIndexed { index, active ->
-                if (active) displayCell(index).let { (x, y) -> drawRect(VerifiedCyan.copy(alpha = .85f), topLeft = androidx.compose.ui.geometry.Offset(x * cellWidth, y * cellHeight), size = androidx.compose.ui.geometry.Size(cellWidth, cellHeight), style = Stroke(width = 2.dp.toPx())) }
+            if (showPeaking && analysisFresh) state.focusCells.forEachIndexed { index, active ->
+                if (active) cellRect(index).let { drawRect(options.peakingColor.composeColor().copy(alpha = options.opacityPercent / 100f), it.topLeft, it.size, style = Stroke(width = 2.dp.toPx())) }
             }
             if (showGrid) {
                 val gridColor = Color.White.copy(alpha = .45f)
@@ -632,7 +701,6 @@ private fun MonitoringOverlay(
                 }
             }
         }
-        val analysisFresh = state.analysisUpdatedAtMs > 0L && analysisClockMs - state.analysisUpdatedAtMs <= 1_000L
         if (showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
             val graphWidth = maxWidth * .28f
             val graphHeight = maxHeight * .09f
@@ -667,7 +735,7 @@ private fun MonitoringOverlay(
                     state.histogram.forEachIndexed { index, value ->
                         val width = size.width / state.histogram.size
                         val height = size.height * value / peak
-                        drawRect(Color.White.copy(alpha = .85f), androidx.compose.ui.geometry.Offset(index * width, size.height - height), androidx.compose.ui.geometry.Size((width - 1f).coerceAtLeast(.5f), height))
+                        drawRect(options.lumaColor.composeColor().copy(alpha = options.opacityPercent / 100f), androidx.compose.ui.geometry.Offset(index * width, size.height - height), androidx.compose.ui.geometry.Size((width - 1f).coerceAtLeast(.5f), height))
                     }
                 } else {
                     val channels = listOf(
@@ -683,11 +751,12 @@ private fun MonitoringOverlay(
                             val y = size.height - size.height * value / peak
                             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                         }
-                        drawPath(path, color.copy(alpha = .9f), style = Stroke(width = 1.5.dp.toPx()))
+                        drawPath(path, color.copy(alpha = options.opacityPercent / 100f), style = Stroke(width = 1.5.dp.toPx()))
                     }
                 }
             }
         }
+        ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
     }
 }
 
@@ -835,6 +904,7 @@ internal fun AdaptiveCaptureChrome(
     settings: CameraSettings,
     landscape: Boolean,
     previewAspectRatio: Float? = null,
+    previewGesturesEnabled: Boolean = true,
     zebra: Boolean,
     peaking: Boolean,
     histogram: Boolean,
@@ -856,6 +926,11 @@ internal fun AdaptiveCaptureChrome(
     var manualControl by remember { mutableStateOf<ControlDial?>(null) }
     var showModeGrid by remember { mutableStateOf(false) }
     var showMonitoring by remember { mutableStateOf(false) }
+    val operatorInput = LocalOperatorActions.current
+    DisposableEffect(manualControl, showModeGrid, showMonitoring) {
+        operatorInput?.setEditing?.invoke(manualControl != null || showModeGrid || showMonitoring)
+        onDispose { operatorInput?.setEditing?.invoke(false) }
+    }
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
@@ -910,10 +985,10 @@ internal fun AdaptiveCaptureChrome(
                         true
                     }
                 }
-                .pointerInput(recording, ratio, state.zoomSupported, state.zoomRatio) {
+                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, state.zoomSupported, state.zoomRatio) {
                     // Pinch-to-zoom. Consumed by this detector so it never reaches tap-focus.
                     detectTransformGestures { _, pan, zoom, _ ->
-                        if (!state.zoomSupported) return@detectTransformGestures
+                        if (!previewGesturesEnabled || state.captureControlsLocked || !state.zoomSupported) return@detectTransformGestures
                         if (zoom == 1f) {
                             // Pan or idle: reset the accumulated base so the next pinch starts fresh.
                             pinchStartRatio = -1f
@@ -939,10 +1014,10 @@ internal fun AdaptiveCaptureChrome(
                         pinchStartRatio = coerced
                     }
                 }
-                .pointerInput(recording, ratio, settings.tapExposureMeteringEnabled, state.phase) {
+                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, settings.tapExposureMeteringEnabled, state.phase) {
                     detectTapGestures { position ->
                         if (recording) manualReveal = true
-                        if (ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
+                        if (!previewGesturesEnabled || state.captureControlsLocked || ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
                             position.y !in previewTop..(previewTop + previewHeight)
                         ) return@detectTapGestures
                         val accepted = binder?.tapToFocus(
@@ -1064,6 +1139,8 @@ internal fun AdaptiveCaptureChrome(
                 binder = binder,
                 onOpenMedia = onOpenMedia,
                 onOpenSettings = onOpenSettings,
+                settings = settings,
+                onSettingsChanged = onSettingsChanged,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
             PreviewStatusHud(
@@ -1080,6 +1157,9 @@ internal fun AdaptiveCaptureChrome(
             exit = fadeOut() + slideOutVertically { it / 3 },
             modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { controlDeckHeightPx = it.height },
         ) {
+            Column {
+            OperatorButtonRow(state, settings)
+            PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
             if (horizontalDeck) {
                 LandscapeControlDeck(
                     state = state,
@@ -1100,6 +1180,7 @@ internal fun AdaptiveCaptureChrome(
                     onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
                     onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
                 )
+            }
             }
         }
 
@@ -1129,6 +1210,13 @@ internal fun AdaptiveCaptureChrome(
                 onToggleHorizon = onToggleHorizon,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop),
             )
+        }
+
+        if (state.captureControlsLocked) {
+            OutlinedButton({ binder?.performOperatorAction(OperatorAction.CONTROL_LOCK) },
+                Modifier.align(Alignment.BottomStart).padding(8.dp).heightIn(min = 48.dp).testTag("operator-unlock")) {
+                Text(stringResource(R.string.operator_unlock), color = Color.White)
+            }
         }
 
         if (chromeVisible) manualControl?.let { control ->
@@ -1162,8 +1250,27 @@ private fun CaptureTopBar(
     binder: CaptureService.LocalBinder?,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val foldCoordinator = LocalFoldDisplayCoordinator.current
+    val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
+    val fold by (foldCoordinator?.states ?: foldFallback).collectAsStateWithLifecycle()
+    var showDisplays by remember { mutableStateOf(false) }
+    if (showDisplays) AlertDialog(
+        onDismissRequest = { showDisplays = false },
+        confirmButton = { TextButton(onClick = { showDisplays = false }) { Text(stringResource(android.R.string.ok)) } },
+        text = { FoldDisplaySettings(state, settings, onSettingsChanged) },
+        containerColor = Panel,
+    )
+    var showLight by remember { mutableStateOf(false) }
+    if (showLight) AlertDialog(
+        onDismissRequest = { showLight = false },
+        confirmButton = { TextButton(onClick = { showLight = false }) { Text(stringResource(android.R.string.ok)) } },
+        text = { TorchSettings(state, settings, onSettingsChanged) },
+        containerColor = Panel,
+    )
     val switchDescription = stringResource(R.string.camera_switch)
     Row(
         modifier = modifier
@@ -1190,6 +1297,12 @@ private fun CaptureTopBar(
                 binder?.selectCamera(state.cameras[(index + 1).mod(state.cameras.size)].cameraId)
             }
         }
+        if (fold.operation == DisplayOperation.TRANSFER && fold.phase == DisplaySessionPhase.ACTIVE) {
+            TopAction("↩", stringResource(R.string.fold_return)) { foldCoordinator?.closeSession() }
+        } else {
+            TopAction("▣", stringResource(R.string.fold_settings_title)) { showDisplays = true }
+        }
+        TopAction("ϟ", stringResource(R.string.flash_torch)) { showLight = true }
         TopAction("⚙", stringResource(R.string.settings_tab), onOpenSettings)
     }
 }
@@ -1215,7 +1328,7 @@ private fun MediaThumbnailAction(onClick: () -> Unit) {
     var thumbnail by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(Unit) {
         thumbnail = withContext(Dispatchers.IO) {
-            LocalMediaRepository(context.applicationContext).recent().firstOrNull()?.thumbnail
+            runCatching { LocalMediaRepository(context.applicationContext).recent(1).firstOrNull()?.thumbnail }.getOrNull()
         }
     }
     Box(
@@ -1272,7 +1385,7 @@ private fun PreviewStatusHud(
     settings: CameraSettings,
     modifier: Modifier = Modifier,
 ) {
-    val showAudio = settings.audioEnabled && state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG)
+    val showAudio = settings.audioEnabled && settings.audioMeter.visible && state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG)
     val showLogSource = state.selectedMode == CaptureMode.LOG
     if (!showAudio && !showLogSource) return
 
@@ -1286,7 +1399,7 @@ private fun PreviewStatusHud(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                AudioMeterHud(state, binder)
+                AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
                 LogSourceBadge(
                     state,
                     settings,
@@ -1294,7 +1407,7 @@ private fun PreviewStatusHud(
                 )
             }
         } else {
-            if (showAudio) AudioMeterHud(state, binder, Modifier.align(Alignment.TopStart))
+            if (showAudio) AudioMeterHud(state, binder, Modifier.align(Alignment.TopStart), meterSettings = settings.audioMeter)
             if (showLogSource) LogSourceBadge(state, settings, Modifier.align(Alignment.TopCenter))
         }
     }
@@ -1317,13 +1430,30 @@ private fun PortraitControlDeck(
         if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = false)
         else Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SelectedModeButton(state, onShowModes) }
         Spacer(Modifier.height(6.dp))
+        PortraitCaptureTransport(state, binder, settings, onShowMonitoring)
+        CaptureStatus(state)
+    }
+}
+
+/** Pause uses its own row so it never overlaps Stop on narrow/large-font displays. */
+@Composable
+internal fun PortraitCaptureTransport(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onShowMonitoring: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().background(Panel), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             CaptureButton(state, binder, settings, 72.dp)
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)) {
                 TopAction("\u25eb", stringResource(R.string.monitoring_tools), onShowMonitoring)
             }
         }
-        CaptureStatus(state)
+        RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+        BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
+        BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
+        AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
     }
 }
 
@@ -1357,9 +1487,13 @@ private fun LandscapeControlDeck(
                 else SelectedModeButton(state, onShowModes)
             }
             TopAction("◫", stringResource(R.string.monitoring_tools), onShowMonitoring)
+            RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
             CaptureButton(state, binder, settings, 62.dp)
         }
         Spacer(Modifier.height(6.dp))
+        BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
+        BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
+        AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
         StatusInfoBar(state, settings)
     }
 }
@@ -1402,8 +1536,8 @@ private fun LockToggles(
     val haptics = LocalHapticFeedback.current
     val manualExposure = state.requestedIso != null || state.requestedExposureTimeNs != null
     val manualFocus = state.requestedFocusDiopters != null
-    val aeAvailable = state.aeLockSupported && !manualExposure
-    val afAvailable = state.afLockSupported && !manualFocus
+    val aeAvailable = state.aeLockSupported && !manualExposure && !state.captureControlsLocked
+    val afAvailable = state.afLockSupported && !manualFocus && !state.captureControlsLocked
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1479,11 +1613,18 @@ private fun QuickControlButton(
     modifier: Modifier = Modifier,
 ) {
     val constrained = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
-    val enabled = !constrained || control in setOf(ControlDial.RESOLUTION, ControlDial.FPS)
+    val exposureCaps = state.descriptor?.exposureCapabilities
+    val enabled = (!constrained || control in setOf(ControlDial.RESOLUTION, ControlDial.FPS)) && when (control) {
+        ControlDial.ISO -> exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
+        ControlDial.SHUTTER -> exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
+        else -> true
+    }
     val value = when (control) {
         ControlDial.RESOLUTION -> "${state.targetVideoWidth}×${state.targetVideoHeight}"
         ControlDial.FPS -> state.targetFps.toString()
-        ControlDial.SHUTTER -> if (constrained) "AUTO·HS" else state.exposureTimeNs?.let(::formatShutter) ?: "AUTO"
+        ControlDial.SHUTTER -> if (constrained) "AUTO·HS" else state.effectiveSettings?.exposure?.takeIf {
+            it.shutterUnit == ShutterUnit.ANGLE && it.mode in setOf(ExposureMode.MANUAL, ExposureMode.SHUTTER_PRIORITY) && !state.exposureControlUnavailable
+        }?.let { "${it.angleTenths / 10.0}°${if (state.exposureClamped) "*" else ""}" } ?: state.exposureTimeNs?.let(::formatShutter) ?: "AUTO"
         ControlDial.ISO -> if (constrained) "AUTO·HS" else state.sensitivityIso?.toString() ?: "AUTO"
         ControlDial.WB -> if (constrained) "AUTO·HS" else state.requestedWhiteBalance.label()
         ControlDial.FOCUS -> if (constrained) "AUTO·HS" else state.focusDistanceDiopters?.let { "%.1fD".format(it) } ?: "AUTO"
@@ -1815,22 +1956,31 @@ private fun ContextualPanel(
 }
 
 @Composable
-private fun CaptureButton(
-    state: CameraUiState,
-    binder: CaptureService.LocalBinder?,
-    settings: CameraSettings,
-    size: androidx.compose.ui.unit.Dp,
-) {
+internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.LocalBinder?, settings: CameraSettings, enabled: Boolean = true): () -> Unit {
+    val currentEnabled by rememberUpdatedState(enabled)
     val context = LocalContext.current
     var showAudioChoice by remember { mutableStateOf(false) }
     val currentBinder by rememberUpdatedState(binder)
+    val actionTicket = CaptureActionTicket(state.selfRecordingActive, state.captureActionGeneration)
+    val currentActionTicket by rememberUpdatedState(actionTicket)
+    var audioChoiceTicket by remember { mutableStateOf<CaptureActionTicket?>(null) }
+    var audioChoiceOwner by remember { mutableStateOf<CaptureService.LocalBinder?>(null) }
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         currentBinder?.refreshAudioCapabilities()
-        if (granted) currentBinder?.capturePrimary(audioForThisTake = true)
+        val requestedTicket = audioChoiceTicket
+        val owner = audioChoiceOwner
+        audioChoiceTicket = null
+        audioChoiceOwner = null
+        if (granted && currentEnabled && requestedTicket != null && currentActionTicket == requestedTicket && owner != null && owner === currentBinder) {
+            owner.captureForRole(requestedTicket, audioForThisTake = true)
+        }
+    }
+    LaunchedEffect(enabled) {
+        if (!enabled) { showAudioChoice = false; audioChoiceTicket = null; audioChoiceOwner = null }
     }
     if (showAudioChoice) {
         AlertDialog(
-            onDismissRequest = { showAudioChoice = false },
+            onDismissRequest = { showAudioChoice = false; audioChoiceTicket = null; audioChoiceOwner = null },
             title = { Text("Audio opcional") },
             text = { Text("You can record this take without audio or grant microphone access.") },
             confirmButton = {
@@ -1842,14 +1992,44 @@ private fun CaptureButton(
             dismissButton = {
                 TextButton(onClick = {
                     showAudioChoice = false
-                    binder?.capturePrimary(audioForThisTake = false)
+                    val requestedTicket = audioChoiceTicket
+                    val owner = audioChoiceOwner
+                    audioChoiceTicket = null
+                    audioChoiceOwner = null
+                    if (currentEnabled && requestedTicket != null && owner != null && owner === binder) owner.captureForRole(requestedTicket, audioForThisTake = false)
                 }) { Text("Record without audio") }
             },
         )
     }
+    return {
+        if (enabled) {
+            val needsAudioChoice = !state.capturePreparationCancelable && state.countdownSeconds == 0 && state.phase != CameraUiPhase.RECORDING &&
+                settings.captureWantsAudio(state.selectedMode) &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+            if (needsAudioChoice) {
+                audioChoiceTicket = actionTicket
+                audioChoiceOwner = binder
+                showAudioChoice = true
+            } else binder?.captureForRole(actionTicket)
+        }
+    }
+}
+
+@Composable
+internal fun CaptureButton(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val onCapture = LocalOperatorActions.current?.capture ?: rememberCaptureAction(state, binder, settings)
     val recording = state.phase == CameraUiPhase.RECORDING
     val captureDescription = stringResource(
         when {
+            state.phase == CameraUiPhase.CAPTURING && state.audioRetirementPending -> R.string.audio_retirement_cancel_capture
+            state.transferRetirementPending -> R.string.webdav_transfer_cancel_capture
+            state.whiteBalancePreparing -> R.string.pro_wb_cancel_preparation
+            state.countdownSeconds > 0 -> R.string.self_cancel_timer
             recording -> R.string.stop_recording
             state.selectedMode.isStillMode() -> R.string.capture_photo
             else -> R.string.start_recording
@@ -1863,12 +2043,8 @@ private fun CaptureButton(
             }
             .border(3.dp, Color.White, CircleShape)
             .clip(CircleShape)
-            .clickable(enabled = state.phase == CameraUiPhase.PREVIEWING || state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING) {
-                val needsAudioChoice = state.phase != CameraUiPhase.RECORDING &&
-                    state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG) &&
-                    settings.audioEnabled &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
-                if (needsAudioChoice) showAudioChoice = true else binder?.capturePrimary()
+            .clickable(enabled = state.capturePreparationCancelable || state.phase == CameraUiPhase.PREVIEWING || state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING) {
+                onCapture()
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -1968,7 +2144,7 @@ private fun RecordingOverlay(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(RecordRed))
-                Text("REC " + formatDuration(state.recordingElapsedMs), color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
+                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs), color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
                 if (!compact && state.recordingWidth != null && state.recordingHeight != null) {
                     Text("${state.recordingWidth}\u00d7${state.recordingHeight}", color = Muted, fontSize = 10.sp)
                 }
@@ -1996,65 +2172,89 @@ private fun RecordingOverlay(
 }
 
 @Composable
-private fun AudioMeterHud(
+internal fun AudioMeterHud(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     modifier: Modifier = Modifier,
     meterWidth: androidx.compose.ui.unit.Dp = 132.dp,
+    meterSettings: AudioMeterSettings = state.effectiveSettings?.audioMeter ?: AudioMeterSettings(),
+    nowElapsedRealtimeMs: Long? = null,
+    onResetClip: () -> Unit = { binder?.resetAudioClip() },
 ) {
-    val snapshot = state.audioLevels
-    val channelLevels = snapshot?.channels.orEmpty()
+    if (!meterSettings.visible) return
+    var clockMs by remember { androidx.compose.runtime.mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(nowElapsedRealtimeMs) {
+        if (nowElapsedRealtimeMs == null) while (true) { clockMs = SystemClock.elapsedRealtime(); delay(100) }
+    }
+    val now = nowElapsedRealtimeMs ?: maxOf(clockMs, SystemClock.elapsedRealtime())
+    val snapshot = currentAudioMeterSnapshot(state.audioLevels, state.audioMonitoringActive, now)
+    val levels = snapshot?.channels.orEmpty()
+    val holder = remember(meterSettings, state.audioMonitoringActive, levels.size) { AudioMeterPeakHold() }
+    val displayed = levels.map { meterSettings.displayDb(it) }
+    val held = if (snapshot != null) holder.observe(snapshot.capturedAtElapsedRealtimeMs, now, displayed, meterSettings.peakHoldMs)
+        else { holder.clear(); emptyList() }
+    val resetLabel = stringResource(R.string.audio_meter_reset_clip)
     Column(
-        modifier
-            .width(meterWidth)
-            .testTag("audio-meter-hud")
+        modifier.width(meterWidth).heightIn(min = 48.dp).testTag("audio-meter-hud")
             .background(Panel, RoundedCornerShape(7.dp))
-            .clickable(enabled = state.audioClipLatched) { binder?.resetAudioClip() }
+            .clickable(enabled = state.audioClipLatched, onClickLabel = resetLabel, onClick = onResetClip)
+            .semantics { if (state.audioClipLatched) contentDescription = resetLabel }
             .padding(horizontal = 7.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (state.audioMonitoringActive || state.phase == CameraUiPhase.RECORDING) "MIC" else "MIC —",
-                color = if (state.audioMonitoringActive) VerifiedCyan else Muted,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.weight(1f))
-            if (state.audioClipLatched) Text("CLIP", color = RecordRed, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-        }
-        val rows = max(1, channelLevels.size)
-        repeat(rows) { index ->
-            val level = channelLevels.getOrNull(index)
-            val label = when {
-                channelLevels.size <= 1 -> "M"
-                index == 0 -> "L"
-                else -> "R"
-            }
+        Text(if (snapshot != null) "MIC" else stringResource(R.string.audio_meter_no_pcm),
+            Modifier.testTag("audio-meter-current"), color = if (snapshot != null) VerifiedCyan else Muted,
+            fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted, fontSize = 10.sp)
+        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        repeat(max(1, levels.size)) { index ->
+            val level = levels.getOrNull(index)
+            val value = displayed.getOrNull(index)
+            val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(label, color = Muted, fontSize = 7.sp, modifier = Modifier.width(8.dp))
-                Canvas(Modifier.weight(1f).height(6.dp)) {
+                Text(label, color = Muted, fontSize = 9.sp)
+                Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
                     drawRect(Color(0xFF283033))
-                    val peakDb = level?.peakDbfs ?: -60f
-                    val rmsDb = level?.rmsDbfs ?: -60f
-                    val peakFraction = ((peakDb + 60f) / 60f).coerceIn(0f, 1f)
-                    val rmsFraction = ((rmsDb + 60f) / 60f).coerceIn(0f, 1f)
-                    val color = when {
-                        peakDb >= -3f -> RecordRed
-                        peakDb >= -12f -> Amber
-                        else -> Color(0xFF46C36F)
+                    if (value != null) {
+                        val minimum = if (meterSettings.mode == AudioMeterMode.VU) -30f else -60f
+                        val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
+                        fun fraction(db: Float) = ((db - minimum) / (maximum - minimum)).coerceIn(0f, 1f)
+                        val signalColor = when {
+                            (level?.peakDbfs ?: -120f) >= -3f -> RecordRed
+                            (level?.peakDbfs ?: -120f) >= -12f -> Amber
+                            else -> Color(0xFF46C36F)
+                        }
+                        drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
+                        if (meterSettings.mode == AudioMeterMode.PEAK_RMS) level?.rmsDbfs?.takeIf { it.isFinite() }?.let { rms ->
+                            drawLine(Color.White, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
+                                androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
+                        }
+                        held.getOrNull(index)?.let { peak ->
+                            drawLine(Amber, androidx.compose.ui.geometry.Offset(size.width * fraction(peak), 0f),
+                                androidx.compose.ui.geometry.Offset(size.width * fraction(peak), size.height), strokeWidth = 2.dp.toPx())
+                        }
                     }
-                    drawRect(color, size = androidx.compose.ui.geometry.Size(size.width * peakFraction, size.height))
-                    drawLine(
-                        Color.White,
-                        start = androidx.compose.ui.geometry.Offset(size.width * rmsFraction, 0f),
-                        end = androidx.compose.ui.geometry.Offset(size.width * rmsFraction, size.height),
-                        strokeWidth = 1.dp.toPx(),
-                    )
                 }
+            }
+            if (meterSettings.showValues) {
+                fun number(value: Float?) = value?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "—"
+                val valueText = when (meterSettings.mode) {
+                    AudioMeterMode.PEAK_RMS -> stringResource(R.string.audio_meter_peak_rms_values, number(value), number(level?.rmsDbfs?.takeIf { it.isFinite() }))
+                    AudioMeterMode.VU -> stringResource(R.string.audio_meter_vu_value, number(value))
+                    AudioMeterMode.PPM -> stringResource(R.string.audio_meter_ppm_value, number(value))
+                }
+                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = Color.White, fontSize = 10.sp)
+                if (value != null && meterSettings.peakHoldMs > 0) Text(stringResource(R.string.audio_meter_hold_value, number(held.getOrNull(index))),
+                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 10.sp)
             }
         }
     }
+}
+
+private fun audioMeterModeLabel(mode: AudioMeterMode): Int = when (mode) {
+    AudioMeterMode.PEAK_RMS -> R.string.audio_meter_peak_rms
+    AudioMeterMode.VU -> R.string.audio_meter_vu
+    AudioMeterMode.PPM -> R.string.audio_meter_ppm
 }
 
 
@@ -2070,11 +2270,20 @@ private fun CaptureStatus(state: CameraUiState) {
             noticeVisible = true
         }
     }
-    val status = when {
+    val controlNotice = if (state.exposureControlUnavailable || state.effectiveSettings?.whiteBalance?.let { it != state.requestedWhiteBalance } == true)
+        stringResource(R.string.pro_capture_notice) else null
+    val baseStatus = when {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
             "REC ${state.recordingWidth}×${state.recordingHeight} · ${state.targetFps} fps · ${formatDuration(state.recordingElapsedMs)} · ${formatBytes(state.availableStorageBytes)} free"
         else -> state.message
-    }?.takeIf { !state.messageTransient || noticeVisible } ?: return
+    }?.takeIf { !state.messageTransient || noticeVisible }
+    val recoveryNotice = state.stillRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
+        stringResource(R.string.still_recovery_notice, it.discardedGroups, it.unresolvedGroups)
+    }
+    val recordingRecoveryNotice = state.recordingRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
+        stringResource(R.string.recording_recovery_notice, it.discardedGroups, it.unresolvedGroups)
+    }
+    val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
     Text(
         status,
         color = if (state.errorCode == null) Color.White else RecordRed,
@@ -2116,14 +2325,14 @@ private fun ManualControlDial(
         return
     }
     if (control == ControlDial.INT) {
-        IntervalometerDial(settings, onSettingsChanged, onClose)
+        IntervalometerDial(state, settings, onSettingsChanged, onClose)
         return
     }
     val value = when (control) {
         ControlDial.RESOLUTION -> 0f
         ControlDial.FPS -> 0f
         ControlDial.ISO -> logPosition((state.requestedIso ?: state.sensitivityIso ?: descriptor.sensitivityRange?.lower ?: 100).toDouble(), descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0)
-        ControlDial.SHUTTER -> logPosition((state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L).toDouble(), descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0)
+        ControlDial.SHUTTER -> if (settings.exposure.shutterUnit == ShutterUnit.ANGLE) ((settings.exposure.angleTenths - 1) / 3599f) else logPosition((state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L).toDouble(), descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0)
         ControlDial.FOCUS -> ((state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f) / (descriptor.minimumFocusDistance ?: 1f)).coerceIn(0f, 1f)
         ControlDial.WB -> 0f
         ControlDial.EV -> 0f
@@ -2139,11 +2348,21 @@ private fun ManualControlDial(
                     ControlDial.FPS -> Unit
                     ControlDial.ISO -> {
                         val iso = logValue(position, descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0).toInt()
-                        binder?.setManualExposure(iso, state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L)
+                        onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
+                            mode = if (settings.exposure.mode == ExposureMode.ISO_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
+                            iso = iso,
+                            timeNs = if (settings.exposure.mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
+                        )))
                     }
                     ControlDial.SHUTTER -> {
-                        val exposure = logValue(position, descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0).toLong()
-                        binder?.setManualExposure(state.requestedIso ?: state.sensitivityIso ?: 100, exposure)
+                        val intent = settings.exposure.copy(
+                            mode = if (settings.exposure.mode == ExposureMode.SHUTTER_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
+                            iso = if (settings.exposure.mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
+                        )
+                        onSettingsChanged(settings.copy(exposure = if (intent.shutterUnit == ShutterUnit.ANGLE) {
+                            intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
+                        } else intent.copy(timeNs = logValue(position, descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0,
+                            descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0).toLong())))
                     }
                     ControlDial.FOCUS -> binder?.setManualFocus(position * (descriptor.minimumFocusDistance ?: 1f))
                     ControlDial.WB -> Unit
@@ -2286,6 +2505,8 @@ private fun WbDial(
     val descriptor = state.descriptor
     val kelvinRange = descriptor?.kelvinRange
     val selection = state.requestedWhiteBalance
+    val retainedTint = (state.effectiveSettings?.whiteBalance as? WhiteBalanceSelection.Kelvin)?.tint
+        ?: (selection as? WhiteBalanceSelection.Kelvin)?.tint ?: 0
 
     if (kelvinRange != null) {
         // Direct Kelvin (CCT) path - slider + presets
@@ -2313,7 +2534,7 @@ private fun WbDial(
                     steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
                     onValueChange = { raw ->
                         val snapped = snapKelvinTo100(raw.toInt(), kelvinRange)
-                        if (snapped != null) binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(snapped))
+                        if (snapped != null) binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(snapped, retainedTint))
                     },
                     modifier = Modifier.fillMaxWidth().height(28.dp),
                 )
@@ -2325,7 +2546,7 @@ private fun WbDial(
                     val inRange = preset in kelvinRange
                     val presetSel = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
                     ChoiceTile("${preset}K", presetSel, Modifier.weight(1f), enabled = inRange) {
-                        binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset))
+                        binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset, retainedTint))
                     }
                 }
             }
@@ -2372,154 +2593,10 @@ private fun WbDial(
 }
 
 @Composable
-private fun IntervalometerDial(
-    settings: CameraSettings,
-    onSettingsChanged: (CameraSettings) -> Unit,
-    onClose: () -> Unit,
-) {
-    val context = LocalContext.current
-    var customText by remember { mutableStateOf("") }
-    var customError by remember { mutableStateOf(false) }
-    val presets = listOf(100L, 500L, 1_000L, 2_000L, 5_000L, 10_000L, 30_000L, 60_000L)
-    val limitModes = TimeLapseLimitMode.entries
-
-    Column(
-        Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+private fun IntervalometerDial(state: CameraUiState, settings: CameraSettings, onSettingsChanged: (CameraSettings) -> Unit, onClose: () -> Unit) {
+    Column(Modifier.verticalScroll(rememberScrollState())) {
         PanelHeader(stringResource(R.string.timelapse_interval), onClose)
-        Text(stringResource(R.string.timelapse_interval_summary), color = Muted, fontSize = 10.sp)
-
-        // Interval presets
-        presets.chunked(4).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach { ms ->
-                    val selected = settings.timelapseIntervalMs == ms
-                    ChoiceTile(formatIntervalShort(ms), selected, Modifier.weight(1f)) {
-                        onSettingsChanged(settings.copy(timelapseIntervalMs = ms))
-                    }
-                }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-
-        // Custom interval input
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedTextField(
-                value = customText,
-                onValueChange = { customText = it; customError = false },
-                label = { Text(stringResource(R.string.timelapse_custom_interval), fontSize = 10.sp) },
-                placeholder = { Text(stringResource(R.string.timelapse_custom_hint), fontSize = 10.sp, color = Muted) },
-                isError = customError,
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            TextButton(onClick = {
-                val parsed = customText.trim().replace(',', '.').toDoubleOrNull()
-                if (parsed != null && parsed >= 0.1 && parsed <= 3600.0) {
-                    val ms = (parsed * 1000).toLong().coerceIn(100L, 3_600_000L)
-                    onSettingsChanged(settings.copy(timelapseIntervalMs = ms))
-                    customText = ""
-                } else {
-                    customError = true
-                }
-            }) { Text(stringResource(R.string.timelapse_custom_interval), color = Amber, fontSize = 10.sp) }
-        }
-        if (customError) {
-            Text(stringResource(R.string.timelapse_custom_invalid), color = RecordRed, fontSize = 10.sp)
-        }
-
-        Spacer(Modifier.height(4.dp))
-        Text(stringResource(R.string.timelapse_limit), color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-
-        // Limit mode selector
-        limitModes.forEach { mode ->
-            val label = when (mode) {
-                TimeLapseLimitMode.UNLIMITED -> stringResource(R.string.timelapse_limit_unlimited)
-                TimeLapseLimitMode.FRAME_COUNT -> stringResource(R.string.timelapse_limit_frame_count)
-                TimeLapseLimitMode.DURATION -> stringResource(R.string.timelapse_limit_duration)
-            }
-            ChoiceTile(label, settings.timelapseLimitMode == mode, Modifier.fillMaxWidth()) {
-                onSettingsChanged(settings.copy(timelapseLimitMode = mode))
-            }
-        }
-
-        // Frame count input
-        if (settings.timelapseLimitMode == TimeLapseLimitMode.FRAME_COUNT) {
-            var frameText by remember { mutableStateOf(settings.timelapseFrameCount.toString()) }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = frameText,
-                    onValueChange = { frameText = it.filter { c -> c.isDigit() } },
-                    label = { Text(stringResource(R.string.timelapse_frame_count), fontSize = 10.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                TextButton(onClick = {
-                    val count = frameText.toIntOrNull()?.coerceIn(2, 100_000)
-                    if (count != null) onSettingsChanged(settings.copy(timelapseFrameCount = count))
-                }) { Text("OK", color = Amber, fontSize = 10.sp) }
-            }
-            Text("2\u2013100.000", color = Muted, fontSize = 9.sp)
-        }
-
-        // Duration input
-        if (settings.timelapseLimitMode == TimeLapseLimitMode.DURATION) {
-            val totalSeconds = settings.timelapseDurationMs / 1000
-            var hours by remember { mutableStateOf((totalSeconds / 3600).toString()) }
-            var minutes by remember { mutableStateOf(((totalSeconds % 3600) / 60).toString()) }
-            var seconds by remember { mutableStateOf((totalSeconds % 60).toString()) }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = hours,
-                    onValueChange = { hours = it.filter { c -> c.isDigit() } },
-                    label = { Text("h", fontSize = 10.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = minutes,
-                    onValueChange = { minutes = it.filter { c -> c.isDigit() } },
-                    label = { Text("min", fontSize = 10.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = seconds,
-                    onValueChange = { seconds = it.filter { c -> c.isDigit() } },
-                    label = { Text("s", fontSize = 10.sp) },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                TextButton(onClick = {
-                    val h = hours.toIntOrNull()?.coerceIn(0, 24) ?: 0
-                    val m = minutes.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                    val sec = seconds.toIntOrNull()?.coerceIn(0, 59) ?: 0
-                    val totalMs = (h * 3600 + m * 60 + sec) * 1000L
-                    if (totalMs in 1_000L..86_400_000L) {
-                        onSettingsChanged(settings.copy(timelapseDurationMs = totalMs))
-                    }
-                }) { Text("OK", color = Amber, fontSize = 10.sp) }
-            }
-            Text("1 s\u201324 h", color = Muted, fontSize = 9.sp)
-        }
+        TimelapseSettings(state, settings, onSettingsChanged)
     }
 }
 
@@ -2559,7 +2636,7 @@ private fun PanelHeader(title: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         modifier
             .heightIn(min = 48.dp)
@@ -2571,7 +2648,7 @@ private fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Mo
                     else -> Color(0xFF303638)
                 },
             )
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -2599,33 +2676,69 @@ private fun NavigationBar(selected: AppSection, onSelect: (AppSection) -> Unit) 
 }
 
 @Composable
-internal fun SettingsScreen(
+internal fun SettingsContent(
     state: CameraUiState,
     settings: CameraSettings,
     audioPermissionGranted: Boolean,
     onRequestAudioPermission: () -> Unit,
     onOpenAbout: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
+    visibleIds: Set<String>,
+    onApplyPreset: ((CameraPreset) -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Graphite).testTag("settings-list"),
         contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(stringResource(R.string.settings_tab), color = Amber, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.settings_privacy), color = Color.White)
-                Text(stringResource(R.string.settings_language), color = Muted)
-                Text(stringResource(R.string.settings_technology), color = VerifiedCyan, fontSize = 12.sp)
-                Text(stringResource(R.string.settings_saved), color = Muted, fontSize = 11.sp)
-            }
+        if ("media-sharing" in visibleIds) item(key = "media-sharing") {
+            MediaSharingSettingsControls(settings.mediaSharing, onSettings = { onSettingsChange(settings.copy(mediaSharing = it)) })
         }
-        item {
+        if ("media-gallery" in visibleIds) item(key = "media-gallery") {
+            GallerySettingsControls(settings.gallery) { onSettingsChange(settings.copy(gallery = it)) }
+        }
+        if ("proxy" in visibleIds) item(key = "proxy") {
+            ProxySettingsControls(settings.proxy) { onSettingsChange(settings.copy(proxy = it)) }
+        }
+        if ("playback" in visibleIds) item(key = "playback") {
+            PlaybackSettingsControls(settings.playback) { onSettingsChange(settings.copy(playback = it)) }
+        }
+        if ("capture-naming" in visibleIds) item(key = "capture-naming") {
+            CaptureNamingSettingsControls(settings, onSettingsChange)
+        }
+        if ("geotagging" in visibleIds) item(key = "geotagging") {
+            GeotaggingSettingsControls(settings, onSettingsChange)
+        }
+        if ("production-slate" in visibleIds) item(key = "production-slate") {
+            ProductionSlateSettingsControls(state, settings, onSettingsChange)
+        }
+        if ("project-timing" in visibleIds) item(key = "project-timing") {
+            ProjectTimingSettings(state, settings, onSettingsChange)
+        }
+        if ("timelapse" in visibleIds) item(key = "timelapse") {
+            TimelapseSettings(state, settings, onSettingsChange)
+        }
+        if ("operator-controls" in visibleIds) item(key = "operator-controls") {
+            OperatorSettings(state, settings, onSettingsChange)
+        }
+        if ("webdav-queue" in visibleIds) item(key = "webdav-queue") { WebDavQueueSettingsSection() }
+        if ("presets" in visibleIds) item(key = "presets") {
+            PresetSettings(state, settings, onApplyPreset)
+        }
+        if ("image-processing" in visibleIds) item(key = "image-processing") {
+            ImageProcessingSettings(state, settings, onSettingsChange)
+        }
+        if ("professional-exposure" in visibleIds) item(key = "professional-exposure") {
+            ProfessionalExposureSettings(state, settings, onSettingsChange)
+        }
+        if ("fold-displays" in visibleIds) item(key = "fold-displays") {
+            FoldDisplaySettings(state, settings, onSettingsChange)
+        }
+        if ("layout" in visibleIds) item(key = "layout") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.mode_selector_style), color = Color.White, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 10.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 14.sp)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeSelectorStyle.entries.forEach { style ->
                         TextButton(onClick = { onSettingsChange(settings.copy(modeSelectorStyle = style)) }) {
                             Text(
@@ -2638,7 +2751,7 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
+        if ("audio" in visibleIds) item(key = "audio") {
             SettingsToggleRow(
                 title = stringResource(R.string.audio_recording),
                 summary = if (audioPermissionGranted) {
@@ -2652,14 +2765,18 @@ internal fun SettingsScreen(
             )
         }
         if (!audioPermissionGranted) {
-            item {
+            if ("audio-permission" in visibleIds) item(key = "audio-permission") {
                 Button(
                     onClick = onRequestAudioPermission,
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                 ) { Text(stringResource(R.string.grant_microphone)) }
             }
-        } else {
-            item {
+        }
+        if ("audio-format" in visibleIds) item(key = "audio-format") {
+            if (!audioPermissionGranted) {
+                Text(stringResource(R.string.audio_permission_summary), color = Muted, fontSize = 14.sp)
+                Button(onClick = onRequestAudioPermission) { Text(stringResource(R.string.grant_microphone)) }
+            } else {
                 ProfessionalAudioSettings(
                     state = state,
                     settings = settings,
@@ -2667,8 +2784,9 @@ internal fun SettingsScreen(
                 )
             }
         }
-        item {
+        if ("burst" in visibleIds) item(key = "burst") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.burst_capture_help), color = Color.LightGray)
                 Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = Color.White, fontWeight = FontWeight.Bold)
                 Slider(
                     value = settings.burstCount.toFloat(),
@@ -2678,10 +2796,10 @@ internal fun SettingsScreen(
                 )
             }
         }
-        item {
+        if ("bitrate" in visibleIds) item(key = "bitrate") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.video_bitrate), color = Color.White, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(12, 20, 40).forEach { bitrate ->
                         TextButton(onClick = { onSettingsChange(settings.copy(videoBitrateMbps = bitrate)) }) {
                             Text(
@@ -2694,11 +2812,11 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
+        if ("geometry" in visibleIds) item(key = "geometry") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.recording_geometry), color = Color.White, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 10.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 14.sp)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RecordingGeometryMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(recordingGeometryMode = mode)) }) {
                             Text(
@@ -2717,11 +2835,11 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
+        if ("anamorphic" in visibleIds) item(key = "anamorphic") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.anamorphic), color = Color.White, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 10.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 14.sp)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     AnamorphicSqueeze.entries.forEach { squeeze ->
                         TextButton(
                             onClick = { onSettingsChange(settings.copy(anamorphicSqueeze = squeeze)) },
@@ -2735,15 +2853,15 @@ internal fun SettingsScreen(
                                     AnamorphicSqueeze.SQUEEZE_2X -> "2x"
                                 },
                                 color = if (settings.anamorphicSqueeze == squeeze) Amber else Color.White,
-                                fontSize = 11.sp,
+                                fontSize = 14.sp,
                                 fontWeight = if (settings.anamorphicSqueeze == squeeze) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
                     }
                 }
                 if (settings.anamorphicSqueeze.isActive) {
-                    Text(stringResource(R.string.anamorphic_output), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.anamorphic_output), color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         AnamorphicOutputMode.entries.forEach { mode ->
                             TextButton(
                                 onClick = { onSettingsChange(settings.copy(anamorphicOutputMode = mode)) },
@@ -2755,7 +2873,7 @@ internal fun SettingsScreen(
                                         AnamorphicOutputMode.DESQUEEZED -> "DESQUEEZE"
                                     },
                                     color = if (settings.anamorphicOutputMode == mode) Amber else Color.White,
-                                    fontSize = 9.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = if (settings.anamorphicOutputMode == mode) FontWeight.Bold else FontWeight.Normal,
                                 )
                             }
@@ -2764,16 +2882,39 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
-            SettingsToggleRow(
-                title = stringResource(R.string.flash_torch),
-                summary = stringResource(R.string.flash_torch_summary),
-                checked = settings.flashEnabled && state.selectedMode != CaptureMode.LOG,
-                enabled = state.descriptor?.flashAvailable == true && state.selectedMode != CaptureMode.LOG,
-                onCheckedChange = { onSettingsChange(settings.copy(flashEnabled = it)) },
-            )
+        if ("accumulation" in visibleIds) item(key = "accumulation") {
+            AccumulationSettings(state, settings, onSettingsChange)
         }
-        item {
+        if ("bracket" in visibleIds) item(key = "bracket") {
+            BracketSettings(state, settings, onSettingsChange)
+        }
+        if ("lut-library" in visibleIds) item(key = "lut-library") {
+            LutLibrarySettings(state)
+        }
+        if ("monitoring-scopes" in visibleIds) item(key = "monitoring-scopes") {
+            MonitoringSettings(settings, onSettingsChange)
+        }
+        if ("photo-aspect" in visibleIds) item(key = "photo-aspect") {
+            PhotoAspectSettings(state, settings, onSettingsChange)
+        }
+        if ("photo-format" in visibleIds) item(key = "photo-format") {
+            PhotoFormatSettings(state, settings, onSettingsChange)
+        }
+        if ("photo-flash" in visibleIds) item(key = "photo-flash") {
+            PhotoFlashSettings(state, settings, onSettingsChange)
+        }
+        if ("torch" in visibleIds) item(key = "torch") {
+            TorchSettings(state, settings, onSettingsChange)
+        }
+        if ("zebra" in visibleIds) item(key = "zebra") {
+            SettingsToggleRow(title = stringResource(R.string.monitor_zebra), summary = null, checked = settings.zebraEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(zebraEnabled = it)) })
+        }
+        if ("peaking" in visibleIds) item(key = "peaking") {
+            SettingsToggleRow(title = stringResource(R.string.monitor_peaking), summary = null, checked = settings.peakingEnabled,
+                onCheckedChange = { onSettingsChange(settings.copy(peakingEnabled = it)) })
+        }
+        if ("histogram" in visibleIds) item(key = "histogram") {
             SettingsToggleRow(
                 title = stringResource(R.string.histogram_default),
                 summary = null,
@@ -2781,7 +2922,7 @@ internal fun SettingsScreen(
                 onCheckedChange = { onSettingsChange(settings.copy(histogramEnabled = it)) },
             )
         }
-        item {
+        if ("grid" in visibleIds) item(key = "grid") {
             SettingsToggleRow(
                 title = stringResource(R.string.composition_grid),
                 summary = stringResource(R.string.composition_grid_summary),
@@ -2789,10 +2930,10 @@ internal fun SettingsScreen(
                 onCheckedChange = { onSettingsChange(settings.copy(compositionGridEnabled = it)) },
             )
         }
-        item {
+        if ("grid-mode" in visibleIds) item(key = "grid-mode") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.composition_grid_mode), color = Color.White, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompositionGridMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
                             Text(
@@ -2812,7 +2953,7 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
+        if ("horizon" in visibleIds) item(key = "horizon") {
             SettingsToggleRow(
                 title = stringResource(R.string.horizon_level),
                 summary = stringResource(R.string.horizon_level_summary),
@@ -2820,7 +2961,7 @@ internal fun SettingsScreen(
                 onCheckedChange = { onSettingsChange(settings.copy(horizonLevelEnabled = it)) },
             )
         }
-        item {
+        if ("metering" in visibleIds) item(key = "metering") {
             SettingsToggleRow(
                 title = stringResource(R.string.tap_exposure_metering),
                 summary = stringResource(R.string.tap_exposure_metering_summary),
@@ -2828,7 +2969,7 @@ internal fun SettingsScreen(
                 onCheckedChange = { onSettingsChange(settings.copy(tapExposureMeteringEnabled = it)) },
             )
         }
-        item {
+        if ("assist" in visibleIds) item(key = "assist") {
             SettingsToggleRow(
                 title = stringResource(R.string.log_view_assist),
                 summary = stringResource(R.string.log_view_assist_summary),
@@ -2837,11 +2978,11 @@ internal fun SettingsScreen(
                 onCheckedChange = { onSettingsChange(settings.copy(logViewAssistEnabled = it)) },
             )
         }
-        item {
+        if ("focus-lock" in visibleIds) item(key = "focus-lock") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.af_lock_behavior), color = Color.White, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 10.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 14.sp)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AfLockBehavior.entries.forEach { behavior ->
                         TextButton(onClick = { onSettingsChange(settings.copy(afLockBehavior = behavior)) }) {
                             Text(
@@ -2855,48 +2996,10 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text("Timecode SMPTE", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Generates timecode for VIDEO and LOG. Saved in the sidecar.", color = Muted, fontSize = 10.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onSettingsChange(settings.copy(timecodeEnabled = !settings.timecodeEnabled)) }) {
-                        Text(if (settings.timecodeEnabled) "ON" else "OFF", color = if (settings.timecodeEnabled) Amber else Color.White, fontWeight = if (settings.timecodeEnabled) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
-                if (settings.timecodeEnabled) {
-                    Text("Modo", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TimecodeMode.entries.forEach { mode ->
-                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeMode = mode)) }, contentPadding = PaddingValues(0.dp)) {
-                                Text(when (mode) {
-                                    TimecodeMode.FREE_RUN -> "FREE"
-                                    TimecodeMode.RECORD_RUN -> "REC"
-                                    TimecodeMode.REGEN -> "REGEN"
-                                }, color = if (settings.timecodeMode == mode) Amber else Color.White, fontSize = 9.sp, fontWeight = if (settings.timecodeMode == mode) FontWeight.Bold else FontWeight.Normal)
-                            }
-                        }
-                    }
-                    Text("Tasa", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(24, 25, 30, 50, 60).forEach { fps ->
-                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeNominalFps = fps, timecodeDropFrame = false)) }, contentPadding = PaddingValues(0.dp)) {
-                                Text("", color = if (settings.timecodeNominalFps == fps && !settings.timecodeDropFrame) Amber else Color.White, fontSize = 9.sp)
-                            }
-                        }
-                    }
-                    if (settings.timecodeNominalFps in setOf(30, 60)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { onSettingsChange(settings.copy(timecodeDropFrame = !settings.timecodeDropFrame)) }, contentPadding = PaddingValues(0.dp)) {
-                                Text(if (settings.timecodeDropFrame) "DF" else "NDF", color = if (settings.timecodeDropFrame) Amber else Color.White, fontSize = 9.sp, fontWeight = if (settings.timecodeDropFrame) FontWeight.Bold else FontWeight.Normal)
-                            }
-                        }
-                    }
-                    Text("Start TC: %02d:%02d:%02d%s%02d".format(settings.timecodeStartHours, settings.timecodeStartMinutes, settings.timecodeStartSeconds, if (settings.timecodeDropFrame) ";" else ":", settings.timecodeStartFrames), color = VerifiedCyan, fontSize = 11.sp)
-                }
-            }
+        if ("timecode" in visibleIds) item(key = "timecode") {
+            TimecodeSettings(settings, onSettingsChange)
         }
-        item {
+        if ("hardware" in visibleIds) item(key = "hardware") {
             val descriptor = state.descriptor
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
@@ -2922,18 +3025,18 @@ internal fun SettingsScreen(
                         descriptor?.supportsOpenCineLog == true -> Amber
                         else -> RecordRed
                     },
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                 )
             }
         }
-        items(CaptureMode.entries) { mode ->
+        if ("modes" in visibleIds) items(CaptureMode.entries) { mode ->
             val gate = state.modeGates.getValue(mode)
             Row(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(7.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(modeLabel(mode), color = Color.White, fontSize = 12.sp)
-                Text(gateLabel(gate), color = gateColor(gate), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(modeLabel(mode), color = Color.White, fontSize = 14.sp)
+                Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
-        item {
+        if ("about" in visibleIds) item(key = "about") {
             val aboutDescription = stringResource(R.string.about_settings_summary)
             Row(
                 modifier = Modifier
@@ -2949,7 +3052,7 @@ internal fun SettingsScreen(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.about_title), color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(aboutDescription, color = Muted, fontSize = 10.sp)
+                    Text(aboutDescription, color = Muted, fontSize = 14.sp)
                 }
                 Text("›", color = Amber, fontSize = 22.sp)
             }
@@ -2969,12 +3072,15 @@ private fun ProfessionalAudioSettings(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(stringResource(R.string.professional_audio), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        AudioListeningSettingsControls(state, settings, onSettingsChange, LocalAudioListeningActions.current)
+        AudioEffectsSettingsStatus(state, settings)
+        AudioMeterSettingsControls(settings, onSettingsChange)
         if (capabilities == null) {
-            Text(stringResource(R.string.audio_measuring), color = Muted, fontSize = 11.sp)
+            Text(stringResource(R.string.audio_measuring), color = Muted, fontSize = 14.sp)
             return@Column
         }
         if (capabilities.formats.isEmpty()) {
-            Text(stringResource(R.string.audio_no_route), color = RecordRed, fontSize = 11.sp)
+            Text(stringResource(R.string.audio_no_route), color = RecordRed, fontSize = 14.sp)
             return@Column
         }
         fun update(candidate: CameraSettings) = onSettingsChange(candidate.normalizedFor(capabilities))
@@ -3050,11 +3156,11 @@ private fun ProfessionalAudioSettings(
                 choices = capabilities.aacBitratesKbps.map { it.toString() to "$it kbps" },
                 selected = settings.audioBitrateKbps.toString(),
             ) { bitrate -> update(settings.copy(audioBitrateKbps = bitrate.toInt())) }
-            Text("AAC-LC is embedded in the MP4. AGC applies to LOG recording; it does not apply to standard video (MediaRecorder).", color = Muted, fontSize = 10.sp)
+            Text(stringResource(R.string.audio_gain_aac_backend), color = Muted, fontSize = 14.sp)
         } else {
             val derived = settings.audioSampleRateHz * settings.audioBitDepth.bits * settings.audioChannels / 1_000
             val container = if (settings.audioOutputFormat == AudioOutputFormat.FLAC) "Lossless compressed FLAC" else "WAV PCM"
-            Text("$container · PCM fuente: $derived kbps · archivo sincronizado junto al video", color = VerifiedCyan, fontSize = 10.sp)
+            Text("$container · PCM fuente: $derived kbps · archivo sincronizado junto al video", color = VerifiedCyan, fontSize = 14.sp)
         }
 
         AudioChoiceRow(
@@ -3068,34 +3174,325 @@ private fun ProfessionalAudioSettings(
             choices = listOf("auto" to stringResource(R.string.audio_automatic)) + capabilities.inputs.map { it.id.toString() to "${it.label} · ID ${it.id}" },
             selected = settings.audioInputDeviceId?.toString() ?: "auto",
         ) { id -> update(settings.copy(audioInputDeviceId = id.takeUnless { it == "auto" }?.toInt())) }
-        Text("Android lets you choose the input device; it does not guarantee selecting an individual internal capsule.", color = Muted, fontSize = 10.sp)
+        Text("Android lets you choose the input device; it does not guarantee selecting an individual internal capsule.", color = Muted, fontSize = 14.sp)
 
-        if (settings.audioOutputFormat != AudioOutputFormat.AAC_MP4) {
-            SettingsToggleRow(
-                title = "Noise suppression (NS)",
-                summary = "The effective state is saved in .audio.json.",
-                checked = settings.noiseSuppressorEnabled,
-                enabled = capabilities.noiseSuppressorAvailable,
-                onCheckedChange = { update(settings.copy(noiseSuppressorEnabled = it)) },
-            )
-            SettingsToggleRow(
-                title = "Echo cancellation (AEC)",
-                summary = "Useful for speech; off by default.",
-                checked = settings.acousticEchoCancelerEnabled,
-                enabled = capabilities.acousticEchoCancelerAvailable,
-                onCheckedChange = { update(settings.copy(acousticEchoCancelerEnabled = it)) },
-            )
-        }
         SettingsToggleRow(
-                title = "Automatic gain (AGC)",
-                summary = "On by default for a consistent level; turn it off to preserve dynamics.",
-                checked = settings.automaticGainControlEnabled,
-                // Always interactive: hardware AGC when the HAL exposes it, in-process
-                // SoftAgc otherwise.
-                enabled = true,
-                onCheckedChange = { update(settings.copy(automaticGainControlEnabled = it)) },
+            title = stringResource(R.string.audio_effect_ns),
+            summary = stringResource(R.string.audio_effect_request_help),
+            checked = settings.noiseSuppressorEnabled,
+            enabled = capabilities.noiseSuppressorAvailable,
+            onCheckedChange = { update(settings.copy(noiseSuppressorEnabled = it)) },
         )
-        Text("AAC is embedded in the MP4. WAV and FLAC are saved as synchronized sidecars with capture metadata.", color = Muted, fontSize = 10.sp)
+        SettingsToggleRow(
+            title = stringResource(R.string.audio_effect_aec),
+            summary = stringResource(R.string.audio_effect_request_help),
+            checked = settings.acousticEchoCancelerEnabled,
+            enabled = capabilities.acousticEchoCancelerAvailable,
+            onCheckedChange = { update(settings.copy(acousticEchoCancelerEnabled = it)) },
+        )
+        AudioRecordingGainSettings(state, settings, onSettingsChange)
+        Text("AAC is embedded in the MP4. WAV and FLAC are saved as synchronized sidecars with capture metadata.", color = Muted, fontSize = 14.sp)
+    }
+}
+
+/** Edits target the next admitted capture; the service owns saved-take increment and publication. */
+@Composable
+internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: CameraSettings, onSettingsChange: (CameraSettings) -> Unit) {
+    val slate = settings.productionSlate
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(stringResource(R.string.production_slate_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.production_slate_help), Modifier.testTag("slate-help"), color = Muted, fontSize = 14.sp)
+        if (state.structuralSettingsFrozen && state.effectiveSettings?.productionSlate?.let { it != slate } == true) {
+            Text(stringResource(R.string.production_slate_pending), Modifier.testTag("slate-pending"), color = Amber, fontSize = 14.sp)
+        }
+        ProductionSlateTextField("project", R.string.production_slate_project, slate.project) { onSettingsChange(settings.copy(productionSlate = slate.copy(project = it))) }
+        ProductionSlateTextField("camera", R.string.production_slate_camera, slate.camera) { onSettingsChange(settings.copy(productionSlate = slate.copy(camera = it))) }
+        ProductionSlateTextField("scene", R.string.production_slate_scene, slate.scene) { onSettingsChange(settings.copy(productionSlate = slate.copy(scene = it))) }
+        ProductionSlateTextField("reel", R.string.production_slate_reel, slate.reel) { onSettingsChange(settings.copy(productionSlate = slate.copy(reel = it))) }
+        ProductionSlateTextField("lens", R.string.production_slate_lens, slate.lens) { onSettingsChange(settings.copy(productionSlate = slate.copy(lens = it))) }
+        var takeText by rememberSaveable(slate.takeNumber) { mutableStateOf(slate.takeNumber.toString()) }
+        val take = takeText.toIntOrNull()?.takeIf { it in 1..999999 && it.toString() == takeText }
+        OutlinedTextField(takeText, { value ->
+            takeText = value
+            value.toIntOrNull()?.takeIf { it in 1..999999 && it.toString() == value }?.let { onSettingsChange(settings.copy(productionSlate = slate.copy(takeNumber = it))) }
+        }, label = { Text(stringResource(R.string.production_slate_take), Modifier.fillMaxWidth().testTag("slate-take-label")) }, isError = take == null,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("slate-take"))
+        if (take == null) Text(stringResource(R.string.production_slate_invalid_take), Modifier.testTag("slate-take-invalid"), color = Amber, fontSize = 14.sp)
+        Text(stringResource(R.string.production_slate_location), color = Color.White)
+        for (location in ProductionSlateLocation.entries) {
+            OutlinedButton(onClick = { onSettingsChange(settings.copy(productionSlate = slate.copy(location = location))) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slate-location-$location").semantics { selected = slate.location == location }) {
+                Text(stringResource(when (location) {
+                    ProductionSlateLocation.UNSPECIFIED -> R.string.production_slate_unspecified
+                    ProductionSlateLocation.INTERIOR -> R.string.production_slate_interior
+                    ProductionSlateLocation.EXTERIOR -> R.string.production_slate_exterior
+                }), Modifier.weight(1f).testTag("slate-location-$location-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        Text(stringResource(R.string.production_slate_time), color = Color.White)
+        for (time in ProductionSlateTimeOfDay.entries) {
+            OutlinedButton(onClick = { onSettingsChange(settings.copy(productionSlate = slate.copy(timeOfDay = time))) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slate-time-$time").semantics { selected = slate.timeOfDay == time }) {
+                Text(stringResource(when (time) {
+                    ProductionSlateTimeOfDay.UNSPECIFIED -> R.string.production_slate_unspecified
+                    ProductionSlateTimeOfDay.DAY -> R.string.production_slate_day
+                    ProductionSlateTimeOfDay.NIGHT -> R.string.production_slate_night
+                }), Modifier.weight(1f).testTag("slate-time-$time-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        val goodLabel = stringResource(R.string.production_slate_good)
+        Text(goodLabel, Modifier.fillMaxWidth().testTag("slate-good-label"), color = Color.White)
+        Switch(slate.goodTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(goodTake = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("slate-good").semantics { contentDescription = goodLabel })
+        val incrementLabel = stringResource(R.string.production_slate_increment)
+        Text(incrementLabel, Modifier.fillMaxWidth().testTag("slate-increment-label"), color = Color.White)
+        Switch(slate.autoIncrementTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(autoIncrementTake = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("slate-increment").semantics { contentDescription = incrementLabel })
+    }
+}
+
+@Composable
+private fun ProductionSlateTextField(tag: String, label: Int, value: String, onChange: (String) -> Unit) {
+    var draft by rememberSaveable(value) { mutableStateOf(value) }
+    val valid = validProductionSlateText(draft)
+    OutlinedTextField(draft, { draft = it; if (validProductionSlateText(it)) onChange(it) },
+        label = { Text(stringResource(label), Modifier.fillMaxWidth().testTag("slate-$tag-label")) }, isError = !valid,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("slate-$tag"))
+    if (!valid) Text(stringResource(R.string.production_slate_invalid_text), Modifier.testTag("slate-$tag-invalid"), color = Amber, fontSize = 14.sp)
+}
+
+/** All controls below are live presentation preferences, not microphone or encoder settings. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChange: (CameraSettings) -> Unit) {
+    val options = settings.audioMeter
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.audio_meter_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_meter_help), Modifier.testTag("audio-meter-settings-help"), color = Muted, fontSize = 14.sp)
+        val visibleLabel = stringResource(R.string.audio_meter_visible)
+        Text(visibleLabel, color = Color.White)
+        Switch(options.visible, { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-meter-settings-visible").semantics { contentDescription = visibleLabel })
+        for (mode in AudioMeterMode.entries) {
+            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioMeter = options.copy(mode = mode))) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-meter-settings-mode-$mode").semantics { selected = options.mode == mode }) {
+                Text(stringResource(audioMeterModeLabel(mode)), Modifier.weight(1f).testTag("audio-meter-settings-mode-$mode-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        val referenceLabel = stringResource(R.string.audio_meter_reference, options.vuReferenceDbfs)
+        Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = Color.White)
+        val referenceInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Slider(options.vuReferenceDbfs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(vuReferenceDbfs = it.roundToInt()))) },
+            valueRange = -24f..-6f, steps = 17, interactionSource = referenceInteraction,
+            thumb = { androidx.compose.material3.SliderDefaults.Thumb(referenceInteraction, thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
+            track = { androidx.compose.material3.SliderDefaults.Track(it) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-meter-settings-reference").semantics { contentDescription = referenceLabel })
+        val holdLabel = stringResource(R.string.audio_meter_hold, options.peakHoldMs)
+        Text(holdLabel, Modifier.testTag("audio-meter-settings-hold-label"), color = Color.White)
+        val holdInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Slider(options.peakHoldMs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(peakHoldMs = it.roundToInt()))) },
+            valueRange = 0f..3000f, interactionSource = holdInteraction,
+            thumb = { androidx.compose.material3.SliderDefaults.Thumb(holdInteraction, thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
+            track = { androidx.compose.material3.SliderDefaults.Track(it) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-meter-settings-hold").semantics { contentDescription = holdLabel })
+        val valuesLabel = stringResource(R.string.audio_meter_numbers)
+        Text(valuesLabel, color = Color.White)
+        Switch(options.showValues, { onSettingsChange(settings.copy(audioMeter = options.copy(showValues = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-meter-settings-values").semantics { contentDescription = valuesLabel })
+    }
+}
+
+/** Observations belong to the current PCM producer, never to a capability or preference. */
+@Composable
+internal fun AudioEffectsSettingsStatus(state: CameraUiState, settings: CameraSettings) {
+    val receipt = state.audioLevels?.effects.takeIf { state.audioMonitoringActive }
+    val effective = state.effectiveSettings
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.audio_effect_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_effect_help), Modifier.testTag("audio-effects-help"), color = Muted, fontSize = 14.sp)
+        if (settings.audioRecordingGain.enabled) {
+            Text(stringResource(R.string.audio_effect_manual), Modifier.testTag("audio-effects-manual"), color = Amber, fontSize = 14.sp)
+        }
+        AudioEffectStatusRow("ns", R.string.audio_effect_ns, settings.noiseSuppressorEnabled,
+            receipt?.noiseSuppressor, state.structuralSettingsFrozen && effective != null &&
+                effective.noiseSuppressorEnabled != settings.noiseSuppressorEnabled)
+        AudioEffectStatusRow("agc", R.string.audio_effect_agc, settings.automaticGainControlEnabled,
+            receipt?.automaticGainControl, state.structuralSettingsFrozen && effective != null &&
+                (effective.automaticGainControlEnabled != settings.automaticGainControlEnabled ||
+                    effective.audioRecordingGain.enabled != settings.audioRecordingGain.enabled))
+        AudioEffectStatusRow("aec", R.string.audio_effect_aec, settings.acousticEchoCancelerEnabled,
+            receipt?.acousticEchoCanceler, state.structuralSettingsFrozen && effective != null &&
+                effective.acousticEchoCancelerEnabled != settings.acousticEchoCancelerEnabled)
+    }
+}
+
+@Composable
+private fun AudioEffectStatusRow(tag: String, title: Int, requested: Boolean,
+    observation: com.librestatic.opencinecam.camera.AudioEffectObservation?, pending: Boolean) {
+    fun field(name: String) = Modifier.testTag("audio-effects-$tag-$name")
+    val yes = stringResource(R.string.audio_effect_yes)
+    val no = stringResource(R.string.audio_effect_no)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(title), field("title"), color = Color.White, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_effect_requested, if (requested) yes else no), field("requested"), color = Color.White, fontSize = 14.sp)
+        if (observation == null) {
+            Text(stringResource(R.string.audio_effect_unobserved), field("state"), color = Muted, fontSize = 14.sp)
+        } else {
+            Text(stringResource(R.string.audio_effect_receipt_requested, if (observation.requested) yes else no), field("receipt"), color = Muted, fontSize = 14.sp)
+            val stateLabel = stringResource(when (observation.state) {
+                com.librestatic.opencinecam.camera.AudioEffectState.UNKNOWN -> R.string.audio_effect_unknown
+                com.librestatic.opencinecam.camera.AudioEffectState.UNAVAILABLE -> R.string.audio_effect_unavailable
+                com.librestatic.opencinecam.camera.AudioEffectState.ENABLED -> R.string.audio_effect_enabled
+                com.librestatic.opencinecam.camera.AudioEffectState.DISABLED -> R.string.audio_effect_disabled
+                com.librestatic.opencinecam.camera.AudioEffectState.FAILED -> R.string.audio_effect_failed
+            })
+            Text(stringResource(R.string.audio_effect_observed, stateLabel), field("state"), color = Color.White, fontSize = 14.sp)
+            val implementation = stringResource(when (observation.implementation) {
+                com.librestatic.opencinecam.camera.AudioEffectImplementation.NONE -> R.string.audio_effect_none
+                com.librestatic.opencinecam.camera.AudioEffectImplementation.PLATFORM -> R.string.audio_effect_platform
+                com.librestatic.opencinecam.camera.AudioEffectImplementation.SOFTWARE -> R.string.audio_effect_software
+            })
+            Text(stringResource(R.string.audio_effect_implementation, implementation), field("implementation"), color = Muted, fontSize = 14.sp)
+            val control = when (observation.hasControl) { true -> yes; false -> no; null -> stringResource(R.string.audio_effect_control_unknown) }
+            Text(stringResource(R.string.audio_effect_control, control), field("control"), color = Muted, fontSize = 14.sp)
+            if (observation.configurationFailed) Text(stringResource(R.string.audio_effect_configuration_failed), field("configuration-failed"), color = Amber, fontSize = 14.sp)
+        }
+        if (pending) Text(stringResource(R.string.audio_effect_pending), field("pending"), color = Amber, fontSize = 14.sp)
+    }
+}
+
+/** Playback request is separate from both microphone ownership and recorded-sample gain. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioListeningSettingsControls(
+    state: CameraUiState,
+    settings: CameraSettings,
+    onSettingsChange: (CameraSettings) -> Unit,
+    onReconnect: () -> Unit,
+) {
+    val request = settings.audioListening
+    val status = state.audioListeningStatus
+    val enabledLabel = stringResource(R.string.audio_listening_enable)
+    val volumeLabel = stringResource(R.string.audio_listening_volume, request.volumePercent)
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.audio_listening_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_listening_help), Modifier.testTag("audio-listening-help"), color = Muted, fontSize = 14.sp)
+        Text(enabledLabel, color = Color.White)
+        Switch(checked = request.enabled,
+            onCheckedChange = { onSettingsChange(settings.copy(audioListening = request.copy(enabled = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-listening-enable").semantics { contentDescription = enabledLabel })
+        Text(volumeLabel, Modifier.testTag("audio-listening-volume-label"), color = Color.White)
+        Slider(value = request.volumePercent.toFloat(), onValueChange = {
+            onSettingsChange(settings.copy(audioListening = request.copy(volumePercent = it.roundToInt())))
+        }, valueRange = 0f..100f, steps = 99, interactionSource = interaction,
+            thumb = { androidx.compose.material3.SliderDefaults.Thumb(interactionSource = interaction,
+                thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
+            track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-listening-volume").semantics { contentDescription = volumeLabel })
+        for (output in AudioListeningOutput.entries) {
+            val label = stringResource(when (output) {
+                AudioListeningOutput.WIRED_USB -> R.string.audio_listening_wired
+                AudioListeningOutput.BLUETOOTH -> R.string.audio_listening_bluetooth
+                AudioListeningOutput.SPEAKER -> R.string.audio_listening_speaker
+            })
+            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListening = request.copy(output = output), audioListeningOutputDeviceId = null)) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-output-${output.name}").semantics { selected = request.output == output }) {
+                Text(label, Modifier.weight(1f).testTag("audio-listening-output-${output.name}-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        Text(stringResource(if (request.output == AudioListeningOutput.SPEAKER) R.string.audio_listening_speaker_warning else R.string.audio_listening_latency),
+            Modifier.testTag("audio-listening-route-help"), color = Muted, fontSize = 14.sp)
+        OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = null)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-device-auto").semantics { selected = settings.audioListeningOutputDeviceId == null }) {
+            Text(stringResource(R.string.audio_listening_auto), Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+        for (device in state.audioListeningOutputs.filter { it.output == request.output }) {
+            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = device.id)) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-device-${device.id}").semantics { selected = settings.audioListeningOutputDeviceId == device.id }) {
+                Text(device.name, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        Text(stringResource(R.string.audio_listening_requested_device,
+            settings.audioListeningOutputDeviceId?.toString() ?: stringResource(R.string.audio_listening_auto)),
+            Modifier.testTag("audio-listening-requested-device"), color = Color.White, fontSize = 14.sp)
+        val phaseLabel = stringResource(when (status.phase) {
+            AudioListeningPhase.DISABLED -> R.string.audio_listening_disabled
+            AudioListeningPhase.NEEDS_CONNECT -> R.string.audio_listening_needs_connect
+            AudioListeningPhase.WAITING_PCM -> R.string.audio_listening_waiting_pcm
+            AudioListeningPhase.NO_OUTPUT -> R.string.audio_listening_no_output
+            AudioListeningPhase.CONNECTING -> R.string.audio_listening_connecting
+            AudioListeningPhase.ACTIVE -> R.string.audio_listening_active
+            AudioListeningPhase.DISCONNECTED -> R.string.audio_listening_disconnected
+            AudioListeningPhase.FAILED -> R.string.audio_listening_failed
+            AudioListeningPhase.RETIRING -> R.string.audio_listening_retiring
+        })
+        Text(phaseLabel, Modifier.testTag("audio-listening-status"), color = if (status.phase == AudioListeningPhase.ACTIVE) VerifiedCyan else Muted)
+        status.effectiveDeviceId?.let { id ->
+            Text(stringResource(R.string.audio_listening_effective_device, status.deviceName ?: id.toString(), id),
+                Modifier.testTag("audio-listening-effective-device"), color = Color.White, fontSize = 14.sp)
+        }
+        Text(stringResource(R.string.audio_listening_counters, status.acceptedFrames, status.droppedPackets),
+            Modifier.testTag("audio-listening-counters"), color = Muted, fontSize = 14.sp)
+        status.message?.let { Text(it, Modifier.testTag("audio-listening-message"), color = Muted, fontSize = 14.sp) }
+        OutlinedButton(onClick = onReconnect,
+            enabled = request.enabled && status.phase !in setOf(AudioListeningPhase.CONNECTING, AudioListeningPhase.RETIRING),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-connect")) {
+            Text(stringResource(R.string.audio_listening_connect), Modifier.weight(1f).testTag("audio-listening-connect-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
+
+/** Intent controls only: meters are not proof of headphone playback or native gain application. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun AudioRecordingGainSettings(
+    state: CameraUiState,
+    settings: CameraSettings,
+    onSettingsChange: (CameraSettings) -> Unit,
+) {
+    val gain = settings.audioRecordingGain
+    val manualLabel = stringResource(R.string.audio_gain_manual)
+    val agcLabel = stringResource(R.string.audio_gain_agc_requested)
+    val requestedLabel = stringResource(R.string.audio_gain_requested, gain.decibels)
+    val gainInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.audio_gain_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_gain_help), Modifier.testTag("audio-gain-help"), color = Muted, fontSize = 14.sp)
+        Text(manualLabel, color = Color.White)
+        Switch(checked = gain.enabled,
+            onCheckedChange = { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-gain-manual").semantics { contentDescription = manualLabel })
+        Text(requestedLabel,
+            Modifier.testTag("audio-gain-value"), color = Color.White)
+        Slider(value = gain.decibels.toFloat(), valueRange = -24f..24f, steps = 47,
+            enabled = gain.enabled,
+            onValueChange = { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(decibels = it.roundToInt()))) },
+            interactionSource = gainInteraction,
+            // Material3's inner slider measures from the thumb (44 dp by default), not the
+            // outer minimum. Enlarge the actual thumb/layout, rather than tagging empty padding.
+            thumb = { androidx.compose.material3.SliderDefaults.Thumb(
+                interactionSource = gainInteraction, enabled = gain.enabled,
+                thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
+            track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it, enabled = gain.enabled) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-gain-slider").semantics { contentDescription = requestedLabel })
+        Text(agcLabel, color = Color.White)
+        Switch(checked = settings.automaticGainControlEnabled, enabled = !gain.enabled,
+            onCheckedChange = { onSettingsChange(settings.copy(automaticGainControlEnabled = it)) },
+            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-gain-agc").semantics { contentDescription = agcLabel })
+        Text(stringResource(if (gain.enabled) R.string.audio_gain_agc_suspended else R.string.audio_gain_agc_backend),
+            Modifier.testTag("audio-gain-agc-help"), color = Muted, fontSize = 14.sp)
+        val applied = state.audioLevels?.appliedRecordingGain.takeIf { state.audioMonitoringActive }
+        Text(when {
+            applied == null -> stringResource(R.string.audio_gain_no_receipt)
+            applied.enabled -> stringResource(R.string.audio_gain_applied, applied.decibels)
+            else -> stringResource(R.string.audio_gain_manual_not_applied)
+        }, Modifier.testTag("audio-gain-applied"), color = if (applied == null) Muted else VerifiedCyan, fontSize = 14.sp)
+        if (state.structuralSettingsFrozen && (state.effectiveSettings?.audioRecordingGain != gain ||
+                state.effectiveSettings?.automaticGainControlEnabled != settings.automaticGainControlEnabled)) {
+            Text(stringResource(R.string.audio_gain_pending), Modifier.testTag("audio-gain-pending"), color = Amber, fontSize = 14.sp)
+        }
     }
 }
 
@@ -3107,9 +3504,9 @@ private fun AudioChoiceRow(
     onSelected: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val columns = if (maxWidth < 600.dp) 2 else 3
+            val columns = if (maxWidth < 600.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) 1 else 2
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 choices.chunked(columns).forEach { rowChoices ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -3122,8 +3519,8 @@ private fun AudioChoiceRow(
                                     label,
                                     color = if (selected == value) Amber else Color.White,
                                     fontWeight = if (selected == value) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 11.sp,
-                                    maxLines = 2,
+                                    fontSize = 14.sp,
+
                                 )
                             }
                         }
@@ -3164,64 +3561,15 @@ private fun SettingsToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange).background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, color = if (enabled) Color.White else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            summary?.let { Text(it, color = Muted, fontSize = 10.sp) }
+            Text(title, color = if (enabled) Color.White else Muted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            summary?.let { Text(it, color = Muted, fontSize = 14.sp) }
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun MediaScreen() {
-    val context = LocalContext.current
-    var media by remember { mutableStateOf<List<LocalMediaItem>>(emptyList()) }
-    var loaded by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        media = withContext(Dispatchers.IO) { LocalMediaRepository(context.applicationContext).recent() }
-        loaded = true
-    }
-    if (loaded && media.isEmpty()) {
-        CenterMessage(stringResource(R.string.no_media_yet))
-        return
-    }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Graphite).padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        item { Text(stringResource(R.string.media_tab), color = Amber, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) }
-        items(media, key = { it.uri.toString() }) { item ->
-            Row(
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).clickable {
-                    val intent = Intent(Intent.ACTION_VIEW).setDataAndType(item.uri, item.mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    runCatching { context.startActivity(intent) }
-                }.padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                item.thumbnail?.let { bitmap ->
-                    Image(bitmap.asImageBitmap(), contentDescription = item.name, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(6.dp)))
-                } ?: Box(Modifier.size(72.dp).background(Color(0xFF303638), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
-                    Text(
-                        when {
-                            item.mimeType.contains("video") -> "VIDEO"
-                            item.mimeType.contains("audio") || item.mimeType.contains("wav") -> "AUDIO"
-                            else -> "RAW"
-                        },
-                        color = VerifiedCyan,
-                        fontSize = 10.sp,
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.widthIn(max = 600.dp)) {
-                    Text(item.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${item.mimeType} · ${item.sizeBytes / 1024} KiB", color = Muted, fontSize = 10.sp)
-                }
-            }
-        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 

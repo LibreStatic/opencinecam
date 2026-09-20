@@ -27,6 +27,10 @@ android {
 
     buildTypes {
         debug {
+            // Native AndroidX graphics on x86_64 emulators; release remains ARM64-only.
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
@@ -87,6 +91,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.window)

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="monitoring_title">Monitoring scopes and overlays</string>
+    <string name="monitoring_signal_help">Thresholds use signal-code percentages, not calibrated IRE or sensor exposure. Scopes sample before view assist; monitoring is not baked into saved media.</string>
+    <string name="monitoring_source_help">Source color limits apply: ISP YUV is an SDR estimate; SDR and OC-Log2 codes are different domains. These tools do not certify HDR or display color accuracy.</string>
+    <string name="monitoring_waveform">Waveform</string>
+    <string name="monitoring_vectorscope">Vectorscope</string>
+    <string name="monitoring_false_color">False color</string>
+    <string name="monitoring_zebra">Zebra highlights (master switch)</string>
+    <string name="monitoring_zebra_shadow">Include shadow zebra when zebra is enabled</string>
+    <string name="monitoring_peaking">Focus peaking</string>
+    <string name="monitoring_peaking_threshold">Peaking edge threshold (1–255)</string>
+    <string name="monitoring_opacity">Overlay opacity (%)</string>
+    <string name="monitoring_zebra_color">Zebra color</string>
+    <string name="monitoring_peaking_color">Peaking color</string>
+    <string name="monitoring_luma_color">Luma scope color</string>
+    <string name="monitoring_false_palette">False-color palette</string>
+    <string name="monitoring_palette_classic">Classic</string>
+    <string name="monitoring_palette_high_contrast">High contrast</string>
+    <string name="monitoring_frequency_help">Requested refresh frequency is 1–10 Hz. Actual updates may be slower when frames or processing are unavailable; stale readings are not current measurements.</string>
+    <string name="monitoring_refresh">Requested refresh (Hz)</string>
+    <string name="monitoring_aspect">Aspect guide</string>
+    <string name="monitoring_aspect_none">No aspect guide</string>
+    <string name="monitoring_aspect_wide">Widescreen · 16:9</string>
+    <string name="monitoring_aspect_photo">Photo · 4:3</string>
+    <string name="monitoring_aspect_square">Square · 1:1</string>
+    <string name="monitoring_aspect_cinema">Cinema · 2.39:1</string>
+    <string name="monitoring_safe_area">Safe-area guide</string>
+    <string name="monitoring_safe_percent">Safe area (% of frame)</string>
+    <string name="monitoring_guides_help">Composition guides only: they do not crop, resize or change the saved frame.</string>
+    <string name="monitoring_apply">Apply values</string>
+    <string name="monitoring_range">Valid range: %1$d–%2$d</string>
+    <string name="monitoring_color_cyan">Cyan</string>
+    <string name="monitoring_color_yellow">Yellow</string>
+    <string name="monitoring_color_red">Red</string>
+    <string name="monitoring_color_green">Green</string>
+    <string name="monitoring_color_white">White</string>
+    <string name="monitoring_zebra_low">Shadow zebra code (%)</string>
+    <string name="monitoring_zebra_high">Highlight zebra code (%)</string>
+    <string name="monitoring_zebra_order">Use 0 ≤ shadow &lt; highlight ≤ 100. Apply both thresholds together.</string>
+    <string name="monitoring_false_black">False color: black boundary (%)</string>
+    <string name="monitoring_false_shadow">False color: shadow boundary (%)</string>
+    <string name="monitoring_false_highlight">False color: highlight boundary (%)</string>
+    <string name="monitoring_false_clip">False color: clipping boundary (%)</string>
+    <string name="monitoring_false_order">Use 0 ≤ black &lt; shadow &lt; highlight &lt; clipping ≤ 100. Invalid edits are not saved.</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Production slate</string>
+    <string name="production_slate_help">Descriptive metadata for the next capture. The admitted slate stays frozen through recording and publication; edits during a take remain pending. Automatic numbering advances only after a saved capture and only if the slate has not changed. The UUID, not the take number, identifies a capture. These fields do not change filenames, detect a lens or collect GPS coordinates.</string>
+    <string name="production_slate_pending">Slate changes pending for the next capture; the current capture retains its admitted metadata.</string>
+    <string name="production_slate_project">Project</string>
+    <string name="production_slate_camera">Camera label</string>
+    <string name="production_slate_scene">Scene</string>
+    <string name="production_slate_reel">Reel</string>
+    <string name="production_slate_lens">Lens label (manual)</string>
+    <string name="production_slate_take">Take number (1–999999)</string>
+    <string name="production_slate_invalid_text">Use at most 128 UTF-16 units, without control characters, line breaks or invalid Unicode. This edit has not been saved.</string>
+    <string name="production_slate_invalid_take">Enter a whole number from 1 to 999999 without leading zeroes. This edit has not been saved.</string>
+    <string name="production_slate_location">Scene location</string>
+    <string name="production_slate_time">Scene time of day</string>
+    <string name="production_slate_unspecified">Unspecified</string>
+    <string name="production_slate_interior">Interior</string>
+    <string name="production_slate_exterior">Exterior</string>
+    <string name="production_slate_day">Day</string>
+    <string name="production_slate_night">Night</string>
+    <string name="production_slate_good">Mark as a good take</string>
+    <string name="production_slate_increment">Advance take number after a saved capture (never past 999999)</string>
+    <string name="production_slate_increment_failed">Saved media retained; check the next slate take number.</string>
+</resources>

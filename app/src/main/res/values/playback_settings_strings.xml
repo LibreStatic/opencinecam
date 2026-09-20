@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Playback preferences</string>
+    <string name="playback_settings_help">These preferences apply to the local viewer, not capture audio, recording gain or media files. Playback requires an explicit Play action. Playback position is not saved in preferences or presets.</string>
+    <string name="playback_settings_muted">Mute playback audio</string>
+    <string name="playback_settings_loop">Repeat after playback reaches the end</string>
+    <string name="playback_settings_frame_position">Show the viewer frame position</string>
+</resources>

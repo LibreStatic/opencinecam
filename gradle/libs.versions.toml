@@ -9,6 +9,8 @@ activityCompose = "1.13.0"
 coreKtx = "1.19.0"
 lifecycle = "2.11.0"
 window = "1.5.1"
+exifInterface = "1.4.2"
+media3 = "1.11.0"
 junit = "4.13.2"
 androidxJunit = "1.3.0"
 espresso = "3.7.0"
@@ -16,6 +18,8 @@ serializationJson = "1.9.0"
 coroutines = "1.9.0"
 
 [libraries]
+androidx-media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "media3" }
+androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifInterface" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }

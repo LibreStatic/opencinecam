@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="monitoring_title">Instrumentos y superposiciones de monitoreo</string>
+    <string name="monitoring_signal_help">Los umbrales usan porcentajes del código de señal, no IRE calibrados ni exposición del sensor. Los instrumentos muestrean antes de la asistencia de visualización; el monitoreo no se incorpora al archivo guardado.</string>
+    <string name="monitoring_source_help">Se aplican los límites de color de la fuente: YUV del ISP es una estimación SDR; SDR y OC-Log2 usan códigos distintos. Estas herramientas no certifican HDR ni la precisión de color de la pantalla.</string>
+    <string name="monitoring_waveform">Forma de onda</string>
+    <string name="monitoring_vectorscope">Vectorscopio</string>
+    <string name="monitoring_false_color">Falso color</string>
+    <string name="monitoring_zebra">Cebra de altas luces (interruptor general)</string>
+    <string name="monitoring_zebra_shadow">Incluir cebra de sombras cuando la cebra está activa</string>
+    <string name="monitoring_peaking">Resaltado de enfoque</string>
+    <string name="monitoring_peaking_threshold">Umbral de bordes del enfoque (1–255)</string>
+    <string name="monitoring_opacity">Opacidad de superposiciones (%)</string>
+    <string name="monitoring_zebra_color">Color de cebra</string>
+    <string name="monitoring_peaking_color">Color de resaltado de enfoque</string>
+    <string name="monitoring_luma_color">Color del instrumento de luminancia</string>
+    <string name="monitoring_false_palette">Paleta de falso color</string>
+    <string name="monitoring_palette_classic">Clásica</string>
+    <string name="monitoring_palette_high_contrast">Alto contraste</string>
+    <string name="monitoring_frequency_help">La frecuencia solicitada es de 1–10 Hz. Las actualizaciones pueden ser más lentas si faltan fotogramas o procesamiento; las lecturas antiguas no son mediciones actuales.</string>
+    <string name="monitoring_refresh">Frecuencia solicitada (Hz)</string>
+    <string name="monitoring_aspect">Guía de relación de aspecto</string>
+    <string name="monitoring_aspect_none">Sin guía de aspecto</string>
+    <string name="monitoring_aspect_wide">Panorámica · 16:9</string>
+    <string name="monitoring_aspect_photo">Fotografía · 4:3</string>
+    <string name="monitoring_aspect_square">Cuadrada · 1:1</string>
+    <string name="monitoring_aspect_cinema">Cine · 2,39:1</string>
+    <string name="monitoring_safe_area">Guía de área segura</string>
+    <string name="monitoring_safe_percent">Área segura (% del encuadre)</string>
+    <string name="monitoring_guides_help">Son sólo guías de composición: no recortan, redimensionan ni cambian el fotograma guardado.</string>
+    <string name="monitoring_apply">Aplicar valores</string>
+    <string name="monitoring_range">Rango válido: %1$d–%2$d</string>
+    <string name="monitoring_color_cyan">Cian</string>
+    <string name="monitoring_color_yellow">Amarillo</string>
+    <string name="monitoring_color_red">Rojo</string>
+    <string name="monitoring_color_green">Verde</string>
+    <string name="monitoring_color_white">Blanco</string>
+    <string name="monitoring_zebra_low">Código de cebra de sombras (%)</string>
+    <string name="monitoring_zebra_high">Código de cebra de altas luces (%)</string>
+    <string name="monitoring_zebra_order">Usá 0 ≤ sombras &lt; altas luces ≤ 100. Aplicá ambos umbrales juntos.</string>
+    <string name="monitoring_false_black">Falso color: límite de negros (%)</string>
+    <string name="monitoring_false_shadow">Falso color: límite de sombras (%)</string>
+    <string name="monitoring_false_highlight">Falso color: límite de altas luces (%)</string>
+    <string name="monitoring_false_clip">Falso color: límite de recorte de señal (%)</string>
+    <string name="monitoring_false_order">Usá 0 ≤ negros &lt; sombras &lt; altas luces &lt; recorte ≤ 100. Las ediciones inválidas no se guardan.</string>
+</resources>

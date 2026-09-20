@@ -100,3 +100,20 @@ Every accepted requirement maps to an accepted decision, risk, implementation pl
 | OCC-DIST-003 | ADR-0028 | RISK-016 | OCC-PLAN-059, OCC-PLAN-062 | Plan Section 16 criteria all pass | Commands, tests, structured validation and applicable file/device evidence | Certified for release-critical behavior; otherwise plan-defined stage |
 | OCC-DIST-004 | ADR-0028 | RISK-016 | OCC-PLAN-059, OCC-PLAN-062 | Plan Section 16 criteria all pass | Commands, tests, structured validation and applicable file/device evidence | Certified for release-critical behavior; otherwise plan-defined stage |
 | OCC-DIST-005 | ADR-0028 | RISK-016 | OCC-PLAN-059 | Plan Section 16 criteria all pass | Commands, tests, structured validation and applicable file/device evidence | Certified for release-critical behavior; otherwise plan-defined stage |
+
+## Camera/foldable program follow-up
+
+| Requirement | Plan | ADR | Status |
+|---|---|---|---|
+| OCC-PRO-001 | OCC-PLAN-063 | ADR-0030 | InProgress; shared settings, search and accessibility foundation |
+| OCC-PRO-002 | OCC-PLAN-063 | ADR-0030 | InProgress; session torch, strength and reporting; physical acceptance pending |
+
+| OCC-PRO-003 | OCC-PLAN-064 | ADR-0031 | InProgress; separate transfer/presentation gates and session generations |
+| OCC-PRO-004 | OCC-PLAN-064 | ADR-0031 | InProgress; subject status/prompter, hinge panes and recording policy |
+
+| OCC-PRO-005 | OCC-PLAN-065 | ADR-0030, ADR-0032 | InProgress; time/angle/native priority/antibanding/CCT tint and WB-start preparation connected and tested; physical/media/service-output acceptance pending |
+| OCC-PRO-006 | OCC-PLAN-065 | ADR-0030, ADR-0032 | InProgress; ISP request/result and pending-settings path tested; portable presets/C1/C2 and document/service paths tested; focus generation/cancellation and AF request/result tested; programmable controls/volume/startup policies connected, timelapse lock/stop decoded and VIDEO encoder rejection observed; physical ISP/presets/focus/VIDEO lock plus scopes/LUT/audio remain open |
+
+| OCC-PRO-007 | OCC-PLAN-066 | ADR-0033 | InProgress; correct real interval selection/project cadence first, then complete rational/off-speed/pause A/V and physical/editor acceptance |
+
+| OCC-PRO-008 | OCC-PLAN-067 | ADR-0034 | InProgress; real conditional PUT/policy/MediaStore adapter, then complete finalized bundles, settings/worker/network/reconciliation and full H5 integration |

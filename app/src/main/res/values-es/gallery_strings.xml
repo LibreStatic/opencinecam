@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gallery_settings_title">Galería y catálogo</string>
+    <string name="gallery_title">Catálogo de capturas locales</string>
+    <string name="gallery_settings_help">Preferencias de visualización y filtros en vivo. No modifican los archivos grabados. El filtro de buenas tomas requiere una claqueta legible que marque la toma como buena.</string>
+    <string name="gallery_help">Los grupos provienen de relaciones declaradas, no de una nueva verificación de hashes. Los originales y metadatos disponibles se abren explícitamente en otra app; las miniaturas se cargan sólo al pedirlas.</string>
+    <string name="gallery_all">Todos los medios</string>
+    <string name="gallery_photo">Fotos</string>
+    <string name="gallery_video">Videos</string>
+    <string name="gallery_audio">Audio</string>
+    <string name="gallery_newest_first">Más recientes primero (desactivado: más antiguos)</string>
+    <string name="gallery_good_only">Sólo tomas marcadas como buenas</string>
+    <string name="gallery_show_slate">Mostrar claqueta de producción</string>
+    <string name="gallery_show_technical">Mostrar propiedades de archivo</string>
+    <string name="gallery_search">Buscar capturas</string>
+    <string name="gallery_search_invalid">La búsqueda acepta hasta 128 caracteres sin caracteres de control.</string>
+    <string name="gallery_filters">Filtros de visualización</string>
+    <string name="gallery_refresh">Actualizar catálogo</string>
+    <string name="gallery_loading">Leyendo catálogo…</string>
+    <string name="gallery_empty">No hay capturas que coincidan con esta búsqueda y estos filtros.</string>
+    <string name="gallery_load_failed">No se pudo leer el catálogo. Los resultados existentes se conservan; reintentá para continuar.</string>
+    <string name="gallery_retry">Reintentar lectura</string>
+    <string name="gallery_more">Cargar siguientes resultados</string>
+    <string name="gallery_no_more">Fin de los resultados</string>
+    <string name="gallery_declared">Grupo declarado — hashes sin reverificar</string>
+    <string name="gallery_legacy">Archivo individual anterior</string>
+    <string name="gallery_missing">Faltan metadatos de relación</string>
+    <string name="gallery_invalid">Metadatos de relación inválidos o ilegibles</string>
+    <string name="gallery_incomplete">Grupo incompleto — faltan archivos declarados</string>
+    <string name="gallery_open_primary">Abrir archivo principal</string>
+    <string name="gallery_files">Mostrar u ocultar archivos (Originales: %1$d; Metadatos: %2$d)</string>
+    <string name="gallery_original">Original: %1$s</string>
+    <string name="gallery_metadata">Metadatos: %1$s</string>
+    <string name="gallery_open_failed">No se pudo abrir el archivo seleccionado. Puede no estar disponible o faltar una app compatible.</string>
+    <string name="gallery_technical">Tipo: %1$s · Bytes: %2$d · Modificación en segundos Unix: %3$d</string>
+    <string name="gallery_slate">Proyecto: %1$s\nCámara: %2$s · Escena: %3$s\nRollo: %4$s · Lente: %5$s\nToma: %6$d · Buena: %7$s</string>
+    <string name="gallery_slate_absent">Sin claqueta de producción legible</string>
+    <string name="gallery_yes">Sí</string>
+    <string name="gallery_no">No</string>
+    <string name="gallery_thumbnail">Cargar miniatura</string>
+    <string name="gallery_thumbnail_loading">Cargando miniatura…</string>
+    <string name="gallery_thumbnail_unavailable">Miniatura no disponible; podés intentar abrir el original debajo.</string>
+    <string name="gallery_thumbnail_description">Vista previa de %1$s</string>
+    <string name="gallery_scene_conditions">Ubicación de escena: %1$s · Momento: %2$s</string>
+</resources>

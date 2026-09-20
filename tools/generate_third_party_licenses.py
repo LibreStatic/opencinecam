@@ -34,7 +34,15 @@ def parse_release_runtime(lockfile: Path) -> list[tuple[str, str, str]]:
     return sorted(modules)
 
 
-def license_for(group: str) -> tuple[str, str, str]:
+def license_for(group: str, name: str) -> tuple[str, str, str]:
+    if (group, name) in {
+        ("com.google.code.findbugs", "jsr305"),
+        ("com.google.errorprone", "error_prone_annotations"),
+        ("com.google.j2objc", "j2objc-annotations"),
+    }:
+        return ("Apache-2.0", "Apache License 2.0", "licenses/Apache-2.0.txt")
+    if (group, name) == ("org.checkerframework", "checker-qual"):
+        return ("MIT", "MIT License (Checker Framework annotations)", "licenses/checker-qual-MIT.txt")
     for prefix, license_details in LICENSE_RULES.items():
         if group.startswith(prefix):
             return license_details
@@ -44,7 +52,7 @@ def license_for(group: str) -> tuple[str, str, str]:
 def generate(lockfile: Path) -> dict[str, object]:
     components = []
     for group, name, version in parse_release_runtime(lockfile):
-        license_id, license_name, license_asset = license_for(group)
+        license_id, license_name, license_asset = license_for(group, name)
         components.append(
             {
                 "group": group,

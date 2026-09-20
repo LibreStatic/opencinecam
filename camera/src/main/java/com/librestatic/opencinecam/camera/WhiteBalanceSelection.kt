@@ -15,7 +15,9 @@ import android.hardware.camera2.CaptureRequest
  */
 sealed interface WhiteBalanceSelection {
     data object Auto : WhiteBalanceSelection
-    data class Kelvin(val kelvin: Int) : WhiteBalanceSelection
+    data class Kelvin(val kelvin: Int, val tint: Int = 0) : WhiteBalanceSelection {
+        init { require(tint in -50..50) }
+    }
     data class Preset(val awbMode: Int) : WhiteBalanceSelection
 }
 
@@ -25,7 +27,7 @@ sealed interface WhiteBalanceSelection {
  */
 fun WhiteBalanceSelection.label(): String = when (this) {
     is WhiteBalanceSelection.Auto -> "AUTO"
-    is WhiteBalanceSelection.Kelvin -> "${kelvin}K"
+    is WhiteBalanceSelection.Kelvin -> "${kelvin}K" + if (tint == 0) "" else " T${if (tint > 0) "+" else ""}$tint"
     is WhiteBalanceSelection.Preset -> when (awbMode) {
         CaptureRequest.CONTROL_AWB_MODE_AUTO -> "AUTO"
         CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT -> "DAY"
@@ -54,10 +56,11 @@ val KELVIN_PRESETS: List<Int> = listOf(3200, 4300, 5600, 6500)
  * Adapts a remembered [WhiteBalanceSelection] to the capability of the newly selected camera.
  * A Kelvin request that the new camera cannot honor falls back to [WhiteBalanceSelection.Auto].
  */
-fun WhiteBalanceSelection.adaptTo(kelvinRange: IntRange?): WhiteBalanceSelection = when (this) {
+fun WhiteBalanceSelection.adaptTo(kelvinRange: IntRange?, tintSupported: Boolean = true, presetModes: Set<Int>? = null): WhiteBalanceSelection = when (this) {
     is WhiteBalanceSelection.Kelvin -> {
         val snapped = snapKelvinTo100(kelvin, kelvinRange)
-        if (snapped != null) WhiteBalanceSelection.Kelvin(snapped) else WhiteBalanceSelection.Auto
+        if (snapped != null) WhiteBalanceSelection.Kelvin(snapped, if (tintSupported) tint else 0) else WhiteBalanceSelection.Auto
     }
+    is WhiteBalanceSelection.Preset -> if (presetModes == null || awbMode in presetModes) this else WhiteBalanceSelection.Auto
     else -> this
 }

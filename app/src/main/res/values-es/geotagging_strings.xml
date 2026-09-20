@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="geotagging_title">Geolocalización de captura</string>
+    <string name="geotagging_enabled">Registrar ubicación en capturas nuevas</string>
+    <string name="geotagging_help">Desactivado por defecto. Al activarlo, las coordenadas disponibles y la precisión informada viajan en los metadatos de producción, incluso al compartirlos. El permiso de ubicación por sí solo no activa el registro. Desactivar esta opción no modifica las capturas anteriores. Los preajustes nunca cambian esta elección. Solo se solicita ubicación mientras la aplicación está en primer plano.</string>
+    <string name="geotagging_permission_none">Acceso de Android a la ubicación: sin permiso.</string>
+    <string name="geotagging_permission_approximate">Acceso de Android a la ubicación: aproximada. Se admite ubicación aproximada.</string>
+    <string name="geotagging_permission_precise">Acceso de Android a la ubicación: precisa. Este permiso no garantiza la precisión física.</string>
+    <string name="geotagging_status_disabled">Registro de ubicación desactivado. Las capturas nuevas omiten la geolocalización de captura.</string>
+    <string name="geotagging_status_no_permission">Registro de ubicación activado, pero falta el permiso de Android. Las capturas nuevas registran el estado no disponible, sin coordenadas.</string>
+    <string name="geotagging_status_available">Hay una ubicación reciente disponible. Cada captura registra disponibilidad y precisión informada al admitirse.</string>
+    <string name="geotagging_status_inactive">Acceso a ubicación inactivo. Las capturas nuevas omiten coordenadas mientras siga inactivo.</string>
+    <string name="geotagging_status_unavailable">Esperando ubicación. Las capturas nuevas omiten coordenadas mientras no haya una ubicación disponible.</string>
+    <string name="geotagging_status_stale">La última ubicación es demasiado antigua. Las capturas nuevas omiten coordenadas hasta disponer de una ubicación reciente.</string>
+    <string name="geotagging_denied">No se concedió acceso a la ubicación. Puedes solicitarlo otra vez; si Android ya no muestra el diálogo, cambia el acceso a ubicación en los ajustes del sistema para esta aplicación. Tu elección de registro no cambió.</string>
+    <string name="geotagging_request">Solicitar ubicación / reintentar</string>
+    <string name="geotagging_requesting">Solicitando acceso a ubicación…</string>
+    <string name="geotagging_open_settings">Abrir permisos de la aplicación en Android</string>
+</resources>

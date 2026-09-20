@@ -152,6 +152,38 @@ class SoftAgcTest {
         }
     }
 
+    @Test
+    fun pcm16StereoProcessesLastFrameAndUsesSameSmoothingTimeAsMono() {
+        val frames = 480
+        val mono = SoftAgc(SAMPLE_RATE_HZ,1)
+        val stereo = SoftAgc(SAMPLE_RATE_HZ,2)
+        val monoBuffer = directBuffer(ShortArray(frames) { 1000 })
+        val stereoBuffer = directBuffer(ShortArray(frames*2) { 1000 })
+        mono.processPcm16(monoBuffer,frames*2)
+        stereo.processPcm16(stereoBuffer,frames*4)
+        assertEquals(mono.currentGain(),stereo.currentGain(),1e-12)
+        val expected = monoBuffer.getShort(0)
+        assertTrue(expected>1000)
+        repeat(frames*2) { assertEquals("sample#$it",expected,stereoBuffer.getShort(it*2)) }
+    }
+
+    @Test
+    fun pcm24StereoProcessesLastFrameAndUsesSameSmoothingTimeAsMono() {
+        val frames = 480
+        val mono = SoftAgc(SAMPLE_RATE_HZ,1)
+        val stereo = SoftAgc(SAMPLE_RATE_HZ,2)
+        val monoBuffer = ByteBuffer.allocate(frames*3)
+        val stereoBuffer = ByteBuffer.allocate(frames*6)
+        repeat(frames) { writePacked24(monoBuffer,it,100000) }
+        repeat(frames*2) { writePacked24(stereoBuffer,it,100000) }
+        mono.processPcm24(monoBuffer,frames*3)
+        stereo.processPcm24(stereoBuffer,frames*6)
+        assertEquals(mono.currentGain(),stereo.currentGain(),1e-12)
+        val expected = readPacked24(monoBuffer,0)
+        assertTrue(expected>100000)
+        repeat(frames*2) { assertEquals("sample#$it",expected,readPacked24(stereoBuffer,it)) }
+    }
+
     private fun writePacked24(buffer: ByteBuffer, index: Int, value: Int) {
         buffer.put(index * 3, value.toByte())
         buffer.put(index * 3 + 1, (value shr 8).toByte())

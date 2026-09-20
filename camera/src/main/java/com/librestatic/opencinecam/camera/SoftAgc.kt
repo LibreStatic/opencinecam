@@ -43,7 +43,7 @@ class SoftAgc(
         // AudioRecord PCM is little-endian. MediaCodec-owned/direct ByteBuffers otherwise
         // default to BIG_ENDIAN, which would swap every sample and corrupt level detection.
         buffer.order(ByteOrder.LITTLE_ENDIAN)
-        val sampleCount = byteCount / (BYTES_PER_SAMPLE_16 * channels)
+        val sampleCount = byteCount / BYTES_PER_SAMPLE_16
         if (sampleCount <= 0) return
         var sumSquares = 0.0
         for (index in 0 until sampleCount) {
@@ -62,7 +62,7 @@ class SoftAgc(
 
     /** Processes interleaved little-endian packed 24-bit PCM in place. Resets position to 0. */
     fun processPcm24(buffer: ByteBuffer, byteCount: Int) {
-        val sampleCount = byteCount / (BYTES_PER_SAMPLE_24 * channels)
+        val sampleCount = byteCount / BYTES_PER_SAMPLE_24
         if (sampleCount <= 0) return
         var sumSquares = 0.0
         for (index in 0 until sampleCount) {

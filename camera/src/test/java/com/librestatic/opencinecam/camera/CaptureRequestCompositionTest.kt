@@ -74,6 +74,41 @@ class CaptureRequestCompositionTest {
         assertTrue(result.request.disclosures.size >= 3)
     }
 
+    @Test fun nativePriorityCompositionPreservesTheAutomaticParameter() {
+        val caps = capabilities().copy(aePriorityModes = Knowledge.Known(setOf(ExposureMode.ISO_PRIORITY, ExposureMode.SHUTTER_PRIORITY)))
+        val iso = CaptureRequestComposer().compose(CaptureIntent(exposureMode = ExposureMode.ISO_PRIORITY, sensitivityIso = 400), caps) as CaptureRequestComposition.Accepted
+        assertEquals(RequestValue.TextValue("SENSOR_SENSITIVITY_PRIORITY"), iso.request.values["CONTROL_AE_PRIORITY_MODE"])
+        assertTrue("SENSOR_EXPOSURE_TIME" !in iso.request.values && "SENSOR_FRAME_DURATION" !in iso.request.values)
+        val shutter = CaptureRequestComposer().compose(CaptureIntent(exposureMode = ExposureMode.SHUTTER_PRIORITY, exposureTimeNs = 10_000_000L), caps) as CaptureRequestComposition.Accepted
+        assertTrue("SENSOR_SENSITIVITY" !in shutter.request.values)
+        assertEquals(RequestValue.TextValue("ON"), shutter.request.values["CONTROL_AE_MODE"])
+    }
+    @Test fun nativePriorityCompositionRejectsUnknownSupportAndConflictingParameters() {
+        val intent = CaptureIntent(exposureMode = ExposureMode.ISO_PRIORITY, sensitivityIso = 400)
+        val unknown = CaptureRequestComposer().compose(intent, capabilities()) as CaptureRequestComposition.Rejected
+        assertEquals(FailureCode.UNKNOWN_CAPABILITY, unknown.failure.code)
+        val caps = capabilities().copy(aePriorityModes = Knowledge.Known(setOf(ExposureMode.ISO_PRIORITY)))
+        val conflict = CaptureRequestComposer().compose(intent.copy(exposureTimeNs = 10_000_000L), caps) as CaptureRequestComposition.Rejected
+        assertEquals(FailureCode.INVALID_COMMAND, conflict.failure.code)
+        val unsupported = CaptureRequestComposer().compose(intent, caps.copy(aePriorityModes = Knowledge.Known(emptySet()))) as CaptureRequestComposition.Rejected
+        assertEquals(FailureCode.UNSUPPORTED_CAPABILITY, unsupported.failure.code)
+    }
+
+    @Test fun independentIspAndOpticalStabilizationUseCapabilityBackedFields() {
+        val caps = capabilities().copy(opticalStabilization = Knowledge.Known(true), noiseReductionModes = Knowledge.Known(setOf(IspMode.HIGH_QUALITY)), edgeModes = Knowledge.Known(setOf(IspMode.OFF)))
+        val result = CaptureRequestComposer().compose(CaptureIntent(stabilization = StabilizationMode.OPTICAL, noiseReductionMode = IspMode.HIGH_QUALITY, edgeMode = IspMode.OFF), caps) as CaptureRequestComposition.Accepted
+        assertEquals(RequestValue.TextValue("ON"), result.request.values["LENS_OPTICAL_STABILIZATION_MODE"])
+        assertEquals(RequestValue.TextValue("OFF"), result.request.values["CONTROL_VIDEO_STABILIZATION_MODE"])
+        assertEquals(RequestValue.TextValue("HIGH_QUALITY"), result.request.values["NOISE_REDUCTION_MODE"])
+        assertEquals(RequestValue.TextValue("OFF"), result.request.values["EDGE_MODE"])
+    }
+    @Test fun independentIspRejectsUnknownOrUnadvertisedModes() {
+        val unknown = CaptureRequestComposer().compose(CaptureIntent(edgeMode = IspMode.OFF), capabilities()) as CaptureRequestComposition.Rejected
+        assertEquals(FailureCode.UNKNOWN_CAPABILITY, unknown.failure.code)
+        val unsupported = CaptureRequestComposer().compose(CaptureIntent(edgeMode = IspMode.OFF), capabilities().copy(edgeModes = Knowledge.Known(setOf(IspMode.FAST)))) as CaptureRequestComposition.Rejected
+        assertEquals(FailureCode.UNSUPPORTED_CAPABILITY, unsupported.failure.code)
+    }
+
     private fun capabilities() = CaptureRequestCapabilities(
         manualSensor = Knowledge.Known(true),
         manualPostProcessing = Knowledge.Known(true),

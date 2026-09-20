@@ -3,7 +3,8 @@
 
 package com.librestatic.opencinecam.camera
 
-import kotlin.math.roundToInt
+import java.math.BigInteger
+import java.util.Locale
 
 /**
  * SMPTE timecode value in HH:MM:SS:FF format.
@@ -25,18 +26,24 @@ data class SmpteTimecode(
 
     fun format(): String {
         val sep = if (dropFrame) ";" else ":"
-        return "%02d:%02d:%02d%s%02d".format(hours, minutes, seconds, sep, frames)
+        return String.format(Locale.ROOT, "%02d:%02d:%02d%s%02d", hours, minutes, seconds, sep, frames)
     }
 
     fun toTotalFrames(rate: TimecodeRate): Long {
-        val wholeFrames = ((hours * 3600 + minutes * 60 + seconds) * rate.nominalFps + frames).toLong()
-        return wholeFrames
+        require(dropFrame == rate.dropFrame && frames < rate.nominalFps) { "Timecode label does not match rate" }
+        require(!dropFrame || minutes % 10 == 0 || seconds != 0 || frames >= rate.droppedLabelsPerMinute) {
+            "Timecode label is omitted by drop-frame numbering"
+        }
+        val totalMinutes = hours * 60L + minutes
+        val nominalFrames = ((totalMinutes * 60 + seconds) * rate.nominalFps + frames)
+        return nominalFrames - rate.droppedLabelsPerMinute * (totalMinutes - totalMinutes / 10)
     }
 
     companion object {
         fun fromTotalFrames(total: Long, rate: TimecodeRate): SmpteTimecode {
-            if (rate.dropFrame) return fromTotalFramesDrop(total, rate)
-            return fromTotalFramesNdf(total, rate)
+            val wrapped = Math.floorMod(total, rate.framesPerDay)
+            if (rate.dropFrame) return fromTotalFramesDrop(wrapped, rate)
+            return fromTotalFramesNdf(wrapped, rate)
         }
 
         private fun fromTotalFramesNdf(total: Long, rate: TimecodeRate): SmpteTimecode {
@@ -52,16 +59,13 @@ data class SmpteTimecode(
 
         private fun fromTotalFramesDrop(total: Long, rate: TimecodeRate): SmpteTimecode {
             val fps = rate.nominalFps
-           val dropFrames = if (fps == 30) 2 else if (fps == 60) 4 else 0
-           if (dropFrames == 0) return fromTotalFramesNdf(total, rate)
-            // Each 10-min block drops 9 * dropFrames frames (all minutes except the 0th).
-            val framesPer10Min = fps * 60 * 10 - 9 * dropFrames
-            // Each minute drops dropFrames frames except the 0th minute of each 10-min block.
-            val framesPerMin = fps * 60 - dropFrames
-           val d = total / framesPer10Min
-           val m = total % framesPer10Min
-            val dropAdjust = if (m > dropFrames) d * 9 * dropFrames + ((m - dropFrames) / framesPerMin * dropFrames) else d * 9 * dropFrames
-            val adjustedTotal = total + dropAdjust
+            val dropFrames = rate.droppedLabelsPerMinute
+            val framesPer10Min = fps * 600L - 9 * dropFrames
+            val framesPerMin = fps * 60L - dropFrames
+            val blocks = total / framesPer10Min
+            val remainder = total % framesPer10Min
+            val omittedMinutes = ((remainder - dropFrames).coerceAtLeast(0) / framesPerMin)
+            val adjustedTotal = total + blocks * 9 * dropFrames + omittedMinutes * dropFrames
             val frames = (adjustedTotal % fps).toInt()
             val totalSeconds = adjustedTotal / fps
             val seconds = (totalSeconds % 60).toInt()
@@ -80,12 +84,25 @@ data class TimecodeRate(
     val nominalFps: Int,
     val dropFrame: Boolean = false,
 ) {
-    val label: String get() = if (dropFrame) "${nominalFps - 1}.${if (nominalFps == 30) 97 else 94}DF" else "${nominalFps}NDF"
-    val frameDurationUs: Long get() = when {
-        dropFrame && nominalFps == 30 -> 1_000_000L * 1001 / 30000
-        dropFrame && nominalFps == 60 -> 1_000_000L * 1001 / 60000
-        else -> 1_000_000L / nominalFps
+    init {
+        require(nominalFps in setOf(24, 25, 30, 50, 60)) { "Unsupported nominal timecode rate" }
+        require(!dropFrame || nominalFps in setOf(30, 60)) { "Drop-frame requires nominal 30 or 60" }
     }
+    val numerator: Int get() = if (dropFrame) nominalFps * 1000 else nominalFps
+    val denominator: Int get() = if (dropFrame) 1001 else 1
+    val droppedLabelsPerMinute: Int get() = if (dropFrame) nominalFps / 15 else 0
+    val framesPerDay: Long get() = nominalFps * 86400L - droppedLabelsPerMinute * (1440L - 144L)
+    val label: String get() = if (dropFrame) (if (nominalFps == 30) "29.97DF" else "59.94DF") else "${nominalFps}NDF"
+    /** Truncated single-frame duration for legacy display only; never accumulate this value. */
+    val frameDurationUs: Long get() = 1_000_000L * denominator / numerator
+    fun framesForElapsedNs(elapsedNs: Long): Long {
+        require(elapsedNs >= 0)
+        val frames = BigInteger.valueOf(elapsedNs).multiply(BigInteger.valueOf(numerator.toLong()))
+            .divide(BigInteger.valueOf(1_000_000_000L * denominator))
+        check(frames.bitLength() <= 63) { "Elapsed timecode frame count exceeds Long range" }
+        return frames.toLong()
+    }
+
 }
 
 enum class TimecodeMode { FREE_RUN, RECORD_RUN, REGEN }
@@ -98,4 +115,6 @@ data class TimecodeConfig(
     val mode: TimecodeMode = TimecodeMode.RECORD_RUN,
     val rate: TimecodeRate = TimecodeRate(30, false),
     val startValue: SmpteTimecode = SmpteTimecode(1, 0, 0, 0, false),
+    val rememberPosition: Boolean = true,
+    val resetRevision: Int = 0,
 )

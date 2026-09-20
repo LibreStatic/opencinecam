@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_meter_title">Audio meters</string>
+    <string name="audio_meter_help">Display only: live changes do not alter the recorded file or restart the microphone. Peak/RMS shows sample peak and instantaneous RMS. VU uses 300 ms ballistics; quasi-PPM uses a fast attack and slow return. VU and PPM are sine-peak calibrated. Reference sets 0 VU. Hold retains the displayed value independently per channel. These are not LUFS, true-peak, analog calibration or hardware compliance measurements. Only current PCM, no older than 500 ms, is displayed; clip is independent of mode.</string>
+    <string name="audio_meter_visible">Show audio meter HUD</string>
+    <string name="audio_meter_peak_rms">Peak / RMS</string>
+    <string name="audio_meter_vu">VU</string>
+    <string name="audio_meter_ppm">Quasi-PPM</string>
+    <string name="audio_meter_reference">0 VU reference: %1$d dBFS</string>
+    <string name="audio_meter_hold">Displayed peak hold: %1$d ms (0 disables)</string>
+    <string name="audio_meter_numbers">Show numerical values</string>
+    <string name="audio_meter_reset_clip">Reset latched audio clip indicator</string>
+    <string name="audio_meter_no_pcm">No current PCM</string>
+    <string name="audio_meter_peak_rms_values">Peak %1$s / RMS %2$s dBFS</string>
+    <string name="audio_meter_vu_value">%1$s VU</string>
+    <string name="audio_meter_ppm_value">%1$s dBFS</string>
+    <string name="audio_meter_hold_value">Hold %1$s</string>
+</resources>

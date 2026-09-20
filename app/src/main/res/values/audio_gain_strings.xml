@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_gain_title">Recording gain</string>
+    <string name="audio_gain_help">Digital processing of recorded samples, not microphone hardware gain or headphone volume. Positive gain can clip; it cannot repair an already clipped input. Level meters alone do not confirm playback.</string>
+    <string name="audio_gain_manual">Enable manual digital gain</string>
+    <string name="audio_gain_requested">Requested manual gain: %1$d dB (−24 to +24)</string>
+    <string name="audio_gain_agc_requested">Request automatic gain control (AGC)</string>
+    <string name="audio_gain_agc_suspended">Manual mode suspends AGC, including at 0 dB. The AGC preference is retained for when manual mode is disabled.</string>
+    <string name="audio_gain_agc_backend">AGC is a request, not proof of application. Hardware effects and software AGC depend on the active recording backend and PCM format; MediaRecorder does not expose this control.</string>
+    <string name="audio_gain_pending">Recording gain changes are pending for the next take. This take keeps its admitted gain and AGC configuration.</string>
+    <string name="audio_gain_aac_backend">AAC-LC is embedded in MP4. Direct MediaRecorder does not expose manual sample gain or application-controlled AGC; these require a supported PCM encoding path.</string>
+    <string name="audio_gain_no_receipt">No current PCM gain application receipt. The configured value is only a request.</string>
+    <string name="audio_gain_applied">Applied digital PCM gain: %1$d dB</string>
+    <string name="audio_gain_manual_not_applied">The active PCM source reports manual gain disabled; this does not confirm AGC.</string>
+    <string name="audio_retirement_preparing">Waiting for the previous microphone owner to finish closing…</string>
+    <string name="audio_retirement_failed">The previous audio owner did not confirm closure. Recording did not start.</string>
+    <string name="audio_retirement_cancel_capture">Cancel preparation</string>
+</resources>

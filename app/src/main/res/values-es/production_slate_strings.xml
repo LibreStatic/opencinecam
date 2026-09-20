@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Claqueta de producción</string>
+    <string name="production_slate_help">Metadatos descriptivos para la próxima captura. La claqueta admitida queda congelada durante la grabación y publicación; los cambios durante una toma quedan pendientes. La numeración automática avanza sólo tras una captura guardada y si la claqueta no cambió. El UUID, no el número de toma, identifica la captura. Estos campos no cambian nombres de archivo, detectan el lente ni obtienen coordenadas GPS.</string>
+    <string name="production_slate_pending">Cambios de claqueta pendientes para la próxima captura; la captura actual conserva los metadatos admitidos.</string>
+    <string name="production_slate_project">Proyecto</string>
+    <string name="production_slate_camera">Etiqueta de cámara</string>
+    <string name="production_slate_scene">Escena</string>
+    <string name="production_slate_reel">Rollo</string>
+    <string name="production_slate_lens">Etiqueta de lente (manual)</string>
+    <string name="production_slate_take">Número de toma (1–999999)</string>
+    <string name="production_slate_invalid_text">Usá hasta 128 unidades UTF-16, sin caracteres de control, saltos de línea ni Unicode inválido. Este cambio no se guardó.</string>
+    <string name="production_slate_invalid_take">Ingresá un entero de 1 a 999999 sin ceros iniciales. Este cambio no se guardó.</string>
+    <string name="production_slate_location">Ubicación de la escena</string>
+    <string name="production_slate_time">Momento de la escena</string>
+    <string name="production_slate_unspecified">Sin especificar</string>
+    <string name="production_slate_interior">Interior</string>
+    <string name="production_slate_exterior">Exterior</string>
+    <string name="production_slate_day">Día</string>
+    <string name="production_slate_night">Noche</string>
+    <string name="production_slate_good">Marcar como buena toma</string>
+    <string name="production_slate_increment">Avanzar número de toma tras una captura guardada (máximo 999999)</string>
+    <string name="production_slate_increment_failed">Los archivos guardados se conservaron; revisá el número de la próxima toma.</string>
+</resources>

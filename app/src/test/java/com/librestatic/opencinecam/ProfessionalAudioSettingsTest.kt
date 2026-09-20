@@ -88,4 +88,28 @@ class ProfessionalAudioSettingsTest {
         val withoutHal = CameraSettings().normalizedFor(capabilities)
         assertTrue(withoutHal.automaticGainControlEnabled)
     }
+
+    @Test
+    fun aacNsAndAecRequestsFollowTheirOwnCapabilitiesWithoutChangingManualGainOrAgcIntent() {
+        for (nsAvailable in listOf(false, true)) for (aecAvailable in listOf(false, true)) {
+            val supported = capabilities.copy(noiseSuppressorAvailable = nsAvailable,
+                acousticEchoCancelerAvailable = aecAvailable)
+            for (nsRequested in listOf(false, true)) for (aecRequested in listOf(false, true)) {
+                for (manual in listOf(false, true)) for (agcRequested in listOf(false, true)) {
+                    val requested = CameraSettings(audioOutputFormat = AudioOutputFormat.AAC_MP4,
+                        noiseSuppressorEnabled = nsRequested, acousticEchoCancelerEnabled = aecRequested,
+                        automaticGainControlEnabled = agcRequested,
+                        audioRecordingGain = com.librestatic.opencinecam.camera.DigitalRecordingGain(manual, -6))
+                    val actual = requested.normalizedFor(supported)
+                    assertEquals(AudioOutputFormat.AAC_MP4, actual.audioOutputFormat)
+                    assertEquals(nsRequested && nsAvailable, actual.noiseSuppressorEnabled)
+                    assertEquals(aecRequested && aecAvailable, actual.acousticEchoCancelerEnabled)
+                    assertEquals(agcRequested, actual.automaticGainControlEnabled)
+                    assertEquals(requested.audioRecordingGain, actual.audioRecordingGain)
+                    assertEquals(actual, actual.normalizedFor(supported))
+                }
+            }
+        }
+    }
+
 }

@@ -31,3 +31,10 @@ IDs are permanent; superseded records remain indexed and point to their replacem
 - [ADR-0027: Portable security and privacy permissions](ADR-0027-portable-security-and-privacy-permissions.md)
 - [ADR-0028: Apache licensing and three-channel release](ADR-0028-apache-licensing-and-three-channel-release.md)
 - [ADR-0029: Professional audio formats and controls](ADR-0029-professional-audio-formats-and-controls.md)
+- [ADR-0030: Shared settings and session-owned torch](ADR-0030-shared-settings-and-session-torch.md)
+- [ADR-0031: Fold display sessions and roles](ADR-0031-fold-display-sessions-and-roles.md)
+
+- [ADR-0032: Professional control intent and reported state](ADR-0032-professional-control-intent-and-reported-state.md) — Accepted
+- [ADR-0033: Capture and project timelines](ADR-0033-capture-and-project-timelines.md) — Accepted
+
+- [ADR-0034: Opt-in transfer ownership](ADR-0034-opt-in-transfer-ownership.md) — Accepted

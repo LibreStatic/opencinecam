@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="proxy_title">Proxy</string>
+    <string name="proxy_help">Generate after capture. Original media stays unchanged. Audio packets and timestamps are preserved. Requests survive closing this dialog and resume when the app reopens. Retrying keeps the admitted settings. Embedded audio is supported; sidecar composition and automatic policies are pending.</string>
+    <string name="proxy_busy">Processing and verifying media…</string>
+    <string name="proxy_complete">Proxy and relation verified. Original unchanged.</string>
+    <string name="proxy_sizes">Original: %1$d B · Proxy: %2$d B. Small clips may grow because of container overhead.</string>
+    <string name="proxy_open">Open proxy</string>
+    <string name="proxy_create">Generate proxy / retry</string>
+    <string name="proxy_cancel">Cancel generation</string>
+    <string name="proxy_close">Close</string>
+    <string name="proxy_queued">Queued</string>
+    <string name="proxy_running">Generating proxy</string>
+    <string name="proxy_cancelling">Cancelling — waiting for cleanup</string>
+    <string name="proxy_succeeded">Completed</string>
+    <string name="proxy_failed">Failed — retry available</string>
+    <string name="proxy_cancelled">Cancelled</string>
+    <string name="proxy_policy_help">Admission policy applies to the next attempt; active work finishes. Change these local settings to release waiting requests.</string>
+    <string name="proxy_policy_charging">Require charging</string>
+    <string name="proxy_policy_battery">Minimum battery: %1$d%%</string>
+    <string name="proxy_policy_space">Reserved space: %1$d MiB</string>
+    <string name="proxy_wait_battery_unknown">Waiting: battery reading unavailable</string>
+    <string name="proxy_wait_charging">Waiting for charging</string>
+    <string name="proxy_wait_battery">Waiting for battery level</string>
+    <string name="proxy_wait_storage_unknown">Waiting: storage reading unavailable</string>
+    <string name="proxy_wait_storage">Waiting for working space and reserve</string>
+</resources>

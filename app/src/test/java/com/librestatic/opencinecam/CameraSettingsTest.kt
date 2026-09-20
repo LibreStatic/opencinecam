@@ -13,6 +13,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CameraSettingsTest {
+    @Test(expected = IllegalArgumentException::class)
+    fun timelapseProjectFpsRejectsValuesBeyondTheBoundedEncoderClock() { CameraSettings(timelapseFps = 121) }
+
+    @Test fun timelapseStructuralIntentStaysPendingDuringRecording() {
+        val before = CameraSettings()
+        val next = before.copy(timelapseIntervalMs = 2000, timelapseFps = 25, timelapseFrameCount = 10, timelapseWidth = 640, timelapseHeight = 480)
+        assertEquals(before, before.withLivePreferencesFrom(next))
+        assertEquals(30, next.videoFps)
+    }
+
     @Test
     fun defaultsAreSafeForFoldedLogPreflight() {
         val settings = CameraSettings()

@@ -823,3 +823,73 @@ plans:
     conditional_gates:
       - "Input: a publicly fetchable immutable source tag accepted by F-Droid, an authorized Google Play application with Play App Signing/upload credentials, current store metadata, and an exact releasable version. Pass: build and publish the same source/runtime policy through both channels with recorded checksums and track state. Fail: retain only the operational direct GitHub channel and do not claim three-channel availability."
     intended_executor: GPT-5.6 Luna
+
+  - id: OCC-PLAN-063
+    title: "Shared settings and session torch"
+    status: InProgress
+    revision: 2
+    milestone: H1
+    path: docs/plans/PLAN-063-settings-and-session-torch.md
+    depends_on: [OCC-PLAN-015]
+    blocks: []
+    requirements: [OCC-PRO-001, OCC-PRO-002]
+    adrs: [ADR-0030]
+    risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Codex
+
+  - id: OCC-PLAN-064
+    title: "Fold display sessions, roles and continuity"
+    status: InProgress
+    revision: 6
+    milestone: H2
+    path: docs/plans/PLAN-064-fold-display-sessions-and-continuity.md
+    depends_on: [OCC-PLAN-015]
+    blocks: []
+    requirements: [OCC-PRO-003, OCC-PRO-004]
+    adrs: [ADR-0004, ADR-0031]
+    risks: [RISK-004]
+    conditional_gates: []
+    intended_executor: Codex
+
+  - id: OCC-PLAN-065
+    title: "Professional control intent and operation"
+    status: InProgress
+    revision: 6
+    milestone: H3
+    path: docs/plans/PLAN-065-professional-control-intent-and-operation.md
+    depends_on: [OCC-PLAN-015]
+    blocks: []
+    requirements: [OCC-PRO-005, OCC-PRO-006]
+    adrs: [ADR-0030, ADR-0032]
+    risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Codex
+
+  - id: OCC-PLAN-066
+    title: "Capture and project timelines"
+    status: InProgress
+    revision: 20
+    milestone: H4
+    path: docs/plans/PLAN-066-capture-and-project-timelines.md
+    depends_on: [OCC-PLAN-015]
+    blocks: []
+    requirements: [OCC-PRO-007]
+    adrs: [ADR-0033]
+    risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Codex
+
+  - id: OCC-PLAN-067
+    title: "Opt-in WebDAV transfers and finalized capture bundles"
+    status: InProgress
+    revision: 6
+    milestone: H5
+    path: docs/plans/PLAN-067-opt-in-webdav-transfers.md
+    depends_on: [OCC-PLAN-066]
+    blocks: []
+    requirements: [OCC-PRO-001, OCC-PRO-008]
+    adrs: [ADR-0034]
+    risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Codex

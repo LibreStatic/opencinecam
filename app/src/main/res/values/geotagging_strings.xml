@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="geotagging_title">Capture geolocation</string>
+    <string name="geotagging_enabled">Record location for new captures</string>
+    <string name="geotagging_help">Off by default. When enabled, available coordinates and reported accuracy travel in production metadata, including when that metadata is shared. Location permission alone does not enable recording. Disabling this option leaves previous captures unchanged. Presets never change this choice. Location is requested only while the app is in the foreground.</string>
+    <string name="geotagging_permission_none">Android location access: not granted.</string>
+    <string name="geotagging_permission_approximate">Android location access: approximate. Approximate location is supported.</string>
+    <string name="geotagging_permission_precise">Android location access: precise. This permission does not guarantee physical accuracy.</string>
+    <string name="geotagging_status_disabled">Location recording is off. New captures omit capture geolocation.</string>
+    <string name="geotagging_status_no_permission">Location recording is enabled, but Android access is missing. New captures record the unavailable status, without coordinates.</string>
+    <string name="geotagging_status_available">A recent location is available. Each capture records availability and reported accuracy at admission.</string>
+    <string name="geotagging_status_inactive">Location access is inactive. New captures omit coordinates while inactive.</string>
+    <string name="geotagging_status_unavailable">Waiting for a location. New captures omit coordinates while no location is available.</string>
+    <string name="geotagging_status_stale">The last location is too old. New captures omit coordinates until a recent location is available.</string>
+    <string name="geotagging_denied">Location access was not granted. You can request it again; if Android no longer shows a prompt, change location access in system app settings. Your recording choice has not changed.</string>
+    <string name="geotagging_request">Request location access / retry</string>
+    <string name="geotagging_requesting">Requesting location access…</string>
+    <string name="geotagging_open_settings">Open Android app permission settings</string>
+</resources>

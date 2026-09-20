@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test APK only: separate UID, explicit component, no share-picker registration. -->
+        <activity android:name="com.librestatic.opencinecam.MediaShareReceiverActivity"
+            android:exported="true" android:permission="android.permission.CAMERA" />
+    </application>
+</manifest>

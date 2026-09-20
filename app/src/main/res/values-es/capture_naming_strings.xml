@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Nombres de archivos de captura</string>
+    <string name="capture_naming_enabled">Usar una plantilla personalizada para los archivos de captura</string>
+    <string name="capture_naming_template">Plantilla del nombre de archivo</string>
+    <string name="capture_naming_help">Guardá estas preferencias para la próxima captura. No renombran archivos existentes ni cambian una captura ya admitida. Desactivado conserva OCC_UUID.</string>
+    <string name="capture_naming_tokens">Tokens: {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Límite de la plantilla: 128 caracteres. La fecha y la hora usan UTC; el número de toma tiene al menos cuatro dígitos.</string>
+    <string name="capture_naming_identity">Cada nombre conserva el UUID completo de la captura y su extensión/sufijo de función. Los espacios y caracteres editoriales no portables se convierten en guiones bajos sólo en los nombres. El prefijo legible se limita a 160 bytes UTF-8; un prefijo vacío se convierte en untitled. Los metadatos de claqueta no se reescriben.</string>
+    <string name="capture_naming_example">Sólo un ejemplo: claqueta actual, instante UTC fijo 2 ene 2026 03:04:05.006 y UUID de ejemplo. Las capturas reales usan el instante de admisión y su propio UUID.</string>
+    <string name="capture_naming_invalid">Plantilla inválida. Usá sólo los tokens de la lista, sin rutas, controles, texto vacío ni espacios o puntos finales. Los borradores inválidos no se guardan.</string>
+    <string name="capture_naming_save">Guardar para la próxima captura</string>
+    <string name="capture_naming_preview">Nombre base de ejemplo: %1$s</string>
+</resources>

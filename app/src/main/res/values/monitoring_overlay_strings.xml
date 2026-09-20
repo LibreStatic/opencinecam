@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_reduce">Reduce scopes</string>
+    <string name="scope_enlarge">Enlarge scopes</string>
+    <string name="scope_live">Live sample</string>
+    <string name="scope_suspended">Suspended · waiting for fresh sample</string>
+    <string name="scope_domain_isp">ISP YUV → estimated SDR RGB8</string>
+    <string name="scope_domain_sdr">SDR BT.709 code RGB8</string>
+    <string name="scope_domain_log">OC-Log2 code RGB8</string>
+    <string name="scope_domain_waiting">Signal not received</string>
+    <string name="scope_rate">Requested ≤%1$d Hz · last interval %2$.1f Hz</string>
+    <string name="scope_pre_assist">Before view assist · operator only · not baked. Code values, not IRE/HDR. Age since analysis delivery.</string>
+    <string name="scope_waveform_axes" formatted="false">Waveform · code 100% ↑ 0% ↓ · sample X →</string>
+    <string name="scope_vector_axes">Vectorscope · +Cb → · +Cr ↑ · BT.709 coefficients</string>
+    <string name="scope_black">Black</string>
+    <string name="scope_shadow">Shadow</string>
+    <string name="scope_mid">Mid</string>
+    <string name="scope_highlight">Highlight</string>
+    <string name="scope_clip">Clip</string>
+</resources>

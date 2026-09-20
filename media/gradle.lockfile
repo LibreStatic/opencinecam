@@ -1,6 +1,9 @@
 # This is a Gradle generated file for dependency locking.
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
+androidx.annotation:annotation-jvm:1.8.1=debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
+androidx.annotation:annotation:1.8.1=debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
+androidx.exifinterface:exifinterface:1.4.2=debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
 com.android.tools.analytics-library:protos:32.3.1=androidLintTool,unified-test-platform-android-test-plugin-result-listener-gradle
 com.android.tools.analytics-library:shared:32.3.1=androidLintTool,unified-test-platform-android-test-plugin-result-listener-gradle
 com.android.tools.analytics-library:tracker:32.3.1=androidLintTool
@@ -188,6 +191,7 @@ org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.9.0=debugAndroidTestLintC
 org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0=debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
 org.jetbrains:annotations:13.0=debugAndroidTestCompileClasspath,debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugCompileClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestCompileClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,releaseCompileClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
 org.jetbrains:annotations:23.0.0=androidLintTool,unified-test-platform-android-device-provider-ddmlib,unified-test-platform-android-driver-instrumentation,unified-test-platform-android-test-plugin,unified-test-platform-android-test-plugin-host-additional-test-output,unified-test-platform-android-test-plugin-host-apk-installer,unified-test-platform-android-test-plugin-host-coverage,unified-test-platform-android-test-plugin-host-device-info,unified-test-platform-android-test-plugin-host-emulator-control,unified-test-platform-android-test-plugin-host-logcat,unified-test-platform-android-test-plugin-result-listener-gradle,unified-test-platform-core,unified-test-platform-gradle-work-action,unified-test-platform-launcher
+org.jspecify:jspecify:1.0.0=debugAndroidTestLintChecksClasspath,debugAndroidTestRuntimeClasspath,debugLintChecksClasspath,debugRuntimeClasspath,debugUnitTestLintChecksClasspath,debugUnitTestRuntimeClasspath,releaseLintChecksClasspath,releaseRuntimeClasspath
 org.jvnet.staxex:stax-ex:1.8.1=androidLintTool,unified-test-platform-android-test-plugin-result-listener-gradle
 org.ow2.asm:asm-analysis:9.9=androidLintTool
 org.ow2.asm:asm-commons:9.9=androidLintTool

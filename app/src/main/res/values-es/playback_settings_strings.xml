@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Preferencias de reproducción</string>
+    <string name="playback_settings_help">Estas preferencias se aplican al visor local, no al audio de captura, la ganancia de grabación ni los archivos. La reproducción requiere pulsar Reproducir. La posición no se guarda en preferencias ni preajustes.</string>
+    <string name="playback_settings_muted">Silenciar el audio de reproducción</string>
+    <string name="playback_settings_loop">Repetir cuando la reproducción llegue al final</string>
+    <string name="playback_settings_frame_position">Mostrar la posición del fotograma en el visor</string>
+</resources>

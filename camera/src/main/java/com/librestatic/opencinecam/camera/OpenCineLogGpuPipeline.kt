@@ -12,6 +12,8 @@ import android.media.AudioRecord
 import android.media.AudioManager
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
+import android.media.audiofx.AcousticEchoCanceler
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -34,7 +36,7 @@ import android.util.Size
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.security.MessageDigest
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -44,6 +46,8 @@ data class OpenCineLogEncoderCandidate(
     val codecName: String,
     val profile: Int,
     val size: Size,
+    val hardwareAccelerated: Boolean = true,
+    val level: Int? = null,
 )
 
 /**
@@ -77,6 +81,8 @@ enum class OpenCineLogSourcePath(
 }
 
 data class OpenCineLogRecordingEvidence(
+    val encodedProgress: EncodedRecordingProgress? = null,
+    val avTiming: CaptureEpochReport? = null,
     val provenance: LogProvenance = LogProvenance.ISP_DERIVED,
     val sourcePath: OpenCineLogSourcePath,
     val sourceDynamicRange: String,
@@ -111,6 +117,7 @@ data class OpenCineLogRecordingEvidence(
     val displayHeight: Int,
     val pixelAspectRatioWidth: Int = 1,
     val pixelAspectRatioHeight: Int = 1,
+    val recordingLut: BakedLutEvidence? = null,
 )
 
 internal data class OpenCineLogPreviewGeometry(
@@ -120,31 +127,22 @@ internal data class OpenCineLogPreviewGeometry(
     val mirrorHorizontally: Boolean,
 )
 
-/**
- * Surface video encoders and AAC encoders do not necessarily preserve the same timestamp epoch.
- * In particular, some devices keep the SurfaceTexture/boottime epoch for video while its AAC codec
- * rebases the first input buffer to zero. MediaMuxer interprets those values on one timeline, so
- * writing the raw epochs makes a short clip appear to be several hours long. Each encoded track
- * is therefore rebased to its own first emitted sample before it reaches the container.
- */
-internal class MuxTimestampNormalizer {
-    private var videoOriginUs: Long? = null
-    private var audioOriginUs: Long? = null
+/** Restore codec-local output deltas to explicit capture anchors; unknown camera clocks stay disclosed. */
+internal class MuxTimestampNormalizer(private val captureEpoch: CaptureEpochClock? = null) {
+    var videoOriginUs: Long? = null
+        private set
+    var audioOriginUs: Long? = null
+        private set
     private var lastVideoUs = 0L
     private var lastAudioUs = 0L
-
     fun normalize(video: Boolean, presentationTimeUs: Long): Long {
-        val origin = if (video) {
-            videoOriginUs ?: presentationTimeUs.also { videoOriginUs = it }
-        } else {
-            audioOriginUs ?: presentationTimeUs.also { audioOriginUs = it }
-        }
-        val rebased = (presentationTimeUs - origin).coerceAtLeast(0L)
-        return if (video) {
-            rebased.coerceAtLeast(lastVideoUs).also { lastVideoUs = it }
-        } else {
-            rebased.coerceAtLeast(lastAudioUs).also { lastAudioUs = it }
-        }
+        check(captureEpoch?.ready() != false) { "Capture epoch is not ready" }
+        val origin = if (video) videoOriginUs ?: presentationTimeUs.also { videoOriginUs = it }
+            else audioOriginUs ?: presentationTimeUs.also { audioOriginUs = it }
+        val offset = captureEpoch?.offsetUs(video) ?: 0L
+        val rebased = Math.addExact(Math.subtractExact(presentationTimeUs, origin).coerceAtLeast(0L), offset)
+        return if (video) rebased.coerceAtLeast(lastVideoUs).also { lastVideoUs = it }
+            else rebased.coerceAtLeast(lastAudioUs).also { lastAudioUs = it }
     }
 }
 
@@ -154,8 +152,12 @@ internal fun analyzeRgbaFrame(
     height: Int,
     rgba: ByteArray,
     capturedAtElapsedRealtimeMs: Long,
+    options: MonitoringOptions = MonitoringOptions(),
+    domain: MonitoringSignalDomain = MonitoringSignalDomain.SDR_BT709_CODE,
 ): Camera2Analysis {
-    require(width > 0 && height > 0 && rgba.size == width * height * 4)
+    require(width > 0 && height > 0 && width.toLong() * height in 1..MonitoringScopeFrame.MAX_PIXELS.toLong() &&
+        rgba.size.toLong() == width.toLong() * height * 4)
+    val rgbSamples = ByteArray(width * height * 3)
     val bins = Camera2PreviewEngine.SCOPE_HISTOGRAM_BINS
     val lumaHistogram = IntArray(bins)
     val redHistogram = IntArray(bins)
@@ -172,15 +174,17 @@ internal fun analyzeRgbaFrame(
             val red = rgba[offset].toInt() and 0xff
             val green = rgba[offset + 1].toInt() and 0xff
             val blue = rgba[offset + 2].toInt() and 0xff
-            val luma = ((54 * red + 183 * green + 19 * blue) shr 8).coerceIn(0, 255)
+            val sample = (displayY * width + x) * 3
+            rgbSamples[sample] = red.toByte(); rgbSamples[sample + 1] = green.toByte(); rgbSamples[sample + 2] = blue.toByte()
+            val luma = ((54 * red + 183 * green + 19 * blue + 128) shr 8).coerceIn(0, 255)
             lumaHistogram[luma * bins / 256]++
             redHistogram[red * bins / 256]++
             greenHistogram[green * bins / 256]++
             blueHistogram[blue * bins / 256]++
             val cell = (displayY * 9 / height).coerceIn(0, 8) * 16 + (x * 16 / width).coerceIn(0, 15)
             counts[cell]++
-            if (luma >= 235) zebraHits[cell]++
-            if (previous >= 0 && kotlin.math.abs(luma - previous) >= 35) focusHits[cell]++
+            if (luma * 100 >= options.zebraHighPercent * 255 || options.zebraShadowEnabled && luma * 100 <= options.zebraLowPercent * 255) zebraHits[cell]++
+            if (previous >= 0 && kotlin.math.abs(luma - previous) >= options.peakingThreshold) focusHits[cell]++
             previous = luma
         }
     }
@@ -193,6 +197,7 @@ internal fun analyzeRgbaFrame(
         zebraCells = counts.indices.map { counts[it] > 0 && zebraHits[it].toFloat() / counts[it] >= .20f },
         focusCells = counts.indices.map { counts[it] > 0 && focusHits[it].toFloat() / counts[it] >= .12f },
         capturedAtElapsedRealtimeMs = capturedAtElapsedRealtimeMs,
+        scopes = analyzeMonitoringRgb(width, height, rgbSamples, options, domain),
     )
 }
 
@@ -260,6 +265,14 @@ internal object OpenCineLogPreviewGeometryCalculator {
     }
 }
 
+/** Constructor failure retains ownership until its asynchronous native cleanup completes. */
+internal class GpuPipelineInitializationFailure(
+    cause: Throwable,
+    private val completion: CompletableFuture<Unit>,
+) : IllegalStateException(cause.message ?: "GPU pipeline initialization failed.", cause) {
+    fun retirement(): CompletableFuture<Unit> = completion.thenApply { it }
+}
+
 /**
  * Live, public-API LOG pixel path.
  *
@@ -279,7 +292,12 @@ class OpenCineLogGpuPipeline(
     private val targetFps: Int,
     private val passthroughSdr: Boolean = false,
     private val appContext: Context? = null,
+    private val cameraTimestampRealtime: Boolean = false,
+    /** Codec selection seam; production retains its hardware gate, tests inject advertised software AVC. */
+    private val avcEncoderSelector: (Size, Int, Boolean) -> OpenCineLogEncoderCandidate? = { size, fps, software -> findAvcEncoder(size, fps, software) },
     private val onAnalysis: ((Camera2Analysis) -> Unit)? = null,
+    private val onPreviewLost: ((String) -> Unit)? = null,
+    private val onOperatorLutStatus: ((OperatorLutStatus) -> Unit)? = null,
     private val onFailure: (String, String) -> Unit,
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
@@ -295,6 +313,41 @@ class OpenCineLogGpuPipeline(
     private var encoderEglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
     private var textureId = 0
     private var program = 0
+    @Volatile private var operatorLut: MonitorLut? = null
+    @Volatile private var subjectLut: MonitorLut? = null
+    private var recordingLutTexture = 0
+    private var recordingLutTextureHash: String? = null
+    private var subjectLutTexture = 0
+    private var subjectLutTextureHash: String? = null
+    private var subjectLutFailure: OperatorLutStatus? = null
+    private var operatorLutProgram = 0
+    private var operatorLutTexture = 0
+    private var operatorLutTextureHash: String? = null
+    private var failedOperatorLutHash: String? = null
+    private var lastOperatorLutStatus: OperatorLutStatus? = null
+    private var pendingOperatorLutStatus: OperatorLutStatus? = null
+    fun setOperatorLut(lut: MonitorLut?) {
+        if (operatorLut == lut) return
+        operatorLut = lut
+        if (!closed.get()) handler.post {
+            if (operatorLut === lut) { failedOperatorLutHash = null; lastOperatorLutStatus = null }
+        }
+    }
+    fun setSubjectLut(lut: MonitorLut?) {
+        if (subjectLut == lut) return
+        subjectLut = lut
+        if (!closed.get()) handler.post {
+            if (subjectLut === lut) subjectLutFailure = null
+        }
+    }
+
+    private fun reportOperatorLut(status: OperatorLutStatus) {
+        if (lastOperatorLutStatus == status) return
+        lastOperatorLutStatus = status
+        runCatching { onOperatorLutStatus?.invoke(status) }
+    }
+
+    private var quad: PreviewQuad? = null
     private var textureMatrixLocation = -1
     private var outputModeLocation = -1
     private var positionScaleLocation = -1
@@ -307,16 +360,48 @@ class OpenCineLogGpuPipeline(
     @Volatile private var previewSqueezeFactor = 1f
     @Volatile private var previewDisplayRotationDegrees = displayRotationDegrees
     @Volatile private var recording: Recording? = null
+    private val recordingPreparation = java.util.concurrent.atomic.AtomicReference<RecordingPreparation?>()
     @Volatile private var lastSourceDataSpace: Int? = null
     private var lastAnalysisAtMs = 0L
+    @Volatile private var monitoringOptions = MonitoringOptions()
+    fun setMonitoringOptions(options: MonitoringOptions) { monitoringOptions = options }
     private val closed = AtomicBoolean(false)
+    private val retirement = CompletableFuture<Unit>()
+    private val recordingFileLock = Any()
+    private var lastRecordingFile = RecordingFileRetirement().apply { finish() }
 
-    val cameraInputSurface: Surface = callOnGlThread {
-        initializeEgl()
-        initializeTextureAndProgram()
-        preview?.let(::attachPreviewInternal)
-        requireNotNull(inputSurface)
+    /** Last accepted file intent, even after recording becomes null. Caller cannot forge retirement. */
+    fun recordingFileRetirement(): CompletableFuture<Unit> = synchronized(recordingFileLock) {
+        lastRecordingFile.completion.thenApply { it }
     }
+
+    private class RecordingFileRetirement {
+        val completion = CompletableFuture<Unit>()
+        private var failure: Throwable? = null
+        @Synchronized fun noteFailure(problem: Throwable) {
+            val first = failure
+            if (first == null) failure = problem else if (first !== problem) first.addSuppressed(problem)
+        }
+        fun retire(action: () -> Unit): Throwable? = try { action(); null } catch (problem: Throwable) {
+            noteFailure(problem); problem
+        }
+        @Synchronized fun finish() {
+            val problem = failure
+            if (problem == null) completion.complete(Unit) else completion.completeExceptionally(problem)
+        }
+    }
+    private val previewRequestGeneration = java.util.concurrent.atomic.AtomicLong()
+    private var subjectOutput: SubjectPreviewOutput? = null
+    private val subjectRetirements = mutableListOf<java.util.concurrent.CompletableFuture<Unit>>()
+
+    val cameraInputSurface: Surface = try {
+        callOnGlThread {
+            initializeEgl()
+            initializeTextureAndProgram()
+            preview?.let(::attachPreviewInternal)
+            requireNotNull(inputSurface)
+        }
+    } catch (error: Throwable) { throw GpuPipelineInitializationFailure(error, closeAsync()) }
 
     fun setViewAssist(enabled: Boolean) {
         viewAssistEnabled = enabled
@@ -328,17 +413,63 @@ class OpenCineLogGpuPipeline(
 
     fun attachPreview(surface: Surface, displayRotationDegrees: Int): Boolean {
         if (closed.get() || !surface.isValid) return false
-        previewNativeSurface = surface
-        handler.post {
+        val request = previewRequestGeneration.incrementAndGet()
+        return handler.post {
+            // A caller can be preempted between the public check and posting, including by
+            // close(). Never reconnect a native window behind its retirement receipt.
+            if (closed.get() || request != previewRequestGeneration.get() || !surface.isValid) return@post
+            previewNativeSurface = surface
             previewDisplayRotationDegrees = displayRotationDegrees
-            runCatching { attachPreviewInternal(surface) }.onFailure(::reportGlFailure)
+            runCatching { attachPreviewInternal(surface) }.onFailure(::reportPreviewFailure)
         }
-        return true
     }
 
     fun detachPreview() {
-        previewNativeSurface = null
-        handler.post { destroyPreviewSurface() }
+        val request = previewRequestGeneration.incrementAndGet()
+        handler.post {
+            if (closed.get() || request != previewRequestGeneration.get()) return@post
+            previewNativeSurface = null
+            runCatching { destroyPreviewSurface() }.onFailure(::reportPreviewFailure)
+        }
+    }
+
+    /** Asynchronous output request; submission is reported after swap, not physical scan-out. */
+    fun attachSubjectPreview(surface: Surface, options: SubjectPreviewOptions, onStatus: (SubjectPreviewStatus) -> Unit): Boolean {
+        if (closed.get() || !surface.isValid) return false
+        return handler.post {
+            if (closed.get()) return@post
+            runCatching {
+                check(subjectOutput == null) { "Detach the previous subject output before attaching another." }
+                check(makeCurrent(pbuffer)) { "Subject producer context is unavailable." }
+                subjectOutput = SubjectPreviewOutput.create(display, context, requireNotNull(config8), surface, options, onStatus)
+                if (subjectOutput == null) Handler(android.os.Looper.getMainLooper()).post {
+                    runCatching { onStatus(SubjectPreviewStatus(failure = "The previous subject output is still releasing its window. Retry after it has closed.", failureKind = SubjectPreviewFailure.BUSY)) }
+                }
+            }.onFailure { error ->
+                Handler(android.os.Looper.getMainLooper()).post {
+                    runCatching { onStatus(SubjectPreviewStatus(failure = error.message ?: "Subject attachment failed.")) }
+                }
+            }
+        }
+    }
+
+    fun updateSubjectPreview(options: SubjectPreviewOptions) {
+        handler.post { subjectOutput?.updateOptions(options) }
+    }
+
+    fun detachSubjectPreview() {
+        handler.post {
+            if (!closed.get()) {
+                makeCurrent(pbuffer)
+                retireSubjectOutput()
+            }
+        }
+    }
+
+    private fun retireSubjectOutput() {
+        subjectRetirements.removeAll { it.isDone }
+        subjectOutput?.let { subjectRetirements += it.closeOnProducer() }
+        subjectOutput = null
     }
 
     fun startRecording(
@@ -346,29 +477,70 @@ class OpenCineLogGpuPipeline(
         bitrate: Int,
         geometry: RecordingGeometry,
         audio: Camera2EmbeddedAudioConfig? = null,
+        separateAudioClock: CaptureEpochClock? = null,
+        minimumSensorTimestampNs: Long? = null,
+        timelapse: TimelapseCapture? = null,
+        projectRateOverride: CaptureFrameRate? = null,
+        onTimelapseProgress: ((TimelapseProgress) -> Unit)? = null,
+        onTimelapsePauseChanged: ((TimelapsePauseStatus) -> Unit)? = null,
+        onEncodedProgress: ((EncodedRecordingProgress) -> Unit)? = null,
         onStarted: () -> Unit,
         onStopped: (Boolean, OpenCineLogRecordingEvidence?) -> Unit,
+        onRecordingLutApplied: ((BakedLutEvidence) -> Unit)? = null,
+        recordingLut: MonitorLut? = null,
     ): Boolean {
-        if (closed.get() || recording != null) return false
+        require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
+            separateAudioClock.cameraRealtime == cameraTimestampRealtime) { "Separate audio clock requires a matching regular capture route" }
+        val preparation = RecordingPreparation()
+        val fileRetirement = synchronized(recordingFileLock) {
+            if (closed.get() || recording != null || !lastRecordingFile.completion.isDone ||
+                lastRecordingFile.completion.isCompletedExceptionally ||
+                !recordingPreparation.compareAndSet(null, preparation)) return false
+            RecordingFileRetirement().also { lastRecordingFile = it }
+        }
+        var preparedOutput: ParcelFileDescriptor? = null
+        var posted = false
         return try {
-            callOnGlThread {
+            // Own the descriptor before a queued/native preparation can outlive the caller.
+            preparedOutput = ParcelFileDescriptor.dup(output.fileDescriptor)
+            val task = FutureTask<Unit> {
+              try {
+                check(!preparation.isCancelled && !closed.get() && recording == null) { "Recording owner is closed or busy" }
                 check(geometry.sourceSize.width == size.width && geometry.sourceSize.height == size.height) {
                     "Recording geometry does not match the active source."
                 }
+                require(timelapse == null || (passthroughSdr && audio == null)) { "Interval capture requires silent SDR." }
+                require(projectRateOverride == null || (timelapse == null && passthroughSdr && audio == null)) { "Off-speed requires silent SDR and a single project clock." }
+                require(recordingLut == null || monitorLutCompatible(recordingLut, passthroughSdr)) {
+                    "Recording LUT input domain does not match the active source."
+                }
+                if (recordingLut != null) {
+                    check(makeCurrent(pbuffer)) { "Recording LUT upload context is unavailable." }
+                    // This is mandatory output processing, not an optional monitor. Failure
+                    // aborts preparation before any native onStarted admission or file samples.
+                    operatorProgram(recordingLut, forRecording = true)
+                }
+                val projectRate = timelapse?.projectRate ?: projectRateOverride ?: CaptureFrameRate(targetFps)
+                val projectFps = projectRate.numerator.toDouble() / projectRate.denominator
+                val encoderRate = kotlin.math.ceil(projectFps).toInt()
                 val encodedSize = geometry.encodedSize
                 val platformEncodedSize = Size(encodedSize.width, encodedSize.height)
                 val mime = if (passthroughSdr) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC
-                val candidate = (if (passthroughSdr) findAvcEncoder(platformEncodedSize, targetFps) else findEncoder(platformEncodedSize, targetFps))
-                    ?: error("No hardware $mime Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $targetFps fps.")
+                val candidate = (if (passthroughSdr) avcEncoderSelector(platformEncodedSize, encoderRate, timelapse != null) else findEncoder(platformEncodedSize, targetFps))
+                    ?: error("No ${if (timelapse == null) "hardware " else "advertised "}$mime Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
                 val format = MediaFormat.createVideoFormat(mime, encodedSize.width, encodedSize.height).apply {
                     setInteger(MediaFormat.KEY_PROFILE, candidate.profile)
+                    // OMX AVC requires the advertised level whenever a profile is supplied.
+                    candidate.level?.let { setInteger(MediaFormat.KEY_LEVEL, it) }
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    val rateScaledBitrate = bitrate.toLong() * targetFps / 30
+                    val rateScaledBitrate = bitrate.toLong() * encoderRate / 30
                     setInteger(MediaFormat.KEY_BIT_RATE, rateScaledBitrate.coerceIn(12_000_000L, 200_000_000L).toInt())
-                    setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
+                    if (timelapse == null && projectRateOverride == null) setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
+                    else setFloat(MediaFormat.KEY_FRAME_RATE, projectFps.toFloat())
+                    if (timelapse != null || projectRateOverride != null) setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
-                    if (passthroughSdr) {
+                    if (passthroughSdr || recordingLut != null) {
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
                         setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
                         setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
@@ -382,55 +554,120 @@ class OpenCineLogGpuPipeline(
                         setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_HEIGHT, geometry.pixelAspectRatioHeight)
                     }
                 }
+                check(!preparation.isCancelled && !closed.get()) { "Recording preparation was cancelled" }
+                val ownedOutput = requireNotNull(preparedOutput)
                 val codec = MediaCodec.createByCodecName(candidate.codecName)
                 var codecSurface: Surface? = null
                 var muxer: MediaMuxer? = null
                 var embeddedAac: EmbeddedAac? = null
-                try {
+                var preparedDrain: Thread? = null
+                var codecStarted = false
+                val active = try {
                     codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     codecSurface = codec.createInputSurface()
-                    muxer = MediaMuxer(output.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4).apply {
-                        setOrientationHint(geometry.containerRotationDegrees)
-                    }
+                    // Own before configuration: a throwing setter must not hide a live muxer.
+                    muxer = MediaMuxer(ownedOutput.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                    requireNotNull(muxer).setOrientationHint(geometry.containerRotationDegrees)
+                    val captureEpoch = separateAudioClock ?: audio?.let { CaptureEpochClock(cameraTimestampRealtime, it.sampleRateHz) }
                     embeddedAac = audio?.let {
-                        EmbeddedAac.create(requireNotNull(appContext) { "An Android context is required for embedded AAC." }, it)
+                        EmbeddedAac.create(requireNotNull(appContext) { "An Android context is required for embedded AAC." }, it,
+                            requireNotNull(captureEpoch), fileRetirement::noteFailure) { preparation.isCancelled || closed.get() }
                     }
+                    check(!preparation.isCancelled && !closed.get()) { "Recording preparation was cancelled" }
                     val eglSurface = createWindowSurface(
                         if (passthroughSdr) requireNotNull(config8) else requireNotNull(config10),
                         codecSurface,
-                        if (passthroughSdr) intArrayOf(EGL14.EGL_NONE) else {
+                        if (passthroughSdr || recordingLut != null) intArrayOf(EGL14.EGL_NONE) else {
                             intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_LINEAR_EXT, EGL14.EGL_NONE)
                         },
                     )
                     check(eglSurface != EGL14.EGL_NO_SURFACE) { "Encoder did not accept the EGL window surface." }
                     encoderEglSurface = eglSurface
-                    val active = Recording(codec, codecSurface, muxer, candidate, geometry, embeddedAac, onStopped)
+                    val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied)
                     recording = active
                     codec.start()
+                    codecStarted = true
+                    check(!preparation.isCancelled && !closed.get()) { "Recording preparation was cancelled" }
                     embeddedAac?.start { failure ->
                         active.failure = failure
                         stopRecording()
                     }
-                    active.drainThread = Thread({ drain(active) }, "OpenCineLogCodecDrain").apply { start() }
-                    onStarted()
+                    check(active.failure == null && !closed.get()) { "Recording preparation failed or closed" }
+                    preparedDrain = Thread({ if (preparation.awaitCommit()) drain(active) }, "OpenCineLogCodecDrain")
+                    active.drainThread = preparedDrain
+                    preparedDrain.start()
+                    check(preparation.commit()) { "Recording preparation was cancelled before commit" }
+                    active
                 } catch (failure: Throwable) {
+                    preparation.cancel()
+                    // A cancelled drain has never touched native state; join it before owner cleanup.
+                    joinOwnedWorker(preparedDrain)
                     recording = null
-                    if (encoderEglSurface != EGL14.EGL_NO_SURFACE) {
-                        runCatching { EGL14.eglDestroySurface(display, encoderEglSurface) }
+                    fun retire(action: () -> Unit) {
+                        fileRetirement.retire(action)?.let { if (it !== failure) failure.addSuppressed(it) }
+                    }
+                    if (encoderEglSurface != EGL14.EGL_NO_SURFACE) retire {
+                        if (EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW) == encoderEglSurface) check(makeCurrent(pbuffer))
+                        check(EGL14.eglDestroySurface(display, encoderEglSurface)) { "Preparing encoder EGL surface did not retire" }
                         encoderEglSurface = EGL14.EGL_NO_SURFACE
                     }
-                    runCatching { embeddedAac?.close() }
-                    runCatching { muxer?.release() }
-                    runCatching { codecSurface?.release() }
-                    runCatching { codec.stop() }
-                    runCatching { codec.release() }
+                    retire { embeddedAac?.close() }
+                    retire { muxer?.release() }
+                    retire { codecSurface?.release() }
+                    // configure may have failed before start; release is mandatory in every state.
+                    if (codecStarted) retire { codec.stop() }
+                    retire { codec.release() }
                     throw failure
                 }
+                // Commit owns the take before external callbacks, which can themselves block.
+                runCatching { active.reportEncodedProgress(); onStarted(); active.reportPauseStatus() }.onFailure { active.failure = it; stopRecording() }
+              } finally {
+                try {
+                    if (!preparation.isCommitted) {
+                        fileRetirement.retire { releaseRecordingLutTexture() }
+                        fileRetirement.retire { preparedOutput?.close() }
+                        fileRetirement.finish()
+                    }
+                } finally { if (preparation.ownerFinished()) recordingPreparation.compareAndSet(preparation, null) }
+              }
             }
+            if (Thread.currentThread() === thread) { posted = true; task.run() }
+            else { check(handler.post(task)) { "OCLog GL thread is closed." }; posted = true }
+            task.get(GL_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             true
         } catch (failure: Throwable) {
-            onFailure("log-recording-prepare-failed", failure.message ?: "OCLog recording could not be prepared.")
-            false
+            val cancelled = preparation.cancel()
+            if (!posted) {
+                fileRetirement.retire { preparedOutput?.close() }?.let { if (it !== failure) failure.addSuppressed(it) }
+                fileRetirement.finish()
+                preparation.ownerFinished()
+            }
+            if (failure is InterruptedException) Thread.currentThread().interrupt()
+            if (!cancelled) true else {
+                onFailure("log-recording-prepare-failed", failure.message ?: "OCLog recording could not be prepared.")
+                false
+            }
+        } finally {
+            if (preparation.callerFinished()) recordingPreparation.compareAndSet(preparation, null)
+        }
+    }
+
+    /** Acceptance is asynchronous; a stale/finished take receives no state change. */
+    fun setTimelapsePaused(paused: Boolean, onComplete: (Boolean) -> Unit): Boolean {
+        val active = recording ?: return false
+        if (closed.get() || active.stopRequested.get() || active.timelapse == null && active.captureEpoch?.pauseAvailable() != true) return false
+        return handler.post {
+            if (closed.get() || recording !== active || active.stopRequested.get()) {
+                onComplete(false)
+            } else {
+                val changed = active.timelapse?.setPaused(paused)
+                    ?: (active.captureEpoch?.setPaused(paused, android.os.SystemClock.elapsedRealtimeNanos()) ?: false)
+                if (changed) {
+                    requireNotNull(active.pauseClock).setPaused(paused, active.timelapse?.selectedFrames ?: active.frames)
+                    active.reportPauseStatus()
+                }
+                onComplete(changed)
+            }
         }
     }
 
@@ -440,6 +677,8 @@ class OpenCineLogGpuPipeline(
         handler.post {
             // No draw may occur after EOS is signalled.
             active.acceptFrames.set(false)
+            active.captureEpoch?.finishPause(android.os.SystemClock.elapsedRealtimeNanos())
+            active.reportPauseStatus(finished = true)
             active.audio?.requestStop()
             runCatching { active.codec.signalEndOfInputStream() }
                 .onFailure { active.failure = it }
@@ -448,10 +687,7 @@ class OpenCineLogGpuPipeline(
     }
 
     private fun initializeEgl() {
-        display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-        check(display != EGL14.EGL_NO_DISPLAY) { "EGL display is unavailable." }
-        val version = IntArray(2)
-        check(EGL14.eglInitialize(display, version, 0, version, 1)) { "EGL initialization failed." }
+        display = GpuEglDisplayLease.acquire()
         config10 = chooseConfig(10, 10, 10, 2)
         config8 = chooseConfig(8, 8, 8, 8) ?: error("An 8-bit EGL preview config is unavailable.")
         if (!passthroughSdr && config10 == null) {
@@ -517,6 +753,7 @@ class OpenCineLogGpuPipeline(
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
         program = linkProgram(VERTEX_SHADER, if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else fragmentShader(sourcePath))
+        quad = PreviewQuad()
         textureMatrixLocation = GLES30.glGetUniformLocation(program, "uTextureMatrix")
         outputModeLocation = GLES30.glGetUniformLocation(program, "uOutputMode")
         positionScaleLocation = GLES30.glGetUniformLocation(program, "uPositionScale")
@@ -536,35 +773,66 @@ class OpenCineLogGpuPipeline(
         try {
             makeCurrent(pbuffer)
             texture.updateTexImage()
+            val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
             texture.getTransformMatrix(textureMatrix)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 lastSourceDataSpace = texture.dataSpace
             }
             val timestampNs = texture.timestamp
-            recording?.takeIf { it.acceptFrames.get() }?.let { active ->
-                if (encoderEglSurface != EGL14.EGL_NO_SURFACE && makeCurrent(encoderEglSurface)) {
+            recording?.takeIf { it.acceptFrames.get() && recordingFrameMeetsWhiteBalanceBoundary(timestampNs, it.minimumSensorTimestampNs) }?.let { active ->
+                val capturePts = active.captureEpoch?.mapVideoInput(timestampNs)
+                if (!active.pauseStatusPublished && active.captureEpoch?.pauseAvailable() == true) active.reportPauseStatus()
+                val selectedPts = when {
+                    active.timelapse != null -> active.timelapse.select(timestampNs)
+                    active.projectTimeline != null -> active.projectTimeline.select(timestampNs)
+                    else -> if (active.captureEpoch == null) timestampNs else capturePts
+                }
+                if (selectedPts != null && encoderEglSurface != EGL14.EGL_NO_SURFACE) {
+                    check(makeCurrent(encoderEglSurface)) { "Encoder EGL surface is unavailable." }
                     draw(
                         outputMode = OUTPUT_OCLOG,
                         width = active.geometry.encodedSize.width,
                         height = active.geometry.encodedSize.height,
                         previewOutput = false,
                         recordingGeometry = active.geometry,
+                        recordingLut = active.recordingLut,
                     )
-                    EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, timestampNs)
+                    check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
+                    if (!active.lutApplied && active.recordingLut != null) {
+                        active.lutApplied = true
+                        active.onRecordingLutApplied?.invoke(requireNotNull(active.lutEvidence))
+                    }
+                    active.timelapse?.let { clock ->
+                        active.onTimelapseProgress?.invoke(TimelapseProgress(clock.selectedFrames, clock.missedIntervals, active.candidate.codecName, active.candidate.hardwareAccelerated))
+                    }
                 }
             }
             renderScopeAnalysisIfDue()
-            if (previewNativeSurface?.isValid == true && previewEglSurface != EGL14.EGL_NO_SURFACE && makeCurrent(previewEglSurface)) {
-                val width = querySurface(EGL14.EGL_WIDTH).coerceAtLeast(1)
-                val height = querySurface(EGL14.EGL_HEIGHT).coerceAtLeast(1)
-                draw(
-                    if (viewAssistEnabled) OUTPUT_VIEW_ASSIST else OUTPUT_FLAT_MONITOR,
-                    width,
-                    height,
-                    previewOutput = true,
-                )
-                check(EGL14.eglSwapBuffers(display, previewEglSurface)) { "Preview EGL swap failed." }
+            subjectOutput?.let { output ->
+                check(makeCurrent(pbuffer)) { "Subject producer pbuffer is unavailable." }
+                output.render(sourceReceivedAtMs) { width, height, options ->
+                    val geometry = OpenCineLogPreviewGeometryCalculator.calculate(
+                        sourceWidth = size.width, sourceHeight = size.height,
+                        targetWidth = width, targetHeight = height,
+                        sensorOrientationDegrees = sensorOrientationDegrees,
+                        displayRotationDegrees = options.displayRotationDegrees,
+                        frontFacing = frontFacing, squeezeFactor = options.squeezeFactor,
+                    ).copy(mirrorHorizontally = options.mirror)
+                    requireNotNull(draw(if (options.viewAssist) OUTPUT_VIEW_ASSIST else OUTPUT_FLAT_MONITOR,
+                        width, height, previewOutput = false, outputGeometry = geometry, subjectLutOutput = true))
+                }
+            }
+            if (previewNativeSurface?.isValid == true && previewEglSurface != EGL14.EGL_NO_SURFACE) {
+                runCatching {
+                    check(makeCurrent(previewEglSurface)) { "Preview EGL window is unavailable." }
+                    val width = querySurface(EGL14.EGL_WIDTH).coerceAtLeast(1)
+                    val height = querySurface(EGL14.EGL_HEIGHT).coerceAtLeast(1)
+                    pendingOperatorLutStatus = null
+                    draw(if (viewAssistEnabled) OUTPUT_VIEW_ASSIST else OUTPUT_FLAT_MONITOR, width, height, previewOutput = true)
+                    check(EGL14.eglSwapBuffers(display, previewEglSurface)) { "Preview EGL swap failed." }
+                    pendingOperatorLutStatus?.let(::reportOperatorLut)
+                }.onFailure(::reportPreviewFailure)
             }
         } catch (failure: Throwable) {
             reportGlFailure(failure)
@@ -576,7 +844,8 @@ class OpenCineLogGpuPipeline(
     private fun renderScopeAnalysisIfDue() {
         val callback = onAnalysis ?: return
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastAnalysisAtMs < ANALYSIS_PERIOD_MS) return
+        val options = monitoringOptions
+        if (now - lastAnalysisAtMs < options.periodMs) return
         lastAnalysisAtMs = now
         check(makeCurrent(pbuffer)) { "Scope analysis pbuffer is unavailable." }
         draw(
@@ -601,7 +870,102 @@ class OpenCineLogGpuPipeline(
         val bytes = ByteArray(rgba.capacity())
         rgba.position(0)
         rgba.get(bytes)
-        callback(analyzeRgbaFrame(ANALYSIS_WIDTH, ANALYSIS_HEIGHT, bytes, now))
+        callback(analyzeRgbaFrame(ANALYSIS_WIDTH, ANALYSIS_HEIGHT, bytes, now, options,
+            if (passthroughSdr) MonitoringSignalDomain.SDR_BT709_CODE else MonitoringSignalDomain.OCLOG2_CODE))
+    }
+
+    // This boundary returns the encoded 16-bit payload, not an integer conversion of its value.
+    private fun nativeHalfBits(value: Float): Short = android.util.Half.toHalf(value)
+
+    private fun releaseRecordingLutTexture() {
+        if (recordingLutTexture == 0) return
+        check(makeCurrent(pbuffer)) { "Recording LUT retirement context is unavailable." }
+        GLES30.glDeleteTextures(1, intArrayOf(recordingLutTexture), 0)
+        check(GLES30.glGetError() == GLES30.GL_NO_ERROR) { "Recording LUT texture did not retire." }
+        recordingLutTexture = 0
+        recordingLutTextureHash = null
+    }
+
+    private fun operatorProgram(lut: MonitorLut, forSubject: Boolean = false, forRecording: Boolean = false): Int {
+        check(!forSubject || !forRecording)
+        if (operatorLutProgram == 0) {
+            val source = if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else fragmentShader(sourcePath)
+            val declarations = """
+                uniform highp sampler3D uOperatorLut;
+                uniform vec3 uLutMin;
+                uniform vec3 uLutMax;
+                uniform float uLutSize;
+                vec3 applyOperatorLut(vec3 signal) {
+                    vec3 normalized = clamp((signal - uLutMin) / (uLutMax - uLutMin), 0.0, 1.0);
+                    // Eight texel fetches implement the same trilinear interpolation as the CPU
+                    // without depending on the sampler's fixed-function filtering precision.
+                    vec3 coordinate = normalized * (uLutSize - 1.0);
+                    ivec3 lo = ivec3(floor(coordinate));
+                    ivec3 hi = min(lo + ivec3(1), ivec3(int(uLutSize) - 1));
+                    vec3 weight = fract(coordinate);
+                    vec3 c00 = mix(texelFetch(uOperatorLut, ivec3(lo.x,lo.y,lo.z),0).rgb,
+                                   texelFetch(uOperatorLut, ivec3(hi.x,lo.y,lo.z),0).rgb, weight.x);
+                    vec3 c10 = mix(texelFetch(uOperatorLut, ivec3(lo.x,hi.y,lo.z),0).rgb,
+                                   texelFetch(uOperatorLut, ivec3(hi.x,hi.y,lo.z),0).rgb, weight.x);
+                    vec3 c01 = mix(texelFetch(uOperatorLut, ivec3(lo.x,lo.y,hi.z),0).rgb,
+                                   texelFetch(uOperatorLut, ivec3(hi.x,lo.y,hi.z),0).rgb, weight.x);
+                    vec3 c11 = mix(texelFetch(uOperatorLut, ivec3(lo.x,hi.y,hi.z),0).rgb,
+                                   texelFetch(uOperatorLut, ivec3(hi.x,hi.y,hi.z),0).rgb, weight.x);
+                    return mix(mix(c00,c10,weight.y),mix(c01,c11,weight.y),weight.z);
+                }
+            """.trimIndent()
+            val augmented = source.replace("void main() {", declarations + "\nvoid main() {")
+            val signal = if (passthroughSdr) "texture(uTexture, vTexCoord).rgb" else "ocLog"
+            val end = augmented.lastIndexOf('}')
+            operatorLutProgram = linkProgram(VERTEX_SHADER, augmented.substring(0, end) +
+                "outColor = vec4(applyOperatorLut($signal), 1.0);\n}")
+        }
+        val previousTextureHash = when { forRecording -> recordingLutTextureHash; forSubject -> subjectLutTextureHash; else -> operatorLutTextureHash }
+        if (previousTextureHash != lut.cube.sha256) {
+            if (forRecording) check(recordingLutTexture == 0) { "Previous recording LUT did not retire." }
+            val texture = IntArray(1); GLES30.glGenTextures(1, texture, 0)
+            // Keep the file's native allocation reachable even if upload/configuration throws;
+            // the preparation finally must verify its retirement before releasing the receipt.
+            if (forRecording) recordingLutTexture = texture[0]
+            try {
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, texture[0])
+                for (parameter in listOf(GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_TEXTURE_MAG_FILTER))
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, parameter, GLES30.GL_NEAREST)
+                for (parameter in listOf(GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_TEXTURE_WRAP_R))
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, parameter, GLES30.GL_CLAMP_TO_EDGE)
+                val values = lut.cube.values
+                // Upload native half-floats: FLOAT conversion corrupted nonzero texels on
+                // the API30 GLES translator. RGBA rows remain naturally four-byte aligned.
+                val halves = ShortArray(values.size / 3 * 4)
+                for (index in values.indices step 3) {
+                    val offset = index / 3 * 4
+                    halves[offset] = nativeHalfBits(values[index])
+                    halves[offset + 1] = nativeHalfBits(values[index + 1])
+                    halves[offset + 2] = nativeHalfBits(values[index + 2])
+                    halves[offset + 3] = nativeHalfBits(1f)
+                }
+                val buffer = ByteBuffer.allocateDirect(halves.size * 2)
+                    .order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
+                buffer.put(halves).position(0)
+                GLES30.glTexImage3D(GLES30.GL_TEXTURE_3D, 0, GLES30.GL_RGBA16F,
+                    lut.cube.size, lut.cube.size, lut.cube.size, 0, GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, buffer)
+                check(GLES30.glGetError() == GLES30.GL_NO_ERROR) { "Operator LUT texture upload failed" }
+                val previousTexture = when { forRecording -> 0; forSubject -> subjectLutTexture; else -> operatorLutTexture }
+                if (previousTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(previousTexture), 0)
+                if (forRecording) {
+                    recordingLutTexture = texture[0]; recordingLutTextureHash = lut.cube.sha256
+                } else if (forSubject) {
+                    subjectLutTexture = texture[0]; subjectLutTextureHash = lut.cube.sha256
+                } else {
+                    operatorLutTexture = texture[0]; operatorLutTextureHash = lut.cube.sha256
+                }
+            } catch (failure: Throwable) {
+                if (!forRecording) GLES30.glDeleteTextures(1, texture, 0)
+                throw failure
+            } finally { GLES30.glActiveTexture(GLES30.GL_TEXTURE0) }
+        }
+        return operatorLutProgram
     }
 
     private fun draw(
@@ -610,16 +974,54 @@ class OpenCineLogGpuPipeline(
         height: Int,
         previewOutput: Boolean,
         recordingGeometry: RecordingGeometry? = null,
-    ) {
+        outputGeometry: OpenCineLogPreviewGeometry? = null,
+        subjectLutOutput: Boolean = false,
+        recordingLut: MonitorLut? = null,
+    ): OperatorLutStatus? {
+        check(!previewOutput || !subjectLutOutput)
+        check(recordingLut == null || !previewOutput && !subjectLutOutput)
         GLES30.glViewport(0, 0, width, height)
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        GLES30.glUseProgram(program)
+        // Selection is frozen with these pixels; the consumer may swap after selection changes.
+        val selection = if (previewOutput) operatorLut else if (subjectLutOutput) subjectLut else recordingLut
+        val lut = selection?.takeIf { monitorLutCompatible(it, passthroughSdr) }
+        val previousFailure = if (subjectLutOutput) subjectLutFailure?.hash else failedOperatorLutHash
+        val selectedProgram = if (recordingLut != null) {
+            check(lut === recordingLut) { "Recording LUT domain changed." }
+            // No fallback is permitted for requested file pixels, even if monitor uploads fail.
+            check(recordingLutTexture != 0 && recordingLutTextureHash == recordingLut.cube.sha256) {
+                "Recording LUT texture is not prepared."
+            }
+            check(operatorLutProgram != 0) { "Recording LUT program is not prepared." }
+            operatorLutProgram
+        } else if (lut != null && previousFailure != lut.cube.sha256) {
+            try { operatorProgram(lut, forSubject = subjectLutOutput) } catch (failure: Exception) {
+                val status = OperatorLutStatus(lut.cube.sha256, OperatorLutState.FAILED, failure.message, monitorLutIdentity(lut))
+                if (subjectLutOutput) subjectLutFailure = status else {
+                    failedOperatorLutHash = lut.cube.sha256
+                    reportOperatorLut(status)
+                }
+                // Optional monitors cannot poison the encoder, scopes or each other's output.
+                for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+                program
+            }
+        } else program
+        GLES30.glUseProgram(selectedProgram)
+        fun location(name: String, original: Int): Int = if (selectedProgram == program) original else GLES30.glGetUniformLocation(selectedProgram, name)
+        if (selectedProgram != program && lut != null) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, when { recordingLut != null -> recordingLutTexture; subjectLutOutput -> subjectLutTexture; else -> operatorLutTexture })
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(selectedProgram, "uOperatorLut"), 1)
+            GLES30.glUniform3fv(GLES30.glGetUniformLocation(selectedProgram, "uLutMin"), 1, lut.cube.domainMin, 0)
+            GLES30.glUniform3fv(GLES30.glGetUniformLocation(selectedProgram, "uLutMax"), 1, lut.cube.domainMax, 0)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(selectedProgram, "uLutSize"), lut.cube.size.toFloat())
+        }
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-        GLES30.glUniformMatrix4fv(textureMatrixLocation, 1, false, textureMatrix, 0)
-        GLES30.glUniform1i(outputModeLocation, outputMode)
-        val geometry = if (previewOutput) {
+        GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
+        GLES30.glUniform1i(location("uOutputMode", outputModeLocation), outputMode)
+        val geometry = outputGeometry ?: if (previewOutput) {
             OpenCineLogPreviewGeometryCalculator.calculate(
                 sourceWidth = size.width,
                 sourceHeight = size.height,
@@ -640,12 +1042,32 @@ class OpenCineLogGpuPipeline(
         } else {
             OpenCineLogPreviewGeometry(0, 1f, 1f, false)
         }
-        GLES30.glUniform2f(positionScaleLocation, geometry.scaleX, geometry.scaleY)
-        GLES30.glUniform1i(previewRotationLocation, geometry.positionRotationDegrees / 90)
-        GLES30.glUniform1i(mirrorPreviewLocation, if (geometry.mirrorHorizontally) 1 else 0)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glUniform2f(location("uPositionScale", positionScaleLocation), geometry.scaleX, geometry.scaleY)
+        GLES30.glUniform1i(location("uPreviewRotation", previewRotationLocation), geometry.positionRotationDegrees / 90)
+        GLES30.glUniform1i(location("uMirrorPreview", mirrorPreviewLocation), if (geometry.mirrorHorizontally) 1 else 0)
+        requireNotNull(quad).draw()
         val error = GLES30.glGetError()
         check(error == GLES30.GL_NO_ERROR) { "OCLog shader failed with GL error 0x${error.toString(16)}." }
+        if (previewOutput) {
+            // A concurrent selection change cannot relabel the pixels just drawn. The next
+            // frame will apply it; only an unchanged selection can produce a pending swap status.
+            pendingOperatorLutStatus = if (operatorLut !== selection) null else when {
+                selection == null -> OperatorLutStatus()
+                lut == null -> OperatorLutStatus(selection.cube.sha256, OperatorLutState.INCOMPATIBLE_DOMAIN,
+                    selectionId = monitorLutIdentity(selection))
+                selectedProgram != program -> OperatorLutStatus(selection.cube.sha256, OperatorLutState.ACTIVE,
+                    selectionId = monitorLutIdentity(selection))
+                else -> null
+            }
+        }
+        return if (!subjectLutOutput) null else when {
+            selection == null -> OperatorLutStatus()
+            lut == null -> OperatorLutStatus(selection.cube.sha256, OperatorLutState.INCOMPATIBLE_DOMAIN,
+                selectionId = monitorLutIdentity(selection))
+            selectedProgram != program -> OperatorLutStatus(selection.cube.sha256, OperatorLutState.ACTIVE,
+                selectionId = monitorLutIdentity(selection))
+            else -> requireNotNull(subjectLutFailure).copy(selectionId = monitorLutIdentity(selection))
+        }
     }
 
     private fun attachPreviewInternal(surface: Surface) {
@@ -676,14 +1098,31 @@ class OpenCineLogGpuPipeline(
         var videoEos = false
         var audioEos = active.audio == null
         val pending = ArrayDeque<PendingMuxSample>()
-        val timestampNormalizer = MuxTimestampNormalizer()
+        val timestampNormalizer = MuxTimestampNormalizer(active.captureEpoch.takeIf { active.audio != null })
+        var audioEncoderDelayFrames: Int? = null
         var stopDeadlineNs: Long? = null
 
+        fun noteVideoSample(video: Boolean, normalizedPtsUs: Long) {
+            if (!video) { active.audioPackets++; return }
+            active.frames++
+            active.lastPtsUs?.let { previousPtsUs ->
+                val gapUs = (normalizedPtsUs - previousPtsUs).coerceAtLeast(0L)
+                active.maxVideoPtsGapUs = maxOf(active.maxVideoPtsGapUs ?: 0L, gapUs)
+                if (gapUs > 1_500_000L / targetFps) active.videoPtsGapsOverThreshold++
+            }
+            active.firstPtsUs = active.firstPtsUs ?: normalizedPtsUs
+            active.lastPtsUs = normalizedPtsUs
+            active.reportEncodedProgress()
+        }
+
         fun startMuxerIfReady() {
-            if (muxerStarted || videoTrack < 0 || (active.audio != null && audioTrack < 0)) return
+            if (muxerStarted || videoTrack < 0 || (active.audio != null && audioTrack < 0) || active.audio != null && active.captureEpoch?.ready() == false) return
             active.muxer.start()
             muxerStarted = true
-            pending.sortedBy { it.presentationTimeUs }.forEach { sample ->
+            val normalizedPending = pending.map {
+                it.copy(presentationTimeUs = timestampNormalizer.normalize(it.video, it.presentationTimeUs))
+            }.sortedBy { it.presentationTimeUs }
+            normalizedPending.forEach { sample ->
                 val track = if (sample.video) videoTrack else audioTrack
                 active.muxer.writeSampleData(
                     track,
@@ -695,6 +1134,7 @@ class OpenCineLogGpuPipeline(
                         flags = sample.flags
                     },
                 )
+                noteVideoSample(sample.video, sample.presentationTimeUs)
             }
             pending.clear()
         }
@@ -709,10 +1149,22 @@ class OpenCineLogGpuPipeline(
                         format.setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_HEIGHT, active.geometry.pixelAspectRatioHeight)
                     }
                     if (video) {
+                        if (active.recordingLut != null) {
+                            check(format.getInteger(MediaFormat.KEY_COLOR_STANDARD, -1) == MediaFormat.COLOR_STANDARD_BT709 &&
+                                format.getInteger(MediaFormat.KEY_COLOR_RANGE, -1) == MediaFormat.COLOR_RANGE_LIMITED &&
+                                format.getInteger(MediaFormat.KEY_COLOR_TRANSFER, -1) == MediaFormat.COLOR_TRANSFER_SDR_VIDEO) {
+                                "Baked LUT encoder did not report the required BT709 limited SDR output contract."
+                            }
+                        }
                         check(videoTrack < 0) { "Video encoder emitted its format twice." }
                         videoTrack = active.muxer.addTrack(format)
                     } else {
                         check(audioTrack < 0) { "AAC encoder emitted its format twice." }
+                        val csd = requireNotNull(format.getByteBuffer("csd-0")).duplicate().let { value -> ByteArray(value.remaining()).also { value.get(it) } }
+                        check(aacCodecConfigSha256(csd) == requireNotNull(active.audio).calibration.codecSpecificDataSha256) { "AAC configuration changed after calibration" }
+                        audioEncoderDelayFrames = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && format.containsKey(MediaFormat.KEY_ENCODER_DELAY)) {
+                            format.getInteger(MediaFormat.KEY_ENCODER_DELAY)
+                        } else null
                         audioTrack = active.muxer.addTrack(format)
                     }
                     startMuxerIfReady()
@@ -724,29 +1176,16 @@ class OpenCineLogGpuPipeline(
                     if (info.size > 0 && buffer != null && !isCodecConfig) {
                         buffer.position(info.offset)
                         buffer.limit(info.offset + info.size)
-                        val normalizedPtsUs = timestampNormalizer.normalize(video, info.presentationTimeUs)
-                        val normalizedInfo = MediaCodec.BufferInfo().apply {
-                            set(info.offset, info.size, normalizedPtsUs, info.flags)
-                        }
                         if (muxerStarted) {
+                            val normalizedPtsUs = timestampNormalizer.normalize(video, info.presentationTimeUs)
+                            val normalizedInfo = MediaCodec.BufferInfo().apply { set(info.offset, info.size, normalizedPtsUs, info.flags) }
                             active.muxer.writeSampleData(if (video) videoTrack else audioTrack, buffer, normalizedInfo)
+                            noteVideoSample(video, normalizedPtsUs)
                         } else {
-                            check(pending.size < MAX_PENDING_MUX_SAMPLES) { "Muxer format negotiation buffer overflowed." }
+                            check(pending.size < MAX_PENDING_MUX_SAMPLES) { "Muxer format/epoch negotiation buffer overflowed." }
                             val bytes = ByteArray(info.size)
                             buffer.get(bytes)
-                            pending.add(PendingMuxSample(video, bytes, normalizedPtsUs, info.flags))
-                        }
-                        if (video) {
-                            active.frames++
-                            active.lastPtsUs?.let { previousPtsUs ->
-                                val gapUs = (normalizedPtsUs - previousPtsUs).coerceAtLeast(0L)
-                                active.maxVideoPtsGapUs = maxOf(active.maxVideoPtsGapUs ?: 0L, gapUs)
-                                if (gapUs > 1_500_000L / targetFps) {
-                                    active.videoPtsGapsOverThreshold++
-                                }
-                            }
-                            active.firstPtsUs = active.firstPtsUs ?: normalizedPtsUs
-                            active.lastPtsUs = normalizedPtsUs
+                            pending.add(PendingMuxSample(video, bytes, info.presentationTimeUs, info.flags))
                         }
                     }
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
@@ -766,6 +1205,7 @@ class OpenCineLogGpuPipeline(
                 val videoProgress = if (!videoEos) {
                     drainOne(active.codec, videoInfo, video = true, timeoutUs = if (audioProgress) 0 else CODEC_TIMEOUT_US)
                 } else false
+                startMuxerIfReady()
                 if (active.stopRequested.get()) {
                     val deadline = stopDeadlineNs ?: (System.nanoTime() + CODEC_STOP_TIMEOUT_NS).also { stopDeadlineNs = it }
                     if (System.nanoTime() > deadline) error("Codec EOS timed out while finalizing the recording.")
@@ -775,30 +1215,90 @@ class OpenCineLogGpuPipeline(
         } catch (failure: Throwable) {
             active.failure = failure
         } finally {
-            val glReleased = CountDownLatch(1)
-            handler.post {
-                if (encoderEglSurface != EGL14.EGL_NO_SURFACE) {
-                    if (EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW) == encoderEglSurface) makeCurrent(pbuffer)
-                    EGL14.eglDestroySurface(display, encoderEglSurface)
-                    encoderEglSurface = EGL14.EGL_NO_SURFACE
-                }
-                glReleased.countDown()
+            val glReleased = CompletableFuture<Unit>()
+            val posted = handler.post {
+                try {
+                    active.acceptFrames.set(false)
+                    if (encoderEglSurface != EGL14.EGL_NO_SURFACE) {
+                        if (EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW) == encoderEglSurface) check(makeCurrent(pbuffer))
+                        check(EGL14.eglDestroySurface(display, encoderEglSurface)) { "Encoder EGL surface did not detach" }
+                        encoderEglSurface = EGL14.EGL_NO_SURFACE
+                    }
+                    releaseRecordingLutTexture()
+                    glReleased.complete(Unit)
+                } catch (failure: Throwable) { glReleased.completeExceptionally(failure) }
             }
-            glReleased.await(3, TimeUnit.SECONDS)
-            val success = active.failure == null && muxerStarted && videoEos && audioEos && active.frames > 0
-            if (muxerStarted) runCatching { active.muxer.stop() }.onFailure { active.failure = it }
-            runCatching { active.muxer.release() }
-            runCatching { active.audio?.close() }
-            runCatching { active.codec.stop() }
-            runCatching { active.codec.release() }
-            runCatching { active.codecSurface.release() }
+            if (!posted) {
+                active.failure = IllegalStateException("GL retirement task was rejected").also(active.fileRetirement::noteFailure)
+                // A quitting looper can still be inside a native call. Wait for actual thread exit.
+                joinOwnedWorker(thread)
+            } else {
+                try {
+                    awaitOwnedCompletion(glReleased, 3000) {
+                        active.failure = IllegalStateException("Encoder GL retirement is still pending")
+                        if (!closed.get()) onFailure("log-retirement-pending", "Encoder GL work is still retiring.")
+                    }
+                } catch (failure: Throwable) { active.failure = failure; active.fileRetirement.noteFailure(failure) }
+            }
+            // No AAC codec release while its feeder/stop thread can still call into native code.
+            active.fileRetirement.retire { active.audio?.close() }?.let(active::noteFailure)
+            if (active.timelapse != null && active.frames != active.timelapse.selectedFrames) {
+                active.failure = IllegalStateException("Timelapse encoder emitted ${active.frames} frames for ${active.timelapse.selectedFrames} selected inputs.")
+            }
+            if (active.projectTimeline != null && active.frames != active.projectTimeline.selectedFrames) {
+                active.failure = IllegalStateException("Off-speed encoder frame count differs from selected inputs.")
+            }
+            val success = active.failure == null && muxerStarted && videoEos && audioEos &&
+                (active.recordingLut == null || active.lutApplied) &&
+                hasRequiredEncodedSamples(active.frames, active.audio?.submittedPcmFrames, active.audioPackets)
+            val projectRate = active.timelapse?.capture?.projectRate ?: active.projectTimeline?.rate
+            var audioSourceWindow: AacSourceWindowResult? = null
+            val timelineFinalizer: (() -> Unit)? = when {
+                projectRate != null -> { { finalizeProjectMp4Timing(ProjectMp4Descriptor(active.outputDescriptor.fileDescriptor), projectRate, active.frames) } }
+                active.audio != null -> { {
+                    val audio = active.audio
+                    requireNotNull(active.captureEpoch).requireRetainedAudioFrames(audio.submittedPcmFrames)
+                    check(audio.drainPaddingFrames == audio.calibration.drainPaddingFrames.toLong()) { "AAC drain padding did not complete" }
+                    audioSourceWindow = finalizeAacSourceWindow(ProjectMp4Descriptor(active.outputDescriptor.fileDescriptor),
+                        AacSourceWindow(audio.calibration.config.sampleRateHz, audio.submittedPcmFrames,
+                            audio.calibration.primingFrames.toLong(), active.audioPackets, requireNotNull(active.captureEpoch).offsetUs(false)))
+                } }
+                else -> null
+            }
+            active.failure = finalizeEncodedRecording(
+                ready = success,
+                initialFailure = active.failure,
+                muxerStarted = muxerStarted,
+                stopMuxer = { active.fileRetirement.retire(active.muxer::stop)?.let { throw it } },
+                releaseMuxer = { active.fileRetirement.retire(active.muxer::release)?.let { throw it } },
+                finalizeTimeline = timelineFinalizer,
+            )
+            active.fileRetirement.retire { active.codec.stop() }?.let(active::noteFailure)
+            active.fileRetirement.retire { active.codec.release() }?.let(active::noteFailure)
+            active.fileRetirement.retire { active.codecSurface.release() }?.let(active::noteFailure)
+            active.fileRetirement.retire { active.outputDescriptor.close() }?.let(active::noteFailure)
+            active.fileRetirement.finish()
             val evidence = if (success && active.failure == null) {
                 OpenCineLogRecordingEvidence(
+                    encodedProgress = active.encodedProgress(),
+                    avTiming = active.captureEpoch?.report(timestampNormalizer.videoOriginUs, timestampNormalizer.audioOriginUs, audioEncoderDelayFrames)
+                        ?.let { report -> active.audio?.let { audio -> report.copy(submittedPcmFrames = audio.submittedPcmFrames,
+                            encodedAudioPackets = active.audioPackets, aacCalibration = audio.calibration,
+                            audioDrainPaddingFrames = audio.drainPaddingFrames, audioSourceWindow = audioSourceWindow,
+                            audioPresentationOffsetUs = active.captureEpoch.offsetUs(false)) } ?: report.copy(audioStorage = "SEPARATE_LOSSLESS") },
                     sourcePath = sourcePath,
                     sourceDynamicRange = sourcePath.dynamicRange,
                     sourceColorSpace = sourcePath.colorSpace,
                     sourceTransfer = sourcePath.transfer,
                     sourcePrecision = sourcePath.sourcePrecision,
+                    recordingLut = active.lutEvidence,
+                    curve = if (active.recordingLut != null) "LUT_BAKED_SDR" else "OCLog2",
+                    curveVersion = if (active.recordingLut != null) "1" else "2.0",
+                    gamut = if (active.recordingLut != null) "BT.709" else "BT.2020",
+                    range = if (active.recordingLut != null) "limited" else "full",
+                    codecMime = if (passthroughSdr) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC,
+                    codecProfile = if (passthroughSdr) "AVC_${active.candidate.profile}" else "Main10",
+                    eglRenderTargetBits = if (passthroughSdr) 8 else 10,
                     codecName = active.candidate.codecName,
                     targetFps = targetFps,
                     sourceDataSpace = lastSourceDataSpace,
@@ -828,8 +1328,11 @@ class OpenCineLogGpuPipeline(
 
     private fun destroyPreviewSurface() {
         if (previewEglSurface != EGL14.EGL_NO_SURFACE) {
-            if (EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW) == previewEglSurface) makeCurrent(pbuffer)
-            EGL14.eglDestroySurface(display, previewEglSurface)
+            if (EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW) == previewEglSurface ||
+                EGL14.eglGetCurrentSurface(EGL14.EGL_READ) == previewEglSurface) {
+                check(makeCurrent(pbuffer)) { "Operator EGL window could not be unbound." }
+            }
+            check(EGL14.eglDestroySurface(display, previewEglSurface)) { "Operator EGL window did not retire." }
             previewEglSurface = EGL14.EGL_NO_SURFACE
         }
     }
@@ -844,29 +1347,45 @@ class OpenCineLogGpuPipeline(
     private fun linkProgram(vertexSource: String, fragmentSource: String): Int {
         fun compile(type: Int, source: String): Int {
             val shader = GLES30.glCreateShader(type)
-            GLES30.glShaderSource(shader, source)
-            GLES30.glCompileShader(shader)
-            val status = IntArray(1)
-            GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, status, 0)
-            check(status[0] == GLES30.GL_TRUE) { GLES30.glGetShaderInfoLog(shader) }
-            return shader
+            try {
+                GLES30.glShaderSource(shader, source); GLES30.glCompileShader(shader)
+                val status = IntArray(1); GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, status, 0)
+                check(status[0] == GLES30.GL_TRUE) { GLES30.glGetShaderInfoLog(shader) }
+                return shader
+            } catch (failure: Throwable) { GLES30.glDeleteShader(shader); throw failure }
         }
-        val vertex = compile(GLES30.GL_VERTEX_SHADER, vertexSource)
-        val fragment = compile(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
-        val linked = GLES30.glCreateProgram()
-        GLES30.glAttachShader(linked, vertex)
-        GLES30.glAttachShader(linked, fragment)
-        GLES30.glLinkProgram(linked)
-        val status = IntArray(1)
-        GLES30.glGetProgramiv(linked, GLES30.GL_LINK_STATUS, status, 0)
-        GLES30.glDeleteShader(vertex)
-        GLES30.glDeleteShader(fragment)
-        check(status[0] == GLES30.GL_TRUE) { GLES30.glGetProgramInfoLog(linked) }
-        return linked
+        var vertex = 0; var fragment = 0; var linked = 0
+        try {
+            vertex = compile(GLES30.GL_VERTEX_SHADER, vertexSource)
+            fragment = compile(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+            linked = GLES30.glCreateProgram()
+            GLES30.glAttachShader(linked, vertex); GLES30.glAttachShader(linked, fragment); GLES30.glLinkProgram(linked)
+            val status = IntArray(1); GLES30.glGetProgramiv(linked, GLES30.GL_LINK_STATUS, status, 0)
+            check(status[0] == GLES30.GL_TRUE) { GLES30.glGetProgramInfoLog(linked) }
+            return linked
+        } catch (failure: Throwable) {
+            if (linked != 0) GLES30.glDeleteProgram(linked)
+            throw failure
+        } finally {
+            if (vertex != 0) GLES30.glDeleteShader(vertex)
+            if (fragment != 0) GLES30.glDeleteShader(fragment)
+        }
     }
 
     private fun reportGlFailure(failure: Throwable) {
+        recording?.let { active ->
+            active.failure = failure
+            active.acceptFrames.set(false)
+            stopRecording()
+        }
         onFailure("log-gpu-pipeline-failed", failure.message ?: "The OCLog GPU pipeline failed.")
+    }
+
+    private fun reportPreviewFailure(failure: Throwable) {
+        operatorLut?.let { reportOperatorLut(OperatorLutStatus(it.cube.sha256, OperatorLutState.WAITING_FOR_GPU, failure.message, monitorLutIdentity(it))) }
+        previewNativeSurface = null
+        runCatching { destroyPreviewSurface() }
+        runCatching { onPreviewLost?.invoke(failure.message ?: "The operator preview window was lost.") }
     }
 
     private fun <T> callOnGlThread(block: () -> T): T {
@@ -876,32 +1395,58 @@ class OpenCineLogGpuPipeline(
         return task.get(GL_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 
+    /** Defensive completion view: callers cannot complete the pipeline's owning future. */
+    fun closeAsync(): CompletableFuture<Unit> {
+        close()
+        return retirement.thenCombine(recordingFileRetirement()) { _, _ -> Unit }
+    }
+
     override fun close() {
-        if (!closed.compareAndSet(false, true)) return
-        recording?.let { active ->
-            if (active.stopRequested.compareAndSet(false, true)) {
-                active.acceptFrames.set(false)
-                active.audio?.requestStop()
-                handler.post { runCatching { active.codec.signalEndOfInputStream() } }
-            }
-            active.drainThread?.join(4_000)
+        synchronized(recordingFileLock) { if (!closed.compareAndSet(false, true)) return }
+        previewRequestGeneration.incrementAndGet()
+        recordingPreparation.get()?.cancel()
+        val accepted = handler.post {
+            val active = recording
+            if (active != null) stopRecording()
+            Thread({
+                joinOwnedWorker(active?.drainThread)
+                val posted = handler.post {
+                    try {
+                    if (pbuffer != EGL14.EGL_NO_SURFACE) check(makeCurrent(pbuffer))
+                    retireSubjectOutput()
+                    destroyPreviewSurface()
+                    if (encoderEglSurface != EGL14.EGL_NO_SURFACE) check(EGL14.eglDestroySurface(display, encoderEglSurface))
+                    surfaceTexture?.setOnFrameAvailableListener(null)
+                    surfaceTexture?.release()
+                    inputSurface?.release()
+                    if (operatorLutProgram != 0) GLES30.glDeleteProgram(operatorLutProgram)
+                    if (operatorLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(operatorLutTexture), 0)
+                    if (subjectLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(subjectLutTexture), 0)
+                    releaseRecordingLutTexture()
+                    if (program != 0) GLES30.glDeleteProgram(program)
+                    quad?.delete()
+                    if (textureId != 0) GLES30.glDeleteTextures(1, intArrayOf(textureId), 0)
+                    if (display != EGL14.EGL_NO_DISPLAY) check(EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT))
+                    if (pbuffer != EGL14.EGL_NO_SURFACE) check(EGL14.eglDestroySurface(display, pbuffer))
+                    if (previewContext != EGL14.EGL_NO_CONTEXT) check(EGL14.eglDestroyContext(display, previewContext))
+                    if (context != EGL14.EGL_NO_CONTEXT) check(EGL14.eglDestroyContext(display, context))
+                    check(EGL14.eglReleaseThread())
+                    if (display != EGL14.EGL_NO_DISPLAY) {
+                        // A stuck auxiliary swap may outlive the camera worker. Do not tear its EGL
+                        // display down underneath it, and do not join it on the recording path.
+                        val closingDisplay = display
+                        java.util.concurrent.CompletableFuture.allOf(*subjectRetirements.toTypedArray())
+                            .whenComplete { _, _ -> GpuEglDisplayLease.release(closingDisplay) }
+                    }
+
+                        retirement.complete(Unit)
+                    } catch (failure: Throwable) { retirement.completeExceptionally(failure) }
+                    finally { thread.quitSafely() }
+                }
+                if (!posted) retirement.completeExceptionally(IllegalStateException("GL pipeline retirement task was rejected"))
+            }, "OpenCineLogRetirement").apply { isDaemon = true; start() }
         }
-        runCatching {
-            callOnGlThread {
-                destroyPreviewSurface()
-                if (encoderEglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, encoderEglSurface)
-                surfaceTexture?.setOnFrameAvailableListener(null)
-                surfaceTexture?.release()
-                inputSurface?.release()
-                if (program != 0) GLES30.glDeleteProgram(program)
-                if (textureId != 0) GLES30.glDeleteTextures(1, intArrayOf(textureId), 0)
-                if (pbuffer != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, pbuffer)
-                if (previewContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, previewContext)
-                if (context != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, context)
-                if (display != EGL14.EGL_NO_DISPLAY) EGL14.eglTerminate(display)
-            }
-        }
-        thread.quitSafely()
+        if (!accepted) retirement.completeExceptionally(IllegalStateException("GL close request was rejected"))
     }
 
     private class EmbeddedAac(
@@ -910,53 +1455,119 @@ class OpenCineLogGpuPipeline(
         private val sampleRateHz: Int,
         private val channels: Int,
         private val hardwareAgc: AutomaticGainControl?,
+        private val effects: List<AudioEffect>,
+        private val effectReaders: List<AudioEffectObservationReader>,
+        private val hardwareAgcReader: AudioEffectObservationReader,
         private val softAgc: SoftAgc?,
         private val onAudioLevel: ((AudioLevelSnapshot) -> Unit)?,
+        private val recordingGain: DigitalRecordingGain,
+        private val listeningSink: PcmListeningSink?,
+        private val captureEpoch: CaptureEpochClock,
+        val calibration: AacCodecCalibration,
     ) : AutoCloseable {
         private val stopRequested = AtomicBoolean(false)
-        private val levelMeter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels)
+        private val stopDeadline = CodecStopDeadline(CODEC_STOP_TIMEOUT_NS)
+        @Volatile private var stopThread: Thread? = null
+        @Volatile private var stopFailure: Throwable? = null
+        private var codecStarted = false
+        private val levelMeter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels, sampleRateHz = audioRecord.sampleRate)
         @Volatile private var feederThread: Thread? = null
+        @Volatile var submittedPcmFrames = 0L
+            private set
+        @Volatile var drainPaddingFrames = 0L
+            private set
 
         fun start(onFailure: (Throwable) -> Unit) {
             codec.start()
+            codecStarted = true
             audioRecord.startRecording()
             check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 "AudioRecord did not enter RECORDING state."
             }
-            val anchorUs = System.nanoTime() / 1_000L
+            val startedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
+            val pcmEpoch = PcmCaptureEpoch(sampleRateHz)
+            val timestamp = android.media.AudioTimestamp()
             feederThread = Thread({
                 var submittedFrames = 0L
+                var capturedFrames = 0L
+                val frameBytes = PCM_BYTES_PER_SAMPLE * channels
+                val buffer = ByteBuffer.allocateDirect(calibration.config.maxInputBytes / frameBytes * frameBytes)
                 try {
                     while (!stopRequested.get()) {
-                        val index = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
-                        if (index < 0) continue
-                        val buffer = requireNotNull(codec.getInputBuffer(index)).apply { clear() }
+                        buffer.clear()
                         val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
                         if (read <= 0) {
-                            codec.queueInputBuffer(index, 0, 0, anchorUs + submittedFrames * 1_000_000L / sampleRateHz, 0)
+                            if (stopRequested.get()) break
                             if (read == AudioRecord.ERROR_DEAD_OBJECT || read == AudioRecord.ERROR_INVALID_OPERATION) {
                                 error("AudioRecord read failed with code $read.")
                             }
                             continue
                         }
-                        levelMeter.analyze(buffer, read, android.os.SystemClock.elapsedRealtime())
-                            ?.let { onAudioLevel?.invoke(it) }
+                        check(read % (PCM_BYTES_PER_SAMPLE * channels) == 0) { "AudioRecord returned a partial PCM frame" }
+                        val stampResult = audioRecord.getTimestamp(timestamp, android.media.AudioTimestamp.TIMEBASE_BOOTTIME)
+                        if (stampResult == AudioRecord.SUCCESS) {
+                            captureEpoch.audioInput(pcmEpoch.observe(timestamp.framePosition, timestamp.nanoTime))
+                        } else if (pcmEpoch.current() == null && android.os.SystemClock.elapsedRealtimeNanos() - startedAtNs >= 500_000_000L) {
+                            captureEpoch.audioInput(pcmEpoch.estimate(startedAtNs))
+                        }
+                        val platformAgc = hardwareAgcReader.read()
+                        requireExclusiveAgcObservation(platformAgc, hardwareAgc != null, recordingGain.enabled, softAgc != null)
+                        val appliedAgc = if (softAgc == null) platformAgc else platformAgc.copy(
+                            state = AudioEffectState.ENABLED, implementation = AudioEffectImplementation.SOFTWARE, hasControl = null)
+                        val observedEffects = AudioEffectsSnapshot(effectReaders[0].read(), appliedAgc, effectReaders[2].read())
+                        levelMeter.observeInput(buffer, read)
                         softAgc?.processPcm16(buffer, read)
-                        val ptsUs = anchorUs + submittedFrames * 1_000_000L / sampleRateHz
-                        codec.queueInputBuffer(index, 0, read, ptsUs, 0)
-                        submittedFrames += read / (PCM_BYTES_PER_SAMPLE * channels)
+                        recordingGain.process(buffer, read, PcmMeterEncoding.PCM_16, channels)
+                        listeningSink.offerListening(buffer, read, PcmMeterEncoding.PCM_16, sampleRateHz, channels)
+                        levelMeter.analyze(buffer, read, android.os.SystemClock.elapsedRealtime())
+                            ?.let { onAudioLevel?.invoke(it.copy(appliedRecordingGain = recordingGain,
+                                effects = observedEffects)) }
+                        val readCount = read / frameBytes
+                        val spans = captureEpoch.selectAudio(capturedFrames, readCount)
+                        capturedFrames = Math.addExact(capturedFrames, readCount.toLong())
+                        val retainedBytes = compactPcm16(buffer, read, channels, spans)
+                        var sent = 0
+                        while (sent < retainedBytes) {
+                            if (stopRequested.get()) stopDeadline.check()
+                            val index = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
+                            if (index < 0) continue
+                            val input = requireNotNull(codec.getInputBuffer(index)).apply { clear() }
+                            val count = minOf(input.capacity() / frameBytes, (retainedBytes - sent) / frameBytes) * frameBytes
+                            check(count > 0)
+                            input.put(buffer.duplicate().apply { position(sent); limit(sent + count) })
+                            codec.queueInputBuffer(index, 0, count, pcmFrameDurationNs(submittedFrames, sampleRateHz) / 1000, 0)
+                            sent += count
+                            submittedFrames = Math.addExact(submittedFrames, (count / frameBytes).toLong())
+                            submittedPcmFrames = submittedFrames
+                        }
                     }
                 } catch (failure: Throwable) {
                     if (!stopRequested.get()) onFailure(failure)
                 } finally {
+                    if (pcmEpoch.current() == null) captureEpoch.audioInput(pcmEpoch.estimate(startedAtNs))
+                    stopDeadline.begin()
                     runCatching {
-                        val eosIndex = generateSequence { codec.dequeueInputBuffer(CODEC_TIMEOUT_US) }
-                            .first { it >= 0 }
+                        // Explicit codec drain samples are not captured PCM and never enter the meter or capture clock.
+                        while (submittedFrames > 0 && drainPaddingFrames < calibration.drainPaddingFrames) {
+                            stopDeadline.check()
+                            val index = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
+                            if (index < 0) continue
+                            val buffer = requireNotNull(codec.getInputBuffer(index)).apply { clear() }
+                            val frameBytes = PCM_BYTES_PER_SAMPLE * channels
+                            val frames = minOf(buffer.capacity() / frameBytes, (calibration.drainPaddingFrames - drainPaddingFrames).toInt())
+                            check(frames > 0)
+                            buffer.put(ByteArray(frames * frameBytes))
+                            codec.queueInputBuffer(index, 0, frames * frameBytes,
+                                pcmFrameDurationNs(Math.addExact(submittedFrames, drainPaddingFrames), sampleRateHz) / 1000, 0)
+                            drainPaddingFrames += frames
+                        }
+                        var eosIndex: Int
+                        do { stopDeadline.check(); eosIndex = codec.dequeueInputBuffer(CODEC_TIMEOUT_US) } while (eosIndex < 0)
                         codec.queueInputBuffer(
                             eosIndex,
                             0,
                             0,
-                            anchorUs + submittedFrames * 1_000_000L / sampleRateHz,
+                            pcmFrameDurationNs(Math.addExact(submittedFrames, drainPaddingFrames), sampleRateHz) / 1000,
                             MediaCodec.BUFFER_FLAG_END_OF_STREAM,
                         )
                     }.onFailure(onFailure)
@@ -964,31 +1575,48 @@ class OpenCineLogGpuPipeline(
             }, "OpenCineCamAacFeeder").apply { start() }
         }
 
-        fun requestStop() {
+        @Synchronized fun requestStop() {
             if (!stopRequested.compareAndSet(false, true)) return
-            runCatching { audioRecord.stop() }
+            stopDeadline.begin()
+            stopThread = Thread({
+                try { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() }
+                catch (failure: Throwable) { stopFailure = failure }
+            }, "OpenCineCamAacStop").apply { isDaemon = true; start() }
         }
 
         override fun close() {
             requestStop()
-            feederThread?.join(2_000)
-            runCatching { hardwareAgc?.release() }
-            runCatching { audioRecord.release() }
-            runCatching { codec.stop() }
-            runCatching { codec.release() }
+            joinOwnedWorker(stopThread)
+            joinOwnedWorker(feederThread)
+            var failure = stopFailure
+            fun release(action: () -> Unit) {
+                try { action() } catch (problem: Throwable) {
+                    val first = failure
+                    if (first == null) failure = problem else if (first !== problem) first.addSuppressed(problem)
+                }
+            }
+            effects.forEach { effect -> release { effect.release() } }
+            release { audioRecord.release() }
+            release { if (codecStarted) codec.stop() }
+            release { codec.release() }
+            failure?.let { throw it }
         }
 
         companion object {
             private const val PCM_BYTES_PER_SAMPLE = 2
 
             @SuppressLint("MissingPermission")
-            fun create(context: Context, config: Camera2EmbeddedAudioConfig): EmbeddedAac {
+            fun create(context: Context, config: Camera2EmbeddedAudioConfig, captureEpoch: CaptureEpochClock,
+                onRetirementFailure: (Throwable) -> Unit, isCancelled: () -> Boolean): EmbeddedAac {
                 check(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     "RECORD_AUDIO permission is required for embedded AAC."
                 }
                 val channelMask = if (config.channels == 2) AudioFormat.CHANNEL_IN_STEREO else AudioFormat.CHANNEL_IN_MONO
                 val minimum = AudioRecord.getMinBufferSize(config.sampleRateHz, channelMask, AudioFormat.ENCODING_PCM_16BIT)
                 check(minimum > 0) { "The requested PCM input is unsupported." }
+                val calibrationConfig = AacCodecCalibrator.selectConfig(config.sampleRateHz, config.channels, config.bitrateBps, minimum * 2)
+                val calibration = AacCodecCalibrator.qualify(calibrationConfig, isCancelled)
+                check(!isCancelled()) { "Recording preparation was cancelled" }
                 val audioRecord = AudioRecord.Builder()
                     .setAudioSource(config.source)
                     .setAudioFormat(
@@ -1001,20 +1629,34 @@ class OpenCineLogGpuPipeline(
                     .setBufferSizeInBytes(minimum * 2)
                     .build()
                 var hardwareAgc: AutomaticGainControl? = null
+                val effects = mutableListOf<AudioEffect>()
                 try {
                 check(audioRecord.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed." }
-                var softwareAgc: SoftAgc? = null
-                if (config.enableAutomaticGainControl) {
-                    // Prefer the HAL effect; fall back to in-process gain control on devices
-                    // whose audio HAL does not expose AutomaticGainControl (seen on a tested device).
-                    val candidate = runCatching { AutomaticGainControl.create(audioRecord.audioSessionId) }.getOrNull()
-                    if (candidate != null) {
-                        val status = runCatching { candidate.setEnabled(true) }.getOrDefault(AudioEffect.ERROR)
-                        if (status == AudioEffect.SUCCESS && candidate.enabled) hardwareAgc = candidate
-                        else runCatching { candidate.release() }
+                check(audioRecord.sampleRate == config.sampleRateHz) { "AudioRecord sample rate differs from the configured AAC rate" }
+                fun observeOptional(available: () -> Boolean, create: () -> AudioEffect?, requested: Boolean): Pair<AudioEffect?, AudioEffectObservationReader> {
+                    var failed = false
+                    val supported = try { available() } catch (_: Throwable) { failed = true; null }
+                    val effect = try { create() } catch (_: Throwable) { failed = true; null }
+                    if (effect != null) {
+                        effects += effect
+                        try {
+                            val status = effect.setEnabled(requested)
+                            if (status != AudioEffect.SUCCESS || effect.enabled != requested) failed = true
+                        } catch (_: Throwable) { failed = true }
                     }
-                    if (hardwareAgc == null) softwareAgc = SoftAgc(config.sampleRateHz, config.channels)
+                    return effect to AudioEffectObservationReader(requested, effect, supported, failed)
                 }
+                val ns = observeOptional(NoiseSuppressor::isAvailable, { NoiseSuppressor.create(audioRecord.audioSessionId) }, config.enableNoiseSuppressor)
+                val aec = observeOptional(AcousticEchoCanceler::isAvailable, { AcousticEchoCanceler.create(audioRecord.audioSessionId) }, config.enableAcousticEchoCanceler)
+                val agc = if (config.recordingGain.enabled) {
+                    val supported = AutomaticGainControl.isAvailable()
+                    createDisabledManualAgc(audioRecord.audioSessionId) { hardwareAgc = it; effects += it }
+                    hardwareAgc to AudioEffectObservationReader(config.enableAutomaticGainControl, hardwareAgc, supported)
+                } else observeOptional(AutomaticGainControl::isAvailable, { AutomaticGainControl.create(audioRecord.audioSessionId) }, config.enableAutomaticGainControl)
+                hardwareAgc = agc.first as AutomaticGainControl?
+                val initialAgc = agc.second.read()
+                val softwareAgc = if (!config.recordingGain.enabled && config.enableAutomaticGainControl &&
+                    (hardwareAgc == null || initialAgc.state == AudioEffectState.DISABLED)) SoftAgc(config.sampleRateHz, config.channels) else null
                 config.preferredInputDeviceId?.let { requestedId ->
                         val device = context.getSystemService(AudioManager::class.java)
                             .getDevices(AudioManager.GET_DEVICES_INPUTS)
@@ -1022,26 +1664,28 @@ class OpenCineLogGpuPipeline(
                             ?: error("Requested audio input $requestedId is no longer connected.")
                         check(audioRecord.setPreferredDevice(device)) { "AudioRecord rejected audio input $requestedId." }
                     }
-                    val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+                    val codec = MediaCodec.createByCodecName(calibration.config.codecName)
                     try {
                         codec.configure(
-                            MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, config.sampleRateHz, config.channels).apply {
-                                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                                setInteger(MediaFormat.KEY_BIT_RATE, config.bitrateBps)
-                                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, minimum * 2)
-                            },
+                            AacCodecCalibrator.encoderFormat(calibration.config),
                             null,
                             null,
                             MediaCodec.CONFIGURE_FLAG_ENCODE,
                         )
-                        return EmbeddedAac(codec, audioRecord, config.sampleRateHz, config.channels, hardwareAgc, softwareAgc, config.onAudioLevel)
+                        return EmbeddedAac(codec, audioRecord, config.sampleRateHz, config.channels, hardwareAgc,
+                            effects, listOf(ns.second, agc.second, aec.second), agc.second, softwareAgc, config.onAudioLevel, config.recordingGain, config.listeningSink, captureEpoch, calibration)
                     } catch (failure: Throwable) {
-                        codec.release()
+                        try { codec.release() } catch (cleanup: Throwable) {
+                            onRetirementFailure(cleanup); if (cleanup !== failure) failure.addSuppressed(cleanup)
+                        }
                         throw failure
                     }
                 } catch (failure: Throwable) {
-                    runCatching { hardwareAgc?.release() }
-                    audioRecord.release()
+                    for (release in effects.map { effect -> { effect.release() } } + { audioRecord.release() }) {
+                        try { release() } catch (cleanup: Throwable) {
+                            onRetirementFailure(cleanup); if (cleanup !== failure) failure.addSuppressed(cleanup)
+                        }
+                    }
                     throw failure
                 }
             }
@@ -1049,19 +1693,55 @@ class OpenCineLogGpuPipeline(
     }
 
     private class Recording(
+        val outputDescriptor: ParcelFileDescriptor,
         val codec: MediaCodec,
         val codecSurface: Surface,
         val muxer: MediaMuxer,
         val candidate: OpenCineLogEncoderCandidate,
         val geometry: RecordingGeometry,
         val audio: EmbeddedAac?,
+        val captureEpoch: CaptureEpochClock?,
+        val minimumSensorTimestampNs: Long?,
+        val timelapse: TimelapseTimeline?,
+        val projectTimeline: ProjectFrameTimeline?,
+        val onTimelapseProgress: ((TimelapseProgress) -> Unit)?,
+        val onTimelapsePauseChanged: ((TimelapsePauseStatus) -> Unit)?,
+        val onEncodedProgress: ((EncodedRecordingProgress) -> Unit)?,
         val onStopped: (Boolean, OpenCineLogRecordingEvidence?) -> Unit,
+        val fileRetirement: RecordingFileRetirement,
+        val recordingLut: MonitorLut?,
+        val onRecordingLutApplied: ((BakedLutEvidence) -> Unit)?,
     ) {
+        val lutEvidence = recordingLut?.let(::BakedLutEvidence)
+        var lutApplied = false
+        val takeId = takeIds.incrementAndGet()
+        fun encodedProgress() = EncodedRecordingProgress(takeId, frames, firstPtsUs, lastPtsUs)
+        fun reportEncodedProgress() { onEncodedProgress?.invoke(encodedProgress()) }
+        // First reported after codec.start/onStarted: native preparation is not active capture time.
+        // Every access stays on the GL owner, including pause and terminal stop.
+        val pauseClock by lazy(LazyThreadSafetyMode.NONE) {
+            if (timelapse != null || captureEpoch != null) TimelapsePauseClock(takeId, android.os.SystemClock::elapsedRealtime) else null
+        }
+        var pauseStatusPublished = false
+        fun reportPauseStatus(finished: Boolean = false) {
+            val clock = pauseClock ?: return
+            if (timelapse == null && captureEpoch?.pauseAvailable() != true) return
+            pauseStatusPublished = true
+            val status = if (finished) clock.finish() else clock.snapshot()
+            onTimelapsePauseChanged?.invoke(status.copy(submittedFrames = timelapse?.selectedFrames ?: frames,
+                missedIntervals = timelapse?.missedIntervals ?: 0,
+                policy = if (timelapse != null) "TIMELAPSE_COMMAND_CLOCK" else "SHARED_CAPTURE_SAMPLE_WINDOWS"))
+        }
         val stopRequested = AtomicBoolean(false)
         val acceptFrames = AtomicBoolean(true)
         @Volatile var failure: Throwable? = null
+        @Synchronized fun noteFailure(problem: Throwable) {
+            val first = failure
+            if (first == null) failure = problem else if (first !== problem) first.addSuppressed(problem)
+        }
         @Volatile var drainThread: Thread? = null
-        var frames = 0L
+        @Volatile var frames = 0L
+        var audioPackets = 0L
         var firstPtsUs: Long? = null
         var lastPtsUs: Long? = null
         var maxVideoPtsGapUs: Long? = null
@@ -1076,6 +1756,7 @@ class OpenCineLogGpuPipeline(
     )
 
     companion object {
+        private val takeIds = java.util.concurrent.atomic.AtomicLong()
         private const val CODEC_TIMEOUT_US = 20_000L
         private const val CODEC_STOP_TIMEOUT_NS = 5_000_000_000L
         private const val MAX_PENDING_MUX_SAMPLES = 64
@@ -1085,7 +1766,6 @@ class OpenCineLogGpuPipeline(
         private const val OUTPUT_FLAT_MONITOR = 2
         private const val ANALYSIS_WIDTH = 160
         private const val ANALYSIS_HEIGHT = 90
-        private const val ANALYSIS_PERIOD_MS = 250L
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
         private const val EGL_GL_COLORSPACE_BT2020_LINEAR_EXT = 0x333F
 
@@ -1110,11 +1790,11 @@ class OpenCineLogGpuPipeline(
                 }
                 .firstOrNull()
 
-        fun findAvcEncoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
+        fun findAvcEncoder(size: Size, targetFps: Int, allowSoftware: Boolean = false): OpenCineLogEncoderCandidate? =
             MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.asSequence()
-                .filter { it.isEncoder && !it.isAlias && it.isHardwareAccelerated }
+                .filter { it.isEncoder && !it.isAlias && (allowSoftware || it.isHardwareAccelerated) }
                 .filter { it.supportedTypes.any { type -> type.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
-                .sortedBy { it.name }
+                .sortedWith(compareByDescending<MediaCodecInfo> { it.isHardwareAccelerated }.thenBy { it.name })
                 .mapNotNull { info ->
                     val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) }.getOrNull()
                         ?: return@mapNotNull null
@@ -1125,7 +1805,8 @@ class OpenCineLogGpuPipeline(
                     if (caps.videoCapabilities?.areSizeAndRateSupported(size.width, size.height, targetFps.toDouble()) != true) {
                         return@mapNotNull null
                     }
-                    OpenCineLogEncoderCandidate(info.name, profile, size)
+                    OpenCineLogEncoderCandidate(info.name, profile, size, info.isHardwareAccelerated,
+                        caps.profileLevels.filter { it.profile == profile }.maxOf { it.level })
                 }
                 .firstOrNull()
 
@@ -1135,11 +1816,10 @@ class OpenCineLogGpuPipeline(
             uniform vec2 uPositionScale;
             uniform int uPreviewRotation;
             uniform int uMirrorPreview;
+            layout(location = 0) in vec2 aPosition;
             out vec2 vTexCoord;
-            const vec2 positions[4] = vec2[4](vec2(-1.0,-1.0), vec2(1.0,-1.0), vec2(-1.0,1.0), vec2(1.0,1.0));
-            const vec2 texCoords[4] = vec2[4](vec2(0.0,0.0), vec2(1.0,0.0), vec2(0.0,1.0), vec2(1.0,1.0));
             void main() {
-                vec2 position = positions[gl_VertexID];
+                vec2 position = aPosition;
                 if (uPreviewRotation == 1) {
                     position = vec2(position.y, -position.x);
                 } else if (uPreviewRotation == 2) {
@@ -1149,7 +1829,7 @@ class OpenCineLogGpuPipeline(
                 }
                 if (uMirrorPreview == 1) position.x = -position.x;
                 gl_Position = vec4(position * uPositionScale, 0.0, 1.0);
-                vTexCoord = (uTextureMatrix * vec4(texCoords[gl_VertexID], 0.0, 1.0)).xy;
+                vTexCoord = (uTextureMatrix * vec4((aPosition + 1.0) * 0.5, 0.0, 1.0)).xy;
             }
         """.trimIndent()
 

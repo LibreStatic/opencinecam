@@ -87,3 +87,38 @@ class FocusPullAnimator {
 
     private fun lerp(from: Float, to: Float, t: Float): Float = from + (to - from) * t.coerceIn(0f, 1f)
 }
+
+/** One camera-executor-owned transition. Immutable tokens reject already-queued stale ticks. */
+class FocusPullSession {
+    private val animator = FocusPullAnimator()
+    private var generation = 0L
+    val isActive: Boolean get() = animator.isActive
+    fun isCurrent(token: Long): Boolean = token == generation && isActive
+
+    fun start(plan: FocusPullPlan, nowMs: Long): Long {
+        require(plan.fromDiopters.isFinite() && plan.fromDiopters >= 0f)
+        require(plan.toDiopters.isFinite() && plan.toDiopters >= 0f)
+        require(plan.durationMs > 0 && nowMs >= 0)
+        generation++
+        animator.start(plan, nowMs)
+        return generation
+    }
+
+    fun tick(token: Long, nowMs: Long): FocusPullStep? {
+        if (!isCurrent(token)) return null
+        val value = animator.tick(nowMs) ?: return null
+        val finished = animator.isComplete(nowMs)
+        if (finished) animator.complete()
+        return FocusPullStep(value, finished)
+    }
+
+    /** Returns whether a visible transition was cancelled; every cancellation revokes old tokens. */
+    fun cancel(): Boolean {
+        val active = isActive
+        generation++
+        animator.cancel()
+        return active
+    }
+}
+
+data class FocusPullStep(val diopters: Float, val finished: Boolean)

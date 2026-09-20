@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_listening_title">Salida de escucha</string>
+    <string name="audio_listening_help">Sólo reproducción: no modifica la ganancia del micrófono ni las muestras grabadas. Activar, importar un preset o reabrir la app no conecta audio; pulsá Conectar explícitamente. Los medidores solos no confirman escucha.</string>
+    <string name="audio_listening_enable">Habilitar preferencia de escucha</string>
+    <string name="audio_listening_volume">Volumen de escucha solicitado: %1$d%%</string>
+    <string name="audio_listening_wired">Auriculares con cable o USB</string>
+    <string name="audio_listening_bluetooth">Salida Bluetooth</string>
+    <string name="audio_listening_speaker">Altavoz integrado (selección explícita)</string>
+    <string name="audio_listening_speaker_warning">El altavoz puede realimentar el micrófono y quedar grabado acústicamente. Bajá el volumen de escucha antes de conectar. No se cambia al altavoz automáticamente.</string>
+    <string name="audio_listening_latency">La latencia de escucha no está medida; Bluetooth puede introducir una demora considerable. La salida elegida es una solicitud hasta que la ruta se confirme.</string>
+    <string name="audio_listening_auto">Cualquier dispositivo disponible del tipo elegido</string>
+    <string name="audio_listening_requested_device">Salida solicitada: %1$s</string>
+    <string name="audio_listening_effective_device">Salida informada: %1$s · ID %2$d</string>
+    <string name="audio_listening_disabled">Escucha desactivada</string>
+    <string name="audio_listening_needs_connect">Requiere conexión explícita</string>
+    <string name="audio_listening_waiting_pcm">Esperando PCM de la fuente</string>
+    <string name="audio_listening_no_output">Sin salida compatible disponible</string>
+    <string name="audio_listening_connecting">Conectando salida de escucha…</string>
+    <string name="audio_listening_active">Salida de escucha activa</string>
+    <string name="audio_listening_disconnected">Salida desconectada; reconectá explícitamente</string>
+    <string name="audio_listening_failed">La salida de escucha falló</string>
+    <string name="audio_listening_retiring">Esperando el cierre de la salida de escucha…</string>
+    <string name="audio_listening_counters">Frames aceptados: %1$d · paquetes descartados: %2$d</string>
+    <string name="audio_listening_connect">Conectar / reconectar escucha</string>
+</resources>

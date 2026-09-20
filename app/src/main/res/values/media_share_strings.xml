@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_sharing_title">Sharing and export</string>
+    <string name="media_share_action">Share or export take</string>
+    <string name="media_share_help">Choose exactly what leaves this app. Originals are not rewritten. Production metadata is exported separately; technical metadata excludes the production slate. Every package includes a relationship manifest.</string>
+    <string name="media_share_content_both">Originals and selected metadata</string>
+    <string name="media_share_content_originals">Originals only (plus relationship manifest)</string>
+    <string name="media_share_content_metadata">Selected metadata only (plus relationship manifest)</string>
+    <string name="media_share_production">Production slate metadata</string>
+    <string name="media_share_technical">Technical metadata</string>
+    <string name="media_share_both">Production and technical metadata</string>
+    <string name="media_share_lut">Include exact referenced LUT files with technical metadata</string>
+    <string name="media_share_lut_help">A missing referenced LUT stops preparation unless you explicitly exclude LUT files. A baked recording LUT must not be applied again to the recorded pixels.</string>
+    <string name="media_share_temporary">Generated files expire after 24 hours and may be reclaimed from cache earlier. Keep an external copy if needed. Opening the Android chooser does not verify delivery.</string>
+    <string name="media_share_relation_required">Selected metadata requires a complete declared relationship. Production metadata also requires a consistent readable slate. Choose another selection or refresh the catalog; no fallback is applied automatically.</string>
+    <string name="media_share_sources">Available sources — Originals: %1$d; Metadata: %2$d</string>
+    <string name="media_share_confirm">Prepare and open Android chooser</string>
+    <string name="media_share_preparing">Preparing selected export…</string>
+    <string name="media_share_cancel">Cancel / close</string>
+    <string name="media_share_error">Export was not handed off successfully. Retry, change the selection, or close and refresh the catalog. Originals are retained.</string>
+    <string name="media_share_cleanup_error">Temporary export cleanup failed; originals are retained.</string>
+    <string name="media_share_launched">Android chooser opened — delivery is not verified.</string>
+    <string name="media_share_prepared_files">Prepared files: %1$d</string>
+    <string name="media_share_chooser">Send selected capture files</string>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Delete related originals…</string>
+    <string name="media_delete_title">Permanently delete this take</string>
+    <string name="media_delete_help">This deletes the listed original media and related metadata, not just a preview or proxy. This action cannot be undone. Review every file before confirming.</string>
+    <string name="media_delete_acknowledge">I understand that these original files and metadata will be permanently deleted.</string>
+    <string name="media_delete_sources">Files selected — Originals: %1$d; Metadata: %2$d</string>
+    <string name="media_delete_original">Original: %1$s</string>
+    <string name="media_delete_metadata">Metadata: %1$s</string>
+    <string name="media_delete_confirm">Permanently delete listed files</string>
+    <string name="media_delete_cancel">Cancel / close</string>
+    <string name="media_delete_busy">Deletion is in progress. Cancellation is no longer available; wait for the per-file result. Leaving this screen does not stop an operation already confirmed.</string>
+    <string name="media_delete_complete">All selected files were deleted.</string>
+    <string name="media_delete_partial">Deletion was partial. Review every file result; do not assume the take was fully deleted.</string>
+    <string name="media_delete_rejected">Deletion was rejected. Review the current catalog before making a new selection.</string>
+    <string name="media_delete_unknown">Deletion outcome is unknown. Refresh the catalog and inspect the remaining files before taking further action.</string>
+    <string name="media_delete_absent">Absence verified</string>
+    <string name="media_delete_remaining">Not deleted</string>
+    <string name="media_delete_member_unknown">Unknown result</string>
+    <string name="media_delete_refresh">A catalog refresh was requested. A loading or read error is not proof that a file is absent.</string>
+    <string name="media_delete_not_attempted">Not attempted</string>
+</resources>

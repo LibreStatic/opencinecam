@@ -1,0 +1,56 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+package com.librestatic.opencinecam
+
+import org.json.JSONObject
+import com.librestatic.opencinecam.camera.CaptureEpochReport
+
+internal fun captureEpochJson(report: CaptureEpochReport): JSONObject = JSONObject()
+    .put("audioStorage", report.audioStorage)
+    .put("sourceAudioMinusVideoNs", if (report.cameraRealtime && report.audioTimestampBacked && report.audioFrameZeroNs != null && report.videoFrameZeroNs != null)
+        requireNotNull(report.audioFrameZeroNs) - requireNotNull(report.videoFrameZeroNs) else JSONObject.NULL)
+    .put("policy", report.policy).put("cameraRealtime", report.cameraRealtime)
+    .put("videoFrameZeroNs", report.videoFrameZeroNs ?: JSONObject.NULL)
+    .put("audioFrameZeroNs", report.audioFrameZeroNs ?: JSONObject.NULL)
+    .put("sharedOriginNs", report.sharedOriginNs ?: JSONObject.NULL)
+    .put("audioTimestampBacked", report.audioTimestampBacked)
+    .put("audioMaxResidualNs", report.audioMaxResidualNs ?: JSONObject.NULL)
+    .put("videoEncoderFirstPtsUs", report.videoEncoderFirstPtsUs ?: JSONObject.NULL)
+    .put("audioEncoderFirstPtsUs", report.audioEncoderFirstPtsUs ?: JSONObject.NULL)
+    .put("audioEncoderDelayFrames", report.audioEncoderDelayFrames ?: JSONObject.NULL)
+    .put("waveformAlignmentVerified", report.waveformAlignmentVerified)
+    .put("submittedPcmFrames", report.submittedPcmFrames).put("encodedAudioPackets", report.encodedAudioPackets)
+    .put("aacCalibration", report.aacCalibration?.let(::aacCalibrationJson) ?: JSONObject.NULL)
+    .put("audioSourceWindow", report.audioSourceWindow?.let(::aacSourceWindowJson) ?: JSONObject.NULL)
+    .put("audioDrainPaddingFrames", report.audioDrainPaddingFrames)
+    .put("codecInputFrames", if (report.audioStorage == "EMBEDDED_AAC") Math.addExact(report.submittedPcmFrames, report.audioDrainPaddingFrames) else JSONObject.NULL)
+    .put("audioPresentationOffsetUs", report.audioPresentationOffsetUs ?: JSONObject.NULL)
+    .put("capturedPcmFrames", report.capturedPcmFrames)
+    .put("sharedPause", report.sharedPause?.let { pause -> JSONObject()
+        .put("policy", "SHARED_BOOTTIME_PCM_GRID_V1").put("sampleRateHz", pause.sampleRateHz)
+        .put("audioFrameZeroNs", pause.audioFrameZeroNs).put("stopFrame", pause.stopFrame ?: JSONObject.NULL)
+        .put("capturedPcmFrames", pause.capturedPcmFrames).put("retainedPcmFrames", pause.retainedPcmFrames)
+        .put("lastCommandNs", pause.lastCommandNs ?: JSONObject.NULL)
+        .put("lastEffectiveBoundaryNs", pause.lastEffectiveBoundaryNs ?: JSONObject.NULL)
+        .put("windows", org.json.JSONArray().apply { pause.windows.forEach { window ->
+            put(JSONObject().put("startFrame", window.startFrame).put("endFrame", window.endFrame ?: JSONObject.NULL))
+        } })
+    } ?: JSONObject.NULL)
+
+
+private fun aacCalibrationJson(report: com.librestatic.opencinecam.camera.AacCodecCalibration): JSONObject = JSONObject()
+    .put("policy", "NATIVE_TWO_BOUNDARY_PCM_CALIBRATION_V1")
+    .put("encoder", report.config.codecName).put("decoder", report.decoderName)
+    .put("sampleRateHz", report.config.sampleRateHz).put("channels", report.config.channels)
+    .put("bitrateBps", report.config.bitrateBps).put("maxInputBytes", report.config.maxInputBytes)
+    .put("primingFrames", report.primingFrames).put("drainPaddingFrames", report.drainPaddingFrames)
+    .put("minimumCorrelation", report.minimumCorrelation)
+    .put("decoderSignalLagFrames", report.decoderSignalLagFrames).put("decoderFirstPtsUs", report.decoderFirstPtsUs)
+    .put("firstEncodedPtsUs", report.firstEncodedPtsUs).put("measuredAtElapsedMs", report.measuredAtElapsedMs)
+    .put("codecSpecificDataSha256", report.codecSpecificDataSha256).put("cacheMaxAgeMs", 300000)
+
+private fun aacSourceWindowJson(window: com.librestatic.opencinecam.camera.AacSourceWindowResult): JSONObject = JSONObject()
+    .put("policy", "EXPLICIT_MP4_SOURCE_EDIT_WITH_ROLL_GROUPS_V1")
+    .put("sourceFrames", window.sourceFrames).put("primingFrames", window.primingFrames)
+    .put("encodedFrames", window.encodedFrames).put("remainderFrames", window.remainderFrames)
+    .put("movieTimescale", window.movieTimescale).put("presentationDurationTicks", window.presentationDurationTicks)
+    .put("automaticReaderClippingVerified", false)
