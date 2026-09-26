@@ -644,7 +644,7 @@ private fun MonitoringOverlay(
             analysisClockMs = android.os.SystemClock.elapsedRealtime()
         }
     }
-    val analysisFresh = monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options) &&
+    val analysisFresh = state.scopeAnalysisLive(monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options)) &&
         (state.monitoringScopes == null || state.monitoringScopes.options == options)
     BoxWithConstraints(modifier) {
         ProfessionalScopeImage(state, options, analysisFresh, displayRotationProvider() * 90, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
@@ -778,6 +778,7 @@ private fun MonitoringOverlay(
             }
         }
         ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
+        AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = if (landscape) 64.dp else 12.dp))
     }
 }
 

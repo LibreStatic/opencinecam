@@ -137,6 +137,8 @@ data class CameraUiState(
     val analysisUpdatedAtMs: Long = 0L,
     val monitoringScopes: com.librestatic.opencinecam.camera.MonitoringScopeFrame? = null,
     val analysisIntervalMs: Long = 0L,
+    /** Why the engine has stopped producing scope analysis (THERMAL under severe device heat); NONE while it runs. */
+    val analysisSuspension: com.librestatic.opencinecam.camera.AnalysisSuspension = com.librestatic.opencinecam.camera.AnalysisSuspension.NONE,
     val audioLevels: AudioLevelSnapshot? = null,
     val audioClipLatched: Boolean = false,
     val audioMonitoringActive: Boolean = false,

@@ -16,6 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.*
 
@@ -31,9 +34,22 @@ internal fun FalseColorBand.composeColor(palette: FalseColorPalette): Color = wh
     FalseColorBand.CLIP -> Color.Red
 }
 
+/** Scope samples are only drawable while the engine is still producing them; a suspended engine leaves stale ones behind. */
+internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh && analysisSuspension == AnalysisSuspension.NONE
+
+/** Says why scopes stopped while analysis is suspended; the picture and any take keep running. */
+@Composable internal fun AnalysisSuspensionNotice(state: CameraUiState, modifier: Modifier = Modifier) {
+    if (state.analysisSuspension != AnalysisSuspension.THERMAL) return
+    Text(stringResource(R.string.analysis_suspended_thermal), color = Color.Yellow,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = modifier.background(Color.Black.copy(alpha = .75f)).padding(horizontal = 10.dp, vertical = 6.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite }.testTag("analysis-suspended-thermal"))
+}
+
 /** Operator only: never mutates the encoder, subject output, crop or stored image. */
 @Composable internal fun ProfessionalScopeImage(state: CameraUiState, options: MonitoringOptions,
     fresh: Boolean, displayDegrees: Int, sourceWidth: Int, sourceHeight: Int, squeezeFactor: Float, modifier: Modifier = Modifier) {
+    val live = state.scopeAnalysisLive(fresh)
     Canvas(modifier.testTag("monitoring-image-guides")) {
         val scale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
             monitoringPreviewScale(sourceWidth, sourceHeight, size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1),
@@ -41,7 +57,7 @@ internal fun FalseColorBand.composeColor(palette: FalseColorPalette): Color = wh
                 state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT, squeezeFactor)
             else 1f to 1f
         val frame = state.monitoringScopes
-        if (options.falseColorEnabled && fresh && frame != null && frame.options == options) {
+        if (options.falseColorEnabled && live && frame != null && frame.options == options) {
             fun point(x: Float, y: Float): Offset {
                 val p = monitoringDisplayPoint(x, y, frame.domain, state.descriptor?.sensorOrientation ?: 0,
                     displayDegrees, state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT)
@@ -74,7 +90,7 @@ internal fun FalseColorBand.composeColor(palette: FalseColorPalette): Color = wh
     if (!options.waveformEnabled && !options.vectorscopeEnabled && !options.falseColorEnabled) return
     var enlarged by remember { mutableStateOf(false) }
     val frame = state.monitoringScopes
-    val current = fresh && frame != null && frame.options == options
+    val current = state.scopeAnalysisLive(fresh) && frame != null && frame.options == options
     BoxWithConstraints(modifier) {
         Column(Modifier.width(minOf(maxWidth, if (enlarged) 280.dp else 152.dp))
             .heightIn(max = maxHeight * .65f).background(Color.Black.copy(alpha = .8f))

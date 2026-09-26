@@ -145,6 +145,26 @@ class OperatorPreferencesTest {
         assertEquals(false, operatorActionToggleState(OperatorAction.VIEW_ASSIST, requested, video.copy(gpuViewfinder = true)))
         assertEquals(true, operatorActionToggleState(OperatorAction.VIEW_ASSIST, requested, torchCamera(CaptureMode.LOG)))
     }
+    @Test fun thermallySuspendedAnalysisMakesOnlyTheScopeActionsUnavailable() {
+        val scopes = setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM)
+        val cool = torchCamera(CaptureMode.LOG)
+        val hot = cool.copy(analysisSuspension = AnalysisSuspension.THERMAL)
+        for (action in OperatorAction.entries) {
+            assertFalse(action.name, operatorActionThermallyPaused(action, cool))
+            assertEquals(action.name, action in scopes, operatorActionThermallyPaused(action, hot))
+            if (action in scopes) {
+                assertTrue(action.name, operatorActionAvailable(action, cool))
+                assertFalse(action.name, operatorActionAvailable(action, hot))
+            } else {
+                // Heat only stops scope analysis: every other action keeps its normal availability.
+                assertEquals(action.name, operatorActionAvailable(action, cool), operatorActionAvailable(action, hot))
+            }
+        }
+        // The operator's setting is kept, so the scopes come back as they were when analysis resumes.
+        val on = CameraSettings(peakingEnabled = true, zebraEnabled = true, histogramEnabled = true)
+        for (action in scopes) assertEquals(action.name, true, operatorActionToggleState(action, on, hot))
+        assertTrue(operatorActionAvailable(OperatorAction.PEAKING, hot.copy(analysisSuspension = AnalysisSuspension.NONE)))
+    }
     private fun torchCamera(mode: CaptureMode, torch: Boolean = true): CameraUiState {
         val descriptor = Camera2CameraDescriptor(
             cameraId = "operator-torch", lensFacing = 0, focalLengthsMm = listOf(4f), previewSize = Size(640, 480),

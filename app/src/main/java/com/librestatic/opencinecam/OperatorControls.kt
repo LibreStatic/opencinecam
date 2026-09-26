@@ -65,7 +65,8 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
         }
     }
     val perform: (OperatorAction) -> Unit = { action ->
-        if (!available(action)) Toast.makeText(context, R.string.operator_unavailable, Toast.LENGTH_SHORT).show()
+        if (!available(action)) Toast.makeText(context,
+            if (operatorActionThermallyPaused(action, state)) R.string.operator_action_thermal_help else R.string.operator_unavailable, Toast.LENGTH_SHORT).show()
         else when (action) {
             OperatorAction.CAPTURE -> capture()
             OperatorAction.PRESET_C1, OperatorAction.PRESET_C2 -> review = preset(action)
@@ -105,12 +106,14 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
         if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             settings.operation.buttons.forEachIndexed { index, action ->
+                val paused = operatorActionThermallyPaused(action, state)
                 OperatorButton(
                     index = index,
                     action = action,
-                    available = actions?.available?.invoke(action) == true,
+                    available = !paused && actions?.available?.invoke(action) == true,
                     // A row rendered without the action bundle still reads the settings it was given.
                     latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
+                    thermallyPaused = paused,
                     onClick = { actions?.perform?.invoke(action) },
                 )
             }
@@ -123,10 +126,13 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
  * an ON/OFF pill, so the operator never has to press one to find out where it stands; a long press
  * explains what the action does, including whether it only affects monitoring. An unavailable
  * button ignores taps but still answers the long press, because that help is what explains why.
+ * A scope action paused by device heat reads PAUSED rather than its latched ON, because the engine
+ * is not drawing it; TalkBack and the long press say why.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun OperatorButton(index: Int, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit) {
+private fun OperatorButton(index: Int, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
+    thermallyPaused: Boolean = false) {
     val context = LocalContext.current
     val on = latched == true
     val content = when {
@@ -139,8 +145,9 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
         on -> OperatorActiveAccent
         else -> Color(0xFF49535A)
     }
-    val help = stringResource(action.helpResource())
-    val stateWord = latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
+    val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
+    val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
+        else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
     Row(
         Modifier
             .heightIn(min = 48.dp)
@@ -166,7 +173,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
         if (latched != null) {
             Spacer(Modifier.width(8.dp))
             Text(
-                stringResource(if (latched) R.string.operator_state_on else R.string.operator_state_off),
+                stringResource(when { thermallyPaused -> R.string.operator_state_paused; latched -> R.string.operator_state_on; else -> R.string.operator_state_off }),
                 color = if (available && latched) Color(0xFF101417) else content,
                 fontSize = 11.sp,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,

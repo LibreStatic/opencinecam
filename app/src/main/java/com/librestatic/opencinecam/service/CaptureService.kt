@@ -298,6 +298,8 @@ class CaptureService : Service() {
     }
 
     @Volatile private var audioSidecarRecorder: AudioSidecarRecorder? = null
+    // Report-only A/V clock drift of the last separate WAV/FLAC take (ADAPTIVE; never stops a take).
+    @Volatile private var lastSeparateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? = null
     private var previewAudioMonitor: PreviewAudioMonitor? = null
     @Volatile private var audioListeningController: AudioListeningController? = null
     private val latestListeningStatus = AtomicReference<AudioListeningStatus?>(null)
@@ -1075,6 +1077,13 @@ class CaptureService : Service() {
             ) }
         }
 
+        override fun onAnalysisSuspended(reason: com.librestatic.opencinecam.camera.AnalysisSuspension) {
+            // cameraExecutor, on change only. The UI hides stale scopes and marks the scope
+            // buttons unavailable from this field; preview and any take are unaffected.
+            if (serviceDestroyed) return
+            cameraState.update { it.copy(analysisSuspension = reason) }
+        }
+
         override fun onTimelapseProgress(progress: TimelapseProgress) {
             mainHandler.post {
                 val current = cameraState.value
@@ -1187,6 +1196,7 @@ class CaptureService : Service() {
             }
             val transferPublication = take.publication
             var avTiming = previewEngine.consumeCaptureEpochReport()
+            lastSeparateAudioAvDrift = null
             val timing = previewEngine.consumeTimelapsePauseStatus()
             val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
@@ -1219,6 +1229,9 @@ class CaptureService : Service() {
                             val result = prepared?.result
                             if (result != null) avTiming = sidecar.captureClock?.report(avTiming?.videoEncoderFirstPtsUs, null, null)
                                 ?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_${result.container}") ?: avTiming
+                            lastSeparateAudioAvDrift = result?.let {
+                                separateAudioAvDrift(sidecar.captureClock?.cameraRealtime == true, it.captureTiming, it.displayName)
+                            }?.also { android.util.Log.i("AvClockDiagnostics", separateAudioAvDriftLog(it)) }
                         }
                     } },
                     discardAudio = { audioOutput?.finish(false); Unit },
@@ -1420,6 +1433,8 @@ class CaptureService : Service() {
 
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
+        /** A/V clock drift of the last separate WAV/FLAC take, or null (no such take, or not measurable). Diagnostic only. */
+        val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
 
         /** Returns false when the bounded actor queue is full or the service is shutting down. */
         fun submit(command: CaptureCommand): Boolean = try {

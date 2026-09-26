@@ -77,8 +77,17 @@ private fun CameraUiState.operatorHighSpeed(): Boolean =
     if (selectedMode == CaptureMode.LOG) activeLogProfile?.constrainedHighSpeed == true
     else selectedMode in CameraUiState.videoProfileModes && activeVideoProfile?.constrainedHighSpeed == true
 
+/**
+ * True when [action] only drives scope analysis that the engine has suspended because the device is
+ * too hot. The setting itself is kept; the button reads as unavailable until analysis resumes.
+ */
+fun operatorActionThermallyPaused(action: OperatorAction, state: CameraUiState): Boolean =
+    state.analysisSuspension == com.librestatic.opencinecam.camera.AnalysisSuspension.THERMAL &&
+        action in setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM)
+
 fun operatorActionAvailable(action: OperatorAction, state: CameraUiState): Boolean {
     if (action == OperatorAction.NONE || action == OperatorAction.SYSTEM_VOLUME) return false
+    if (operatorActionThermallyPaused(action, state)) return false
     if (action == OperatorAction.CONTROL_LOCK) return true
     if (action == OperatorAction.CAPTURE) return state.whiteBalancePreparing || state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)
     // Color view assist is applied only by the OCLog2 shader. Every other GPU viewfinder (time-lapse,
