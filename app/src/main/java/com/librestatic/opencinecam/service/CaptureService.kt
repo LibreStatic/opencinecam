@@ -157,7 +157,9 @@ class CaptureService : Service() {
     private val foreground = RecordingForegroundController(this)
     private val previewEngine by lazy { Camera2PreviewEngine(this) }
     private val stillSaver by lazy { StillImageSaver(this) }
-    private var videoOutput: VideoOutput? = null
+    // Take-owned fields are written on main before dispatch and detached by engine callbacks.
+    @Volatile private var videoOutput: VideoOutput? = null
+    private val takeOwnershipLock = Any()
     private val recordingRecoveryGuards = java.util.concurrent.ConcurrentHashMap<VideoOutput, AutoCloseable>()
 
     private fun reserveRecordingRecoveryGuard(output: VideoOutput) {
@@ -182,20 +184,21 @@ class CaptureService : Service() {
             }
         }
     }
-    private var activeTransferPublication: CaptureTransferPublication? = null
+    @Volatile private var activeTransferPublication: CaptureTransferPublication? = null
     private var transferRuntime: WebDavTransferRuntime? = null
     private val transferCapture = AtomicReference<CaptureTransferReservation?>(null)
     private var transferPreparationToken = 0L
     private var transferWaiting = false
     private var transferPreparationJob: kotlinx.coroutines.Job? = null
     private var transferCaptureDispatched = false
+    private val dispatchedTake = DispatchedTakeAdmission<CaptureTransferReservation>()
     @Volatile private var serviceDestroyed = false
 
     private fun transferCoordinator(): WebDavTransferRuntime = transferRuntime
         ?: WebDavTransferRuntime.get(this).also { transferRuntime = it }
 
     /** An error/timeout is not native retirement; callers choose a proven terminal boundary. */
-    private fun releaseTransferCapture(reservation: CaptureTransferReservation?) {
+    private fun releaseTransferCapture(reservation: CaptureTransferReservation?, onReleased: (() -> Unit)? = null) {
         if (reservation == null) return
         AudioRetirementGate.whenIdle().whenComplete { _, failure ->
             if (failure == null && transferCapture.compareAndSet(reservation, null)) {
@@ -207,7 +210,48 @@ class CaptureService : Service() {
                     }
                 }
                 reservation.close()
+                onReleased?.invoke()
             }
+        }
+    }
+
+    private fun dispatchTransferCapture() {
+        transferCaptureDispatched = true
+        dispatchedTake.dispatch(requireNotNull(transferCapture.get()) { "Recording reservation missing" })
+    }
+
+    /**
+     * A dispatched start that never reached RECORDING releases its exact admission once the
+     * engine proves native retirement. A failed receipt (preparation still retiring) keeps it
+     * held for onRecordingStopped, a later failure/recovery receipt, or engine closure.
+     */
+    private fun releaseFailedTakeStart(receipt: CompletableFuture<Unit>,
+        dispatch: DispatchedTakeAdmission.Dispatch<CaptureTransferReservation>? = dispatchedTake.pendingStart()) {
+        if (dispatch == null) return
+        receipt.whenComplete { _, failure ->
+            if (failure != null) return@whenComplete
+            dispatchedTake.claimFailedStart(dispatch)?.let { reservation ->
+                releaseTransferCapture(reservation) { startPreviewAudioMonitorIfEligible() }
+            }
+        }
+    }
+
+    private class DetachedTake(
+        val video: VideoOutput?,
+        val audio: AudioSidecarRecorder?,
+        val publication: CaptureTransferPublication?,
+        val audioStartFailure: String?,
+        val geometry: RecordingGeometry?,
+    )
+
+    /** Engine callbacks and main detach the take-owned outputs exactly once; the caller finishes them. */
+    private fun detachTake(): DetachedTake = synchronized(takeOwnershipLock) {
+        DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry).also {
+            videoOutput = null
+            audioSidecarRecorder = null
+            activeTransferPublication = null
+            audioStartFailure = null
+            activeRecordingGeometry = null
         }
     }
 
@@ -231,15 +275,14 @@ class CaptureService : Service() {
         }
     }
 
-    private fun abortTransferPublication() {
-        val publication = activeTransferPublication
-        activeTransferPublication = null
+    private fun abortTransferPublication(publication: CaptureTransferPublication? =
+        synchronized(takeOwnershipLock) { activeTransferPublication.also { activeTransferPublication = null } }) {
         publication?.abort()?.forEach { problem ->
             android.util.Log.e("CapturePublication", "Aborted take bookkeeping failed", problem)
         }
     }
 
-    private var audioSidecarRecorder: AudioSidecarRecorder? = null
+    @Volatile private var audioSidecarRecorder: AudioSidecarRecorder? = null
     private var previewAudioMonitor: PreviewAudioMonitor? = null
     @Volatile private var audioListeningController: AudioListeningController? = null
     private val latestListeningStatus = AtomicReference<AudioListeningStatus?>(null)
@@ -247,11 +290,11 @@ class CaptureService : Service() {
     // Owned on main; even a failed factory keeps its native cleanup receipt here.
     private var previewAudioRetirement = CompletableFuture.completedFuture(Unit)
     private var previewAudioGeneration = 0L
-    private var audioStartFailure: String? = null
+    @Volatile private var audioStartFailure: String? = null
     private var activeRecordingAudioLabel: String = "no audio"
     private var activeRecordingGain: DigitalRecordingGain? = null
     private val audioLevelEpoch = java.util.concurrent.atomic.AtomicLong()
-    private var recordingStartedAtMs = 0L
+    @Volatile private var recordingStartedAtMs = 0L
     private var timelapseAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
     private var attachedPreviewRotationDegrees: Int = 0
@@ -269,7 +312,7 @@ class CaptureService : Service() {
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var geometrySeeds = GeometrySeeds()
     private lateinit var physicalOrientationTracker: PhysicalOrientationTracker
-    private var activeRecordingGeometry: RecordingGeometry? = null
+    @Volatile private var activeRecordingGeometry: RecordingGeometry? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private fun incrementSavedSlate(saved: ProductionSlateSettings) {
         try {
@@ -714,6 +757,13 @@ class CaptureService : Service() {
 
         override fun onPreviewStarted(descriptor: Camera2CameraDescriptor) {
             activePreviewKey = previewKey()
+            // A preview (re)started outside CAPTURING means a never-started take already failed
+            // (fail() left CAPTURING) and the engine drops its stale-generation start silently.
+            // Re-observe retirement so a receipt that failed while preparation was retiring
+            // cannot keep the admission after the operator changed settings instead of retrying.
+            dispatchedTake.pendingStart()?.takeIf { cameraState.value.phase != CameraUiPhase.CAPTURING }?.let { dispatch ->
+                releaseFailedTakeStart(previewEngine.recordingOutputRetirement(), dispatch)
+            }
             mainHandler.post { updateSubjectTarget() }
             if (pendingSwitchTarget == descriptor.cameraId) {
                 pendingSwitchTarget = null
@@ -974,14 +1024,12 @@ class CaptureService : Service() {
                     try {
                         val uri = stillSaver.saveDng(bytes, productionSlate, captureNames)
                         incrementSavedSlate(productionSlate)
-                        cameraState.value = cameraState.value.copy(
-                            phase = CameraUiPhase.SAVED,
-                            lastSavedUri = uri.toString(),
-                            message = "DNG saved: ${width}×$height",
-                            errorCode = null,
-                        )
                         mainHandler.post {
-                            localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value) }
+                            if (serviceDestroyed) return@post
+                            cameraState.update { it.copy(phase = CameraUiPhase.SAVED, lastSavedUri = uri.toString(),
+                                message = "DNG saved: ${width}×$height", errorCode = null) }
+                            localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value)
+                        }
                     } catch (failure: Throwable) {
                         fail("dng-save-failed", failure.message ?: "DNG could not be saved.")
                     }
@@ -1045,6 +1093,7 @@ class CaptureService : Service() {
         }
 
         override fun onRecordingStarted(width: Int, height: Int) {
+            dispatchedTake.markStarted()
             timecodeTracker.onRecordingStarted(previewEngine.encodedRecordingProgress()?.takeId)
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
             previewEngine.consumeTimelapsePauseStatus()
@@ -1054,9 +1103,14 @@ class CaptureService : Service() {
                 try {
                     sidecar.start()
                 } catch (failure: Throwable) {
-                    audioStartFailure = failure.message ?: "Lossless audio could not start."
+                    synchronized(takeOwnershipLock) {
+                        // A concurrent failure/recovery may already own (and finish) this sidecar.
+                        if (audioSidecarRecorder === sidecar) {
+                            audioStartFailure = failure.message ?: "Lossless audio could not start."
+                            audioSidecarRecorder = null
+                        }
+                    }
                     sidecar.finish(false)
-                    audioSidecarRecorder = null
                     previewEngine.stopVideo()
                     return
                 }
@@ -1092,13 +1146,15 @@ class CaptureService : Service() {
         override fun onRecordingStopped(success: Boolean) {
             retireAudioLevelConsumer()
             val recordingGain = activeRecordingGain
-            val transferReservation = transferCapture.get()
+            // Only the exact dispatched admission; a failed start may already have released it.
+            val transferReservation = dispatchedTake.claimStopped()
             val frozenLut = recordingLutIntent.get()?.takeIf { it.owner === transferReservation }?.lut
             previewEngine.releaseRecordingWhiteBalance()
             cameraState.value = cameraState.value.copy(recordingFinalizing = true)
             mainHandler.removeCallbacks(recordingTicker)
             cancelTimelapseAutoStop()
-            val output = videoOutput
+            val take = detachTake()
+            val output = take.video
             // A failed content callback alone never proves native retirement. The exact file
             // receipt can succeed even when encoding failed, but release/close failures keep it fenced.
             val retirement = previewEngine.stoppedRecordingOutputRetirement()
@@ -1114,25 +1170,21 @@ class CaptureService : Service() {
                     }
                 }
             }
-            val transferPublication = activeTransferPublication
-            activeTransferPublication = null
-            videoOutput = null
+            val transferPublication = take.publication
             var avTiming = previewEngine.consumeCaptureEpochReport()
             val timing = previewEngine.consumeTimelapsePauseStatus()
             val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
             val timecodeReport = timecodeTracker.recordingReport()
             try {
-                val requestedAudioFailure = audioStartFailure
-                audioStartFailure = null
-                val audioOutput = audioSidecarRecorder
+                val requestedAudioFailure = take.audioStartFailure
+                val audioOutput = take.audio
                 val logEvidence = previewEngine.consumeLastOpenCineLogEvidence()
                 val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
                 val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
                 val finalizedSuccess = success && nativeRetired && requestedAudioFailure == null && bakingVerified &&
                     (cameraState.value.selectedMode != CaptureMode.LOG || logEvidence != null)
-                val geometry = activeRecordingGeometry
-                activeRecordingGeometry = null
+                val geometry = take.geometry
                 var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
                 val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
                     catch (problem: Throwable) {
@@ -1189,7 +1241,6 @@ class CaptureService : Service() {
                 }
                 val registrationFailed = registrationCreationFailed || finalization.registrationFailures.isNotEmpty() || transferPublication?.registrationFailed == true
                 timecodeReport?.let { timecodeTracker.onRecordingStopped(completedTake != null, it.lifecycleToken) }
-                audioSidecarRecorder = null
                 val uri = completedTake?.first
                 val sidecarResult = completedTake?.second
                 val registrationNotice = if (completedTake == null) "" else buildString {
@@ -1223,8 +1274,7 @@ class CaptureService : Service() {
                     recordingElapsedMs = durationMs,
                 ) }
             } catch (failure: Throwable) {
-                runCatching { audioSidecarRecorder?.finish(false) }
-                audioSidecarRecorder = null
+                runCatching { take.audio?.finish(false) }
                 runCatching { output?.finish(false) }
                 fail("video-save-failed", failure.message ?: "Video could not be saved.")
             } finally {
@@ -1323,20 +1373,25 @@ class CaptureService : Service() {
             stillOwner.get()?.takeUnless { it.publishing.get() }?.let { owner ->
                 if (stillOwner.compareAndSet(owner, null)) cameraState.update { it.copy(stillCapturePending = false, burstSaving = false, bracketSaving = false, accumulationSaving = false) }
             }
-            stopPreviewAudioMonitor(clearLevels = false)
-            mainHandler.removeCallbacks(recordingTicker)
-            cancelTimelapseAutoStop()
-            videoOutput?.finish(false)
-            videoOutput = null
-            abortTransferPublication()
-            activeRecordingGeometry = null
-            runCatching { audioSidecarRecorder?.finish(false) }
-            audioSidecarRecorder = null
-            audioStartFailure = null
-            foreground.stop()
-            fail(code, message)
-            retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-            stopSelf()
+            // Observed on the failing engine thread so the receipt queues behind its cleanup.
+            val retirement = previewEngine.recordingOutputRetirement()
+            releaseFailedTakeStart(retirement)
+            val cleanup = Runnable {
+                // Take-owned and main-only state (transferWaiting, WB, timers) is mutated on main.
+                stopPreviewAudioMonitor(clearLevels = false)
+                mainHandler.removeCallbacks(recordingTicker)
+                cancelTimelapseAutoStop()
+                val take = detachTake()
+                take.video?.finish(false)
+                abortTransferPublication(take.publication)
+                runCatching { take.audio?.finish(false) }
+                foreground.stop()
+                fail(code, message)
+                retireRecordingRecoveryGuards(retirement)
+                stopSelf()
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) cleanup.run()
+            else mainHandler.post { if (!serviceDestroyed) cleanup.run() }
         }
     }
 
@@ -1435,16 +1490,15 @@ class CaptureService : Service() {
         fun recoverPreview(targetWidth: Int, targetHeight: Int) {
             val token = ++recoveryGeneration
             mainHandler.removeCallbacks(recordingTicker)
-            runCatching { audioSidecarRecorder?.finish(false) }
-            audioSidecarRecorder = null
-            runCatching { videoOutput?.finish(false) }
-            videoOutput = null
-            abortTransferPublication()
-            activeRecordingGeometry = null
-            audioStartFailure = null
+            val take = detachTake()
+            runCatching { take.audio?.finish(false) }
+            runCatching { take.video?.finish(false) }
+            abortTransferPublication(take.publication)
             foreground.stop()
             previewEngine.stopPreview()
-            retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
+            val retirement = previewEngine.recordingOutputRetirement()
+            retireRecordingRecoveryGuards(retirement)
+            releaseFailedTakeStart(retirement)
             prepare(targetWidth, targetHeight)
             if (cameraState.value.phase == CameraUiPhase.ERROR) return
             val surface = attachedPreviewSurface
@@ -1810,7 +1864,8 @@ class CaptureService : Service() {
             )
             val surface = attachedPreviewSurface?.takeIf { it.isValid } ?: return
             val reopen = {
-                if (cameraState.value.targetFps == effectiveFps && surface.isValid) {
+                // The high-speed reopen is deferred; a take admitted meanwhile owns the graph.
+                if (cameraState.value.targetFps == effectiveFps && surface.isValid && !cameraState.value.structuralSettingsFrozen) {
                     previewEngine.startPreview(
                         descriptor,
                         surface,
@@ -2355,8 +2410,10 @@ class CaptureService : Service() {
                 return accepted
             } finally {
                 // An engine timeout can return false while native preparation is still retiring.
-                // Such a reservation stays held until onRecordingStopped or actual engine closure.
+                // Such a reservation stays held until the engine proves retirement, onRecordingStopped
+                // or actual engine closure; a rejected dispatch never keeps it forever.
                 if (!accepted && !transferCaptureDispatched) releaseTransferCapture(reservation)
+                else if (!accepted) releaseFailedTakeStart(previewEngine.recordingOutputRetirement())
             }
         }
 
@@ -2529,7 +2586,7 @@ class CaptureService : Service() {
                         }
                         cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, recordingProjectRate = settings.videoProjectRate.takeIf { settings.videoOffSpeed },
                             message = "Preparing H.264 · $activeRecordingAudioLabel…") }
-                        transferCaptureDispatched = true
+                        dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
                         previewEngine.startVideo(
                             output.descriptor,
@@ -2651,7 +2708,7 @@ class CaptureService : Service() {
                                 "Preparing OCLog2 · ${current.targetFps} fps · HLG10 → scene-linear BT.2020 → HEVC Main10 · $activeRecordingAudioLabel…"
                             },
                         ) }
-                        transferCaptureDispatched = true
+                        dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
                         previewEngine.startOpenCineLogVideo(
                             output.descriptor,
@@ -2726,7 +2783,7 @@ class CaptureService : Service() {
                             timelapseEncoder = null,
                             timelapseHardwareEncoder = null,
                         )
-                        transferCaptureDispatched = true
+                        dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
                         previewEngine.startVideo(
                             output.descriptor,
@@ -2802,12 +2859,10 @@ class CaptureService : Service() {
         stopPreviewAudioMonitor(clearLevels = true)
         audioListeningController?.let { audioListeningRetirement = it.closeAsync() }
         foreground.stop()
-        runCatching { audioSidecarRecorder?.finish(false) }
-        audioSidecarRecorder = null
-        runCatching { videoOutput?.finish(false) }
-        videoOutput = null
-        abortTransferPublication()
-        activeRecordingGeometry = null
+        val take = detachTake()
+        runCatching { take.audio?.finish(false) }
+        runCatching { take.video?.finish(false) }
+        abortTransferPublication(take.publication)
         val retired = previewEngine.closeAsync()
         retireRecordingRecoveryGuards(retired)
         retired.whenComplete { _, failure ->
@@ -2847,6 +2902,11 @@ class CaptureService : Service() {
     }
 
     private fun fail(code: String, message: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            // transferWaiting and WB preparation are main-owned; worker failures hop like other callbacks.
+            mainHandler.post { if (!serviceDestroyed) fail(code, message) }
+            return
+        }
         if (transferWaiting) {
             transferWaiting = false
             transferPreparationToken++

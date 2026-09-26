@@ -19,6 +19,7 @@ import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.transfers.*
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
+import org.junit.Assume
 import org.junit.Rule
 import org.junit.Test
 
@@ -386,7 +387,33 @@ class OperatorServiceTest {
                     android.util.Log.i("ServiceAudioMatrixProbe", "mode=VIDEO requested=$audioPreference outcome=HARDWARE_REQUIRED positiveCellAccepted=false createdVideo=0 createdAudio=0 createdMetadata=0")
                 }
                 android.util.Log.i("OperatorTakeProbe", "mode=VIDEO hardwareAvcEncoders=0 offSpeed=$offSpeed cleanRejection=true createdClips=0 REC_NOT_RUN error=${rejected.errorCode} message=${rejected.message}")
-                return
+                // A rejected dispatched start must release its exact service admission: after
+                // recovery the operator's next take is admitted instead of silently ignored.
+                val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
+                val admission = CaptureService::class.java.getDeclaredField("transferCapture").apply { isAccessible = true }
+                fun admissionHeld() = (admission.get(outer) as AtomicReference<*>).get() != null
+                compose.waitUntil(10_000) { !admissionHeld() }
+                compose.runOnUiThread { owner.recoverPreview(640, 480) }
+                compose.waitUntil(15_000) { owner.cameraStates.value.phase == CameraUiPhase.PREVIEWING }
+                var retried = false
+                var retriedPhase: CameraUiPhase? = null
+                compose.runOnUiThread {
+                    retried = owner.captureForRole(CaptureActionTicket(false, owner.cameraStates.value.captureActionGeneration), audioForThisTake = audioPreference != null || offSpeed)
+                    retriedPhase = owner.cameraStates.value.phase
+                }
+                // Off-speed VIDEO starts on the already-running GPU viewfinder graph, whose engine
+                // start is synchronous: an admitted take is dispatched and rejected inside this call,
+                // so capturePrimary returns false with the phase already ERROR. A leaked admission
+                // instead returns false silently and leaves the viewfinder PREVIEWING.
+                assertTrue("A take after a rejected start must be admitted (phase=$retriedPhase)",
+                    retried || retriedPhase == CameraUiPhase.ERROR)
+                compose.waitUntil(20_000) { owner.cameraStates.value.phase in setOf(CameraUiPhase.RECORDING, CameraUiPhase.ERROR) }
+                val retriedRejection = owner.cameraStates.value
+                assertEquals(CameraUiPhase.ERROR, retriedRejection.phase)
+                assertTrue(retriedRejection.message.orEmpty(), retriedRejection.message.orEmpty().contains("No hardware video/avc Surface encoder accepts"))
+                assertEquals(beforeVideos, ownedVideos())
+                compose.waitUntil(10_000) { !admissionHeld() }
+                Assume.assumeTrue("positive VIDEO path needs a hardware AVC encoder", false)
             }
             assertTrue("Supported take must accept capture", accepted)
             assertEquals(owner.cameraStates.value.message, CameraUiPhase.RECORDING, owner.cameraStates.value.phase)
