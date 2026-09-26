@@ -32,6 +32,7 @@ import android.media.MediaCodecList
 import android.media.AudioManager
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.PowerManager
 import android.os.Build
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
@@ -311,6 +312,7 @@ class Camera2PreviewEngine(
 ) : AutoCloseable {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val appContext = context.applicationContext
+    private val powerManager = context.getSystemService(PowerManager::class.java)
     private val cameraExecutor = CloseTolerantCameraExecutor()
     private val imageThread = HandlerThread("OpenCineCamImage").apply { start() }
     private val imageHandler = Handler(imageThread.looper)
@@ -3479,6 +3481,9 @@ class Camera2PreviewEngine(
         descriptor.analysisSize?.takeUnless { gpuPhotoPreviewEnabled || logPreviewEnabled }?.let { size ->
             analysisReader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader ->
                 val lease = ReaderLease(reader)
+                // Per graph: once thermal pressure turns the scopes off they stay off until the
+                // next preview graph, so they do not flap at the SEVERE boundary.
+                val governor = AnalysisPerformanceGovernor(queueCapacity = 2)
                 analysisReaderLease = lease
                 analysisLease = lease
                 reader.setOnImageAvailableListener({
@@ -3490,7 +3495,7 @@ class Camera2PreviewEngine(
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastAnalysisAtMs >= monitoringOptions.periodMs) {
                                 lastAnalysisAtMs = now
-                                analyzeImage(it)
+                                if (analysisAllowed(governor)) analyzeImage(it) else null
                             } else null
                         }
                     }
@@ -4334,6 +4339,16 @@ class Camera2PreviewEngine(
         } else {
             (descriptor.sensorOrientation - displayRotationDegrees + 360) % 360
         }
+
+    /** Image-thread check before the CPU scopes run; logs once when thermal pressure disables them. */
+    private fun analysisAllowed(governor: AnalysisPerformanceGovernor): Boolean {
+        if (governor.isDisabled()) return false
+        val status = powerManager?.currentThermalStatus ?: -1
+        val decision = governor.observeLatestFrameReader(status)
+        if (decision.action == AnalysisGovernorAction.KEEP) return true
+        Log.w(TAG, "YUV analysis disabled (thermal status $status): ${decision.reason}")
+        return false
+    }
 
     private fun closeAnalysisReader() {
         val lease = analysisReaderLease

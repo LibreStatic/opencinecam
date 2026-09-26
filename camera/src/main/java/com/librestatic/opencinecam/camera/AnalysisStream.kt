@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam.camera
 
+import android.os.PowerManager
 import com.librestatic.opencinecam.core.model.FailureCode
 import com.librestatic.opencinecam.core.model.FailureSeverity
 import com.librestatic.opencinecam.core.model.Recoverability
@@ -67,6 +68,24 @@ class AnalysisPerformanceGovernor(
 
     fun isDisabled(): Boolean = disabled
 }
+
+/** Maps `PowerManager.THERMAL_STATUS_*` to the model scale; values this build does not know stay UNKNOWN. */
+fun thermalStatusFromPlatform(status: Int): ThermalStatus = when (status) {
+    PowerManager.THERMAL_STATUS_NONE, PowerManager.THERMAL_STATUS_LIGHT -> ThermalStatus.NORMAL
+    PowerManager.THERMAL_STATUS_MODERATE -> ThermalStatus.MODERATE
+    PowerManager.THERMAL_STATUS_SEVERE -> ThermalStatus.SEVERE
+    PowerManager.THERMAL_STATUS_CRITICAL, PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN ->
+        ThermalStatus.CRITICAL
+    else -> ThermalStatus.UNKNOWN
+}
+
+/**
+ * Governor input for the engine's Camera2 YUV analysis reader. `acquireLatestImage` discards
+ * stale frames, so the reader never builds a queue; storage pressure belongs to the recorder,
+ * not to preview analysis. Only the platform thermal status can therefore shut analysis off.
+ */
+fun AnalysisPerformanceGovernor.observeLatestFrameReader(platformThermalStatus: Int): AnalysisGovernorDecision =
+    observe(queueDepth = 0, thermal = thermalStatusFromPlatform(platformThermalStatus), storage = StoragePressure.UNKNOWN)
 
 class BoundedAnalysisStream(
     private val config: AnalysisStreamConfig,
