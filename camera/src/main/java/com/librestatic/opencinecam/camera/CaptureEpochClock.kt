@@ -77,12 +77,26 @@ class CaptureEpochClock(val cameraRealtime: Boolean, val sampleRateHz: Int? = nu
         }
     }
     @Synchronized fun pauseAvailable(): Boolean = pause != null
-    @Synchronized fun setPaused(value: Boolean, nowNs: Long): Boolean = pause?.setPaused(value, nowNs) ?: false
+    /** Why shared pause is not available yet (or at all) for this take; null once it is. */
+    @Synchronized fun pauseUnavailableReason(): CapturePauseRejection? = when {
+        pause != null -> null
+        !cameraRealtime || sampleRateHz == null -> CapturePauseRejection.UNSUPPORTED_CLOCK
+        videoNs == null || audio == null -> CapturePauseRejection.ANCHORS_PENDING
+        else -> CapturePauseRejection.ESTIMATED_AUDIO_ANCHOR
+    }
+    /** Reason for the most recent rejected [requestPaused]/[setPaused]; cleared by an applied command. */
+    @Volatile var lastPauseRejection: CapturePauseRejection? = null
+        private set
+    @Synchronized fun requestPaused(value: Boolean, nowNs: Long): CapturePauseRejection? =
+        (pause?.requestPaused(value, nowNs) ?: pauseUnavailableReason()).also { lastPauseRejection = it }
+    @Synchronized fun setPaused(value: Boolean, nowNs: Long): Boolean = requestPaused(value, nowNs) == null
+    @Synchronized fun regressedVideoFrames(): Long = pause?.regressedVideoFrames ?: 0
     @Synchronized fun finishPause(nowNs: Long) { pause?.finish(nowNs) }
     @Synchronized fun mapVideoInput(sourceNs: Long): Long? {
         videoInput(sourceNs); preparePause()
         val mapped = if (pause != null) pause!!.video(sourceNs) else sourceNs
-        lastVideoNs = sourceNs
+        // A later-created pause must not place a boundary before an already submitted (higher) timestamp.
+        lastVideoNs = maxOf(lastVideoNs ?: sourceNs, sourceNs)
         return mapped
     }
     @Synchronized fun selectAudio(startFrame: Long, count: Int): List<PcmKeepSpan> {

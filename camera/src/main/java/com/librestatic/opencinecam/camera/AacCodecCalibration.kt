@@ -41,7 +41,8 @@ data class AacCalibrationEvidence(
 
 /** Native resources stay on their owner until actual stop/release. No microphone is opened here. */
 object AacCodecCalibrator {
-    private val cache = mutableMapOf<AacCalibrationConfig, AacCodecCalibration>()
+    // Concurrent so the drain thread can evict without waiting behind another take's @Synchronized probes.
+    private val cache = java.util.concurrent.ConcurrentHashMap<AacCalibrationConfig, AacCodecCalibration>()
     @Synchronized fun qualify(config: AacCalibrationConfig, isCancelled: () -> Boolean = { false }, onEvidence: ((AacCalibrationEvidence) -> Unit)? = null): AacCodecCalibration {
         check(!isCancelled()) { "AAC calibration was cancelled" }
         if (onEvidence == null) cache[config]?.takeIf { SystemClock.elapsedRealtime() - it.measuredAtElapsedMs in 0..300000 }?.let { return it }
@@ -57,11 +58,27 @@ object AacCodecCalibrator {
                 val result = first.measurement.copy(minimumCorrelation = minOf(first.measurement.minimumCorrelation, second.measurement.minimumCorrelation))
                 check(!isCancelled()) { "AAC calibration was cancelled" }
                 onEvidence?.invoke(first); onEvidence?.invoke(second)
-                cache[config] = result
+                remember(result)
                 return result
             } catch (failure: IllegalArgumentException) { lastFailure = failure }
         }
         throw IllegalStateException("AAC configuration did not preserve the complete calibration signal", lastFailure)
+    }
+
+    /** Raw cache entry without the TTL check (which needs SystemClock); test and diagnostics seam. */
+    internal fun cached(config: AacCalibrationConfig): AacCodecCalibration? = cache[config]
+    internal fun remember(calibration: AacCodecCalibration) { cache[calibration.config] = calibration }
+    /** Evicts [calibration] only while it is still the cached evidence for its config; a newer entry is kept. */
+    fun invalidate(calibration: AacCodecCalibration): Boolean = cache.remove(calibration.config, calibration)
+
+    /**
+     * The live encoder must emit the calibrated CSD. On mismatch the take fails (as before) and the cached
+     * evidence is evicted, so the next take recalibrates instead of failing the same way for the cache lifetime.
+     */
+    fun requireCalibratedCodecConfig(calibration: AacCodecCalibration, csd: ByteArray) {
+        if (aacCodecConfigSha256(csd) == calibration.codecSpecificDataSha256) return
+        invalidate(calibration)
+        throw IllegalStateException("AAC configuration changed after calibration")
     }
 
     private data class Encoded(val packets: List<AacProbePacket>, val csd: ByteArray)

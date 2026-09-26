@@ -78,4 +78,38 @@ class CaptureEpochClockTest {
         clock.audioInput(AudioCaptureEpoch(1_100_000_000,true));assertEquals(100000L,clock.offsetUs(false))
         assertThrows(IllegalStateException::class.java) { clock.audioInput(AudioCaptureEpoch(1_100_000_001,true)) }
     }
+    @Test fun pauseRejectionReasonsDistinguishPendingEstimatedAndUnsupportedClocks() {
+        val pending=CaptureEpochClock(true,8000);pending.audioInput(AudioCaptureEpoch(1_000_000_000,true))
+        assertEquals(CapturePauseRejection.ANCHORS_PENDING,pending.requestPaused(true,1_100_000_000))
+        assertEquals(CapturePauseRejection.ANCHORS_PENDING,pending.lastPauseRejection)
+        val estimated=CaptureEpochClock(true,8000);estimated.mapVideoInput(1_050_000_000);estimated.audioInput(AudioCaptureEpoch(1_000_000_000,false))
+        assertFalse(estimated.setPaused(true,1_100_000_000));assertEquals(CapturePauseRejection.ESTIMATED_AUDIO_ANCHOR,estimated.lastPauseRejection)
+        assertEquals(CapturePauseRejection.UNSUPPORTED_CLOCK,CaptureEpochClock(false,8000).requestPaused(true,1_100_000_000))
+        assertEquals(CapturePauseRejection.UNSUPPORTED_CLOCK,CaptureEpochClock(true).pauseUnavailableReason())
+        pending.mapVideoInput(1_050_000_000);assertNull(pending.pauseUnavailableReason())
+        assertNull(pending.requestPaused(true,1_100_000_000));assertNull(pending.lastPauseRejection)
+        assertEquals(CapturePauseRejection.UNCHANGED,pending.requestPaused(true,1_200_000_000))
+        pending.finishPause(1_300_000_000);assertEquals(CapturePauseRejection.STOPPED,pending.requestPaused(false,1_400_000_000))
+    }
+    @Test fun regressedCameraTimestampIsDroppedOnlyOnceSharedPauseOwnsTheClock() {
+        val clock=CaptureEpochClock(true,8000)
+        assertEquals(1_100_000_000L,clock.mapVideoInput(1_100_000_000))
+        // Before shared pause exists the historical pass-through is unchanged, but the horizon keeps the maximum.
+        assertEquals(1_050_000_000L,clock.mapVideoInput(1_050_000_000))
+        clock.audioInput(AudioCaptureEpoch(1_000_000_000,true));assertTrue(clock.pauseAvailable())
+        assertNull(clock.mapVideoInput(1_080_000_000));assertEquals(1L,clock.regressedVideoFrames())
+        assertTrue(clock.setPaused(true,1_000_000_000))
+        // 1_100_000_000 + 1 ns rounds up onto the 8 kHz grid: frame 801, not the regressed 1_050/1_080 ms frames.
+        assertEquals(801L,clock.report(null,null,null).sharedPause!!.windows.single().startFrame)
+        assertEquals(1L,clock.report(null,null,null).sharedPause!!.regressedVideoFrames)
+    }
+    @Test fun preStartMuxQueueCoversTheEstimatedAnchorWindowAtSixtyFps() {
+        assertEquals(OpenCineLogGpuPipeline.MIN_PENDING_MUX_SAMPLES,OpenCineLogGpuPipeline.maxPendingMuxSamples(60,null,null))
+        // 0.5 s estimate delay + 80 ms read + 0.5 s latency: ceil(60 * 1.08) + ceil(46.875 * 1.08).
+        assertEquals(65+51,OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840))
+        assertEquals(33+51,OpenCineLogGpuPipeline.maxPendingMuxSamples(30,48000,3840))
+        val worstCaseQueued=kotlin.math.ceil(60*0.58).toInt()+kotlin.math.ceil(48000/1024.0*0.58).toInt()
+        assertTrue(worstCaseQueued>=OpenCineLogGpuPipeline.MIN_PENDING_MUX_SAMPLES-2)
+        assertTrue(OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840)>worstCaseQueued)
+    }
 }

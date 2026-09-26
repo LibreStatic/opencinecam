@@ -10,7 +10,27 @@ data class SharedCapturePauseReport(
     val sampleRateHz: Int, val audioFrameZeroNs: Long, val windows: List<CapturePauseWindow>,
     val stopFrame: Long?, val capturedPcmFrames: Long, val retainedPcmFrames: Long,
     val lastCommandNs: Long?, val lastEffectiveBoundaryNs: Long?,
+    // Camera frames whose timestamp regressed below an already classified frame; dropped, never mapped.
+    val regressedVideoFrames: Long = 0,
 )
+
+/** Why a shared/timelapse pause command was not applied; `null` from a request means it was applied. */
+enum class CapturePauseRejection {
+    /** No take owns the pipeline (idle, closed, or a stale take). */
+    NOT_RECORDING,
+    /** The take is stopping or its stop boundary is already sealed. */
+    STOPPED,
+    /** Pause while paused, or resume while running. */
+    UNCHANGED,
+    /** The per-take pause window cap was reached. */
+    WINDOW_LIMIT,
+    /** The first camera frame or the PCM capture anchor has not arrived yet. */
+    ANCHORS_PENDING,
+    /** The PCM anchor is a read-receipt estimate, not an AudioTimestamp; sample windows would not be comparable. */
+    ESTIMATED_AUDIO_ANCHOR,
+    /** The camera clock is not realtime or the take has no PCM clock. */
+    UNSUPPORTED_CLOCK,
+}
 
 /** Owned by CaptureEpochClock's monitor. Boundaries use the actual PCM source grid, never codec PTS. */
 internal class SharedCapturePause(
@@ -25,6 +45,8 @@ internal class SharedCapturePause(
     private var stopFrame: Long? = null
     private var lastCommandNs: Long? = null
     private var lastBoundaryNs: Long? = null
+    var regressedVideoFrames = 0L
+        private set
     val paused: Boolean get() = windows.lastOrNull()?.endFrame == null && windows.isNotEmpty()
     private fun frameTime(frame: Long): Long = Math.addExact(originNs, pcmFrameDurationNs(frame, rate))
     private fun boundary(nowNs: Long): Long {
@@ -37,12 +59,15 @@ internal class SharedCapturePause(
         lastCommandNs = nowNs; lastBoundaryNs = frameTime(frame.toLong())
         return frame.toLong()
     }
-    fun setPaused(value: Boolean, nowNs: Long): Boolean {
-        if (stopFrame != null || paused == value || value && windows.size >= 10000) return false
+    fun setPaused(value: Boolean, nowNs: Long): Boolean = requestPaused(value, nowNs) == null
+    fun requestPaused(value: Boolean, nowNs: Long): CapturePauseRejection? {
+        if (stopFrame != null) return CapturePauseRejection.STOPPED
+        if (paused == value) return CapturePauseRejection.UNCHANGED
+        if (value && windows.size >= MAX_WINDOWS) return CapturePauseRejection.WINDOW_LIMIT
         val frame = boundary(nowNs)
         if (value) windows += CapturePauseWindow(frame, null)
         else windows[windows.lastIndex] = windows.last().copy(endFrame = frame)
-        return true
+        return null
     }
     fun finish(nowNs: Long) {
         if (stopFrame != null) return
@@ -51,7 +76,10 @@ internal class SharedCapturePause(
         stopFrame = end
     }
     fun video(sourceNs: Long): Long? {
-        require(sourceNs > 0 && lastVideoNs?.let { sourceNs < it } != true)
+        require(sourceNs > 0)
+        // A HAL timestamp glitch costs one frame, not the take: the regressed frame is dropped before any
+        // window/PTS math, so boundaries and mapped PTS still only ever see a monotonic video clock.
+        if (lastVideoNs?.let { sourceNs < it } == true) { regressedVideoFrames++; return null }
         lastVideoNs = sourceNs
         if (stopFrame?.let { sourceNs >= frameTime(it) } == true) return null
         var removedNs = 0L
@@ -85,7 +113,8 @@ internal class SharedCapturePause(
         retainedFrames = Math.addExact(retainedFrames, keep.sumOf { it.frames.toLong() })
         return keep
     }
-    fun report() = SharedCapturePauseReport(rate, originNs, windows.toList(), stopFrame, readFrames, retainedFrames, lastCommandNs, lastBoundaryNs)
+    fun report() = SharedCapturePauseReport(rate, originNs, windows.toList(), stopFrame, readFrames, retainedFrames, lastCommandNs, lastBoundaryNs, regressedVideoFrames)
+    companion object { const val MAX_WINDOWS = 10000 }
 }
 
 /** Forward in-place compaction preserves complete interleaved frames; the common no-cut path copies nothing. */

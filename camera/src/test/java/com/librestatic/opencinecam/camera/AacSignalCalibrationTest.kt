@@ -54,5 +54,24 @@ class AacSignalCalibrationTest {
         assertThrows(IllegalArgumentException::class.java) { aacCodecConfigSha256(byteArrayOf()) }
         assertEquals(64, aacCodecConfigSha256(byteArrayOf(0x11, 0x88.toByte())).length)
     }
+    @Test fun codecSpecificDataMismatchFailsTheTakeAndEvictsOnlyThatCalibration() {
+        val config = AacCalibrationConfig("evict-on-mismatch", 48000, 1, 96000, 5760)
+        val calibratedCsd = byteArrayOf(0x11, 0x88.toByte())
+        val calibration = AacCodecCalibration(config, "decoder", 2048, 4096, 0.99, 0, 0, 0, 1, aacCodecConfigSha256(calibratedCsd))
+        AacCodecCalibrator.remember(calibration)
+        AacCodecCalibrator.requireCalibratedCodecConfig(calibration, calibratedCsd)
+        assertSame(calibration, AacCodecCalibrator.cached(config))
+        val failure = assertThrows(IllegalStateException::class.java) {
+            AacCodecCalibrator.requireCalibratedCodecConfig(calibration, byteArrayOf(0x12, 0x10))
+        }
+        assertEquals("AAC configuration changed after calibration", failure.message)
+        assertNull(AacCodecCalibrator.cached(config))
+        // A stale take's late mismatch must not evict a newer calibration measured for the same config.
+        val newer = calibration.copy(measuredAtElapsedMs = 2, codecSpecificDataSha256 = aacCodecConfigSha256(byteArrayOf(0x12, 0x10)))
+        AacCodecCalibrator.remember(newer)
+        assertThrows(IllegalStateException::class.java) { AacCodecCalibrator.requireCalibratedCodecConfig(calibration, byteArrayOf(0x13)) }
+        assertSame(newer, AacCodecCalibrator.cached(config))
+        assertTrue(AacCodecCalibrator.invalidate(newer)); assertNull(AacCodecCalibrator.cached(config))
+    }
 
 }

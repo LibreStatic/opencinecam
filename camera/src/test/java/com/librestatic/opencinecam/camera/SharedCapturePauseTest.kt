@@ -70,11 +70,32 @@ class SharedCapturePauseTest {
         val clock = SharedCapturePause(8000, origin); clock.audio(0, 10)
         assertThrows(IllegalArgumentException::class.java) { clock.audio(11, 5) }
     }
-    @Test fun regressingVideoAndCommandClocksAreRejected() {
+    @Test fun regressingVideoIsDroppedAndRegressingCommandClockIsRejected() {
         val clock = SharedCapturePause(8000, origin); clock.video(time(10))
-        assertThrows(IllegalArgumentException::class.java) { clock.video(time(9)) }
-        clock.setPaused(true, time(30))
-        assertThrows(IllegalArgumentException::class.java) { clock.setPaused(false, time(29)) }
+        assertNull(clock.video(time(9))); assertEquals(1L, clock.report().regressedVideoFrames)
+        // The dropped frame never became the classification horizon.
+        clock.setPaused(true, time(5)); assertEquals(11L, clock.report().windows.single().startFrame)
+        assertThrows(IllegalArgumentException::class.java) { clock.setPaused(false, time(4)) }
+    }
+    @Test fun regressionAfterAPauseWindowIsDroppedAndTheNextMonotonicFrameKeepsExactSubtraction() {
+        val clock = SharedCapturePause(8000, origin); assertEquals(time(5), clock.video(time(5)))
+        assertTrue(clock.setPaused(true, time(10))); assertTrue(clock.setPaused(false, time(20)))
+        assertEquals(time(11), clock.video(time(21)))
+        assertNull(clock.video(time(15))); assertNull(clock.video(time(3)))
+        assertEquals(time(12), clock.video(time(22)))
+        assertEquals(2L, clock.report().regressedVideoFrames)
+        assertEquals(listOf(CapturePauseWindow(10, 20)), clock.report().windows)
+    }
+    @Test fun rejectedCommandsCarryAReasonAndTheWindowCapIsExplicit() {
+        val clock = SharedCapturePause(8000, origin)
+        assertEquals(CapturePauseRejection.UNCHANGED, clock.requestPaused(false, time(1)))
+        for (i in 0 until SharedCapturePause.MAX_WINDOWS) {
+            assertNull(clock.requestPaused(true, time(2L * i + 2))); assertNull(clock.requestPaused(false, time(2L * i + 3)))
+        }
+        assertEquals(10000, clock.report().windows.size)
+        assertEquals(CapturePauseRejection.WINDOW_LIMIT, clock.requestPaused(true, time(30000)))
+        assertFalse(clock.setPaused(true, time(30001))); assertFalse(clock.paused)
+        clock.finish(time(30002)); assertEquals(CapturePauseRejection.STOPPED, clock.requestPaused(true, time(30003)))
     }
     @Test fun stereoCompactionPreservesWholeFramesAcrossTwoCuts() {
         val buffer = ByteBuffer.allocateDirect(40); repeat(40) { buffer.put(it, it.toByte()) }
