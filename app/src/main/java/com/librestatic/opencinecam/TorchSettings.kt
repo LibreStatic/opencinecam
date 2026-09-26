@@ -41,20 +41,26 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
     val requested = (settings.torchStrengthLevel ?: capabilities?.defaultLevel ?: 1).coerceIn(1, max)
     var level by remember(requested, max, state.selectedCameraId) { mutableFloatStateOf(requested.toFloat()) }
     val title = stringResource(R.string.flash_torch)
+    // A locked take keeps the torch it started with (withLivePreferencesFrom), so the switch shows
+    // that effective state and cannot queue a change the operator buttons would refuse (ADR-0030).
+    val locked = state.captureControlsLocked
+    val torchOn = if (locked) (state.effectiveSettings ?: settings).flashEnabled else settings.flashEnabled
+    val switchEnabled = !locked && (available || settings.flashEnabled)
     Column(
         Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                .toggleable(settings.flashEnabled, enabled = available || settings.flashEnabled, role = Role.Switch) {
+                .toggleable(torchOn, enabled = switchEnabled, role = Role.Switch) {
                     onChange(settings.copy(flashEnabled = it))
                 }.testTag("torch-toggle"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(title, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
-            Switch(checked = settings.flashEnabled, onCheckedChange = null, enabled = available || settings.flashEnabled)
+            Switch(checked = torchOn, onCheckedChange = null, enabled = switchEnabled)
         }
+        if (locked) Text(stringResource(R.string.operator_locked), color = Color.LightGray, fontSize = 14.sp)
         if (!available) Text(stringResource(R.string.settings_torch_unavailable), color = Color.LightGray, fontSize = 14.sp)
         if (available && capabilities?.adjustable == true) {
             val levelDescription = stringResource(R.string.settings_torch_level, level.roundToInt(), max)
@@ -67,6 +73,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
                 onValueChangeFinished = { onChange(settings.copy(torchStrengthLevel = level.roundToInt())) },
                 valueRange = 1f..max.toFloat(),
                 steps = max - 2,
+                enabled = !locked,
                 interactionSource = sliderInteraction,
                 thumb = {
                     // Material3 resets its internal minimum constraints to the track size.
@@ -88,7 +95,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
                     symbol = "−",
                     description = stringResource(R.string.settings_torch_decrease),
                     tag = "torch-decrease",
-                    enabled = level.roundToInt() > 1,
+                    enabled = !locked && level.roundToInt() > 1,
                 ) {
                     level = (level.roundToInt() - 1).coerceAtLeast(1).toFloat()
                     onChange(settings.copy(torchStrengthLevel = level.roundToInt()))
@@ -97,7 +104,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
                     symbol = "+",
                     description = stringResource(R.string.settings_torch_increase),
                     tag = "torch-increase",
-                    enabled = level.roundToInt() < max,
+                    enabled = !locked && level.roundToInt() < max,
                 ) {
                     level = (level.roundToInt() + 1).coerceAtMost(max).toFloat()
                     onChange(settings.copy(torchStrengthLevel = level.roundToInt()))

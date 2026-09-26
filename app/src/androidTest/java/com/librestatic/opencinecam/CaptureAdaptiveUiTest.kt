@@ -52,7 +52,7 @@ class CaptureAdaptiveUiTest {
         setChrome(landscape = false, selectorStyle = ModeSelectorStyle.DIAL)
 
         composeRule.onNodeWithTag("media-action", useUnmergedTree = true).assertIsEnabled()
-        composeRule.onNodeWithContentDescription("Mode dial: PHOTO").assertIsEnabled()
+        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsEnabled()
         composeRule.onNodeWithText("FPS").assertIsEnabled()
         saveScreenshot("mode-wheel-portrait")
     }
@@ -61,7 +61,7 @@ class CaptureAdaptiveUiTest {
     fun portraitDialUpdatesFocusedModeWhileSwiping() {
         setChrome(landscape = false, selectorStyle = ModeSelectorStyle.DIAL)
 
-        composeRule.onNodeWithContentDescription("Mode dial: PHOTO").performTouchInput { swipeLeft() }
+        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).performTouchInput { swipeLeft() }
         composeRule.waitForIdle()
 
         composeRule.onAllNodes(isSelected()).assertCountEquals(1)
@@ -71,7 +71,7 @@ class CaptureAdaptiveUiTest {
     fun landscapeDialRendersCenteredWheel() {
         setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, selectedMode = CaptureMode.VIDEO)
 
-        composeRule.onNodeWithContentDescription("Mode dial: VIDEO").assertIsEnabled()
+        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.VIDEO)).assertIsEnabled()
         composeRule.onNodeWithText("Mbps", substring = true).assertIsEnabled()
         saveScreenshot("mode-wheel-landscape")
     }
@@ -81,7 +81,7 @@ class CaptureAdaptiveUiTest {
         setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, phase = CameraUiPhase.RECORDING)
 
         composeRule.onNodeWithContentDescription("Stop recording").assertIsEnabled()
-        composeRule.onNodeWithContentDescription("Mode dial: PHOTO").assertIsNotDisplayed()
+        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsNotDisplayed()
         composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertIsEnabled()
     }
 
@@ -94,7 +94,7 @@ class CaptureAdaptiveUiTest {
 
         composeRule.onAllNodesWithContentDescription("Stop recording").assertCountEquals(1)
         composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertIsEnabled()
-        composeRule.onNodeWithContentDescription("Mode dial: PHOTO").assertIsEnabled()
+        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsEnabled()
     }
 
     @Test
@@ -336,7 +336,10 @@ class CaptureAdaptiveUiTest {
     fun aboutScreenIncludesAndExpandsTheCompleteOfflineCatalog() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val components = loadThirdPartyComponents(context)
-        assertEquals(100, components.size)
+        // The authority is verifyThirdPartyLicenses, which re-derives this catalog from
+        // app/gradle.lockfile on every preBuild; this number is the deliberate review tripwire,
+        // so bump it only together with the dependency that moved it.
+        assertEquals(118, components.size)
         assertEquals(components.size, components.map { it.coordinate }.toSet().size)
         assertTrue(components.all { it.licenseId.isNotBlank() && it.licenseTextAsset.isNotBlank() })
 
@@ -433,5 +436,16 @@ class CaptureAdaptiveUiTest {
         val out = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "$name.png")
         out.parentFile?.mkdirs()
         FileOutputStream(out).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    /** Mirrors CameraScreen's localized dial description so the test does not pin an English literal. */
+    private fun modeDial(mode: CaptureMode): String {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val label = context.getString(when (mode) {
+            CaptureMode.PHOTO -> R.string.photo_mode
+            CaptureMode.VIDEO -> R.string.video_mode
+            else -> error("Add the label mapping for $mode")
+        })
+        return context.getString(R.string.mode_dial_description, label)
     }
 }

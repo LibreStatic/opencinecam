@@ -56,7 +56,7 @@ class RecordingWhiteBalanceUiTest {
                 recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.CONVERGING), null, CameraSettings(audioEnabled = true), 88.dp) }
         }
         compose.onNodeWithContentDescription(context.getString(R.string.pro_wb_cancel_preparation)).assertIsEnabled().performClick()
-        compose.onNodeWithText("Audio opcional").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.audio_choice_title)).assertDoesNotExist()
     }
 
     @Test fun lockWhiteBalanceSearchFindsCanonicalSettings() {

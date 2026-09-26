@@ -5,25 +5,37 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.view.KeyEvent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
 
-internal data class OperatorActions(val capture: () -> Unit, val perform: (OperatorAction) -> Unit, val available: (OperatorAction) -> Boolean, val setEditing: (Boolean) -> Unit = {})
+internal data class OperatorActions(val capture: () -> Unit, val perform: (OperatorAction) -> Unit, val available: (OperatorAction) -> Boolean,
+    /** Latched state of a toggle action, or null when the action is momentary. */
+    val latched: (OperatorAction) -> Boolean? = { null }, val setEditing: (Boolean) -> Unit = {})
 internal val LocalOperatorActions = staticCompositionLocalOf<OperatorActions?> { null }
 private tailrec fun Context.operatorActivity(): MainActivity? = when (this) {
     is MainActivity -> this
@@ -79,7 +91,12 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
         if (enabled && !state.captureControlsLocked) binder?.applyPreset(selected)
         review = null
     } }
-    return OperatorActions(capture, perform, available) { editing = it }
+    // The display session lives in the UI layer, so only this scope can latch EXTERIOR.
+    val latched: (OperatorAction) -> Boolean? = { action ->
+        if (action == OperatorAction.EXTERIOR) fold.phase != DisplaySessionPhase.IDLE
+        else operatorActionToggleState(action, settings, state)
+    }
+    return OperatorActions(capture, perform, available, latched) { editing = it }
 }
 
 @Composable
@@ -88,12 +105,182 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
         if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             settings.operation.buttons.forEachIndexed { index, action ->
-                OutlinedButton(onClick = { actions?.perform?.invoke(action) }, enabled = actions?.available?.invoke(action) == true,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("operator-button-${index + 1}")) {
-                    Text("F${index + 1} · ${stringResource(action.labelResource())}", color = if (actions?.available?.invoke(action) == true) Color.White else Color.Gray, fontSize = 14.sp)
-                }
+                OperatorButton(
+                    index = index,
+                    action = action,
+                    available = actions?.available?.invoke(action) == true,
+                    // A row rendered without the action bundle still reads the settings it was given.
+                    latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
+                    onClick = { actions?.perform?.invoke(action) },
+                )
             }
         }
+    }
+}
+
+/**
+ * One assignable button. A toggle action carries its latched state in the container colour and in
+ * an ON/OFF pill, so the operator never has to press one to find out where it stands; a long press
+ * explains what the action does, including whether it only affects monitoring. An unavailable
+ * button ignores taps but still answers the long press, because that help is what explains why.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun OperatorButton(index: Int, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val on = latched == true
+    val content = when {
+        !available -> Color.Gray
+        on -> OperatorActiveAccent
+        else -> Color.White
+    }
+    val border = when {
+        !available -> Color(0xFF2A3034)
+        on -> OperatorActiveAccent
+        else -> Color(0xFF49535A)
+    }
+    val help = stringResource(action.helpResource())
+    val stateWord = latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
+    Row(
+        Modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (on && available) OperatorActiveContainer else Color.Transparent)
+            .border(BorderStroke(if (on && available) 2.dp else 1.dp, border), RoundedCornerShape(10.dp))
+            .combinedClickable(
+                role = if (latched != null) Role.Switch else Role.Button,
+                onClick = { if (available) onClick() },
+                onLongClick = { Toast.makeText(context, help, Toast.LENGTH_LONG).show() },
+            )
+            .semantics {
+                if (stateWord != null) stateDescription = stateWord
+                if (!available) disabled()
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("operator-button-${index + 1}"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OperatorActionIcon(action, tint = content, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("F${index + 1} · ${stringResource(action.labelResource())}", color = content, fontSize = 14.sp)
+        if (latched != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(if (latched) R.string.operator_state_on else R.string.operator_state_off),
+                color = if (available && latched) Color(0xFF101417) else content,
+                fontSize = 11.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (available && latched) OperatorActiveAccent else Color.Transparent)
+                    .border(BorderStroke(1.dp, if (available && latched) OperatorActiveAccent else border), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                    .testTag("operator-button-${index + 1}-state"),
+            )
+        }
+    }
+}
+
+private val OperatorActiveAccent = Color(0xFFFFCF66)
+private val OperatorActiveContainer = Color(0xFF3A2E12)
+
+/** Geometric glyphs matching the app's stroke language; letters where a letter is the symbol. */
+@Composable
+private fun OperatorActionIcon(action: OperatorAction, tint: Color, modifier: Modifier = Modifier) {
+    val letter = when (action) {
+        OperatorAction.FOCUS_A -> "A"; OperatorAction.FOCUS_B -> "B"
+        OperatorAction.PRESET_C1 -> "C1"; OperatorAction.PRESET_C2 -> "C2"
+        else -> null
+    }
+    if (letter != null) {
+        androidx.compose.foundation.layout.Box(modifier, contentAlignment = Alignment.Center) {
+            Text(letter, color = tint, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+        return
+    }
+    androidx.compose.foundation.Canvas(modifier) { drawOperatorGlyph(action, tint) }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOperatorGlyph(action: OperatorAction, color: Color) {
+    val w = size.width; val h = size.height; val cx = w / 2f
+    val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = w * 0.09f)
+    fun rect(left: Float, top: Float, width: Float, height: Float, filled: Boolean = false) {
+        val style = if (filled) androidx.compose.ui.graphics.drawscope.Fill else stroke
+        drawRect(color, Offset(left, top), androidx.compose.ui.geometry.Size(width, height), style = style)
+    }
+    when (action) {
+        OperatorAction.TORCH -> {
+            rect(cx - w * .20f, h * .14f, w * .40f, h * .24f)
+            rect(cx - w * .13f, h * .38f, w * .26f, h * .48f)
+            drawLine(color, Offset(cx - w * .26f, h * .04f), Offset(cx - w * .18f, h * .12f), strokeWidth = w * .07f)
+            drawLine(color, Offset(cx, 0f), Offset(cx, h * .10f), strokeWidth = w * .07f)
+            drawLine(color, Offset(cx + w * .26f, h * .04f), Offset(cx + w * .18f, h * .12f), strokeWidth = w * .07f)
+        }
+        OperatorAction.TORCH_LEVEL -> {
+            rect(cx - w * .20f, h * .08f, w * .40f, h * .24f)
+            rect(cx - w * .13f, h * .32f, w * .26f, h * .60f)
+            drawLine(color, Offset(cx, h * .48f), Offset(cx, h * .76f), strokeWidth = w * .08f)
+            drawLine(color, Offset(cx - w * .14f, h * .62f), Offset(cx + w * .14f, h * .62f), strokeWidth = w * .08f)
+        }
+        OperatorAction.PEAKING -> {
+            val inset = w * .10f; val arm = w * .30f; val strokeW = w * .09f
+            val right = w - inset; val bottom = h - inset
+            // Four corner brackets around the in-focus center dot.
+            drawLine(color, Offset(inset, inset), Offset(inset + arm, inset), strokeWidth = strokeW)
+            drawLine(color, Offset(inset, inset), Offset(inset, inset + arm), strokeWidth = strokeW)
+            drawLine(color, Offset(right, inset), Offset(right - arm, inset), strokeWidth = strokeW)
+            drawLine(color, Offset(right, inset), Offset(right, inset + arm), strokeWidth = strokeW)
+            drawLine(color, Offset(inset, bottom), Offset(inset + arm, bottom), strokeWidth = strokeW)
+            drawLine(color, Offset(inset, bottom), Offset(inset, bottom - arm), strokeWidth = strokeW)
+            drawLine(color, Offset(right, bottom), Offset(right - arm, bottom), strokeWidth = strokeW)
+            drawLine(color, Offset(right, bottom), Offset(right, bottom - arm), strokeWidth = strokeW)
+            drawCircle(color, radius = w * .10f)
+        }
+        OperatorAction.ZEBRA -> {
+            drawLine(color, Offset(w * .05f, h * .85f), Offset(w * .45f, h * .05f), strokeWidth = w * .09f)
+            drawLine(color, Offset(w * .35f, h * .95f), Offset(w * .75f, h * .15f), strokeWidth = w * .09f)
+            drawLine(color, Offset(w * .65f, h * .95f), Offset(w * .95f, h * .45f), strokeWidth = w * .09f)
+        }
+        OperatorAction.HISTOGRAM -> {
+            rect(w * .10f, h * .55f, w * .22f, h * .35f, filled = true)
+            rect(w * .40f, h * .20f, w * .22f, h * .70f, filled = true)
+            rect(w * .70f, h * .38f, w * .22f, h * .52f, filled = true)
+        }
+        OperatorAction.VIEW_ASSIST -> {
+            drawCircle(color, radius = w * .40f, style = stroke)
+            drawArc(color, startAngle = -90f, sweepAngle = 180f, useCenter = true,
+                topLeft = Offset(cx - w * .40f, h * .10f), size = androidx.compose.ui.geometry.Size(w * .80f, h * .80f))
+        }
+        OperatorAction.AUTO_FOCUS -> {
+            drawCircle(color, radius = w * .40f, style = stroke)
+            drawCircle(color, radius = w * .12f)
+        }
+        OperatorAction.CAPTURE -> {
+            drawCircle(color, radius = w * .38f, style = Stroke(width = w * .16f))
+        }
+        OperatorAction.CONTROL_LOCK -> {
+            drawArc(color, startAngle = 180f, sweepAngle = 180f, useCenter = false,
+                topLeft = Offset(cx - w * .22f, h * .12f), size = androidx.compose.ui.geometry.Size(w * .44f, h * .40f),
+                style = stroke)
+            rect(cx - w * .30f, h * .42f, w * .60f, h * .44f, filled = true)
+        }
+        OperatorAction.EXTERIOR -> {
+            rect(w * .06f, h * .16f, w * .40f, h * .68f, filled = true)
+            rect(w * .54f, h * .16f, w * .40f, h * .68f)
+        }
+        OperatorAction.NONE -> {
+            drawCircle(color, radius = w * .40f, style = stroke)
+            drawLine(color, Offset(w * .16f, h * .84f), Offset(w * .84f, h * .16f), strokeWidth = w * .09f)
+        }
+        OperatorAction.SYSTEM_VOLUME -> {
+            drawPath(androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .10f, h * .38f); lineTo(w * .32f, h * .38f); lineTo(w * .55f, h * .16f)
+                lineTo(w * .55f, h * .84f); lineTo(w * .32f, h * .62f); lineTo(w * .10f, h * .62f); close()
+            }, color)
+            drawArc(color, startAngle = -55f, sweepAngle = 110f, useCenter = false,
+                topLeft = Offset(w * .58f, h * .22f), size = androidx.compose.ui.geometry.Size(w * .34f, h * .56f), style = stroke)
+        }
+        else -> drawCircle(color, radius = w * .30f, style = stroke)
     }
 }
 
@@ -103,6 +290,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.operator_title), color = Color.White, fontSize = 20.sp)
         Text(stringResource(R.string.operator_help), color = Color.LightGray, fontSize = 16.sp)
+        Text(stringResource(R.string.operator_help_hint), color = Color.LightGray, fontSize = 16.sp)
         operation.buttons.forEachIndexed { index, action ->
             OperatorChoice(stringResource(R.string.operator_button, index + 1), action, OperatorAction.entries.filter { it != OperatorAction.SYSTEM_VOLUME }, "operator-map-${index + 1}") { selected ->
                 onChange(settings.copy(operation = when (index) { 0 -> operation.copy(button1 = selected); 1 -> operation.copy(button2 = selected); else -> operation.copy(button3 = selected) }))
@@ -133,7 +321,12 @@ private fun OperatorChoice(title: String, value: OperatorAction, options: List<O
     }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) },
         text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            options.forEach { action -> TextButton({ onChange(action); open = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("operator-choice-$action")) { Text(stringResource(action.labelResource()), fontSize = 16.sp) } }
+            options.forEach { action -> TextButton({ onChange(action); open = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("operator-choice-$action")) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(stringResource(action.labelResource()), fontSize = 16.sp)
+                    Text(stringResource(action.helpResource()), color = Color.LightGray, fontSize = 13.sp)
+                }
+            } }
         } }, confirmButton = { TextButton({ open = false }) { Text(stringResource(android.R.string.cancel)) } })
 }
 @Composable
@@ -160,4 +353,23 @@ internal fun OperatorAction.labelResource(): Int = when (this) {
     OperatorAction.PRESET_C2 -> R.string.operator_action_preset_c2
     OperatorAction.EXTERIOR -> R.string.operator_action_exterior
     OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock
+}
+/** What the action actually does, including whether it only affects monitoring. */
+internal fun OperatorAction.helpResource(): Int = when (this) {
+    OperatorAction.NONE -> R.string.operator_action_none_help
+    OperatorAction.SYSTEM_VOLUME -> R.string.operator_action_system_volume_help
+    OperatorAction.CAPTURE -> R.string.operator_action_capture_help
+    OperatorAction.TORCH -> R.string.operator_action_torch_help
+    OperatorAction.TORCH_LEVEL -> R.string.operator_action_torch_level_help
+    OperatorAction.PEAKING -> R.string.operator_action_peaking_help
+    OperatorAction.ZEBRA -> R.string.operator_action_zebra_help
+    OperatorAction.HISTOGRAM -> R.string.operator_action_histogram_help
+    OperatorAction.VIEW_ASSIST -> R.string.operator_action_view_assist_help
+    OperatorAction.AUTO_FOCUS -> R.string.operator_action_auto_focus_help
+    OperatorAction.FOCUS_A -> R.string.operator_action_focus_a_help
+    OperatorAction.FOCUS_B -> R.string.operator_action_focus_b_help
+    OperatorAction.PRESET_C1 -> R.string.operator_action_preset_c1_help
+    OperatorAction.PRESET_C2 -> R.string.operator_action_preset_c2_help
+    OperatorAction.EXTERIOR -> R.string.operator_action_exterior_help
+    OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock_help
 }

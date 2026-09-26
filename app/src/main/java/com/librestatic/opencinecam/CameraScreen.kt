@@ -134,6 +134,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -540,18 +542,25 @@ internal fun CaptureSurface(
     }
 }
 
+/**
+ * A monitoring chip. With [cycleState] null it is an on/off switch; otherwise it is a button that
+ * advances a mode, announced with its current value instead of a permanent "selected".
+ */
 @Composable
-private fun MonitorToggle(label: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+private fun MonitorToggle(label: String, description: String, enabled: Boolean, onClick: () -> Unit, cycleState: String? = null) {
     Box(
         Modifier
             .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             .semantics {
                 contentDescription = description
-                selected = enabled
+                if (cycleState != null) stateDescription = cycleState
             }
             .clip(RoundedCornerShape(7.dp))
             .background(if (enabled) Amber else Color(0xFF303638))
-            .clickable(onClick = onClick),
+            .then(
+                if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = onClick)
+                else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { onClick() })
+            ),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = if (enabled) Color.Black else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
 }
@@ -583,11 +592,13 @@ private fun MonitoringToggleGrid(
                 stringResource(R.string.monitor_histogram_mode),
                 true,
                 onCycleHistogramMode,
+                cycleState = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MonitorToggle("G", stringResource(R.string.monitor_grid), showGrid, onToggleGrid)
-            MonitorToggle(gridModeLabel(gridMode), stringResource(R.string.monitor_grid_mode), true, onCycleGridMode)
+            MonitorToggle(gridModeLabel(gridMode), stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
+                cycleState = stringResource(compositionGridModeTitle(gridMode)))
             MonitorToggle("L", stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon)
         }
     }
@@ -700,6 +711,16 @@ private fun MonitoringOverlay(
                     drawCircle(color, radius = 4.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 1.dp.toPx()))
                 }
             }
+        }
+        if (showHorizon && horizonSensorAvailable?.available == false) {
+            // No gravity or accelerometer sensor: say so where the level line would be drawn.
+            Text(
+                stringResource(R.string.horizon_level_unavailable),
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.Center).background(Panel, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp).testTag("horizon-level-unavailable"),
+            )
         }
         if (showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
             val graphWidth = maxWidth * .28f
@@ -1656,6 +1677,7 @@ private fun ModeDial(
     val modes = CaptureMode.entries
     val selectedIndex = modes.indexOf(state.selectedMode).coerceAtLeast(0)
     val haptics = LocalHapticFeedback.current
+    val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(state.selectedMode))
     fun selectable(mode: CaptureMode): Boolean {
         val gate = state.modeGates.getValue(mode)
         return gate == ModeGateState.AVAILABLE || gate == ModeGateState.CANDIDATE
@@ -1702,7 +1724,7 @@ private fun ModeDial(
             Modifier
                 .width(150.dp)
                 .height(itemHeight * 5)
-                .semantics { contentDescription = "Mode dial: ${state.selectedMode.name}" },
+                .semantics { contentDescription = dialDescription },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -1755,7 +1777,7 @@ private fun ModeDial(
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .semantics { contentDescription = "Mode dial: ${state.selectedMode.name}" },
+                .semantics { contentDescription = dialDescription },
         ) {
             val totalWidth = maxWidth
             val itemWidth = (totalWidth / 3.3f).coerceIn(88.dp, 150.dp)
@@ -1981,13 +2003,13 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
     if (showAudioChoice) {
         AlertDialog(
             onDismissRequest = { showAudioChoice = false; audioChoiceTicket = null; audioChoiceOwner = null },
-            title = { Text("Audio opcional") },
-            text = { Text("You can record this take without audio or grant microphone access.") },
+            title = { Text(stringResource(R.string.audio_choice_title)) },
+            text = { Text(stringResource(R.string.audio_choice_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showAudioChoice = false
                     audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }) { Text("Conceder permiso") }
+                }) { Text(stringResource(R.string.audio_choice_grant)) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -1997,7 +2019,7 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
                     audioChoiceTicket = null
                     audioChoiceOwner = null
                     if (currentEnabled && requestedTicket != null && owner != null && owner === binder) owner.captureForRole(requestedTicket, audioForThisTake = false)
-                }) { Text("Record without audio") }
+                }) { Text(stringResource(R.string.audio_choice_without_audio)) }
             },
         )
     }
@@ -2274,7 +2296,8 @@ private fun CaptureStatus(state: CameraUiState) {
         stringResource(R.string.pro_capture_notice) else null
     val baseStatus = when {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
-            "REC ${state.recordingWidth}×${state.recordingHeight} · ${state.targetFps} fps · ${formatDuration(state.recordingElapsedMs)} · ${formatBytes(state.availableStorageBytes)} free"
+            stringResource(R.string.recording_status, state.recordingWidth, state.recordingHeight, state.targetFps,
+                formatDuration(state.recordingElapsedMs), formatBytes(state.availableStorageBytes))
         else -> state.message
     }?.takeIf { !state.messageTransient || noticeVisible }
     val recoveryNotice = state.stillRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
@@ -2937,14 +2960,7 @@ internal fun SettingsContent(
                     CompositionGridMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
                             Text(
-                                stringResource(
-                                    when (mode) {
-                                        CompositionGridMode.THIRDS -> R.string.composition_grid_thirds
-                                        CompositionGridMode.FOUR_BY_FOUR -> R.string.composition_grid_quarters
-                                        CompositionGridMode.DIAGONAL -> R.string.composition_grid_diagonal
-                                        CompositionGridMode.GOLDEN_RATIO -> R.string.composition_grid_golden
-                                    }
-                                ),
+                                stringResource(compositionGridModeTitle(mode)),
                                 color = if (settings.compositionGridMode == mode) Amber else Color.White,
                                 fontWeight = if (settings.compositionGridMode == mode) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -2996,6 +3012,25 @@ internal fun SettingsContent(
                 }
             }
         }
+        if ("zoom-lens" in visibleIds) item(key = "zoom-lens") {
+            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.zoom_lens_switch_mode), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ZoomLensSwitchMode.entries.forEach { mode ->
+                        val chosen = settings.zoomLensSwitchMode == mode
+                        TextButton(onClick = { onSettingsChange(settings.copy(zoomLensSwitchMode = mode)) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("zoom-lens-switch-$mode").semantics { selected = chosen }) {
+                            Text(
+                                stringResource(if (mode == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic),
+                                color = if (chosen) Amber else Color.White,
+                                fontWeight = if (chosen) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         if ("timecode" in visibleIds) item(key = "timecode") {
             TimecodeSettings(settings, onSettingsChange)
         }
@@ -3003,8 +3038,11 @@ internal fun SettingsContent(
             val descriptor = state.descriptor
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-                Text("Camera ${descriptor?.cameraId ?: "—"} · ${descriptor?.previewSize?.width ?: 0}×${descriptor?.previewSize?.height ?: 0}", color = Color.White)
-                Text("JPEG ${descriptor?.jpegSize?.width ?: 0}×${descriptor?.jpegSize?.height ?: 0} · RAW ${if (descriptor?.supportsRaw == true) "YES" else "NO"}", color = Muted)
+                Text(stringResource(R.string.hardware_camera_line, descriptor?.cameraId ?: "—", descriptor?.previewSize?.width ?: 0, descriptor?.previewSize?.height ?: 0), color = Color.White)
+                Text(stringResource(R.string.hardware_still_line, descriptor?.jpegSize?.width ?: 0, descriptor?.jpegSize?.height ?: 0,
+                    stringResource(if (descriptor?.supportsRaw == true) R.string.hardware_supported else R.string.hardware_not_supported)), color = Muted)
+                val profilesVerifiedTemplate = stringResource(R.string.hardware_log_profiles_verified)
+                val logUnsupported = stringResource(R.string.hardware_log_unsupported)
                 Text(
                     if (descriptor?.supportsOpenCineLog == true) {
                         val trueLog = descriptor.logProfiles.filter { it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020 }
@@ -3013,12 +3051,12 @@ internal fun SettingsContent(
                         val qualification = if (descriptor.allOpenCineLogProfilesVerified) {
                             "VERIFIED"
                         } else {
-                            "EXPERIMENTAL · $verifiedCount/${descriptor.logProfiles.size} profiles verified"
+                            "EXPERIMENTAL · " + profilesVerifiedTemplate.format(verifiedCount, descriptor.logProfiles.size)
                         }
                         "OCLog2 $qualification · HLG10-DERIVED ${trueLog.maxOfOrNull { it.size.width } ?: 0}×${trueLog.maxOfOrNull { it.size.height } ?: 0} @ ${trueLog.maxOfOrNull { it.fps } ?: 0} max" +
                             if (hfrLog.isNotEmpty()) " · HFR ISP-DERIVED ${hfrLog.maxOf { it.fps }} max" else ""
                     } else {
-                        "OCLog2 UNSUPPORTED · no capability-backed graph"
+                        logUnsupported
                     },
                     color = when {
                         descriptor?.allOpenCineLogProfilesVerified == true -> VerifiedCyan
@@ -3174,7 +3212,7 @@ private fun ProfessionalAudioSettings(
             choices = listOf("auto" to stringResource(R.string.audio_automatic)) + capabilities.inputs.map { it.id.toString() to "${it.label} · ID ${it.id}" },
             selected = settings.audioInputDeviceId?.toString() ?: "auto",
         ) { id -> update(settings.copy(audioInputDeviceId = id.takeUnless { it == "auto" }?.toInt())) }
-        Text("Android lets you choose the input device; it does not guarantee selecting an individual internal capsule.", color = Muted, fontSize = 14.sp)
+        Text(stringResource(R.string.audio_input_device_hint), color = Muted, fontSize = 14.sp)
 
         SettingsToggleRow(
             title = stringResource(R.string.audio_effect_ns),
@@ -3191,7 +3229,7 @@ private fun ProfessionalAudioSettings(
             onCheckedChange = { update(settings.copy(acousticEchoCancelerEnabled = it)) },
         )
         AudioRecordingGainSettings(state, settings, onSettingsChange)
-        Text("AAC is embedded in the MP4. WAV and FLAC are saved as synchronized sidecars with capture metadata.", color = Muted, fontSize = 14.sp)
+        Text(stringResource(R.string.audio_format_container_hint), color = Muted, fontSize = 14.sp)
     }
 }
 
@@ -3574,13 +3612,6 @@ private fun SettingsToggleRow(
 }
 
 @Composable
-private fun CenterMessage(message: String) {
-    Box(modifier = Modifier.fillMaxSize().background(Graphite).padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(message, color = Color.White)
-    }
-}
-
-@Composable
 private fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.PHOTO -> stringResource(R.string.photo_mode)
     CaptureMode.RAW_PHOTO -> stringResource(R.string.raw_photo_mode)
@@ -3689,7 +3720,7 @@ private fun FocusPullDial(
         if (supportsManualFocus && !pullActive) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
 
-            Text("MARCAS", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.focus_marks_title), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 markLabels.forEach { label ->
                     val savedDiopters = marks[label]
@@ -3734,21 +3765,21 @@ private fun FocusPullDial(
                             if (hasMark) {
                                 Text("%.1fD".format(savedDiopters), color = Muted, fontSize = 7.sp)
                             } else {
-                                Text("SET", color = Color(0xFF444444), fontSize = 7.sp)
+                                Text(stringResource(R.string.focus_mark_empty), color = Color(0xFF444444), fontSize = 7.sp)
                             }
                         }
                     }
                 }
             }
             Text(
-                "Tap: pull - Long: guardar/borrar",
+                stringResource(R.string.focus_marks_hint),
                 color = Color(0xFF555555),
                 fontSize = 8.sp,
             )
 
             Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
 
-            Text("DURACION %.1fs".format(settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.focus_pull_duration, settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Slider(
                 value = settings.focusPullDurationMs.toFloat(),
                 onValueChange = { v ->
@@ -3759,7 +3790,7 @@ private fun FocusPullDial(
                 modifier = Modifier.fillMaxWidth().height(28.dp),
             )
 
-            Text("CURVA", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.focus_pull_curve), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 FocusPullEasing.entries.forEach { easing ->
                     TextButton(
@@ -3788,7 +3819,7 @@ private fun FocusPullDial(
                 onClick = { binder?.cancelFocusPull() },
                 colors = ButtonDefaults.buttonColors(containerColor = RecordRed, contentColor = Color.White),
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("CANCELAR PULL", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            ) { Text(stringResource(R.string.focus_pull_cancel), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -3848,6 +3879,13 @@ private fun ModeWheelPortraitPreview() {
             compact = false,
         )
     }
+}
+
+private fun compositionGridModeTitle(mode: CompositionGridMode): Int = when (mode) {
+    CompositionGridMode.THIRDS -> R.string.composition_grid_thirds
+    CompositionGridMode.FOUR_BY_FOUR -> R.string.composition_grid_quarters
+    CompositionGridMode.DIAGONAL -> R.string.composition_grid_diagonal
+    CompositionGridMode.GOLDEN_RATIO -> R.string.composition_grid_golden
 }
 
 private fun gridModeLabel(mode: CompositionGridMode): String = when (mode) {

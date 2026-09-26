@@ -51,15 +51,45 @@ class OperatorKeyLatch {
     }
 }
 
+/**
+ * Latched state of the actions that turn something on and leave it on; momentary actions
+ * (a capture, a focus pull, a level step) have none and return null. [OperatorAction.EXTERIOR]
+ * latches on a display session that only the UI layer observes, so it is resolved there.
+ *
+ * The state is what the engine is doing, not what was last requested (ADR-0030): a locked take
+ * keeps the torch it started with, a torch the camera or profile cannot light is off, and view
+ * assist only exists in LOG.
+ */
+fun operatorActionToggleState(action: OperatorAction, settings: CameraSettings, state: CameraUiState): Boolean? {
+    val effective = state.effectiveSettings ?: settings
+    return when (action) {
+        OperatorAction.TORCH -> effective.flashEnabled && !state.operatorHighSpeed() && state.descriptor?.torchCapabilities?.available == true
+        OperatorAction.PEAKING -> effective.peakingEnabled
+        OperatorAction.ZEBRA -> effective.zebraEnabled
+        OperatorAction.HISTOGRAM -> effective.histogramEnabled
+        OperatorAction.VIEW_ASSIST -> effective.logViewAssistEnabled && state.selectedMode == CaptureMode.LOG
+        OperatorAction.CONTROL_LOCK -> effective.operation.lockDuringTake
+        else -> null
+    }
+}
+
+private fun CameraUiState.operatorHighSpeed(): Boolean =
+    if (selectedMode == CaptureMode.LOG) activeLogProfile?.constrainedHighSpeed == true
+    else selectedMode in CameraUiState.videoProfileModes && activeVideoProfile?.constrainedHighSpeed == true
+
 fun operatorActionAvailable(action: OperatorAction, state: CameraUiState): Boolean {
     if (action == OperatorAction.NONE || action == OperatorAction.SYSTEM_VOLUME) return false
     if (action == OperatorAction.CONTROL_LOCK) return true
     if (action == OperatorAction.CAPTURE) return state.whiteBalancePreparing || state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)
-    if (action in setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM, OperatorAction.VIEW_ASSIST, OperatorAction.EXTERIOR)) return true
+    // Color view assist is applied only by the OCLog2 shader. Every other GPU viewfinder (time-lapse,
+    // VIDEO with a LUT or subject preview, PHOTO with an operator LUT) is SDR passthrough and ignores
+    // it, so offering it there would be a silent no-op.
+    if (action == OperatorAction.VIEW_ASSIST) return state.selectedMode == CaptureMode.LOG
+    if (action in setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM, OperatorAction.EXTERIOR)) return true
     if (state.captureControlsLocked) return false
     if (action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2)) return state.descriptor != null
     if (state.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING) || state.whiteBalancePreparing || state.recordingFinalizing) return false
-    val highSpeed = if (state.selectedMode == CaptureMode.LOG) state.activeLogProfile?.constrainedHighSpeed == true else state.selectedMode in CameraUiState.videoProfileModes && state.activeVideoProfile?.constrainedHighSpeed == true
+    val highSpeed = state.operatorHighSpeed()
     return when (action) {
         OperatorAction.TORCH -> !highSpeed && state.descriptor?.torchCapabilities?.available == true
         OperatorAction.TORCH_LEVEL -> !highSpeed && state.descriptor?.torchCapabilities?.adjustable == true

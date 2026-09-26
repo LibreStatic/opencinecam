@@ -130,6 +130,17 @@ class TorchAccessibilityTest {
         compose.runOnIdle { assertFalse(settings.value.flashEnabled); assertEquals(2, settings.value.torchStrengthLevel) }
     }
 
+    @Test fun lockedTakeShowsTheEffectiveTorchAndRefusesChanges() {
+        // The take started with the torch off; the repository was flipped on afterwards.
+        val effective = CameraSettings(flashEnabled = false, torchStrengthLevel = 2, operation = OperatorPreferences(lockDuringTake = true))
+        val settings = show(state = state().copy(phase = CameraUiPhase.RECORDING, selectedMode = CaptureMode.VIDEO, effectiveSettings = effective),
+            initial = effective.copy(flashEnabled = true))
+        compose.onNodeWithTag("torch-toggle").assertIsNotEnabled().assertIsOff().performClick()
+        compose.onNodeWithTag("torch-increase").assertIsNotEnabled()
+        compose.onNodeWithText(context.getString(R.string.operator_locked)).assertExists()
+        compose.runOnIdle { assertTrue(settings.value.flashEnabled); assertEquals(2, settings.value.torchStrengthLevel) }
+    }
+
     private fun show(
         state: CameraUiState = state(),
         initial: CameraSettings = CameraSettings(flashEnabled = true, torchStrengthLevel = 2),
