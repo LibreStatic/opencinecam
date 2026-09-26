@@ -12,6 +12,23 @@ data class AuditFinding(
     val detail: String,
 )
 
+/**
+ * Explicit, off-by-default features that justify network or location permissions
+ * (OCC-PRIV-001 as amended 2026-09-26, ADR-0027 amendment). A permission listed here
+ * is only acceptable when its feature is declared in the audit input.
+ */
+enum class OptInFeature(val justifiedPermissions: Set<String>) {
+    /** OCC-PLAN-067 / ADR-0034: user-started HTTPS WebDAV transfers of finalized captures. */
+    WEBDAV_TRANSFER(
+        setOf("android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"),
+    ),
+
+    /** OCC-PLAN-066: photo/take geotagging, requested while the activity is resumed. */
+    GEOTAGGING(
+        setOf("android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"),
+    ),
+}
+
 data class SecurityAuditInput(
     val permissions: Set<String>,
     val exportedComponents: Map<String, Boolean>,
@@ -24,6 +41,7 @@ data class SecurityAuditInput(
     val analyticsOrRemoteCrashEnabled: Boolean,
     val touchTargetDp: List<Int>,
     val semanticLabels: List<String>,
+    val declaredOptInFeatures: Set<OptInFeature> = emptySet(),
 )
 
 data class SecurityAuditReport(
@@ -47,17 +65,28 @@ object SecurityPrivacyAccessibilityAuditor {
         "android.permission.FOREGROUND_SERVICE_MICROPHONE",
     )
 
+    // Network permissions are never part of the baseline; each must be justified by a
+    // declared opt-in feature. Unknown network permissions therefore always fail.
+    private val networkPermissions = setOf(
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+    )
+
     fun audit(input: SecurityAuditInput): SecurityAuditReport {
+        val optInPermissions = input.declaredOptInFeatures.flatMapTo(mutableSetOf()) { it.justifiedPermissions }
         val findings = listOf(
             check(
                 "SEC-NETWORK",
-                input.permissions.none { it == "android.permission.INTERNET" },
-                "Internet permission is absent",
-                "Internet permission would permit data exfiltration",
+                input.permissions.filter { it in networkPermissions }.all { it in optInPermissions },
+                "network permissions are absent or justified by a declared opt-in feature",
+                "network permission without a declared opt-in feature would permit data exfiltration",
             ),
             check(
                 "SEC-PERMISSIONS",
-                input.permissions.all { it in allowedPermissions },
+                input.permissions.all { it in allowedPermissions || it in optInPermissions },
                 "permissions are in the least-privilege allowlist",
                 "unexpected broad or network permission declared",
             ),

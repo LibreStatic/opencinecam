@@ -17,4 +17,8 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // SecurityAuditManifestTest audits the real app manifest; a manifest-only change must re-run it.
+    inputs.file(rootProject.file("app/src/main/AndroidManifest.xml"))
+        .withPropertyName("appManifest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

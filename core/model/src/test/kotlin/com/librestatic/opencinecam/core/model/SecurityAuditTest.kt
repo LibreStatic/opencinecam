@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam.core.model
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,5 +57,53 @@ class SecurityAuditTest {
         assertFalse(report.findings.first { it.findingId == "SEC-NETWORK" }.passed)
         assertFalse(report.findings.first { it.findingId == "SEC-COMPONENTS" }.passed)
         assertFalse(report.findings.first { it.findingId == "A11Y-TOUCH" }.passed)
+    }
+
+    @Test
+    fun networkAndLocationPermissionsPassOnlyWithTheirDeclaredOptInFeature() {
+        val optInPermissions = safeInput.permissions + setOf(
+            "android.permission.INTERNET",
+            "android.permission.ACCESS_NETWORK_STATE",
+            "android.permission.ACCESS_COARSE_LOCATION",
+            "android.permission.ACCESS_FINE_LOCATION",
+        )
+        val allowed = SecurityPrivacyAccessibilityAuditor.audit(
+            safeInput.copy(
+                permissions = optInPermissions,
+                declaredOptInFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING),
+            ),
+        )
+        assertTrue(allowed.passed)
+
+        val noWebDav = SecurityPrivacyAccessibilityAuditor.audit(
+            safeInput.copy(permissions = optInPermissions, declaredOptInFeatures = setOf(OptInFeature.GEOTAGGING)),
+        )
+        assertEquals(
+            listOf("SEC-NETWORK", "SEC-PERMISSIONS"),
+            noWebDav.findings.filterNot { it.passed }.map { it.findingId },
+        )
+
+        val noGeotag = SecurityPrivacyAccessibilityAuditor.audit(
+            safeInput.copy(permissions = optInPermissions, declaredOptInFeatures = setOf(OptInFeature.WEBDAV_TRANSFER)),
+        )
+        assertEquals(listOf("SEC-PERMISSIONS"), noGeotag.findings.filterNot { it.passed }.map { it.findingId })
+    }
+
+    @Test
+    fun optInFeaturesDoNotJustifyOtherNetworkLocationOrSensitivePermissions() {
+        val allFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING)
+        listOf(
+            "android.permission.ACCESS_WIFI_STATE",
+            "android.permission.CHANGE_NETWORK_STATE",
+            "android.permission.ACCESS_BACKGROUND_LOCATION",
+            "android.permission.READ_EXTERNAL_STORAGE",
+            "android.permission.READ_CONTACTS",
+        ).forEach { permission ->
+            val report = SecurityPrivacyAccessibilityAuditor.audit(
+                safeInput.copy(permissions = safeInput.permissions + permission, declaredOptInFeatures = allFeatures),
+            )
+            assertFalse(permission, report.passed)
+            assertFalse(permission, report.findings.first { it.findingId == "SEC-PERMISSIONS" }.passed)
+        }
     }
 }

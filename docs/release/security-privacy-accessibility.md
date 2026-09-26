@@ -11,10 +11,14 @@ Review baseline for the portable OpenCineCam release:
   only for opt-in photo/take geotagging: off by default and requested at
   runtime while the camera activity is resumed. No broad storage, analytics,
   account, or remote-crash permission.
-- **Open decision:** OCC-PRIV-001 ("no Internet permission"), ADR-0027 and the
-  `SEC-NETWORK`/`SEC-PERMISSIONS` checks in `SecurityAudit.kt` still encode the
-  pre-WebDAV baseline and must be amended (or the network features split into a
-  separate flavor) before release certification.
+- **Opt-in network/location (OCC-PRIV-001, amended 2026-09-26; ADR-0027
+  amendment):** network and location permissions are allowed only for the named
+  opt-in features above, each off by default, with no background or automatic
+  network use, no analytics/telemetry/accounts, HTTPS-only transfers and no
+  third-party SDKs. The `SEC-NETWORK`/`SEC-PERMISSIONS` checks in
+  `SecurityAudit.kt` accept those permissions only when their `OptInFeature` is
+  declared, and `SecurityAuditManifestTest` audits the real manifest. A separate
+  no-network flavor was considered and rejected for now.
 - **Components:** `MainActivity` is the deliberate launcher export;
   `CaptureService` is non-exported. Foreground starts are visible and use
   immutable Stop intents.
