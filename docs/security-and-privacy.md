@@ -1,6 +1,6 @@
 # Security and Privacy
 
-The portable OSS app has no Internet permission, analytics, telemetry, account, remote crash reporting, cloud sync, or automatic upload. Required permissions are CAMERA; optional RECORD_AUDIO; FOREGROUND_SERVICE plus camera/microphone service permissions; and POST_NOTIFICATIONS where required. No broad storage permission is used.
+The portable OSS app has no analytics, telemetry, account, remote crash reporting, cloud sync, or automatic upload. Required permissions are CAMERA; optional RECORD_AUDIO; FOREGROUND_SERVICE plus camera/microphone service permissions; and POST_NOTIFICATIONS where required. INTERNET and ACCESS_NETWORK_STATE are declared only for opt-in WebDAV transfers (OCC-PLAN-067, ADR-0034), and ACCESS_COARSE/FINE_LOCATION only for opt-in geotagging; both are off by default and presets never enable them. OCC-PRIV-001 and ADR-0027 still state the pre-WebDAV "no Internet permission" baseline and need an explicit amendment before release certification. No broad storage permission is used.
 
 The service and providers are non-exported unless a documented share surface requires otherwise. PendingIntents are immutable. Shares use content URIs, explicit MIME types, temporary read grants, and chooser UI. MediaStore and SAF descriptors are closed by their owner. Signing keys and Play credentials stay outside the repository.
 

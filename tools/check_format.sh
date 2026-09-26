@@ -7,7 +7,7 @@ set -euo pipefail
 # Dependency-free formatting guard for the repository's checked-in text files.
 # It intentionally checks source/docs rather than generated build output.
 mapfile -t files < <(
-  find app/src core gradle docs tools .github \
+  find app/src camera/src media/src core gradle docs tools .github \
     -type d -name build -prune -o -type f \( \
     -name '*.kt' -o -name '*.kts' -o -name '*.xml' -o -name '*.md' \
     -o -name '*.json' -o -name '*.yaml' -o -name '*.yml' -o -name '*.pro' \

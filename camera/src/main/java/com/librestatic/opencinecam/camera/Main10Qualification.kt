@@ -15,7 +15,7 @@ data class Main10FileSignal(
     val colorStandard: String?,
     val colorTransfer: String?,
     val bitDepth: Int?,
-) 
+)
 
 data class QualificationResult(
     val status: QualificationStatus,

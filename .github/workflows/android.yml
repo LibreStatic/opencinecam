@@ -3,9 +3,11 @@
 
 name: Android quality
 
+# Instrumented tests (app/src/androidTest, ~832 methods) are local-only: they need a camera
+# emulator or physical device and are not run by any workflow. See docs/testing-strategy.md.
 on:
   push:
-    branches: [main]
+    branches: [main, 'wip/**']
   pull_request:
     branches: [main]
 
@@ -17,6 +19,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  tools:
+    name: Python tooling tests and plan graph
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Run tools/tests
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
+      - name: Validate plan graph
+        # evidence/ is gitignored, so missing Done-plan evidence is reported as a warning here;
+        # release certification runs the validator with --require-evidence.
+        run: python3 tools/validate_plan_system.py
+
   quality:
     name: JDK 17 lint, tests, and ARM64 debug build
     runs-on: ubuntu-24.04
@@ -52,5 +68,7 @@ jobs:
             camera/build/test-results/
             media/build/reports/
             media/build/test-results/
+            core/model/build/reports/
+            core/model/build/test-results/
           if-no-files-found: warn
           retention-days: 7

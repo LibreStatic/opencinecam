@@ -58,6 +58,33 @@ class ValidatorUnitTest(unittest.TestCase):
             ["evidence/one.log", "evidence/two.json"],
         )
 
+    def test_marker_is_upper_case_todo_or_any_case_tbd(self):
+        marker = validator.UNRESOLVED_MARKER
+        self.assertIsNotNone(marker.search("Owner: TODO"))
+        self.assertIsNotNone(marker.search("Owner: TBD"))
+        self.assertIsNotNone(marker.search("owner tbd"))
+        # Lower/mixed-case "todo" is ordinary prose and must not read as an unresolved marker.
+        self.assertIsNone(marker.search("the todo list stays in the todo writer"))
+        self.assertIsNone(marker.search("Todo list items"))
+        self.assertIsNone(marker.search("TODOS as a plural word"))
+
+    def test_front_matter_revision(self):
+        self.assertEqual(validator.front_matter_revision("---\nplan_id: X\nrevision: 12\n---\n"), 12)
+        self.assertIsNone(validator.front_matter_revision("### Revision 12\n"))
+
+    def test_missing_evidence_is_a_warning_unless_required(self):
+        root = Path(__file__).parents[2]
+        errors, warnings, stats = validator.validate_root(root)
+        strict_errors, strict_warnings, strict_stats = validator.validate_root(root, require_evidence=True)
+        missing = [item for item in warnings if "missing evidence file" in item]
+        self.assertEqual(missing, warnings)
+        self.assertFalse(any("missing evidence file" in item for item in errors))
+        self.assertEqual(strict_warnings, [])
+        self.assertEqual(sorted(strict_errors), sorted(errors + warnings))
+        self.assertEqual(stats["missing_evidence"], len(warnings))
+        self.assertEqual(strict_stats["missing_evidence"], len(warnings))
+        self.assertEqual(strict_stats["evidence_required"], "yes")
+
 
 if __name__ == "__main__":
     unittest.main()

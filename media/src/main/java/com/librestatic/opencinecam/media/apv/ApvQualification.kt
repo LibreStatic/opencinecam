@@ -77,7 +77,7 @@ data class ApvContainerFixture(
     val decoded: Boolean,
     val profile: String,
     val chroma: String,
-) 
+)
 
 enum class ApvFileStatus {
     PASS,

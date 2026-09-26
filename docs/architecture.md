@@ -70,6 +70,6 @@ OCLog2 has a launcher-reachable experimental runtime with distinct HLG10-derived
 
 ## Privacy, diagnostics, and trust
 
-Portable manifests use CAMERA, optional RECORD_AUDIO, notification, foreground-service, and camera/microphone FGS permissions only. Components default non-exported; immutable PendingIntents and content URI grants are required. No Internet or broad storage permission exists.
+Portable manifests use CAMERA, optional RECORD_AUDIO, notification, foreground-service, and camera/microphone FGS permissions for capture, plus INTERNET/ACCESS_NETWORK_STATE for opt-in WebDAV transfers (ADR-0034) and COARSE/FINE location for opt-in geotagging; both features are off by default. Components default non-exported; immutable PendingIntents and content URI grants are required. No broad storage permission exists.
 
 Structured local NDJSON logs use session/recording/correlation IDs, roll at five 2 MiB files, omit per-frame data in release, and are exported manually as a redacted ZIP by default. Bundled profiles are release-trusted; imported profiles are untrusted and require confirmation. User overrides can narrow/disable behavior but never promote evidence. Quirks match exact fingerprint/camera/codec scope and expire on validity changes.

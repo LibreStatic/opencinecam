@@ -70,13 +70,19 @@ jobs:
           build_tools="$(find "$ANDROID_SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           "$build_tools/apksigner" verify --verbose "build/release/OpenCineCam-$APP_VERSION-arm64-debug.apk"
 
-          for apk in build/release/OpenCineCam-"$APP_VERSION"-arm64-{debug,release}.apk; do
-            mapfile -t abis < <(zipinfo -1 "$apk" | awk -F/ '$1 == "lib" {print $2}' | sort -u)
-            [[ "${#abis[@]}" -eq 1 && "${abis[0]}" == "arm64-v8a" ]] || {
-              echo "Unexpected ABIs in $apk: ${abis[*]:-none}" >&2
+          # The shipped release APK is ARM64-only. The debug APK intentionally also carries
+          # x86_64 native AndroidX graphics for emulators (app/build.gradle.kts debug abiFilters),
+          # so it is checked against that exact set; any other ABI drift still fails the release.
+          check_abis() {
+            local apk="$1" expected="$2" actual
+            actual="$(zipinfo -1 "$apk" | awk -F/ '$1 == "lib" && NF > 2 {print $2}' | sort -u | paste -sd' ' -)"
+            [[ "$actual" == "$expected" ]] || {
+              echo "Unexpected ABIs in $apk: ${actual:-none} (expected: $expected)" >&2
               exit 1
             }
-          done
+          }
+          check_abis "build/release/OpenCineCam-$APP_VERSION-arm64-release.apk" "arm64-v8a"
+          check_abis "build/release/OpenCineCam-$APP_VERSION-arm64-debug.apk" "arm64-v8a x86_64"
 
           cd build/release
           sha256sum \

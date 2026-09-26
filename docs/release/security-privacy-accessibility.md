@@ -3,8 +3,18 @@
 Review baseline for the portable OpenCineCam release:
 
 - **Permissions:** Camera, microphone, notification, and camera/microphone
-  foreground-service permissions only. No Internet, broad storage, analytics,
+  foreground-service permissions for capture. `INTERNET` and
+  `ACCESS_NETWORK_STATE` are declared only for opt-in WebDAV transfers
+  (OCC-PLAN-067, ADR-0034): off by default, never enabled by presets, HTTPS
+  only, started by an explicit per-bundle user action, with no background
+  scheduler. `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` are declared
+  only for opt-in photo/take geotagging: off by default and requested at
+  runtime while the camera activity is resumed. No broad storage, analytics,
   account, or remote-crash permission.
+- **Open decision:** OCC-PRIV-001 ("no Internet permission"), ADR-0027 and the
+  `SEC-NETWORK`/`SEC-PERMISSIONS` checks in `SecurityAudit.kt` still encode the
+  pre-WebDAV baseline and must be amended (or the network features split into a
+  separate flavor) before release certification.
 - **Components:** `MainActivity` is the deliberate launcher export;
   `CaptureService` is non-exported. Foreground starts are visible and use
   immutable Stop intents.

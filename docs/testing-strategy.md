@@ -4,6 +4,8 @@
 
 Pure JVM tests cover models, schema parity, policy graphs, request composer, timestamp math, container parser/recovery, and test vectors. Android instrumentation covers permissions, service lifecycle, MediaStore/SAF, surface replacement, and fakes. Physical-device suites alone establish Camera2, codec, audio, storage, thermal, foldable, RAW, and APV behavior. Emulators are orchestration evidence only.
 
+CI coverage (`.github/workflows/android.yml`, on `main`, `wip/**` and PRs to `main`): formatting, Gradle `lint test assembleDebug` for every module including `core:model`, the Python `tools/tests` suite, and the plan-graph validator. No workflow runs instrumented tests: the ~832 `androidTest` methods need a camera emulator (`-camera-back emulated`) or a physical device and are run locally only, so a green CI run says nothing about them. Several instrumented evidence collectors also pass on UNSUPPORTED hardware branches; treat their result as orchestration evidence, not capability proof.
+
 ## Evidence levels
 
 | Level | Required evidence |

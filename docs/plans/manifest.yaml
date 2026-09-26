@@ -855,7 +855,7 @@ plans:
   - id: OCC-PLAN-065
     title: "Professional control intent and operation"
     status: InProgress
-    revision: 6
+    revision: 9
     milestone: H3
     path: docs/plans/PLAN-065-professional-control-intent-and-operation.md
     depends_on: [OCC-PLAN-015]
@@ -869,7 +869,7 @@ plans:
   - id: OCC-PLAN-066
     title: "Capture and project timelines"
     status: InProgress
-    revision: 20
+    revision: 35
     milestone: H4
     path: docs/plans/PLAN-066-capture-and-project-timelines.md
     depends_on: [OCC-PLAN-015]
@@ -883,7 +883,7 @@ plans:
   - id: OCC-PLAN-067
     title: "Opt-in WebDAV transfers and finalized capture bundles"
     status: InProgress
-    revision: 6
+    revision: 7
     milestone: H5
     path: docs/plans/PLAN-067-opt-in-webdav-transfers.md
     depends_on: [OCC-PLAN-066]

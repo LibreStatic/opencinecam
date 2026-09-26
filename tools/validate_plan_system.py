@@ -40,6 +40,8 @@ ALLOWED_STATUSES = {
     "Draft", "Ready", "ConditionalReady", "InProgress", "Blocked",
     "Done", "Superseded", "Cancelled",
 }
+# Upper-case TODO only: lower/mixed-case "todo" is ordinary prose.
+UNRESOLVED_MARKER = re.compile(r"\bTODO\b|\b(?i:TBD)\b")
 LIST_FIELDS = {
     "depends_on", "blocks", "requirements", "adrs", "risks",
     "conditional_gates",
@@ -143,24 +145,39 @@ def acceptance_states(text: str) -> list[str]:
     return re.findall(r"^- \[([ xX])\]", match.group(1), re.MULTILINE)
 
 
+def front_matter_revision(text: str) -> int | None:
+    match = re.search(r"^revision:\s*(\d+)\s*$", text, re.MULTILINE)
+    return None if not match else int(match.group(1))
+
+
 def execution_evidence_paths(text: str) -> list[str]:
     match = re.search(r"^- Evidence:\s*(.*)$", text, re.MULTILINE)
     return [] if not match else re.findall(r"`([^`]+)`", match.group(1))
 
 
-def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
+def validate_root(
+    root: Path, require_evidence: bool = False,
+) -> tuple[list[str], list[str], dict[str, int | str]]:
+    """Return (errors, warnings, stats).
+
+    Done-plan evidence under the gitignored `evidence/` tree is absent from a
+    clean checkout (docs/plans/README.md). Missing evidence is therefore a
+    counted warning by default and an error only with `require_evidence`, which
+    release certification must use.
+    """
     errors: list[str] = []
+    warnings: list[str] = []
     for relative in REQUIRED_DOCS:
         if not (root / relative).is_file():
             errors.append(f"missing required file: {relative}")
 
     manifest_path = root / "docs/plans/manifest.yaml"
     if not manifest_path.is_file():
-        return errors, {}
+        return errors, warnings, {}
     try:
         records = parse_manifest(manifest_path)
     except (OSError, ValueError) as exc:
-        return errors + [str(exc)], {}
+        return errors + [str(exc)], warnings, {}
 
     ids = [str(r["id"]) for r in records]
     if len(ids) != len(set(ids)):
@@ -219,10 +236,12 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
             errors.append(f"{plan_id}: front matter ID mismatch")
         if f"status: {status}" not in text:
             errors.append(f"{plan_id}: front matter status mismatch")
+        if "revision" in record and front_matter_revision(text) != record["revision"]:
+            errors.append(f"{plan_id}: front matter revision mismatch")
         for section in range(1, 22):
             if not re.search(rf"^## {section}\. ", text, re.MULTILINE):
                 errors.append(f"{plan_id}: missing section {section}")
-        if re.search(r"\b(TBD|TODO)\b", text, re.IGNORECASE):
+        if UNRESOLVED_MARKER.search(text):
             errors.append(f"{plan_id}: unresolved marker")
         checks = acceptance_states(text)
         if not checks:
@@ -235,7 +254,8 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
                 errors.append(f"{plan_id}: Done plan has no execution evidence")
             for evidence_path in evidence_paths:
                 if not (root / evidence_path).is_file():
-                    errors.append(f"{plan_id}: missing evidence file {evidence_path}")
+                    missing = f"{plan_id}: missing evidence file {evidence_path}"
+                    (errors if require_evidence else warnings).append(missing)
 
     cycle = cycle_nodes(records)
     if cycle:
@@ -282,11 +302,16 @@ def validate_root(root: Path) -> tuple[list[str], dict[str, int | str]]:
         "traceability_coverage": "100%" if not missing_trace else "incomplete",
         "dependency_cycles": "none" if not cycle else "present",
         "next_plan": next_plan,
+        "schemas": len(schema_files),
+        "missing_evidence": sum("missing evidence file" in item for item in errors + warnings),
+        "evidence_required": "yes" if require_evidence else "no",
     }
-    return errors, stats
+    return errors, warnings, stats
 
 
-def write_quality_report(root: Path, stats: dict[str, int | str], errors: list[str]) -> None:
+def write_quality_report(
+    root: Path, stats: dict[str, int | str], errors: list[str], warnings: list[str] | None = None,
+) -> None:
     outcome = "PASS" if not errors else "FAIL"
     remaining = (
         "Physical-device HLG10/effective precision, RAW throughput, OEM audio/ISP behavior, "
@@ -312,12 +337,17 @@ def write_quality_report(root: Path, stats: dict[str, int | str], errors: list[s
         lines.extend(f"- FAIL: {error}" for error in errors)
     else:
         lines.extend([
-            f"- PASS: required files and {len(schema_files)} JSON schemas exist and parse.",
+            f"- PASS: required files and {stats.get('schemas', 0)} JSON schemas exist and parse.",
             "- PASS: IDs, paths, dependencies, references, and statuses resolve.",
             "- PASS: dependency graph is acyclic and every plan has 21 sections.",
             "- PASS: all accepted requirements, ADRs, and risks are traceable.",
             "- PASS: ConditionalReady plans carry deterministic gates.",
         ])
+    if warnings:
+        lines.append(
+            f"- WARN: {len(warnings)} Done-plan evidence paths are absent from this checkout "
+            "(`evidence/` is gitignored); certification requires `--require-evidence`."
+        )
     (root / "docs/plans/PLAN-QUALITY-REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -325,10 +355,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--write-report", action="store_true")
+    parser.add_argument(
+        "--require-evidence",
+        action="store_true",
+        help="fail when Done-plan evidence files are missing (release certification)",
+    )
     args = parser.parse_args()
-    errors, stats = validate_root(args.root.resolve())
+    errors, warnings, stats = validate_root(args.root.resolve(), args.require_evidence)
     if args.write_report:
-        write_quality_report(args.root.resolve(), stats, errors)
+        write_quality_report(args.root.resolve(), stats, errors, warnings)
+    if warnings:
+        print(
+            f"WARNING: {len(warnings)} Done-plan evidence paths are missing "
+            "(evidence/ is gitignored); pass --require-evidence to fail on them.",
+            file=sys.stderr,
+        )
     if errors:
         for error in errors:
             print(f"ERROR: {error}")

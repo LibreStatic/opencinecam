@@ -5,6 +5,10 @@ local.properties
 .cxx/
 .externalNativeBuild/
 *.apk
+# APK v4 signatures/checksums travel with their (ignored) APKs. The 0.3.0-0.3.3 ones
+# committed earlier stay tracked until the maintainer decides to remove them.
+*.apk.idsig
+*.apk.sha256
 *.aab
 .idea/
 *.iml
