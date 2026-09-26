@@ -153,6 +153,8 @@ sealed interface WebDavRemoteObservation {
     }
     data object NotFound404 : WebDavRemoteObservation
     data object Inconclusive : WebDavRemoteObservation
+    /** 401/403: says nothing about the remote bytes; the credentials need attention. */
+    data object AuthenticationRejected : WebDavRemoteObservation
 }
 
 data class WebDavReconciliationEvidence(
@@ -235,7 +237,7 @@ internal object WebDavOutboxTransitions {
                 WebDavArtifactState.SOURCE_UNAVAILABLE
             } else when (val remote = evidence.remote) {
                 WebDavRemoteObservation.NotFound404 -> WebDavArtifactState.QUEUED
-                WebDavRemoteObservation.Inconclusive -> WebDavArtifactState.UNCERTAIN
+                WebDavRemoteObservation.Inconclusive, WebDavRemoteObservation.AuthenticationRejected -> WebDavArtifactState.UNCERTAIN
                 is WebDavRemoteObservation.CompleteBody -> if (remote.sizeBytes == artifact.spec.sizeBytes && remote.sha256 == artifact.sha256)
                     WebDavArtifactState.VERIFIED else WebDavArtifactState.CONFLICT
             }

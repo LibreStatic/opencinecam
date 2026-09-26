@@ -12,6 +12,9 @@ enum class ProxyJobStatus { QUEUED, RUNNING, CANCELLING, SUCCEEDED, FAILED, CANC
 data class ProxyJob(val id: String, val take: LocalMediaTake, val settings: ProxySettings,
     val status: ProxyJobStatus, val attempts: Int = 0, val error: String? = null)
 
+/** The snapshot was refused before any storage was touched; the committed state is unchanged. */
+class ProxyJobRejectedException(message: String, cause: Throwable) : IllegalArgumentException(message, cause)
+
 /** Single-writer snapshot. A synced staging file precedes same-directory atomic rename.
  * Backup is the previous committed snapshot, never an excuse to hide a corrupt current one.
  * An interrupted main→backup→main rename is recovered only when main is absent.
@@ -37,9 +40,12 @@ class ProxyJobStore(directory: File) {
     }
 
     @Synchronized fun write(jobs: List<ProxyJob>) {
-        validate(jobs)
-        val bytes = encode(jobs).toString().toByteArray(Charsets.UTF_8)
-        require(bytes.size <= MAX_BYTES) { "Proxy queue exceeds4MiB" }
+        val bytes = try {
+            validate(jobs)
+            encode(jobs).toString().toByteArray(Charsets.UTF_8).also { require(it.size <= MAX_BYTES) { "Proxy queue exceeds4MiB" } }
+        } catch (invalid: IllegalArgumentException) {
+            throw ProxyJobRejectedException("Proxy request rejected: ${invalid.message ?: "invalid take or queue limit"}", invalid)
+        }
         check(directory.isDirectory || directory.mkdirs()) { "Proxy queue directory unavailable" }
         checkPaths()
         // Validate/recover prior state before touching it; malformed storage is never reset.

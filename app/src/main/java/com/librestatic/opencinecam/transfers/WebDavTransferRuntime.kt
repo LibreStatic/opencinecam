@@ -8,6 +8,7 @@ import android.net.NetworkCapabilities
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
@@ -26,6 +27,12 @@ import kotlinx.coroutines.withContext
 internal interface WebDavRuntimeNetworkSource : AutoCloseable {
     fun start(changed: (Network?, WebDavNetwork) -> Unit)
 }
+
+enum class MediaMutationBlocker { CAPTURE, TRANSFER, MEDIA_MUTATION, CLOSED }
+
+/** Typed refusal so waiters can tell temporary ownership from a real failure. */
+class MediaMutationBusyException internal constructor(val blocker: MediaMutationBlocker) :
+    IllegalStateException("Local media changes require idle capture and transfer ownership")
 
 class CaptureTransferReservation internal constructor(
     private val finished: CompletableDeferred<Unit>?,
@@ -81,6 +88,7 @@ class WebDavTransferRuntime internal constructor(
     private var work: Work? = null
     private var closed = false
     private val processToken = UUID.randomUUID().toString()
+    private val idleListeners = CopyOnWriteArrayList<() -> Unit>()
 
     private class Work(val bundleId: String?) {
         val finished = CompletableDeferred<Unit>()
@@ -110,6 +118,7 @@ class WebDavTransferRuntime internal constructor(
                 captures--
                 receipt = control.updatePolicyAsync(policyLocked(), ::dispatchCleanup)
                 publishLocked(if (captures > 0) WebDavTransferMessage.WAITING_RECORDING else WebDavTransferMessage.IDLE)
+                notifyIdleLocked()
             }
         }
     }
@@ -117,9 +126,14 @@ class WebDavTransferRuntime internal constructor(
     /** Admit destructive local IO only when no transfer owns a source. Never cancels a worker,
      * initializes the outbox or waits on capture; callers retry after the visible operation ends. */
     fun reserveIdleMediaMutation(): AutoCloseable = synchronized(gate) {
-        check(!closed && work == null && receipt.isRetired && captures == 0 && mediaMutations == 0) {
-            "Local media changes require idle capture and transfer ownership"
+        val blocker = when {
+            closed -> MediaMutationBlocker.CLOSED
+            captures > 0 -> MediaMutationBlocker.CAPTURE
+            work != null || !receipt.isRetired -> MediaMutationBlocker.TRANSFER
+            mediaMutations > 0 -> MediaMutationBlocker.MEDIA_MUTATION
+            else -> null
         }
+        if (blocker != null) throw MediaMutationBusyException(blocker)
         mediaMutations++
         mediaMutationFinished = CompletableDeferred()
         publishLocked(WebDavTransferMessage.WAITING_MEDIA)
@@ -135,10 +149,19 @@ class WebDavTransferRuntime internal constructor(
                     if (!closed) {
                         receipt = control.updatePolicyAsync(policyLocked(), ::dispatchCleanup)
                         publishLocked(WebDavTransferMessage.IDLE)
+                        notifyIdleLocked()
                     }
                 }
             }
         }
+    }
+
+    /** Wakes media waiters (queued proxies) when capture, transfer and mutation ownership are all
+     * idle. Listeners run under the runtime lock and must only schedule their own work. */
+    internal fun addMediaIdleListener(listener: () -> Unit) { idleListeners += listener }
+
+    private fun notifyIdleLocked() {
+        if (!closed && work == null && receipt.isRetired && captures == 0 && mediaMutations == 0) idleListeners.forEach { it() }
     }
 
     /** Reflect a committed local-mutation hold without starting settings/network/database IO. */
@@ -165,7 +188,7 @@ class WebDavTransferRuntime internal constructor(
     private fun dispatchCleanup(action: () -> Unit) {
         cleanup.execute {
             try { action() } finally {
-                synchronized(gate) { publishLocked(mutable.value.message) }
+                synchronized(gate) { publishLocked(mutable.value.message); notifyIdleLocked() }
             }
         }
     }
@@ -269,6 +292,7 @@ class WebDavTransferRuntime internal constructor(
                 current.finished.complete(Unit) // SQLite/FD/worker finally has actually returned.
                 if (work === current) work = null
                 publishLocked(current.stopped ?: message)
+                notifyIdleLocked()
             }
         }
     }
@@ -393,18 +417,23 @@ internal fun classifyWebDavNetwork(value: NetworkCapabilities): WebDavNetwork = 
     vpn = value.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
     internet = value.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
     validated = value.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+    notMetered = value.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
 )
 
+/** CELLULAR means any metered path and needs the cellular consent; a hotspot or metered Wi-Fi
+ * is not free Wi-Fi. A VPN carries its underlying transports and metering in its capabilities;
+ * one whose underlying transport is unknown still fails closed. */
 internal fun classifyWebDavNetwork(
     wifi: Boolean = false,
     cellular: Boolean = false,
     vpn: Boolean = false,
     internet: Boolean = false,
     validated: Boolean = false,
+    notMetered: Boolean = false,
 ): WebDavNetwork {
-    if (vpn) return WebDavNetwork.OTHER
+    if (vpn && !wifi && !cellular) return WebDavNetwork.OTHER
     // A LAN-only Wi-Fi connection need not pass Android's public-Internet validation.
-    if (wifi && !cellular) return WebDavNetwork.WIFI
+    if (wifi && !cellular) return if (notMetered) WebDavNetwork.WIFI else WebDavNetwork.CELLULAR
     if (!internet || !validated) return WebDavNetwork.OFFLINE
     if (cellular) return WebDavNetwork.CELLULAR
     return WebDavNetwork.OTHER

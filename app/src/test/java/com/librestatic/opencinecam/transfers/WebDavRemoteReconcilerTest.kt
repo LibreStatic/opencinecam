@@ -89,7 +89,11 @@ class WebDavRemoteReconcilerTest {
         for (status in listOf(204, 206, 301, 302, 307, 308, 401, 403, 404, 412, 500)) {
             val socket = Connection(status = status)
             val result = WebDavRemoteReconciler({ socket }).inspect(destination, "take.mp4", 1, scope)
-            assertEquals(if (status == 404) WebDavRemoteObservation.NotFound404 else WebDavRemoteObservation.Inconclusive, result)
+            assertEquals(when (status) {
+                404 -> WebDavRemoteObservation.NotFound404
+                401, 403 -> WebDavRemoteObservation.AuthenticationRejected
+                else -> WebDavRemoteObservation.Inconclusive
+            }, result)
             assertEquals(0, socket.opens)
             assertEquals(1, socket.disconnects)
         }

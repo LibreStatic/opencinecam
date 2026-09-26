@@ -79,7 +79,11 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
     onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null, onOpen: (LocalMediaArtifact) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    var queryInvalid by rememberSaveable { mutableStateOf(false) }
+    // What the operator typed, which is not always what we search for. Keeping it lets the field
+    // show a rejected edit long enough to explain it: a controlled field that silently discards the
+    // edit calls onValueChange a second time with the reverted text, and a flag set on the first
+    // call would be cleared by that second one before anything could be drawn.
+    var typedQuery by rememberSaveable { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     var batch by remember { mutableIntStateOf(0) }
@@ -128,9 +132,11 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                     }
                 }
                 Text(stringResource(R.string.gallery_help), Modifier.fillMaxWidth().testTag("gallery-help"))
-                OutlinedTextField(query, { candidate ->
-                    queryInvalid = !validGalleryQuery(candidate)
-                    if (!queryInvalid) query = candidate
+                val queryInvalid = !validGalleryQuery(typedQuery)
+                OutlinedTextField(typedQuery, { candidate ->
+                    typedQuery = galleryQueryInput(candidate)
+                    // Only a query we would actually accept reaches the loader.
+                    if (validGalleryQuery(candidate)) query = candidate
                 }, label = { Text(stringResource(R.string.gallery_search), Modifier.fillMaxWidth().testTag("gallery-search-label")) },
                     isError = queryInvalid, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("gallery-search"))
                 if (queryInvalid) Text(stringResource(R.string.gallery_search_invalid), Modifier.fillMaxWidth().testTag("gallery-search-invalid"))
@@ -172,6 +178,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
 }
 
 internal fun validGalleryQuery(query: String): Boolean = query.length <= 128 && query.none { it.isISOControl() }
+/** Saveable-state memory bound, like the rename fields. Anything cut here is already invalid (>128),
+ * so the bound never turns a paste into a different accepted query. */
+internal fun galleryQueryInput(candidate: String): String = candidate.take(512)
 
 @Composable
 private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, action: () -> Unit) {

@@ -65,6 +65,7 @@ internal class WebDavRemoteReconciler(
             remainingMillis()
             when (status) {
                 404 -> WebDavRemoteObservation.NotFound404
+                401, 403 -> WebDavRemoteObservation.AuthenticationRejected
                 200 -> {
                     val headers = connection.headerFields
                     fun header(name: String): String? {

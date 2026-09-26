@@ -34,7 +34,8 @@ internal class ProxyPolicyMonitor(context: Context) {
         // rechecks actual working space immediately before starting its encoder.
         val conditions = ProxyConditions(percent, charging, available)
         proxyWaitReason(policies.states.value, conditions)?.let { return@withContext it }
-        val reservation = com.librestatic.opencinecam.transfers.WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+        val reservation = try { com.librestatic.opencinecam.transfers.WebDavTransferRuntime.get(context).reserveIdleMediaMutation() }
+            catch (busy: com.librestatic.opencinecam.transfers.MediaMutationBusyException) { return@withContext busy.proxyWaitReason() }
         val duration = try {
             val extractor = android.media.MediaExtractor()
             try {

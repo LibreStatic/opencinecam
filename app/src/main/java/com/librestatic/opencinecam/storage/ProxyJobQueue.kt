@@ -50,12 +50,17 @@ internal class ProxyJobQueue(private val store: ProxyJobStore, private val engin
     fun conditionsChanged() { scope.launch { gate.withLock {
         mutable.value = mutable.value.copy(waiting = emptyMap()); load(); kick()
     } } }
+    /** REC, a transfer or another proxy action released media ownership. Policy waits stay put. */
+    fun mediaReleased() { scope.launch { gate.withLock {
+        mutable.value = mutable.value.copy(waiting = mutable.value.waiting.filterValues { it !in MEDIA_WAITS }); load(); kick()
+    } } }
+    /** A take the store cannot represent (or a full queue) is rejected for this call only. */
     suspend fun enqueue(take: LocalMediaTake, settings: ProxySettings): String = withContext(Dispatchers.IO) {
         gate.withLock {
             ready()
             mutable.value.jobs.firstOrNull { it.take.id == take.id }?.let { return@withLock it.id }
             val job = ProxyJob(UUID.randomUUID().toString(), take, settings, ProxyJobStatus.QUEUED)
-            persist(mutable.value.jobs + job); kick(); job.id
+            persist(pruneHistory(mutable.value.jobs) + job); kick(); job.id
         }
     }
     suspend fun retry(id: String) = withContext(Dispatchers.IO) {
@@ -213,11 +218,23 @@ internal class ProxyJobQueue(private val store: ProxyJobStore, private val engin
     }
     private suspend fun ready() { check(!closed); load(); check(mutable.value.loaded && mutable.value.error == null) { mutable.value.error ?: "Proxy queue unavailable" } }
     private fun persist(jobs: List<ProxyJob>) {
-        try { store.write(jobs); mutable.value = ProxyQueueState(jobs, loaded = !recovering, waiting = mutable.value.waiting.filterKeys { id -> jobs.any { it.id == id && it.status == ProxyJobStatus.QUEUED } }) }
+        try {
+            store.write(jobs)
+            // Cancellation bypasses policy waits; only media ownership can still hold a CANCELLING cleanup.
+            mutable.value = ProxyQueueState(jobs, loaded = !recovering, waiting = mutable.value.waiting.filter { (id, reason) ->
+                jobs.any { it.id == id && (it.status == ProxyJobStatus.QUEUED || it.status == ProxyJobStatus.CANCELLING && reason in MEDIA_WAITS) } })
+        }
+        catch (rejected: ProxyJobRejectedException) { throw rejected } // Nothing written; the queue stays usable.
         catch (failure: Exception) {
             mutable.value = mutable.value.copy(error = failure.message ?: failure.javaClass.simpleName)
             throw failure
         }
+    }
+    /** Terminal jobs are history; committed proxies stay listed through their receipts. */
+    private fun pruneHistory(jobs: List<ProxyJob>): List<ProxyJob> {
+        var excess = jobs.count { it.status in TERMINAL } - (HISTORY_LIMIT - 1)
+        if (excess <= 0) return jobs
+        return jobs.filterNot { it.status in TERMINAL && it.id != activeId && excess-- > 0 }
     }
     private fun replace(job: ProxyJob) = persist(mutable.value.jobs.map { if (it.id == job.id) job else it })
     private fun kick() {
@@ -235,10 +252,15 @@ internal class ProxyJobQueue(private val store: ProxyJobStore, private val engin
                     replace(admitted)
                     activeId = admitted.id
                     operation = scope.async(start = CoroutineStart.LAZY) {
-                        val existing = engine.reconcile(admitted)
-                        if (existing != null || admitted.status == ProxyJobStatus.CANCELLING) existing else {
-                            admission(admitted)?.let { throw AdmissionWait(it) }
-                            engine.create(admitted)
+                        try {
+                            val existing = engine.reconcile(admitted)
+                            if (existing != null || admitted.status == ProxyJobStatus.CANCELLING) existing else {
+                                admission(admitted)?.let { throw AdmissionWait(it) }
+                                engine.create(admitted)
+                            }
+                        } catch (busy: ProxyMediaBusyException) {
+                            // Refused before any media IO: REC, a transfer or another proxy action owns media.
+                            throw AdmissionWait(busy.reason)
                         }
                     }.also { it.start() }
                     admitted to requireNotNull(operation)
@@ -259,16 +281,19 @@ internal class ProxyJobQueue(private val store: ProxyJobStore, private val engin
                         operation = null; activeId = null
                         if (!closed) {
                             val current = mutable.value.jobs.single { it.id == selected.first.id }
+                            val wait = failure as? AdmissionWait
                             val status = when {
                                 result != null -> ProxyJobStatus.SUCCEEDED
-                                failure is AdmissionWait && current.status != ProxyJobStatus.CANCELLING -> ProxyJobStatus.QUEUED
-                                current.status == ProxyJobStatus.CANCELLING && (failure == null || failure is CancellationException || failure is AdmissionWait) -> ProxyJobStatus.CANCELLED
+                                wait != null && current.status != ProxyJobStatus.CANCELLING -> ProxyJobStatus.QUEUED
+                                // Cancellation cleanup still needs its reconciliation once media ownership frees.
+                                wait != null && wait.reason in MEDIA_WAITS -> ProxyJobStatus.CANCELLING
+                                current.status == ProxyJobStatus.CANCELLING && (failure == null || failure is CancellationException || wait != null) -> ProxyJobStatus.CANCELLED
                                 else -> ProxyJobStatus.FAILED
                             }
-                            replace(current.copy(status = status, attempts = if (failure is AdmissionWait) (current.attempts - 1).coerceAtLeast(0) else current.attempts, error = if (status == ProxyJobStatus.FAILED)
+                            val admittedAttempt = selected.first.status == ProxyJobStatus.RUNNING
+                            replace(current.copy(status = status, attempts = if (wait != null && admittedAttempt) (current.attempts - 1).coerceAtLeast(0) else current.attempts, error = if (status == ProxyJobStatus.FAILED)
                                 (failure?.message ?: failure?.javaClass?.simpleName ?: "Proxy produced no committed result").take(4096) else null))
-                            val wait = failure as? AdmissionWait
-                            if (status == ProxyJobStatus.QUEUED && wait != null) {
+                            if (status in WAITABLE && wait != null) {
                                 mutable.value = mutable.value.copy(waiting = mutable.value.waiting + (current.id to wait.reason))
                             }
                         }
@@ -291,5 +316,9 @@ internal class ProxyJobQueue(private val store: ProxyJobStore, private val engin
     private class AdmissionWait(val reason: ProxyWaitReason) : Exception()
     private companion object {
         val TERMINAL = setOf(ProxyJobStatus.SUCCEEDED, ProxyJobStatus.FAILED, ProxyJobStatus.CANCELLED)
+        val WAITABLE = setOf(ProxyJobStatus.QUEUED, ProxyJobStatus.CANCELLING)
+        val MEDIA_WAITS = setOf(ProxyWaitReason.CAPTURE_ACTIVE, ProxyWaitReason.TRANSFER_ACTIVE, ProxyWaitReason.MEDIA_BUSY)
+        /** Terminal history retained before the oldest entries are pruned on enqueue. */
+        const val HISTORY_LIMIT = 256
     }
 }

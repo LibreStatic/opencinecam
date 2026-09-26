@@ -60,6 +60,9 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
                             ProxyWaitReason.BATTERY -> R.string.proxy_wait_battery
                             ProxyWaitReason.STORAGE_UNKNOWN -> R.string.proxy_wait_storage_unknown
                             ProxyWaitReason.STORAGE -> R.string.proxy_wait_storage
+                            ProxyWaitReason.CAPTURE_ACTIVE -> R.string.proxy_wait_capture
+                            ProxyWaitReason.TRANSFER_ACTIVE -> R.string.proxy_wait_transfer
+                            ProxyWaitReason.MEDIA_BUSY -> R.string.proxy_wait_media_busy
                         }), Modifier.fillMaxWidth().testTag("media-proxy-waiting"))
                     }
                     request?.let {

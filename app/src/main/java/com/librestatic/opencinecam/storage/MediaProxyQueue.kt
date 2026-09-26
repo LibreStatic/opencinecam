@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import android.content.Context
+import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 import java.io.File
 
 internal object MediaProxyQueue {
@@ -19,7 +20,12 @@ internal object MediaProxyQueue {
                     repository.deleteProxy(entry, committed)
                 override suspend fun deleteProxy(take: LocalMediaTake, expected: MediaProxyResult, committed: suspend (String, String) -> Unit) =
                     repository.deleteProxy(take, expected, committed)
-            }, policy::admission).also { instance = it; it.start(); policy.start(it::conditionsChanged) }
+            }, policy::admission).also {
+                instance = it; it.start(); policy.start(it::conditionsChanged)
+                // Media waits wake on the actual release instead of the next policy poll.
+                repository.addReleaseListener(it::mediaReleased)
+                WebDavTransferRuntime.get(app).addMediaIdleListener(it::mediaReleased)
+            }
         }
     }
 }

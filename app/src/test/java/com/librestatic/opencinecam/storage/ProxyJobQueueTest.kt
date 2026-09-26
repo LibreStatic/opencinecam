@@ -766,4 +766,117 @@ class ProxyJobQueueTest {
             assertEquals(0, calls.get()); assertNotNull(queue.states.value.error)
         } finally { if (staging.exists()) check(staging.delete()); queue.shutdown() }
     }
+
+    @Test fun mediaOwnershipBusyWaitsQueuedAndResumesWhenReleased() = runBlocking<Unit> {
+        val store = ProxyJobStore(temporary.newFolder())
+        val busy = java.util.concurrent.atomic.AtomicReference<com.librestatic.opencinecam.ProxyWaitReason?>(
+            com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE)
+        val reconciles = AtomicInteger(); val creates = AtomicInteger()
+        val queue = ProxyJobQueue(store, object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? {
+                reconciles.incrementAndGet()
+                busy.get()?.takeIf { it == com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE }?.let {
+                    throw ProxyMediaBusyException(it, "Local media changes require idle capture and transfer ownership", IllegalStateException())
+                }
+                return null
+            }
+            override suspend fun create(job: ProxyJob): MediaProxyResult {
+                busy.get()?.let { throw ProxyMediaBusyException(it, "Another proxy operation is active") }
+                creates.incrementAndGet(); return result(job)
+            }
+        })
+        try {
+            val id = queue.enqueue(take(), ProxySettings())
+            val waiting = withTimeout(10_000) { queue.states.first { id in it.waiting } }
+            assertEquals(com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE, waiting.waiting[id])
+            assertEquals(ProxyJobStatus.QUEUED, store.read().single().status)
+            assertEquals(0, store.read().single().attempts); assertNull(store.read().single().error)
+            assertNull(waiting.error)
+            // Another proxy action now holds the media lock instead of REC: still a wait, never FAILED.
+            busy.set(com.librestatic.opencinecam.ProxyWaitReason.MEDIA_BUSY); queue.mediaReleased()
+            withTimeout(10_000) { queue.states.first { it.waiting[id] == com.librestatic.opencinecam.ProxyWaitReason.MEDIA_BUSY } }
+            assertEquals(ProxyJobStatus.QUEUED, store.read().single().status)
+            busy.set(null); queue.conditionsChanged()
+            val done = terminal(queue, id)
+            assertEquals(ProxyJobStatus.SUCCEEDED, done.status); assertEquals(1, done.attempts)
+            assertEquals(1, creates.get()); assertTrue(queue.states.value.waiting.isEmpty())
+        } finally { queue.shutdown() }
+    }
+
+    @Test fun mediaReleaseWakesOnlyMediaWaitsNotPolicyWaits() = runBlocking<Unit> {
+        val store = ProxyJobStore(temporary.newFolder()); val admissions = AtomicInteger()
+        val queue = ProxyJobQueue(store, object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
+            override suspend fun create(job: ProxyJob): MediaProxyResult = error("Battery wait encoded")
+        }, { admissions.incrementAndGet(); com.librestatic.opencinecam.ProxyWaitReason.BATTERY })
+        try {
+            val id = queue.enqueue(take(), ProxySettings())
+            withTimeout(10_000) { queue.states.first { id in it.waiting } }
+            queue.mediaReleased(); queue.mediaReleased(); delay(200)
+            // Queue work is serialized on the gate; a later enqueue runs after the released wake-ups.
+            assertEquals(id, queue.enqueue(take(), ProxySettings()))
+            assertEquals(1, admissions.get())
+            assertEquals(com.librestatic.opencinecam.ProxyWaitReason.BATTERY, queue.states.value.waiting[id])
+        } finally { queue.shutdown() }
+    }
+
+    @Test fun cancellingRequestWaitsForMediaOwnershipBeforeCleanup() = runBlocking<Unit> {
+        val store = ProxyJobStore(temporary.newFolder()); val id = UUID.randomUUID().toString()
+        store.write(listOf(ProxyJob(id, take(), ProxySettings(), ProxyJobStatus.CANCELLING, 1)))
+        val blocked = java.util.concurrent.atomic.AtomicBoolean(true); val cleaned = AtomicInteger()
+        val queue = ProxyJobQueue(store, object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? {
+                if (blocked.get()) throw ProxyMediaBusyException(com.librestatic.opencinecam.ProxyWaitReason.TRANSFER_ACTIVE, "busy")
+                cleaned.incrementAndGet(); return null
+            }
+            override suspend fun create(job: ProxyJob): MediaProxyResult = error("Cancelled request must not encode")
+        })
+        try {
+            queue.start()
+            withTimeout(10_000) { queue.states.first { id in it.waiting } }
+            assertEquals(ProxyJobStatus.CANCELLING, store.read().single().status); assertEquals(1, store.read().single().attempts)
+            blocked.set(false); queue.mediaReleased()
+            val done = terminal(queue, id)
+            assertEquals(ProxyJobStatus.CANCELLED, done.status); assertEquals(1, done.attempts); assertEquals(1, cleaned.get())
+        } finally { queue.shutdown() }
+    }
+
+    @Test fun unrepresentableTakeIsRejectedPerCallAndQueueStaysUsable() = runBlocking<Unit> {
+        val store = ProxyJobStore(temporary.newFolder())
+        val queue = ProxyJobQueue(store, object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
+            override suspend fun create(job: ProxyJob): MediaProxyResult = result(job)
+        })
+        try {
+            val base = take(1)
+            val metadata = (1..5).map { LocalMediaArtifact("content://media/external_primary/file/$it", "$it.json", "application/json", 1, 1) }
+            try { queue.enqueue(base.copy(metadata = metadata), ProxySettings()); fail("Unrepresentable take queued") }
+            catch (rejected: ProxyJobRejectedException) { assertTrue(rejected.message.orEmpty().startsWith("Proxy request rejected")) }
+            assertNull(queue.states.value.error); assertEquals(emptyList<ProxyJob>(), store.read())
+            val id = queue.enqueue(take(2), ProxySettings())
+            assertEquals(ProxyJobStatus.SUCCEEDED, terminal(queue, id).status)
+            assertNull(queue.states.value.error)
+        } finally { queue.shutdown() }
+    }
+
+    @Test fun terminalHistoryIsPrunedOldestFirstOnEnqueue() = runBlocking<Unit> {
+        val store = ProxyJobStore(temporary.newFolder())
+        val history = (1..300).map { index ->
+            ProxyJob(UUID.randomUUID().toString(), take(index), ProxySettings(),
+                if (index % 2 == 0) ProxyJobStatus.SUCCEEDED else ProxyJobStatus.FAILED, 1, if (index % 2 == 0) null else "failed")
+        }
+        store.write(history)
+        val queue = ProxyJobQueue(store, object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
+            override suspend fun create(job: ProxyJob): MediaProxyResult = result(job)
+        })
+        try {
+            val id = queue.enqueue(take(1000), ProxySettings())
+            val kept = store.read()
+            assertEquals(256, kept.size)
+            assertEquals(history.takeLast(255), kept.take(255)); assertEquals(id, kept.last().id)
+            assertEquals(ProxyJobStatus.SUCCEEDED, terminal(queue, id).status)
+            assertNull(queue.states.value.error)
+        } finally { queue.shutdown() }
+    }
 }

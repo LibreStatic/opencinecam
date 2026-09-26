@@ -9,6 +9,9 @@ import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.ProxyWaitReason
+import com.librestatic.opencinecam.transfers.MediaMutationBlocker
+import com.librestatic.opencinecam.transfers.MediaMutationBusyException
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 import java.io.File
 import java.security.MessageDigest
@@ -17,7 +20,18 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.*
 
-internal class ProxyRecoveryBusyException(cause: Throwable? = null) : IllegalStateException("Proxy recovery waits for media ownership", cause)
+/** Media ownership is temporarily held by REC, a WebDAV transfer or another proxy action.
+ * Nothing was started or changed; queued work waits with [reason] instead of failing. */
+internal open class ProxyMediaBusyException(val reason: ProxyWaitReason, message: String, cause: Throwable? = null) :
+    IllegalStateException(message, cause)
+internal class ProxyRecoveryBusyException(cause: Throwable? = null) : ProxyMediaBusyException(
+    (cause as? ProxyMediaBusyException)?.reason ?: ProxyWaitReason.MEDIA_BUSY, "Proxy recovery waits for media ownership", cause)
+
+internal fun MediaMutationBusyException.proxyWaitReason(): ProxyWaitReason = when (blocker) {
+    MediaMutationBlocker.CAPTURE -> ProxyWaitReason.CAPTURE_ACTIVE
+    MediaMutationBlocker.TRANSFER -> ProxyWaitReason.TRANSFER_ACTIVE
+    MediaMutationBlocker.MEDIA_MUTATION, MediaMutationBlocker.CLOSED -> ProxyWaitReason.MEDIA_BUSY
+}
 
 internal data class MediaProxyResult(val originalUri: String, val proxyUri: String, val metadataUri: String,
     val originalSha256: String, val proxySha256: String, val originalBytes: Long, val proxyBytes: Long,
@@ -37,11 +51,12 @@ internal class MediaProxyRepository(context: Context) {
 
     /** Independent derivative library. Never queries or hashes the historically referenced source. */
     suspend fun catalog(): List<ProxyCatalogEntry> = withContext(Dispatchers.IO) {
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         try {
             check(deletions.pending().isEmpty()) { "Proxy deletion pending recovery" }
             val root = catalogDirectory()
             if (!root.exists()) return@withContext emptyList()
+            recoverProxyReceiptResidue(root) // Receipt writers are excluded by the held operation lock.
             val files = mutableListOf<File>()
             java.nio.file.Files.newDirectoryStream(root.toPath()).use { entries ->
                 for (path in entries) {
@@ -60,15 +75,15 @@ internal class MediaProxyRepository(context: Context) {
                 "Duplicate proxy catalog identity"
             }
             results.toList()
-        } finally { active.unlock() }
+        } finally { active.unlock(); ownershipReleased() }
     }
 
     /** Only the derivative is granted; original reference remains historical even when readable. */
     suspend fun prepareShare(entry: ProxyCatalogEntry): android.content.Intent {
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(Dispatchers.IO) {
                 val verified = verifyCatalogEntry(entry)
                 val uri = verified.result.proxyUri.toUri()
@@ -79,7 +94,7 @@ internal class MediaProxyRepository(context: Context) {
                     addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
             }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     suspend fun prepareOpen(entry: ProxyCatalogEntry): android.content.Intent = prepareShare(entry).apply {
@@ -90,16 +105,16 @@ internal class MediaProxyRepository(context: Context) {
 
     suspend fun renameProxy(entry: ProxyCatalogEntry, stem: String): ProxyCatalogEntry {
         proxyFilename(stem)
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(NonCancellable + Dispatchers.IO) {
                 verifyCatalogEntry(entry)
                 val renamed = MediaProxyVideoRenamer(context).rename(entry, stem)
                 verifyCatalogEntry(renamed)
             }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     /** Caller retains its operation/media ownership when using this for effects. No original IO. */
@@ -204,7 +219,7 @@ internal class MediaProxyRepository(context: Context) {
         val result = decode(obj)
         check(result.originalUri == take.primary.uri && obj.getValue("takeId").jsonPrimitive.content == take.id)
         check(obj.getValue("originalDisplayName").jsonPrimitive.content == take.primary.name) { "Proxy original name changed; relation requires reconciliation" }
-        check(proxyHash(context, result.originalUri.toUri()) == result.originalSha256) { "Proxy original changed" }
+        check(originalHash(result.originalUri.toUri()) == result.originalSha256) { "Proxy original changed" }
         check(proxyHash(context, result.proxyUri.toUri()) == result.proxySha256) { "Proxy missing or changed" }
         verifyPair(obj, result)
         result
@@ -212,10 +227,10 @@ internal class MediaProxyRepository(context: Context) {
 
     /** Grants only the verified derivative. Preparing a chooser is not delivery to a receiver. */
     suspend fun prepareShare(take: LocalMediaTake, expected: MediaProxyResult): android.content.Intent {
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(Dispatchers.IO) {
                 catalog.freshSnapshot(take)
                 val verified = requireNotNull(existing(take)) { "Proxy no longer available" }
@@ -228,38 +243,38 @@ internal class MediaProxyRepository(context: Context) {
                     addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
             }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     suspend fun renameProxy(take: LocalMediaTake, expected: MediaProxyResult, stem: String): MediaProxyResult {
         proxyFilename(stem)
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(NonCancellable + Dispatchers.IO) {
                 catalog.freshSnapshot(take)
                 check(existing(take) == expected) { "Proxy selection changed; reopen its actions" }
                 MediaProxyVideoRenamer(context).rename(take, expected, stem)
             }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     suspend fun create(take: LocalMediaTake, settings: ProxySettings, id: String = UUID.randomUUID().toString()): MediaProxyResult {
         require(canonicalMediaId(id))
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var candidate: File? = null
         val inserted = mutableListOf<Uri>()
         var committed = false
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(Dispatchers.IO) {
                 require(take.kind == LocalMediaKind.VIDEO && take.primary.mimeType.startsWith("video/"))
                 catalog.freshSnapshot(take)
                 check(existing(take) == null) { "This take already has a proxy" }
                 val original = take.primary.uri.toUri()
-                val beforeHash = proxyHash(context, original)
+                val beforeHash = originalHash(original)
                 val before = probeProxyMedia(context, original)
                 val sidecar = if (take.originals.any { it.mimeType.startsWith("audio/") }) {
                     require(before.audio == null) { "Sidecar cannot replace embedded audio" }
@@ -282,7 +297,7 @@ internal class MediaProxyRepository(context: Context) {
                         after.audio.channels == sidecar.pcm.channels)
                     verifyProxySidecarSource(context, take, sidecar)
                 }
-                check(proxyHash(context, original) == beforeHash) { "Original changed during proxy generation" }
+                check(originalHash(original) == beforeHash) { "Original changed during proxy generation" }
                 catalog.freshSnapshot(take)
                 val proxyHash = proxyHash(context, Uri.fromFile(output))
                 currentCoroutineContext().ensureActive()
@@ -312,7 +327,7 @@ internal class MediaProxyRepository(context: Context) {
                         .withValue(MediaStore.MediaColumns.IS_PENDING, 0).withExpectedCount(1).build() }
                     resolver.applyBatch(MediaStore.AUTHORITY, ArrayList(operations))
                     verifyPair(relation, result)
-                    check(proxyHash(context, original) == beforeHash) { "Original changed before proxy commit" }
+                    check(originalHash(original) == beforeHash) { "Original changed before proxy commit" }
                     catalog.freshSnapshot(take)
                     if (sidecar != null) verifyProxySidecarSource(context, take, sidecar)
                     check(directory.isDirectory || directory.mkdirs())
@@ -332,7 +347,7 @@ internal class MediaProxyRepository(context: Context) {
                     }
                 } finally {
                     try { candidate?.let { check(!it.exists() || it.delete()) { "Proxy temporary file cleanup failed" } } }
-                    finally { try { reservation?.close() } finally { active.unlock() } }
+                    finally { releaseMedia(reservation) }
                 }
             }
         }
@@ -342,10 +357,10 @@ internal class MediaProxyRepository(context: Context) {
      * A committed receipt always wins. Unknown/corrupt identity halts rather than deleting media. */
     suspend fun reconcile(take: LocalMediaTake, id: String): MediaProxyResult? {
         require(canonicalMediaId(id))
-        check(active.tryLock()) { "Another proxy operation is active" }
+        lockActive()
         var reservation: AutoCloseable? = null
         try {
-            reservation = WebDavTransferRuntime.get(context).reserveIdleMediaMutation()
+            reservation = reserveMedia()
             return withContext(Dispatchers.IO) {
                 val result = existing(take)
                 check(result == null || result.proxyId == id) { "Proxy receipt belongs to a different job" }
@@ -387,7 +402,7 @@ internal class MediaProxyRepository(context: Context) {
                 check(!candidate.exists() || candidate.delete()) { "Proxy candidate recovery failed" }
                 result
             }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     suspend fun recoverDeletions(committed: suspend (String, String) -> Unit) {
@@ -448,13 +463,12 @@ internal class MediaProxyRepository(context: Context) {
     }
 
     private suspend fun withDeletionOwnership(block: suspend () -> Unit) {
-        if (!active.tryLock()) throw ProxyRecoveryBusyException()
+        try { lockActive() } catch (busy: ProxyMediaBusyException) { throw ProxyRecoveryBusyException(busy) }
         var reservation: AutoCloseable? = null
         try {
-            reservation = try { WebDavTransferRuntime.get(context).reserveIdleMediaMutation() }
-                catch (busy: IllegalStateException) { throw ProxyRecoveryBusyException(busy) }
+            reservation = try { reserveMedia() } catch (busy: ProxyMediaBusyException) { throw ProxyRecoveryBusyException(busy) }
             withContext(Dispatchers.IO) { block() }
-        } finally { try { reservation?.close() } finally { active.unlock() } }
+        } finally { releaseMedia(reservation) }
     }
 
     private fun deletionAccess(committed: suspend (String, String) -> Unit) = object : ProxyDeletionAccess {
@@ -561,6 +575,31 @@ internal class MediaProxyRepository(context: Context) {
         check(proxyHash(context, result.proxyUri.toUri()) == result.proxySha256) { "Proxy bytes differ after publication" }
     }
 
+    private fun lockActive() {
+        if (!active.tryLock()) throw ProxyMediaBusyException(ProxyWaitReason.MEDIA_BUSY, "Another proxy operation is active")
+    }
+    private fun reserveMedia(): AutoCloseable = try { WebDavTransferRuntime.get(context).reserveIdleMediaMutation() }
+        catch (busy: MediaMutationBusyException) { throw ProxyMediaBusyException(busy.proxyWaitReason(), busy.message.orEmpty(), busy) }
+    /** Only an operation that actually owned media wakes waiters; a refused one never self-notifies. */
+    private fun releaseMedia(reservation: AutoCloseable?) {
+        try { reservation?.close() } finally { active.unlock(); if (reservation != null) ownershipReleased() }
+    }
+    private fun ownershipReleased() = releaseListeners.forEach { it() }
+    /** Listeners must only schedule work; they run on the releasing thread. */
+    fun addReleaseListener(listener: () -> Unit) { releaseListeners += listener }
+
+    /** Full-content hash, reused only while MediaStore reports the same size/mtime/generation. */
+    private suspend fun originalHash(uri: Uri): String = originalHashes.hash(uri.toString(), { sourceStamp(uri) }) { proxyHash(context, uri) }
+    private fun sourceStamp(uri: Uri): ProxySourceStamp? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return null
+        return runCatching {
+            resolver.query(uri, arrayOf(MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
+                MediaStore.MediaColumns.GENERATION_MODIFIED), null, null, null)?.use { row ->
+                if (row.count == 1 && row.moveToFirst() && (0..2).none(row::isNull)) ProxySourceStamp(row.getLong(0), row.getLong(1), row.getLong(2)) else null
+            }
+        }.getOrNull()
+    }
+
     private fun receipt(take: LocalMediaTake): AtomicFile = receiptForId(take.id)
     private fun receiptForId(takeId: String): AtomicFile {
         val key = MessageDigest.getInstance("SHA-256").digest(takeId.toByteArray()).proxyHex()
@@ -587,5 +626,9 @@ internal class MediaProxyRepository(context: Context) {
             text("frames").toInt(), text("durationUs").toLong(), text("requestedBitrate").toInt(), text("proxyId"),
             obj["proxyDisplayName"]?.jsonPrimitive?.also { require(it.isString) }?.content ?: "proxy-${text("proxyId")}.mp4")
     }
-    private companion object { val active = Mutex() }
+    private companion object {
+        val active = Mutex()
+        val releaseListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+        val originalHashes = ProxySourceHashCache()
+    }
 }

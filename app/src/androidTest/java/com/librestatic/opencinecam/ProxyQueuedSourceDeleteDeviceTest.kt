@@ -12,6 +12,7 @@ import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /** Actual platform battery observation and real queue/repository/codec, not injected admission. */
@@ -21,7 +22,7 @@ class ProxyQueuedSourceDeleteDeviceTest {
     private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(
         instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
     @Test fun deletingWaitingOriginalStopsSameRequestBeforeProviderMutation() = runBlocking<Unit> {
-        check(android.os.Build.FINGERPRINT.contains("generic")) { "Battery override fixture requires emulator" }
+        assumeTrue("Battery override fixture requires emulator", android.os.Build.FINGERPRINT.contains("generic"))
         val batteryBefore = shell("dumpsys battery")
         check(!batteryBefore.contains("UPDATES STOPPED")) { "Another battery override must not be overwritten" }
         val policies = ProxyPolicies.get(context); val before = policies.states.value

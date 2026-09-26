@@ -15,7 +15,8 @@ data class ProxyPolicy(
 
 /** Absent or out-of-range observations are unknown, never evidence that a gate passed. */
 data class ProxyConditions(val batteryPercent: Int?, val charging: Boolean?, val availableBytes: Long?)
-enum class ProxyWaitReason { BATTERY_UNKNOWN, CHARGING, BATTERY, STORAGE_UNKNOWN, STORAGE }
+/** Policy gates, then temporary media ownership held by REC, a WebDAV transfer or another proxy action. */
+enum class ProxyWaitReason { BATTERY_UNKNOWN, CHARGING, BATTERY, STORAGE_UNKNOWN, STORAGE, CAPTURE_ACTIVE, TRANSFER_ACTIVE, MEDIA_BUSY }
 
 /** Deterministic first failing gate: battery observation, charging, battery level, storage.
  * Unknown charging blocks only when charging is required. Battery remains a required

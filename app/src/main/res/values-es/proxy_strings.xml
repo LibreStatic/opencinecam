@@ -25,4 +25,7 @@
     <string name="proxy_wait_battery">Esperando nivel de batería</string>
     <string name="proxy_wait_storage_unknown">En espera: lectura de espacio ausente</string>
     <string name="proxy_wait_storage">Esperando espacio de trabajo y reserva</string>
+    <string name="proxy_wait_capture">Esperando que termine la grabación</string>
+    <string name="proxy_wait_transfer">Esperando que termine la transferencia WebDAV</string>
+    <string name="proxy_wait_media_busy">Esperando que termine otra acción sobre los medios</string>
 </resources>

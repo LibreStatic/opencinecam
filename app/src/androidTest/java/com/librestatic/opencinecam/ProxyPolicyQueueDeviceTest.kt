@@ -16,6 +16,7 @@ import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -27,7 +28,7 @@ class ProxyPolicyQueueDeviceTest {
     private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(
         instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
     @Test fun batteryWaitVisibleThenPolicyChangePublishesSameRequestWithoutChangingOriginal() = runBlocking<Unit> {
-        check(android.os.Build.FINGERPRINT.contains("generic")) { "Battery override fixture requires emulator" }
+        assumeTrue("Battery override fixture requires emulator", android.os.Build.FINGERPRINT.contains("generic"))
         val batteryBefore = shell("dumpsys battery")
         check(!batteryBefore.contains("UPDATES STOPPED")) { "Another battery override must not be overwritten" }
         val policies = ProxyPolicies.get(context); val before = policies.states.value

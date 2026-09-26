@@ -119,11 +119,21 @@ internal class WebDavArtifactWorker(
                     WebDavPutOutcome.REMOTE_UNCERTAIN -> WebDavWorkerTransition.PUT_UNCERTAIN
                     WebDavPutOutcome.DEFINITELY_NOT_STARTED -> WebDavWorkerTransition.PUT_NOT_STARTED
                 }) { store.finishPut(lease, outcome) }
-                return if (committed is WebDavWorkerResult.Applied && result is WebDavUploadResult.Stopped)
-                    WebDavWorkerResult.Stopped(result.reason) else committed
+                return when {
+                    committed !is WebDavWorkerResult.Applied -> committed
+                    result is WebDavUploadResult.Stopped -> WebDavWorkerResult.Stopped(result.reason)
+                    // Still UNCERTAIN (a later run reconciles, never re-PUTs blindly), but surfaced as credentials.
+                    result is WebDavUploadResult.Failed && result.reason == WebDavFailure.HTTP_REJECTED &&
+                        result.httpStatus in AUTHENTICATION_STATUSES -> WebDavWorkerResult.Held(WebDavWorkerHold.AUTHENTICATION)
+                    else -> committed
+                }
             }
             val remote = reconciler.inspect(resolved.destination, artifact.spec.remoteName, artifact.spec.sizeBytes, scope)
             scope.checkRunning()
+            if (remote == WebDavRemoteObservation.AuthenticationRejected) {
+                val committed = applied(WebDavWorkerTransition.RECONCILE_INCONCLUSIVE) { store.finishReconcile(lease) }
+                return if (committed is WebDavWorkerResult.Applied) WebDavWorkerResult.Held(WebDavWorkerHold.AUTHENTICATION) else committed
+            }
             if (remote == WebDavRemoteObservation.Inconclusive) {
                 return applied(WebDavWorkerTransition.RECONCILE_INCONCLUSIVE) { store.finishReconcile(lease) }
             }
@@ -151,6 +161,8 @@ internal class WebDavArtifactWorker(
     private fun sourceUnavailable(bundleId: String, artifact: WebDavOutboxArtifact, failure: WebDavSourceFailure) =
         if (store.sourceUnavailable(bundleId, artifact.spec.id, artifact.revision, failure))
             WebDavWorkerResult.Applied(WebDavWorkerTransition.SOURCE_UNAVAILABLE) else WebDavWorkerResult.Stale
+
+    private companion object { val AUTHENTICATION_STATUSES = setOf(401, 403) }
 
     private fun changed(artifact: WebDavOutboxArtifact) = WebDavSourceFailure(artifact.spec.sourceUri, WebDavSourceFailureReason.CONTENT_CHANGED)
 

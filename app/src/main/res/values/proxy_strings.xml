@@ -25,4 +25,7 @@
     <string name="proxy_wait_battery">Waiting for battery level</string>
     <string name="proxy_wait_storage_unknown">Waiting: storage reading unavailable</string>
     <string name="proxy_wait_storage">Waiting for working space and reserve</string>
+    <string name="proxy_wait_capture">Waiting for recording to finish</string>
+    <string name="proxy_wait_transfer">Waiting for the WebDAV transfer to finish</string>
+    <string name="proxy_wait_media_busy">Waiting for another media action to finish</string>
 </resources>

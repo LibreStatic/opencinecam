@@ -89,6 +89,42 @@ class WebDavArtifactWorkerTest {
         assertNull(f.artifact().attempt)
     }
 
+    @Test fun rejectedCredentialsSurfaceAsAuthenticationWithoutBlindRePut() {
+        for (status in listOf(401, 403)) {
+            val f = Fixture()
+            Server(listOf(Reply(status), Reply(status), Reply(404))).use { server ->
+                f.connections = server::connect
+                // The PUT may still have reached storage: persist UNCERTAIN, but name the real problem.
+                assertEquals(held(WebDavWorkerHold.AUTHENTICATION), f.run())
+                assertEquals(WebDavArtifactState.UNCERTAIN, f.artifact().state)
+                assertTrue(f.artifact().remoteMayExist); assertNull(f.artifact().attempt)
+                // The next run reconciles with GET; still rejected, so still an authentication hold.
+                assertEquals(held(WebDavWorkerHold.AUTHENTICATION), f.run())
+                assertEquals(WebDavArtifactState.UNCERTAIN, f.artifact().state); assertNull(f.artifact().attempt)
+                // Fixed credentials: an authoritative 404 returns to QUEUED, never an automatic PUT.
+                assertEquals(applied(WebDavWorkerTransition.RECONCILED), f.run())
+                assertEquals(WebDavArtifactState.QUEUED, f.artifact().state)
+                assertEquals(listOf("PUT", "GET", "GET"), server.await().map { it.method })
+            }
+        }
+    }
+
+    @Test fun unreachableServerStaysUncertainNotAuthenticationAndLaterReconcilesToVerified() {
+        // Emulator E1 scenario without the host TLS server: the PUT dispatch fails to connect.
+        val f = Fixture()
+        val closed = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+        f.connections = { uri -> URI("http", null, "127.0.0.1", closed, uri.path, null, null).toURL().openConnection() as HttpURLConnection }
+        assertEquals(applied(WebDavWorkerTransition.PUT_UNCERTAIN), f.run())
+        assertEquals(WebDavArtifactState.UNCERTAIN, f.artifact().state); assertNull(f.artifact().attempt)
+        // Server present with valid credentials: reconcile GET 200 with matching bytes verifies.
+        Server(listOf(Reply(200, f.data))).use { server ->
+            f.connections = server::connect
+            assertEquals(applied(WebDavWorkerTransition.RECONCILED), f.run())
+            assertEquals(WebDavArtifactState.VERIFIED, f.artifact().state)
+            assertEquals(listOf("GET"), server.await().map { it.method })
+        }
+    }
+
     @Test fun ineligibleAndChangedPoliciesDoNotResolveCredentialsOrOpenSourceOrNetwork() {
         val policies = listOf(policy.copy(enabled = false), policy.copy(recording = true),
             policy.copy(network = WebDavNetwork.OFFLINE), policy.copy(network = WebDavNetwork.CELLULAR))
