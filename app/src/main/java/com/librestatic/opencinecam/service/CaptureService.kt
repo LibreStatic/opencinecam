@@ -152,6 +152,7 @@ class CaptureService : Service() {
     )
     private val actor = SerializedCaptureActor(machine, executor)
     private val state = MutableStateFlow<CaptureState>(CaptureState.Stopped)
+    private val stateCommands = CaptureStateCommands(OWNER_ID)
     private val cameraState = MutableStateFlow(CameraUiState())
     private val localBinder = LocalBinder()
     private val foreground = RecordingForegroundController(this)
@@ -218,6 +219,20 @@ class CaptureService : Service() {
     private fun dispatchTransferCapture() {
         transferCaptureDispatched = true
         dispatchedTake.dispatch(requireNotNull(transferCapture.get()) { "Recording reservation missing" })
+        submitCaptureState(stateCommands.takeDispatched())
+    }
+
+    /** Actor state is reporting only: a full queue or a retired actor never blocks capture. */
+    private fun submitCaptureState(commands: List<CaptureCommand>) {
+        for (command in commands) {
+            try {
+                actor.submit(command).whenComplete { transition, error ->
+                    if (error == null && transition != null) state.value = transition.current
+                }
+            } catch (_: RejectedExecutionException) {
+                return
+            }
+        }
     }
 
     /**
@@ -770,9 +785,7 @@ class CaptureService : Service() {
                 pendingSwitchPrevious = null
                 cameraSwitchGeneration++
             }
-            actor.submit(CaptureCommand.PreviewConfigured).whenComplete { transition, error ->
-                if (error == null && transition?.accepted == true) state.value = transition.current
-            }
+            submitCaptureState(stateCommands.previewStarted())
             val pendingMessage = pendingStatusMessage.also { pendingStatusMessage = null }
             val gpuPath = previewEngine.usesGpuViewfinder()
             cameraState.update { it.copy(
@@ -1094,6 +1107,7 @@ class CaptureService : Service() {
 
         override fun onRecordingStarted(width: Int, height: Int) {
             dispatchedTake.markStarted()
+            submitCaptureState(stateCommands.takeStarted())
             timecodeTracker.onRecordingStarted(previewEngine.encodedRecordingProgress()?.takeId)
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
             previewEngine.consumeTimelapsePauseStatus()
@@ -1148,6 +1162,7 @@ class CaptureService : Service() {
             val recordingGain = activeRecordingGain
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
+            submitCaptureState(stateCommands.takeEnded())
             val frozenLut = recordingLutIntent.get()?.takeIf { it.owner === transferReservation }?.lut
             previewEngine.releaseRecordingWhiteBalance()
             cameraState.value = cameraState.value.copy(recordingFinalizing = true)
@@ -1370,6 +1385,7 @@ class CaptureService : Service() {
 
         override fun onFailure(code: String, message: String, recoverable: Boolean) {
             retireAudioLevelConsumer()
+            submitCaptureState(stateCommands.engineFailed(code, message, recoverable))
             stillOwner.get()?.takeUnless { it.publishing.get() }?.let { owner ->
                 if (stillOwner.compareAndSet(owner, null)) cameraState.update { it.copy(stillCapturePending = false, burstSaving = false, bracketSaving = false, accumulationSaving = false) }
             }
@@ -1496,6 +1512,7 @@ class CaptureService : Service() {
             abortTransferPublication(take.publication)
             foreground.stop()
             previewEngine.stopPreview()
+            submitCaptureState(stateCommands.takeEnded() + stateCommands.previewStopped())
             val retirement = previewEngine.recordingOutputRetirement()
             retireRecordingRecoveryGuards(retirement)
             releaseFailedTakeStart(retirement)
@@ -1557,9 +1574,7 @@ class CaptureService : Service() {
             if (current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) &&
                 activePreviewKey == previewKey() && current.gpuViewfinder &&
                 previewEngine.attachOperatorToActiveGpuPreview(surface, displayRotationDegrees)) return true
-            actor.submit(CaptureCommand.Open(OWNER_ID, descriptor.cameraId)).whenComplete { transition, error ->
-                if (error == null && transition?.accepted == true) state.value = transition.current
-            }
+            submitCaptureState(stateCommands.previewOpening(descriptor.cameraId))
             cameraState.update { it.copy(phase = CameraUiPhase.OPENING) }
             previewEngine.startPreview(
                 descriptor,
@@ -1604,11 +1619,7 @@ class CaptureService : Service() {
                 previewEngine.detachOperatorFromActiveGpuPreview()) return
             previewEngine.stopPreview()
             activePreviewKey = null
-            actor.submit(CaptureCommand.RequestStop).thenCompose { transition ->
-                if (transition.accepted) actor.submit(CaptureCommand.StopCompleted) else java.util.concurrent.CompletableFuture.completedFuture(transition)
-            }.whenComplete { transition, error ->
-                if (error == null && transition != null) state.value = transition.current
-            }
+            submitCaptureState(stateCommands.previewStopped())
             cameraState.value = cameraState.value.copy(phase = if (stillOwner.get() == null) CameraUiPhase.READY else CameraUiPhase.CAPTURING)
         }
 
@@ -2261,6 +2272,7 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(recordingFinalizing = true)
             val accepted = previewEngine.stopVideo()
             if (!accepted) cameraState.value = cameraState.value.copy(recordingFinalizing = false)
+            else submitCaptureState(stateCommands.takeStopRequested())
             return accepted
         }
 
@@ -2413,7 +2425,11 @@ class CaptureService : Service() {
                 // Such a reservation stays held until the engine proves retirement, onRecordingStopped
                 // or actual engine closure; a rejected dispatch never keeps it forever.
                 if (!accepted && !transferCaptureDispatched) releaseTransferCapture(reservation)
-                else if (!accepted) releaseFailedTakeStart(previewEngine.recordingOutputRetirement())
+                else if (!accepted) {
+                    // A rejected start never reached RECORDING; an engine failure already moved the actor.
+                    submitCaptureState(stateCommands.takeEnded())
+                    releaseFailedTakeStart(previewEngine.recordingOutputRetirement())
+                }
             }
         }
 

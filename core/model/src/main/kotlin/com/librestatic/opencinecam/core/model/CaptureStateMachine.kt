@@ -25,6 +25,10 @@ sealed interface CaptureCommand {
     data object StartRecording : CaptureCommand
     data object RequestStop : CaptureCommand
     data object StopCompleted : CaptureCommand
+    /** Stops only the named take; the configured preview session stays owned. */
+    data class StopRecording(val recordingId: String) : CaptureCommand
+    /** The named take ended (finalized, or rejected before RECORDING) and the preview continues. */
+    data class RecordingStopped(val recordingId: String) : CaptureCommand
     data class Fail(val failure: StableFailure) : CaptureCommand
     data class Recover(val ownerId: String, val cameraId: String) : CaptureCommand
     data object RecoveryReady : CaptureCommand
@@ -96,6 +100,21 @@ class CaptureStateMachine(
                 ownership.release(stopping.ownerId)
                 CaptureState.Stopped
             }
+            is CaptureCommand.StopRecording -> when (val current = state) {
+                is CaptureState.PreparingRecording -> if (current.recordingId == command.recordingId) {
+                    accepted(CaptureState.Stopping(current.ownerId, current.cameraId, current.recordingId))
+                } else invalid("Stop names a take that is not active.")
+                is CaptureState.Recording -> if (current.recordingId == command.recordingId) {
+                    accepted(CaptureState.Stopping(current.ownerId, current.cameraId, current.recordingId))
+                } else invalid("Stop names a take that is not active.")
+                else -> invalid("Recording stop is only valid while a take is active.")
+            }
+            is CaptureCommand.RecordingStopped -> when (val current = state) {
+                is CaptureState.PreparingRecording -> takeEnded(current.ownerId, current.cameraId, current.recordingId, command)
+                is CaptureState.Recording -> takeEnded(current.ownerId, current.cameraId, current.recordingId, command)
+                is CaptureState.Stopping -> takeEnded(current.ownerId, current.cameraId, current.recordingId, command)
+                else -> invalid("Recording end is only valid while a take is active.")
+            }
             is CaptureCommand.Fail -> {
                 require(command.failure.correlationId.isNotBlank())
                 releaseActiveOwner()
@@ -122,6 +141,18 @@ class CaptureStateMachine(
             )
         }
         return accepted(CaptureState.Opening(command.ownerId, command.cameraId))
+    }
+
+    /** A take ends back in preview; a stale or preview-only stop never matches. */
+    private fun takeEnded(
+        ownerId: String,
+        cameraId: String,
+        recordingId: String?,
+        command: CaptureCommand.RecordingStopped,
+    ): CaptureTransition = if (recordingId != null && recordingId == command.recordingId) {
+        accepted(CaptureState.Previewing(ownerId, cameraId))
+    } else {
+        invalid("Recording end names a take that is not active.")
     }
 
     private fun recover(command: CaptureCommand.Recover): CaptureTransition {

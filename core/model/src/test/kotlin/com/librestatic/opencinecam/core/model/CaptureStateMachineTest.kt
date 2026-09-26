@@ -81,6 +81,53 @@ class CaptureStateMachineTest {
     }
 
     @Test
+    fun takeStopReturnsToPreviewAndKeepsOwnership() {
+        val ownership = HardwareOwnership()
+        val machine = CaptureStateMachine(ownership)
+        machine.dispatch(CaptureCommand.Open("owner-1", "0"))
+        machine.dispatch(CaptureCommand.PreviewConfigured)
+        machine.dispatch(CaptureCommand.PrepareRecording("take-1"))
+        machine.dispatch(CaptureCommand.StartRecording)
+
+        assertTrue(!machine.dispatch(CaptureCommand.StopRecording("take-0")).accepted)
+        assertEquals(
+            CaptureState.Stopping("owner-1", "0", "take-1"),
+            machine.dispatch(CaptureCommand.StopRecording("take-1")).current,
+        )
+        assertTrue(!machine.dispatch(CaptureCommand.RecordingStopped("take-0")).accepted)
+        assertEquals(
+            CaptureState.Previewing("owner-1", "0"),
+            machine.dispatch(CaptureCommand.RecordingStopped("take-1")).current,
+        )
+        assertEquals("owner-1", ownership.currentOwner())
+        // The next take starts from the same preview.
+        assertTrue(machine.dispatch(CaptureCommand.PrepareRecording("take-2")).accepted)
+    }
+
+    @Test
+    fun takeEndWithoutStopRequestOrBeforeRecordingReturnsToPreview() {
+        val machine = CaptureStateMachine()
+        machine.dispatch(CaptureCommand.Open("owner-1", "0"))
+        machine.dispatch(CaptureCommand.PreviewConfigured)
+        machine.dispatch(CaptureCommand.PrepareRecording("take-1"))
+        assertEquals(
+            CaptureState.Previewing("owner-1", "0"),
+            machine.dispatch(CaptureCommand.RecordingStopped("take-1")).current,
+        )
+        machine.dispatch(CaptureCommand.PrepareRecording("take-2"))
+        machine.dispatch(CaptureCommand.StartRecording)
+        assertEquals(
+            CaptureState.Previewing("owner-1", "0"),
+            machine.dispatch(CaptureCommand.RecordingStopped("take-2")).current,
+        )
+        // A preview-only stop is not a take and never returns to preview.
+        machine.dispatch(CaptureCommand.RequestStop)
+        assertTrue(!machine.dispatch(CaptureCommand.RecordingStopped("take-2")).accepted)
+        assertTrue(!machine.dispatch(CaptureCommand.StopRecording("take-2")).accepted)
+        assertEquals(CaptureState.Stopped, machine.dispatch(CaptureCommand.StopCompleted).current)
+    }
+
+    @Test
     fun staleEvidenceRemainsStaleRatherThanBecomingUnsupported() {
         val oldKey = key("old")
         val currentKey = key("current")
