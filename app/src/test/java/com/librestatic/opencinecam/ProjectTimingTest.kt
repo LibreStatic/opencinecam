@@ -23,7 +23,10 @@ class ProjectTimingTest {
     }
     @Test fun versionThreeMigrationKeepsExactOldSchemaAndDefaultsToRealtime() {
         val encoded=Json.parseToJsonElement(CameraPresetCodec.encode(CameraPreset(name="Old",settings=CameraSettings()))).jsonObject
-        val fields=encoded.getValue("settings").jsonObject.filterKeys { it !in setOf("photo-aspect-enabled", "photo-aspect-width", "photo-aspect-height", "bracket-count", "bracket-step", "accumulation-mode", "accumulation-duration-ms", "accumulation-interval-ms", "accumulation-max-edge", "accumulation-stars-threshold", "photo-flash-mode", "photo-flash-strength", "photo-format", "photo-quality", "timelapse-project-denominator","video-off-speed","video-project-numerator","video-project-denominator") }
+        // Derived from the frozen v3 set, not by subtracting newer keys: a list like that goes stale
+        // the next time a version is added, and then this stops testing the migration it names.
+        assertEquals(89,CameraPresetCodec.portableKeysFor(3).size)
+        val fields=encoded.getValue("settings").jsonObject.filterKeys { it in CameraPresetCodec.portableKeysFor(3) }
         assertEquals(89,fields.size)
         val old=JsonObject(encoded+mapOf("version" to JsonPrimitive(3),"settings" to JsonObject(fields)))
         val migrated=CameraPresetCodec.decode(old.toString()).settings

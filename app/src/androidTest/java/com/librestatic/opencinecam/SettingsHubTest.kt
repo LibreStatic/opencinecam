@@ -33,6 +33,10 @@ class SettingsHubTest {
         show(fontScale = 2f)
         compose.onNodeWithTag("settings-category-CAPTURE").performScrollTo().performClick()
         compose.onNodeWithTag("settings-search").performTextInput("luz")
+        // "luz" also matches the tall accumulation section, so the torch result sits below the fold.
+        // The results are a lazy list, which composes only what is near the viewport: scroll the
+        // list to the result rather than the node, then require it visible and the field still there.
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasTestTag("torch-toggle"))
         compose.onNodeWithTag("torch-toggle").assertIsDisplayed()
         compose.onNodeWithTag("settings-search").assertIsDisplayed()
     }
@@ -40,7 +44,11 @@ class SettingsHubTest {
     @Test fun searchRemainsUsableAtOneAndAHalfFontScale() {
         show(fontScale = 1.5f)
         compose.onNodeWithTag("settings-search").performTextInput("peaking")
-        compose.onNodeWithText(label(R.string.monitor_peaking)).assertIsDisplayed()
+        // The monitoring scopes section matches "peaking" too and renders above the dedicated one,
+        // and both spell the same label, so scroll the lazy list and accept the first match.
+        compose.onNodeWithTag("settings-list").performScrollToNode(hasText(label(R.string.monitor_peaking)))
+        compose.onAllNodesWithText(label(R.string.monitor_peaking)).onFirst().assertIsDisplayed()
+        compose.onNodeWithTag("settings-search").assertIsDisplayed()
     }
 
     @Test fun recordingDisplaysDeferredChangeExplanation() {

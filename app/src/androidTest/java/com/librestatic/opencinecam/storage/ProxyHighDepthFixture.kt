@@ -8,7 +8,8 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 
 /** Known signal at real source depth. FLAC24 is an immutable independently encoded asset. */
-internal fun writeProxyDepthFixture(file: File, pcm16: ByteArray, flac: Boolean, type: ProxyPcmSampleType): ByteArray {
+internal fun writeProxyDepthFixture(file: File, pcm16: ByteArray, flac: Boolean, type: ProxyPcmSampleType,
+    rate: Int = 48000, channels: Int = 2): ByteArray {
     val raw = when (type) {
         ProxyPcmSampleType.S16_LE -> pcm16
         ProxyPcmSampleType.S24_LE -> ByteArray(pcm16.size / 2 * 3).also { bytes ->
@@ -28,9 +29,9 @@ internal fun writeProxyDepthFixture(file: File, pcm16: ByteArray, flac: Boolean,
         file.writeBytes(bytes)
     } else if (flac) {
         require(type == ProxyPcmSampleType.S16_LE)
-        ProxyPcmProbeDeviceTest().encodeFlac(file, raw, 48000, 2)
+        ProxyPcmProbeDeviceTest().encodeFlac(file, raw, rate, channels)
     } else {
-        val header = createWavHeader(raw.size.toLong(), 48000, type.bytes * 8, 2, type == ProxyPcmSampleType.F32_LE)
+        val header = createWavHeader(raw.size.toLong(), rate, type.bytes * 8, channels, type == ProxyPcmSampleType.F32_LE)
         val bytes = ByteArray(header.remaining()); header.get(bytes)
         file.writeBytes(bytes + raw)
     }

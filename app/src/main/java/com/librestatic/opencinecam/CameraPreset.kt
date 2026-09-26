@@ -128,6 +128,18 @@ object CameraPresetCodec {
     private val portableV16 = portableV15 + setOf("media-share-content", "media-share-metadata", "media-share-include-lut")
     private val portableV17 = portableV16 + setOf("capture-naming-enabled", "capture-naming-template")
     private val portableV18 = portableV17 + setOf("playback-muted", "playback-loop", "playback-show-frame-position")
+    /**
+     * The exact key set a payload of [version] must carry. Every published version stays frozen
+     * here, so a payload written by an older build keeps decoding without its keys being guessed.
+     */
+    internal fun portableKeysFor(version: Int): Set<String> = when {
+        version < 3 -> portableV2; version == 3 -> portableV3; version == 4 -> portableV4
+        version == 5 -> portableV5; version == 6 -> portableV6; version == 7 -> portableV7
+        version == 8 -> portableV8; version == 9 -> portableV9; version == 10 -> portableV10
+        version == 11 -> portableV11; version == 12 -> portableV12; version == 13 -> portableV13
+        version == 14 -> portableV14; version == 15 -> portableV15; version == 16 -> portableV16
+        version == 17 -> portableV17; else -> portableV18
+    }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
         return memory.all.filterKeys { it in portableV18 }.mapValues { requireNotNull(it.value) }.toSortedMap()
@@ -158,7 +170,7 @@ object CameraPresetCodec {
         require(root["format"] == JsonPrimitive("OpenCineCamPreset")) { "Unknown preset format" }
         val name = root.getValue("name").jsonPrimitive.also { require(it.isString) }.content
         val entries = root["settings"] as? JsonObject ?: error("Expected settings object")
-        val acceptedKeys = when { version < 3 -> portableV2; version == 3 -> portableV3; version == 4 -> portableV4; version == 5 -> portableV5; version == 6 -> portableV6; version == 7 -> portableV7; version == 8 -> portableV8; version == 9 -> portableV9; version == 10 -> portableV10; version == 11 -> portableV11; version == 12 -> portableV12; version == 13 -> portableV13; version == 14 -> portableV14; version == 15 -> portableV15; version == 16 -> portableV16; version == 17 -> portableV17; else -> portableV18 }
+        val acceptedKeys = portableKeysFor(version)
         require(entries.keys.all { it in acceptedKeys }) { "Unknown or nonportable setting" }
         if (version >= 2) require(entries.keys == acceptedKeys) { "Incomplete version $version settings" }
         val values = defaults.toMutableMap()

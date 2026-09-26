@@ -28,15 +28,21 @@ class ProxySidecarCompositionDeviceTest {
     @Test fun wavAudioTailLongerThanVideoRemainsPresented() = compose(false, frames = 192347)
     @Test fun flacAudioTailLongerThanVideoRemainsPresented() = compose(true, frames = 192347)
 
+    // Rev64: cells outside the Rev63 verified window (rate, channels, wider gaps in both directions).
+    @Test fun wav44100HzComposesWithExplicitPresentationWindow() = compose(false, rate = 44_100, frames = 45_089)
+    @Test fun flac44100HzComposesWithExplicitPresentationWindow() = compose(true, rate = 44_100, frames = 45_089)
+    @Test fun wavMonoComposesWithoutChannelAssumptions() = compose(false, channels = 1)
+    @Test fun flacMonoComposesWithoutChannelAssumptions() = compose(true, channels = 1)
+    @Test fun wavOneSecondVideoLeadComposesWithDelayedInteriorAudio() = compose(false, audioStartUs = 1_000_000)
+    @Test fun wavOneSecondAudioLeadComposesWithExplicitSharedClock() = compose(false, 1_000_000)
+
     private fun compose(flac: Boolean, videoOffsetUs: Long = 0, type: ProxyPcmSampleType = ProxyPcmSampleType.S16_LE,
-        frames: Int = 48347) = runBlocking<Unit> {
+        frames: Int = 48347, rate: Int = 48_000, channels: Int = 2, audioStartUs: Long? = null) = runBlocking<Unit> {
         val evidencePrefix = proxyTestEvidencePrefix()
         val video = if (videoOffsetUs == 0L) createPreciseGopFixture(context) else
             File(context.cacheDir, "offset-video-${UUID.randomUUID()}.mp4").also { offsetProxyVideoFixture(context, it, videoOffsetUs) }
         val directory = File(context.cacheDir, "sidecar-composition-${UUID.randomUUID()}").also { check(it.mkdir()) }
         try {
-            val rate = 48_000
-            val channels = 2
             val signal = if (frames <= 65536) com.librestatic.opencinecam.camera.aacCalibrationSignal(frames, rate, channels)
             else ShortArray(frames * channels) { index ->
                 val frame = index / channels; val channel = index % channels
@@ -46,7 +52,7 @@ class ProxySidecarCompositionDeviceTest {
             val bytes = java.nio.ByteBuffer.allocate(signal.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
                 .apply { signal.forEach { putShort(it) } }.array()
             val audio = File(directory, if (flac) "source.flac" else "source.wav")
-            val sourceRaw = writeProxyDepthFixture(audio, bytes, flac, type)
+            val sourceRaw = writeProxyDepthFixture(audio, bytes, flac, type, rate, channels)
             val videoUri = Uri.fromFile(video)
             val audioUri = Uri.fromFile(audio)
             val beforeVideoHash = proxyHash(context, videoUri)
@@ -54,7 +60,7 @@ class ProxySidecarCompositionDeviceTest {
             val before = probeProxyMedia(context, videoUri)
             val pcm = probeProxyPcm(context, audioUri)
             if (videoOffsetUs > 0) {
-                val diagnostic = File(context.getExternalFilesDir(null), "$evidencePrefix-input-${if (flac) "flac" else "wav"}-$type.mp4")
+                val diagnostic = File(context.getExternalFilesDir(null), "$evidencePrefix-input-${if (flac) "flac" else "wav"}-$videoOffsetUs-$type.mp4")
                 video.copyTo(diagnostic)
                 Log.i("E17SidecarComposition", "offsetInput expected=$videoOffsetUs actual=$before path=${diagnostic.absolutePath}")
             }
@@ -62,7 +68,7 @@ class ProxySidecarCompositionDeviceTest {
             assertEquals(3_400_000L, before.video.durationUs)
             val videoEnd = probeProxyVideoEndUs(context, videoUri)
             assertEquals(3_400_000L + videoOffsetUs, videoEnd)
-            val audioStart = if (videoOffsetUs == 0L) 125_000L else 0L
+            val audioStart = audioStartUs ?: if (videoOffsetUs == 0L) 125_000L else 0L
             val durationFloor = frames * 1_000_000L / rate
             val endFloor = audioStart + durationFloor
             val remainder = frames * 1_000_000L % rate
@@ -75,7 +81,7 @@ class ProxySidecarCompositionDeviceTest {
             val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(videoUri, output, 96, 64, 1_000_000,
                 ProxySidecarExportInput(audioUri, pcm, timeline)) }
             if (videoOffsetUs > 0) {
-                output.copyTo(File(context.getExternalFilesDir(null), "$evidencePrefix-output-${if (flac) "flac" else "wav"}-$type.mp4"))
+                output.copyTo(File(context.getExternalFilesDir(null), "$evidencePrefix-output-${if (flac) "flac" else "wav"}-$videoOffsetUs-$type.mp4"))
             }
             val after = probeProxyMedia(context, Uri.fromFile(output))
             Log.i("E17SidecarComposition", "flac=$flac report=$report before=$before after=$after timeline=$timeline")
@@ -86,7 +92,7 @@ class ProxySidecarCompositionDeviceTest {
             assertEquals(rate, after.audio.sampleRate); assertEquals(channels, after.audio.channels)
             assertEquals(beforeVideoHash, proxyHash(context, videoUri))
             assertEquals(beforeAudioHash, proxyHash(context, audioUri))
-            val evidence = File(context.getExternalFilesDir(null), "$evidencePrefix-composition-${if (flac) "flac" else "wav"}-$videoOffsetUs-$type-$frames")
+            val evidence = File(context.getExternalFilesDir(null), "$evidencePrefix-composition-${if (flac) "flac" else "wav"}-$videoOffsetUs-$type-$rate-$channels-$frames-$audioStart")
             check(evidence.mkdir()) { "Refusing to overwrite existing composition evidence" }
             output.copyTo(File(evidence, "proxy.mp4"))
             video.copyTo(File(evidence, "source.mp4"))
