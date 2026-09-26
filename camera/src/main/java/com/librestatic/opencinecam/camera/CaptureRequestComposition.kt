@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam.camera
 
+import android.hardware.camera2.CaptureRequest
 import com.librestatic.opencinecam.core.model.FailureCode
 import com.librestatic.opencinecam.core.model.FailureSeverity
 import com.librestatic.opencinecam.core.model.Knowledge
@@ -247,4 +248,114 @@ class CaptureRequestComposer(
             userMessage = message,
         ),
     )
+}
+
+/**
+ * The base control blocks Camera2PreviewEngine sets when it creates each request, before its
+ * stateful appliers (target fps, manual/pro controls, zoom, torch, white balance, image
+ * processing, photo flash plans, high-speed controls) run on the same builder. Unlike [CaptureIntent]
+ * composition, these modes reproduce today's requests exactly: no EDGE/NOISE_REDUCTION/stabilization
+ * keys, CONTINUOUS_PICTURE where the engine uses it, and nothing at all where it keeps template defaults.
+ */
+enum class EngineRequestMode {
+    /** Regular (photo or video) preview graph repeating request, TEMPLATE_PREVIEW. */
+    PREVIEW,
+    /** Private photo-flash metering repeating request, TEMPLATE_PREVIEW. */
+    PHOTO_PRECAPTURE,
+    /** GPU video preview, GPU recording and direct recording repeating requests, TEMPLATE_RECORD. */
+    VIDEO_RECORD,
+    /** OCLog HLG10/SDR-ISP source repeating request, TEMPLATE_RECORD. */
+    LOG_RECORD,
+    /** Constrained high-speed preview and GPU HFR preview/recording: template defaults, then high-speed controls. */
+    HIGH_SPEED_PREVIEW,
+    /** Constrained high-speed recording and OCLog HFR; intent only, then high-speed controls. */
+    HIGH_SPEED_RECORD,
+    /** Still capture (JPEG/HEIC/DNG, bursts, brackets, accumulation), TEMPLATE_STILL_CAPTURE. */
+    STILL_CAPTURE,
+    /** Legacy one-second manual still, TEMPLATE_STILL_CAPTURE. */
+    LONG_EXPOSURE_STILL,
+    /** Bracket metering repeating request over frozen still controls. */
+    BRACKET_METERING,
+    /** Precapture cancel single request. */
+    PRECAPTURE_CANCEL,
+}
+
+data class EngineRequestParameters(
+    val jpegQuality: Int? = null,
+    val jpegOrientationDegrees: Int? = null,
+    val sensitivityIso: Int? = null,
+    val exposureTimeNs: Long? = null,
+)
+
+/** One (key name, value) pair; names are `CaptureRequest` field names, enum values their suffixes. */
+data class RequestEntry(val key: String, val value: RequestValue)
+
+/** Ordered base block for [mode]; the engine applies it in place of its former hand-set keys. */
+fun CaptureRequestComposer.composeEngineRequest(
+    mode: EngineRequestMode,
+    parameters: EngineRequestParameters = EngineRequestParameters(),
+): List<RequestEntry> {
+    fun text(key: String, value: String) = RequestEntry(key, RequestValue.TextValue(value))
+    fun <T> required(value: T?, label: String): T = requireNotNull(value) { "$mode requires $label" }
+    return when (mode) {
+        EngineRequestMode.PREVIEW -> listOf(
+            text("CONTROL_MODE", "AUTO"),
+            text("CONTROL_AF_MODE", "CONTINUOUS_PICTURE"),
+            text("CONTROL_AE_MODE", "ON"),
+            text("CONTROL_AWB_MODE", "AUTO"),
+        )
+        EngineRequestMode.PHOTO_PRECAPTURE -> listOf(
+            text("CONTROL_MODE", "AUTO"),
+            text("CONTROL_AF_MODE", "CONTINUOUS_PICTURE"),
+        )
+        EngineRequestMode.VIDEO_RECORD -> listOf(
+            text("CONTROL_MODE", "AUTO"),
+            text("CONTROL_AF_MODE", "CONTINUOUS_VIDEO"),
+            text("CONTROL_AE_MODE", "ON"),
+            text("CONTROL_AWB_MODE", "AUTO"),
+        )
+        EngineRequestMode.LOG_RECORD -> listOf(
+            text("CONTROL_MODE", "AUTO"),
+            text("CONTROL_CAPTURE_INTENT", "VIDEO_RECORD"),
+            text("CONTROL_AF_MODE", "CONTINUOUS_VIDEO"),
+            text("CONTROL_AE_MODE", "ON"),
+            text("CONTROL_AWB_MODE", "AUTO"),
+        )
+        EngineRequestMode.HIGH_SPEED_PREVIEW -> emptyList()
+        EngineRequestMode.HIGH_SPEED_RECORD -> listOf(text("CONTROL_CAPTURE_INTENT", "VIDEO_RECORD"))
+        EngineRequestMode.STILL_CAPTURE -> listOf(
+            RequestEntry("JPEG_QUALITY", RequestValue.IntValue(required(parameters.jpegQuality, "JPEG quality").also { require(it in 1..100) })),
+            text("CONTROL_MODE", "AUTO"),
+            text("CONTROL_AF_MODE", "CONTINUOUS_PICTURE"),
+            text("CONTROL_AE_MODE", "ON"),
+            RequestEntry("JPEG_ORIENTATION", RequestValue.IntValue(required(parameters.jpegOrientationDegrees, "JPEG orientation"))),
+        )
+        EngineRequestMode.LONG_EXPOSURE_STILL -> listOf(
+            text("CONTROL_AE_MODE", "OFF"),
+            text("CONTROL_AF_MODE", "OFF"),
+            RequestEntry("SENSOR_SENSITIVITY", RequestValue.IntValue(required(parameters.sensitivityIso, "sensitivity"))),
+            RequestEntry("SENSOR_EXPOSURE_TIME", RequestValue.LongValue(required(parameters.exposureTimeNs, "exposure time"))),
+            RequestEntry("JPEG_ORIENTATION", RequestValue.IntValue(required(parameters.jpegOrientationDegrees, "JPEG orientation"))),
+        )
+        EngineRequestMode.BRACKET_METERING -> listOf(text("CONTROL_CAPTURE_INTENT", "PREVIEW"))
+        EngineRequestMode.PRECAPTURE_CANCEL -> listOf(text("CONTROL_AE_PRECAPTURE_TRIGGER", "CANCEL"))
+    }
+}
+
+/**
+ * Resolves an engine request enum name to its Camera2 constant. Pure (the constants are
+ * compile-time ints), so host tests can prove the numeric values the engine sends.
+ */
+fun camera2RequestEnum(key: String, name: String): Int = when (key to name) {
+    "CONTROL_MODE" to "AUTO" -> CaptureRequest.CONTROL_MODE_AUTO
+    "CONTROL_AF_MODE" to "OFF" -> CaptureRequest.CONTROL_AF_MODE_OFF
+    "CONTROL_AF_MODE" to "CONTINUOUS_PICTURE" -> CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+    "CONTROL_AF_MODE" to "CONTINUOUS_VIDEO" -> CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+    "CONTROL_AE_MODE" to "OFF" -> CaptureRequest.CONTROL_AE_MODE_OFF
+    "CONTROL_AE_MODE" to "ON" -> CaptureRequest.CONTROL_AE_MODE_ON
+    "CONTROL_AWB_MODE" to "AUTO" -> CaptureRequest.CONTROL_AWB_MODE_AUTO
+    "CONTROL_CAPTURE_INTENT" to "PREVIEW" -> CaptureRequest.CONTROL_CAPTURE_INTENT_PREVIEW
+    "CONTROL_CAPTURE_INTENT" to "VIDEO_RECORD" -> CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD
+    "CONTROL_AE_PRECAPTURE_TRIGGER" to "CANCEL" -> CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL
+    else -> throw IllegalArgumentException("No Camera2 constant for $key=$name")
 }

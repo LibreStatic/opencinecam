@@ -80,12 +80,28 @@ fun thermalStatusFromPlatform(status: Int): ThermalStatus = when (status) {
 }
 
 /**
- * Governor input for the engine's Camera2 YUV analysis reader. `acquireLatestImage` discards
- * stale frames, so the reader never builds a queue; storage pressure belongs to the recorder,
- * not to preview analysis. Only the platform thermal status can therefore shut analysis off.
+ * Continuous thermal governor for the engine's scope analysis (direct YUV reader and GPU
+ * pipeline readback). Unlike [AnalysisPerformanceGovernor] it never latches: it suspends at
+ * SEVERE or worse and resumes only once the platform reports below MODERATE, so the scopes do
+ * not flap while the status hovers around one boundary. MODERATE and unknown statuses hold the
+ * current state. Not thread-safe; the engine drives it from its camera executor.
  */
-fun AnalysisPerformanceGovernor.observeLatestFrameReader(platformThermalStatus: Int): AnalysisGovernorDecision =
-    observe(queueDepth = 0, thermal = thermalStatusFromPlatform(platformThermalStatus), storage = StoragePressure.UNKNOWN)
+class ThermalAnalysisGovernor {
+    var state: AnalysisSuspension = AnalysisSuspension.NONE
+        private set
+
+    /** Feeds one `PowerManager.THERMAL_STATUS_*` value; returns the new state only when it changed. */
+    fun observePlatformStatus(platformThermalStatus: Int): AnalysisSuspension? {
+        val next = when (thermalStatusFromPlatform(platformThermalStatus)) {
+            ThermalStatus.SEVERE, ThermalStatus.CRITICAL -> AnalysisSuspension.THERMAL
+            ThermalStatus.NORMAL -> AnalysisSuspension.NONE
+            else -> state
+        }
+        if (next == state) return null
+        state = next
+        return next
+    }
+}
 
 class BoundedAnalysisStream(
     private val config: AnalysisStreamConfig,

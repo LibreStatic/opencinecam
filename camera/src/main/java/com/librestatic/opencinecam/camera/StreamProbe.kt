@@ -108,6 +108,22 @@ class StreamCapabilityProbe(private val source: StreamMetadataSource) {
     }
 }
 
+/**
+ * Advisory answer of `CameraDevice.isSessionConfigurationSupported` (API 29+, i.e. always on this
+ * minSdk): Known(true/false), or Unknown when the HAL does not implement the query
+ * (UnsupportedOperationException) or it fails for any other reason.
+ */
+fun sessionConfigurationSupport(query: () -> Boolean): Knowledge<Boolean> =
+    try { Knowledge.Known(query()) } catch (_: Exception) { Knowledge.Unknown }
+
+/**
+ * Whether a fallback candidate may be skipped without a real `createCaptureSession`: only on an
+ * explicit `false` and only while a further candidate exists, so the last graph always gets its
+ * real attempt and the engine's failure codes stay those of CameraService.
+ */
+fun skipBySessionPreCheck(support: Knowledge<Boolean>, hasFallback: Boolean): Boolean =
+    hasFallback && (support as? Knowledge.Known)?.value == false
+
 private fun Size.toStreamSize() = StreamSize(width, height)
 
 private fun Range<Int>.toIntRange() = lower..upper

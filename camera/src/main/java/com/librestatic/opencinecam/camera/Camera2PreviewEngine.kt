@@ -238,6 +238,9 @@ data class PhotoFlashReport(
     val sensorTimestampNs: Long?,
 )
 
+/** Why the engine's CPU (YUV) and GPU scope analysis is currently suspended; NONE while it runs. */
+enum class AnalysisSuspension { NONE, THERMAL }
+
 interface Camera2PreviewListener {
     fun onOperatorLutStatus(status: OperatorLutStatus) = Unit
     fun onPhotoFlashResult(report: PhotoFlashReport) = Unit
@@ -273,6 +276,8 @@ interface Camera2PreviewListener {
     fun onTimelapseProgress(progress: TimelapseProgress) = Unit
     fun onTimelapsePauseChanged(status: TimelapsePauseStatus) = Unit
     fun onFocusSelectionChanged(diopters: Float?) = Unit
+    /** Emitted on the camera executor only when the analysis suspension state changes. */
+    fun onAnalysisSuspended(reason: AnalysisSuspension) {}
 }
 
 /**
@@ -314,6 +319,7 @@ class Camera2PreviewEngine(
     private val appContext = context.applicationContext
     private val powerManager = context.getSystemService(PowerManager::class.java)
     private val cameraExecutor = CloseTolerantCameraExecutor()
+    private val requestComposer = CaptureRequestComposer()
     private val imageThread = HandlerThread("OpenCineCamImage").apply { start() }
     private val imageHandler = Handler(imageThread.looper)
     @Volatile private var generation = 0L
@@ -480,6 +486,7 @@ class Camera2PreviewEngine(
             value?.setMonitoringOptions(monitoringOptions)
             value?.setOperatorLut(operatorLutSelection)
             value?.setSubjectLut(subjectLutSelection)
+            value?.setAnalysisSuspended(analysisSuspended)
         }
 
     fun setOperatorLut(lut: MonitorLut?) {
@@ -529,6 +536,22 @@ class Camera2PreviewEngine(
     private var closeStarted = false
     private var pendingPreviewStart: Runnable? = null
     private val disposed = java.util.concurrent.atomic.AtomicBoolean(false)
+    // Thermal scope governor. The platform delivers status changes on cameraExecutor, which owns
+    // the governor, the active pipeline and the listener; the image thread only reads the flag.
+    private val thermalGovernor = ThermalAnalysisGovernor()
+    @Volatile private var analysisSuspended = false
+    private var suspensionNotified: Pair<Camera2PreviewListener, AnalysisSuspension>? = null
+    // cameraExecutor: DIAGNOSTIC-only capture-result audit of the current graph.
+    private var graphAudit: Pair<CameraCaptureSession, CaptureResultAuditor>? = null
+    private var lastCaptureAuditSummaryAtMs = 0L
+    @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
+    private val thermalStatusListener = PowerManager.OnThermalStatusChangedListener(::observeThermalStatus)
+    init {
+        // minSdk 29: the listener API is always present, so no polling fallback is needed. The
+        // platform posts the current status once on registration.
+        runCatching { powerManager?.addThermalStatusListener(cameraExecutor, thermalStatusListener) }
+            .onFailure { Log.w(TAG, "Thermal status listener unavailable; scopes are not thermally governed.", it) }
+    }
     private data class SubjectTarget(val token: Long, val surface: Surface, val options: SubjectPreviewOptions, val onStatus: (SubjectPreviewStatus) -> Unit)
     private var subjectTarget: SubjectTarget? = null
     private var subjectPipeline: OpenCineLogGpuPipeline? = null
@@ -633,6 +656,8 @@ class Camera2PreviewEngine(
             pendingPreviewStart = null
             closeResources()
             this.listener = listener
+            // A listener that joins while the scopes are suspended (or missed a resume) learns it once.
+            notifyAnalysisSuspension(listener)
             if (requestedFocusCameraId != descriptor.cameraId) {
                 requestedFocusDiopters = null
                 requestedFocusCameraId = null
@@ -892,11 +917,8 @@ class Camera2PreviewEngine(
                     try {
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(input)
-                            if (constrained) applyHighSpeedControls(this) else {
-                                set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-                                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                            if (constrained) { applyEngineRequest(EngineRequestMode.HIGH_SPEED_PREVIEW); applyHighSpeedControls(this) } else {
+                                applyEngineRequest(EngineRequestMode.VIDEO_RECORD)
                                 applyTargetFps(this, descriptor)
                                 applyManualControls(this, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                             }
@@ -1001,11 +1023,8 @@ class Camera2PreviewEngine(
                 val builder = request.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                     addTarget(request.reader.surface)
                     request.raw?.takeIf { it !== request.reader }?.surface?.let(::addTarget)
-                    set(CaptureRequest.JPEG_QUALITY, request.quality.toByte())
-                    set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                    set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                    set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                    set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation(request.descriptor))
+                    applyEngineRequest(EngineRequestMode.STILL_CAPTURE, EngineRequestParameters(
+                        jpegQuality = request.quality, jpegOrientationDegrees = jpegOrientation(request.descriptor)))
                     val frozen = request.bracket?.controls ?: request.accumulation?.controls ?: request.burst?.controls
                     if (frozen != null) copyPhotoControls(frozen, this) else applyManualControls(this)
                     if (request.accumulation != null || request.aspect.enabled && request.format != StillPhotoFormat.DNG)
@@ -1156,8 +1175,7 @@ class Camera2PreviewEngine(
         val builder = request.device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(preview)
             analysisReader?.surface?.let(::addTarget)
-            set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-            set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            applyEngineRequest(EngineRequestMode.PHOTO_PRECAPTURE)
             applyTargetFps(this, request.descriptor)
             applyManualControls(this)
             applyPhotoPlan(this, photoMeteringRepeatPlan(plan))
@@ -1372,7 +1390,7 @@ class Camera2PreviewEngine(
                     addTarget(requireNotNull(targetPreviewCameraSurface()))
                     analysisReader?.surface?.let(::addTarget)
                     applyManualControls(this)
-                    set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_CANCEL)
+                    applyEngineRequest(EngineRequestMode.PRECAPTURE_CANCEL)
                 }.build()
                 owner.session.captureSingleRequest(cancel, cameraExecutor, object : CameraCaptureSession.CaptureCallback() {})
             }
@@ -1526,7 +1544,7 @@ class Camera2PreviewEngine(
             copyPhotoControls(requireNotNull(owner.still), this)
             addTarget(requireNotNull(targetPreviewCameraSurface()))
             analysisReader?.surface?.let(::addTarget)
-            set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_PREVIEW)
+            applyEngineRequest(EngineRequestMode.BRACKET_METERING)
             setTag(PhotoTag(owner.id))
         }.build()
         group.repeatingChanged = true
@@ -1875,11 +1893,8 @@ class Camera2PreviewEngine(
                 val request = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                     applyImageProcessing(this)
                     addTarget(reader.surface)
-                    set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                    set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-                    set(CaptureRequest.SENSOR_SENSITIVITY, iso)
-                    set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposure)
-                    set(CaptureRequest.JPEG_ORIENTATION, jpegOrientation(descriptor))
+                    applyEngineRequest(EngineRequestMode.LONG_EXPOSURE_STILL, EngineRequestParameters(
+                        jpegOrientationDegrees = jpegOrientation(descriptor), sensitivityIso = iso, exposureTimeNs = exposure))
                 }.build()
                 currentSession.captureSingleRequest(request, cameraExecutor, object : CameraCaptureSession.CaptureCallback() {
                     override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
@@ -2949,12 +2964,10 @@ class Camera2PreviewEngine(
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(input)
                             if (constrained) {
+                                applyEngineRequest(EngineRequestMode.HIGH_SPEED_PREVIEW)
                                 applyHighSpeedControls(this)
                             } else {
-                                set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-                                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                                applyEngineRequest(EngineRequestMode.VIDEO_RECORD)
                                 applyTargetFps(this, descriptor)
                                 applyManualControls(this, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                             }
@@ -3032,10 +3045,7 @@ class Camera2PreviewEngine(
                             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                                 preview?.takeIf { it.isValid }?.let(::addTarget)
                                 addTarget(recordingSurface)
-                                set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-                                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                                applyEngineRequest(EngineRequestMode.VIDEO_RECORD)
                                 applyTargetFps(this, descriptor)
                                 applyManualControls(this, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                             }
@@ -3106,6 +3116,7 @@ class Camera2PreviewEngine(
                     try {
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(surface)
+                            applyEngineRequest(EngineRequestMode.HIGH_SPEED_PREVIEW)
                             applyHighSpeedControls(this)
                         }
                         repeatingBuilder = builder
@@ -3177,7 +3188,7 @@ class Camera2PreviewEngine(
                             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                                 preview?.takeIf { it.isValid }?.let(::addTarget)
                                 addTarget(recordingSurface)
-                                set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD)
+                                applyEngineRequest(EngineRequestMode.HIGH_SPEED_RECORD)
                                 applyHighSpeedControls(this)
                             }
                             repeatingBuilder = builder
@@ -3275,11 +3286,7 @@ class Camera2PreviewEngine(
                     try {
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(input)
-                            set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                            set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD)
-                            set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
-                            set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                            set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                            applyEngineRequest(EngineRequestMode.LOG_RECORD)
                             applyTargetFps(this, descriptor)
                             applyManualControls(this, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                         }
@@ -3348,7 +3355,7 @@ class Camera2PreviewEngine(
                     try {
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(input)
-                            set(CaptureRequest.CONTROL_CAPTURE_INTENT, CaptureRequest.CONTROL_CAPTURE_INTENT_VIDEO_RECORD)
+                            applyEngineRequest(EngineRequestMode.HIGH_SPEED_RECORD)
                             applyHighSpeedControls(this)
                         }
                         repeatingBuilder = builder
@@ -3403,6 +3410,9 @@ class Camera2PreviewEngine(
         val photoPipeline = logPipeline.takeIf { gpuPhotoPreviewEnabled }
         if (gpuPhotoPreviewEnabled) check(photoPipeline != null && surface === photoPipeline.cameraInputSurface)
         val outputs = mutableListOf(OutputConfiguration(surface))
+        var stillOutput: OutputConfiguration? = null
+        var rawOutput: OutputConfiguration? = null
+        var graphRawReader: ImageReader? = null
         if (activeVideoProfile == null) {
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
         val compressedSize = if (activeStillFormat == StillPhotoFormat.HEIC) descriptor.heicSize else descriptor.jpegSize
@@ -3460,7 +3470,7 @@ class Camera2PreviewEngine(
                     } finally { if (!transferred) ticket?.let(compressedHandoff::release) }
                 }, imageHandler)
             }
-            outputs += OutputConfiguration(requireNotNull(jpegReader).surface)
+            stillOutput = OutputConfiguration(requireNotNull(jpegReader).surface).also { outputs += it }
         }
         descriptor.rawSize?.takeIf { activeStillFormat != StillPhotoFormat.HEIC }?.let { size ->
             rawReader = ImageReader.newInstance(size.width, size.height, ImageFormat.RAW_SENSOR, 2).apply {
@@ -3469,7 +3479,8 @@ class Camera2PreviewEngine(
                     queueRawImage(reader, currentGeneration, received)
                 }, imageHandler)
             }
-            outputs += OutputConfiguration(requireNotNull(rawReader).surface)
+            graphRawReader = rawReader
+            rawOutput = OutputConfiguration(requireNotNull(rawReader).surface).also { outputs += it }
         }
         }
         // GPU photo monitor already supplies pre-LUT analysis; avoid a redundant fourth Camera2
@@ -3481,9 +3492,6 @@ class Camera2PreviewEngine(
         descriptor.analysisSize?.takeUnless { gpuPhotoPreviewEnabled || logPreviewEnabled }?.let { size ->
             analysisReader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader ->
                 val lease = ReaderLease(reader)
-                // Per graph: once thermal pressure turns the scopes off they stay off until the
-                // next preview graph, so they do not flap at the SEVERE boundary.
-                val governor = AnalysisPerformanceGovernor(queueCapacity = 2)
                 analysisReaderLease = lease
                 analysisLease = lease
                 reader.setOnImageAvailableListener({
@@ -3495,7 +3503,8 @@ class Camera2PreviewEngine(
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastAnalysisAtMs >= monitoringOptions.periodMs) {
                                 lastAnalysisAtMs = now
-                                if (analysisAllowed(governor)) analyzeImage(it) else null
+                                // Suspended scopes still acquire and close frames; only analysis stops.
+                                if (!analysisSuspended) analyzeImage(it) else null
                             } else null
                         }
                     }
@@ -3510,17 +3519,51 @@ class Camera2PreviewEngine(
         }
         fun ownsGraph(): Boolean = currentGeneration == generation &&
             (photoPipeline == null || !disposed.get() && logPipeline === photoPipeline)
-        fun createSession(sessionOutputs: List<OutputConfiguration>, withAnalysis: Boolean) {
-            // The extra YUV stream is optional: a HAL rejecting the pair must cost the scopes,
-            // never the viewfinder. Retry once with the analysis stream dropped.
-            fun retryWithoutAnalysis(reason: String) {
-                Log.w(TAG, "Preview graph rejected the YUV analysis stream ($reason); scopes unavailable.")
-                if (analysisReaderLease === analysisLease) closeAnalysisReader()
-                createSession(
-                    sessionOutputs.filterNot { it === analysisOutput }.mapNotNull { it.surface }.map(::OutputConfiguration),
-                    withAnalysis = false,
-                )
+        // The YUV and RAW streams are optional: a HAL rejecting the combination must cost the
+        // scopes (then DNG capture), never the viewfinder or JPEG/HEIC. The negotiator orders the
+        // attempts; the first one is exactly the graph assembled above.
+        val configs = listOfNotNull(
+            PREVIEW_GRAPH_PREVIEW to outputs.first(),
+            stillOutput?.let { PREVIEW_GRAPH_STILL to it },
+            rawOutput?.let { PREVIEW_GRAPH_RAW to it },
+            analysisOutput?.let { PREVIEW_GRAPH_ANALYSIS to it },
+        ).toMap()
+        fun Size.stream() = StreamSize(width, height)
+        val compressedStreamSize = (if (activeStillFormat == StillPhotoFormat.HEIC) descriptor.heicSize else descriptor.jpegSize)?.stream()
+        val streams = runCatching { StreamCapabilityProbe(Camera2StreamMetadataSource(manager)).probe(descriptor.cameraId) }.getOrNull()
+        val graphs = GraphNegotiator().fallbackGraphs(
+            previewGraphRequest(
+                cameraId = descriptor.cameraId,
+                fps = requestedTargetFps,
+                preview = (activeVideoProfile?.size ?: descriptor.previewSize).stream(),
+                still = compressedStreamSize?.takeIf { stillOutput != null },
+                raw = descriptor.rawSize?.stream()?.takeIf { rawOutput != null },
+                analysis = descriptor.analysisSize?.stream()?.takeIf { analysisOutput != null },
+            ),
+            streams,
+            PREVIEW_GRAPH_DROP_ORDER,
+        )
+        fun releaseDropped(kept: Set<String>) {
+            if (PREVIEW_GRAPH_ANALYSIS !in kept && analysisLease != null && analysisReaderLease === analysisLease) closeAnalysisReader()
+            if (PREVIEW_GRAPH_RAW !in kept && graphRawReader != null && rawReader === graphRawReader) {
+                runCatching { rawReader?.close() }
+                rawReader = null
             }
+        }
+        fun createSession(index: Int) {
+            val graph = graphs[index]
+            val ids = graph.outputs.map { it.id }
+            releaseDropped(ids.toSet())
+            val hasFallback = index + 1 < graphs.size
+            fun fallback(reason: String) {
+                val dropped = ids - graphs[index + 1].outputs.map { it.id }.toSet()
+                // analysis: scopes unavailable; raw: DNG capture unavailable (captureStill returns false).
+                Log.w(TAG, "Preview graph rejected; retrying without ${dropped.joinToString()} ($reason).")
+                createSession(index + 1)
+            }
+            // The first attempt uses the original configurations; retries get fresh ones.
+            val sessionOutputs = if (index == 0) ids.map(configs::getValue)
+                else ids.mapNotNull { configs.getValue(it).surface }.map(::OutputConfiguration)
             val configuration = SessionConfiguration(
                 SessionConfiguration.SESSION_REGULAR,
                 sessionOutputs,
@@ -3539,27 +3582,40 @@ class Camera2PreviewEngine(
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
                         if (!ownsGraph()) return
-                        if (withAnalysis) {
-                            retryWithoutAnalysis("configure failed")
+                        if (hasFallback) {
+                            fallback("configure failed")
                             return
                         }
                         listener?.onFailure("preview-session-failed", "Camera preview configuration failed.", true)
                     }
                 },
             )
-            try {
-                configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
-                device.createCaptureSession(configuration)
-            } catch (failure: Exception) {
+            fun onException(failure: Exception) {
                 if (!ownsGraph()) return
-                if (withAnalysis) {
-                    retryWithoutAnalysis(failure.message ?: failure.javaClass.simpleName)
+                if (hasFallback) {
+                    fallback(failure.message ?: failure.javaClass.simpleName)
                     return
                 }
                 listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
             }
+            val skip = try {
+                configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
+                skipBySessionPreCheck(sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }, hasFallback)
+            } catch (failure: Exception) {
+                onException(failure)
+                return
+            }
+            if (skip) {
+                fallback("isSessionConfigurationSupported=false")
+                return
+            }
+            try {
+                device.createCaptureSession(configuration)
+            } catch (failure: Exception) {
+                onException(failure)
+            }
         }
-        createSession(outputs, withAnalysis = analysisOutput != null)
+        createSession(0)
     }
 
     private fun startRepeating(
@@ -3572,10 +3628,7 @@ class Camera2PreviewEngine(
             val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 addTarget(surface)
                 analysisReader?.surface?.let(::addTarget)
-                set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                applyEngineRequest(EngineRequestMode.PREVIEW)
                 applyTargetFps(this, descriptor)
                 applyManualControls(this)
             }
@@ -3610,6 +3663,7 @@ class Camera2PreviewEngine(
                     }
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
+                    auditCaptureResult(session, result, sensorTimestamp)
                     reportTapFocusResult(request, result)
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
@@ -3664,7 +3718,56 @@ class Camera2PreviewEngine(
                         )
                     }
                 }
+
+                override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
+                    if (disposed.get() || callbackGeneration != generation || session !== this@Camera2PreviewEngine.session) return
+                    runCatching { graphAuditor(session).recordCaptureFailure() }
+                }
             }
+    }
+
+    /** Latest DIAGNOSTIC capture-result statistics of the current graph, or null before its first result. */
+    fun captureDiagnostics(): CaptureAuditStats? = latestCaptureDiagnostics
+
+    /** cameraExecutor: the current graph's DIAGNOSTIC auditor, replaced (and summarized) when the session changes. */
+    private fun graphAuditor(session: CameraCaptureSession): CaptureResultAuditor {
+        graphAudit?.takeIf { it.first === session }?.let { return it.second }
+        retireGraphAudit()
+        val frameUs = 1_000_000L / requestedTargetFps.coerceAtLeast(1)
+        return CaptureResultAuditor(CaptureAuditPolicy.DIAGNOSTIC, cadenceTargetUs = frameUs, cadenceToleranceUs = frameUs / 4,
+            correlationId = "graph-audit").also { graphAudit = session to it }
+    }
+
+    private fun retireGraphAudit() {
+        val auditor = graphAudit?.second ?: return
+        graphAudit = null
+        Log.i(TAG, "Capture audit (graph retired): ${auditor.diagnostics()}")
+        auditor.close()
+    }
+
+    /**
+     * cameraExecutor, DIAGNOSTIC only: collects cadence, dropped-frame and AE/AF statistics for
+     * the current graph and logs them once per summary interval. It never stops or fails a take;
+     * any auditing error is swallowed so the preview callback is unaffected.
+     */
+    private fun auditCaptureResult(session: CameraCaptureSession, result: TotalCaptureResult, sensorTimestamp: Long?) {
+        runCatching {
+            val auditor = graphAuditor(session)
+            val metadata = buildMap {
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE)?.let {
+                    put(AUDIT_AE_STATE, if (it == CaptureRequest.CONTROL_AE_STATE_SEARCHING) AUDIT_AE_SEARCHING else it.toString())
+                }
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)?.let { put(AUDIT_AF_STATE, it.toString()) }
+            }
+            auditor.auditResult(CaptureResultSample(result.frameNumber, sensorTimestamp?.takeIf { it >= 0 }, metadata))
+            val stats = auditor.diagnostics()
+            latestCaptureDiagnostics = stats
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastCaptureAuditSummaryAtMs >= CAPTURE_AUDIT_SUMMARY_MS) {
+                lastCaptureAuditSummaryAtMs = now
+                Log.i(TAG, "Capture audit: $stats")
+            }
+        }.onFailure { Log.w(TAG, "Capture audit skipped a result.", it) }
     }
 
     private fun recordingCaptureCallback(
@@ -3984,6 +4087,33 @@ class Camera2PreviewEngine(
     }
 
     /** Constrained high-speed sessions accept only a restricted request-control subset. */
+    /**
+     * Applies the composer's base block for [mode] where the engine used to hand-set the same
+     * keys; the stateful appliers that follow on the builder are unchanged.
+     */
+    private fun CaptureRequest.Builder.applyEngineRequest(
+        mode: EngineRequestMode,
+        parameters: EngineRequestParameters = EngineRequestParameters(),
+    ) {
+        for ((key, value) in requestComposer.composeEngineRequest(mode, parameters)) when (key) {
+            "JPEG_QUALITY" -> set(CaptureRequest.JPEG_QUALITY, (value as RequestValue.IntValue).value.toByte())
+            "JPEG_ORIENTATION" -> set(CaptureRequest.JPEG_ORIENTATION, (value as RequestValue.IntValue).value)
+            "SENSOR_SENSITIVITY" -> set(CaptureRequest.SENSOR_SENSITIVITY, (value as RequestValue.IntValue).value)
+            "SENSOR_EXPOSURE_TIME" -> set(CaptureRequest.SENSOR_EXPOSURE_TIME, (value as RequestValue.LongValue).value)
+            else -> set(engineEnumKey(key), camera2RequestEnum(key, (value as RequestValue.TextValue).value))
+        }
+    }
+
+    private fun engineEnumKey(key: String): CaptureRequest.Key<Int> = when (key) {
+        "CONTROL_MODE" -> CaptureRequest.CONTROL_MODE
+        "CONTROL_AF_MODE" -> CaptureRequest.CONTROL_AF_MODE
+        "CONTROL_AE_MODE" -> CaptureRequest.CONTROL_AE_MODE
+        "CONTROL_AWB_MODE" -> CaptureRequest.CONTROL_AWB_MODE
+        "CONTROL_CAPTURE_INTENT" -> CaptureRequest.CONTROL_CAPTURE_INTENT
+        "CONTROL_AE_PRECAPTURE_TRIGGER" -> CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER
+        else -> throw IllegalArgumentException("No Camera2 request key for $key")
+    }
+
     private fun applyHighSpeedControls(builder: CaptureRequest.Builder) {
         // Keep TEMPLATE_RECORD defaults intact. Some Qualcomm HALs advertise these keys but
         // reject an HFR request when AF/AWB/AE mode is redundantly overridden.
@@ -4340,14 +4470,27 @@ class Camera2PreviewEngine(
             (descriptor.sensorOrientation - displayRotationDegrees + 360) % 360
         }
 
-    /** Image-thread check before the CPU scopes run; logs once when thermal pressure disables them. */
-    private fun analysisAllowed(governor: AnalysisPerformanceGovernor): Boolean {
-        if (governor.isDisabled()) return false
-        val status = powerManager?.currentThermalStatus ?: -1
-        val decision = governor.observeLatestFrameReader(status)
-        if (decision.action == AnalysisGovernorAction.KEEP) return true
-        Log.w(TAG, "YUV analysis disabled (thermal status $status): ${decision.reason}")
-        return false
+    /**
+     * cameraExecutor: applies a thermal status change to both scope sources (the direct YUV
+     * reader through [analysisSuspended], the active GPU pipeline through its own flag) and
+     * reports only actual state changes. Graphs and pipelines created later read the same flag.
+     */
+    private fun observeThermalStatus(platformStatus: Int) {
+        if (disposed.get()) return
+        thermalGovernor.observePlatformStatus(platformStatus) ?: return
+        analysisSuspended = thermalGovernor.state == AnalysisSuspension.THERMAL
+        logPipeline?.setAnalysisSuspended(analysisSuspended)
+        Log.w(TAG, "Scope analysis ${if (analysisSuspended) "suspended" else "resumed"} (thermal status $platformStatus).")
+        listener?.let(::notifyAnalysisSuspension)
+    }
+
+    /** cameraExecutor: emits the governor state to [target] only if it differs from what [target] last saw. */
+    private fun notifyAnalysisSuspension(target: Camera2PreviewListener) {
+        val state = thermalGovernor.state
+        val seen = suspensionNotified?.takeIf { it.first === target }?.second ?: AnalysisSuspension.NONE
+        if (seen == state) return
+        suspensionNotified = target to state
+        target.onAnalysisSuspended(state)
     }
 
     private fun closeAnalysisReader() {
@@ -4405,6 +4548,7 @@ class Camera2PreviewEngine(
 
     private fun closeResources() {
         pendingPreviewStartedReceipt = null
+        retireGraphAudit()
         burstRequest.get()?.let { retireBurst(it, restore = false) }
         accumulationRequest.get()?.let { retireAccumulation(it, restore = false) }
         bracketRequest.get()?.let { retireBracket(it, restore = false) }
@@ -4625,6 +4769,7 @@ class Camera2PreviewEngine(
 
     override fun close() {
         if (!disposed.compareAndSet(false, true)) return
+        runCatching { powerManager?.removeThermalStatusListener(thermalStatusListener) }
         cameraExecutor.execute {
             closeStarted = true
             val released = ownerLease?.releaseAfter(nativeRetirement) ?: nativeRetirement
@@ -4667,6 +4812,7 @@ class Camera2PreviewEngine(
         private const val MIN_SELECTABLE_FPS = 10
         private const val MAX_SELECTABLE_FPS = 60
         private const val METADATA_PERIOD_MS = 500L
+        private const val CAPTURE_AUDIT_SUMMARY_MS = 10_000L
         private const val ZOOM_REPORT_PERIOD_MS = 33L
         private const val TAP_FOCUS_HOLD_MS = 3_000L
         internal const val SCOPE_HISTOGRAM_BINS = 64

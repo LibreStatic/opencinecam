@@ -16,7 +16,7 @@ data class GraphOutput(
     val size: StreamSize,
     val required: Boolean = true,
 ) {
-    enum class Kind { PREVIEW, ENCODER, RAW, ANALYSIS }
+    enum class Kind { PREVIEW, ENCODER, RAW, ANALYSIS, STILL }
 
     init {
         require(id.isNotBlank()) { "graph output ID must not be blank" }
@@ -72,6 +72,8 @@ class GraphNegotiator(private val correlationId: String = "graph-negotiation") {
             val sizes = when (output.kind) {
                 GraphOutput.Kind.RAW -> streams.rawSizes
                 GraphOutput.Kind.PREVIEW, GraphOutput.Kind.ENCODER, GraphOutput.Kind.ANALYSIS -> streams.previewSizes
+                // JPEG/HEIC sizes come from their own format lists, which the probe does not report.
+                GraphOutput.Kind.STILL -> continue
             }
             when (sizes) {
                 Knowledge.Unknown -> return rejected(FailureCode.UNKNOWN_CAPABILITY, "Required ${output.kind} sizes are unknown.")
@@ -109,6 +111,47 @@ class GraphNegotiator(private val correlationId: String = "graph-negotiation") {
         return GraphNegotiationOutcome.Accepted(ResolvedCaptureGraph(request, request.outputs.toList()))
     }
 
+    /**
+     * Ordered fallback graphs for one session: [request] unchanged first, then with its optional
+     * (`required = false`) outputs dropped cumulatively in [dropOrder]. A candidate is skipped only
+     * when the probe positively excludes one of its sizes; Unknown (or a missing report) allows it,
+     * so no graph that opens today is rejected up front. Only ANALYSIS (YUV_420_888 list) and RAW
+     * sizes are checked: the preview surface is PRIVATE and still sizes come from their own format
+     * lists, neither of which the probe reports. If every candidate is excluded the last one is kept
+     * so the caller still makes its real attempt and reports its usual failure.
+     */
+    fun fallbackGraphs(
+        request: CaptureGraphRequest,
+        streams: StreamCapabilityReport?,
+        dropOrder: List<GraphOutput.Kind>,
+    ): List<CaptureGraphRequest> {
+        val candidates = mutableListOf(request)
+        var outputs = request.outputs
+        for (kind in dropOrder) {
+            val kept = outputs.filterNot { it.kind == kind && !it.required }
+            if (kept.size == outputs.size) continue
+            outputs = kept
+            candidates += request.copy(outputs = kept)
+        }
+        return candidates.filter { admits(it, streams) }.ifEmpty { listOf(candidates.last()) }
+    }
+
+    private fun admits(request: CaptureGraphRequest, streams: StreamCapabilityReport?): Boolean {
+        if (streams == null || streams.cameraId != request.cameraId) return true
+        return request.outputs.all { output ->
+            val sizes = when (output.kind) {
+                GraphOutput.Kind.ANALYSIS -> streams.previewSizes
+                GraphOutput.Kind.RAW -> streams.rawSizes
+                else -> return@all true
+            }
+            when (sizes) {
+                Knowledge.Unknown -> true
+                is Knowledge.Unsupported -> false
+                is Knowledge.Known -> output.size in sizes.value
+            }
+        }
+    }
+
     private fun rejected(code: FailureCode, message: String, details: Map<String, String> = emptyMap()) =
         GraphNegotiationOutcome.Rejected(
             StableFailure(
@@ -126,6 +169,40 @@ class GraphNegotiator(private val correlationId: String = "graph-negotiation") {
             ),
         )
 }
+
+/** Drop order of Camera2PreviewEngine.configureSession: scopes first, then DNG; preview and still stay. */
+val PREVIEW_GRAPH_DROP_ORDER = listOf(GraphOutput.Kind.ANALYSIS, GraphOutput.Kind.RAW)
+
+/**
+ * The regular preview graph exactly as Camera2PreviewEngine.configureSession assembles it (the
+ * HFR and LOG graphs are built elsewhere). Photo graphs carry [still] (JPEG or HEIC) and, unless
+ * HEIC, [raw]; video graphs carry neither. [analysis] is the optional YUV scope stream. Output IDs
+ * are the keys the engine maps back to its OutputConfigurations.
+ */
+fun previewGraphRequest(
+    cameraId: String,
+    fps: Int,
+    preview: StreamSize,
+    still: StreamSize?,
+    raw: StreamSize?,
+    analysis: StreamSize?,
+): CaptureGraphRequest = CaptureGraphRequest(
+    graphId = GraphId("preview-$cameraId"),
+    cameraId = cameraId,
+    physicalCameraId = null,
+    outputs = listOfNotNull(
+        GraphOutput(PREVIEW_GRAPH_PREVIEW, GraphOutput.Kind.PREVIEW, preview),
+        still?.let { GraphOutput(PREVIEW_GRAPH_STILL, GraphOutput.Kind.STILL, it) },
+        raw?.let { GraphOutput(PREVIEW_GRAPH_RAW, GraphOutput.Kind.RAW, it, required = false) },
+        analysis?.let { GraphOutput(PREVIEW_GRAPH_ANALYSIS, GraphOutput.Kind.ANALYSIS, it, required = false) },
+    ),
+    fps = fps,
+)
+
+const val PREVIEW_GRAPH_PREVIEW = "preview"
+const val PREVIEW_GRAPH_STILL = "still"
+const val PREVIEW_GRAPH_RAW = "raw"
+const val PREVIEW_GRAPH_ANALYSIS = "analysis"
 
 enum class GraphNegotiationPolicy { STRICT, ADAPTIVE }
 
