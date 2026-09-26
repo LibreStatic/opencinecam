@@ -3,9 +3,9 @@
 
 package com.librestatic.opencinecam.media.ocraw
 
-import com.librestatic.opencinecam.camera.RawFormat
-import com.librestatic.opencinecam.camera.RawFrame
-import com.librestatic.opencinecam.camera.RawFrameMetadata
+import com.librestatic.opencinecam.media.raw.RawFormat
+import com.librestatic.opencinecam.media.raw.RawFrame
+import com.librestatic.opencinecam.media.raw.RawFrameMetadata
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

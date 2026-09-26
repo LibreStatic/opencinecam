@@ -14,7 +14,6 @@ import com.librestatic.opencinecam.core.model.FailureSeverity
 import com.librestatic.opencinecam.core.model.Recoverability
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.encodeCanonical
-import java.io.OutputStream
 
 data class ClipOutputRequest(
     val displayName: String,
@@ -27,14 +26,12 @@ data class ClipOutputRequest(
     }
 }
 
+/** One owned "rw" descriptor per clip; the muxer writes through it, nothing else opens the URI. */
 class OwnedClipDescriptor(
     val uri: Uri,
     val fileDescriptor: ParcelFileDescriptor,
-    private val output: OutputStream,
 ) : AutoCloseable {
     override fun close() {
-        runCatching { output.flush() }
-        runCatching { output.close() }
         runCatching { fileDescriptor.close() }
     }
 }
@@ -42,13 +39,96 @@ class OwnedClipDescriptor(
 sealed interface ClipFinalizationResult {
     data class Published(val incomplete: Boolean) : ClipFinalizationResult
     data object Deleted : ClipFinalizationResult
-    data class Failed(val failure: StableFailure) : ClipFinalizationResult
+    /**
+     * [cause] is the original failure. When [clipRetained] is true the muxed clip was kept as a
+     * pending row (never deleted), so recovery can still publish it.
+     */
+    data class Failed(
+        val failure: StableFailure,
+        val cause: Throwable? = null,
+        val clipRetained: Boolean = false,
+    ) : ClipFinalizationResult
+}
+
+/** Row operations [finalizeClip] needs; the production implementation is backed by a ContentResolver. */
+internal interface ClipRows<U> {
+    fun delete(uri: U)
+    fun publish(uri: U)
+    fun writeSidecar(uri: U, bytes: ByteArray)
+}
+
+/** Opens exactly one descriptor for a newly inserted row, deleting the row if that open fails. */
+internal fun <U, D> openInsertedOnce(insert: () -> U, open: (U) -> D?, delete: (U) -> Unit): Pair<U, D> {
+    val uri = insert()
+    return try {
+        uri to (open(uri) ?: error("Pending clip descriptor could not be opened."))
+    } catch (error: Throwable) {
+        runCatching { delete(uri) }.exceptionOrNull()?.let(error::addSuppressed)
+        throw error
+    }
+}
+
+internal fun <U> finalizeClip(
+    rows: ClipRows<U>,
+    clipUri: U,
+    sidecarUri: U?,
+    muxerFinalized: Boolean,
+    bytesWritten: Long,
+    sidecarBytes: (() -> ByteArray)?,
+    correlationId: String,
+): ClipFinalizationResult {
+    val decision = decideClipRecovery(muxerFinalized, bytesWritten)
+    return try {
+        when (decision) {
+            ClipRecoveryDecision.DELETE -> {
+                rows.delete(clipUri)
+                sidecarUri?.let(rows::delete)
+                ClipFinalizationResult.Deleted
+            }
+            ClipRecoveryDecision.PUBLISH_COMPLETE,
+            ClipRecoveryDecision.PUBLISH_INCOMPLETE,
+            -> {
+                if (sidecarUri != null && sidecarBytes != null) rows.writeSidecar(sidecarUri, sidecarBytes())
+                rows.publish(clipUri)
+                ClipFinalizationResult.Published(muxerFinalized.not())
+            }
+        }
+    } catch (cause: Throwable) {
+        // A clip that holds muxed bytes is user media: keep its pending row for recovery instead of
+        // deleting it because metadata failed. Only an empty clip (DELETE) is removed.
+        val retainClip = decision != ClipRecoveryDecision.DELETE
+        if (!retainClip) runCatching { rows.delete(clipUri) }.exceptionOrNull()?.let(cause::addSuppressed)
+        sidecarUri?.let { uri -> runCatching { rows.delete(uri) }.exceptionOrNull()?.let(cause::addSuppressed) }
+        ClipFinalizationResult.Failed(
+            StableFailure(
+                component = "clip-storage",
+                code = FailureCode.MUXER_FINALIZATION_FAILED,
+                severity = FailureSeverity.ERROR,
+                recoverability = Recoverability.RETRYABLE,
+                correlationId = correlationId,
+                userMessage = "The clip could not be finalized safely.",
+                details = mapOf("cause" to (cause::class.java.name + ": " + cause.message.orEmpty()).replace('\n', ' ')),
+            ),
+            cause = cause,
+            clipRetained = retainClip,
+        )
+    }
 }
 
 class MediaStoreClipOwner(
     private val resolver: ContentResolver,
     private val correlationId: String = "clip-storage",
 ) {
+    private val rows = object : ClipRows<Uri> {
+        override fun delete(uri: Uri) { resolver.delete(uri, null, null) }
+        override fun publish(uri: Uri) {
+            resolver.update(uri, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null)
+        }
+        override fun writeSidecar(uri: Uri, bytes: ByteArray) {
+            (resolver.openOutputStream(uri) ?: error("Clip sidecar could not be opened.")).use { it.write(bytes) }
+        }
+    }
+
     fun createPending(request: ClipOutputRequest): OwnedClipDescriptor {
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, request.displayName)
@@ -56,28 +136,16 @@ class MediaStoreClipOwner(
             put(MediaStore.Video.Media.RELATIVE_PATH, request.relativePath)
             put(MediaStore.Video.Media.IS_PENDING, 1)
         }
-        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-            ?: error("MediaStore did not create a pending clip.")
-        return try {
-            val output = resolver.openOutputStream(uri) ?: error("Pending clip output could not be opened.")
-            val descriptor = resolver.openFileDescriptor(uri, "rw") ?: error("Pending clip descriptor could not be opened.")
-            OwnedClipDescriptor(uri, descriptor, output)
-        } catch (error: Throwable) {
-            resolver.delete(uri, null, null)
-            throw error
-        }
+        val (uri, descriptor) = openInsertedOnce(
+            insert = { resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: error("MediaStore did not create a pending clip.") },
+            open = { resolver.openFileDescriptor(it, "rw") },
+            delete = rows::delete,
+        )
+        return OwnedClipDescriptor(uri, descriptor)
     }
 
-    fun openSaf(uri: Uri): OwnedClipDescriptor {
-        val output = resolver.openOutputStream(uri) ?: error("SAF output could not be opened.")
-        val descriptor = try {
-            resolver.openFileDescriptor(uri, "rw") ?: error("SAF descriptor could not be opened.")
-        } catch (error: Throwable) {
-            output.close()
-            throw error
-        }
-        return OwnedClipDescriptor(uri, descriptor, output)
-    }
+    fun openSaf(uri: Uri): OwnedClipDescriptor =
+        OwnedClipDescriptor(uri, resolver.openFileDescriptor(uri, "rw") ?: error("SAF descriptor could not be opened."))
 
     fun finalize(
         clipUri: Uri,
@@ -85,49 +153,8 @@ class MediaStoreClipOwner(
         muxerFinalized: Boolean,
         bytesWritten: Long,
         sidecar: ClipSidecarDocument?,
-    ): ClipFinalizationResult {
-        return try {
-            when (decideClipRecovery(muxerFinalized, bytesWritten)) {
-                ClipRecoveryDecision.DELETE -> {
-                    resolver.delete(clipUri, null, null)
-                    sidecarUri?.let { resolver.delete(it, null, null) }
-                    ClipFinalizationResult.Deleted
-                }
-                ClipRecoveryDecision.PUBLISH_COMPLETE,
-                ClipRecoveryDecision.PUBLISH_INCOMPLETE,
-                -> {
-                    if (sidecarUri != null && sidecar != null) writeSidecar(sidecarUri, sidecar)
-                    resolver.update(
-                        clipUri,
-                        ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) },
-                        null,
-                        null,
-                    )
-                    ClipFinalizationResult.Published(muxerFinalized.not())
-                }
-            }
-        } catch (_: Throwable) {
-            resolver.delete(clipUri, null, null)
-            sidecarUri?.let { resolver.delete(it, null, null) }
-            ClipFinalizationResult.Failed(
-                StableFailure(
-                    component = "clip-storage",
-                    code = FailureCode.MUXER_FINALIZATION_FAILED,
-                    severity = FailureSeverity.ERROR,
-                    recoverability = Recoverability.RETRYABLE,
-                    correlationId = correlationId,
-                    userMessage = "The clip could not be finalized safely.",
-                ),
-            )
-        }
-    }
-
-    private fun writeSidecar(uri: Uri, sidecar: ClipSidecarDocument) {
-        val output = resolver.openOutputStream(uri) ?: error("Clip sidecar could not be opened.")
-        try {
-            output.write(encodeCanonical(sidecar).toByteArray())
-        } finally {
-            output.close()
-        }
-    }
+    ): ClipFinalizationResult = finalizeClip(
+        rows, clipUri, sidecarUri, muxerFinalized, bytesWritten,
+        sidecar?.let { document -> { encodeCanonical(document).toByteArray() } }, correlationId,
+    )
 }

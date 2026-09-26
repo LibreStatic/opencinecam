@@ -5,6 +5,7 @@ package com.librestatic.opencinecam.media.video
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.view.Surface
 import com.librestatic.opencinecam.core.model.FailureCode
@@ -64,7 +65,124 @@ sealed interface VideoEncoderSelection {
     data class Rejected(val failure: StableFailure) : VideoEncoderSelection
 }
 
+/** Whether a production Surface pick may fall back to a software codec (timelapse AVC only). */
+enum class EncoderHardwarePolicy { REQUIRE_HARDWARE, ALLOW_SOFTWARE }
+
+/** Profile rule of a production Surface pick; both reproduce the OpenCineLog GPU pipeline exactly. */
+enum class EncoderProfileRule {
+    /** First advertised HEVC Main10, Main10 HDR10 or Main10 HDR10+ profile, in advertised order. No level is reported. */
+    HEVC_MAIN10_HDR,
+    /** AVC High when advertised, else the numerically highest advertised profile; reports that profile's highest level. */
+    AVC_HIGH_ELSE_HIGHEST,
+}
+
+data class SurfaceEncoderPolicy(
+    val mime: String,
+    val hardware: EncoderHardwarePolicy,
+    val profile: EncoderProfileRule,
+) {
+    companion object {
+        /** LOG/HEVC recording: hardware Main10 only, so an emulator's software HEVC is never accepted. */
+        val HEVC_MAIN10_HARDWARE = SurfaceEncoderPolicy(
+            MediaFormat.MIMETYPE_VIDEO_HEVC, EncoderHardwarePolicy.REQUIRE_HARDWARE, EncoderProfileRule.HEVC_MAIN10_HDR,
+        )
+
+        /** SDR/AVC recording; [allowSoftware] is true only for timelapse. */
+        fun avcHigh(allowSoftware: Boolean) = SurfaceEncoderPolicy(
+            MediaFormat.MIMETYPE_VIDEO_AVC,
+            if (allowSoftware) EncoderHardwarePolicy.ALLOW_SOFTWARE else EncoderHardwarePolicy.REQUIRE_HARDWARE,
+            EncoderProfileRule.AVC_HIGH_ELSE_HIGHEST,
+        )
+    }
+}
+
+data class EncoderProfileLevel(val profile: Int, val level: Int)
+
+/** Platform-free view of one type's CodecCapabilities; a null [sizeAndRateSupported] means no video capabilities. */
+class SurfaceEncoderCaps(
+    val colorFormats: List<Int>,
+    val profileLevels: List<EncoderProfileLevel>,
+    val sizeAndRateSupported: ((width: Int, height: Int, fps: Double) -> Boolean)?,
+)
+
+/** Platform-free view of one MediaCodecInfo; [capabilities] may throw, like getCapabilitiesForType. */
+class SurfaceEncoderInfo(
+    val name: String,
+    val isEncoder: Boolean,
+    val isAlias: Boolean,
+    val hardwareAccelerated: Boolean,
+    val supportedTypes: List<String>,
+    val capabilities: (String) -> SurfaceEncoderCaps,
+)
+
+data class SurfaceEncoderPick(
+    val codecName: String,
+    val profile: Int,
+    val hardwareAccelerated: Boolean,
+    val level: Int?,
+)
+
+fun MediaCodecInfo.asSurfaceEncoderInfo(): SurfaceEncoderInfo = SurfaceEncoderInfo(
+    name = name,
+    isEncoder = isEncoder,
+    isAlias = isAlias,
+    hardwareAccelerated = isHardwareAccelerated,
+    supportedTypes = supportedTypes.toList(),
+    capabilities = { type ->
+        val caps = getCapabilitiesForType(type)
+        val video = caps.videoCapabilities
+        SurfaceEncoderCaps(
+            colorFormats = caps.colorFormats.toList(),
+            profileLevels = caps.profileLevels.map { EncoderProfileLevel(it.profile, it.level) },
+            sizeAndRateSupported = video?.let { v -> { w, h, fps -> v.areSizeAndRateSupported(w, h, fps) } },
+        )
+    },
+)
+
+/** Every codec the platform advertises (ALL_CODECS), lazily adapted. */
+fun platformSurfaceEncoders(): Sequence<SurfaceEncoderInfo> =
+    MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.asSequence().map { it.asSurfaceEncoderInfo() }
+
 class VideoEncoderSelector(private val correlationId: String = "video-encoder") {
+    /**
+     * Production Surface-encoder pick. Candidates are ordered hardware first, then by codec name;
+     * the first one whose capabilities advertise a Surface input, a profile allowed by
+     * [SurfaceEncoderPolicy.profile] and `areSizeAndRateSupported(width, height, fps)` wins.
+     * There is no bitrate gate: the pipeline clamps its own bitrate.
+     */
+    fun selectSurfaceEncoder(
+        policy: SurfaceEncoderPolicy,
+        width: Int,
+        height: Int,
+        fps: Int,
+        codecs: Sequence<SurfaceEncoderInfo>,
+    ): SurfaceEncoderPick? = codecs
+        .filter { it.isEncoder && !it.isAlias && (policy.hardware == EncoderHardwarePolicy.ALLOW_SOFTWARE || it.hardwareAccelerated) }
+        .filter { it.supportedTypes.any { type -> type.equals(policy.mime, true) } }
+        .sortedWith(compareByDescending<SurfaceEncoderInfo> { it.hardwareAccelerated }.thenBy { it.name })
+        .mapNotNull { info ->
+            val caps = runCatching { info.capabilities(policy.mime) }.getOrNull() ?: return@mapNotNull null
+            if (MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in caps.colorFormats) return@mapNotNull null
+            val profiles = caps.profileLevels.map { it.profile }
+            val profile = when (policy.profile) {
+                EncoderProfileRule.HEVC_MAIN10_HDR -> profiles.firstOrNull {
+                    it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
+                        it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
+                        it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
+                }
+                EncoderProfileRule.AVC_HIGH_ELSE_HIGHEST ->
+                    profiles.firstOrNull { it == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh } ?: profiles.maxOrNull()
+            } ?: return@mapNotNull null
+            if (caps.sizeAndRateSupported?.invoke(width, height, fps.toDouble()) != true) return@mapNotNull null
+            SurfaceEncoderPick(
+                info.name, profile, info.hardwareAccelerated,
+                if (policy.profile == EncoderProfileRule.AVC_HIGH_ELSE_HIGHEST) {
+                    caps.profileLevels.filter { it.profile == profile }.maxOf { it.level }
+                } else null,
+            )
+        }
+        .firstOrNull()
+
     fun select(request: VideoEncoderRequest, capabilities: List<VideoEncoderCapability>): VideoEncoderSelection {
         val candidates = capabilities.asSequence()
             .filter { it.mime == request.mime }

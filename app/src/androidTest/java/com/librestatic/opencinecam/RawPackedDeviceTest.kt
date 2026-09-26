@@ -23,10 +23,10 @@ import android.util.Log
 import android.util.Size
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.camera.RawFormat
-import com.librestatic.opencinecam.camera.RawFrame
-import com.librestatic.opencinecam.camera.RawFrameMetadata
-import com.librestatic.opencinecam.camera.RawUnpacker
+import com.librestatic.opencinecam.media.raw.RawFormat
+import com.librestatic.opencinecam.media.raw.RawFrame
+import com.librestatic.opencinecam.media.raw.RawFrameMetadata
+import com.librestatic.opencinecam.media.raw.RawUnpacker
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch

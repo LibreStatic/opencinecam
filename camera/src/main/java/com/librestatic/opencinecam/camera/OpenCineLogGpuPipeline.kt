@@ -17,7 +17,6 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.graphics.SurfaceTexture
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
-import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.opengl.EGL14
@@ -41,6 +40,9 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
+import com.librestatic.opencinecam.media.video.SurfaceEncoderPolicy
+import com.librestatic.opencinecam.media.video.VideoEncoderSelector
+import com.librestatic.opencinecam.media.video.platformSurfaceEncoders
 
 data class OpenCineLogEncoderCandidate(
     val codecName: String,
@@ -145,6 +147,10 @@ internal class MuxTimestampNormalizer(private val captureEpoch: CaptureEpochCloc
             else rebased.coerceAtLeast(lastAudioUs).also { lastAudioUs = it }
     }
 }
+
+/** GPU scope cadence gate; a thermal suspension skips the readback without touching the period clock. */
+internal fun scopeAnalysisDue(suspended: Boolean, nowMs: Long, lastAnalysisAtMs: Long, periodMs: Long): Boolean =
+    !suspended && nowMs - lastAnalysisAtMs >= periodMs
 
 /** Converts a small recorded-signal RGBA readback into the same bounded scope model as YUV preview. */
 internal fun analyzeRgbaFrame(
@@ -365,6 +371,9 @@ class OpenCineLogGpuPipeline(
     private var lastAnalysisAtMs = 0L
     @Volatile private var monitoringOptions = MonitoringOptions()
     fun setMonitoringOptions(options: MonitoringOptions) { monitoringOptions = options }
+    @Volatile private var analysisSuspended = false
+    /** Thermal governor seam: skips the scope readback and [onAnalysis]; preview and recording are unaffected. */
+    fun setAnalysisSuspended(suspended: Boolean) { analysisSuspended = suspended }
     private val closed = AtomicBoolean(false)
     private val retirement = CompletableFuture<Unit>()
     private val recordingFileLock = Any()
@@ -883,7 +892,7 @@ class OpenCineLogGpuPipeline(
         val callback = onAnalysis ?: return
         val now = android.os.SystemClock.elapsedRealtime()
         val options = monitoringOptions
-        if (now - lastAnalysisAtMs < options.periodMs) return
+        if (!scopeAnalysisDue(analysisSuspended, now, lastAnalysisAtMs, options.periodMs)) return
         lastAnalysisAtMs = now
         check(makeCurrent(pbuffer)) { "Scope analysis pbuffer is unavailable." }
         draw(
@@ -1854,46 +1863,17 @@ class OpenCineLogGpuPipeline(
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
         private const val EGL_GL_COLORSPACE_BT2020_LINEAR_EXT = 0x333F
 
+        /** HEVC Main10 hardware Surface encoder; rules live in [VideoEncoderSelector.selectSurfaceEncoder]. */
         fun findEncoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
-            MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.asSequence()
-                .filter { it.isEncoder && !it.isAlias && it.isHardwareAccelerated }
-                .filter { it.supportedTypes.any { type -> type.equals(MediaFormat.MIMETYPE_VIDEO_HEVC, true) } }
-                .sortedBy { it.name }
-                .mapNotNull { info ->
-                    val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC) }.getOrNull()
-                        ?: return@mapNotNull null
-                    if (MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in caps.colorFormats) return@mapNotNull null
-                    val profile = caps.profileLevels.map { it.profile }.firstOrNull {
-                        it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ||
-                            it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
-                            it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
-                    } ?: return@mapNotNull null
-                    if (caps.videoCapabilities?.areSizeAndRateSupported(size.width, size.height, targetFps.toDouble()) != true) {
-                        return@mapNotNull null
-                    }
-                    OpenCineLogEncoderCandidate(info.name, profile, size)
-                }
-                .firstOrNull()
+            VideoEncoderSelector().selectSurfaceEncoder(
+                SurfaceEncoderPolicy.HEVC_MAIN10_HARDWARE, size.width, size.height, targetFps, platformSurfaceEncoders(),
+            )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
 
+        /** AVC High Surface encoder; software is admitted only when [allowSoftware] (timelapse). */
         fun findAvcEncoder(size: Size, targetFps: Int, allowSoftware: Boolean = false): OpenCineLogEncoderCandidate? =
-            MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.asSequence()
-                .filter { it.isEncoder && !it.isAlias && (allowSoftware || it.isHardwareAccelerated) }
-                .filter { it.supportedTypes.any { type -> type.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
-                .sortedWith(compareByDescending<MediaCodecInfo> { it.isHardwareAccelerated }.thenBy { it.name })
-                .mapNotNull { info ->
-                    val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) }.getOrNull()
-                        ?: return@mapNotNull null
-                    if (MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in caps.colorFormats) return@mapNotNull null
-                    val profile = caps.profileLevels.map { it.profile }.firstOrNull {
-                        it == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
-                    } ?: caps.profileLevels.maxOfOrNull { it.profile } ?: return@mapNotNull null
-                    if (caps.videoCapabilities?.areSizeAndRateSupported(size.width, size.height, targetFps.toDouble()) != true) {
-                        return@mapNotNull null
-                    }
-                    OpenCineLogEncoderCandidate(info.name, profile, size, info.isHardwareAccelerated,
-                        caps.profileLevels.filter { it.profile == profile }.maxOf { it.level })
-                }
-                .firstOrNull()
+            VideoEncoderSelector().selectSurfaceEncoder(
+                SurfaceEncoderPolicy.avcHigh(allowSoftware), size.width, size.height, targetFps, platformSurfaceEncoders(),
+            )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
 
         private val VERTEX_SHADER = """
             #version 300 es

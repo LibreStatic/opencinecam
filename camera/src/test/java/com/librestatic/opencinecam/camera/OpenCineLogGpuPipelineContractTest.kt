@@ -27,6 +27,14 @@ class OpenCineLogGpuPipelineContractTest {
     }
 
     @Test
+    fun thermalSuspensionSkipsScopeReadbackAndResumesOnCadence() {
+        assertTrue(scopeAnalysisDue(suspended = false, nowMs = 1_100, lastAnalysisAtMs = 1_000, periodMs = 100))
+        assertEquals(false, scopeAnalysisDue(suspended = false, nowMs = 1_099, lastAnalysisAtMs = 1_000, periodMs = 100))
+        assertEquals(false, scopeAnalysisDue(suspended = true, nowMs = 9_000, lastAnalysisAtMs = 1_000, periodMs = 100))
+        assertTrue(scopeAnalysisDue(suspended = false, nowMs = 9_000, lastAnalysisAtMs = 1_000, periodMs = 100))
+    }
+
+    @Test
     fun hlgDecodeThenOcLog2MatchesReferenceCurve() {
         val hlgCodes = listOf(0.0, 0.25, 0.5, 0.75, 1.0)
         val results = hlgCodes.map { OpenCineLog2Curve.encode(inverseHlg(it)) }

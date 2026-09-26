@@ -3,9 +3,9 @@
 
 package com.librestatic.opencinecam.media.ocraw
 
-import com.librestatic.opencinecam.camera.DngFixture
-import com.librestatic.opencinecam.camera.RawFrame
-import com.librestatic.opencinecam.camera.RawStillDng
+import com.librestatic.opencinecam.media.raw.DngFixture
+import com.librestatic.opencinecam.media.raw.RawFrame
+import com.librestatic.opencinecam.media.raw.RawStillDng
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

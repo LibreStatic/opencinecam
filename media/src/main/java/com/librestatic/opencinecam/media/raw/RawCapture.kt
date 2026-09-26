@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 OpenCineCam contributors */
 
-package com.librestatic.opencinecam.camera
+package com.librestatic.opencinecam.media.raw
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
