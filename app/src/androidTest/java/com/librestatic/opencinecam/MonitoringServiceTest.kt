@@ -27,6 +27,7 @@ import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -64,6 +65,7 @@ class MonitoringServiceTest {
             compose.waitUntil(10_000) { binder.get() != null }
             val owner = requireNotNull(binder.get())
             compose.runOnUiThread { owner.prepare(640, 480); owner.selectMode(CaptureMode.PHOTO, reopen = false) }
+            compose.waitUntil(15_000) { owner.cameraStates.value.descriptor != null }
             val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
             assertNotNull("This fixture requires the actual YUV analysis output", descriptor.analysisSize)
             val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
@@ -137,6 +139,121 @@ class MonitoringServiceTest {
                     if (bound) context.unbindService(connection)
                     instrumentation.waitForIdleSync()
                 } finally {
+                    compose.runOnUiThread { repository.set(before) }
+                }
+            }
+        }
+    }
+
+    @Test fun analysisKeepsFlowingWhileVideoRecordsWhereHardwareAllows() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+        val repository = SettingsRepositories.get(context)
+        val before = repository.states.value
+        val binder = AtomicReference<CaptureService.LocalBinder?>()
+        val surface = AtomicReference<Surface?>()
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) { binder.set(service as CaptureService.LocalBinder) }
+            override fun onServiceDisconnected(name: ComponentName?) { binder.set(null) }
+        }
+        var bound = false
+        var cameraExecutor: Executor? = null
+        var storageExecutor: Executor? = null
+        fun ownedIds(collection: android.net.Uri): Set<Long> {
+            val result = mutableSetOf<Long>()
+            requireNotNull(context.contentResolver.query(collection, arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                "${android.provider.MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?", arrayOf(context.packageName), null)).use { cursor ->
+                while (cursor.moveToNext()) result.add(cursor.getLong(0))
+            }
+            return result
+        }
+        val beforeVideos = ownedIds(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        val beforeDownloads = ownedIds(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI)
+        val beforeAudio = ownedIds(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        try {
+            val enabled = MonitoringOptions(waveformEnabled = true, vectorscopeEnabled = false, falseColorEnabled = false,
+                refreshHz = 10, zebraColor = MonitorColor.RED, opacityPercent = 60)
+            compose.runOnUiThread {
+                repository.set(CameraSettings(audioEnabled = false, photoQuality = 73, monitoring = enabled,
+                    operation = OperatorPreferences(startupMode = StartupMode.VIDEO)))
+            }
+            bound = context.bindService(Intent(context, CaptureService::class.java), connection, Context.BIND_AUTO_CREATE)
+            assertTrue(bound)
+            compose.waitUntil(10_000) { binder.get() != null }
+            val owner = requireNotNull(binder.get())
+            compose.runOnUiThread { owner.prepare(640, 480); owner.selectMode(CaptureMode.VIDEO, reopen = false) }
+            compose.waitUntil(15_000) { owner.cameraStates.value.descriptor != null }
+            val descriptor = requireNotNull(owner.cameraStates.value.descriptor)
+            assertNotNull("This regression requires the actual YUV analysis output", descriptor.analysisSize)
+            val outer = owner.javaClass.getDeclaredField("this\$0").apply { isAccessible = true }.get(owner)
+            val engine = CaptureService::class.java.getDeclaredMethod("getPreviewEngine").apply { isAccessible = true }
+                .invoke(outer) as Camera2PreviewEngine
+            val executor = field(engine, "cameraExecutor") as Executor
+            cameraExecutor = executor
+            storageExecutor = CaptureService::class.java.getDeclaredField("storageExecutor").apply { isAccessible = true }.get(outer) as Executor
+            compose.setContent {
+                AndroidView(factory = { host -> SurfaceView(host).apply {
+                    holder.setFixedSize(descriptor.previewSize.width, descriptor.previewSize.height)
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) { surface.set(holder.surface) }
+                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { surface.set(holder.surface) }
+                        override fun surfaceDestroyed(holder: SurfaceHolder) { surface.set(null) }
+                    })
+                } }, modifier = Modifier.fillMaxSize())
+            }
+            compose.waitUntil(10_000) { surface.get()?.isValid == true }
+            compose.runOnUiThread { assertTrue(owner.attachPreview(requireNotNull(surface.get()), 0)) }
+            compose.waitUntil(15_000) { owner.cameraStates.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.ERROR) }
+            assertEquals(owner.cameraStates.value.message, CameraUiPhase.PREVIEWING, owner.cameraStates.value.phase)
+            val lastPreview = awaitFrame(owner, enabled, 0)
+            barrier(requireNotNull(storageExecutor))
+            instrumentation.waitForIdleSync()
+            val hardwareAvc = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS).codecInfos.filter {
+                it.isEncoder && !it.isAlias && it.isHardwareAccelerated && it.supportedTypes.any { type -> type.equals("video/avc", true) }
+            }
+            var accepted = false
+            compose.runOnUiThread { accepted = owner.captureForRole(CaptureActionTicket(false, owner.cameraStates.value.captureActionGeneration)) }
+            compose.waitUntil(20_000) { owner.cameraStates.value.phase in setOf(CameraUiPhase.RECORDING, CameraUiPhase.ERROR) }
+            if (hardwareAvc.isEmpty() && owner.cameraStates.value.phase == CameraUiPhase.ERROR) {
+                // This environment cannot produce a take (production policy requires a hardware AVC
+                // encoder). The documented rejection errors the graph, exactly like the sealed
+                // OperatorServiceTest path; the analysis-through-recording assertion below needs
+                // capable hardware (real device or hw-encoder emulator), so report SKIPPED, not passed.
+                assertTrue(owner.cameraStates.value.message.orEmpty().contains("No hardware video/avc"))
+                android.util.Log.i("MonitoringRecordingProbe",
+                    "hardwareAvcEncoders=0 documentedErrorRejection=true analysisThroughRecordingAssertionRequiresCapableHardware")
+                assumeTrue("Analysis-through-recording needs a hardware video/avc encoder", hardwareAvc.isNotEmpty())
+                return
+            }
+            assertTrue("Video take must be admitted", accepted)
+            assertEquals(owner.cameraStates.value.message, CameraUiPhase.RECORDING, owner.cameraStates.value.phase)
+            // The regression: the recording graph (GPU pipeline analysis in production) must keep
+            // analysis flowing, so peaking/zebra/histogram do not silently die when recording starts.
+            val duringRecording = awaitFrame(owner, enabled, lastPreview.analysisUpdatedAtMs)
+            assertEquals(CameraUiPhase.RECORDING, duringRecording.phase)
+            compose.runOnUiThread { assertTrue(owner.stopRecording()) }
+            compose.waitUntil(20_000) { owner.cameraStates.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.ERROR) }
+            assertTrue(owner.cameraStates.value.message,
+                owner.cameraStates.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED))
+        } finally {
+            try {
+                compose.runOnUiThread { binder.get()?.detachPreview() }
+                cameraExecutor?.let(::barrier)
+                storageExecutor?.let(::barrier)
+            } finally {
+                try {
+                    if (bound) context.unbindService(connection)
+                    instrumentation.waitForIdleSync()
+                } finally {
+                    for (pair in listOf(
+                        android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI to beforeVideos,
+                        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI to beforeDownloads,
+                        android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI to beforeAudio)) {
+                        for (id in ownedIds(pair.first) - pair.second) {
+                            context.contentResolver.delete(android.content.ContentUris.withAppendedId(pair.first, id), null, null)
+                        }
+                    }
                     compose.runOnUiThread { repository.set(before) }
                 }
             }

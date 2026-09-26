@@ -35,6 +35,7 @@ import android.os.HandlerThread
 import android.os.Build
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.util.Range
 import android.util.Size
 import android.view.Surface
@@ -2399,20 +2400,13 @@ class Camera2PreviewEngine(
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
             lastAcceptedZoomRatio = requestedZoomRatio
         } catch (failure: Throwable) {
-            if (isZoomRejection(failure)) {
+            if (isZoomRejection(failure, zoomChanged = requestedZoomRatio != lastAcceptedZoomRatio)) {
                 requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onZoomRejected(requestedZoomRatio, lastAcceptedZoomRatio)
             } else {
                 listener?.onFailure("zoom-request-failed", failure.message ?: "Zoom update failed.", true)
             }
         }
-    }
-
-    private fun isZoomRejection(failure: Throwable): Boolean {
-        val message = failure.message.orEmpty()
-        return message.contains("SCALER_CROP_REGION", ignoreCase = true) ||
-            message.contains("CONTROL_ZOOM_RATIO", ignoreCase = true) ||
-            message.contains("zoom", ignoreCase = true)
     }
 
     private fun reportEffectiveZoom(result: TotalCaptureResult) {
@@ -2569,6 +2563,9 @@ class Camera2PreviewEngine(
         if (logPipeline != null) return false
         val cameraGeneration = generation
         cameraExecutor.execute {
+            // Superseded take: only startPreview/stopPreview/close advance the generation, so the
+            // owner that did so already sees the newer graph (or no listener); reporting this stale
+            // take to it would be the spurious-failure pattern the onConfigureFailed guards avoid.
             if (disposed.get() || cameraGeneration != generation) return@execute
             if (bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null) {
                 listener?.onFailure("still-sequence-recording-busy", "A still sequence owns the camera graph.", true)
@@ -2586,6 +2583,9 @@ class Camera2PreviewEngine(
                 closeAnalysisReader()
                 analysisReader = null
                 var analysisPipeline: OpenCineLogGpuPipeline? = null
+                // Set when the pipeline already reported its own failure (e.g. log-recording-prepare-failed),
+                // so a rejected start below does not report twice.
+                val pipelineFailureReported = java.util.concurrent.atomic.AtomicBoolean(false)
                 val pipeline = OpenCineLogGpuPipeline(
                     size = Size(recordingGeometry.sourceSize.width, recordingGeometry.sourceSize.height),
                     sourcePath = OpenCineLogSourcePath.SDR_BT709_ISP,
@@ -2606,7 +2606,14 @@ class Camera2PreviewEngine(
                     onAnalysis = { analysis -> deliverGpuAnalysis(cameraGeneration, { analysisPipeline }, analysis) },
                     onOperatorLutStatus = { status -> deliverGpuLutStatus(cameraGeneration, { analysisPipeline }, status) },
                     onPreviewLost = { listener?.onPreviewSurfaceLost(it) },
-                ) { code, message -> listener?.onFailure(code, message, true) }
+                ) { code, message ->
+                    // A retired/superseded pipeline's late failure must not reach a newer owner's listener.
+                    val owner = analysisPipeline
+                    if (generation == cameraGeneration && owner != null && logPipeline === owner) {
+                        pipelineFailureReported.set(true)
+                        listener?.onFailure(code, message, true)
+                    }
+                }
                 logPipeline = pipeline
                 analysisPipeline = pipeline
                 synchronizeSubjectOutput()
@@ -2662,6 +2669,12 @@ class Camera2PreviewEngine(
                     retirePipeline(pipeline)
                     logPipeline = null
                     passthroughVideoPipeline = false
+                    recording = false
+                    // Still this generation's take (checked above on this executor): the caller was
+                    // already told `true`, so a rejected start must terminate it via onFailure.
+                    if (!pipelineFailureReported.get()) {
+                        listener?.onFailure("video-gpu-prepare-failed", "The GPU video recorder rejected the take.", true)
+                    }
                     return@execute
                 }
                 configureGpuInputSession(device, descriptor, pipeline, recordingGeometry)
@@ -2918,6 +2931,7 @@ class Camera2PreviewEngine(
     ) {
         val input = pipeline.cameraInputSurface
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
+        val currentGeneration = generation
         val configuration = SessionConfiguration(
             if (constrained) SessionConfiguration.SESSION_HIGH_SPEED else SessionConfiguration.SESSION_REGULAR,
             listOf(OutputConfiguration(input)),
@@ -2970,6 +2984,8 @@ class Camera2PreviewEngine(
 
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
+                    // A replaced graph's late failure must not stop or report on the current owner.
+                    if (currentGeneration != generation || logPipeline !== pipeline || !recording) return
                     pipeline.stopRecording()
                     listener?.onFailure("video-gpu-session-failed", "CameraService rejected the GPU video session.", true)
                 }
@@ -3102,6 +3118,7 @@ class Camera2PreviewEngine(
 
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
+                    if (currentGeneration != generation) return
                     listener?.onFailure("high-speed-preview-session-failed", "CameraService rejected the constrained high-speed preview.", true)
                 }
             },
@@ -3278,6 +3295,7 @@ class Camera2PreviewEngine(
 
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
+                    if (currentGeneration != generation || !logPreviewEnabled) return
                     listener?.onFailure("log-session-failed", "CameraService rejected the HLG10 OCLog graph.", false)
                 }
             },
@@ -3349,6 +3367,7 @@ class Camera2PreviewEngine(
 
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
+                    if (currentGeneration != generation || !logPreviewEnabled) return
                     listener?.onFailure(
                         "log-hfr-session-failed",
                         "CameraService rejected the ISP-derived OCLog high-speed graph.",
@@ -3388,7 +3407,9 @@ class Camera2PreviewEngine(
         compressedSize?.let { size ->
             jpegReader = ImageReader.newInstance(size.width, size.height, compressedFormat, MAX_BURST_IMAGES + 2).apply {
                 setOnImageAvailableListener({ reader ->
-                    val image = runCatching { reader.acquireNextImage() }.getOrNull() ?: return@setOnImageAvailableListener
+                    val image = runCatching { reader.acquireNextImage() }
+                        .onFailure { Log.w(TAG, "Compressed still acquire failed; image dropped.", it) }
+                        .getOrNull() ?: return@setOnImageAvailableListener
                     var imageTimestamp: Long? = null
                     var ticket: StillImageHandoff.Ticket<JpegPayload>? = null
                     var transferred = false
@@ -3448,14 +3469,23 @@ class Camera2PreviewEngine(
             }
             outputs += OutputConfiguration(requireNotNull(rawReader).surface)
         }
-        // GPU already supplies pre-LUT analysis; avoid a redundant fourth Camera2 stream.
-        descriptor.analysisSize?.takeUnless { gpuPhotoPreviewEnabled }?.let { size ->
+        }
+        // GPU photo monitor already supplies pre-LUT analysis; avoid a redundant fourth Camera2
+        // stream there. Video preview keeps the YUV analysis stream too so peaking/zebra/histogram
+        // do not silently die when the mode leaves photo. `logPreviewEnabled` is belt-and-braces
+        // only: LOG graphs are built by configureLogSession and never reach this function.
+        var analysisOutput: OutputConfiguration? = null
+        var analysisLease: ReaderLease<ImageReader>? = null
+        descriptor.analysisSize?.takeUnless { gpuPhotoPreviewEnabled || logPreviewEnabled }?.let { size ->
             analysisReader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also { reader ->
                 val lease = ReaderLease(reader)
                 analysisReaderLease = lease
+                analysisLease = lease
                 reader.setOnImageAvailableListener({
                     val analysis = lease.read { ownedReader ->
-                        val image = runCatching { ownedReader.acquireLatestImage() }.getOrNull()
+                        val image = runCatching { ownedReader.acquireLatestImage() }
+                            .onFailure { Log.w(TAG, "Analysis image acquire failed; frame dropped.", it) }
+                            .getOrNull()
                         image?.use {
                             val now = SystemClock.elapsedRealtime()
                             if (now - lastAnalysisAtMs >= monitoringOptions.periodMs) {
@@ -3471,37 +3501,60 @@ class Camera2PreviewEngine(
                     }
                 }, imageHandler)
             }
-            outputs += OutputConfiguration(requireNotNull(analysisReader).surface)
+            analysisOutput = OutputConfiguration(requireNotNull(analysisReader).surface).also { outputs += it }
         }
-        }
-        val configuration = SessionConfiguration(
-            SessionConfiguration.SESSION_REGULAR,
-            outputs,
-            cameraExecutor,
-            object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(configured: CameraCaptureSession) {
-                    if (currentGeneration != generation ||
-                        photoPipeline != null && (disposed.get() || logPipeline !== photoPipeline || !gpuPhotoPreviewEnabled)) {
-                        configured.close()
-                        return
+        fun ownsGraph(): Boolean = currentGeneration == generation &&
+            (photoPipeline == null || !disposed.get() && logPipeline === photoPipeline)
+        fun createSession(sessionOutputs: List<OutputConfiguration>, withAnalysis: Boolean) {
+            // The extra YUV stream is optional: a HAL rejecting the pair must cost the scopes,
+            // never the viewfinder. Retry once with the analysis stream dropped.
+            fun retryWithoutAnalysis(reason: String) {
+                Log.w(TAG, "Preview graph rejected the YUV analysis stream ($reason); scopes unavailable.")
+                if (analysisReaderLease === analysisLease) closeAnalysisReader()
+                createSession(
+                    sessionOutputs.filterNot { it === analysisOutput }.mapNotNull { it.surface }.map(::OutputConfiguration),
+                    withAnalysis = false,
+                )
+            }
+            val configuration = SessionConfiguration(
+                SessionConfiguration.SESSION_REGULAR,
+                sessionOutputs,
+                cameraExecutor,
+                object : CameraCaptureSession.StateCallback() {
+                    override fun onConfigured(configured: CameraCaptureSession) {
+                        if (currentGeneration != generation ||
+                            photoPipeline != null && (disposed.get() || logPipeline !== photoPipeline || !gpuPhotoPreviewEnabled)) {
+                            configured.close()
+                            return
+                        }
+                        session = configured
+                        startRepeating(device, configured, descriptor)
                     }
-                    session = configured
-                    startRepeating(device, configured, descriptor)
-                }
 
-                override fun onConfigureFailed(configured: CameraCaptureSession) {
-                    configured.close()
-                    if (photoPipeline != null && (disposed.get() || currentGeneration != generation || logPipeline !== photoPipeline)) return
-                    listener?.onFailure("preview-session-failed", "Camera preview configuration failed.", true)
+                    override fun onConfigureFailed(configured: CameraCaptureSession) {
+                        configured.close()
+                        if (!ownsGraph()) return
+                        if (withAnalysis) {
+                            retryWithoutAnalysis("configure failed")
+                            return
+                        }
+                        listener?.onFailure("preview-session-failed", "Camera preview configuration failed.", true)
+                    }
+                },
+            )
+            try {
+                configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
+                device.createCaptureSession(configuration)
+            } catch (failure: Exception) {
+                if (!ownsGraph()) return
+                if (withAnalysis) {
+                    retryWithoutAnalysis(failure.message ?: failure.javaClass.simpleName)
+                    return
                 }
-            },
-        )
-        try {
-            configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
-            device.createCaptureSession(configuration)
-        } catch (failure: Exception) {
-            listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+                listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+            }
         }
+        createSession(outputs, withAnalysis = analysisOutput != null)
     }
 
     private fun startRepeating(
@@ -4608,7 +4661,22 @@ class Camera2PreviewEngine(
         private const val MOTOROLA_IS_CAMERA2_KEY = "com.lenovo.moto.clientapp.is_motcamera2"
         private const val MOTOROLA_CURRENT_MODE_KEY = "com.lenovo.moto.clientapp.current_mode"
         private const val MOTOROLA_SLOW_MOTION_MODE = 3
+        private const val TAG = "Camera2PreviewEngine"
     }
+}
+
+/**
+ * True only when a repeating-request failure is Camera2 refusing the zoom value just requested:
+ * the ratio changed since the last accepted request and the framework raised
+ * [IllegalArgumentException] naming a zoom key. Anything else (closed session, access errors,
+ * unrelated invalid arguments) is a real failure and must not be silently rolled back.
+ */
+internal fun isZoomRejection(failure: Throwable, zoomChanged: Boolean): Boolean {
+    if (!zoomChanged || failure !is IllegalArgumentException) return false
+    val message = failure.message.orEmpty()
+    return message.contains("SCALER_CROP_REGION", ignoreCase = true) ||
+        message.contains("CONTROL_ZOOM_RATIO", ignoreCase = true) ||
+        message.contains("zoom", ignoreCase = true)
 }
 
 private fun preferredTargetFps(values: List<Int>): Int = when {
