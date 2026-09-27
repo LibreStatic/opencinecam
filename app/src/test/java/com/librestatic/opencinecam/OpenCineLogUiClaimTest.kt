@@ -12,9 +12,9 @@ import org.junit.Test
 
 class OpenCineLogUiClaimTest {
     @Test
-    fun missingAndExperimentalEvidenceNeverRenderAsVerified() {
-        assertEquals("EXPERIMENTAL", ocLogQualificationLabel(null))
-        assertEquals("EXPERIMENTAL", ocLogQualificationLabel(profile()))
+    fun missingEvidenceNeverRendersAsVerified() {
+        assertEquals(null, ocLogQualificationLabel(null))
+        assertEquals(null, ocLogQualificationLabel(profile()))
     }
 
     @Test

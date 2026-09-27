@@ -1497,11 +1497,7 @@ class CaptureService : Service() {
                     effectiveFps = null,
                     modeGates = cameraState.value.modeGates + mapOf(
                         CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                        CaptureMode.LOG to when {
-                            preferred.allOpenCineLogProfilesVerified -> com.librestatic.opencinecam.ModeGateState.AVAILABLE
-                            preferred.supportsOpenCineLog -> com.librestatic.opencinecam.ModeGateState.CANDIDATE
-                            else -> com.librestatic.opencinecam.ModeGateState.UNSUPPORTED
-                        },
+                        CaptureMode.LOG to if (preferred.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
                     message = null,
@@ -1714,11 +1710,7 @@ class CaptureService : Service() {
                 message = "Camera $cameraId selected",
                 modeGates = current.modeGates + mapOf(
                     CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                    CaptureMode.LOG to when {
-                        descriptor.allOpenCineLogProfilesVerified -> com.librestatic.opencinecam.ModeGateState.AVAILABLE
-                        descriptor.supportsOpenCineLog -> com.librestatic.opencinecam.ModeGateState.CANDIDATE
-                        else -> com.librestatic.opencinecam.ModeGateState.UNSUPPORTED
-                    },
+                    CaptureMode.LOG to if (descriptor.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                 ),
             )
             if (surface?.isValid != true) return
@@ -1779,7 +1771,7 @@ class CaptureService : Service() {
             cancelCountdown()
             if (cameraState.value.structuralSettingsFrozen) return
             val current = cameraState.value
-            if (current.modeGates[mode] != com.librestatic.opencinecam.ModeGateState.AVAILABLE) {
+            if (!CameraUiState.isModeSelectable(current.modeGates[mode])) {
                 cameraState.value = current.copy(message = getString(R.string.gate_requires_preflight, modeDisplayName(mode)))
                 return
             }

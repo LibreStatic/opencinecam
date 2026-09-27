@@ -2,6 +2,8 @@
 package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -45,5 +47,14 @@ class CaptureChromeStateTest {
     @Test fun operatorErrorTextKeepsPlainSentences() {
         assertEquals("Storage is full: free space to continue.", operatorErrorText("Storage is full: free space to continue."))
         assertEquals("", operatorErrorText(""))
+    }
+
+    @Test fun onlyAvailableModesAreSelectable() {
+        // The selectors used to offer candidates the service then refused, leaving taps unanswered.
+        assertTrue(CameraUiState.isModeSelectable(ModeGateState.AVAILABLE))
+        assertFalse(CameraUiState.isModeSelectable(ModeGateState.CANDIDATE))
+        listOf(ModeGateState.UNSUPPORTED, ModeGateState.FAILED, null).forEach {
+            assertFalse(CameraUiState.isModeSelectable(it))
+        }
     }
 }

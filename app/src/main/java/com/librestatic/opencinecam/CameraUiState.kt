@@ -37,7 +37,7 @@ enum class CaptureMode(val experimental: Boolean = false) {
     TIME_LAPSE,
     BRACKET,
     LIGHT_TRAIL,
-    LOG(true),
+    LOG,
     APV(true),
     RAW_VIDEO(true),
 }
@@ -241,6 +241,13 @@ data class CameraUiState(
         }
 
     companion object {
+        /**
+         * The single rule the mode selectors and the service share for manual mode selection. A
+         * candidate, such as slow motion, has no integrated capture path yet: offering it would
+         * accept a tap the service then refuses.
+         */
+        fun isModeSelectable(gate: ModeGateState?): Boolean = gate == ModeGateState.AVAILABLE
+
         val videoProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE)
         val resolutionProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)
         val defaultModeGates: Map<CaptureMode, ModeGateState> = mapOf(

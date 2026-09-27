@@ -20,14 +20,16 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 @Composable
-internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
+internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit,
+    // The settings hub already titles the page; the capture-screen dialog does not.
+    showTitle: Boolean = true) {
     val coordinator = LocalFoldDisplayCoordinator.current
     val fallback = remember { kotlinx.coroutines.flow.MutableStateFlow(FoldDisplayState()) }
     val display by (coordinator?.states ?: fallback).collectAsState()
     val subject = settings.subjectDisplay
     fun update(next: SubjectDisplaySettings) = onChange(settings.copy(subjectDisplay = next))
     Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.fold_settings_title), color = Color.White, fontSize = 18.sp)
+        if (showTitle) Text(stringResource(R.string.fold_settings_title), color = Color.White, fontSize = 18.sp)
         Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_dual), capabilityLabel(display.presentation)), color = Color.White, fontSize = 14.sp)
         Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_transfer), capabilityLabel(display.transfer)), color = Color.White, fontSize = 14.sp)
         Text(stringResource(R.string.fold_posture, postureLabel(display.posture)), color = Color.LightGray, fontSize = 14.sp)
@@ -35,7 +37,8 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
         if (display.phase != DisplaySessionPhase.IDLE) {
             Text(stringResource(if (display.phase == DisplaySessionPhase.STARTING) R.string.fold_starting else if (display.visible) R.string.fold_visible else R.string.fold_hidden), color = Color.White, fontSize = 14.sp)
             Button(onClick = { coordinator?.closeSession() }, modifier = Modifier.heightIn(min = 48.dp).testTag("fold-close")) { Text(stringResource(R.string.fold_close)) }
-        } else {
+        } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Side by side when the pane has room; they wrap only on narrow displays.
             Button(onClick = { coordinator?.start(DisplayOperation.PRESENT) }, enabled = display.presentation == DisplayCapability.AVAILABLE,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("fold-present")) { Text(stringResource(R.string.fold_start_subject)) }
             Button(onClick = { coordinator?.start(DisplayOperation.TRANSFER) }, enabled = display.transfer == DisplayCapability.AVAILABLE && camera.phase != CameraUiPhase.RECORDING,
@@ -44,21 +47,31 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
         Text(stringResource(R.string.fold_transfer_help), color = Color.LightGray, fontSize = 14.sp)
         Text(stringResource(R.string.self_title), color = Color.White, fontSize = 18.sp)
         Text(stringResource(R.string.self_timer_help), color = Color.LightGray, fontSize = 14.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0, 3, 5, 10).forEach { seconds ->
-                FilterChip(subject.selfTimerSeconds == seconds, { update(subject.copy(selfTimerSeconds = seconds)) },
-                    modifier = Modifier.heightIn(min = 48.dp), label = { Text(stringResource(R.string.self_timer_value, seconds)) })
+        // One segmented row: the unit repeats in each segment, the name of the setting once above.
+        Text(stringResource(R.string.self_timer_label), color = Color.White, fontSize = 14.sp)
+        val timers = listOf(0, 3, 5, 10)
+        SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
+            timers.forEachIndexed { index, seconds ->
+                val description = stringResource(R.string.self_timer_value, seconds)
+                SegmentedButton(
+                    selected = subject.selfTimerSeconds == seconds,
+                    onClick = { update(subject.copy(selfTimerSeconds = seconds)) },
+                    shape = SegmentedButtonDefaults.itemShape(index, timers.size),
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
+                ) { Text(stringResource(R.string.self_timer_short, seconds)) }
             }
         }
         FoldToggle(stringResource(R.string.self_minimal), subject.selfMinimalControls) { update(subject.copy(selfMinimalControls = it)) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SubjectDisplayMode.entries.forEach { mode ->
-                FilterChip(selected = subject.mode == mode, onClick = { update(subject.copy(mode = mode)) },
+        SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
+            SubjectDisplayMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(selected = subject.mode == mode, onClick = { update(subject.copy(mode = mode)) },
+                    shape = SegmentedButtonDefaults.itemShape(index, SubjectDisplayMode.entries.size),
+                    modifier = Modifier.heightIn(min = 48.dp),
                     label = { Text(stringResource(when (mode) {
                         SubjectDisplayMode.STATUS -> R.string.fold_mode_status
                         SubjectDisplayMode.TELEPROMPTER -> R.string.fold_mode_prompter
                         SubjectDisplayMode.PREVIEW -> R.string.fold_mode_preview
-                    })) })
+                    }), maxLines = 1) })
             }
         }
         FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }

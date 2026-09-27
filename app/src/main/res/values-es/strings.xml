@@ -49,6 +49,9 @@
     <string name="rec_state_finalizing">Finalizando…</string>
     <string name="rec_state_saved">Clip guardado</string>
     <string name="rec_state_unavailable">No disponible</string>
+    <string name="error_restore_previous">Restaurar configuración anterior</string>
+    <string name="error_open_settings">Abrir ajustes</string>
+    <string name="error_failed_configuration">Falló: %1$s</string>
     <string name="error_details_show">Detalles técnicos</string>
     <string name="error_details_hide">Ocultar detalles técnicos</string>
 
@@ -242,6 +245,8 @@
     <string name="subject_preview_failed">Vista no disponible: %1$s</string>
     <string name="operator_preview_lost">El visor del operador se desconectó; el procesamiento de captura continúa.</string>
     <string name="self_title">Autograbación</string>
+    <string name="self_timer_label">Temporizador</string>
+    <string name="self_timer_short">%1$d s</string>
     <string name="self_timer_value">Temporizador: %1$d s</string>
     <string name="self_timer_help">El temporizador se aplica sólo al rol de autograbación trasladado. Cero inicia inmediatamente. Volvé a tocar captura para cancelar; regresar, cambiar de cámara o perder la vista también lo cancela.</string>
     <string name="self_minimal">Controles mínimos de autograbación</string>
@@ -632,4 +637,12 @@
     <string name="focus_pull_cancel">CANCELAR PULL</string>
     <string name="histogram_mode_rgb">RGB</string>
     <string name="histogram_mode_luma">Luma</string>
+    <string name="settings_summary_capture">Exposición, foco, balance de blancos</string>
+    <string name="settings_summary_recording">Códec, resolución, cuadros, foto</string>
+    <string name="settings_summary_monitoring">Scopes, zebra, peaking, LUTs</string>
+    <string name="settings_summary_audio">Entradas, formato, medidores, ganancia</string>
+    <string name="settings_summary_controls">Teclas F, presets, gestos</string>
+    <string name="settings_summary_displays">Pantalla del sujeto, autograbación</string>
+    <string name="settings_summary_transfers">Envíos y servidor</string>
+    <string name="settings_summary_diagnostics">Versión, licencias, registros</string>
 </resources>

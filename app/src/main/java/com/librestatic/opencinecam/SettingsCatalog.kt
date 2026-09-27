@@ -4,15 +4,15 @@ package com.librestatic.opencinecam
 import java.text.Normalizer
 import java.util.Locale
 
-enum class SettingsCategory(val title: Int) {
-    CAPTURE(R.string.settings_category_capture),
-    RECORDING(R.string.settings_category_recording),
-    MONITORING(R.string.settings_category_monitoring),
-    AUDIO(R.string.settings_category_audio),
-    CONTROLS(R.string.settings_category_controls),
-    DISPLAYS(R.string.fold_settings_title),
-    TRANSFERS(R.string.webdav_queue_title),
-    DIAGNOSTICS(R.string.settings_category_diagnostics),
+enum class SettingsCategory(val title: Int, val summary: Int) {
+    CAPTURE(R.string.settings_category_capture, R.string.settings_summary_capture),
+    RECORDING(R.string.settings_category_recording, R.string.settings_summary_recording),
+    MONITORING(R.string.settings_category_monitoring, R.string.settings_summary_monitoring),
+    AUDIO(R.string.settings_category_audio, R.string.settings_summary_audio),
+    CONTROLS(R.string.settings_category_controls, R.string.settings_summary_controls),
+    DISPLAYS(R.string.fold_settings_title, R.string.settings_summary_displays),
+    TRANSFERS(R.string.webdav_queue_title, R.string.settings_summary_transfers),
+    DIAGNOSTICS(R.string.settings_category_diagnostics, R.string.settings_summary_diagnostics),
 }
 
 data class SettingEntry(val id: String, val category: SettingsCategory, val title: Int, val keywords: String)

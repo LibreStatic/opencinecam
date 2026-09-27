@@ -46,6 +46,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import android.os.BatteryManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
@@ -404,6 +405,16 @@ internal fun CaptureSurface(
     val gridMode = settings.compositionGridMode
     val showHorizon = settings.horizonLevelEnabled
     var windowOrigin by remember { mutableStateOf(Offset.Zero) }
+    val context = LocalContext.current
+    val knownGoodStore = remember(context) { KnownGoodCaptureStore(context) }
+    val currentSettings by rememberUpdatedState(settings)
+    // Record the configuration only on the transition into a live preview: a change requested
+    // while previewing must prove itself by reopening before it becomes the way back.
+    LaunchedEffect(state.phase) {
+        if (state.phase == CameraUiPhase.PREVIEWING) {
+            knownGoodStore.save(KnownGoodCapture.of(currentSettings, state.selectedMode, state.selectedCameraId))
+        }
+    }
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black).onGloballyPositioned { windowOrigin = it.positionInWindow() }) {
         val density = LocalDensity.current
         val fullWidthPx = with(density) { maxWidth.roundToPx() }
@@ -533,7 +544,24 @@ internal fun CaptureSurface(
             )
         }
         if (state.phase == CameraUiPhase.ERROR) {
-            CameraErrorSheet(state) { binder?.recoverPreview(widthPx, heightPx) }
+            val knownGood = remember(state.errorCode, state.message) { knownGoodStore.load() }
+            // Fall back to the stock 1080p30 geometry when nothing has previewed on this install yet.
+            val restoreTarget = (knownGood ?: KnownGoodCapture.safeDefault(state.selectedMode))
+                .takeIf { it.differsFrom(settings, state.selectedMode) }
+            CameraErrorSheet(
+                state = state,
+                failed = KnownGoodCapture.of(settings, state.selectedMode, state.selectedCameraId),
+                restoreTarget = restoreTarget,
+                onRetry = { binder?.recoverPreview(widthPx, heightPx) },
+                onRestore = restoreTarget?.let { target -> {
+                    val restored = target.applyTo(settings)
+                    onSettingsChanged(restored)
+                    binder?.applySettings(restored)
+                    if (target.mode != state.selectedMode) binder?.selectMode(target.mode, reopen = false)
+                    binder?.recoverPreview(widthPx, heightPx)
+                } },
+                onOpenSettings = onOpenSettings,
+            )
         }
         }
     }
@@ -545,7 +573,14 @@ internal fun CaptureSurface(
  * which is never shown by default on the shooting surface.
  */
 @Composable
-private fun BoxScope.CameraErrorSheet(state: CameraUiState, onRetry: () -> Unit) {
+private fun BoxScope.CameraErrorSheet(
+    state: CameraUiState,
+    failed: KnownGoodCapture,
+    restoreTarget: KnownGoodCapture?,
+    onRetry: () -> Unit,
+    onRestore: (() -> Unit)?,
+    onOpenSettings: () -> Unit,
+) {
     var showDetails by remember(state.message, state.errorCode) { mutableStateOf(false) }
     val raw = state.message.orEmpty()
     Box(
@@ -560,7 +595,7 @@ private fun BoxScope.CameraErrorSheet(state: CameraUiState, onRetry: () -> Unit)
             .align(Alignment.BottomCenter)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(12.dp)
-            .widthIn(max = 420.dp)
+            .widthIn(max = 560.dp)
             .fillMaxWidth()
             .background(Color(0xFF12171A), RoundedCornerShape(12.dp))
             .border(1.dp, Color(0xFF344047), RoundedCornerShape(12.dp))
@@ -572,11 +607,36 @@ private fun BoxScope.CameraErrorSheet(state: CameraUiState, onRetry: () -> Unit)
         CineGlyph(CineIcon.WARNING, RecordRed, Modifier.size(32.dp))
         Text(stringResource(R.string.camera_error), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(operatorErrorText(raw), color = Color(0xFFAAB4BA), fontSize = 14.sp, textAlign = TextAlign.Center)
-        Button(
-            onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        ) { Text(stringResource(R.string.retry), fontWeight = FontWeight.Bold) }
+        // Name the configuration that failed, so the operator can tell what "restore" moves away from.
+        Text(
+            stringResource(R.string.error_failed_configuration, captureSummary(failed)),
+            color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("camera-error-failed-config"),
+        )
+        // Retrying replays the configuration that failed, so restoring the last one that
+        // previewed leads, alone on its row; the lighter actions share the row below.
+        val primary = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black)
+        val outline = BorderStroke(1.dp, Color(0xFF344047))
+        if (onRestore != null) {
+            Button(onClick = onRestore, colors = primary,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("camera-error-restore")) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.error_restore_previous), fontWeight = FontWeight.Bold)
+                    restoreTarget?.let { Text(captureSummary(it), fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().testTag("camera-error-actions"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val action = Modifier.weight(1f).heightIn(min = 48.dp)
+            if (onRestore != null) OutlinedButton(onClick = onRetry, border = outline, modifier = action) {
+                Text(stringResource(R.string.retry), color = Color.White, textAlign = TextAlign.Center)
+            } else Button(onClick = onRetry, colors = primary, modifier = action) {
+                Text(stringResource(R.string.retry), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            }
+            OutlinedButton(onClick = onOpenSettings, border = outline, modifier = action.testTag("camera-error-settings")) {
+                Text(stringResource(R.string.error_open_settings), color = Color.White, textAlign = TextAlign.Center)
+            }
+        }
         if (raw.isNotBlank() || state.errorCode != null) {
             TextButton(onClick = { showDetails = !showDetails }, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(if (showDetails) R.string.error_details_hide else R.string.error_details_show), color = VerifiedCyan)
@@ -593,6 +653,14 @@ private fun BoxScope.CameraErrorSheet(state: CameraUiState, onRetry: () -> Unit)
         }
     }
 }
+
+@Composable
+private fun captureSummary(capture: KnownGoodCapture): String =
+    listOfNotNull(
+        capture.geometry()?.let { (w, h, _) -> "$w×$h" },
+        capture.geometry()?.third?.let { "$it fps" },
+        modeLabel(capture.mode),
+    ).joinToString(" · ")
 
 /** Drops the exception class a failure message may carry, keeping the sentence the operator can act on. */
 internal fun operatorErrorText(message: String): String =
@@ -1417,18 +1485,18 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
     if (state.selectedMode != CaptureMode.LOG) return
     val profile = state.activeLogProfile
     val sourcePath = profile?.sourcePath
-    val qualification = ocLogQualificationLabel(profile)
+    val qualification = ocLogQualificationLabel(profile)?.let { " · $it" }.orEmpty()
     val text = when {
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP && settings.logViewAssistEnabled ->
-            "OCLOG2 HFR · ISP SDR · VIEW ASSIST · $qualification"
+            "OCLOG2 HFR · ISP SDR · VIEW ASSIST$qualification"
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP ->
-            "OCLOG2 HFR · ISP-DERIVED SDR · MAIN10 · $qualification"
-        settings.logViewAssistEnabled -> "OCLOG2 · HLG10 · VIEW ASSIST REC.709 · $qualification"
-        else -> "OCLOG2 · HLG-DERIVED 10-BIT · FLAT · $qualification"
+            "OCLOG2 HFR · ISP-DERIVED SDR · MAIN10$qualification"
+        settings.logViewAssistEnabled -> "OCLOG2 · HLG10 · VIEW ASSIST REC.709$qualification"
+        else -> "OCLOG2 · HLG-DERIVED 10-BIT · FLAT$qualification"
     }
     Text(
         text,
-        color = if (profile?.isVerified == true) VerifiedCyan else Amber,
+        color = if (profile?.isVerified == true) VerifiedCyan else Color.White,
         fontSize = 9.sp,
         fontWeight = FontWeight.Bold,
         maxLines = 1,
@@ -1440,8 +1508,9 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
     )
 }
 
-internal fun ocLogQualificationLabel(profile: Camera2LogProfile?): String =
-    if (profile?.isVerified == true) "VERIFIED" else "EXPERIMENTAL"
+/** VERIFIED only for a profile tied to exact evidence; an unqualified profile makes no claim either way. */
+internal fun ocLogQualificationLabel(profile: Camera2LogProfile?): String? =
+    if (profile?.isVerified == true) "VERIFIED" else null
 
 @Composable
 private fun InstrumentStack(
@@ -1776,10 +1845,7 @@ private fun ModeDial(
     val selectedIndex = modes.indexOf(state.selectedMode).coerceAtLeast(0)
     val haptics = LocalHapticFeedback.current
     val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(state.selectedMode))
-    fun selectable(mode: CaptureMode): Boolean {
-        val gate = state.modeGates.getValue(mode)
-        return gate == ModeGateState.AVAILABLE || gate == ModeGateState.CANDIDATE
-    }
+    fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
 
     // A mode wheel: a linear carousel with a fixed center selection indicator. Several
     // neighbors stay visible on both sides, the active mode snaps to the marker, drag
@@ -2017,7 +2083,7 @@ private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBin
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowModes.forEach { mode ->
                     val gate = state.modeGates.getValue(mode)
-                    val enabled = gate == ModeGateState.AVAILABLE || gate == ModeGateState.CANDIDATE
+                    val enabled = CameraUiState.isModeSelectable(gate)
                     Column(
                         Modifier
                             .weight(1f)
@@ -2920,7 +2986,7 @@ internal fun SettingsContent(
             ProfessionalExposureSettings(state, settings, onSettingsChange)
         }
         if ("fold-displays" in visibleIds) item(key = "fold-displays") {
-            FoldDisplaySettings(state, settings, onSettingsChange)
+            FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
         }
         if ("layout" in visibleIds) item(key = "layout") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
@@ -3216,7 +3282,7 @@ internal fun SettingsContent(
                         val qualification = if (descriptor.allOpenCineLogProfilesVerified) {
                             "VERIFIED"
                         } else {
-                            "EXPERIMENTAL · " + profilesVerifiedTemplate.format(verifiedCount, descriptor.logProfiles.size)
+                            profilesVerifiedTemplate.format(verifiedCount, descriptor.logProfiles.size)
                         }
                         "OCLog2 $qualification · HLG10-DERIVED ${trueLog.maxOfOrNull { it.size.width } ?: 0}×${trueLog.maxOfOrNull { it.size.height } ?: 0} @ ${trueLog.maxOfOrNull { it.fps } ?: 0} max" +
                             if (hfrLog.isNotEmpty()) " · HFR ISP-DERIVED ${hfrLog.maxOf { it.fps }} max" else ""
