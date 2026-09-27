@@ -38,6 +38,12 @@ internal enum class CineIcon {
     LEVEL,
     WARNING,
     CHECK,
+    CAMERA,
+    VIDEO,
+    AUDIO,
+    CONTROLS,
+    CLOUD,
+    INFO,
 }
 
 @Composable
@@ -159,5 +165,38 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             drawCircle(color, radius = w * .05f, center = Offset(cx, h * .73f))
         }
         CineIcon.CHECK -> poly(.16f to .54f, .40f to .78f, .86f to .24f, close = false)
+        CineIcon.CAMERA -> {
+            // Stills body: housing, viewfinder hump and lens.
+            poly(.10f to .32f, .34f to .32f, .40f to .20f, .60f to .20f, .66f to .32f, .90f to .32f, .90f to .82f, .10f to .82f)
+            drawCircle(color, radius = w * .16f, center = Offset(cx, h * .56f), style = stroke)
+        }
+        CineIcon.VIDEO -> {
+            // Cine body with the matte box to the side.
+            box(.08f, .30f, .64f, .74f)
+            poly(.64f to .44f, .92f to .28f, .92f to .76f, .64f to .60f)
+        }
+        CineIcon.AUDIO -> {
+            // Level bars of a meter, tallest in the middle.
+            line(.14f, .42f, .14f, .58f); line(.32f, .28f, .32f, .72f); line(.50f, .14f, .50f, .86f)
+            line(.68f, .28f, .68f, .72f); line(.86f, .42f, .86f, .58f)
+        }
+        CineIcon.CONTROLS -> {
+            // Three faders at different positions.
+            line(.24f, .14f, .24f, .86f); line(.50f, .14f, .50f, .86f); line(.76f, .14f, .76f, .86f)
+            drawCircle(color, radius = w * .08f, center = Offset(w * .24f, h * .36f))
+            drawCircle(color, radius = w * .08f, center = Offset(w * .50f, h * .66f))
+            drawCircle(color, radius = w * .08f, center = Offset(w * .76f, h * .44f))
+        }
+        CineIcon.CLOUD -> {
+            drawArc(color, 150f, 180f, false, Offset(w * .10f, h * .40f), Size(w * .36f, h * .36f), style = stroke)
+            drawArc(color, 190f, 170f, false, Offset(w * .30f, h * .20f), Size(w * .44f, h * .44f), style = stroke)
+            drawArc(color, 230f, 170f, false, Offset(w * .56f, h * .38f), Size(w * .34f, h * .38f), style = stroke)
+            line(.24f, .76f, .76f, .76f)
+        }
+        CineIcon.INFO -> {
+            drawCircle(color, radius = w * .40f, center = Offset(cx, cy), style = stroke)
+            line(.50f, .46f, .50f, .72f)
+            drawCircle(color, radius = w * .05f, center = Offset(cx, h * .32f))
+        }
     }
 }

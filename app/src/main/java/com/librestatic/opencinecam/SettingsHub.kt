@@ -79,7 +79,7 @@ internal fun SettingsScreen(
             Row(Modifier.fillMaxSize()) {
                 if (wide || (category == null && query.isBlank())) {
                     LazyColumn(
-                        modifier = if (wide) Modifier.width(248.dp).fillMaxHeight().testTag("settings-categories") else Modifier.fillMaxSize().testTag("settings-categories"),
+                        modifier = if (wide) Modifier.width(272.dp).fillMaxHeight().testTag("settings-categories") else Modifier.fillMaxSize().testTag("settings-categories"),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         items(SettingsCategory.entries, key = { it.name }) { item ->
@@ -93,6 +93,8 @@ internal fun SettingsScreen(
                                 .testTag("settings-category-${item.name}"),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.width(3.dp).height(32.dp).background(if (selected) Color(0xFFFFB000) else Color.Transparent))
+                                CineGlyph(item.icon, if (selected) Color(0xFFFFB000) else Color(0xFFAAB4BA),
+                                    Modifier.padding(start = 12.dp).size(22.dp))
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                     Text(stringResource(item.title), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                                     Text(stringResource(item.summary), color = Color(0xFFAAB4BA), fontSize = 12.sp, maxLines = 1,
@@ -121,3 +123,16 @@ internal fun SettingsScreen(
     }
     }
 }
+
+/** The rail symbol for each category, so the list can be scanned by shape as well as by name. */
+private val SettingsCategory.icon: CineIcon
+    get() = when (this) {
+        SettingsCategory.CAPTURE -> CineIcon.CAMERA
+        SettingsCategory.RECORDING -> CineIcon.VIDEO
+        SettingsCategory.MONITORING -> CineIcon.MONITORING
+        SettingsCategory.AUDIO -> CineIcon.AUDIO
+        SettingsCategory.CONTROLS -> CineIcon.CONTROLS
+        SettingsCategory.DISPLAYS -> CineIcon.DISPLAYS
+        SettingsCategory.TRANSFERS -> CineIcon.CLOUD
+        SettingsCategory.DIAGNOSTICS -> CineIcon.INFO
+    }
