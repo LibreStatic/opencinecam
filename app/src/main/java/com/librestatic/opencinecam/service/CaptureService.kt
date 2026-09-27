@@ -1498,6 +1498,7 @@ class CaptureService : Service() {
                     modeGates = cameraState.value.modeGates + mapOf(
                         CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                         CaptureMode.LOG to if (preferred.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
                     message = null,
@@ -1711,6 +1712,7 @@ class CaptureService : Service() {
                 modeGates = current.modeGates + mapOf(
                     CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     CaptureMode.LOG to if (descriptor.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                 ),
             )
             if (surface?.isValid != true) return

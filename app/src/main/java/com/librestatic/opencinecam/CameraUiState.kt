@@ -249,6 +249,8 @@ data class CameraUiState(
         fun isModeSelectable(gate: ModeGateState?): Boolean = gate == ModeGateState.AVAILABLE
 
         val videoProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE)
+        /** Modes whose recording rate the operator chooses (slow motion runs on VIDEO). */
+        val frameRateModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG)
         val resolutionProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)
         val defaultModeGates: Map<CaptureMode, ModeGateState> = mapOf(
             CaptureMode.PHOTO to ModeGateState.AVAILABLE,

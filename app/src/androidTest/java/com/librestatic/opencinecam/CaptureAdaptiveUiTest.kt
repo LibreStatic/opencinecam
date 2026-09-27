@@ -53,7 +53,9 @@ class CaptureAdaptiveUiTest {
 
         composeRule.onNodeWithTag("media-action", useUnmergedTree = true).assertIsEnabled()
         composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsEnabled()
-        composeRule.onNodeWithText("FPS").assertIsEnabled()
+        composeRule.onNodeWithText("ISO").assertIsEnabled()
+        // Stills have no recording rate: the FPS control belongs to video and LOG only.
+        composeRule.onNodeWithText("FPS").assertDoesNotExist()
         saveScreenshot("mode-wheel-portrait")
     }
 

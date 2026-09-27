@@ -1099,6 +1099,28 @@ internal fun AdaptiveCaptureChrome(
         showMonitoring = false
     }
 
+    val modeSelection = ModeSelection(displayedCaptureMode(state.selectedMode, settings.videoOffSpeed)) { mode ->
+        // Slow motion is VIDEO recording off-speed; Video is the same path at normal speed.
+        val offSpeed = when (mode) {
+            CaptureMode.SLOW_MOTION -> true
+            CaptureMode.VIDEO -> false
+            else -> settings.videoOffSpeed
+        }
+        if (offSpeed != settings.videoOffSpeed) {
+            val updated = settings.copy(videoOffSpeed = offSpeed)
+            onSettingsChanged(updated)
+            binder?.applySettings(updated)
+        }
+        val pipelineMode = if (mode == CaptureMode.SLOW_MOTION) CaptureMode.VIDEO else mode
+        if (pipelineMode != state.selectedMode) binder?.selectMode(pipelineMode)
+        if (mode == CaptureMode.SLOW_MOTION) {
+            state.descriptor?.let { descriptor ->
+                slowMotionTargetFps(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
+            }?.let { fps -> binder?.selectTargetFps(fps) }
+        }
+    }
+
+    CompositionLocalProvider(LocalModeSelection provides modeSelection) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -1374,6 +1396,7 @@ internal fun AdaptiveCaptureChrome(
             }
         }
     }
+}
 }
 
 @Composable
@@ -1691,7 +1714,9 @@ private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit
     val controls = buildList {
         if (state.selectedMode in CameraUiState.resolutionProfileModes) add(ControlDial.RESOLUTION)
         if (state.selectedMode == CaptureMode.TIME_LAPSE) add(ControlDial.INT)
-        add(ControlDial.FPS)
+        // A recording rate only exists where frames are recorded as motion; stills and the
+        // fixed-output time-lapse have none to choose.
+        if (state.selectedMode in CameraUiState.frameRateModes) add(ControlDial.FPS)
         add(ControlDial.SHUTTER)
         add(ControlDial.ISO)
         add(ControlDial.WB)
@@ -1841,10 +1866,13 @@ private fun ModeDial(
     binder: CaptureService.LocalBinder?,
     compact: Boolean = false,
 ) {
-    val modes = CaptureMode.entries
-    val selectedIndex = modes.indexOf(state.selectedMode).coerceAtLeast(0)
+    val selection = LocalModeSelection.current
+    val displayedMode = selection?.displayed ?: state.selectedMode
+    val selectMode: (CaptureMode) -> Unit = selection?.select ?: { mode -> binder?.selectMode(mode) }
+    val modes = visibleCaptureModes(state.modeGates, displayedMode)
+    val selectedIndex = modes.indexOf(displayedMode).coerceAtLeast(0)
     val haptics = LocalHapticFeedback.current
-    val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(state.selectedMode))
+    val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(displayedMode))
     fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
 
     // A mode wheel: a linear carousel with a fixed center selection indicator. Several
@@ -1876,8 +1904,8 @@ private fun ModeDial(
         LaunchedEffect(listState.isScrollInProgress) {
             if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
                 val idx = focusedIndex.coerceIn(0, modes.lastIndex)
-                if (idx != selectedIndex && modes[idx] != state.selectedMode && selectable(modes[idx])) {
-                    binder?.selectMode(modes[idx])
+                if (idx != selectedIndex && modes[idx] != displayedMode && selectable(modes[idx])) {
+                    selectMode(modes[idx])
                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 } else if (idx != selectedIndex && !selectable(modes[idx])) {
                     listState.animateScrollToItem(selectedIndex)
@@ -1907,7 +1935,7 @@ private fun ModeDial(
                                 .fillMaxWidth()
                                 .height(itemHeight)
                                 .semantics { selected = isSelected }
-                                .clickable(enabled = enabled && !isSelected) { binder?.selectMode(mode) },
+                                .clickable(enabled = enabled && !isSelected) { selectMode(mode) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -1968,8 +1996,8 @@ private fun ModeDial(
             LaunchedEffect(listState.isScrollInProgress) {
                 if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
                     val idx = focusedIndex.coerceIn(0, modes.lastIndex)
-                    if (idx != selectedIndex && modes[idx] != state.selectedMode && selectable(modes[idx])) {
-                        binder?.selectMode(modes[idx])
+                    if (idx != selectedIndex && modes[idx] != displayedMode && selectable(modes[idx])) {
+                        selectMode(modes[idx])
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     } else if (idx != selectedIndex && !selectable(modes[idx])) {
                         listState.animateScrollToItem(selectedIndex)
@@ -1993,7 +2021,7 @@ private fun ModeDial(
                                     .width(itemWidth)
                                     .height(38.dp)
                                     .semantics { selected = isSelected }
-                                    .clickable(enabled = enabled && !isSelected) { binder?.selectMode(mode) },
+                                    .clickable(enabled = enabled && !isSelected) { selectMode(mode) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
@@ -2077,9 +2105,12 @@ private fun SelectedModeButton(state: CameraUiState, onClick: () -> Unit) {
 
 @Composable
 private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBinder?, onSelected: () -> Unit) {
+    val selection = LocalModeSelection.current
+    val displayedMode = selection?.displayed ?: state.selectedMode
+    val selectMode: (CaptureMode) -> Unit = selection?.select ?: { mode -> binder?.selectMode(mode) }
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(R.string.modes_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        CaptureMode.entries.chunked(2).forEach { rowModes ->
+        visibleCaptureModes(state.modeGates, displayedMode).chunked(2).forEach { rowModes ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 rowModes.forEach { mode ->
                     val gate = state.modeGates.getValue(mode)
@@ -2089,17 +2120,17 @@ private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBin
                             .weight(1f)
                             .height(52.dp)
                             .clip(RoundedCornerShape(7.dp))
-                            .background(if (mode == state.selectedMode) Amber else Color(0xFF303638))
+                            .background(if (mode == displayedMode) Amber else Color(0xFF303638))
                             .clickable(enabled = enabled) {
-                                binder?.selectMode(mode)
+                                selectMode(mode)
                                 onSelected()
                             }
                             .padding(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Text(modeLabel(mode), color = if (mode == state.selectedMode) Color.Black else if (enabled) Color.White else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        if (gate != ModeGateState.AVAILABLE) Text(gateLabel(gate), color = if (mode == state.selectedMode) Color.Black else gateColor(gate), fontSize = 8.sp)
+                        Text(modeLabel(mode), color = if (mode == displayedMode) Color.Black else if (enabled) Color.White else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        if (gate != ModeGateState.AVAILABLE) Text(gateLabel(gate), color = if (mode == displayedMode) Color.Black else gateColor(gate), fontSize = 8.sp)
                     }
                 }
                 if (rowModes.size == 1) Spacer(Modifier.weight(1f))
