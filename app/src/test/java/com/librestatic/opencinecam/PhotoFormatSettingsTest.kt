@@ -54,6 +54,6 @@ class PhotoFormatSettingsTest {
     }
     @Test fun formatAndQualityAreSearchable() {
         for(query in listOf("heic","jpeg","calidad","pareja","dng"))
-            assertTrue("photo-format" in SettingsCatalog.search(query,SettingsCategory.CAPTURE) { "" })
+            assertTrue("photo-format" in SettingsCatalog.search(query,SettingsCategory.RECORDING) { "" })
     }
 }

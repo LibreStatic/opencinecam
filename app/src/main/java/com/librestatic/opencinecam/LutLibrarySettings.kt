@@ -195,21 +195,23 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             enabled = available, isError = name.isNotEmpty() && !validName,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("lut-name").semantics { contentDescription = nameLabel })
         Text(stringResource(R.string.lut_kind), color = Color.White)
-        for (value in LutTransformKind.entries) {
+        SettingsPillRow { for (value in LutTransformKind.entries) {
             LutButton(if (value == LutTransformKind.TECHNICAL) R.string.lut_technical else R.string.lut_creative,
                 "kind-${value.name}", available, kind == value) { kind = value }
-        }
+        } }
         Text(stringResource(R.string.lut_input), color = Color.White)
-        for (value in LutSignalDomain.entries) {
+        SettingsPillRow { for (value in LutSignalDomain.entries) {
             LutButton(if (value == LutSignalDomain.SDR_BT709_CODE) R.string.lut_sdr else R.string.lut_log,
                 "input-${value.name}", available, input == value) { input = value }
-        }
+        } }
+        SettingsPillRow {
         LutButton(R.string.lut_import, "import", available && validName && kind != null && input != null && library.entries.size < LutLibrary.MAX_ENTRIES) {
             onImport(name, requireNotNull(kind), requireNotNull(input))
         }
         LutButton(R.string.lut_disable, "disable", available && library.operatorHash != null) { onSelect(null) }
         LutButton(R.string.lut_subject_disable, "subject-disable", available && library.subjectHash != null) { onSelectSubject(null) }
         LutButton(R.string.lut_recording_disable, "recording-disable", recordingEditable && library.recordingHash != null) { onSelectRecording(null) }
+        }
         if (library.entries.isEmpty()) Text(stringResource(R.string.lut_empty), color = Color.LightGray)
         for (entry in library.entries) {
             HorizontalDivider()
@@ -219,20 +221,22 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             Text(stringResource(if (entry.input == LutSignalDomain.SDR_BT709_CODE) R.string.lut_sdr else R.string.lut_log), color = Color.LightGray)
             Text(stringResource(R.string.lut_domain_range, entry.domainMin.joinToString(), entry.domainMax.joinToString()), color = Color.LightGray)
             val selected = library.operatorHash == entry.hash
-            if (selected) Text(stringResource(R.string.lut_selected), color = Color.White, modifier = Modifier.testTag("lut-selected-${entry.hash}"))
-            LutButton(R.string.lut_select, "select-${entry.hash}", available && !selected, selected) { onSelect(entry.hash) }
             val subjectSelected = library.subjectHash == entry.hash
+            val recordingSelected = library.recordingHash == entry.hash
+            if (selected) Text(stringResource(R.string.lut_selected), color = Color.White, modifier = Modifier.testTag("lut-selected-${entry.hash}"))
             if (subjectSelected) Text(stringResource(R.string.lut_subject_selected), color = Color.White,
                 modifier = Modifier.testTag("lut-subject-selected-${entry.hash}"))
-            LutButton(R.string.lut_subject_select, "subject-select-${entry.hash}", available && !subjectSelected, subjectSelected) { onSelectSubject(entry.hash) }
-            val recordingSelected = library.recordingHash == entry.hash
             if (recordingSelected) Text(stringResource(R.string.lut_recording_selected), color = Color(0xFFFFCF66),
                 modifier = Modifier.testTag("lut-recording-selected-${entry.hash}"))
+            SettingsPillRow {
+            LutButton(R.string.lut_select, "select-${entry.hash}", available && !selected, selected) { onSelect(entry.hash) }
+            LutButton(R.string.lut_subject_select, "subject-select-${entry.hash}", available && !subjectSelected, subjectSelected) { onSelectSubject(entry.hash) }
             LutButton(R.string.lut_recording_select, "recording-select-${entry.hash}", recordingEditable && !recordingSelected, recordingSelected) {
                 recordingChoice = entry.hash
             }
             LutButton(R.string.lut_export, "export-${entry.hash}", available) { onExport(entry.hash) }
             LutButton(R.string.lut_delete, "delete-${entry.hash}", canDelete(entry.hash)) { deleting = entry.hash }
+            }
         }
     }
     if (deleting != null || resetting) {
@@ -273,8 +277,5 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
 
 @Composable
 private fun LutButton(label: Int, tag: String, enabled: Boolean, selected: Boolean = false, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-        .testTag("lut-$tag").semantics { this.selected = selected }) {
-        Text(stringResource(label), modifier = Modifier.weight(1f).testTag("lut-$tag-label"), textAlign = TextAlign.Center)
-    }
+    SettingsPill(stringResource(label), "lut-$tag", selected, enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
 }

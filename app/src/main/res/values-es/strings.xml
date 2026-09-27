@@ -645,4 +645,8 @@
     <string name="settings_summary_displays">Pantalla del sujeto, autograbación</string>
     <string name="settings_summary_transfers">Envíos y servidor</string>
     <string name="settings_summary_diagnostics">Versión, licencias, registros</string>
+    <string name="settings_help_show">Ver ayuda</string>
+    <string name="settings_help_hide">Ocultar ayuda</string>
+    <string name="settings_category_media">Medios y archivos</string>
+    <string name="settings_summary_media">Compartir, galería, proxies, nombres</string>
 </resources>

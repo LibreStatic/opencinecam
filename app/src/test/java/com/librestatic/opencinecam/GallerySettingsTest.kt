@@ -50,7 +50,7 @@ class GallerySettingsTest {
         assertEquals(requested.gallery, effective.gallery)
         assertEquals(original.productionSlate, effective.productionSlate)
         assertEquals(45, effective.audioInputDeviceId)
-        assertTrue("media-gallery" in SettingsCatalog.search("galería", SettingsCategory.CAPTURE) { "" })
+        assertTrue("media-gallery" in SettingsCatalog.search("galería", SettingsCategory.MEDIA) { "" })
     }
     @Test fun failedStoreDoesNotPublishGalleryAndQueryIsBoundedWithoutSilentTruncation() {
         val persistence = object : SettingsPersistence {

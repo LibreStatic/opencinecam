@@ -18,12 +18,11 @@ internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (Gal
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.gallery_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.gallery_settings_help), Modifier.fillMaxWidth().testTag("gallery-settings-help"))
-        for (kind in GalleryMediaKind.entries) {
-            OutlinedButton(onClick = { onSettings(settings.copy(kind = kind)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("gallery-kind-$kind").semantics { selected = settings.kind == kind }) {
-                Text(stringResource(galleryKindLabel(kind)), Modifier.weight(1f).testTag("gallery-kind-$kind-label"), textAlign = TextAlign.Center)
+        SettingsPillRow { for (kind in GalleryMediaKind.entries) {
+            SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-kind-$kind", settings.kind == kind) {
+                onSettings(settings.copy(kind = kind))
             }
-        }
+        } }
         GalleryToggle("newest", R.string.gallery_newest_first, settings.newestFirst) { onSettings(settings.copy(newestFirst = it)) }
         GalleryToggle("good", R.string.gallery_good_only, settings.goodTakesOnly) { onSettings(settings.copy(goodTakesOnly = it)) }
         GalleryToggle("slate", R.string.gallery_show_slate, settings.showSlate) { onSettings(settings.copy(showSlate = it)) }

@@ -66,6 +66,6 @@ class PhotoAspectSettingsTest {
     }
     @Test fun searchableSeparatelyFromDisplayGuides() {
         for (query in listOf("aspecto", "crop", "custom", "proporcion", "ancho", "alto"))
-            assertTrue("photo-aspect" in SettingsCatalog.search(query, SettingsCategory.CAPTURE) { "" })
+            assertTrue("photo-aspect" in SettingsCatalog.search(query, SettingsCategory.RECORDING) { "" })
     }
 }

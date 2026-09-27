@@ -53,6 +53,6 @@ class AccumulationSettingsTest {
     }
     @Test fun allNamedModesAndDurationAreSearchable() {
         for(query in listOf("light","water","stars","bulb","acumulacion","duracion","intervalo"))
-            assertTrue("accumulation" in SettingsCatalog.search(query,SettingsCategory.CAPTURE) {""})
+            assertTrue("accumulation" in SettingsCatalog.search(query,SettingsCategory.RECORDING) {""})
     }
 }

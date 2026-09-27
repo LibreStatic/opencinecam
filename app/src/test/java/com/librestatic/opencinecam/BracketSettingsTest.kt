@@ -47,6 +47,6 @@ class BracketSettingsTest {
     }
     @Test fun searchFindsCountStepAndSeparateExposurePolicy() {
         for(query in listOf("horquillado","bracket","paso","exposiciones","hdr"))
-            assertTrue("bracket" in SettingsCatalog.search(query,SettingsCategory.CAPTURE) {""})
+            assertTrue("bracket" in SettingsCatalog.search(query,SettingsCategory.RECORDING) {""})
     }
 }

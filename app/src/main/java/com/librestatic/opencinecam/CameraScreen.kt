@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam
 
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.BoxScope
@@ -2971,55 +2974,59 @@ internal fun SettingsContent(
     visibleIds: Set<String>,
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
 ) {
-    LazyColumn(
+    // Cards flow into two columns wherever each keeps a usable width (an unfolded foldable
+    // already qualifies); long forms and libraries always take the whole row.
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Adaptive(260.dp),
         modifier = Modifier.fillMaxSize().background(Graphite).testTag("settings-list"),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalItemSpacing = 12.dp,
     ) {
-        if ("media-sharing" in visibleIds) item(key = "media-sharing") {
+        if ("media-sharing" in visibleIds) settingsCard("media-sharing", fullLine = true) {
             MediaSharingSettingsControls(settings.mediaSharing, onSettings = { onSettingsChange(settings.copy(mediaSharing = it)) })
         }
-        if ("media-gallery" in visibleIds) item(key = "media-gallery") {
+        if ("media-gallery" in visibleIds) settingsCard("media-gallery") {
             GallerySettingsControls(settings.gallery) { onSettingsChange(settings.copy(gallery = it)) }
         }
-        if ("proxy" in visibleIds) item(key = "proxy") {
+        if ("proxy" in visibleIds) settingsCard("proxy", fullLine = true) {
             ProxySettingsControls(settings.proxy) { onSettingsChange(settings.copy(proxy = it)) }
         }
-        if ("playback" in visibleIds) item(key = "playback") {
+        if ("playback" in visibleIds) settingsCard("playback") {
             PlaybackSettingsControls(settings.playback) { onSettingsChange(settings.copy(playback = it)) }
         }
-        if ("capture-naming" in visibleIds) item(key = "capture-naming") {
+        if ("capture-naming" in visibleIds) settingsCard("capture-naming", fullLine = true) {
             CaptureNamingSettingsControls(settings, onSettingsChange)
         }
-        if ("geotagging" in visibleIds) item(key = "geotagging") {
+        if ("geotagging" in visibleIds) settingsCard("geotagging") {
             GeotaggingSettingsControls(settings, onSettingsChange)
         }
-        if ("production-slate" in visibleIds) item(key = "production-slate") {
+        if ("production-slate" in visibleIds) settingsCard("production-slate", fullLine = true) {
             ProductionSlateSettingsControls(state, settings, onSettingsChange)
         }
-        if ("project-timing" in visibleIds) item(key = "project-timing") {
+        if ("project-timing" in visibleIds) settingsCard("project-timing", fullLine = true) {
             ProjectTimingSettings(state, settings, onSettingsChange)
         }
-        if ("timelapse" in visibleIds) item(key = "timelapse") {
+        if ("timelapse" in visibleIds) settingsCard("timelapse", fullLine = true) {
             TimelapseSettings(state, settings, onSettingsChange)
         }
-        if ("operator-controls" in visibleIds) item(key = "operator-controls") {
+        if ("operator-controls" in visibleIds) settingsCard("operator-controls", fullLine = true) {
             OperatorSettings(state, settings, onSettingsChange)
         }
-        if ("webdav-queue" in visibleIds) item(key = "webdav-queue") { WebDavQueueSettingsSection() }
-        if ("presets" in visibleIds) item(key = "presets") {
+        if ("webdav-queue" in visibleIds) settingsCard("webdav-queue", fullLine = true) { WebDavQueueSettingsSection() }
+        if ("presets" in visibleIds) settingsCard("presets", fullLine = true) {
             PresetSettings(state, settings, onApplyPreset)
         }
-        if ("image-processing" in visibleIds) item(key = "image-processing") {
+        if ("image-processing" in visibleIds) settingsCard("image-processing", fullLine = true) {
             ImageProcessingSettings(state, settings, onSettingsChange)
         }
-        if ("professional-exposure" in visibleIds) item(key = "professional-exposure") {
+        if ("professional-exposure" in visibleIds) settingsCard("professional-exposure", fullLine = true) {
             ProfessionalExposureSettings(state, settings, onSettingsChange)
         }
-        if ("fold-displays" in visibleIds) item(key = "fold-displays") {
+        if ("fold-displays" in visibleIds) settingsCard("fold-displays", fullLine = true) {
             FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
         }
-        if ("layout" in visibleIds) item(key = "layout") {
+        if ("layout" in visibleIds) settingsCard("layout") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.mode_selector_style), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 14.sp)
@@ -3036,7 +3043,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("audio" in visibleIds) item(key = "audio") {
+        if ("audio" in visibleIds) settingsCard("audio") {
             SettingsToggleRow(
                 title = stringResource(R.string.audio_recording),
                 summary = if (audioPermissionGranted) {
@@ -3050,14 +3057,14 @@ internal fun SettingsContent(
             )
         }
         if (!audioPermissionGranted) {
-            if ("audio-permission" in visibleIds) item(key = "audio-permission") {
+            if ("audio-permission" in visibleIds) settingsCard("audio-permission") {
                 Button(
                     onClick = onRequestAudioPermission,
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
                 ) { Text(stringResource(R.string.grant_microphone)) }
             }
         }
-        if ("audio-format" in visibleIds) item(key = "audio-format") {
+        if ("audio-format" in visibleIds) settingsCard("audio-format", fullLine = true) {
             if (!audioPermissionGranted) {
                 Text(stringResource(R.string.audio_permission_summary), color = Muted, fontSize = 14.sp)
                 Button(onClick = onRequestAudioPermission) { Text(stringResource(R.string.grant_microphone)) }
@@ -3069,7 +3076,7 @@ internal fun SettingsContent(
                 )
             }
         }
-        if ("burst" in visibleIds) item(key = "burst") {
+        if ("burst" in visibleIds) settingsCard("burst") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.burst_capture_help), color = Color.LightGray)
                 Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = Color.White, fontWeight = FontWeight.Bold)
@@ -3081,7 +3088,7 @@ internal fun SettingsContent(
                 )
             }
         }
-        if ("bitrate" in visibleIds) item(key = "bitrate") {
+        if ("bitrate" in visibleIds) settingsCard("bitrate") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.video_bitrate), color = Color.White, fontWeight = FontWeight.Bold)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3097,7 +3104,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("geometry" in visibleIds) item(key = "geometry") {
+        if ("geometry" in visibleIds) settingsCard("geometry") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.recording_geometry), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 14.sp)
@@ -3120,7 +3127,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("anamorphic" in visibleIds) item(key = "anamorphic") {
+        if ("anamorphic" in visibleIds) settingsCard("anamorphic") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.anamorphic), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 14.sp)
@@ -3167,39 +3174,39 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("accumulation" in visibleIds) item(key = "accumulation") {
+        if ("accumulation" in visibleIds) settingsCard("accumulation", fullLine = true) {
             AccumulationSettings(state, settings, onSettingsChange)
         }
-        if ("bracket" in visibleIds) item(key = "bracket") {
+        if ("bracket" in visibleIds) settingsCard("bracket", fullLine = true) {
             BracketSettings(state, settings, onSettingsChange)
         }
-        if ("lut-library" in visibleIds) item(key = "lut-library") {
+        if ("lut-library" in visibleIds) settingsCard("lut-library", fullLine = true) {
             LutLibrarySettings(state)
         }
-        if ("monitoring-scopes" in visibleIds) item(key = "monitoring-scopes") {
+        if ("monitoring-scopes" in visibleIds) settingsCard("monitoring-scopes", fullLine = true) {
             MonitoringSettings(settings, onSettingsChange)
         }
-        if ("photo-aspect" in visibleIds) item(key = "photo-aspect") {
+        if ("photo-aspect" in visibleIds) settingsCard("photo-aspect", fullLine = true) {
             PhotoAspectSettings(state, settings, onSettingsChange)
         }
-        if ("photo-format" in visibleIds) item(key = "photo-format") {
+        if ("photo-format" in visibleIds) settingsCard("photo-format", fullLine = true) {
             PhotoFormatSettings(state, settings, onSettingsChange)
         }
-        if ("photo-flash" in visibleIds) item(key = "photo-flash") {
+        if ("photo-flash" in visibleIds) settingsCard("photo-flash", fullLine = true) {
             PhotoFlashSettings(state, settings, onSettingsChange)
         }
-        if ("torch" in visibleIds) item(key = "torch") {
+        if ("torch" in visibleIds) settingsCard("torch", fullLine = true) {
             TorchSettings(state, settings, onSettingsChange)
         }
-        if ("zebra" in visibleIds) item(key = "zebra") {
+        if ("zebra" in visibleIds) settingsCard("zebra") {
             SettingsToggleRow(title = stringResource(R.string.monitor_zebra), summary = null, checked = settings.zebraEnabled,
                 onCheckedChange = { onSettingsChange(settings.copy(zebraEnabled = it)) })
         }
-        if ("peaking" in visibleIds) item(key = "peaking") {
+        if ("peaking" in visibleIds) settingsCard("peaking") {
             SettingsToggleRow(title = stringResource(R.string.monitor_peaking), summary = null, checked = settings.peakingEnabled,
                 onCheckedChange = { onSettingsChange(settings.copy(peakingEnabled = it)) })
         }
-        if ("histogram" in visibleIds) item(key = "histogram") {
+        if ("histogram" in visibleIds) settingsCard("histogram") {
             SettingsToggleRow(
                 title = stringResource(R.string.histogram_default),
                 summary = null,
@@ -3207,7 +3214,7 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(histogramEnabled = it)) },
             )
         }
-        if ("grid" in visibleIds) item(key = "grid") {
+        if ("grid" in visibleIds) settingsCard("grid") {
             SettingsToggleRow(
                 title = stringResource(R.string.composition_grid),
                 summary = stringResource(R.string.composition_grid_summary),
@@ -3215,7 +3222,7 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(compositionGridEnabled = it)) },
             )
         }
-        if ("grid-mode" in visibleIds) item(key = "grid-mode") {
+        if ("grid-mode" in visibleIds) settingsCard("grid-mode") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.composition_grid_mode), color = Color.White, fontWeight = FontWeight.Bold)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3231,7 +3238,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("horizon" in visibleIds) item(key = "horizon") {
+        if ("horizon" in visibleIds) settingsCard("horizon") {
             SettingsToggleRow(
                 title = stringResource(R.string.horizon_level),
                 summary = stringResource(R.string.horizon_level_summary),
@@ -3239,7 +3246,7 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(horizonLevelEnabled = it)) },
             )
         }
-        if ("metering" in visibleIds) item(key = "metering") {
+        if ("metering" in visibleIds) settingsCard("metering") {
             SettingsToggleRow(
                 title = stringResource(R.string.tap_exposure_metering),
                 summary = stringResource(R.string.tap_exposure_metering_summary),
@@ -3247,7 +3254,7 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(tapExposureMeteringEnabled = it)) },
             )
         }
-        if ("assist" in visibleIds) item(key = "assist") {
+        if ("assist" in visibleIds) settingsCard("assist") {
             SettingsToggleRow(
                 title = stringResource(R.string.log_view_assist),
                 summary = stringResource(R.string.log_view_assist_summary),
@@ -3256,7 +3263,7 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(logViewAssistEnabled = it)) },
             )
         }
-        if ("focus-lock" in visibleIds) item(key = "focus-lock") {
+        if ("focus-lock" in visibleIds) settingsCard("focus-lock") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.af_lock_behavior), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 14.sp)
@@ -3274,7 +3281,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("zoom-lens" in visibleIds) item(key = "zoom-lens") {
+        if ("zoom-lens" in visibleIds) settingsCard("zoom-lens", fullLine = true) {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.zoom_lens_switch_mode), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
@@ -3293,10 +3300,10 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("timecode" in visibleIds) item(key = "timecode") {
+        if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
         }
-        if ("hardware" in visibleIds) item(key = "hardware") {
+        if ("hardware" in visibleIds) settingsCard("hardware", fullLine = true) {
             val descriptor = state.descriptor
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
@@ -3336,7 +3343,7 @@ internal fun SettingsContent(
                 Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
-        if ("about" in visibleIds) item(key = "about") {
+        if ("about" in visibleIds) settingsCard("about") {
             val aboutDescription = stringResource(R.string.about_settings_summary)
             Row(
                 modifier = Modifier
@@ -3520,27 +3527,25 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("slate-take"))
         if (take == null) Text(stringResource(R.string.production_slate_invalid_take), Modifier.testTag("slate-take-invalid"), color = Amber, fontSize = 14.sp)
         Text(stringResource(R.string.production_slate_location), color = Color.White)
-        for (location in ProductionSlateLocation.entries) {
-            OutlinedButton(onClick = { onSettingsChange(settings.copy(productionSlate = slate.copy(location = location))) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slate-location-$location").semantics { selected = slate.location == location }) {
-                Text(stringResource(when (location) {
-                    ProductionSlateLocation.UNSPECIFIED -> R.string.production_slate_unspecified
-                    ProductionSlateLocation.INTERIOR -> R.string.production_slate_interior
-                    ProductionSlateLocation.EXTERIOR -> R.string.production_slate_exterior
-                }), Modifier.weight(1f).testTag("slate-location-$location-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        SettingsPillRow { for (location in ProductionSlateLocation.entries) {
+            SettingsPill(stringResource(when (location) {
+                ProductionSlateLocation.UNSPECIFIED -> R.string.production_slate_unspecified
+                ProductionSlateLocation.INTERIOR -> R.string.production_slate_interior
+                ProductionSlateLocation.EXTERIOR -> R.string.production_slate_exterior
+            }), "slate-location-$location", slate.location == location) {
+                onSettingsChange(settings.copy(productionSlate = slate.copy(location = location)))
             }
-        }
+        } }
         Text(stringResource(R.string.production_slate_time), color = Color.White)
-        for (time in ProductionSlateTimeOfDay.entries) {
-            OutlinedButton(onClick = { onSettingsChange(settings.copy(productionSlate = slate.copy(timeOfDay = time))) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("slate-time-$time").semantics { selected = slate.timeOfDay == time }) {
-                Text(stringResource(when (time) {
-                    ProductionSlateTimeOfDay.UNSPECIFIED -> R.string.production_slate_unspecified
-                    ProductionSlateTimeOfDay.DAY -> R.string.production_slate_day
-                    ProductionSlateTimeOfDay.NIGHT -> R.string.production_slate_night
-                }), Modifier.weight(1f).testTag("slate-time-$time-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        SettingsPillRow { for (time in ProductionSlateTimeOfDay.entries) {
+            SettingsPill(stringResource(when (time) {
+                ProductionSlateTimeOfDay.UNSPECIFIED -> R.string.production_slate_unspecified
+                ProductionSlateTimeOfDay.DAY -> R.string.production_slate_day
+                ProductionSlateTimeOfDay.NIGHT -> R.string.production_slate_night
+            }), "slate-time-$time", slate.timeOfDay == time) {
+                onSettingsChange(settings.copy(productionSlate = slate.copy(timeOfDay = time)))
             }
-        }
+        } }
         val goodLabel = stringResource(R.string.production_slate_good)
         Text(goodLabel, Modifier.fillMaxWidth().testTag("slate-good-label"), color = Color.White)
         Switch(slate.goodTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(goodTake = it))) },
@@ -3574,12 +3579,11 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
         Text(visibleLabel, color = Color.White)
         Switch(options.visible, { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) },
             modifier = Modifier.heightIn(min = 48.dp).testTag("audio-meter-settings-visible").semantics { contentDescription = visibleLabel })
-        for (mode in AudioMeterMode.entries) {
-            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioMeter = options.copy(mode = mode))) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-meter-settings-mode-$mode").semantics { selected = options.mode == mode }) {
-                Text(stringResource(audioMeterModeLabel(mode)), Modifier.weight(1f).testTag("audio-meter-settings-mode-$mode-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        SettingsPillRow { for (mode in AudioMeterMode.entries) {
+            SettingsPill(stringResource(audioMeterModeLabel(mode)), "audio-meter-settings-mode-$mode", options.mode == mode) {
+                onSettingsChange(settings.copy(audioMeter = options.copy(mode = mode)))
             }
-        }
+        } }
         val referenceLabel = stringResource(R.string.audio_meter_reference, options.vuReferenceDbfs)
         Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = Color.White)
         val referenceInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -3691,27 +3695,26 @@ internal fun AudioListeningSettingsControls(
                 thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
             track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-listening-volume").semantics { contentDescription = volumeLabel })
-        for (output in AudioListeningOutput.entries) {
+        SettingsPillRow { for (output in AudioListeningOutput.entries) {
             val label = stringResource(when (output) {
                 AudioListeningOutput.WIRED_USB -> R.string.audio_listening_wired
                 AudioListeningOutput.BLUETOOTH -> R.string.audio_listening_bluetooth
                 AudioListeningOutput.SPEAKER -> R.string.audio_listening_speaker
             })
-            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListening = request.copy(output = output), audioListeningOutputDeviceId = null)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-output-${output.name}").semantics { selected = request.output == output }) {
-                Text(label, Modifier.weight(1f).testTag("audio-listening-output-${output.name}-label"), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            SettingsPill(label, "audio-listening-output-${output.name}", request.output == output) {
+                onSettingsChange(settings.copy(audioListening = request.copy(output = output), audioListeningOutputDeviceId = null))
             }
-        }
+        } }
         Text(stringResource(if (request.output == AudioListeningOutput.SPEAKER) R.string.audio_listening_speaker_warning else R.string.audio_listening_latency),
             Modifier.testTag("audio-listening-route-help"), color = Muted, fontSize = 14.sp)
-        OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = null)) },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-device-auto").semantics { selected = settings.audioListeningOutputDeviceId == null }) {
-            Text(stringResource(R.string.audio_listening_auto), Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        }
-        for (device in state.audioListeningOutputs.filter { it.output == request.output }) {
-            OutlinedButton(onClick = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = device.id)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-listening-device-${device.id}").semantics { selected = settings.audioListeningOutputDeviceId == device.id }) {
-                Text(device.name, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        SettingsPillRow {
+            SettingsPill(stringResource(R.string.audio_listening_auto), "audio-listening-device-auto", settings.audioListeningOutputDeviceId == null) {
+                onSettingsChange(settings.copy(audioListeningOutputDeviceId = null))
+            }
+            for (device in state.audioListeningOutputs.filter { it.output == request.output }) {
+                SettingsPill(device.name, "audio-listening-device-${device.id}", settings.audioListeningOutputDeviceId == device.id) {
+                    onSettingsChange(settings.copy(audioListeningOutputDeviceId = device.id))
+                }
             }
         }
         Text(stringResource(R.string.audio_listening_requested_device,
@@ -3803,32 +3806,11 @@ private fun AudioChoiceRow(
     selected: String,
     onSelected: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    // Options share one row of pills and wrap only when the card is too narrow for them.
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val columns = if (maxWidth < 600.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) 1 else 2
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                choices.chunked(columns).forEach { rowChoices ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        rowChoices.forEach { (value, label) ->
-                            TextButton(
-                                onClick = { onSelected(value) },
-                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                            ) {
-                                Text(
-                                    label,
-                                    color = if (selected == value) Amber else Color.White,
-                                    fontWeight = if (selected == value) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 14.sp,
-
-                                )
-                            }
-                        }
-                        repeat(columns - rowChoices.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-        }
+        val labels = choices.toMap()
+        SettingsChips(choices.map { it.first }, selected, label = { labels.getValue(it) }, onSelect = onSelected)
     }
 }
 

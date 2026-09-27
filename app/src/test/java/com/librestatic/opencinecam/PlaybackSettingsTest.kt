@@ -57,6 +57,6 @@ class PlaybackSettingsTest {
         })
         repository.update { it.copy(playback = requested.playback) }
         assertEquals(initial.copy(playback = requested.playback), repository.states.value)
-        assertTrue("playback" in SettingsCatalog.search("reproduccion visor", SettingsCategory.CAPTURE) { "" })
+        assertTrue("playback" in SettingsCatalog.search("reproduccion visor", SettingsCategory.MEDIA) { "" })
     }
 }

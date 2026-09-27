@@ -43,4 +43,11 @@
     <string name="monitoring_false_highlight">Falso color: límite de altas luces (%)</string>
     <string name="monitoring_false_clip">Falso color: límite de recorte de señal (%)</string>
     <string name="monitoring_false_order">Usá 0 ≤ negros &lt; sombras &lt; altas luces &lt; recorte ≤ 100. Las ediciones inválidas no se guardan.</string>
+    <string name="monitoring_group_instruments">Instrumentos</string>
+    <string name="monitoring_group_zebra">Cebra</string>
+    <string name="monitoring_group_peaking">Resaltado de foco</string>
+    <string name="monitoring_group_overlays">Superposiciones</string>
+    <string name="monitoring_group_false">Falso color</string>
+    <string name="monitoring_group_guides">Guías</string>
+    <string name="monitoring_group_analysis">Frecuencia de análisis</string>
 </resources>

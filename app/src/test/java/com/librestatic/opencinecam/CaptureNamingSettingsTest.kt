@@ -61,7 +61,7 @@ class CaptureNamingSettingsTest {
         assertEquals(before.productionSlate, live.productionSlate); assertEquals(before.audioInputDeviceId, live.audioInputDeviceId)
         assertEquals("OCC_00000000-0000-4000-8000-000000000000", captureFileStem("00000000-0000-4000-8000-000000000000", frozen))
         assertEquals(before.captureNaming, frozen.settings)
-        assertTrue("capture-naming" in SettingsCatalog.search("plantilla nombres", SettingsCategory.CAPTURE) { "" })
+        assertTrue("capture-naming" in SettingsCatalog.search("plantilla nombres", SettingsCategory.MEDIA) { "" })
     }
     @Test fun failedPreferenceWriteDoesNotPublishNewCaptureNaming() {
         val before = CameraSettings()

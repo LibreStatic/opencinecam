@@ -61,6 +61,6 @@ class PhotoFlashSettingsTest {
     }
     @Test fun photoFlashIsSearchableInCaptureCategory() {
         for (query in listOf("photo", "pulso", "precaptura"))
-            assertTrue("photo-flash" in SettingsCatalog.search(query, SettingsCategory.CAPTURE) { "" })
+            assertTrue("photo-flash" in SettingsCatalog.search(query, SettingsCategory.RECORDING) { "" })
     }
 }

@@ -60,7 +60,7 @@ class GeotaggingSettingsTest {
 
     @Test fun captureSearchFindsEnglishSpanishAndAccentedAliases() {
         for (query in listOf("geolocation", "geotagging", "GPS", "ubicación", "localizacion", "coordenadas", "approximate", "privacidad")) {
-            assertTrue(query, "geotagging" in SettingsCatalog.search(query, SettingsCategory.CAPTURE) { "" })
+            assertTrue(query, "geotagging" in SettingsCatalog.search(query, SettingsCategory.MEDIA) { "" })
         }
         assertFalse("geotagging" in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
         assertEquals(1, SettingsCatalog.entries.count { it.id == "geotagging" })

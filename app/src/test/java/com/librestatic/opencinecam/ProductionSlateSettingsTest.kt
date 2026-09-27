@@ -86,8 +86,8 @@ class ProductionSlateSettingsTest {
         assertEquals(next.audioMeter, effective.audioMeter)
         assertEquals(listOf("slate-good-take", "slate-scene", "slate-take-number"),
             CameraPresetCodec.differences(current, next).filter { it.startsWith("slate-") }.map { it.substringBefore(":") }.sorted())
-        assertTrue("production-slate" in SettingsCatalog.search("claqueta", SettingsCategory.CAPTURE) { "" })
-        assertTrue("production-slate" in SettingsCatalog.search("reel", SettingsCategory.CAPTURE) { "" })
+        assertTrue("production-slate" in SettingsCatalog.search("claqueta", SettingsCategory.MEDIA) { "" })
+        assertTrue("production-slate" in SettingsCatalog.search("reel", SettingsCategory.MEDIA) { "" })
     }
     @Test fun failedPreferenceWriteDoesNotPublishSlateAndReloadDoesNotIncrement() {
         var fail = false

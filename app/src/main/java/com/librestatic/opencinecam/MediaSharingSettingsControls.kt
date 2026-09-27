@@ -19,14 +19,14 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.media_sharing_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.media_share_help), Modifier.fillMaxWidth().testTag("media-share-help"))
-        for (content in MediaShareContent.entries) {
+        SettingsPillRow { for (content in MediaShareContent.entries) {
             ShareChoice("content-$content", when (content) {
                 MediaShareContent.ORIGINALS_AND_METADATA -> R.string.media_share_content_both
                 MediaShareContent.ORIGINALS_ONLY -> R.string.media_share_content_originals
                 MediaShareContent.METADATA_ONLY -> R.string.media_share_content_metadata
             }, settings.content == content, enabled) { onSettings(settings.copy(content = content)) }
-        }
-        for (metadata in MediaShareMetadata.entries) {
+        } }
+        SettingsPillRow { for (metadata in MediaShareMetadata.entries) {
             ShareChoice("metadata-$metadata", when (metadata) {
                 MediaShareMetadata.PRODUCTION -> R.string.media_share_production
                 MediaShareMetadata.TECHNICAL -> R.string.media_share_technical
@@ -34,7 +34,7 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
             }, settings.metadata == metadata, enabled && settings.content != MediaShareContent.ORIGINALS_ONLY) {
                 onSettings(settings.copy(metadata = metadata))
             }
-        }
+        } }
         val lutLabel = stringResource(R.string.media_share_lut)
         Text(lutLabel, Modifier.fillMaxWidth().testTag("media-share-lut-label"))
         Switch(settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
@@ -46,8 +46,5 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
 
 @Composable
 private fun ShareChoice(tag: String, label: Int, selected: Boolean, enabled: Boolean, action: () -> Unit) {
-    OutlinedButton(action, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-        .testTag("media-share-$tag").semantics { this.selected = selected }) {
-        Text(stringResource(label), Modifier.weight(1f).testTag("media-share-$tag-label"), textAlign = TextAlign.Center)
-    }
+    SettingsPill(stringResource(label), "media-share-$tag", selected, enabled, onClick = action)
 }

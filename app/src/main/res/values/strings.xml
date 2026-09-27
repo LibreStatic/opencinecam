@@ -645,4 +645,8 @@
     <string name="settings_summary_displays">Subject display, self-recording</string>
     <string name="settings_summary_transfers">Uploads and server</string>
     <string name="settings_summary_diagnostics">Version, licenses, logs</string>
+    <string name="settings_help_show">Show help</string>
+    <string name="settings_help_hide">Hide help</string>
+    <string name="settings_category_media">Media and files</string>
+    <string name="settings_summary_media">Sharing, gallery, proxies, naming</string>
 </resources>

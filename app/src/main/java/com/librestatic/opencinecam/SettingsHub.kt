@@ -66,7 +66,7 @@ internal fun SettingsScreen(
             Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(vertical = 16.dp).then(if (wide) Modifier else Modifier.weight(1f)),
                 fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
             if (wide) search(Modifier.weight(1f).widthIn(max = 520.dp))
-            if (category != null || query.isNotEmpty()) TextButton(onClick = { query = ""; selectedName = null }) {
+            if (!wide && (category != null || query.isNotEmpty())) TextButton(onClick = { query = ""; selectedName = null }) {
                 Text(stringResource(R.string.settings_categories))
             }
         }
@@ -131,6 +131,7 @@ private val SettingsCategory.icon: CineIcon
         SettingsCategory.RECORDING -> CineIcon.VIDEO
         SettingsCategory.MONITORING -> CineIcon.MONITORING
         SettingsCategory.AUDIO -> CineIcon.AUDIO
+        SettingsCategory.MEDIA -> CineIcon.MEDIA
         SettingsCategory.CONTROLS -> CineIcon.CONTROLS
         SettingsCategory.DISPLAYS -> CineIcon.DISPLAYS
         SettingsCategory.TRANSFERS -> CineIcon.CLOUD

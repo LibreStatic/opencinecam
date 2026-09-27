@@ -85,7 +85,7 @@ class ProxySettingsTest {
 
     @Test fun searchFindsBilingualCaptureEntry() {
         for (query in listOf("proxy", "proxies", "edición", "resolution", "resolucion", "bitrate", "manual")) {
-            assertTrue(query, "proxy" in SettingsCatalog.search(query, SettingsCategory.CAPTURE) { "" })
+            assertTrue(query, "proxy" in SettingsCatalog.search(query, SettingsCategory.MEDIA) { "" })
         }
         assertFalse("proxy" in SettingsCatalog.search("proxy", SettingsCategory.AUDIO) { "" })
         assertEquals(1, SettingsCatalog.entries.count { it.id == "proxy" })

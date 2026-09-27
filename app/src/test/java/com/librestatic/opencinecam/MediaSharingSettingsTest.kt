@@ -54,7 +54,7 @@ class MediaSharingSettingsTest {
         })
         assertThrows(IllegalStateException::class.java) { repository.set(next) }
         assertEquals(before, repository.states.value)
-        assertTrue("media-sharing" in SettingsCatalog.search("compartir", SettingsCategory.CAPTURE) { "" })
+        assertTrue("media-sharing" in SettingsCatalog.search("compartir", SettingsCategory.MEDIA) { "" })
     }
     @Test fun metadataEligibilityNeverSilentlyFallsBackForAnyContentOrRelationship() {
         val original = LocalMediaArtifact("content://media/external_primary/images/media/1", "image.jpg", "image/jpeg", 10, 1)

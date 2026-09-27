@@ -34,13 +34,13 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
         Text(stringResource(R.string.proxy_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.proxy_settings_help), Modifier.fillMaxWidth().testTag("proxy-settings-help"))
         Text(stringResource(R.string.proxy_settings_edge), Modifier.fillMaxWidth().testTag("proxy-settings-edge-label"))
-        Column(Modifier.fillMaxWidth().selectableGroup()) {
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (edge in listOf(640, 1280, 1920)) ProxySettingOption(
                 "edge-$edge", stringResource(R.string.proxy_settings_edge_value, edge), settings.maxLongEdge == edge,
             ) { if (settings.maxLongEdge != edge) onSettings(settings.copy(maxLongEdge = edge)) }
         }
         Text(stringResource(R.string.proxy_settings_bitrate), Modifier.fillMaxWidth().testTag("proxy-settings-bitrate-label"))
-        Column(Modifier.fillMaxWidth().selectableGroup()) {
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (bitrate in listOf(1, 2, 3, 5, 8)) ProxySettingOption(
                 "bitrate-$bitrate", stringResource(R.string.proxy_settings_bitrate_value, bitrate), settings.videoBitrateMbps == bitrate,
             ) { if (settings.videoBitrateMbps != bitrate) onSettings(settings.copy(videoBitrateMbps = bitrate)) }
@@ -54,13 +54,13 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
             Text(stringResource(R.string.proxy_policy_charging), Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 8.dp)
                 .testTag("proxy-settings-charging-label"))
         }
-        Column(Modifier.fillMaxWidth().selectableGroup()) {
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (level in listOf(0, 10, 20, 30, 50)) ProxySettingOption("battery-$level",
                 stringResource(R.string.proxy_policy_battery, level), policy.minimumBatteryPercent == level) {
                 update { it.copy(minimumBatteryPercent = level) }
             }
         }
-        Column(Modifier.fillMaxWidth().selectableGroup()) {
+        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (space in listOf(64, 256, 512, 1024, 2048)) ProxySettingOption("space-$space",
                 stringResource(R.string.proxy_policy_space, space), policy.reserveSpaceMiB == space) {
                 update { it.copy(reserveSpaceMiB = space) }
@@ -73,11 +73,5 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
 
 @Composable
 private fun ProxySettingOption(tag: String, label: String, selected: Boolean, onSelect: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-        .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
-        .testTag("proxy-settings-$tag"), verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = null)
-        Text(label, Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 8.dp)
-            .testTag("proxy-settings-$tag-label"))
-    }
+    SettingsPill(label, "proxy-settings-$tag", selected, onClick = onSelect)
 }

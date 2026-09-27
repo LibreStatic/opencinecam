@@ -43,4 +43,11 @@
     <string name="monitoring_false_highlight">False color: highlight boundary (%)</string>
     <string name="monitoring_false_clip">False color: clipping boundary (%)</string>
     <string name="monitoring_false_order">Use 0 ≤ black &lt; shadow &lt; highlight &lt; clipping ≤ 100. Invalid edits are not saved.</string>
+    <string name="monitoring_group_instruments">Instruments</string>
+    <string name="monitoring_group_zebra">Zebra</string>
+    <string name="monitoring_group_peaking">Focus peaking</string>
+    <string name="monitoring_group_overlays">Overlays</string>
+    <string name="monitoring_group_false">False color</string>
+    <string name="monitoring_group_guides">Guides</string>
+    <string name="monitoring_group_analysis">Analysis rate</string>
 </resources>
