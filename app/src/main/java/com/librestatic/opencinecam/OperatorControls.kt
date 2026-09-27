@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -145,6 +146,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
         on -> OperatorActiveAccent
         else -> Color(0xFF49535A)
     }
+    val actionName = "F${index + 1} · ${stringResource(action.labelResource())}"
     val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
     val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
         else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
@@ -160,16 +162,18 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
                 onLongClick = { Toast.makeText(context, help, Toast.LENGTH_LONG).show() },
             )
             .semantics {
+                contentDescription = actionName
                 if (stateWord != null) stateDescription = stateWord
                 if (!available) disabled()
             }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .widthIn(min = 48.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
             .testTag("operator-button-${index + 1}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OperatorActionIcon(action, tint = content, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("F${index + 1} · ${stringResource(action.labelResource())}", color = content, fontSize = 14.sp)
+        // Compact chip: symbol and state only, so the row costs one line of viewfinder. The name
+        // stays in the semantics and in the long-press help.
+        OperatorActionIcon(action, tint = content, modifier = Modifier.size(22.dp))
         if (latched != null) {
             Spacer(Modifier.width(8.dp))
             Text(

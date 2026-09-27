@@ -3,6 +3,12 @@
 
 package com.librestatic.opencinecam
 
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
@@ -82,6 +88,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -183,6 +190,7 @@ private val Amber = Color(0xFFFFB300)
 private val VerifiedCyan = Color(0xFF45D6E8)
 private val RecordRed = Color(0xFFE23A3A)
 private val Muted = Color(0xFF9CA6AA)
+private val OkGreen = Color(0xFF4BD28A)
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
 private enum class SettingsPage { MAIN, ABOUT }
@@ -415,7 +423,6 @@ internal fun CaptureSurface(
 
         val descriptor = state.descriptor
         val landscape = widthPx > heightPx
-        val compactPortrait = captureWindowProfile(maxWidth.value, maxHeight.value) == CaptureWindowProfile.COMPACT_PORTRAIT
         val previewStreamSize = descriptor?.let {
             if (state.selectedMode == CaptureMode.LOG) {
                 state.activeLogProfile?.size ?: it.preferredLogProfile?.size ?: it.previewSize
@@ -460,11 +467,9 @@ internal fun CaptureSurface(
                 showGrid = showGrid,
                 gridMode = gridMode,
                 showHorizon = showHorizon,
-                reserveAudioMeterSpace = settings.audioEnabled &&
-                    state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG),
-                reserveZoomChromeSpace = state.zoomSupported,
-                compactPortrait = compactPortrait,
-                landscape = landscape,
+                // The capture chrome stacks the histogram with the zoom and audio instruments;
+                // only the minimal self-recording chrome leaves it to the overlay.
+                drawHistogram = state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls,
                 // aspectRatio must receive the unconstrained Box bounds. Applying fillMaxWidth
                 // first can force a too-wide landscape view and make Compose violate the ratio
                 // when the remaining height is smaller than width / ratio.
@@ -528,41 +533,105 @@ internal fun CaptureSurface(
             )
         }
         if (state.phase == CameraUiPhase.ERROR) {
-            Column(
-                modifier = Modifier.align(Alignment.Center).background(Panel, RoundedCornerShape(12.dp)).padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(stringResource(R.string.camera_error), color = RecordRed, fontWeight = FontWeight.Bold)
-                Text(state.message.orEmpty(), color = Color.White)
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { binder?.recoverPreview(widthPx, heightPx) }) { Text(stringResource(R.string.retry)) }
-            }
+            CameraErrorSheet(state) { binder?.recoverPreview(widthPx, heightPx) }
         }
         }
     }
 }
 
 /**
- * A monitoring chip. With [cycleState] null it is an on/off switch; otherwise it is a button that
- * advances a mode, announced with its current value instead of a permanent "selected".
+ * Operational error sheet. The scrim swallows input so nothing behind it, REC included, reads as
+ * actionable; the operator sees the cause in plain words and can open the raw technical text,
+ * which is never shown by default on the shooting surface.
  */
 @Composable
-private fun MonitorToggle(label: String, description: String, enabled: Boolean, onClick: () -> Unit, cycleState: String? = null) {
+private fun BoxScope.CameraErrorSheet(state: CameraUiState, onRetry: () -> Unit) {
+    var showDetails by remember(state.message, state.errorCode) { mutableStateOf(false) }
+    val raw = state.message.orEmpty()
     Box(
         Modifier
-            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .matchParentSize()
+            .background(Color.Black.copy(alpha = .72f))
+            .pointerInput(Unit) { detectTapGestures { } }
+            .testTag("camera-error-scrim"),
+    )
+    Column(
+        Modifier
+            .align(Alignment.BottomCenter)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(12.dp)
+            .widthIn(max = 420.dp)
+            .fillMaxWidth()
+            .background(Color(0xFF12171A), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFF344047), RoundedCornerShape(12.dp))
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+            .testTag("camera-error-sheet"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CineGlyph(CineIcon.WARNING, RecordRed, Modifier.size(32.dp))
+        Text(stringResource(R.string.camera_error), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(operatorErrorText(raw), color = Color(0xFFAAB4BA), fontSize = 14.sp, textAlign = TextAlign.Center)
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) { Text(stringResource(R.string.retry), fontWeight = FontWeight.Bold) }
+        if (raw.isNotBlank() || state.errorCode != null) {
+            TextButton(onClick = { showDetails = !showDetails }, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(if (showDetails) R.string.error_details_hide else R.string.error_details_show), color = VerifiedCyan)
+            }
+            if (showDetails) SelectionContainer {
+                Text(
+                    listOfNotNull(state.errorCode, raw.takeIf { it.isNotBlank() }).joinToString("\n"),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.fillMaxWidth().testTag("camera-error-details"),
+                )
+            }
+        }
+    }
+}
+
+/** Drops the exception class a failure message may carry, keeping the sentence the operator can act on. */
+internal fun operatorErrorText(message: String): String =
+    message.replace(Regex("""^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Exception|Error)\s*:\s*"""), "").trim()
+        .ifEmpty { message.trim() }
+
+/**
+ * A monitoring chip: symbol plus a short visible label, so no tool has to be memorised by letter.
+ * With [cycleState] null it is an on/off switch whose ON state carries a check mark as well as the
+ * amber container; otherwise it is a button that advances a mode and shows that mode as its label.
+ */
+@Composable
+private fun MonitorToggle(icon: CineIcon, label: String, description: String, enabled: Boolean, onClick: () -> Unit,
+    cycleState: String? = null, modifier: Modifier = Modifier) {
+    val on = enabled && cycleState == null
+    val content = if (on) Color.Black else Color.White
+    Row(
+        modifier
+            .heightIn(min = 48.dp)
             .semantics {
                 contentDescription = description
                 if (cycleState != null) stateDescription = cycleState
             }
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (enabled) Amber else Color(0xFF303638))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (on) Amber else Color(0xFF1B2226))
+            .border(1.dp, if (on) Amber else Color(0xFF344047), RoundedCornerShape(8.dp))
             .then(
                 if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = onClick)
                 else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { onClick() })
-            ),
-        contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (enabled) Color.Black else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CineGlyph(icon, content, Modifier.size(20.dp))
+        Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (on) CineGlyph(CineIcon.CHECK, content, Modifier.size(16.dp))
+    }
 }
 
 @Composable
@@ -582,25 +651,26 @@ private fun MonitoringToggleGrid(
     onCycleGridMode: () -> Unit,
     onToggleHorizon: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
+    val histogramModeTitle = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma)
+    val gridModeTitle = stringResource(compositionGridModeTitle(gridMode))
+    // Pairs share a row: each tool sits beside its mode, and the level closes the grid.
+    val cell = Modifier.width(148.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle("Z", stringResource(R.string.monitor_zebra), zebra, onToggleZebra)
-            MonitorToggle("P", stringResource(R.string.monitor_peaking), peaking, onTogglePeaking)
-            MonitorToggle("H", stringResource(R.string.monitor_histogram), histogram, onToggleHistogram)
-            MonitorToggle(
-                if (histogramMode == HistogramMode.RGB) "RGB" else "Y",
-                stringResource(R.string.monitor_histogram_mode),
-                true,
-                onCycleHistogramMode,
-                cycleState = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma),
-            )
+            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = cell)
+            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = cell)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle("G", stringResource(R.string.monitor_grid), showGrid, onToggleGrid)
-            MonitorToggle(gridModeLabel(gridMode), stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
-                cycleState = stringResource(compositionGridModeTitle(gridMode)))
-            MonitorToggle("L", stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon)
+            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = cell)
+            MonitorToggle(CineIcon.HISTOGRAM_MODE, histogramModeTitle, stringResource(R.string.monitor_histogram_mode), true, onCycleHistogramMode,
+                cycleState = histogramModeTitle, modifier = cell)
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = cell)
+            MonitorToggle(CineIcon.GRID_MODE, gridModeTitle, stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
+                cycleState = gridModeTitle, modifier = cell)
+        }
+        MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = cell)
     }
 }
 
@@ -618,10 +688,7 @@ private fun MonitoringOverlay(
     showGrid: Boolean,
     gridMode: CompositionGridMode,
     showHorizon: Boolean,
-    reserveAudioMeterSpace: Boolean,
-    reserveZoomChromeSpace: Boolean,
-    compactPortrait: Boolean,
-    landscape: Boolean,
+    drawHistogram: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -637,15 +704,7 @@ private fun MonitoringOverlay(
     DisposableEffect(horizonSensorAvailable) {
         onDispose { horizonSensorAvailable?.close() }
     }
-    var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(250)
-            analysisClockMs = android.os.SystemClock.elapsedRealtime()
-        }
-    }
-    val analysisFresh = state.scopeAnalysisLive(monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options)) &&
-        (state.monitoringScopes == null || state.monitoringScopes.options == options)
+    val analysisFresh = rememberScopeAnalysisFresh(state, options)
     BoxWithConstraints(modifier) {
         ProfessionalScopeImage(state, options, analysisFresh, displayRotationProvider() * 90, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
         Canvas(Modifier.matchParentSize()) {
@@ -722,65 +781,58 @@ private fun MonitoringOverlay(
                     .padding(horizontal = 8.dp, vertical = 4.dp).testTag("horizon-level-unavailable"),
             )
         }
-        if (showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
-            val graphWidth = maxWidth * .28f
-            val graphHeight = maxHeight * .09f
-            // The histogram belongs at the top of the usable preview. In landscape the
-            // preview reaches behind the 56 dp top bar, so clear that bar even without audio;
-            // reserve the larger HUD footprint only when the microphone meter is enabled.
-            val desiredTop = maxOf(
-                if (landscape) 64.dp else 12.dp,
-                when {
-                    reserveAudioMeterSpace && landscape -> 140.dp
-                    reserveAudioMeterSpace -> 92.dp
-                    else -> 0.dp
-                },
-                when {
-                    !reserveZoomChromeSpace -> 0.dp
-                    compactPortrait -> 128.dp
-                    landscape -> 124.dp
-                    else -> 184.dp
-                },
-            )
-            val graphTop = desiredTop.coerceAtMost((maxHeight - graphHeight - 12.dp).coerceAtLeast(12.dp))
-            Canvas(
-                Modifier
-                    .offset(x = 12.dp, y = graphTop)
-                    .width(graphWidth)
-                    .height(graphHeight)
-                    .testTag("histogram-graph"),
-            ) {
-                drawRect(Color.Black.copy(alpha = .55f))
-                if (histogramMode == HistogramMode.LUMA) {
-                    val peak = state.histogram.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
-                    state.histogram.forEachIndexed { index, value ->
-                        val width = size.width / state.histogram.size
-                        val height = size.height * value / peak
-                        drawRect(options.lumaColor.composeColor().copy(alpha = options.opacityPercent / 100f), androidx.compose.ui.geometry.Offset(index * width, size.height - height), androidx.compose.ui.geometry.Size((width - 1f).coerceAtLeast(.5f), height))
-                    }
-                } else {
-                    val channels = listOf(
-                        state.redHistogram to Color.Red,
-                        state.greenHistogram to Color.Green,
-                        state.blueHistogram to Color.Blue,
-                    ).filter { it.first.isNotEmpty() }
-                    val peak = channels.flatMap { it.first }.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
-                    channels.forEach { (values, color) ->
-                        val path = Path()
-                        values.forEachIndexed { index, value ->
-                            val x = index * size.width / (values.size - 1).coerceAtLeast(1)
-                            val y = size.height - size.height * value / peak
-                            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                        }
-                        drawPath(path, color.copy(alpha = options.opacityPercent / 100f), style = Stroke(width = 1.5.dp.toPx()))
-                    }
-                }
-            }
+        if (drawHistogram && showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
+            HistogramGraph(state, options, histogramMode, Modifier.padding(start = 12.dp, top = 12.dp).width(maxWidth * .28f).height(maxHeight * .09f))
         }
         ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
         // The overlay spans the whole screen: clear the top bar and the AE/AF lock toggles
         // (top end, from 62 dp) and keep right of the zoom column (top start).
         AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 116.dp, start = 88.dp, end = 12.dp))
+    }
+}
+
+/** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
+@Composable
+private fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
+    var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(250)
+            analysisClockMs = android.os.SystemClock.elapsedRealtime()
+        }
+    }
+    return state.scopeAnalysisLive(monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options)) &&
+        (state.monitoringScopes == null || state.monitoringScopes.options == options)
+}
+
+@Composable
+private fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier) {
+    Canvas(modifier.testTag("histogram-graph")) {
+        drawRect(Color.Black.copy(alpha = .55f))
+        if (histogramMode == HistogramMode.LUMA) {
+            val peak = state.histogram.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
+            state.histogram.forEachIndexed { index, value ->
+                val width = size.width / state.histogram.size
+                val height = size.height * value / peak
+                drawRect(options.lumaColor.composeColor().copy(alpha = options.opacityPercent / 100f), androidx.compose.ui.geometry.Offset(index * width, size.height - height), androidx.compose.ui.geometry.Size((width - 1f).coerceAtLeast(.5f), height))
+            }
+        } else {
+            val channels = listOf(
+                state.redHistogram to Color.Red,
+                state.greenHistogram to Color.Green,
+                state.blueHistogram to Color.Blue,
+            ).filter { it.first.isNotEmpty() }
+            val peak = channels.flatMap { it.first }.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
+            channels.forEach { (values, color) ->
+                val path = Path()
+                values.forEachIndexed { index, value ->
+                    val x = index * size.width / (values.size - 1).coerceAtLeast(1)
+                    val y = size.height - size.height * value / peak
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(path, color.copy(alpha = options.opacityPercent / 100f), style = Stroke(width = 1.5.dp.toPx()))
+            }
+        }
     }
 }
 
@@ -1092,34 +1144,6 @@ internal fun AdaptiveCaptureChrome(
         // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
         // visible during recording even when the rest of the chrome hides.
         if (state.zoomSupported) {
-            if (chromeVisible) {
-                val anchorTop = if (compactPortrait) 112.dp else 62.dp
-                ZoomAnchorBar(
-                    anchors = state.opticalAnchors,
-                    activeRatio = state.zoomEffectiveRatio ?: state.zoomRatio,
-                    onSelect = { ratio -> binder?.selectZoomAnchor(ratio) },
-                    modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = anchorTop),
-                )
-                val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
-                val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
-                Box(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 12.dp, top = anchorTop + 56.dp)
-                        .testTag("zoom-ratio")
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Panel)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        "%.1f×".format(ratioValue) +
-                            if (isDigital) " " + stringResource(R.string.zoom_digital) else "",
-                        color = Amber,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
             ZoomRocker(
                 onStep = { offset, deltaSeconds ->
                     val speed = ZoomMath.rockerSpeedOctavesPerSecond(offset)
@@ -1167,13 +1191,34 @@ internal fun AdaptiveCaptureChrome(
                 onSettingsChanged = onSettingsChanged,
                 modifier = Modifier.align(Alignment.TopCenter),
             )
-            PreviewStatusHud(
-                state = state,
-                binder = binder,
-                settings = settings,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 62.dp),
-            )
         }
+
+        // Every viewfinder instrument lives in one measured stack, so the LOG badge, zoom,
+        // microphone meter and histogram can never land on top of each other. It starts below
+        // the top bar (or the recording HUD) and stops above the measured control deck.
+        val recordingHudTop = when {
+            !chromeVisible -> 0.dp
+            state.selectedMode == CaptureMode.LOG -> 82.dp
+            else -> 56.dp
+        }
+        InstrumentStack(
+            state = state,
+            binder = binder,
+            settings = settings,
+            chromeVisible = chromeVisible,
+            recording = recording,
+            histogram = histogram,
+            histogramMode = histogramMode,
+            horizontal = landscape,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    start = 12.dp,
+                    end = 64.dp,
+                    top = if (recording) recordingHudTop + 60.dp else 62.dp,
+                    bottom = if (chromeVisible) controlDeckHeight + 8.dp else 8.dp,
+                ),
+        )
 
         AnimatedVisibility(
             visible = chromeVisible,
@@ -1209,11 +1254,6 @@ internal fun AdaptiveCaptureChrome(
         }
 
         if (recording) {
-            val recordingHudTop = when {
-                !chromeVisible -> 0.dp
-                state.selectedMode == CaptureMode.LOG -> 82.dp
-                else -> 56.dp
-            }
             RecordingOverlay(
                 state = state,
                 binder = binder,
@@ -1317,23 +1357,23 @@ private fun CaptureTopBar(
         )
         ThermalHudChip()
         if (state.cameras.size > 1) {
-            TopAction("↻", switchDescription) {
+            TopAction(CineIcon.SWITCH_CAMERA, switchDescription) {
                 val index = state.cameras.indexOfFirst { it.cameraId == state.selectedCameraId }
                 binder?.selectCamera(state.cameras[(index + 1).mod(state.cameras.size)].cameraId)
             }
         }
         if (fold.operation == DisplayOperation.TRANSFER && fold.phase == DisplaySessionPhase.ACTIVE) {
-            TopAction("↩", stringResource(R.string.fold_return)) { foldCoordinator?.closeSession() }
+            TopAction(CineIcon.RETURN, stringResource(R.string.fold_return)) { foldCoordinator?.closeSession() }
         } else {
-            TopAction("▣", stringResource(R.string.fold_settings_title)) { showDisplays = true }
+            TopAction(CineIcon.DISPLAYS, stringResource(R.string.fold_settings_title)) { showDisplays = true }
         }
-        TopAction("ϟ", stringResource(R.string.flash_torch)) { showLight = true }
-        TopAction("⚙", stringResource(R.string.settings_tab), onOpenSettings)
+        TopAction(CineIcon.TORCH, stringResource(R.string.flash_torch)) { showLight = true }
+        TopAction(CineIcon.SETTINGS, stringResource(R.string.settings_tab), onOpenSettings)
     }
 }
 
 @Composable
-private fun TopAction(glyph: String, description: String, onClick: () -> Unit) {
+private fun TopAction(icon: CineIcon, description: String, onClick: () -> Unit) {
     Box(
         Modifier
             .size(48.dp)
@@ -1342,7 +1382,7 @@ private fun TopAction(glyph: String, description: String, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        CineGlyph(icon, Color.White, Modifier.size(24.dp))
     }
 }
 
@@ -1368,7 +1408,7 @@ private fun MediaThumbnailAction(onClick: () -> Unit) {
     ) {
         thumbnail?.let {
             Image(it.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize())
-        } ?: Text("▣", color = Color.White, fontSize = 18.sp)
+        } ?: CineGlyph(CineIcon.MEDIA, Color.White, Modifier.size(24.dp))
     }
 }
 
@@ -1404,36 +1444,90 @@ internal fun ocLogQualificationLabel(profile: Camera2LogProfile?): String =
     if (profile?.isVerified == true) "VERIFIED" else "EXPERIMENTAL"
 
 @Composable
-private fun PreviewStatusHud(
+private fun InstrumentStack(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
+    chromeVisible: Boolean,
+    recording: Boolean,
+    histogram: Boolean,
+    histogramMode: HistogramMode,
+    horizontal: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val showAudio = settings.audioEnabled && settings.audioMeter.visible && state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG)
-    val showLogSource = state.selectedMode == CaptureMode.LOG
-    if (!showAudio && !showLogSource) return
+    val analysisFresh = rememberScopeAnalysisFresh(state, settings.monitoring)
+    // While recording, the recording HUD carries its own meter.
+    val showAudio = chromeVisible && !recording && settings.audioEnabled && settings.audioMeter.visible &&
+        state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG)
+    val showLogSource = chromeVisible && state.selectedMode == CaptureMode.LOG
+    val showZoom = chromeVisible && state.zoomSupported
+    val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
+    if (!showAudio && !showLogSource && !showZoom && !showHistogram) return
+    BoxWithConstraints(modifier) {
+        val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
+        FittingStack(horizontal, spacing = 8.dp) {
+            if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
+            if (showZoom) ZoomReadout(state, binder)
+            if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
+            if (showHistogram) HistogramGraph(state, settings.monitoring, histogramMode,
+                Modifier.width(histogramWidth).height(histogramWidth * .32f))
+        }
+    }
+}
 
-    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
-        // A centered badge and a start-aligned meter overlap on phone-width portrait
-        // displays. Preserve the centered landscape treatment only when both controls fit;
-        // otherwise let the badge consume the measured space remaining beside the meter.
-        if (showAudio && showLogSource && maxWidth < 600.dp) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
-                LogSourceBadge(
-                    state,
-                    settings,
-                    Modifier.weight(1f).wrapContentWidth(Alignment.End),
-                )
+/**
+ * Lays instruments out in a row or a column and leaves out any that would not fit whole in the
+ * space left above the deck. A half-drawn meter reads as a real level, so a clipped instrument is
+ * worse than an absent one.
+ */
+@Composable
+private fun FittingStack(horizontal: Boolean, spacing: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+    Layout(content) { measurables, constraints ->
+        val gap = spacing.roundToPx()
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val placeables = measurables.map { it.measure(loose) }
+        val positions = ArrayList<Pair<androidx.compose.ui.layout.Placeable, IntOffset>>()
+        var cursor = 0
+        placeables.forEach { item ->
+            val main = if (horizontal) item.width else item.height
+            val cross = if (horizontal) item.height else item.width
+            val mainLimit = if (horizontal) constraints.maxWidth else constraints.maxHeight
+            val crossLimit = if (horizontal) constraints.maxHeight else constraints.maxWidth
+            if (cursor + main <= mainLimit && cross <= crossLimit) {
+                positions += item to if (horizontal) IntOffset(cursor, 0) else IntOffset(0, cursor)
+                cursor += main + gap
             }
-        } else {
-            if (showAudio) AudioMeterHud(state, binder, Modifier.align(Alignment.TopStart), meterSettings = settings.audioMeter)
-            if (showLogSource) LogSourceBadge(state, settings, Modifier.align(Alignment.TopCenter))
+        }
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            positions.forEach { (item, at) -> item.place(at) }
+        }
+    }
+}
+
+@Composable
+private fun ZoomReadout(state: CameraUiState, binder: CaptureService.LocalBinder?) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ZoomAnchorBar(
+            anchors = state.opticalAnchors,
+            activeRatio = state.zoomEffectiveRatio ?: state.zoomRatio,
+            onSelect = { ratio -> binder?.selectZoomAnchor(ratio) },
+        )
+        val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
+        val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
+        Box(
+            Modifier
+                .testTag("zoom-ratio")
+                .clip(RoundedCornerShape(6.dp))
+                .background(Panel)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(
+                "%.1f×".format(ratioValue) +
+                    if (isDigital) " " + stringResource(R.string.zoom_digital) else "",
+                color = Amber,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -1472,7 +1566,7 @@ internal fun PortraitCaptureTransport(
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             CaptureButton(state, binder, settings, 72.dp)
             Box(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)) {
-                TopAction("\u25eb", stringResource(R.string.monitoring_tools), onShowMonitoring)
+                TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
             }
         }
         RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
@@ -1511,9 +1605,9 @@ private fun LandscapeControlDeck(
                 if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = false)
                 else SelectedModeButton(state, onShowModes)
             }
-            TopAction("◫", stringResource(R.string.monitoring_tools), onShowMonitoring)
+            TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
             RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
-            CaptureButton(state, binder, settings, 62.dp)
+            CaptureButton(state, binder, settings, 62.dp, labelBeside = true)
         }
         Spacer(Modifier.height(6.dp))
         BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
@@ -2047,9 +2141,12 @@ internal fun CaptureButton(
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     size: androidx.compose.ui.unit.Dp,
+    // The landscape deck has width to spare but no height: there the label sits beside the button.
+    labelBeside: Boolean = false,
 ) {
     val onCapture = LocalOperatorActions.current?.capture ?: rememberCaptureAction(state, binder, settings)
     val recording = state.phase == CameraUiPhase.RECORDING
+    val recordState = recordButtonState(state)
     val captureDescription = stringResource(
         when {
             state.phase == CameraUiPhase.CAPTURING && state.audioRetirementPending -> R.string.audio_retirement_cancel_capture
@@ -2061,33 +2158,94 @@ internal fun CaptureButton(
             else -> R.string.start_recording
         },
     )
-    Box(
-        Modifier
-            .size(size)
-            .semantics {
-                contentDescription = captureDescription
-            }
-            .border(3.dp, Color.White, CircleShape)
-            .clip(CircleShape)
-            .clickable(enabled = state.capturePreparationCancelable || state.phase == CameraUiPhase.PREVIEWING || state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING) {
-                onCapture()
-            },
-        contentAlignment = Alignment.Center,
-    ) {
+    val stateLabel = recordState?.let { stringResource(it.label) }
+    val busy = recordState == RecordButtonState.PREPARING || recordState == RecordButtonState.FINALIZING
+    val label: @Composable () -> Unit = {
+        if (stateLabel != null) {
+            Text(
+                stateLabel,
+                color = recordState!!.color,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier.padding(top = if (labelBeside) 0.dp else 3.dp).testTag("record-state-label"),
+            )
+        }
+    }
+    val button: @Composable () -> Unit = {
         Box(
-            if (recording) {
-                Modifier
-                    .size(size * .34f)
-                    .testTag("recording-stop-glyph")
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(RecordRed)
-            } else {
-                Modifier
-                    .size(size - 10.dp)
-                    .clip(CircleShape)
-                    .background(if (state.selectedMode.isStillMode()) Amber else RecordRed)
-            },
-        )
+            Modifier
+                .size(size)
+                .semantics {
+                    contentDescription = captureDescription
+                    if (stateLabel != null) stateDescription = stateLabel
+                }
+                .border(3.dp, if (recordState == RecordButtonState.UNAVAILABLE) Muted else Color.White, CircleShape)
+                .clip(CircleShape)
+                .clickable(enabled = !state.recordingFinalizing && (state.capturePreparationCancelable || state.phase == CameraUiPhase.PREVIEWING ||
+                    state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING)) {
+                    onCapture()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                when {
+                    recordState == RecordButtonState.FINALIZING -> Modifier
+                        .size(size * .34f)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Muted)
+                    recording -> Modifier
+                        .size(size * .34f)
+                        .testTag("recording-stop-glyph")
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(RecordRed)
+                    else -> Modifier
+                        .size(size - 10.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                recordState == RecordButtonState.UNAVAILABLE || recordState == RecordButtonState.PREPARING -> Color(0xFF3A4247)
+                                state.selectedMode.isStillMode() -> Amber
+                                else -> RecordRed
+                            },
+                        )
+                },
+            )
+            // Starting and closing a take both spin; the colour says which one is in progress.
+            if (busy) CircularProgressIndicator(
+                color = if (recordState == RecordButtonState.PREPARING) RecordRed else Amber,
+                strokeWidth = 3.dp,
+                modifier = Modifier.matchParentSize().padding(2.dp).testTag("record-busy-indicator"),
+            )
+        }
+    }
+    if (labelBeside) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { label(); button() }
+    else Column(horizontalAlignment = Alignment.CenterHorizontally) { button(); label() }
+}
+
+/**
+ * What the record control can honestly claim, derived from the service's confirmed phase: a take
+ * reads REC only once the service reports RECORDING, and a closing file is never shown as saved.
+ * Still modes return null because their button has no recording lifecycle to explain.
+ */
+internal enum class RecordButtonState(val label: Int, val color: Color) {
+    READY(R.string.rec_state_ready, Color.White),
+    PREPARING(R.string.rec_state_preparing, Amber),
+    RECORDING(R.string.rec_state_recording, RecordRed),
+    FINALIZING(R.string.rec_state_finalizing, Amber),
+    SAVED(R.string.rec_state_saved, OkGreen),
+    UNAVAILABLE(R.string.rec_state_unavailable, Muted),
+}
+
+internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
+    if (state.selectedMode.isStillMode()) return null
+    return when {
+        state.recordingFinalizing -> RecordButtonState.FINALIZING
+        state.phase == CameraUiPhase.RECORDING -> RecordButtonState.RECORDING
+        state.phase == CameraUiPhase.CAPTURING -> RecordButtonState.PREPARING
+        state.phase == CameraUiPhase.SAVED -> RecordButtonState.SAVED
+        state.phase == CameraUiPhase.PREVIEWING -> RecordButtonState.READY
+        else -> RecordButtonState.UNAVAILABLE
     }
 }
 
@@ -2178,7 +2336,7 @@ private fun RecordingOverlay(
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
             ThermalHudChip()
             Spacer(Modifier.weight(1f))
-            if (!compact) TopAction("\u25eb", stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
+            if (!compact) TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {
                 Box(
                     Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, Color.White, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
@@ -2303,6 +2461,8 @@ private fun CaptureStatus(state: CameraUiState) {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
             stringResource(R.string.recording_status, state.recordingWidth, state.recordingHeight, state.targetFps,
                 formatDuration(state.recordingElapsedMs), formatBytes(state.availableStorageBytes))
+        // The error sheet already states a failure; repeating it here would show it twice.
+        state.phase == CameraUiPhase.ERROR -> null
         else -> state.message
     }?.takeIf { !state.messageTransient || noticeVisible }
     val recoveryNotice = state.stillRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
@@ -3891,13 +4051,6 @@ private fun compositionGridModeTitle(mode: CompositionGridMode): Int = when (mod
     CompositionGridMode.FOUR_BY_FOUR -> R.string.composition_grid_quarters
     CompositionGridMode.DIAGONAL -> R.string.composition_grid_diagonal
     CompositionGridMode.GOLDEN_RATIO -> R.string.composition_grid_golden
-}
-
-private fun gridModeLabel(mode: CompositionGridMode): String = when (mode) {
-    CompositionGridMode.THIRDS -> "T"
-    CompositionGridMode.FOUR_BY_FOUR -> "4"
-    CompositionGridMode.DIAGONAL -> "D"
-    CompositionGridMode.GOLDEN_RATIO -> "G"
 }
 
 private fun rotationDegrees(rotation: Int): Int = when (rotation) {

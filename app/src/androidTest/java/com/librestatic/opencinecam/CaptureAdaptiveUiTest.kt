@@ -112,8 +112,11 @@ class CaptureAdaptiveUiTest {
 
     @Test
     fun videoPreviewShowsLiveStereoMeterAndClipLatch() {
+        // Portrait: the forced 800x360 landscape fixture keeps the portrait emulator's system-bar
+        // insets, which leaves no room above the deck, and the instrument stack omits whatever
+        // does not fit whole instead of drawing it under the controls.
         setChrome(
-            landscape = true,
+            landscape = false,
             selectorStyle = ModeSelectorStyle.DIAL,
             selectedMode = CaptureMode.VIDEO,
             audioLevels = AudioLevelSnapshot(

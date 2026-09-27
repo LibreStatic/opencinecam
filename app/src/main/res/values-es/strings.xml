@@ -43,6 +43,14 @@
     <string name="camera_loading">Preparando cámara…</string>
     <string name="camera_error">Error de cámara</string>
     <string name="retry">Reintentar</string>
+    <string name="rec_state_ready">REC</string>
+    <string name="rec_state_preparing">Preparando…</string>
+    <string name="rec_state_recording">REC</string>
+    <string name="rec_state_finalizing">Finalizando…</string>
+    <string name="rec_state_saved">Clip guardado</string>
+    <string name="rec_state_unavailable">No disponible</string>
+    <string name="error_details_show">Detalles técnicos</string>
+    <string name="error_details_hide">Ocultar detalles técnicos</string>
 
     <string name="auto_value">AUTO</string>
     <string name="camera_switch">Cambiar cámara</string>
@@ -79,6 +87,11 @@
     <string name="monitor_grid">Grilla de composición</string>
     <string name="monitor_grid_mode">Cambiar grilla de composición</string>
     <string name="monitor_horizon">Nivel de horizonte</string>
+    <string name="monitor_zebra_short">Zebra</string>
+    <string name="monitor_peaking_short">Peaking</string>
+    <string name="monitor_histogram_short">Histograma</string>
+    <string name="monitor_grid_short">Grilla</string>
+    <string name="monitor_horizon_short">Nivel</string>
     <string name="close_panel">Cerrar %1$s</string>
     <string name="mode_title">MODO</string>
     <string name="modes_title">MODOS</string>
