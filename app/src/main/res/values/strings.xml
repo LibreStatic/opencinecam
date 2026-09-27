@@ -649,4 +649,5 @@
     <string name="settings_help_hide">Hide help</string>
     <string name="settings_category_media">Media and files</string>
     <string name="settings_summary_media">Sharing, gallery, proxies, naming</string>
+    <string name="preview_start_timeout">The camera did not start the preview in time.</string>
 </resources>

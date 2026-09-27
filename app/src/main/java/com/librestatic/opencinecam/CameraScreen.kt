@@ -1104,23 +1104,27 @@ internal fun AdaptiveCaptureChrome(
 
     val modeSelection = ModeSelection(displayedCaptureMode(state.selectedMode, settings.videoOffSpeed)) { mode ->
         // Slow motion is VIDEO recording off-speed; Video is the same path at normal speed.
+        val slow = mode == CaptureMode.SLOW_MOTION
+        val profile = if (slow) state.descriptor?.let { descriptor ->
+            slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
+        } else null
         val offSpeed = when (mode) {
             CaptureMode.SLOW_MOTION -> true
             CaptureMode.VIDEO -> false
             else -> settings.videoOffSpeed
         }
-        if (offSpeed != settings.videoOffSpeed) {
-            val updated = settings.copy(videoOffSpeed = offSpeed)
+        // Size and rate are settled before the mode changes, so a switch from another mode opens
+        // the camera once, directly in the high-speed session, instead of reopening it per step.
+        val updated = settings.copy(videoOffSpeed = offSpeed).let { base ->
+            profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) } ?: base
+        }
+        if (updated != settings) {
             onSettingsChanged(updated)
             binder?.applySettings(updated)
         }
-        val pipelineMode = if (mode == CaptureMode.SLOW_MOTION) CaptureMode.VIDEO else mode
+        val pipelineMode = if (slow) CaptureMode.VIDEO else mode
         if (pipelineMode != state.selectedMode) binder?.selectMode(pipelineMode)
-        if (mode == CaptureMode.SLOW_MOTION) {
-            state.descriptor?.let { descriptor ->
-                slowMotionTargetFps(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
-            }?.let { fps -> binder?.selectTargetFps(fps) }
-        }
+        else if (profile != null) binder?.selectTargetFps(profile.fps)
     }
 
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {

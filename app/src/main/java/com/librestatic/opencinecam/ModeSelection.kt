@@ -27,13 +27,14 @@ internal const val SLOW_MOTION_MIN_FPS = 100
 internal fun supportsSlowMotion(profiles: List<VideoProfileSpec>): Boolean = profiles.any { it.fps >= SLOW_MOTION_MIN_FPS }
 
 /**
- * The capture rate slow motion opens with: the fastest high-speed rate at the current resolution,
- * or the fastest the camera offers at all when that resolution has none.
+ * The high-speed profile slow motion opens with: the fastest rate at the current resolution, or
+ * the fastest the camera offers at all (largest frame first) when that resolution has none.
+ * Choosing size and rate together lets the camera open once, straight into the high-speed session.
  */
-internal fun slowMotionTargetFps(profiles: List<VideoProfileSpec>, width: Int, height: Int): Int? {
+internal fun slowMotionProfile(profiles: List<VideoProfileSpec>, width: Int, height: Int): VideoProfileSpec? {
     val fast = profiles.filter { it.fps >= SLOW_MOTION_MIN_FPS }
-    return (fast.filter { it.width == width && it.height == height }.takeIf { it.isNotEmpty() } ?: fast)
-        .maxOfOrNull { it.fps }
+    val candidates = fast.filter { it.width == width && it.height == height }.takeIf { it.isNotEmpty() } ?: fast
+    return candidates.maxWithOrNull(compareBy<VideoProfileSpec> { it.fps }.thenBy { it.width.toLong() * it.height })
 }
 
 /** The mode shown as selected and the action that selects one, provided by the capture chrome. */

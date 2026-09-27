@@ -399,8 +399,33 @@ class CaptureService : Service() {
     private val recordingLutIntent = java.util.concurrent.atomic.AtomicReference<RecordingLutIntent?>()
     private val subjectPreviewEpoch = java.util.concurrent.atomic.AtomicLong()
 
+    /**
+     * No preview start may leave the operator on "Preparing camera" indefinitely. A session that
+     * stays OPENING/READY with a live surface past the timeout is declared failed, which brings
+     * up the error sheet and its way back to the last configuration that previewed.
+     */
+    private var previewWaitSinceMs = 0L
+    private val previewStartWatchdog = object : Runnable {
+        override fun run() {
+            if (serviceDestroyed) return
+            val waiting = cameraState.value.phase in setOf(CameraUiPhase.OPENING, CameraUiPhase.READY) &&
+                attachedPreviewSurface?.isValid == true
+            val now = android.os.SystemClock.elapsedRealtime()
+            when {
+                !waiting -> previewWaitSinceMs = 0L
+                previewWaitSinceMs == 0L -> previewWaitSinceMs = now
+                now - previewWaitSinceMs >= PREVIEW_START_TIMEOUT_MS -> {
+                    previewWaitSinceMs = 0L
+                    fail("preview-start-timeout", getString(R.string.preview_start_timeout))
+                }
+            }
+            mainHandler.postDelayed(this, PREVIEW_WATCHDOG_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
             latestListeningStatus.set(status)
             val publish = Runnable {
@@ -1820,6 +1845,9 @@ class CaptureService : Service() {
                 val surface = attachedPreviewSurface
                 if (descriptor != null && surface?.isValid == true) {
                     cameraState.value = cameraState.value.copy(phase = CameraUiPhase.OPENING)
+                    val start = Runnable {
+                    // A later mode change supersedes this deferred start.
+                    if (cameraState.value.selectedMode != mode || !surface.isValid) return@Runnable
                     previewEngine.startPreview(
                         descriptor,
                         surface,
@@ -1836,6 +1864,12 @@ class CaptureService : Service() {
                         },
                         logProfile = cameraState.value.activeLogProfile.takeIf { mode == CaptureMode.LOG },
                     )
+                    }
+                    // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
+                    // constrained high-speed stream starts.
+                    if (cameraState.value.activeVideoProfile?.constrainedHighSpeed == true && mode in CameraUiState.videoProfileModes) {
+                        mainHandler.postDelayed(start, 350L)
+                    } else start.run()
                 }
             }
         }
@@ -2870,6 +2904,7 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        mainHandler.removeCallbacks(previewStartWatchdog)
         transferPreparationToken++
         transferWaiting = false
         val transferReservation = transferCapture.get()
@@ -3206,5 +3241,8 @@ class CaptureService : Service() {
         private const val RECORDING_TICK_MS = 500L
         private const val CAMERA_SWITCH_TIMEOUT_MS = 6_000L
         private const val PREVIEW_RECOVERY_TIMEOUT_MS = 4_000L
+        // High-speed sessions on some devices take ~2-3 s to open; 12 s is well past any healthy start.
+        private const val PREVIEW_START_TIMEOUT_MS = 12_000L
+        private const val PREVIEW_WATCHDOG_INTERVAL_MS = 1_000L
     }
 }

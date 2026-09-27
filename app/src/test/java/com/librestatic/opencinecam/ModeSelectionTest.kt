@@ -28,10 +28,11 @@ class ModeSelectionTest {
     }
 
     @Test fun slowMotionPicksTheFastestRateAtTheCurrentSize() {
-        assertEquals(240, slowMotionTargetFps(sampleDevice, 1920, 1080))
-        assertEquals(120, slowMotionTargetFps(sampleDevice, 3840, 2160))
-        assertEquals(240, slowMotionTargetFps(sampleDevice, 2560, 1440))
-        assertNull(slowMotionTargetFps(listOf(profile(1920, 1080, 60)), 1920, 1080))
+        assertEquals(profile(1920, 1080, 240), slowMotionProfile(sampleDevice, 1920, 1080))
+        assertEquals(profile(3840, 2160, 120), slowMotionProfile(sampleDevice, 3840, 2160))
+        // No high-speed profile at 1440p: the fastest rate, at its largest frame.
+        assertEquals(profile(1920, 1080, 240), slowMotionProfile(sampleDevice, 2560, 1440))
+        assertNull(slowMotionProfile(listOf(profile(1920, 1080, 60)), 1920, 1080))
     }
 
     @Test fun unsupportedAndUnintegratedModesStayOffTheDial() {
