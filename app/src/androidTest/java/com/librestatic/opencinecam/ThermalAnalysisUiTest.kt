@@ -153,6 +153,27 @@ class ThermalAnalysisUiTest {
     }
 
     /** Runs a shell command as the shell user and waits for it by reading its output to the end. */
+    @Test fun thermalHudChipTracksPlatformThermalStatus() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        compose.setContent { MaterialTheme { ThermalHudChip() } }
+        val critical = context.getString(R.string.thermal_hud_critical)
+        val normal = context.getString(R.string.thermal_hud_normal)
+        compose.onNodeWithTag("thermal-hud").assertIsDisplayed()
+        try {
+            shell("cmd thermalservice override-status 4")
+            compose.waitUntil(10_000) { chipDescription().endsWith(critical) }
+            shell("cmd thermalservice override-status 0")
+            // Headroom may keep a real forecast; only the status-driven level must drop back.
+            compose.waitUntil(10_000) { !chipDescription().endsWith(critical) }
+            assertTrue(chipDescription().endsWith(normal) || chipDescription().endsWith(context.getString(R.string.thermal_hud_elevated)))
+        } finally {
+            shell("cmd thermalservice reset")
+        }
+    }
+
+    private fun chipDescription(): String = compose.onNodeWithTag("thermal-hud").fetchSemanticsNode()
+        .config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }.joinToString()
+
     private fun shell(command: String): String {
         val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
         return ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes().decodeToString() }

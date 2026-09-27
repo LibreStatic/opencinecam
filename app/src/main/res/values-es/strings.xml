@@ -364,6 +364,11 @@
     <string name="operator_state_thermal_description">no disponible: scopes en pausa porque el dispositivo está muy caliente</string>
     <string name="operator_action_thermal_help">En pausa mientras el dispositivo está muy caliente. Se reanuda automáticamente cuando el dispositivo se enfría; la grabación no se ve afectada.</string>
     <string name="analysis_suspended_thermal">Scopes en pausa: el dispositivo está muy caliente</string>
+    <string name="thermal_hud_normal">normal</string>
+    <string name="thermal_hud_elevated">elevado</string>
+    <string name="thermal_hud_high">alto</string>
+    <string name="thermal_hud_critical">crítico</string>
+    <string name="thermal_hud_description">Carga térmica %1$s. Riesgo de cierre por temperatura: %2$s</string>
     <string name="operator_help_hint">Mantené apretado un botón para leer qué hace.</string>
     <string name="operator_action_none_help">Sin asignar. Asignale una acción en Ajustes \u203a Operador.</string>
     <string name="operator_action_system_volume_help">Deja la tecla al volumen del sistema; no se puede asignar a un botón en pantalla.</string>

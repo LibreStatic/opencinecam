@@ -778,7 +778,9 @@ private fun MonitoringOverlay(
             }
         }
         ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
-        AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = if (landscape) 64.dp else 12.dp))
+        // The overlay spans the whole screen: clear the top bar and the AE/AF lock toggles
+        // (top end, from 62 dp) and keep right of the zoom column (top start).
+        AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 116.dp, start = 88.dp, end = 12.dp))
     }
 }
 
@@ -1313,6 +1315,7 @@ private fun CaptureTopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        ThermalHudChip()
         if (state.cameras.size > 1) {
             TopAction("↻", switchDescription) {
                 val index = state.cameras.indexOfFirst { it.cameraId == state.selectedCameraId }
@@ -2173,6 +2176,7 @@ private fun RecordingOverlay(
                 }
             }
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
+            ThermalHudChip()
             Spacer(Modifier.weight(1f))
             if (!compact) TopAction("\u25eb", stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {

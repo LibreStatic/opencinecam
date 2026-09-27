@@ -364,6 +364,11 @@
     <string name="operator_state_thermal_description">unavailable: scopes paused because the device is too hot</string>
     <string name="operator_action_thermal_help">Paused while the device is too hot. It comes back by itself once the device cools down; recording is not affected.</string>
     <string name="analysis_suspended_thermal">Scopes paused: device is too hot</string>
+    <string name="thermal_hud_normal">normal</string>
+    <string name="thermal_hud_elevated">elevated</string>
+    <string name="thermal_hud_high">high</string>
+    <string name="thermal_hud_critical">critical</string>
+    <string name="thermal_hud_description">Thermal load %1$s. Risk of a thermal shutdown: %2$s</string>
     <string name="operator_help_hint">Hold a button to read what it does.</string>
     <string name="operator_action_none_help">Unassigned. Map an action to this button in Settings \u203a Operator.</string>
     <string name="operator_action_system_volume_help">Leaves the key to the system volume; it cannot be mapped to an on-screen button.</string>
