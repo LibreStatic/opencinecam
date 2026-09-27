@@ -70,7 +70,7 @@ internal class PreviewAudioMonitor private constructor(
     fun start() = lifecycle.start()
 
     private fun readLoop() {
-        val buffer = ByteBuffer.allocateDirect(audioRecord.bufferSizeInFrames.coerceAtLeast(2_048) * 8)
+        val buffer = ByteBuffer.allocateDirect(previewReadBufferBytes(audioRecord.sampleRate, channels, depth))
         while (lifecycle.isRunning) {
             buffer.clear()
             val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
@@ -217,3 +217,22 @@ internal class PreviewAudioMonitorCreationFailure(
     private val ownedRetirement = retirement.thenApply { it }
     val retirement: CompletableFuture<Unit> get() = ownedRetirement.thenApply { it }
 }
+
+/**
+ * Bytes for one blocking preview read, sized by time rather than by the platform buffer. A buffer
+ * sized in frames times a fixed byte factor made a mono 16-bit read span ~680 ms at 48 kHz, longer
+ * than the meter's freshness window, so the meter blinked between levels and "no current PCM".
+ */
+internal fun previewReadBufferBytes(sampleRate: Int, channels: Int, depth: AudioBitDepth,
+    chunkMs: Int = PREVIEW_READ_CHUNK_MS): Int {
+    val bytesPerSample = when (depth) {
+        AudioBitDepth.PCM_16 -> 2
+        AudioBitDepth.PCM_24 -> 3
+        AudioBitDepth.PCM_FLOAT -> 4
+    }
+    val frames = (sampleRate.toLong() * chunkMs / 1_000L).coerceAtLeast(MIN_PREVIEW_READ_FRAMES)
+    return Math.toIntExact(frames * channels.coerceAtLeast(1) * bytesPerSample)
+}
+
+internal const val PREVIEW_READ_CHUNK_MS = 40
+private const val MIN_PREVIEW_READ_FRAMES = 256L
