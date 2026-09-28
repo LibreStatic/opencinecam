@@ -21,6 +21,7 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -28,6 +29,9 @@ import kotlinx.coroutines.launch
 internal val LocalFoldDisplayCoordinator = staticCompositionLocalOf<FoldDisplayCoordinator?> { null }
 
 /** Owns windows only. It has no camera-open, record or stop command. */
+
+private const val LAYOUT_RETRY_MS = 1_000L
+
 internal class FoldDisplayCoordinator(private val activity: ComponentActivity) : AutoCloseable {
     private val machine = FoldSessionStateMachine()
     private val mutableState = MutableStateFlow(machine.state)
@@ -61,7 +65,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                     catch (failure: Exception) { closeSession(failure.message) }
                 }
                 launch {
-                    try {
+                    // A failed layout stream would otherwise freeze the posture at its last value; resubscribe.
+                    while (true) try {
                         WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(activity).collect { layout ->
                             val fold = layout.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
                             val posture = when {
@@ -77,7 +82,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                             publish()
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (failure: Exception) { closeSession(failure.message) }
+                    catch (failure: Exception) { closeSession(failure.message); delay(LAYOUT_RETRY_MS) }
                 }
             }
         }
