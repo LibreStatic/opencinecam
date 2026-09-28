@@ -3911,12 +3911,12 @@ private fun formatShutter(exposureTimeNs: Long): String {
     return if (denominator >= 1.0) "1/${denominator.toInt()}" else "${exposureTimeNs / 1_000_000}ms"
 }
 
-/** Formats an EV value (e.g. -1.33, +0.5, 0). Returns "0" for null/zero. */
-private fun formatEv(ev: Float?): String {
+/** Formats an EV value (e.g. −1.33, +0.5, 0). Returns "0" for null/zero. */
+internal fun formatEv(ev: Float?): String {
     val value = ev ?: 0f
     if (value == 0f) return "0"
     val sign = if (value > 0f) "+" else "−"
-    val rounded = (value * 100).roundToInt() / 100f
+    val rounded = (abs(value) * 100).roundToInt() / 100f
     val formatted = if (rounded == rounded.toInt().toFloat()) rounded.toInt().toString() else "%.2f".format(rounded)
     return "$sign$formatted"
 }
