@@ -25,13 +25,13 @@ internal fun BracketSettings(state: CameraUiState, settings: CameraSettings, onC
         Text(stringResource(R.string.bracket_count_title), color = Color.White)
         // Preferences remain editable even when this lens rejects the current combination:
         // lowering count and then step must not leave both controls mutually disabled.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (count in listOf(3, 5, 7, 9)) FilterChip(selected = settings.bracket.count == count,
                 onClick = { onChange(settings.copy(bracket = settings.bracket.copy(count = count))) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("bracket-count-$count"), label = { Text(count.toString()) })
         }
         Text(stringResource(R.string.bracket_step_title), color = Color.White)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BracketStep.entries.forEach { step ->
                 val label = when (step) { BracketStep.THIRD_EV -> "1/3"; BracketStep.HALF_EV -> "1/2"; BracketStep.ONE_EV -> "1"; BracketStep.TWO_EV -> "2" }
                 FilterChip(selected = settings.bracket.step == step,

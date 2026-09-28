@@ -29,14 +29,14 @@ internal fun TimecodeSettings(settings: CameraSettings, onChange: (CameraSetting
             Switch(settings.timecodeEnabled, { onChange(settings.copy(timecodeEnabled = it)) }, Modifier.testTag("timecode-enabled"))
         }
         if (settings.timecodeEnabled) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TimecodeMode.entries.forEach { mode ->
                     FilterChip(settings.timecodeMode == mode, { onChange(settings.copy(timecodeMode = mode)) },
                         label = { Text(when (mode) { TimecodeMode.FREE_RUN -> "FREE"; TimecodeMode.RECORD_RUN -> "REC"; TimecodeMode.REGEN -> "REGEN" }) })
                 }
             }
             Text(stringResource(R.string.timecode_rate))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(24, 25, 30, 50, 60).forEach { fps ->
                     FilterChip(settings.timecodeNominalFps == fps && !settings.timecodeDropFrame,
                         { onChange(settings.withTimecodeRate(fps, false)) }, label = { Text("$fps NDF") })

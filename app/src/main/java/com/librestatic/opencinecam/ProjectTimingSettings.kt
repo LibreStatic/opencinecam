@@ -18,7 +18,7 @@ import com.librestatic.opencinecam.camera.CaptureFrameRate
 @Composable
 internal fun ProjectRateEditor(rate: CaptureFrameRate, tag: String, onChange: (CaptureFrameRate) -> Unit) {
     Text(stringResource(R.string.project_selected_rate, rate.projectLabel()), fontSize = 18.sp, modifier = Modifier.testTag("$tag-selected"))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         (listOf(24, 25, 30, 50, 60, 120).map { CaptureFrameRate(it) } + fractionalProjectRates).forEach { choice ->
             FilterChip(selected = rate == choice, onClick = { onChange(choice) }, label = { Text(choice.projectLabel(), fontSize = 16.sp) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-fps-${choice.projectLabel()}"))

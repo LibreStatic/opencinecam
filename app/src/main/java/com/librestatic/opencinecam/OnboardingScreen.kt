@@ -224,7 +224,7 @@ internal fun OnboardingScreen(
         modifier = Modifier.fillMaxSize().background(OnbCanvas).windowInsetsPadding(WindowInsets.safeDrawing).testTag("onboarding"),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -245,7 +245,7 @@ internal fun OnboardingScreen(
             }
         }
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { index ->
-            BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+            BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 4.dp)) {
                 val wide = maxWidth > maxHeight && maxHeight < 520.dp
                 when (pages[index]) {
                     OnboardingPage.WELCOME -> HeroPage(wide, { WelcomeHero(it) }, R.string.onb_welcome_title, R.string.onb_welcome_body, large = true)
@@ -258,9 +258,9 @@ internal fun OnboardingScreen(
             }
         }
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             PageDots(pages.size, pagerState.currentPage)
             when (page) {
@@ -344,7 +344,7 @@ private fun SplitPage(wide: Boolean, hero: (@Composable (Modifier) -> Unit)?, co
 @Composable
 private fun HeroPage(wide: Boolean, hero: @Composable (Modifier) -> Unit, @StringRes title: Int, @StringRes body: Int, large: Boolean = false) {
     SplitPage(wide, hero) {
-        Text(stringResource(title), color = Color.White, fontSize = if (large) 34.sp else 26.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        Text(stringResource(title), color = Color.White, fontSize = if (large) 34.sp else 26.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(top = 28.dp, bottom = 10.dp))
         Text(stringResource(body), color = OnbMuted, fontSize = 15.sp, lineHeight = 22.sp)
     }
 }
@@ -613,8 +613,8 @@ private fun HeroFrame(modifier: Modifier, glow: Color, content: androidx.compose
 
 @Composable
 private fun WelcomeHero(modifier: Modifier) = HeroFrame(modifier, Color(0xFF3A2A00)) {
-    val c = Offset(size.width * 0.58f, size.height * 0.52f)
-    val r = size.minDimension * 0.34f
+    val c = Offset(size.width * 0.64f, size.height * 0.5f)
+    val r = size.minDimension * 0.32f
     // Lens barrel: concentric rings with an amber focus ring.
     drawCircle(Color(0xFF1B2226), r, c)
     drawCircle(OnbAmber, r * 0.92f, c, style = Stroke(r * 0.07f))
@@ -622,9 +622,9 @@ private fun WelcomeHero(modifier: Modifier) = HeroFrame(modifier, Color(0xFF3A2A
     drawCircle(Brush.radialGradient(listOf(Color(0xFF45D6E8).copy(alpha = 0.55f), Color(0xFF0B0D0E)), c, r * 0.5f), r * 0.48f, c)
     drawCircle(Color.White.copy(alpha = 0.35f), r * 0.1f, Offset(c.x - r * 0.18f, c.y - r * 0.18f))
     // Clapperboard leaning against the lens.
-    val w = size.minDimension * 0.46f
+    val w = size.minDimension * 0.42f
     val h = w * 0.62f
-    val origin = Offset(size.width * 0.1f, size.height * 0.56f)
+    val origin = Offset(size.width * 0.08f, size.height * 0.58f)
     drawRoundRect(Color(0xFF232B30), origin, Size(w, h), CornerRadius(12f))
     rotate(-14f, pivot = origin) {
         val stickHeight = h * 0.24f

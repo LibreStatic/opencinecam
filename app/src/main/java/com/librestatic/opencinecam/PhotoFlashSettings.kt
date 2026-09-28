@@ -30,7 +30,7 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_flash_title), color = Color.White, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_flash_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PhotoFlashMode.entries.forEach { mode ->
                 val candidate = choice(mode)
                 FilterChip(selected = selection.mode == mode,

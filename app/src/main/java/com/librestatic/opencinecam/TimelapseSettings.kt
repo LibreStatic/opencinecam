@@ -30,7 +30,7 @@ internal fun TimelapseSettings(state: CameraUiState, settings: CameraSettings, o
             Text(stringResource(R.string.project_active_rate, it.projectLabel()), fontSize = 16.sp, modifier = Modifier.testTag("timelapse-active-project"))
         }
         Text(stringResource(R.string.timelapse_resolution, settings.timelapseWidth, settings.timelapseHeight), fontSize = 16.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.descriptor?.videoProfiles.orEmpty().filter { !it.constrainedHighSpeed && it.fps == 30 }
                 .distinctBy { it.size }.forEach { profile ->
                     FilterChip(selected = settings.timelapseWidth == profile.size.width && settings.timelapseHeight == profile.size.height,

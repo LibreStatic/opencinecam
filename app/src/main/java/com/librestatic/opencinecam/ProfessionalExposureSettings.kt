@@ -37,7 +37,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
         Text(stringResource(R.string.pro_exposure_title), color = Color.White, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.pro_exposure_help))
         if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = Color(0xFFFFCF66), fontSize = 16.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ExposureMode.entries.forEach { mode ->
                 FilterChip(selected = exposure.mode == mode, onClick = { updateExposure(exposure.copy(mode = mode)) },
                     enabled = caps.supports(mode), modifier = Modifier.heightIn(min = 48.dp), label = { Text(stringResource(mode.titleResource())) })
@@ -49,7 +49,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
                 enabled = caps.supports(exposure.mode) && exposure.mode in setOf(ExposureMode.MANUAL, ExposureMode.ISO_PRIORITY),
                 format = { it.roundToInt().toString() }, onChange = { updateExposure(exposure.copy(iso = it.roundToInt())) })
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ShutterUnit.entries.forEach { unit ->
                 FilterChip(exposure.shutterUnit == unit, { updateExposure(exposure.copy(shutterUnit = unit)) }, modifier = Modifier.heightIn(min = 48.dp),
                     label = { Text(stringResource(if (unit == ShutterUnit.TIME) R.string.pro_time else R.string.pro_angle)) })
@@ -58,7 +58,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
         if (exposure.shutterUnit == ShutterUnit.ANGLE) {
             ProSlider(stringResource(R.string.pro_angle), exposure.angleTenths.toFloat(), 1f..3600f, supportsTime,
                 format = { String.format(Locale.ROOT, "%.1f°", it / 10) }, onChange = { updateExposure(timed(exposure.copy(angleTenths = it.roundToInt()))) })
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(900, 1440, 1728, 1800, 2160, 2700, 3600).forEach { angle ->
                     FilterChip(exposure.angleTenths == angle, { updateExposure(timed(exposure.copy(angleTenths = angle))) }, enabled = supportsTime,
                         modifier = Modifier.heightIn(min = 48.dp), label = { Text("${angle / 10.0}°") })
@@ -77,14 +77,14 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             resolved.timeNs?.toString() ?: unknown, state.exposureTimeNs?.toString() ?: unknown, state.sensitivityIso?.toString() ?: unknown), color = Color.White, fontSize = 14.sp)
         if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = Color(0xFFFFCF66), fontSize = 14.sp)
         Text(stringResource(R.string.pro_antibanding), color = Color.White, fontSize = 18.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Antibanding.entries.forEach { band ->
                 FilterChip(exposure.antibanding == band, { updateExposure(exposure.copy(antibanding = band)) }, enabled = band in caps.antibanding,
                     modifier = Modifier.heightIn(min = 48.dp), label = { Text(band.displayLabel()) })
             }
         }
         SettingsHelp(stringResource(R.string.pro_flicker_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(50 to 10_000_000L, 60 to 8_333_333L).forEach { (hz, time) ->
                 OutlinedButton({ updateExposure(timed(exposure.copy(shutterUnit = ShutterUnit.TIME, timeNs = time))) }, enabled = supportsTime,
                     modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.pro_shutter_suggestion, hz)) }
@@ -102,7 +102,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
         val kelvinRange = descriptor?.kelvinRange.takeUnless { hfr }
         val wb = settings.whiteBalance
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(wb == WhiteBalanceSelection.Auto, { onChange(settings.copy(whiteBalance = WhiteBalanceSelection.Auto)) },
                 modifier = Modifier.heightIn(min = 48.dp), label = { Text(stringResource(R.string.pro_wb_auto)) })
             listOf(CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT, CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
@@ -153,7 +153,7 @@ private fun ProSlider(label: String, value: Float, range: ClosedFloatingPointRan
 internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.pro_wb_record_policy), color = Color.White, fontSize = 18.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             RecordingWhiteBalancePolicy.entries.forEach { policy ->
                 FilterChip(settings.recordingWhiteBalance == policy, { onChange(settings.copy(recordingWhiteBalance = policy)) },
                     modifier = Modifier.heightIn(min = 48.dp), label = {

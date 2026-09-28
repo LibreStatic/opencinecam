@@ -19,7 +19,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.accumulation_title), color = Color.White, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.accumulation_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AccumulationMode.entries.forEach { mode ->
                 FilterChip(selected = selection.mode == mode,
                     onClick = { onChange(settings.copy(accumulation = selection.copy(mode = mode))) },
@@ -34,7 +34,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
             AccumulationMode.BULB -> R.string.accumulation_bulb_help
         }), color = Color.LightGray, modifier = Modifier.testTag("accumulation-algorithm"))
         Text(stringResource(R.string.accumulation_duration, selection.durationMs), color = Color.White)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(1L, 5L, 10L, 30L, 60L, 300L).forEach { seconds ->
                 FilterChip(selected = selection.durationMs == seconds * 1000,
                     enabled = selection.intervalMs <= seconds * 500,
@@ -44,7 +44,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
             }
         }
         Text(stringResource(R.string.accumulation_interval, selection.intervalMs), color = Color.White)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(100L, 250L, 500L, 1000L, 5000L, 10000L).forEach { ms ->
                 FilterChip(selected = selection.intervalMs == ms, enabled = ms <= selection.durationMs / 2,
                     onClick = { onChange(settings.copy(accumulation = selection.copy(intervalMs = ms))) },
@@ -53,7 +53,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
             }
         }
         Text(stringResource(R.string.accumulation_edge, selection.maxEdge), color = Color.White)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(720, 1080, 2048).forEach { edge ->
                 FilterChip(selected = selection.maxEdge == edge,
                     onClick = { onChange(settings.copy(accumulation = selection.copy(maxEdge = edge))) },

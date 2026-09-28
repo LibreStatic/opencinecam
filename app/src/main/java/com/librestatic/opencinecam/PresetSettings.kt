@@ -88,7 +88,7 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
         OutlinedTextField(name, { name = it.take(64) }, label = { Text(stringResource(R.string.presets_name)) },
             modifier = Modifier.fillMaxWidth().testTag("preset-name"), singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Button({ attempt { repository.save(snapshot(name)) } }, enabled = !busy && library.error == null && name.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_save_new)) }
             OutlinedButton({ importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy && library.error == null,
                 modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_import)) }
@@ -96,7 +96,7 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
         library.presets.forEach { preset ->
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(preset.name, color = Color.White, fontSize = 18.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ review = preset }, Modifier.heightIn(min = 48.dp), enabled = onApply != null && !busy) { Text(stringResource(R.string.presets_review)) }
                     OutlinedButton({ updating = preset; renameOnly = false; name = preset.name }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_update)) }
                     OutlinedButton({ updating = preset; renameOnly = true; name = preset.name }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_rename)) }
@@ -104,7 +104,7 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
                         Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_export)) }
                     OutlinedButton({ delete = preset }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_delete)) }
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("C1", "C2").forEach { slot ->
                         val assigned = library.slots[slot] == preset.id
                         FilterChip(assigned, { attempt { repository.assign(slot, if (assigned) null else preset.id) } }, enabled = !busy,
@@ -152,7 +152,7 @@ internal fun PresetQuickAccess(state: CameraUiState, settings: CameraSettings, o
     repository: PresetRepository = PresetRepositories.get(LocalContext.current)) {
     val library by repository.states.collectAsState()
     var review by remember { mutableStateOf<CameraPreset?>(null) }
-    if (library.slots.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.85f)), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (library.slots.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.85f)), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("C1", "C2").forEach { slot -> library.presets.firstOrNull { it.id == library.slots[slot] }?.let { preset ->
             OutlinedButton({ review = preset }, Modifier.heightIn(min = 48.dp).testTag("preset-$slot"), enabled = onApply != null) {
                 Text("$slot · ${preset.name}", color = Color.White, fontSize = 16.sp)

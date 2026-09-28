@@ -45,7 +45,7 @@ internal fun SelfCaptureChrome(
         val optionsHeight = maxHeight * 0.38f
         val scrollWhole = maxHeight < 400.dp
         Column(Modifier.fillMaxSize().then(if (scrollWhole) Modifier.verticalScroll(rememberScrollState()) else Modifier), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { binder?.cancelSelfTimer(); coordinator?.closeSession() }, modifier = Modifier.heightIn(min = 48.dp).testTag("self-return")) {
                     Text(stringResource(R.string.fold_return))
                 }
@@ -58,7 +58,7 @@ internal fun SelfCaptureChrome(
                 .verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.self_title), color = Color.White, fontSize = 18.sp)
                 Text(stringResource(R.string.self_timer_value, settings.subjectDisplay.selfTimerSeconds), color = Color.White, fontSize = 16.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.cameras.forEach { camera ->
                         FilterChip(selected = state.selectedCameraId == camera.cameraId, enabled = !locked,
                             onClick = { binder?.selectCamera(camera.cameraId) }, modifier = Modifier.heightIn(min = 48.dp),

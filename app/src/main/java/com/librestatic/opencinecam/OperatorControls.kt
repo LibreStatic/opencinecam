@@ -338,7 +338,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         OperatorChoice(stringResource(R.string.operator_volume_up), operation.volumeUp, OperatorAction.entries, "operator-volume-up") { onChange(settings.copy(operation = operation.copy(volumeUp = it))) }
         OperatorChoice(stringResource(R.string.operator_volume_down), operation.volumeDown, OperatorAction.entries, "operator-volume-down") { onChange(settings.copy(operation = operation.copy(volumeDown = it))) }
         Text(stringResource(R.string.operator_startup), color = Color.White, fontSize = 18.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StartupMode.entries.forEach { mode ->
                 FilterChip(selected = operation.startupMode == mode, onClick = { onChange(settings.copy(operation = operation.copy(startupMode = mode))) },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("operator-startup-$mode"), label = { Text(stringResource(when (mode) { StartupMode.PHOTO -> R.string.operator_startup_photo; StartupMode.VIDEO -> R.string.operator_startup_video; StartupMode.LAST -> R.string.operator_startup_last })) })

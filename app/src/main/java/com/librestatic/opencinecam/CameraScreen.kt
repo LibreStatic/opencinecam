@@ -3475,7 +3475,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.mode_selector_style), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeSelectorStyle.entries.forEach { style ->
                         TextButton(onClick = { onSettingsChange(settings.copy(modeSelectorStyle = style)) }) {
                             Text(
@@ -3536,7 +3536,7 @@ internal fun SettingsContent(
         if ("bitrate" in visibleIds) settingsCard("bitrate") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.video_bitrate), color = Color.White, fontWeight = FontWeight.Bold)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(12, 20, 40).forEach { bitrate ->
                         TextButton(onClick = { onSettingsChange(settings.copy(videoBitrateMbps = bitrate)) }) {
                             Text(
@@ -3553,7 +3553,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.recording_geometry), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     RecordingGeometryMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(recordingGeometryMode = mode)) }) {
                             Text(
@@ -3576,7 +3576,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.anamorphic), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AnamorphicSqueeze.entries.forEach { squeeze ->
                         TextButton(
                             onClick = { onSettingsChange(settings.copy(anamorphicSqueeze = squeeze)) },
@@ -3598,7 +3598,7 @@ internal fun SettingsContent(
                 }
                 if (settings.anamorphicSqueeze.isActive) {
                     Text(stringResource(R.string.anamorphic_output), color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         AnamorphicOutputMode.entries.forEach { mode ->
                             TextButton(
                                 onClick = { onSettingsChange(settings.copy(anamorphicOutputMode = mode)) },
@@ -3670,7 +3670,7 @@ internal fun SettingsContent(
         if ("grid-mode" in visibleIds) settingsCard("grid-mode") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.composition_grid_mode), color = Color.White, fontWeight = FontWeight.Bold)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompositionGridMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
                             Text(
@@ -3712,7 +3712,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.af_lock_behavior), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AfLockBehavior.entries.forEach { behavior ->
                         TextButton(onClick = { onSettingsChange(settings.copy(afLockBehavior = behavior)) }) {
                             Text(
@@ -3730,7 +3730,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.zoom_lens_switch_mode), color = Color.White, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ZoomLensSwitchMode.entries.forEach { mode ->
                         val chosen = settings.zoomLensSwitchMode == mode
                         TextButton(onClick = { onSettingsChange(settings.copy(zoomLensSwitchMode = mode)) },

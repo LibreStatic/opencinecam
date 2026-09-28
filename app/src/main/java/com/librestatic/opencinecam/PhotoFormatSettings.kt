@@ -28,7 +28,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_format_title), color = Color.White, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_format_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC).forEach { format ->
                 FilterChip(selected = settings.photoFormat == format, enabled = supported(format),
                     onClick = { onChange(settings.copy(photoFormat = format)) },

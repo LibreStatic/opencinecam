@@ -21,15 +21,17 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
         state.reportedNoiseReduction, state.reportedEdgeEnhancement)
     val unavailable = selected.resolve(caps, reported, hfr).unavailable
     val unknown = stringResource(R.string.pro_unknown)
-    Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.image_processing_title), color = Color.White, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.image_processing_help))
         if (state.structuralSettingsFrozen && state.effectiveSettings?.imageProcessing != selected) {
             Text(stringResource(R.string.image_processing_deferred), color = Color(0xFFFFCF66), fontSize = 16.sp)
         }
         if (hfr) Text(stringResource(R.string.image_processing_hfr), color = Color(0xFFFFCF66), fontSize = 14.sp)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.image_stabilization), color = Color.White, fontSize = 18.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsHelp(stringResource(R.string.image_stabilization_help))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO).forEach { mode ->
                 FilterChip(selected.stabilization == mode, { onChange(settings.copy(imageProcessing = selected.copy(stabilization = mode))) },
                     enabled = mode == null || (!hfr && caps.supports(mode)), modifier = Modifier.heightIn(min = 48.dp).testTag("stabilization-${mode?.name ?: "DEFAULT"}"),
@@ -37,7 +39,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
                         StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video }), fontSize = 16.sp) })
             }
         }
-        SettingsHelp(stringResource(R.string.image_stabilization_help))
+        }
         IspModeChoices(stringResource(R.string.image_noise), "image-noise", selected.noiseReduction,
             { !hfr && caps.supports(it, ImageProcessingControl.NOISE_REDUCTION) },
             { onChange(settings.copy(imageProcessing = selected.copy(noiseReduction = it))) })
@@ -63,12 +65,14 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
 
 @Composable
 private fun IspModeChoices(title: String, tag: String, value: IspMode, supported: (IspMode) -> Boolean, onChange: (IspMode) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
     Text(title, color = Color.White, fontSize = 18.sp)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(IspMode.DEFAULT, IspMode.OFF, IspMode.FAST, IspMode.HIGH_QUALITY).forEach { mode ->
             FilterChip(value == mode, { onChange(mode) }, enabled = mode == IspMode.DEFAULT || supported(mode),
                 modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-${mode.name}"), label = { Text(stringResource(mode.titleResource()), fontSize = 16.sp) })
         }
+    }
     }
 }
 internal fun IspMode.titleResource(): Int = when (this) {

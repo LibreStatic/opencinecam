@@ -39,7 +39,7 @@ internal fun PhotoAspectSettings(state: CameraUiState, settings: CameraSettings,
         }
         Text(stringResource(R.string.photo_aspect_selected, selection.width, selection.height), color = Color.White,
             modifier = Modifier.testTag("photo-aspect-selected"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((w, h) in listOf(1 to 1, 4 to 3, 3 to 2, 16 to 9, 239 to 100)) {
                 FilterChip(selected = selection.width == w && selection.height == h,
                     onClick = { onChange(settings.copy(photoAspect = PhotoAspectSelection(true, w, h))) },
@@ -56,7 +56,7 @@ internal fun PhotoAspectSettings(state: CameraUiState, settings: CameraSettings,
             modifier = Modifier.fillMaxWidth().testTag("photo-aspect-height"))
         if (candidate == null) Text(stringResource(R.string.photo_aspect_invalid), color = Color(0xFFFFCF66),
             modifier = Modifier.testTag("photo-aspect-invalid"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { candidate?.let { onChange(settings.copy(photoAspect = it.copy(enabled = true))) } },
                 enabled = candidate != null, modifier = Modifier.heightIn(min = 48.dp).testTag("photo-aspect-apply")) {
                 Text(stringResource(R.string.photo_aspect_apply))
