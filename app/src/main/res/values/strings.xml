@@ -650,4 +650,5 @@
     <string name="settings_category_media">Media and files</string>
     <string name="settings_summary_media">Sharing, gallery, proxies, naming</string>
     <string name="preview_start_timeout">The camera did not start the preview in time.</string>
+    <string name="fps_high_speed_preview_note">High-speed rates (HS) record every frame; the viewfinder shows 30 fps while they run.</string>
 </resources>

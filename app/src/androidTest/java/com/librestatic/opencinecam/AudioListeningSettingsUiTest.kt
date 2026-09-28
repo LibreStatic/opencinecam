@@ -97,6 +97,7 @@ class AudioListeningSettingsUiTest {
             try { target.assertHeightIsAtLeast(48.dp) }
             catch (failure: AssertionError) { throw AssertionError("Control $tag: ${target.getUnclippedBoundsInRoot()}", failure) }
         }
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "volume-label", "output-WIRED_USB-label", "output-BLUETOOTH-label", "output-SPEAKER-label", "connect-label")) {
             val results = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(results)) }

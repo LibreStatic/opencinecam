@@ -11,6 +11,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioLevelMeterTest {
+    @Test
+    fun recorderPeakIsPeakOnlyMono() {
+        val full = recorderPeakSnapshot(Short.MAX_VALUE.toInt(), 10L)
+        assertEquals(0f, full.channels.single().peakDbfs, 0.001f)
+        assertTrue(full.clipped)
+        assertTrue(full.channels.single().rmsDbfs.isNaN())
+        assertNull(full.channels.single().vuDbfs)
+        val half = recorderPeakSnapshot(Short.MAX_VALUE / 2, 20L)
+        assertEquals(-6.02f, half.channels.single().peakDbfs, 0.05f)
+        assertFalse(half.clipped)
+        assertEquals(-120f, recorderPeakSnapshot(0, 30L).channels.single().peakDbfs, 0f)
+    }
+
     @Test fun `pcm16 reports independent stereo peaks and clipping`() {
         val pcm = ByteBuffer.allocateDirect(8).order(ByteOrder.LITTLE_ENDIAN).apply {
             putShort(32767.toShort()); putShort(16384.toShort())

@@ -30,6 +30,20 @@ data class AudioLevelSnapshot(
     val effects: AudioEffectsSnapshot? = null,
 )
 
+/**
+ * A MediaRecorder peak amplitude (0..32767 since the previous read) as a mono peak-only reading.
+ * RMS is NaN because the recorder never exposes the samples it came from.
+ */
+fun recorderPeakSnapshot(amplitude: Int, capturedAtElapsedRealtimeMs: Long): AudioLevelSnapshot {
+    val clamped = amplitude.coerceIn(0, Short.MAX_VALUE.toInt())
+    val peakDbfs = if (clamped == 0) -120f else (20.0 * log10(clamped / Short.MAX_VALUE.toDouble())).toFloat()
+    return AudioLevelSnapshot(
+        channels = listOf(AudioChannelLevel(peakDbfs = peakDbfs, rmsDbfs = Float.NaN)),
+        clipped = clamped >= Short.MAX_VALUE,
+        capturedAtElapsedRealtimeMs = capturedAtElapsedRealtimeMs,
+    )
+}
+
 /** Pure bounded PCM level calculator. It never mutates the recorder-owned buffer. */
 class AudioLevelMeter(
     private val encoding: PcmMeterEncoding,

@@ -79,10 +79,8 @@ internal fun GeotaggingSettingsContent(
         Text(stringResource(R.string.geotagging_title), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.geotagging_help), Modifier.fillMaxWidth().testTag("geotagging-help"))
         val label = stringResource(R.string.geotagging_enabled)
-        Text(label, Modifier.fillMaxWidth().testTag("geotagging-enabled-label"))
-        Switch(settings.geotaggingEnabled, { onSettingsChange(settings.copy(geotaggingEnabled = it)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("geotagging-enabled")
-                .semantics { contentDescription = label })
+        SettingsSwitchRow(label, settings.geotaggingEnabled, { onSettingsChange(settings.copy(geotaggingEnabled = it)) },
+            tag = "geotagging-enabled", labelTag = "geotagging-enabled-label")
         Text(stringResource(when (precision) {
             null -> R.string.geotagging_permission_none
             LocationPermissionPrecision.APPROXIMATE -> R.string.geotagging_permission_approximate

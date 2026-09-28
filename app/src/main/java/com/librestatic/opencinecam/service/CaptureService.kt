@@ -83,6 +83,7 @@ import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.camera.RecordingGeometryCalculator
+import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.RecordingFrameSize
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
@@ -675,7 +676,12 @@ class CaptureService : Service() {
 
     private fun desiredGpuViewfinder(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
         mode in setOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE) ||
-        (mode == CaptureMode.VIDEO && (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW || settings.videoOffSpeed || currentOperatorLut != null || currentRecordingLut != null || recordingLutIntent.get()?.lut != null)) ||
+        // Off-speed conforms frames on the GPU only at regular rates: in a constrained high-speed
+        // session Camera2 feeds any non-encoder surface 30 fps, so those takes go to the encoder
+        // directly (see startVideo) and the viewfinder stays direct.
+        (mode == CaptureMode.VIDEO && (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW ||
+            (settings.videoOffSpeed && cameraState.value.activeVideoProfile?.constrainedHighSpeed != true) ||
+            currentOperatorLut != null || currentRecordingLut != null || recordingLutIntent.get()?.lut != null)) ||
         (photoPreviewMode(mode) && currentOperatorLut != null)
 
     private fun selectedStillPhotoFormat(mode: CaptureMode = cameraState.value.selectedMode): StillPhotoFormat = when (mode) {
@@ -1192,6 +1198,7 @@ class CaptureService : Service() {
         }
 
         override fun onRecordingStopped(success: Boolean) {
+            android.util.Log.i("CaptureService", "Recording stopped: success=$success mode=${cameraState.value.selectedMode} fps=${cameraState.value.targetFps}")
             retireAudioLevelConsumer()
             val recordingGain = activeRecordingGain
             // Only the exact dispatched admission; a failed start may already have released it.
@@ -2647,14 +2654,36 @@ class CaptureService : Service() {
                             message = "Preparing H.264 · $activeRecordingAudioLabel…") }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
+                        // Constrained high-speed takes must reach the encoder surface directly: the GPU
+                        // path's camera texture only receives the 30 fps preview share of each batch.
+                        // Off-speed then plays the high-speed capture back at the project rate.
+                        val recordingLutForTake = frozenRecordingLut()
+                        val directHighSpeed = current.activeVideoProfile?.constrainedHighSpeed == true &&
+                            recordingLutForTake == null && audioSidecarRecorder == null &&
+                            activeRecordingGain?.enabled != true && !previewEngine.usesGpuViewfinder() &&
+                            !settings.anamorphicSqueeze.isActive
+                        // The encoder then stores the sensor raster and the MP4 matrix rotates it,
+                        // so the take is described (and validated) as native raster.
+                        val takeGeometry = if (directHighSpeed) RecordingGeometryCalculator.calculate(
+                            sourceSize = sourceSize,
+                            sensorOrientationDegrees = descriptor.sensorOrientation,
+                            deviceOrientationDegrees = orientation,
+                            lensFacing = descriptor.lensFacing,
+                            mode = RecordingGeometryMode.NATIVE_RASTER,
+                        ).also { activeRecordingGeometry = it } else geometry
+                        val projectFps = settings.videoProjectRate.let { rate ->
+                            kotlin.math.round(rate.numerator.toDouble() / rate.denominator).toInt().coerceAtLeast(1)
+                        }
                         previewEngine.startVideo(
                             output.descriptor,
                             embeddedAudio,
                             separateAudioClock = audioSidecarRecorder?.captureClock,
-                            projectRateOverride = settings.videoProjectRate.takeIf { settings.videoOffSpeed },
-                            recordingGeometry = geometry,
+                            projectRateOverride = settings.videoProjectRate.takeIf { settings.videoOffSpeed && !directHighSpeed },
+                            recordingGeometry = takeGeometry,
+                            captureRate = current.targetFps.toDouble().takeIf { directHighSpeed },
+                            outputFrameRate = projectFps.takeIf { directHighSpeed && settings.videoOffSpeed },
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
-                            recordingLut = frozenRecordingLut(),
+                            recordingLut = recordingLutForTake,
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.

@@ -40,9 +40,7 @@ internal fun CaptureNamingSettingsControls(settings: CameraSettings, onSettingsC
         Text(stringResource(R.string.capture_naming_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.capture_naming_help), Modifier.fillMaxWidth().testTag("capture-naming-help"))
         val label = stringResource(R.string.capture_naming_enabled)
-        Text(label, Modifier.fillMaxWidth().testTag("capture-naming-enabled-label"))
-        Switch(enabled, { enabled = it }, modifier = Modifier.heightIn(min = 48.dp)
-            .testTag("capture-naming-enabled").semantics { contentDescription = label })
+        SettingsSwitchRow(label, enabled, { enabled = it }, tag = "capture-naming-enabled", labelTag = "capture-naming-enabled-label")
         Text(stringResource(R.string.capture_naming_tokens), Modifier.fillMaxWidth().testTag("capture-naming-tokens"))
         OutlinedTextField(template, { value ->
             // Preserve rejection across an IME echo of the retained text, not just one callback.

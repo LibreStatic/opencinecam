@@ -109,6 +109,7 @@ class AudioEffectsSettingsUiTest {
             audioMonitoringActive = true, audioLevels = levels(AudioEffectObservation(true,
                 AudioEffectState.ENABLED, AudioEffectImplementation.SOFTWARE, null, configurationFailed = true)))
         show(2f)
+        node("help-toggle").performScrollTo().performClick()
         val tags = listOf("help", "manual", "agc-pending") + listOf("ns", "agc", "aec").flatMap { effect ->
             listOf("title", "requested", "receipt", "state", "implementation", "control", "configuration-failed").map { "$effect-$it" }
         }

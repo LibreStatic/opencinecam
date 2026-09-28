@@ -33,8 +33,7 @@ internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (Gal
 @Composable
 private fun GalleryToggle(tag: String, label: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
     val title = stringResource(label)
-    Text(title, Modifier.fillMaxWidth().testTag("gallery-$tag-label"))
-    Switch(checked, onChange, modifier = Modifier.heightIn(min = 48.dp).testTag("gallery-$tag").semantics { contentDescription = title })
+    SettingsSwitchRow(title, checked, onChange, tag = "gallery-$tag", labelTag = "gallery-$tag-label")
 }
 
 internal fun galleryKindLabel(kind: GalleryMediaKind): Int = when (kind) {

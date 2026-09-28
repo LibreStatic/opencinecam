@@ -319,6 +319,8 @@ class Camera2PreviewEngine(
     private val appContext = context.applicationContext
     private val powerManager = context.getSystemService(PowerManager::class.java)
     private val cameraExecutor = CloseTolerantCameraExecutor()
+    private val recorderLevelHandler = Handler(android.os.Looper.getMainLooper())
+    @Volatile private var recorderLevelSink: ((AudioLevelSnapshot) -> Unit)? = null
     private val requestComposer = CaptureRequestComposer()
     private val imageThread = HandlerThread("OpenCineCamImage").apply { start() }
     private val imageHandler = Handler(imageThread.looper)
@@ -2461,8 +2463,12 @@ class Camera2PreviewEngine(
         projectRateOverride: CaptureFrameRate? = null,
         separateAudioClock: CaptureEpochClock? = null,
         recordingLut: MonitorLut? = null,
+        // Playback rate written to the file when it differs from the capture rate: a high-speed
+        // capture played at the project rate is slow motion.
+        outputFrameRate: Int? = null,
     ): Boolean {
         if (disposed.get() || gpuPhotoPreviewEnabled || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null) return false
+        require(outputFrameRate == null || (captureRate != null && outputFrameRate > 0))
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null && recordingGeometry != null && captureRate == null)
 
         require(projectRateOverride == null || (timelapse == null && captureRate == null && recordingGeometry != null))
@@ -2541,16 +2547,19 @@ class Camera2PreviewEngine(
                         }
                     }
                     setVideoSize(size.width, size.height)
-                    setVideoFrameRate(requestedTargetFps)
+                    setVideoFrameRate(outputFrameRate ?: requestedTargetFps)
                     captureRate?.let { setCaptureRate(it) }
                     val rateScaledBitrate = videoBitrate.toLong() * requestedTargetFps / DEFAULT_TARGET_FPS
                     setVideoEncodingBitRate(rateScaledBitrate.coerceIn(8_000_000L, 200_000_000L).toInt())
+                    // The encoder receives raw sensor frames here (no GPU pass bakes rotation into
+                    // pixels), so the container carries the whole content rotation.
                     setOrientationHint(recordingGeometry?.containerRotationDegrees ?: jpegOrientation(descriptor))
                     setOutputFile(output.fileDescriptor)
                     prepare()
                 }
                 recorder = configuredRecorder
                 recordSurface = configuredRecorder.surface
+                recorderLevelSink = audio?.onAudioLevel
                 configureRecordingSession(device, descriptor, surface, requireNotNull(recordSurface), startRecorder = true)
             } catch (failure: Exception) {
                 val reportFailure = ownsRecorderRequest(request)
@@ -2811,7 +2820,11 @@ class Camera2PreviewEngine(
             runCatching { session?.stopRepeating() }
             runCatching { session?.close() }
             session = null
-            try { recorder?.stop() } catch (_: RuntimeException) { success = false }
+            try { recorder?.stop() } catch (failure: RuntimeException) {
+                success = false
+                Log.w(TAG, "MediaRecorder stop failed", failure)
+            }
+            Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
             releaseRecorder(request)
             reportRecordingStopped(success, recorderOutputRetirement())
             if (success && descriptor != null && device != null && surface?.isValid == true) {
@@ -2876,6 +2889,7 @@ class Camera2PreviewEngine(
             val device = camera ?: return@execute
             val descriptor = activeDescriptor ?: return@execute
             val recordingSurface = recordSurface ?: return@execute
+            Log.i(TAG, "Reattaching preview during a recorder take")
             this.previewSurface = surface
             this.displayRotationDegrees = displayRotationDegrees
             runCatching { session?.stopRepeating() }
@@ -3058,6 +3072,7 @@ class Camera2PreviewEngine(
                             if (startRecorder) {
                                 requireNotNull(recorder).start()
                                 recording = true
+                                startRecorderLevelPolling(request)
                                 listener?.onRecordingStarted(descriptor.previewSize.width, descriptor.previewSize.height)
                             }
                         } catch (failure: Exception) {
@@ -3197,6 +3212,7 @@ class Camera2PreviewEngine(
                             if (startRecorder) {
                                 requireNotNull(recorder).start()
                                 recording = true
+                                startRecorderLevelPolling(request)
                                 val size = activeVideoProfile?.size ?: descriptor.previewSize
                                 listener?.onRecordingStarted(size.width, size.height)
                             }
@@ -3210,6 +3226,7 @@ class Camera2PreviewEngine(
 
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
+                        Log.w(TAG, "High-speed recording session rejected: startRecorder=$startRecorder owns=${ownsConfiguration()} preview=${preview != null}")
                         if (!ownsConfiguration()) return
                         if (startRecorder) {
                             releaseRecorder(request)
@@ -3645,8 +3662,13 @@ class Camera2PreviewEngine(
         notifyStarted: Boolean,
     ): CameraCaptureSession.CaptureCallback {
         val callbackGeneration = generation
+        // Bind to the session armed now rather than to the callback's session argument: a
+        // constrained high-speed session reports its bursts with the inner capture session, not
+        // the CameraConstrainedHighSpeedCaptureSession the engine holds, so an identity check
+        // against the argument dropped every HFR result and a GPU HFR preview never "started".
+        val armedSession = session
         if (notifyStarted && descriptor != null && !disposed.get()) {
-            session?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
+            armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
         }
         return object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(
@@ -3654,8 +3676,9 @@ class Camera2PreviewEngine(
                     request: CaptureRequest,
                     result: TotalCaptureResult,
                 ) {
-                    if (disposed.get() || callbackGeneration != generation || session !== this@Camera2PreviewEngine.session) return
-                    pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === session }?.let { receipt ->
+                    if (disposed.get() || callbackGeneration != generation || armedSession == null ||
+                        armedSession !== this@Camera2PreviewEngine.session) return
+                    pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.
                         pendingPreviewStartedReceipt = null
@@ -3663,7 +3686,7 @@ class Camera2PreviewEngine(
                     }
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
-                    auditCaptureResult(session, result, sensorTimestamp)
+                    auditCaptureResult(armedSession, result, sensorTimestamp)
                     reportTapFocusResult(request, result)
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
@@ -3720,8 +3743,9 @@ class Camera2PreviewEngine(
                 }
 
                 override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
-                    if (disposed.get() || callbackGeneration != generation || session !== this@Camera2PreviewEngine.session) return
-                    runCatching { graphAuditor(session).recordCaptureFailure() }
+                    if (disposed.get() || callbackGeneration != generation || armedSession == null ||
+                        armedSession !== this@Camera2PreviewEngine.session) return
+                    runCatching { graphAuditor(armedSession).recordCaptureFailure() }
                 }
             }
     }
@@ -4607,9 +4631,31 @@ class Camera2PreviewEngine(
     private fun ownsRecorderRequest(request: RecorderRequest): Boolean =
         recorderRequest.get() === request && !disposed.get() && generation == request.generation && camera === request.device
 
+    /**
+     * MediaRecorder owns the microphone on this route, so there is no PCM to meter. Its peak
+     * amplitude is the only level it exposes: publish that as a peak-only mono reading, with no
+     * RMS, VU or PPM value, so the meter never shows a measurement this route cannot make.
+     */
+    private fun startRecorderLevelPolling(request: RecorderRequest) {
+        val sink = recorderLevelSink ?: return
+        runCatching { recorder?.maxAmplitude } // The first read only resets the peak.
+        val tick = object : Runnable {
+            override fun run() {
+                cameraExecutor.execute {
+                    if (!recording || !ownsRecorderRequest(request) || request.stopRequested.get()) return@execute
+                    val amplitude = runCatching { recorder?.maxAmplitude }.getOrNull() ?: return@execute
+                    sink(recorderPeakSnapshot(amplitude, SystemClock.elapsedRealtime()))
+                    recorderLevelHandler.postDelayed(this, RECORDER_LEVEL_INTERVAL_MS)
+                }
+            }
+        }
+        recorderLevelHandler.postDelayed(tick, RECORDER_LEVEL_INTERVAL_MS)
+    }
+
     private fun releaseRecorder(expected: RecorderRequest? = recorderRequest.get()) {
         if (recorderRequest.get() !== expected) return
         recording = false
+        recorderLevelSink = null
         runCatching { recorder?.reset() }
         val releaseFailure = runCatching { recorder?.release() }.exceptionOrNull()
         if (releaseFailure != null) {
@@ -4807,6 +4853,7 @@ class Camera2PreviewEngine(
     companion object {
         const val FOCUS_PULL_TICK_MS = 33L
         const val DEFAULT_TARGET_FPS = 30
+        private const val RECORDER_LEVEL_INTERVAL_MS = 100L
         internal const val MIME_AVC = "video/avc"
         internal const val MIME_HEVC = "video/hevc"
         private const val MIN_SELECTABLE_FPS = 10

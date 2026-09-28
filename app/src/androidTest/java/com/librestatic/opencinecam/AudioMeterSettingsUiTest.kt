@@ -124,6 +124,7 @@ class AudioMeterSettingsUiTest {
         for (tag in listOf("settings-visible", "settings-mode-PEAK_RMS", "settings-mode-VU", "settings-mode-PPM", "settings-reference", "settings-hold", "settings-values")) {
             node(tag).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         }
+        node("settings-help-toggle").performScrollTo().performClick()
         for (tag in listOf("settings-help", "settings-mode-PEAK_RMS-label", "settings-mode-VU-label", "settings-mode-PPM-label", "settings-reference-label", "settings-hold-label")) {
             val result = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(result)) }

@@ -650,4 +650,5 @@
     <string name="settings_category_media">Medios y archivos</string>
     <string name="settings_summary_media">Compartir, galería, proxies, nombres</string>
     <string name="preview_start_timeout">La cámara no llegó a iniciar la vista previa a tiempo.</string>
+    <string name="fps_high_speed_preview_note">Las tasas de alta velocidad (HS) graban todos los cuadros; mientras tanto el visor muestra 30 fps.</string>
 </resources>

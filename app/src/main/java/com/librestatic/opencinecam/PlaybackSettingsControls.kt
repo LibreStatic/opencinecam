@@ -26,7 +26,5 @@ internal fun PlaybackSettingsControls(settings: PlaybackSettings, onSettings: (P
 @Composable
 private fun PlaybackToggle(tag: String, label: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
     val title = stringResource(label)
-    Text(title, Modifier.fillMaxWidth().testTag("playback-$tag-label"))
-    Switch(checked, onChange, modifier = Modifier.heightIn(min = 48.dp).testTag("playback-$tag")
-        .semantics { contentDescription = title })
+    SettingsSwitchRow(title, checked, onChange, tag = "playback-$tag", labelTag = "playback-$tag-label")
 }

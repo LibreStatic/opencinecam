@@ -19,11 +19,13 @@ internal data class KnownGoodCapture(
     val logFps: Int,
     val timelapseWidth: Int,
     val timelapseHeight: Int,
+    val videoOffSpeed: Boolean = false,
 ) {
     fun applyTo(settings: CameraSettings): CameraSettings = settings.copy(
         videoWidth = videoWidth, videoHeight = videoHeight, videoFps = videoFps,
         logWidth = logWidth, logHeight = logHeight, logFps = logFps,
         timelapseWidth = timelapseWidth, timelapseHeight = timelapseHeight,
+        videoOffSpeed = videoOffSpeed,
     )
 
     /** Resolution and rate the camera opens with in [mode], or null for modes that have none. */
@@ -39,12 +41,13 @@ internal data class KnownGoodCapture(
         this.mode != mode || applyTo(settings) != settings
 
     fun encode(): String = listOf(mode.name, cameraId.orEmpty(), videoWidth, videoHeight, videoFps,
-        logWidth, logHeight, logFps, timelapseWidth, timelapseHeight).joinToString("|")
+        logWidth, logHeight, logFps, timelapseWidth, timelapseHeight, if (videoOffSpeed) 1 else 0).joinToString("|")
 
     companion object {
         fun of(settings: CameraSettings, mode: CaptureMode, cameraId: String?) = KnownGoodCapture(
             mode, cameraId, settings.videoWidth, settings.videoHeight, settings.videoFps,
             settings.logWidth, settings.logHeight, settings.logFps, settings.timelapseWidth, settings.timelapseHeight,
+            settings.videoOffSpeed,
         )
 
         /** Fallback when nothing has previewed yet: the defaults every supported camera opens. */
@@ -57,11 +60,13 @@ internal data class KnownGoodCapture(
 
         fun decode(value: String?): KnownGoodCapture? {
             val parts = value?.split("|") ?: return null
-            if (parts.size != 10) return null
+            // Ten fields before off-speed was recorded; eleven since.
+            if (parts.size != 10 && parts.size != 11) return null
             val mode = CaptureMode.entries.firstOrNull { it.name == parts[0] } ?: return null
-            val numbers = parts.drop(2).map { it.toIntOrNull()?.takeIf { n -> n > 0 } ?: return null }
+            val numbers = parts.subList(2, 10).map { it.toIntOrNull()?.takeIf { n -> n > 0 } ?: return null }
+            val offSpeed = when (parts.getOrNull(10)) { null, "0" -> false; "1" -> true; else -> return null }
             return KnownGoodCapture(mode, parts[1].ifEmpty { null }, numbers[0], numbers[1], numbers[2],
-                numbers[3], numbers[4], numbers[5], numbers[6], numbers[7])
+                numbers[3], numbers[4], numbers[5], numbers[6], numbers[7], offSpeed)
         }
     }
 }

@@ -77,6 +77,7 @@ class AudioRecordingGainSettingsUiTest {
             try { target.assertHeightIsAtLeast(48.dp) }
             catch (failure: AssertionError) { throw AssertionError("Control $tag: ${target.getUnclippedBoundsInRoot()}", failure) }
         }
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "value", "agc-help", "applied")) {
             val results = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(results)) }

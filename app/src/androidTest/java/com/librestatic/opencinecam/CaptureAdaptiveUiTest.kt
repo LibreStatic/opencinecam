@@ -53,7 +53,8 @@ class CaptureAdaptiveUiTest {
 
         composeRule.onNodeWithTag("media-action", useUnmergedTree = true).assertIsEnabled()
         composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsEnabled()
-        composeRule.onNodeWithText("ISO").assertIsEnabled()
+        // Without a camera descriptor there is no manual-exposure capability, so ISO is shown but disabled.
+        composeRule.onNodeWithText("ISO").assertIsDisplayed()
         // Stills have no recording rate: the FPS control belongs to video and LOG only.
         composeRule.onNodeWithText("FPS").assertDoesNotExist()
         saveScreenshot("mode-wheel-portrait")
@@ -107,9 +108,9 @@ class CaptureAdaptiveUiTest {
         composeRule.onNodeWithText(context.getString(R.string.mode_title)).performClick()
         val modesLabel = context.getString(R.string.modes_title)
         composeRule.onNodeWithText(modesLabel).assertIsDisplayed()
-        val rawVideoLabel = InstrumentationRegistry.getInstrumentation().targetContext
-            .getString(R.string.raw_video_mode)
-        composeRule.onNodeWithText(rawVideoLabel).performScrollTo().assertIsDisplayed()
+        // Modes this device cannot run (RAW video fails its gate by default) stay off the grid.
+        composeRule.onNodeWithText(context.getString(R.string.raw_video_mode)).assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(R.string.time_lapse_mode)).performScrollTo().assertIsDisplayed()
     }
 
     @Test

@@ -36,10 +36,9 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
             }
         } }
         val lutLabel = stringResource(R.string.media_share_lut)
-        Text(lutLabel, Modifier.fillMaxWidth().testTag("media-share-lut-label"))
-        Switch(settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
-            enabled = enabled && settings.content != MediaShareContent.ORIGINALS_ONLY && settings.metadata != MediaShareMetadata.PRODUCTION,
-            modifier = Modifier.heightIn(min = 48.dp).testTag("media-share-lut").semantics { contentDescription = lutLabel })
+        SettingsSwitchRow(lutLabel, settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
+            tag = "media-share-lut", labelTag = "media-share-lut-label",
+            enabled = enabled && settings.content != MediaShareContent.ORIGINALS_ONLY && settings.metadata != MediaShareMetadata.PRODUCTION)
         Text(stringResource(R.string.media_share_lut_help), Modifier.fillMaxWidth().testTag("media-share-lut-help"))
     }
 }

@@ -57,4 +57,14 @@ class CaptureRecoveryTest {
         assertEquals(Triple(1920, 1080, 30), snapshot.geometry(CaptureMode.VIDEO))
         assertNull(snapshot.geometry(CaptureMode.PHOTO))
     }
+
+    @Test fun offSpeedIsPartOfTheWayBack() {
+        val slow = KnownGoodCapture.of(working.copy(videoFps = 240, videoOffSpeed = true), CaptureMode.VIDEO, "0")
+        assertEquals(slow, KnownGoodCapture.decode(slow.encode()))
+        // A normal-speed snapshot restores off-speed off, even at the same geometry.
+        val normal = KnownGoodCapture.of(working.copy(videoFps = 240), CaptureMode.VIDEO, "0")
+        assertTrue(normal.differsFrom(working.copy(videoFps = 240, videoOffSpeed = true), CaptureMode.VIDEO))
+        // Snapshots written before off-speed was recorded still decode, as normal speed.
+        assertEquals(false, KnownGoodCapture.decode("VIDEO|0|1920|1080|30|1920|1080|30|1920|1080")?.videoOffSpeed)
+    }
 }

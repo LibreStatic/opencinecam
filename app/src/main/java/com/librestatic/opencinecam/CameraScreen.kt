@@ -1102,9 +1102,13 @@ internal fun AdaptiveCaptureChrome(
         showMonitoring = false
     }
 
+    // The real-time rate Video had before slow motion raised it, restored when Video is chosen again.
+    var normalVideoFps by rememberSaveable { mutableIntStateOf(30) }
     val modeSelection = ModeSelection(displayedCaptureMode(state.selectedMode, settings.videoOffSpeed)) { mode ->
         // Slow motion is VIDEO recording off-speed; Video is the same path at normal speed.
         val slow = mode == CaptureMode.SLOW_MOTION
+        val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
+        if (slow && !settings.videoOffSpeed && state.targetFps < SLOW_MOTION_MIN_FPS) normalVideoFps = state.targetFps
         val profile = if (slow) state.descriptor?.let { descriptor ->
             slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
         } else null
@@ -1116,7 +1120,8 @@ internal fun AdaptiveCaptureChrome(
         // Size and rate are settled before the mode changes, so a switch from another mode opens
         // the camera once, directly in the high-speed session, instead of reopening it per step.
         val updated = settings.copy(videoOffSpeed = offSpeed).let { base ->
-            profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) } ?: base
+            profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) }
+                ?: if (leavingSlowMotion) base.copy(videoFps = normalVideoFps) else base
         }
         if (updated != settings) {
             onSettingsChanged(updated)
@@ -1125,6 +1130,7 @@ internal fun AdaptiveCaptureChrome(
         val pipelineMode = if (slow) CaptureMode.VIDEO else mode
         if (pipelineMode != state.selectedMode) binder?.selectMode(pipelineMode)
         else if (profile != null) binder?.selectTargetFps(profile.fps)
+        else if (leavingSlowMotion) binder?.selectTargetFps(normalVideoFps)
     }
 
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {
@@ -1298,6 +1304,9 @@ internal fun AdaptiveCaptureChrome(
             state.selectedMode == CaptureMode.LOG -> 82.dp
             else -> 56.dp
         }
+        // The recording HUD grows with its meter and monitor toggles; measure it instead of guessing.
+        var recordingHudHeightPx by remember { mutableIntStateOf(0) }
+        val recordingHudHeight = with(LocalDensity.current) { recordingHudHeightPx.toDp() }
         InstrumentStack(
             state = state,
             binder = binder,
@@ -1312,7 +1321,7 @@ internal fun AdaptiveCaptureChrome(
                 .padding(
                     start = 12.dp,
                     end = 64.dp,
-                    top = if (recording) recordingHudTop + 60.dp else 62.dp,
+                    top = if (recording) recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp else 62.dp,
                     bottom = if (chromeVisible) controlDeckHeight + 8.dp else 8.dp,
                 ),
         )
@@ -1369,7 +1378,8 @@ internal fun AdaptiveCaptureChrome(
                 onToggleGrid = onToggleGrid,
                 onCycleGridMode = onCycleGridMode,
                 onToggleHorizon = onToggleHorizon,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop)
+                    .onSizeChanged { recordingHudHeightPx = it.height },
             )
         }
 
@@ -1443,7 +1453,7 @@ private fun CaptureTopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        MediaThumbnailAction(onOpenMedia)
+        MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
         Text(
             "${state.selectedCameraId ?: "—"} · ${state.phase.name}",
             color = VerifiedCyan,
@@ -1485,11 +1495,12 @@ private fun TopAction(icon: CineIcon, description: String, onClick: () -> Unit) 
 }
 
 @Composable
-private fun MediaThumbnailAction(onClick: () -> Unit) {
+private fun MediaThumbnailAction(lastSavedUri: String?, onClick: () -> Unit) {
     val context = LocalContext.current
     val description = stringResource(R.string.media_tab)
     var thumbnail by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(Unit) {
+    // Reload after every published capture, not only once: the newest take belongs here.
+    LaunchedEffect(lastSavedUri) {
         thumbnail = withContext(Dispatchers.IO) {
             runCatching { LocalMediaRepository(context.applicationContext).recent(1).firstOrNull()?.thumbnail }.getOrNull()
         }
@@ -1556,8 +1567,10 @@ private fun InstrumentStack(
 ) {
     val analysisFresh = rememberScopeAnalysisFresh(state, settings.monitoring)
     // While recording, the recording HUD carries its own meter.
+    // Off-speed (slow motion) takes are silent by design, so there is no microphone to meter.
     val showAudio = chromeVisible && !recording && settings.audioEnabled && settings.audioMeter.visible &&
-        state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG)
+        state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG) &&
+        !(state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
     val showLogSource = chromeVisible && state.selectedMode == CaptureMode.LOG
     val showZoom = chromeVisible && state.zoomSupported
     val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
@@ -1863,7 +1876,12 @@ private fun QuickControlButton(
         verticalArrangement = Arrangement.Center,
     ) {
         Text(value, color = if (enabled) Color.White else Muted, fontSize = 13.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(control.name.take(4), color = if (enabled) Muted else Color(0xFF626A6D), fontSize = 8.sp, lineHeight = 9.sp, maxLines = 1)
+        val label = when (control) {
+            ControlDial.RESOLUTION -> "RES"
+            ControlDial.SHUTTER -> "SHUTTER"
+            else -> control.name
+        }
+        Text(label, color = if (enabled) Muted else Color(0xFF626A6D), fontSize = 8.sp, lineHeight = 9.sp, maxLines = 1)
     }
 }
 
@@ -2785,6 +2803,10 @@ private fun FpsDial(
                 repeat(4 - rates.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+        // Camera2 feeds the preview one frame per high-speed batch, so the viewfinder of a 120 or
+        // 240 fps session runs at 30 fps while the file keeps every frame. Say so here.
+        Text(stringResource(R.string.fps_high_speed_preview_note), color = Muted, fontSize = 12.sp,
+            modifier = Modifier.testTag("fps-high-speed-note"))
     }
 }
 
@@ -3551,13 +3573,12 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
             }
         } }
         val goodLabel = stringResource(R.string.production_slate_good)
-        Text(goodLabel, Modifier.fillMaxWidth().testTag("slate-good-label"), color = Color.White)
-        Switch(slate.goodTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(goodTake = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("slate-good").semantics { contentDescription = goodLabel })
+        SettingsSwitchRow(goodLabel, slate.goodTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(goodTake = it))) },
+            tag = "slate-good", labelTag = "slate-good-label")
         val incrementLabel = stringResource(R.string.production_slate_increment)
-        Text(incrementLabel, Modifier.fillMaxWidth().testTag("slate-increment-label"), color = Color.White)
-        Switch(slate.autoIncrementTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(autoIncrementTake = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("slate-increment").semantics { contentDescription = incrementLabel })
+        SettingsSwitchRow(incrementLabel, slate.autoIncrementTake,
+            { onSettingsChange(settings.copy(productionSlate = slate.copy(autoIncrementTake = it))) },
+            tag = "slate-increment", labelTag = "slate-increment-label")
     }
 }
 
@@ -3578,11 +3599,9 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
     val options = settings.audioMeter
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.audio_meter_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.audio_meter_help), Modifier.testTag("audio-meter-settings-help"), color = Muted, fontSize = 14.sp)
-        val visibleLabel = stringResource(R.string.audio_meter_visible)
-        Text(visibleLabel, color = Color.White)
-        Switch(options.visible, { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-meter-settings-visible").semantics { contentDescription = visibleLabel })
+        SettingsHelp(stringResource(R.string.audio_meter_help), tag = "audio-meter-settings-help")
+        SettingsSwitchRow(stringResource(R.string.audio_meter_visible), options.visible,
+            { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) }, tag = "audio-meter-settings-visible")
         SettingsPillRow { for (mode in AudioMeterMode.entries) {
             SettingsPill(stringResource(audioMeterModeLabel(mode)), "audio-meter-settings-mode-$mode", options.mode == mode) {
                 onSettingsChange(settings.copy(audioMeter = options.copy(mode = mode)))
@@ -3605,9 +3624,8 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
             track = { androidx.compose.material3.SliderDefaults.Track(it) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-meter-settings-hold").semantics { contentDescription = holdLabel })
         val valuesLabel = stringResource(R.string.audio_meter_numbers)
-        Text(valuesLabel, color = Color.White)
-        Switch(options.showValues, { onSettingsChange(settings.copy(audioMeter = options.copy(showValues = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-meter-settings-values").semantics { contentDescription = valuesLabel })
+        SettingsSwitchRow(valuesLabel, options.showValues,
+            { onSettingsChange(settings.copy(audioMeter = options.copy(showValues = it))) }, tag = "audio-meter-settings-values")
     }
 }
 
@@ -3618,7 +3636,7 @@ internal fun AudioEffectsSettingsStatus(state: CameraUiState, settings: CameraSe
     val effective = state.effectiveSettings
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.audio_effect_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.audio_effect_help), Modifier.testTag("audio-effects-help"), color = Muted, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.audio_effect_help), tag = "audio-effects-help")
         if (settings.audioRecordingGain.enabled) {
             Text(stringResource(R.string.audio_effect_manual), Modifier.testTag("audio-effects-manual"), color = Amber, fontSize = 14.sp)
         }
@@ -3686,11 +3704,13 @@ internal fun AudioListeningSettingsControls(
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.audio_listening_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.audio_listening_help), Modifier.testTag("audio-listening-help"), color = Muted, fontSize = 14.sp)
-        Text(enabledLabel, color = Color.White)
-        Switch(checked = request.enabled,
-            onCheckedChange = { onSettingsChange(settings.copy(audioListening = request.copy(enabled = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-listening-enable").semantics { contentDescription = enabledLabel })
+        SettingsHelp(stringResource(R.string.audio_listening_help), tag = "audio-listening-help")
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(enabledLabel, Modifier.weight(1f).padding(end = 12.dp), color = Color.White)
+            Switch(checked = request.enabled,
+                onCheckedChange = { onSettingsChange(settings.copy(audioListening = request.copy(enabled = it))) },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("audio-listening-enable").semantics { contentDescription = enabledLabel })
+        }
         Text(volumeLabel, Modifier.testTag("audio-listening-volume-label"), color = Color.White)
         Slider(value = request.volumePercent.toFloat(), onValueChange = {
             onSettingsChange(settings.copy(audioListening = request.copy(volumePercent = it.roundToInt())))
@@ -3766,11 +3786,9 @@ internal fun AudioRecordingGainSettings(
     val gainInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.audio_gain_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.audio_gain_help), Modifier.testTag("audio-gain-help"), color = Muted, fontSize = 14.sp)
-        Text(manualLabel, color = Color.White)
-        Switch(checked = gain.enabled,
-            onCheckedChange = { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-gain-manual").semantics { contentDescription = manualLabel })
+        SettingsHelp(stringResource(R.string.audio_gain_help), tag = "audio-gain-help")
+        SettingsSwitchRow(manualLabel, gain.enabled,
+            { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) }, tag = "audio-gain-manual")
         Text(requestedLabel,
             Modifier.testTag("audio-gain-value"), color = Color.White)
         Slider(value = gain.decibels.toFloat(), valueRange = -24f..24f, steps = 47,
@@ -3784,10 +3802,8 @@ internal fun AudioRecordingGainSettings(
                 thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
             track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it, enabled = gain.enabled) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-gain-slider").semantics { contentDescription = requestedLabel })
-        Text(agcLabel, color = Color.White)
-        Switch(checked = settings.automaticGainControlEnabled, enabled = !gain.enabled,
-            onCheckedChange = { onSettingsChange(settings.copy(automaticGainControlEnabled = it)) },
-            modifier = Modifier.heightIn(min = 48.dp).testTag("audio-gain-agc").semantics { contentDescription = agcLabel })
+        SettingsSwitchRow(agcLabel, settings.automaticGainControlEnabled,
+            { onSettingsChange(settings.copy(automaticGainControlEnabled = it)) }, tag = "audio-gain-agc", enabled = !gain.enabled)
         Text(stringResource(if (gain.enabled) R.string.audio_gain_agc_suspended else R.string.audio_gain_agc_backend),
             Modifier.testTag("audio-gain-agc-help"), color = Muted, fontSize = 14.sp)
         val applied = state.audioLevels?.appliedRecordingGain.takeIf { state.audioMonitoringActive }

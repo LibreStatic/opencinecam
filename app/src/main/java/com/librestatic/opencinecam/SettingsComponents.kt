@@ -153,6 +153,27 @@ internal fun SettingsPillRow(modifier: Modifier = Modifier, content: @Composable
     FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
 }
 
+/**
+ * A labelled on/off setting: the label takes the row and the switch sits at its end, instead of
+ * a switch stacked under its label. The switch carries [tag]; the label carries [labelTag].
+ */
+@Composable
+internal fun SettingsSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    tag: String,
+    labelTag: String? = null,
+    enabled: Boolean = true,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f).padding(end = 12.dp).then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
+            color = if (enabled) Color.White else SettingsMuted)
+        androidx.compose.material3.Switch(checked, onCheckedChange, enabled = enabled,
+            modifier = Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = label })
+    }
+}
+
 /** Colour choices as a row of swatches; the selected one carries a ring and a check, not only colour. */
 @Composable
 internal fun <T> SettingsSwatches(
@@ -186,17 +207,21 @@ internal fun <T> SettingsSwatches(
     }
 }
 
-/** Long explanations stay one tap away instead of pushing the controls down the page. */
+/**
+ * Long explanations stay one tap away instead of pushing the controls down the page. With a
+ * [tag], the toggle carries "[tag]-toggle" and the expanded explanation carries [tag].
+ */
 @Composable
-internal fun SettingsHelp(text: String, modifier: Modifier = Modifier) {
+internal fun SettingsHelp(text: String, modifier: Modifier = Modifier, tag: String? = null) {
     var open by rememberSaveable(text) { mutableStateOf(false) }
     Column(modifier) {
         Text(
             stringResource(if (open) R.string.settings_help_hide else R.string.settings_help_show),
             color = Color(0xFF5BD6E5),
             fontSize = 13.sp,
-            modifier = Modifier.heightIn(min = 40.dp).clickable { open = !open }.padding(vertical = 10.dp),
+            modifier = Modifier.heightIn(min = 40.dp).clickable { open = !open }.padding(vertical = 10.dp)
+                .then(tag?.let { Modifier.testTag("$it-toggle") } ?: Modifier),
         )
-        if (open) Text(text, color = SettingsMuted, fontSize = 13.sp)
+        if (open) Text(text, color = SettingsMuted, fontSize = 13.sp, modifier = tag?.let { Modifier.testTag(it) } ?: Modifier)
     }
 }
