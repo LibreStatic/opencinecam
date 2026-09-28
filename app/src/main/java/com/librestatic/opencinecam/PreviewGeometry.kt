@@ -23,16 +23,28 @@ internal data class PreviewViewport(
     val bottom: Float get() = top + height
 }
 
+/**
+ * Width / height of the upright viewfinder image on the current display.
+ *
+ * Camera2 rotates a SurfaceView buffer by the sensor orientation relative to the current
+ * display rotation, so the stream's long edge follows the screen only when that relative turn
+ * is 0 or 180 degrees. Deriving this from the window shape assumes a phone (sensor 90,
+ * portrait-native display) and stretches tablets and any other sensor/display combination.
+ * Front cameras rotate by sensor + display, which has the same quarter-turn parity.
+ */
 internal fun previewDisplayRatio(
     streamWidth: Int,
     streamHeight: Int,
     squeezeFactor: Float,
-    windowLandscape: Boolean,
+    sensorOrientationDegrees: Int,
+    displayRotationDegrees: Int,
 ): Float {
     require(streamWidth > 0 && streamHeight > 0)
     require(squeezeFactor > 0f)
+    val relativeRotation = ((sensorOrientationDegrees - displayRotationDegrees) % 360 + 360) % 360
+    require(relativeRotation % 90 == 0) { "Preview rotations must be multiples of 90 degrees." }
     val landscapeRatio = streamWidth.toFloat() / streamHeight / squeezeFactor
-    return if (windowLandscape) landscapeRatio else 1f / landscapeRatio
+    return if (relativeRotation == 90 || relativeRotation == 270) 1f / landscapeRatio else landscapeRatio
 }
 
 internal fun fittedPreviewViewport(containerWidth: Float, containerHeight: Float, ratio: Float?): PreviewViewport {

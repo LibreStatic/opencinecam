@@ -50,7 +50,45 @@ class PreviewGeometryTest {
     }
 
     @Test fun anamorphicRatioIsSharedAcrossRotations() {
-        assertEquals(4f / 3f, previewDisplayRatio(1920, 1080, 4f / 3f, true), 0.001f)
-        assertEquals(3f / 4f, previewDisplayRatio(1920, 1080, 4f / 3f, false), 0.001f)
+        // Phone sensor (90) on a portrait-native display: landscape at 90, portrait at 0.
+        assertEquals(4f / 3f, previewDisplayRatio(1920, 1080, 4f / 3f, 90, 90), 0.001f)
+        assertEquals(3f / 4f, previewDisplayRatio(1920, 1080, 4f / 3f, 90, 0), 0.001f)
+    }
+
+    @Test fun phoneBackSensorFollowsDisplayRotation() {
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 90, 0), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 90, 90), 0.001f)
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 90, 180), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 90, 270), 0.001f)
+    }
+
+    @Test fun phoneFrontSensorFollowsDisplayRotation() {
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 270, 0), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 270, 90), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 270, 270), 0.001f)
+    }
+
+    @Test fun tabletSensorZeroOnLandscapeNativeDisplay() {
+        // Natural (rotation 0) is landscape: the stream is shown unrotated.
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 0, 0), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 0, 180), 0.001f)
+        // Portrait rotations turn the stream a quarter.
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 0, 90), 0.001f)
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 0, 270), 0.001f)
+        assertEquals(3f / 4f, previewDisplayRatio(1920, 1080, 4f / 3f, 0, 90), 0.001f)
+    }
+
+    @Test fun otherSensorMountsUseRelativeRotation() {
+        // Emulator tablets report the phone-style 90 sensor on a landscape-native display: the
+        // upright image is portrait in the natural landscape window, not window-shaped.
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 90, 0), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 90, 270), 0.001f)
+        assertEquals(9f / 16f, previewDisplayRatio(1920, 1080, 1f, 180, 90), 0.001f)
+        assertEquals(16f / 9f, previewDisplayRatio(1920, 1080, 1f, 180, 0), 0.001f)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun previewRatioRejectsNonRightAngles() {
+        previewDisplayRatio(1920, 1080, 1f, 45, 0)
     }
 }

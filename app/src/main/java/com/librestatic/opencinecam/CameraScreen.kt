@@ -448,8 +448,11 @@ internal fun CaptureSurface(
         }
         val squeezeFactor = (state.effectiveSettings?.takeIf { state.phase == CameraUiPhase.RECORDING }
             ?: settings).anamorphicSqueeze.factor
+        // Read on every constraint change: a quarter rotation always swaps widthPx/heightPx, and a
+        // half rotation keeps the sensor-to-display quarter-turn parity (and so the ratio).
+        val displayRotationDegrees = rotationDegrees(LocalView.current.display?.rotation ?: Surface.ROTATION_0)
         val previewDisplayRatio = previewStreamSize?.let { size ->
-            previewDisplayRatio(size.width, size.height, squeezeFactor, landscape)
+            previewDisplayRatio(size.width, size.height, squeezeFactor, descriptor?.sensorOrientation ?: 90, displayRotationDegrees)
         }
         Box(paneModifier(panes?.preview).testTag("fold-preview-pane")) {
         if (descriptor != null && binder != null) {
