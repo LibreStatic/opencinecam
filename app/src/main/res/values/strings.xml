@@ -629,6 +629,13 @@
     <string name="hardware_not_supported">NO</string>
     <string name="hardware_log_profiles_verified">%1$d/%2$d profiles verified</string>
     <string name="hardware_log_unsupported">OCLog2 UNSUPPORTED · no capability-backed graph</string>
+    <string name="panel_title_ev">EV</string>
+    <string name="panel_title_resolution">RESOLUTION</string>
+    <string name="panel_title_fixed_fps">FIXED FPS</string>
+    <string name="panel_title_white_balance">WHITE BALANCE</string>
+    <string name="panel_title_focus">FOCUS</string>
+    <string name="panel_title_focus_pull">FOCUS PULL</string>
+    <string name="focus_auto_fixed_lens">AUTO (fixed lens)</string>
     <string name="focus_marks_title">MARKS</string>
     <string name="focus_mark_empty">SET</string>
     <string name="focus_marks_hint">Tap: pull · Long press: save/clear</string>

@@ -629,6 +629,13 @@
     <string name="hardware_not_supported">NO</string>
     <string name="hardware_log_profiles_verified">%1$d/%2$d perfiles verificados</string>
     <string name="hardware_log_unsupported">OCLog2 NO SOPORTADO · sin grafo respaldado por capacidades</string>
+    <string name="panel_title_ev">EV</string>
+    <string name="panel_title_resolution">RESOLUCIÓN</string>
+    <string name="panel_title_fixed_fps">FPS FIJO</string>
+    <string name="panel_title_white_balance">BALANCE DE BLANCOS</string>
+    <string name="panel_title_focus">FOCO</string>
+    <string name="panel_title_focus_pull">CAMBIO DE FOCO</string>
+    <string name="focus_auto_fixed_lens">AUTO (lente fija)</string>
     <string name="focus_marks_title">MARCAS</string>
     <string name="focus_mark_empty">FIJAR</string>
     <string name="focus_marks_hint">Tocar: pull · Mantener: guardar/borrar</string>

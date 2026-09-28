@@ -2705,7 +2705,7 @@ private fun EvDial(
     onClose: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader("EV", onClose)
+        PanelHeader(stringResource(R.string.panel_title_ev), onClose)
         val range = state.aeCompensationIndexRange ?: return@Column
         val step = state.descriptor?.aeCompensationStep?.takeIf { it > 0f } ?: 1f
         val minEv = range.first * step
@@ -2745,7 +2745,7 @@ private fun ResolutionDial(
     onClose: () -> Unit,
 ) {
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader("RESOLUCIÓN", onClose)
+        PanelHeader(stringResource(R.string.panel_title_resolution), onClose)
         state.availableVideoSizes.chunked(2).forEach { sizes ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 sizes.forEach { (width, height) ->
@@ -2768,7 +2768,7 @@ private fun FpsDial(
     onClose: () -> Unit,
 ) {
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader("FPS FIJO", onClose)
+        PanelHeader(stringResource(R.string.panel_title_fixed_fps), onClose)
         val modeRates = if (state.selectedMode == CaptureMode.LOG) {
             VideoGeometryPolicy.unionLogFps(state.availableLogProfiles.map { it.toSpec() })
         } else if (state.selectedMode in CameraUiState.videoProfileModes) {
@@ -2828,7 +2828,7 @@ private fun WbDial(
             ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange }
             ?: kelvinRange.first
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader("BALANCE DE BLANCOS", onClose)
+            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
 
             // Live Kelvin readout
             val displayK = if (selection is WhiteBalanceSelection.Kelvin) selection.kelvin else currentK
@@ -2887,7 +2887,7 @@ private fun WbDial(
             CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to "FLUO",
         )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader("BALANCE DE BLANCOS", onClose)
+            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
             choices.chunked(3).forEach { rowChoices ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     rowChoices.forEach { (mode, label) ->
@@ -3942,7 +3942,7 @@ private fun FocusPullDial(
         Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        PanelHeader(if (pullActive) "FOCUS PULL" else "FOCO", onClose)
+        PanelHeader(stringResource(if (pullActive) R.string.panel_title_focus_pull else R.string.panel_title_focus), onClose)
 
         Text(
             if (supportsManualFocus) {
@@ -3955,7 +3955,7 @@ private fun FocusPullDial(
                 } else if (effective != null) {
                     "%.1fD".format(effective)
                 } else "AUTO"
-            } else "AUTO (lente fija)",
+            } else stringResource(R.string.focus_auto_fixed_lens),
             color = if (pullActive) RecordRed else Amber,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
