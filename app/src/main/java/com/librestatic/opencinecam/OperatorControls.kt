@@ -105,7 +105,8 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
 internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, actions: OperatorActions? = LocalOperatorActions.current) {
     Column(Modifier.fillMaxWidth().background(Color(0xFF101417)).padding(horizontal = 8.dp, vertical = 4.dp)) {
         if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Wrapped rows (and the one-per-row column in the side rail) keep a gap between chips.
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             settings.operation.buttons.forEachIndexed { index, action ->
                 val paused = operatorActionThermallyPaused(action, state)
                 OperatorButton(

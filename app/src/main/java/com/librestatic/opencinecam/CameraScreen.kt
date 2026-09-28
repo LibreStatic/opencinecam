@@ -454,7 +454,23 @@ internal fun CaptureSurface(
         val previewDisplayRatio = previewStreamSize?.let { size ->
             previewDisplayRatio(size.width, size.height, squeezeFactor, descriptor?.sensorOrientation ?: 90, displayRotationDegrees)
         }
-        Box(paneModifier(panes?.preview).testTag("fold-preview-pane")) {
+        // A short landscape window moves the capture controls into side rails (see
+        // AdaptiveCaptureChrome); the viewfinder is then fitted between them instead of under them.
+        // The decision uses the same safe-drawing size the chrome measures, so both always agree.
+        val safeInsets = WindowInsets.safeDrawing
+        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+        val safeWidthDp = with(density) {
+            (fullWidthPx - safeInsets.getLeft(density, layoutDirection) - safeInsets.getRight(density, layoutDirection)).toDp()
+        }
+        val safeHeightDp = with(density) { (fullHeightPx - safeInsets.getTop(density) - safeInsets.getBottom(density)).toDp() }
+        val sideRails = panes == null && !(state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls) &&
+            captureChromeLayout(safeWidthDp.value, safeHeightDp.value) == CaptureChromeLayout.SIDE_RAILS
+        val previewPaneModifier = if (sideRails) {
+            paneModifier(null)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = SIDE_RAIL_START_WIDTH_DP.dp, end = SIDE_RAIL_END_WIDTH_DP.dp)
+        } else paneModifier(panes?.preview)
+        Box(previewPaneModifier.testTag("fold-preview-pane")) {
         if (descriptor != null && binder != null) {
             val streamSize = requireNotNull(previewStreamSize)
             val displayRatio = requireNotNull(previewDisplayRatio)
@@ -1146,13 +1162,26 @@ internal fun AdaptiveCaptureChrome(
         val windowProfile = captureWindowProfile(maxWidth.value, maxHeight.value)
         val horizontalDeck = windowProfile != CaptureWindowProfile.COMPACT_PORTRAIT
         val compactPortrait = windowProfile == CaptureWindowProfile.COMPACT_PORTRAIT
-        val controlDeckHeight = with(density) { controlDeckHeightPx.toDp() }
+        // Short landscape windows put the controls in side rails and keep the viewfinder at full
+        // height between them. A hinge split owns the preview elsewhere, so it keeps the deck.
+        val sideRails = previewGesturesEnabled &&
+            captureChromeLayout(maxWidth.value, maxHeight.value) == CaptureChromeLayout.SIDE_RAILS
+        val startRail = SIDE_RAIL_START_WIDTH_DP.dp
+        val endRail = SIDE_RAIL_END_WIDTH_DP.dp
+        val controlDeckHeight = if (sideRails) 0.dp else with(density) { controlDeckHeightPx.toDp() }
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         val width = constraints.maxWidth.toFloat()
         val height = constraints.maxHeight.toFloat()
         val ratio = previewAspectRatio
-        val previewViewport = fittedPreviewViewport(width, height, ratio)
+        val previewViewport = if (sideRails) {
+            sideRailPreviewViewport(
+                width, height,
+                with(density) { startRail.toPx() }, with(density) { endRail.toPx() },
+                ratio,
+                rightToLeft = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl,
+            )
+        } else fittedPreviewViewport(width, height, ratio)
         val previewWidth = previewViewport.width
         val previewHeight = previewViewport.height
         val previewLeft = previewViewport.left
@@ -1275,7 +1304,7 @@ internal fun AdaptiveCaptureChrome(
                 onRelease = {},
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
+                    .padding(end = if (sideRails) endRail + 8.dp else 8.dp)
                     .width(28.dp)
                     .height(120.dp),
             )
@@ -1286,9 +1315,11 @@ internal fun AdaptiveCaptureChrome(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = 62.dp),
+                modifier = Modifier.align(Alignment.TopEnd)
+                    .padding(end = if (sideRails) endRail + 8.dp else 8.dp, top = if (sideRails) 8.dp else 62.dp),
             )
-            CaptureTopBar(
+            // In side-rail layout the top-bar actions live in the start rail instead.
+            if (!sideRails) CaptureTopBar(
                 state = state,
                 binder = binder,
                 onOpenMedia = onOpenMedia,
@@ -1304,9 +1335,15 @@ internal fun AdaptiveCaptureChrome(
         // the top bar (or the recording HUD) and stops above the measured control deck.
         val recordingHudTop = when {
             !chromeVisible -> 0.dp
+            sideRails -> 0.dp
             state.selectedMode == CaptureMode.LOG -> 82.dp
             else -> 56.dp
         }
+        // With side rails the instruments sit on the viewfinder between the rails, and there is no
+        // top bar above them; the end inset also clears the zoom rocker at the viewfinder edge.
+        val instrumentStart = if (sideRails) startRail + 12.dp else 12.dp
+        val instrumentEnd = if (sideRails) endRail + 44.dp else 64.dp
+        val instrumentTop = if (sideRails) 12.dp else 62.dp
         // The recording HUD grows with its meter and monitor toggles; measure it instead of guessing.
         var recordingHudHeightPx by remember { mutableIntStateOf(0) }
         val recordingHudHeight = with(LocalDensity.current) { recordingHudHeightPx.toDp() }
@@ -1322,14 +1359,48 @@ internal fun AdaptiveCaptureChrome(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    start = 12.dp,
-                    end = 64.dp,
-                    top = if (recording) recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp else 62.dp,
+                    start = instrumentStart,
+                    end = instrumentEnd,
+                    top = if (recording) recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp else instrumentTop,
                     bottom = if (chromeVisible) controlDeckHeight + 8.dp else 8.dp,
                 ),
         )
 
-        AnimatedVisibility(
+        if (sideRails) {
+            AnimatedVisibility(
+                visible = chromeVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight(),
+            ) {
+                CaptureStartRail(
+                    state = state,
+                    binder = binder,
+                    settings = settings,
+                    onSettingsChanged = onSettingsChanged,
+                    onOpenMedia = onOpenMedia,
+                    onOpenSettings = onOpenSettings,
+                    modifier = Modifier.width(startRail),
+                )
+            }
+            AnimatedVisibility(
+                visible = chromeVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            ) {
+                CaptureEndRail(
+                    state = state,
+                    binder = binder,
+                    selectorStyle = settings.modeSelectorStyle,
+                    settings = settings,
+                    onControl = { manualControl = it; showModeGrid = false; showMonitoring = false },
+                    onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
+                    onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
+                    modifier = Modifier.width(endRail),
+                )
+            }
+        } else AnimatedVisibility(
             visible = chromeVisible,
             enter = fadeIn() + slideInVertically { it / 3 },
             exit = fadeOut() + slideOutVertically { it / 3 },
@@ -1382,29 +1453,31 @@ internal fun AdaptiveCaptureChrome(
                 onCycleGridMode = onCycleGridMode,
                 onToggleHorizon = onToggleHorizon,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop)
+                    .padding(start = if (sideRails) startRail else 0.dp, end = if (sideRails) endRail else 0.dp)
                     .onSizeChanged { recordingHudHeightPx = it.height },
             )
         }
 
         if (state.captureControlsLocked) {
             OutlinedButton({ binder?.performOperatorAction(OperatorAction.CONTROL_LOCK) },
-                Modifier.align(Alignment.BottomStart).padding(8.dp).heightIn(min = 48.dp).testTag("operator-unlock")) {
+                Modifier.align(Alignment.BottomStart).padding(start = if (sideRails) startRail else 0.dp).padding(8.dp)
+                    .heightIn(min = 48.dp).testTag("operator-unlock")) {
                 Text(stringResource(R.string.operator_unlock), color = Color.White)
             }
         }
 
         if (chromeVisible) manualControl?.let { control ->
-            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { manualControl = null }) {
+            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { manualControl = null }) {
                 ManualControlDial(control, state, binder, settings, onSettingsChanged) { manualControl = null }
             }
         }
         if (chromeVisible && showModeGrid) {
-            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { showModeGrid = false }) {
+            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { showModeGrid = false }) {
                 ModeButtonGrid(state, binder) { showModeGrid = false }
             }
         }
         if (chromeVisible && showMonitoring) {
-            ContextualPanel(horizontalDeck, controlDeckHeight, maxHeight, onDismiss = { showMonitoring = false }) {
+            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { showMonitoring = false }) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.monitor_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     MonitoringToggleGrid(
@@ -1428,6 +1501,8 @@ private fun CaptureTopBar(
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
     modifier: Modifier = Modifier,
+    // The side-rail layout stacks the same actions in the start rail instead of across the top.
+    vertical: Boolean = false,
 ) {
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
@@ -1447,26 +1522,8 @@ private fun CaptureTopBar(
         containerColor = Panel,
     )
     val switchDescription = stringResource(R.string.camera_switch)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .background(Panel)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
-        Text(
-            "${state.selectedCameraId ?: "—"} · ${state.phase.name}",
-            color = VerifiedCyan,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        ThermalHudChip()
+    val statusText = "${state.selectedCameraId ?: "—"} · ${state.phase.name}"
+    val actions: @Composable () -> Unit = {
         if (state.cameras.size > 1) {
             TopAction(CineIcon.SWITCH_CAMERA, switchDescription) {
                 val index = state.cameras.indexOfFirst { it.cameraId == state.selectedCameraId }
@@ -1480,6 +1537,53 @@ private fun CaptureTopBar(
         }
         TopAction(CineIcon.TORCH, stringResource(R.string.flash_torch)) { showLight = true }
         TopAction(CineIcon.SETTINGS, stringResource(R.string.settings_tab), onOpenSettings)
+    }
+    if (vertical) {
+        Column(
+            modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
+            Text(
+                statusText,
+                color = VerifiedCyan,
+                fontSize = 9.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            )
+            ThermalHudChip()
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) { actions() }
+        }
+    } else Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(Panel)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
+        Text(
+            statusText,
+            color = VerifiedCyan,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        ThermalHudChip()
+        actions()
     }
 }
 
@@ -1729,6 +1833,92 @@ private fun LandscapeControlDeck(
         BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
         AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
         StatusInfoBar(state, settings)
+    }
+}
+
+/**
+ * Start rail of the side-rail layout: the top-bar actions, then the F-keys and preset slots. It
+ * scrolls rather than clipping when a long F-key list does not fit the window height.
+ */
+@Composable
+private fun CaptureStartRail(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
+    onOpenMedia: () -> Unit,
+    onOpenSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .fillMaxHeight()
+            .background(Panel)
+            .verticalScroll(rememberScrollState())
+            .testTag("capture-start-rail"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        CaptureTopBar(
+            state = state,
+            binder = binder,
+            onOpenMedia = onOpenMedia,
+            onOpenSettings = onOpenSettings,
+            settings = settings,
+            onSettingsChanged = onSettingsChanged,
+            vertical = true,
+        )
+        OperatorButtonRow(state, settings)
+        PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
+    }
+}
+
+/**
+ * End rail of the side-rail layout: exposure cells and the mode selector above, the shutter held
+ * at the bottom so it never scrolls away, with monitoring beside it as the secondary action.
+ */
+@Composable
+private fun CaptureEndRail(
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    selectorStyle: ModeSelectorStyle,
+    settings: CameraSettings,
+    onControl: (ControlDial) -> Unit,
+    onShowModes: () -> Unit,
+    onShowMonitoring: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .fillMaxHeight()
+            .background(Panel)
+            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .testTag("capture-end-rail"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            QuickControls(state, onControl, landscape = true)
+            if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = true)
+            else SelectedModeButton(state, onShowModes)
+            StatusInfoBar(state, settings)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
+            CaptureButton(state, binder, settings, 64.dp)
+        }
+        RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+        BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
+        BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
+        AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
+        CaptureStatus(state)
     }
 }
 
@@ -2172,6 +2362,8 @@ private fun ContextualPanel(
     horizontalDeck: Boolean,
     controlDeckHeight: androidx.compose.ui.unit.Dp,
     availableHeight: androidx.compose.ui.unit.Dp,
+    // Side rails occupy the end edge; the panel opens beside them, over the viewfinder.
+    endInset: androidx.compose.ui.unit.Dp = 0.dp,
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -2187,7 +2379,7 @@ private fun ContextualPanel(
             Modifier
                 .align(if (horizontalDeck) Alignment.BottomEnd else Alignment.BottomCenter)
                 .padding(
-                    end = if (horizontalDeck) 12.dp else 0.dp,
+                    end = endInset + if (horizontalDeck) 12.dp else 0.dp,
                     bottom = controlDeckHeight + 12.dp,
                 )
                 .widthIn(min = 260.dp, max = 380.dp)
