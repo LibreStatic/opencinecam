@@ -44,9 +44,9 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
             Button(onClick = { coordinator?.start(DisplayOperation.TRANSFER) }, enabled = display.transfer == DisplayCapability.AVAILABLE && camera.phase != CameraUiPhase.RECORDING,
                 modifier = Modifier.heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
         }
-        Text(stringResource(R.string.fold_transfer_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.fold_transfer_help))
         Text(stringResource(R.string.self_title), color = Color.White, fontSize = 18.sp)
-        Text(stringResource(R.string.self_timer_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.self_timer_help))
         // One segmented row: the unit repeats in each segment, the name of the setting once above.
         Text(stringResource(R.string.self_timer_label), color = Color.White, fontSize = 14.sp)
         val timers = listOf(0, 3, 5, 10)
@@ -80,7 +80,7 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
             FoldToggle(stringResource(R.string.fold_show_status), subject.showStatus) { update(subject.copy(showStatus = it)) }
         }
         if (subject.mode == SubjectDisplayMode.PREVIEW) {
-            Text(stringResource(R.string.fold_preview_help), color = Color.LightGray, fontSize = 14.sp)
+            SettingsHelp(stringResource(R.string.fold_preview_help))
             FoldToggle(stringResource(R.string.fold_preview_mirror), subject.previewMirror) { update(subject.copy(previewMirror = it)) }
             FoldToggle(stringResource(R.string.fold_preview_assist), subject.previewViewAssist) { update(subject.copy(previewViewAssist = it)) }
         }

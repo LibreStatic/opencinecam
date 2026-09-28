@@ -421,6 +421,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("gallery-good-takes-only", settings.gallery.goodTakesOnly)
             .putBoolean("gallery-show-slate", settings.gallery.showSlate)
             .putBoolean("gallery-show-technical", settings.gallery.showTechnical)
+            .putBoolean("gallery-auto-thumbnails", settings.gallery.autoThumbnails)
             .putString("slate-project", settings.productionSlate.project)
             .putString("slate-camera", settings.productionSlate.camera)
             .putString("slate-scene", settings.productionSlate.scene)
@@ -557,7 +558,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
     private fun loadGallery() = runCatching {
         GallerySettings(GalleryMediaKind.valueOf(preferences.getString("gallery-kind", "ALL") ?: "ALL"),
             preferences.getBoolean("gallery-newest-first", true), preferences.getBoolean("gallery-good-takes-only", false),
-            preferences.getBoolean("gallery-show-slate", true), preferences.getBoolean("gallery-show-technical", false))
+            preferences.getBoolean("gallery-show-slate", true), preferences.getBoolean("gallery-show-technical", false),
+            preferences.getBoolean("gallery-auto-thumbnails", true))
     }.getOrDefault(GallerySettings())
 
     private fun loadProductionSlate() = runCatching {

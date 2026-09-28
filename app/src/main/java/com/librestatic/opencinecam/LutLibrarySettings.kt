@@ -150,8 +150,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
     val validName = runCatching { LutLibrary.requireName(name) }.isSuccess
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.lut_library_title), color = Color.White)
-        Text(stringResource(R.string.lut_library_help), color = Color.LightGray)
-        Text(stringResource(R.string.lut_preview_help), color = Color.LightGray, modifier = Modifier.testTag("lut-preview-help"))
+        SettingsHelp(stringResource(R.string.lut_library_help) + "\n\n" + stringResource(R.string.lut_preview_help), tag = "lut-preview-help")
         val statusLabel = when (state.operatorLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_status_disabled
             OperatorLutState.WAITING_FOR_GPU -> R.string.lut_status_waiting
@@ -160,7 +159,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             OperatorLutState.FAILED -> R.string.lut_status_failed
         }
         Text(stringResource(statusLabel), color = Color.White, modifier = Modifier.testTag("lut-operator-status"))
-        Text(stringResource(R.string.lut_subject_help), color = Color.LightGray, modifier = Modifier.testTag("lut-subject-help"))
+        SettingsHelp(stringResource(R.string.lut_subject_help), tag = "lut-subject-help")
         val subjectStatusLabel = when (state.subjectLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_subject_status_disabled
             OperatorLutState.WAITING_FOR_GPU -> R.string.lut_subject_status_waiting

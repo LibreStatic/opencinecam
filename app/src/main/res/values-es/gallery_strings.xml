@@ -33,13 +33,18 @@
     <string name="gallery_metadata">Metadatos: %1$s</string>
     <string name="gallery_open_failed">No se pudo abrir el archivo seleccionado. Puede no estar disponible o faltar una app compatible.</string>
     <string name="gallery_technical">Tipo: %1$s · Bytes: %2$d · Modificación en segundos Unix: %3$d</string>
-    <string name="gallery_slate">Proyecto: %1$s\nCámara: %2$s · Escena: %3$s\nRollo: %4$s · Lente: %5$s\nToma: %6$d · Buena: %7$s</string>
     <string name="gallery_slate_absent">Sin claqueta de producción legible</string>
-    <string name="gallery_yes">Sí</string>
-    <string name="gallery_no">No</string>
     <string name="gallery_thumbnail">Cargar miniatura</string>
     <string name="gallery_thumbnail_loading">Cargando miniatura…</string>
     <string name="gallery_thumbnail_unavailable">Miniatura no disponible; podés intentar abrir el original debajo.</string>
     <string name="gallery_thumbnail_description">Vista previa de %1$s</string>
     <string name="gallery_scene_conditions">Ubicación de escena: %1$s · Momento: %2$s</string>
+    <string name="gallery_auto_thumbnails">Cargar miniaturas automáticamente</string>
+    <string name="gallery_thumbnail_tap">Tocar para ver</string>
+    <string name="gallery_good_take">Toma buena</string>
+    <string name="gallery_take_number">Toma %1$d</string>
+    <string name="gallery_slate_scene">Escena %1$s</string>
+    <string name="gallery_slate_reel">Rollo %1$s</string>
+    <string name="gallery_slate_lens">Lente %1$s</string>
+    <string name="gallery_slate_camera">Cám %1$s</string>
 </resources>

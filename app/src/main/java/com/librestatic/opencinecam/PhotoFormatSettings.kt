@@ -27,7 +27,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_format_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.photo_format_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.photo_format_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC).forEach { format ->
                 FilterChip(selected = settings.photoFormat == format, enabled = supported(format),
@@ -54,7 +54,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
                         .testTag(if (delta < 0) "photo-quality-decrease" else "photo-quality-increase")) { Text(if (delta < 0) "−" else "+") }
             }
         }
-        Text(stringResource(R.string.photo_quality_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.photo_quality_help))
         if (state.settingsPending) Text(stringResource(R.string.photo_format_pending), color = Color(0xFFFFCF66))
         state.lastStillPublication?.let { publication ->
             Text(stringResource(R.string.photo_capture_saved, publication.images.joinToString(" + ") { it.kind.name }),

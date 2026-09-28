@@ -30,8 +30,8 @@ class PhotoAspectSettingsTest {
         val oldSettings = CameraSettings(accumulation = AccumulationSelection(AccumulationMode.WATER), photoQuality = 81)
         val root = Json.parseToJsonElement(CameraPresetCodec.encode(CameraPreset(name = "V8", settings = oldSettings))).jsonObject
         val old = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
-        assertEquals(104, old.size); assertEquals(160, CameraPresetCodec.portableKeys.size)
-        assertEquals(18, CameraPresetCodec.VERSION)
+        assertEquals(104, old.size); assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(19, CameraPresetCodec.VERSION)
         assertEquals(oldSettings, CameraPresetCodec.decode(JsonObject(root + mapOf("version" to JsonPrimitive(8), "settings" to JsonObject(old))).toString()).settings)
         assertThrows(Exception::class.java) { CameraPresetCodec.decode(JsonObject(root + ("version" to JsonPrimitive(8))).toString()) }
     }

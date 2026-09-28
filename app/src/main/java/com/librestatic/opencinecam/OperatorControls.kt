@@ -329,8 +329,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
     val operation = settings.operation
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.operator_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.operator_help), color = Color.LightGray, fontSize = 16.sp)
-        Text(stringResource(R.string.operator_help_hint), color = Color.LightGray, fontSize = 16.sp)
+        SettingsHelp(stringResource(R.string.operator_help) + "\n\n" + stringResource(R.string.operator_help_hint))
         operation.buttons.forEachIndexed { index, action ->
             OperatorChoice(stringResource(R.string.operator_button, index + 1), action, OperatorAction.entries.filter { it != OperatorAction.SYSTEM_VOLUME }, "operator-map-${index + 1}") { selected ->
                 onChange(settings.copy(operation = when (index) { 0 -> operation.copy(button1 = selected); 1 -> operation.copy(button2 = selected); else -> operation.copy(button3 = selected) }))
@@ -347,7 +346,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         }
         OperatorToggle(R.string.operator_restore_manual, "operator-restore-manual", operation.restoreExposureWhiteBalance) { onChange(settings.copy(operation = operation.copy(restoreExposureWhiteBalance = it))) }
         OperatorToggle(R.string.operator_restore_torch, "operator-restore-torch", operation.restoreTorch) { onChange(settings.copy(operation = operation.copy(restoreTorch = it))) }
-        Text(stringResource(R.string.operator_startup_help), color = Color.LightGray, fontSize = 16.sp)
+        SettingsHelp(stringResource(R.string.operator_startup_help))
         OperatorToggle(R.string.operator_lock, "operator-lock", operation.lockDuringTake) { onChange(settings.copy(operation = operation.copy(lockDuringTake = it))) }
         Text(stringResource(if (state.captureControlsLocked) R.string.operator_locked else R.string.operator_lock_help), color = Color.LightGray, fontSize = 16.sp)
         OutlinedButton({ onChange(settings.copy(operation = OperatorPreferences())) }, Modifier.heightIn(min = 48.dp).testTag("operator-reset")) { Text(stringResource(R.string.operator_reset)) }

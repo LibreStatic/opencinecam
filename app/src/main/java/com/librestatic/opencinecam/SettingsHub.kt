@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,27 +52,47 @@ internal fun SettingsScreen(
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF101417))) {
     val wide = maxWidth >= 840.dp && LocalDensity.current.fontScale <= 1.3f
     Column(Modifier.fillMaxSize()) {
+        // Inside a page, the search names the page it searches, so one row carries both.
+        val inPage = !wide && (category != null || query.isNotEmpty())
+        val searchLabel = if (inPage && query.isEmpty() && category != null)
+            stringResource(R.string.settings_search_in, stringResource(category.title)) else stringResource(R.string.settings_search)
         val search: @Composable (Modifier) -> Unit = { modifier ->
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text(stringResource(R.string.settings_search)) },
+                label = { Text(searchLabel, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
                 modifier = modifier.testTag("settings-search"),
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
             )
         }
-        // Wide panes put the title and the search on one line instead of spending two rows on them.
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (wide) 8.dp else 0.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(vertical = 16.dp).then(if (wide) Modifier else Modifier.weight(1f)),
+        if (wide) {
+            // Wide panes put the title and the search on one line instead of spending two rows on them.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(vertical = 16.dp),
+                    fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                search(Modifier.weight(1f).widthIn(max = 520.dp))
+            }
+        } else {
+            if (!inPage) Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
-            if (wide) search(Modifier.weight(1f).widthIn(max = 520.dp))
-            if (!wide && (category != null || query.isNotEmpty())) TextButton(onClick = { query = ""; selectedName = null }) {
-                Text(stringResource(R.string.settings_categories))
+            // The field keeps its place in the tree when a page opens, so typing never loses focus.
+            Row(Modifier.fillMaxWidth().padding(start = if (inPage) 4.dp else 16.dp, end = 16.dp, top = if (inPage) 8.dp else 0.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                if (inPage) {
+                    val back = stringResource(R.string.settings_categories)
+                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                        .clickable(onClickLabel = back) { query = ""; selectedName = null }
+                        .semantics { contentDescription = back }
+                        .testTag("settings-back"), contentAlignment = Alignment.Center) {
+                        CineGlyph(CineIcon.BACK, Color.White, Modifier.size(22.dp))
+                    }
+                }
+                search(Modifier.weight(1f))
             }
         }
-        if (!wide) search(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (state.settingsPending) Text(
             stringResource(R.string.settings_recording_pending), color = Color(0xFFF4BA55), fontSize = 14.sp,
             modifier = Modifier.padding(16.dp),
@@ -106,7 +128,8 @@ internal fun SettingsScreen(
                 }
                 if (wide || category != null || query.isNotBlank()) {
                     Column(Modifier.weight(1f)) {
-                        Text(
+                        // Compact panes already name the page in the search row.
+                        if (wide) Text(
                             if (query.isNotBlank()) stringResource(R.string.settings_results) else stringResource((category ?: SettingsCategory.CAPTURE).title),
                             color = Color.White, fontSize = 18.sp, modifier = Modifier.padding(16.dp),
                         )

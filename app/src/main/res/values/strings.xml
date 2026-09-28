@@ -172,6 +172,7 @@
     <string name="settings_category_controls">Controls</string>
     <string name="settings_category_diagnostics">About and diagnostics</string>
     <string name="settings_categories">Categories</string>
+    <string name="settings_search_in">Search in %1$s</string>
     <string name="settings_search">Search settings</string>
     <string name="settings_results">Search results</string>
     <string name="settings_no_results">No matching settings</string>

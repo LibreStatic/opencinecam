@@ -14,11 +14,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (GallerySettings) -> Unit) {
+internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (GallerySettings) -> Unit,
+    // The media screen shows the type pills above its list, so its filter panel leaves them out.
+    showKinds: Boolean = true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.gallery_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.gallery_settings_help), Modifier.fillMaxWidth().testTag("gallery-settings-help"))
-        SettingsPillRow { for (kind in GalleryMediaKind.entries) {
+        SettingsHelp(stringResource(R.string.gallery_settings_help), tag = "gallery-settings-help")
+        if (showKinds) SettingsPillRow { for (kind in GalleryMediaKind.entries) {
             SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-kind-$kind", settings.kind == kind) {
                 onSettings(settings.copy(kind = kind))
             }
@@ -27,6 +29,7 @@ internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (Gal
         GalleryToggle("good", R.string.gallery_good_only, settings.goodTakesOnly) { onSettings(settings.copy(goodTakesOnly = it)) }
         GalleryToggle("slate", R.string.gallery_show_slate, settings.showSlate) { onSettings(settings.copy(showSlate = it)) }
         GalleryToggle("technical", R.string.gallery_show_technical, settings.showTechnical) { onSettings(settings.copy(showTechnical = it)) }
+        GalleryToggle("thumbnails", R.string.gallery_auto_thumbnails, settings.autoThumbnails) { onSettings(settings.copy(autoThumbnails = it)) }
     }
 }
 

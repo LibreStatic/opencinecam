@@ -69,6 +69,7 @@ class CaptureNamingSettingsUiTest {
     @Test fun doubleFontLabelsAndControlsRemainReadableWithFortyEightDpTargets() {
         show(doubleFont = true)
         for (tag in listOf("enabled", "template", "save")) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp)
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "enabled-label", "tokens", "template-label", "identity", "example", "preview", "save-label")) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }

@@ -81,6 +81,19 @@ fun OpenCineCamApp() {
         background = androidx.compose.ui.graphics.Color(0xFF0B0D0E),
         surface = androidx.compose.ui.graphics.Color(0xFF101417),
         onSurface = androidx.compose.ui.graphics.Color.White,
+        // Material uses this pair for selected chips and for the inactive part of a slider, so a
+        // dim amber reads as "selected" on a chip and as the unfilled track on a slider.
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFF4A3A12),
+        onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFFFFCF66),
+        primaryContainer = androidx.compose.ui.graphics.Color(0xFF3A2E12),
+        onPrimaryContainer = androidx.compose.ui.graphics.Color(0xFFFFCF66),
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFF1B2226),
+        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFAAB4BA),
+        surfaceContainer = androidx.compose.ui.graphics.Color(0xFF12171A),
+        surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFF1B2226),
+        surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF232B30),
+        outline = androidx.compose.ui.graphics.Color(0xFF41494C),
+        outlineVariant = androidx.compose.ui.graphics.Color(0xFF263036),
     )) {
         Surface(modifier = Modifier.fillMaxSize()) {
             CameraRootScreen()

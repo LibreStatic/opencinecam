@@ -44,6 +44,16 @@ internal enum class CineIcon {
     CONTROLS,
     CLOUD,
     INFO,
+    PLAY,
+    SHARE,
+    DELETE,
+    RENAME,
+    PROXY,
+    FILES,
+    FILTER,
+    REFRESH,
+    STAR,
+    BACK,
 }
 
 @Composable
@@ -197,6 +207,54 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             drawCircle(color, radius = w * .40f, center = Offset(cx, cy), style = stroke)
             line(.50f, .46f, .50f, .72f)
             drawCircle(color, radius = w * .05f, center = Offset(cx, h * .32f))
+        }
+        CineIcon.PLAY -> poly(.30f to .16f, .84f to .50f, .30f to .84f, filled = true)
+        CineIcon.SHARE -> {
+            // Three connected nodes.
+            drawCircle(color, radius = w * .10f, center = Offset(w * .74f, h * .22f), style = stroke)
+            drawCircle(color, radius = w * .10f, center = Offset(w * .26f, h * .50f), style = stroke)
+            drawCircle(color, radius = w * .10f, center = Offset(w * .74f, h * .78f), style = stroke)
+            line(.35f, .45f, .65f, .27f); line(.35f, .55f, .65f, .73f)
+        }
+        CineIcon.DELETE -> {
+            // Bin with lid and handle.
+            line(.14f, .24f, .86f, .24f)
+            poly(.40f to .24f, .40f to .12f, .60f to .12f, .60f to .24f, close = false)
+            poly(.22f to .24f, .28f to .88f, .72f to .88f, .78f to .24f, close = false)
+            line(.42f, .40f, .42f, .74f); line(.58f, .40f, .58f, .74f)
+        }
+        CineIcon.RENAME -> {
+            // Pencil over a baseline.
+            poly(.20f to .70f, .64f to .26f, .76f to .38f, .32f to .82f, .18f to .84f)
+            line(.56f, .34f, .68f, .46f)
+            line(.50f, .90f, .88f, .90f)
+        }
+        CineIcon.PROXY -> {
+            // A large frame and its small copy.
+            box(.10f, .16f, .70f, .62f)
+            box(.50f, .52f, .90f, .84f, filled = true)
+        }
+        CineIcon.FILES -> {
+            box(.30f, .12f, .84f, .74f)
+            poly(.16f to .28f, .16f to .88f, .66f to .88f, close = false)
+        }
+        CineIcon.FILTER -> poly(.10f to .18f, .90f to .18f, .58f to .52f, .58f to .84f, .42f to .74f, .42f to .52f)
+        CineIcon.REFRESH -> {
+            drawArc(color, 300f, 290f, false, Offset(w * .16f, h * .16f), Size(w * .68f, h * .68f), style = stroke)
+            poly(.66f to .08f, .70f to .28f, .50f to .30f, close = false)
+        }
+        CineIcon.BACK -> poly(.62f to .18f, .30f to .50f, .62f to .82f, close = false)
+        CineIcon.STAR -> {
+            val path = Path()
+            for (i in 0 until 10) {
+                val radius = if (i % 2 == 0) w * .42f else w * .18f
+                val angle = Math.toRadians(-90.0 + i * 36.0)
+                val x = cx + radius * cos(angle).toFloat()
+                val y = cy + radius * sin(angle).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            drawPath(path, color)
         }
     }
 }

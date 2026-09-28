@@ -32,7 +32,7 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
     } }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.proxy_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.proxy_settings_help), Modifier.fillMaxWidth().testTag("proxy-settings-help"))
+        SettingsHelp(stringResource(R.string.proxy_settings_help), tag = "proxy-settings-help")
         Text(stringResource(R.string.proxy_settings_edge), Modifier.fillMaxWidth().testTag("proxy-settings-edge-label"))
         androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (edge in listOf(640, 1280, 1920)) ProxySettingOption(
@@ -45,7 +45,7 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
                 "bitrate-$bitrate", stringResource(R.string.proxy_settings_bitrate_value, bitrate), settings.videoBitrateMbps == bitrate,
             ) { if (settings.videoBitrateMbps != bitrate) onSettings(settings.copy(videoBitrateMbps = bitrate)) }
         }
-        Text(stringResource(R.string.proxy_policy_help), Modifier.fillMaxWidth())
+        SettingsHelp(stringResource(R.string.proxy_policy_help))
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .toggleable(value = policy.requireCharging, role = Role.Checkbox,
                 onValueChange = { update { current -> current.copy(requireCharging = !current.requireCharging) } })

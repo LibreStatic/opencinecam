@@ -18,7 +18,7 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
     enabled: Boolean = true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.media_sharing_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.media_share_help), Modifier.fillMaxWidth().testTag("media-share-help"))
+        SettingsHelp(stringResource(R.string.media_share_help), tag = "media-share-help")
         SettingsPillRow { for (content in MediaShareContent.entries) {
             ShareChoice("content-$content", when (content) {
                 MediaShareContent.ORIGINALS_AND_METADATA -> R.string.media_share_content_both
@@ -39,7 +39,7 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
         SettingsSwitchRow(lutLabel, settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
             tag = "media-share-lut", labelTag = "media-share-lut-label",
             enabled = enabled && settings.content != MediaShareContent.ORIGINALS_ONLY && settings.metadata != MediaShareMetadata.PRODUCTION)
-        Text(stringResource(R.string.media_share_lut_help), Modifier.fillMaxWidth().testTag("media-share-lut-help"))
+        SettingsHelp(stringResource(R.string.media_share_lut_help), tag = "media-share-lut-help")
     }
 }
 

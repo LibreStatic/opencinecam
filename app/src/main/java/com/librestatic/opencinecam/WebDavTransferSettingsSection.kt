@@ -36,7 +36,7 @@ import com.librestatic.opencinecam.transfers.*
     Column(Modifier.fillMaxWidth().testTag("webdav-transfer-section"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider()
         Text(stringResource(R.string.webdav_transfer_title), style = MaterialTheme.typography.titleMedium, color = Color.White)
-        Text(stringResource(R.string.webdav_transfer_help), color = Color.LightGray)
+        SettingsHelp(stringResource(R.string.webdav_transfer_help))
         Text(stringResource(transferMessage(state.message)), color = Color.White,
             modifier = Modifier.testTag("webdav-transfer-message").semantics { liveRegion = LiveRegionMode.Polite })
         OutlinedButton(onClick = onRefresh, enabled = canRequest,

@@ -123,6 +123,7 @@ class GeotaggingSettingsUiTest {
             node(tag).performScrollTo().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
         }
         node("enabled").performScrollTo().assertContentDescriptionEquals(text(R.string.geotagging_enabled))
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "enabled-label", "permission", "status", "denied", "retry-label", "app-settings-label")) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
@@ -159,6 +160,7 @@ class GeotaggingSettingsUiTest {
         } }
         compose.onNodeWithTag("settings-search").performTextInput("geotagging")
         node("enabled").performScrollTo().assertIsOff()
+        node("help-toggle").performScrollTo().performClick()
         node("help").performScrollTo().assertTextEquals(text(R.string.geotagging_help))
         compose.runOnIdle { assertEquals(original, settings.value); assertEquals(0, changes) }
     }

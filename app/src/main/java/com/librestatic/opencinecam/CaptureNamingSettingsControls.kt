@@ -38,7 +38,7 @@ internal fun CaptureNamingSettingsControls(settings: CameraSettings, onSettingsC
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.capture_naming_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.capture_naming_help), Modifier.fillMaxWidth().testTag("capture-naming-help"))
+        SettingsHelp(stringResource(R.string.capture_naming_help), tag = "capture-naming-help")
         val label = stringResource(R.string.capture_naming_enabled)
         SettingsSwitchRow(label, enabled, { enabled = it }, tag = "capture-naming-enabled", labelTag = "capture-naming-enabled-label")
         Text(stringResource(R.string.capture_naming_tokens), Modifier.fillMaxWidth().testTag("capture-naming-tokens"))

@@ -187,6 +187,8 @@ class MediaSharingUiTest {
         reveal("lut").assertHeightIsAtLeast(48.dp)
         node("confirm").assertHeightIsAtLeast(48.dp)
         node("cancel").assertHeightIsAtLeast(48.dp)
+        reveal("help-toggle").performClick()
+        reveal("lut-help-toggle").performClick()
         for (tag in choices.map { "$it-label" } + listOf("help", "lut-label", "lut-help", "temporary", "sources")) {
             assertUnclipped(reveal(tag), tag)
         }

@@ -140,6 +140,7 @@ class WebDavCredentialSettingsUiTest {
         for (tag in listOf("webdav-credentials-username", "webdav-credentials-password", "webdav-credentials-save", "webdav-credentials-clear")) {
             compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         }
+        compose.onNodeWithTag("webdav-credentials-help-toggle").performScrollTo().performClick()
         for (resource in listOf(R.string.webdav_credentials_help, R.string.webdav_credentials_save, R.string.webdav_credentials_clear)) {
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(context.getString(resource)).performScrollTo()

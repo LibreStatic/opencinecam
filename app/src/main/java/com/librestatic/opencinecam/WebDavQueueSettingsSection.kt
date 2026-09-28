@@ -46,7 +46,7 @@ import kotlinx.coroutines.withContext
     }
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.webdav_queue_title), style = MaterialTheme.typography.titleMedium, color = Color.White)
-        Text(stringResource(R.string.webdav_queue_help), color = Color.LightGray)
+        SettingsHelp(stringResource(R.string.webdav_queue_help))
         OutlinedTextField(draft, { draft = it }, label = { Text(stringResource(R.string.webdav_queue_endpoint)) },
             supportingText = { Text(stringResource(R.string.webdav_queue_https)) }, singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,

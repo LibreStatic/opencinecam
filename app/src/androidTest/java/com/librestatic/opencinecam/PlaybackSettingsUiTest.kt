@@ -33,6 +33,7 @@ class PlaybackSettingsUiTest {
     @Test fun doubleFontFullLabelsAreUnclippedAndTargetsAtLeastFortyEightDp() {
         show(doubleFont = true)
         for (tag in listOf("muted", "loop", "frame-position")) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp)
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "muted-label", "loop-label", "frame-position-label")) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }

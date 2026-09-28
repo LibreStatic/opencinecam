@@ -34,7 +34,7 @@ class AudioMeterSettingsTest {
     @Test fun versionEighteenHas160ExactPortableKeysAndVersionTwelveMigratesFiveDefaults() {
         val source = CameraSettings(audioListening = AudioListeningSettings(true, 36))
         val root = document(source)
-        assertEquals(18, CameraPresetCodec.VERSION); assertEquals(160, CameraPresetCodec.portableKeys.size)
+        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(161, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         val historical = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
         assertEquals(132, historical.size)

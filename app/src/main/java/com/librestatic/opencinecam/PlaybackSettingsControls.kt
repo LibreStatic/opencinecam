@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 internal fun PlaybackSettingsControls(settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.playback_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.playback_settings_help), Modifier.fillMaxWidth().testTag("playback-help"))
+        SettingsHelp(stringResource(R.string.playback_settings_help), tag = "playback-help")
         PlaybackToggle("muted", R.string.playback_settings_muted, settings.muted) { onSettings(settings.copy(muted = it)) }
         PlaybackToggle("loop", R.string.playback_settings_loop, settings.loop) { onSettings(settings.copy(loop = it)) }
         PlaybackToggle("frame-position", R.string.playback_settings_frame_position, settings.showFramePosition) { onSettings(settings.copy(showFramePosition = it)) }

@@ -33,13 +33,18 @@
     <string name="gallery_metadata">Metadata: %1$s</string>
     <string name="gallery_open_failed">The selected file could not be opened. It may be unavailable or no compatible app is installed.</string>
     <string name="gallery_technical">Type: %1$s · Bytes: %2$d · Modified Unix seconds: %3$d</string>
-    <string name="gallery_slate">Project: %1$s\nCamera: %2$s · Scene: %3$s\nReel: %4$s · Lens: %5$s\nTake: %6$d · Good: %7$s</string>
     <string name="gallery_slate_absent">No readable production slate</string>
-    <string name="gallery_yes">Yes</string>
-    <string name="gallery_no">No</string>
     <string name="gallery_thumbnail">Load thumbnail</string>
     <string name="gallery_thumbnail_loading">Loading thumbnail…</string>
     <string name="gallery_thumbnail_unavailable">Thumbnail unavailable; you can try opening the original below.</string>
     <string name="gallery_thumbnail_description">Preview of %1$s</string>
     <string name="gallery_scene_conditions">Scene location: %1$s · Time of day: %2$s</string>
+    <string name="gallery_auto_thumbnails">Load thumbnails automatically</string>
+    <string name="gallery_thumbnail_tap">Tap to preview</string>
+    <string name="gallery_good_take">Good take</string>
+    <string name="gallery_take_number">Take %1$d</string>
+    <string name="gallery_slate_scene">Scene %1$s</string>
+    <string name="gallery_slate_reel">Reel %1$s</string>
+    <string name="gallery_slate_lens">Lens %1$s</string>
+    <string name="gallery_slate_camera">Cam %1$s</string>
 </resources>

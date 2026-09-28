@@ -26,11 +26,11 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(160, CameraPresetCodec.portableKeys.size)
+        assertEquals(161, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
         assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps"), CameraPresetCodec.portableKeys)
-        println("PRESET_V18_KEYS=" + CameraPresetCodec.portableKeys.size)
+        println("PRESET_V19_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun versionOneMigratesMissingSettingsAndCaptureIntentWithoutAppPreferenceMigrations() {
         val text = """{"format":"OpenCineCamPreset","version":1,"name":"Draft","settings":{"zebra-enabled":true,"audio-output-format":"WAV_PCM","mode-selector-style":"BUTTONS"}}"""

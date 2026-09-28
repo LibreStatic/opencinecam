@@ -23,7 +23,7 @@ class BracketSettingsTest {
         val settings=CameraSettings(photoFormat=StillPhotoFormat.RAW_JPEG,photoQuality=73)
         val current=Json.parseToJsonElement(CameraPresetCodec.encode(CameraPreset(name="V6",settings=settings))).jsonObject
         val fields=current.getValue("settings").jsonObject.filterKeys { !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") }-setOf("photo-aspect-enabled", "photo-aspect-width", "photo-aspect-height", "bracket-count","bracket-step","accumulation-mode","accumulation-duration-ms","accumulation-interval-ms","accumulation-max-edge","accumulation-stars-threshold")
-        assertEquals(97,fields.size);assertEquals(160,CameraPresetCodec.portableKeys.size)
+        assertEquals(97,fields.size);assertEquals(161,CameraPresetCodec.portableKeys.size)
         val old=JsonObject(current+mapOf("version" to JsonPrimitive(6),"settings" to JsonObject(fields)))
         assertEquals(settings,CameraPresetCodec.decode(old.toString()).settings)
         assertThrows(Exception::class.java) { CameraPresetCodec.decode(JsonObject(current+("version" to JsonPrimitive(6))).toString()) }

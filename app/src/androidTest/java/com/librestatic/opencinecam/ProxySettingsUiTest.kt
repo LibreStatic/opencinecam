@@ -28,6 +28,7 @@ class ProxySettingsUiTest {
         show()
         node("edge-1280").performScrollTo().assertIsSelected().performClick()
         node("bitrate-3").performScrollTo().assertIsSelected().performClick()
+        node("help-toggle").performScrollTo().performClick()
         node("help").performScrollTo().assertTextEquals(text(R.string.proxy_settings_help))
         node("audio").performScrollTo().assertTextEquals(text(R.string.proxy_settings_audio))
         compose.runOnIdle { assertEquals(0, changes); assertEquals(original, settings.value) }
@@ -63,6 +64,7 @@ class ProxySettingsUiTest {
         show(doubleFont = true)
         val options = listOf("edge-640", "edge-1280", "edge-1920", "bitrate-1", "bitrate-2", "bitrate-3", "bitrate-5", "bitrate-8")
         for (tag in options) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "edge-label", "bitrate-label", "audio") + options.map { "$it-label" }) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }

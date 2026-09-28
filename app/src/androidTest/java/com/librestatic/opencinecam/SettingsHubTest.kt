@@ -36,7 +36,9 @@ class SettingsHubTest {
         // "luz" also matches the tall accumulation section, so the torch result sits below the fold.
         // The results are a lazy list, which composes only what is near the viewport: scroll the
         // list to the result rather than the node, then require it visible and the field still there.
-        compose.onNodeWithTag("settings-list").performScrollToNode(hasTestTag("torch-toggle"))
+        // Scrolling by the card's key settles the whole card in view; scrolling to the node can stop
+        // with the toggle on the list's last pixels, which the test host draws below the screen.
+        compose.onNodeWithTag("settings-list").performScrollToKey("torch")
         compose.onNodeWithTag("torch-toggle").assertIsDisplayed()
         compose.onNodeWithTag("settings-search").assertIsDisplayed()
     }

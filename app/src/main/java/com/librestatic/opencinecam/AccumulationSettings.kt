@@ -18,7 +18,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
     val selection = settings.accumulation
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.accumulation_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.accumulation_help), color = Color.LightGray)
+        SettingsHelp(stringResource(R.string.accumulation_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AccumulationMode.entries.forEach { mode ->
                 FilterChip(selected = selection.mode == mode,

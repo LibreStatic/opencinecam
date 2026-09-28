@@ -31,7 +31,7 @@ internal fun PhotoAspectSettings(state: CameraUiState, settings: CameraSettings,
     }.getOrNull()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_aspect_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.photo_aspect_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.photo_aspect_help))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(toggleLabel, color = Color.White, modifier = Modifier.weight(1f))
             Switch(checked = selection.enabled, onCheckedChange = { onChange(settings.copy(photoAspect = selection.copy(enabled = it))) },

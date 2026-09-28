@@ -35,7 +35,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.pro_exposure_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.pro_exposure_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.pro_exposure_help))
         if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = Color(0xFFFFCF66), fontSize = 16.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ExposureMode.entries.forEach { mode ->
@@ -83,7 +83,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
                     modifier = Modifier.heightIn(min = 48.dp), label = { Text(band.displayLabel()) })
             }
         }
-        Text(stringResource(R.string.pro_flicker_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.pro_flicker_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(50 to 10_000_000L, 60 to 8_333_333L).forEach { (hz, time) ->
                 OutlinedButton({ updateExposure(timed(exposure.copy(shutterUnit = ShutterUnit.TIME, timeNs = time))) }, enabled = supportsTime,
@@ -161,7 +161,7 @@ internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: Camer
                     })
             }
         }
-        Text(stringResource(R.string.pro_wb_record_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.pro_wb_record_help))
         if (state.descriptor?.awbLockSupported != true || state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true) {
             Text(stringResource(R.string.pro_wb_lock_unavailable), color = Color(0xFFFFCF66), fontSize = 14.sp)
         }

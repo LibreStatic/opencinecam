@@ -99,6 +99,7 @@ class ProductionSlateSettingsUiTest {
         for (tag in fields + choices + listOf("good", "increment")) {
             node(tag).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         }
+        node("help-toggle").performScrollTo().performClick()
         for (tag in listOf("help", "good-label", "increment-label") + fields.map { "$it-label" } + choices.map { "$it-label" }) {
             val results = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(results)) }

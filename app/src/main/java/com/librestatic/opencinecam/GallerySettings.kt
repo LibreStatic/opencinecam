@@ -8,5 +8,7 @@ data class GallerySettings(
     val goodTakesOnly: Boolean = false,
     val showSlate: Boolean = true,
     val showTechnical: Boolean = false,
+    /** Thumbnails load as takes scroll into view; off, each one loads only when asked for. */
+    val autoThumbnails: Boolean = true,
 )
 enum class GalleryMediaKind { ALL, PHOTO, VIDEO, AUDIO }

@@ -53,6 +53,7 @@ class MediaCatalogUiTest {
         var pages = 0
         read = { value, query, _ -> pages++; if (pages < 3) LocalMediaPage(emptyList(), cursor(pages.toLong(), value, query))
             else LocalMediaPage(listOf(take("one")), null) }
+        settings.value = settings.value.copy(autoThumbnails = false)
         show()
         reveal("name-one").assertTextEquals("take1.jpg")
         compose.runOnIdle { assertEquals(3, pages); assertEquals(0, thumbnails) }
@@ -116,6 +117,8 @@ class MediaCatalogUiTest {
         val metadata = artifact(4, "relation.json", "application/json")
         val group = first.copy(originals = listOf(first.primary, second), metadata = listOf(metadata))
         read = { _, _, _ -> LocalMediaPage(listOf(group), null) }
+        // With automatic thumbnails off, nothing is decoded until the operator asks for it.
+        settings.value = settings.value.copy(autoThumbnails = false)
         show()
         reveal("scene-conditions-one").assertTextEquals(text(R.string.gallery_scene_conditions,
             text(R.string.production_slate_interior), text(R.string.production_slate_night)))
@@ -128,6 +131,16 @@ class MediaCatalogUiTest {
         compose.runOnIdle { assertEquals(1, thumbnails); failOpen = true }
         reveal("primary-one").performClick()
         reveal("open-failed").assertTextEquals(text(R.string.gallery_open_failed))
+    }
+
+    @Test fun automaticThumbnailsLoadOncePerVisibleTake() {
+        read = { _, _, _ -> LocalMediaPage(listOf(take("one")), null) }
+        show()
+        reveal("name-one").assertTextEquals("take1.jpg")
+        compose.waitUntil(5000) { thumbnails == 1 }
+        // The fixture has no picture, so the take says so instead of offering a load button.
+        reveal("thumbnail-error-one").assertTextEquals(text(R.string.gallery_thumbnail_unavailable))
+        compose.runOnIdle { assertEquals(1, thumbnails) }
     }
 
     @Test fun allRelationStatusesAndEmptyStateAreExplicitWithoutHashVerificationClaims() {
@@ -165,6 +178,7 @@ class MediaCatalogUiTest {
             node(tag).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         }
         compose.runOnIdle { assertEquals(GallerySettings(GalleryMediaKind.AUDIO, false, true, false, true), settings.value) }
+        node("settings-help-toggle").performScrollTo().performClick()
         for (tag in listOf("settings-help", "newest-label", "good-label", "slate-label", "technical-label") + kinds.map { "$it-label" }) {
             val results = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(results)) }

@@ -23,7 +23,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.image_processing_title), color = Color.White, fontSize = 20.sp)
-        Text(stringResource(R.string.image_processing_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.image_processing_help))
         if (state.structuralSettingsFrozen && state.effectiveSettings?.imageProcessing != selected) {
             Text(stringResource(R.string.image_processing_deferred), color = Color(0xFFFFCF66), fontSize = 16.sp)
         }
@@ -37,7 +37,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
                         StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video }), fontSize = 16.sp) })
             }
         }
-        Text(stringResource(R.string.image_stabilization_help), color = Color.LightGray, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.image_stabilization_help))
         IspModeChoices(stringResource(R.string.image_noise), "image-noise", selected.noiseReduction,
             { !hfr && caps.supports(it, ImageProcessingControl.NOISE_REDUCTION) },
             { onChange(settings.copy(imageProcessing = selected.copy(noiseReduction = it))) })

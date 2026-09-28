@@ -3408,7 +3408,7 @@ internal fun SettingsContent(
             MediaSharingSettingsControls(settings.mediaSharing, onSettings = { onSettingsChange(settings.copy(mediaSharing = it)) })
         }
         if ("media-gallery" in visibleIds) settingsCard("media-gallery") {
-            GallerySettingsControls(settings.gallery) { onSettingsChange(settings.copy(gallery = it)) }
+            GallerySettingsControls(settings.gallery, onSettings = { onSettingsChange(settings.copy(gallery = it)) })
         }
         if ("proxy" in visibleIds) settingsCard("proxy", fullLine = true) {
             ProxySettingsControls(settings.proxy) { onSettingsChange(settings.copy(proxy = it)) }
@@ -3499,7 +3499,7 @@ internal fun SettingsContent(
         }
         if ("burst" in visibleIds) settingsCard("burst") {
             Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.burst_capture_help), color = Color.LightGray)
+                SettingsHelp(stringResource(R.string.burst_capture_help))
                 Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = Color.White, fontWeight = FontWeight.Bold)
                 Slider(
                     value = settings.burstCount.toFloat(),
@@ -3929,7 +3929,7 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
     val slate = settings.productionSlate
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.production_slate_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.production_slate_help), Modifier.testTag("slate-help"), color = Muted, fontSize = 14.sp)
+        SettingsHelp(stringResource(R.string.production_slate_help), tag = "slate-help")
         if (state.structuralSettingsFrozen && state.effectiveSettings?.productionSlate?.let { it != slate } == true) {
             Text(stringResource(R.string.production_slate_pending), Modifier.testTag("slate-pending"), color = Amber, fontSize = 14.sp)
         }
