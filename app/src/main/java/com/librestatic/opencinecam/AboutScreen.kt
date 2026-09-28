@@ -99,6 +99,7 @@ private fun appVersion(context: Context): String =
 internal fun AboutScreen(
     onBack: () -> Unit,
     onOpenUri: ((String) -> Unit)? = null,
+    onReplayTour: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -166,6 +167,11 @@ internal fun AboutScreen(
                 }
                 TextButton(onClick = { openUri(PROJECT_SOURCE) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.about_source_code), color = AboutAmber)
+                }
+                if (onReplayTour != null) {
+                    TextButton(onClick = onReplayTour, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("about-replay-tour")) {
+                        Text(stringResource(R.string.onb_replay), color = AboutAmber)
+                    }
                 }
             }
         }

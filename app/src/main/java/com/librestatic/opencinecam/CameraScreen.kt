@@ -221,6 +221,8 @@ fun CameraRootScreen() {
         audioPermissionGranted = it
         binder?.refreshAudioCapabilities()
     }
+    val onboardingStore = remember(context) { OnboardingStore(context) }
+    var onboardingDone by remember { mutableStateOf(onboardingStore.isCompleted()) }
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
     val state by stateFlow.collectAsStateWithLifecycle()
@@ -285,6 +287,21 @@ fun CameraRootScreen() {
         }
     }
 
+    if (!onboardingDone) {
+        OnboardingScreen(
+            onPermissionsChanged = {
+                permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                audioPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                binder?.refreshAudioCapabilities()
+            },
+            onFinished = {
+                onboardingStore.markCompleted()
+                onboardingDone = true
+            },
+        )
+        return
+    }
+
     if (!permissionGranted) {
         PermissionScreen { permissionLauncher.launch(Manifest.permission.CAMERA) }
         return
@@ -324,7 +341,14 @@ fun CameraRootScreen() {
                             playbackSettings = settings.playback,
                             onPlaybackSettings = { playback -> settingsRepository.update { it.copy(playback = playback) } })
                         AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
-                            AboutScreen(onBack = { settingsPage = SettingsPage.MAIN })
+                            AboutScreen(
+                                onBack = { settingsPage = SettingsPage.MAIN },
+                                onReplayTour = {
+                                    onboardingStore.reset()
+                                    settingsPage = SettingsPage.MAIN
+                                    onboardingDone = false
+                                },
+                            )
                         } else {
                             settingsStateHolder.SaveableStateProvider("settings") {
                             SettingsScreen(
