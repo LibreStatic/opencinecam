@@ -52,3 +52,25 @@ internal fun sideRailPreviewViewport(
     val inner = fittedPreviewViewport((containerWidth - leftInset - rightInset).coerceAtLeast(0f), containerHeight, ratio)
     return inner.copy(left = inner.left + leftInset)
 }
+
+/** Height of the top bar over the viewfinder in the stacked layout. */
+internal const val STACKED_TOP_BAR_HEIGHT_DP = 56f
+
+/** Height of the slim top bar that compact portrait windows use. */
+internal const val SLIM_TOP_BAR_HEIGHT_DP = 48f
+
+/**
+ * The viewfinder between the top bar and the control deck of the stacked layout, in the
+ * container's pixel space. Fitting it there instead of behind the chrome keeps the whole frame in
+ * view, which is what an operator frames with.
+ */
+internal fun stackedPreviewViewport(
+    containerWidth: Float,
+    containerHeight: Float,
+    topInset: Float,
+    bottomInset: Float,
+    ratio: Float?,
+): PreviewViewport {
+    val inner = fittedPreviewViewport(containerWidth, (containerHeight - topInset - bottomInset).coerceAtLeast(0f), ratio)
+    return inner.copy(top = inner.top + topInset)
+}

@@ -107,19 +107,37 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
         if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
         // Wrapped rows (and the one-per-row column in the side rail) keep a gap between chips.
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            settings.operation.buttons.forEachIndexed { index, action ->
-                val paused = operatorActionThermallyPaused(action, state)
-                OperatorButton(
-                    index = index,
-                    action = action,
-                    available = !paused && actions?.available?.invoke(action) == true,
-                    // A row rendered without the action bundle still reads the settings it was given.
-                    latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
-                    thermallyPaused = paused,
-                    onClick = { actions?.perform?.invoke(action) },
-                )
-            }
+            OperatorButtons(state, settings, actions, compact = false)
         }
+    }
+}
+
+/**
+ * The same F-keys as a column of icon keys laid over the viewfinder edge, for portrait windows
+ * where a full-width row would cost a line of viewfinder. Each key still states ON/OFF in text.
+ */
+@Composable
+internal fun OperatorButtonColumn(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier,
+    actions: OperatorActions? = LocalOperatorActions.current) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) {
+        OperatorButtons(state, settings, actions, compact = true)
+    }
+}
+
+@Composable
+private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, actions: OperatorActions?, compact: Boolean) {
+    settings.operation.buttons.forEachIndexed { index, action ->
+        val paused = operatorActionThermallyPaused(action, state)
+        OperatorButton(
+            index = index,
+            action = action,
+            available = !paused && actions?.available?.invoke(action) == true,
+            // A row rendered without the action bundle still reads the settings it was given.
+            latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
+            thermallyPaused = paused,
+            compact = compact,
+            onClick = { actions?.perform?.invoke(action) },
+        )
     }
 }
 
@@ -134,7 +152,7 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun OperatorButton(index: Int, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
-    thermallyPaused: Boolean = false) {
+    thermallyPaused: Boolean = false, compact: Boolean = false) {
     val context = LocalContext.current
     val on = latched == true
     val content = when {
@@ -151,22 +169,46 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
     val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
     val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
         else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
-    Row(
-        Modifier
+    val stateText: (@Composable (androidx.compose.ui.unit.TextUnit) -> Unit)? = latched?.let { isOn -> { size ->
+        Text(
+            stringResource(when { thermallyPaused -> R.string.operator_state_paused; isOn -> R.string.operator_state_on; else -> R.string.operator_state_off }),
+            color = if (available && isOn) Color(0xFF101417) else content,
+            fontSize = size,
+            lineHeight = size,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(if (available && isOn) OperatorActiveAccent else Color.Transparent)
+                .border(BorderStroke(1.dp, if (available && isOn) OperatorActiveAccent else border), RoundedCornerShape(4.dp))
+                .padding(horizontal = if (compact) 3.dp else 5.dp, vertical = 1.dp)
+                .testTag("operator-button-${index + 1}-state"),
+        )
+    } }
+    val key = Modifier
+        .clip(RoundedCornerShape(if (compact) 14.dp else 10.dp))
+        // Over the viewfinder the key needs its own backing to stay readable on bright scenes.
+        .background(if (on && available) OperatorActiveContainer else if (compact) Color(0xCC101417) else Color.Transparent)
+        .border(BorderStroke(if (on && available) 2.dp else 1.dp, border), RoundedCornerShape(if (compact) 14.dp else 10.dp))
+        .combinedClickable(
+            role = if (latched != null) Role.Switch else Role.Button,
+            onClick = { if (available) onClick() },
+            onLongClick = { Toast.makeText(context, help, Toast.LENGTH_LONG).show() },
+        )
+        .semantics {
+            contentDescription = actionName
+            if (stateWord != null) stateDescription = stateWord
+            if (!available) disabled()
+        }
+    if (compact) Column(
+        key.size(52.dp).testTag("operator-button-${index + 1}"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        OperatorActionIcon(action, tint = content, modifier = Modifier.size(22.dp))
+        stateText?.let { Spacer(Modifier.height(3.dp)); it(9.sp) }
+    } else Row(
+        key
             .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (on && available) OperatorActiveContainer else Color.Transparent)
-            .border(BorderStroke(if (on && available) 2.dp else 1.dp, border), RoundedCornerShape(10.dp))
-            .combinedClickable(
-                role = if (latched != null) Role.Switch else Role.Button,
-                onClick = { if (available) onClick() },
-                onLongClick = { Toast.makeText(context, help, Toast.LENGTH_LONG).show() },
-            )
-            .semantics {
-                contentDescription = actionName
-                if (stateWord != null) stateDescription = stateWord
-                if (!available) disabled()
-            }
             .widthIn(min = 48.dp)
             .padding(horizontal = 10.dp, vertical = 6.dp)
             .testTag("operator-button-${index + 1}"),
@@ -175,21 +217,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
         // Compact chip: symbol and state only, so the row costs one line of viewfinder. The name
         // stays in the semantics and in the long-press help.
         OperatorActionIcon(action, tint = content, modifier = Modifier.size(22.dp))
-        if (latched != null) {
-            Spacer(Modifier.width(8.dp))
-            Text(
-                stringResource(when { thermallyPaused -> R.string.operator_state_paused; latched -> R.string.operator_state_on; else -> R.string.operator_state_off }),
-                color = if (available && latched) Color(0xFF101417) else content,
-                fontSize = 11.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (available && latched) OperatorActiveAccent else Color.Transparent)
-                    .border(BorderStroke(1.dp, if (available && latched) OperatorActiveAccent else border), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                    .testTag("operator-button-${index + 1}-state"),
-            )
-        }
+        stateText?.let { Spacer(Modifier.width(8.dp)); it(11.sp) }
     }
 }
 

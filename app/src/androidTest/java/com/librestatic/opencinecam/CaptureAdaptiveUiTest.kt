@@ -175,6 +175,8 @@ class CaptureAdaptiveUiTest {
             landscape = false,
             selectorStyle = ModeSelectorStyle.DIAL,
             zoomSupported = true,
+            // Between anchors, so the ratio readout is shown under the anchor bar.
+            zoomRatio = 1.4f,
             anchors = listOf(
                 ZoomAnchor(0.5f, 1.826f, "3"),
                 ZoomAnchor(1f, 6.57f, null),
@@ -182,11 +184,11 @@ class CaptureAdaptiveUiTest {
             ),
         )
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val media = composeRule.onNodeWithContentDescription(context.getString(R.string.media_tab)).fetchSemanticsNode().boundsInRoot
+        val status = composeRule.onNodeWithTag("capture-status-line", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val settings = composeRule.onNodeWithContentDescription(context.getString(R.string.settings_tab)).fetchSemanticsNode().boundsInRoot
         val anchor = composeRule.onNodeWithTag("zoom-anchor-0.5", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val ratio = composeRule.onNodeWithTag("zoom-ratio", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertTrue("Zoom anchors overlap the top bar", anchor.top >= maxOf(media.bottom, settings.bottom))
+        assertTrue("Zoom anchors overlap the top bar", anchor.top >= maxOf(status.bottom, settings.bottom))
         assertTrue("Zoom ratio overlaps the anchor bar", ratio.top >= anchor.bottom)
     }
 

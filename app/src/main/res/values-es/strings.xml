@@ -134,6 +134,7 @@
     <string name="mode_integrating">La captura %1$s todavía se está integrando.</string>
     <string name="log_view_assist">View Assist para LOG</string>
     <string name="log_view_assist_summary">Sólo monitoreo: transforma OCLog2/BT.2020 a Rec.709. Nunca se graba en el archivo.</string>
+    <string name="capture_status_free">%1$s libres</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s libres</string>
     <string name="camera_switch_timeout">La cámara %1$s no inició; se restauró la cámara %2$s.</string>
     <string name="recording_channel">Grabación</string>

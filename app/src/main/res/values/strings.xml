@@ -134,6 +134,7 @@
     <string name="mode_integrating">%1$s capture is being integrated.</string>
     <string name="log_view_assist">LOG View Assist</string>
     <string name="log_view_assist_summary">Monitoring only: transform OCLog2/BT.2020 to Rec.709. It is never baked into the recording.</string>
+    <string name="capture_status_free">%1$s free</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s free</string>
     <string name="camera_switch_timeout">Camera %1$s did not start; restored camera %2$s.</string>
     <string name="recording_channel">Recording</string>

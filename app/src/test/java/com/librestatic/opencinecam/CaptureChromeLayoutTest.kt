@@ -80,4 +80,28 @@ class CaptureChromeLayoutTest {
         assertEquals(700f, viewport.width, 0.01f)
         assertEquals(400f, viewport.height, 0.01f)
     }
+
+    @Test fun stackedViewportFitsTallImagesBetweenBarAndDeck() {
+        // 9:16 in a 1080 x 2400 window with a 126 px bar and a 500 px deck: 1774 px of height
+        // leave 997.9 px of width, centred, starting right under the bar.
+        val viewport = stackedPreviewViewport(1080f, 2400f, topInset = 126f, bottomInset = 500f, ratio = 9f / 16f)
+        assertEquals(1774f, viewport.height, 0.01f)
+        assertEquals(1774f * 9f / 16f, viewport.width, 0.01f)
+        assertEquals((1080f - 1774f * 9f / 16f) / 2f, viewport.left, 0.01f)
+        assertEquals(126f, viewport.top, 0.01f)
+    }
+
+    @Test fun stackedViewportCentresWideImagesInTheGap() {
+        // 3:4 at 1080 wide is 1440 tall, centred in the 1774 px gap.
+        val viewport = stackedPreviewViewport(1080f, 2400f, topInset = 126f, bottomInset = 500f, ratio = 3f / 4f)
+        assertEquals(1080f, viewport.width, 0.01f)
+        assertEquals(1440f, viewport.height, 0.01f)
+        assertEquals(126f + (1774f - 1440f) / 2f, viewport.top, 0.01f)
+    }
+
+    @Test fun stackedViewportNeverGoesNegative() {
+        val viewport = stackedPreviewViewport(400f, 300f, topInset = 200f, bottomInset = 200f, ratio = 1f)
+        assertEquals(0f, viewport.height, 0.01f)
+        assertEquals(200f, viewport.top, 0.01f)
+    }
 }
