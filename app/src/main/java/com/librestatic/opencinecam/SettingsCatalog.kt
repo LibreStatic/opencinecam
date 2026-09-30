@@ -39,6 +39,7 @@ object SettingsCatalog {
         SettingEntry("fold-displays", SettingsCategory.DISPLAYS, R.string.fold_settings_title, "plegable foldable pantalla exterior outer rear screen teleprompter brillo brightness autograbacion self recording temporizador timer countdown cuenta regresiva minimal espejo mirror vista previa preview color assist asistencia bisagra hinge mesa libro"),
         SettingEntry("appearance", SettingsCategory.CONTROLS, R.string.appearance_title, "apariencia appearance tema theme colores colors cine material you dinamico dynamic claro light oscuro dark amoled negro black fondo wallpaper"),
         SettingEntry("layout", SettingsCategory.CONTROLS, R.string.mode_selector_style, "dial buttons botones selector interfaz"),
+        SettingEntry("translucent-chrome", SettingsCategory.CONTROLS, R.string.translucent_chrome, "interfaz translucida translucent transparente transparent semitransparente pantalla completa full screen visor viewfinder ajustar fit rellenar fill recortar crop opacidad opacity inmersivo immersive"),
         SettingEntry("audio", SettingsCategory.AUDIO, R.string.audio_recording, "mic microphone microfono permiso permission"),
         SettingEntry("audio-permission", SettingsCategory.AUDIO, R.string.grant_microphone, "mic microphone microfono permiso permission"),
         SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
@@ -109,4 +110,7 @@ fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings
     horizonLevelEnabled = next.horizonLevelEnabled,
     logViewAssistEnabled = next.logViewAssistEnabled,
     modeSelectorStyle = next.modeSelectorStyle,
+    translucentChrome = next.translucentChrome,
+    viewfinderScale = next.viewfinderScale,
+    chromeOpacity = next.chromeOpacity,
 )

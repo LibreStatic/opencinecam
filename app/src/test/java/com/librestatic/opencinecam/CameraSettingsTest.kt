@@ -35,6 +35,9 @@ class CameraSettingsTest {
         assertEquals(CompositionGridMode.THIRDS, settings.compositionGridMode)
         assertFalse(settings.horizonLevelEnabled)
         assertEquals(ModeSelectorStyle.DIAL, settings.modeSelectorStyle)
+        assertFalse(settings.translucentChrome)
+        assertEquals(ViewfinderScale.FIT, settings.viewfinderScale)
+        assertEquals(DEFAULT_CHROME_OPACITY, settings.chromeOpacity, 0f)
         assertEquals(RecordingGeometryMode.COMPATIBLE, settings.recordingGeometryMode)
         assertEquals(ZoomLensSwitchMode.MANUAL_PRESETS, settings.zoomLensSwitchMode)
         assertEquals(AfLockBehavior.FREEZE_CURRENT, settings.afLockBehavior)
@@ -172,5 +175,22 @@ class CameraSettingsTest {
     fun timelapseIsProfileBackedMode() {
         assertTrue(CaptureMode.TIME_LAPSE in CameraUiState.videoProfileModes)
         assertTrue(CaptureMode.TIME_LAPSE in CameraUiState.resolutionProfileModes)
+    }
+
+    @Test
+    fun chromeOpacityIsClampedToALegibleRange() {
+        assertEquals(MIN_CHROME_OPACITY, clampChromeOpacity(0f), 0f)
+        assertEquals(MAX_CHROME_OPACITY, clampChromeOpacity(1f), 0f)
+        assertEquals(0.6f, clampChromeOpacity(0.6f), 0f)
+        assertEquals(DEFAULT_CHROME_OPACITY, clampChromeOpacity(Float.NaN), 0f)
+    }
+
+    @Test
+    fun translucentChromeChangesApplyLive() {
+        val next = CameraSettings().copy(translucentChrome = true, viewfinderScale = ViewfinderScale.FILL, chromeOpacity = 0.4f)
+        val live = CameraSettings().withLivePreferencesFrom(next)
+        assertTrue(live.translucentChrome)
+        assertEquals(ViewfinderScale.FILL, live.viewfinderScale)
+        assertEquals(0.4f, live.chromeOpacity, 0f)
     }
 }

@@ -128,6 +128,13 @@
     <string name="mode_selector_dial">Dial</string>
     <string name="mode_selector_buttons">Buttons</string>
     <string name="mode_selector_summary">Choose a tactile dial or an adaptive button grid.</string>
+    <string name="translucent_chrome">Translucent interface</string>
+    <string name="translucent_chrome_summary">Let the viewfinder use the whole screen and float the controls over it.</string>
+    <string name="viewfinder_scale">Viewfinder</string>
+    <string name="viewfinder_scale_fit">Fit</string>
+    <string name="viewfinder_scale_fill">Fill</string>
+    <string name="viewfinder_scale_summary">Fit shows the whole frame; Fill covers the screen and crops the edges.</string>
+    <string name="chrome_opacity">Panel opacity</string>
     <string name="burst_progress">Burst %1$d/%2$d</string>
     <string name="burst_saved">Burst saved · %1$d frames</string>
     <string name="gate_requires_preflight">%1$s requires a passing capability preflight.</string>

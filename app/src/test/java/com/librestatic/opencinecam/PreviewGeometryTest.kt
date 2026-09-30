@@ -91,4 +91,33 @@ class PreviewGeometryTest {
     fun previewRatioRejectsNonRightAngles() {
         previewDisplayRatio(1920, 1080, 1f, 45, 0)
     }
+
+    @Test
+    fun `filled viewport covers a wide container and crops top and bottom`() {
+        val viewport = filledPreviewViewport(2000f, 1000f, 4f / 3f)
+        assertEquals(2000f, viewport.width, 0.01f)
+        assertEquals(1500f, viewport.height, 0.01f)
+        assertEquals(0f, viewport.left, 0.01f)
+        assertEquals(-250f, viewport.top, 0.01f)
+    }
+
+    @Test
+    fun `filled viewport covers a tall container and crops the sides`() {
+        val viewport = filledPreviewViewport(1000f, 2000f, 3f / 4f)
+        assertEquals(2000f, viewport.height, 0.01f)
+        assertEquals(1500f, viewport.width, 0.01f)
+        assertEquals(-250f, viewport.left, 0.01f)
+        assertEquals(0f, viewport.top, 0.01f)
+    }
+
+    @Test
+    fun `filled viewport without a ratio keeps the container`() {
+        assertEquals(PreviewViewport(0f, 0f, 800f, 600f), filledPreviewViewport(800f, 600f, null))
+    }
+
+    @Test
+    fun `overlay viewport follows the chosen scale`() {
+        assertEquals(fittedPreviewViewport(2000f, 1000f, 4f / 3f), overlayPreviewViewport(2000f, 1000f, 4f / 3f, ViewfinderScale.FIT))
+        assertEquals(filledPreviewViewport(2000f, 1000f, 4f / 3f), overlayPreviewViewport(2000f, 1000f, 4f / 3f, ViewfinderScale.FILL))
+    }
 }

@@ -78,6 +78,16 @@ class MainActivity : ComponentActivity() {
         applySplashTheme(this, theme)
         com.librestatic.opencinecam.storage.MediaProxyQueue.get(this).start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // With the bars hidden, the default cutout mode letterboxes the window below the camera
+        // cutout, so a full-screen viewfinder could never reach the top edge. Every screen already
+        // pads its content by safeDrawing; Android 15+ applies ALWAYS by itself.
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            } else {
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

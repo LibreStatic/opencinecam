@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 
 internal data class OperatorActions(val capture: () -> Unit, val perform: (OperatorAction) -> Unit, val available: (OperatorAction) -> Boolean,
     /** Latched state of a toggle action, or null when the action is momentary. */
@@ -106,7 +107,7 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
 
 @Composable
 internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, actions: OperatorActions? = LocalOperatorActions.current) {
-    Column(Modifier.fillMaxWidth().background(Color(0xFF101417)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().background(Color(0xFF101417).chromePanel()).padding(horizontal = 8.dp, vertical = 4.dp)) {
         if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
         // Wrapped rows (and the one-per-row column in the side rail) keep a gap between chips.
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -190,7 +191,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
     val key = Modifier
         .clip(RoundedCornerShape(if (compact) 14.dp else 10.dp))
         // Over the viewfinder the key needs its own backing to stay readable on bright scenes.
-        .background(if (on && available) OperatorActiveContainer else if (compact) Color(0xCC101417) else Color.Transparent)
+        .background(if (on && available) OperatorActiveContainer else if (compact) Color(0xCC101417).chromePanel() else Color.Transparent)
         .border(BorderStroke(if (on && available) 2.dp else 1.dp, border), RoundedCornerShape(if (compact) 14.dp else 10.dp))
         .combinedClickable(
             role = if (latched != null) Role.Switch else Role.Button,

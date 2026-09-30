@@ -68,6 +68,39 @@ internal fun fittedPreviewViewport(containerWidth: Float, containerHeight: Float
     )
 }
 
+/** Centred viewport that covers the whole container; the overflow (negative left/top) is cropped. */
+internal fun filledPreviewViewport(containerWidth: Float, containerHeight: Float, ratio: Float?): PreviewViewport {
+    if (containerWidth <= 0f || containerHeight <= 0f || ratio == null || !ratio.isFinite() || ratio <= 0f) {
+        return PreviewViewport(0f, 0f, containerWidth.coerceAtLeast(0f), containerHeight.coerceAtLeast(0f))
+    }
+    val width: Float
+    val height: Float
+    if (containerWidth / containerHeight > ratio) {
+        width = containerWidth
+        height = width / ratio
+    } else {
+        height = containerHeight
+        width = height * ratio
+    }
+    return PreviewViewport(
+        left = (containerWidth - width) / 2f,
+        top = (containerHeight - height) / 2f,
+        width = width,
+        height = height,
+    )
+}
+
+/** Viewport of a viewfinder that spans the whole window under translucent chrome. */
+internal fun overlayPreviewViewport(
+    containerWidth: Float,
+    containerHeight: Float,
+    ratio: Float?,
+    scale: ViewfinderScale,
+): PreviewViewport = when (scale) {
+    ViewfinderScale.FIT -> fittedPreviewViewport(containerWidth, containerHeight, ratio)
+    ViewfinderScale.FILL -> filledPreviewViewport(containerWidth, containerHeight, ratio)
+}
+
 /** Refresh-rate and brightness changes also dispatch DisplayListener callbacks. */
 internal fun previewDisplayRotationChanged(previousRotation: Int?, currentRotation: Int?): Boolean =
     currentRotation != null && previousRotation != currentRotation

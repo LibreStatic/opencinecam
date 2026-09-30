@@ -136,4 +136,14 @@ class SettingsPersistenceTest {
         preferences.edit().putInt("self-timer-seconds", 123).commit()
         assertEquals(0, CameraSettingsStore(context).load().subjectDisplay.selfTimerSeconds)
     }
+
+    @Test fun translucentChromeSurvivesRecreationAndInvalidValuesAreBounded() {
+        val repository = SettingsRepository(CameraSettingsStore(context))
+        repository.update { it.copy(translucentChrome = true, viewfinderScale = ViewfinderScale.FILL, chromeOpacity = 0.4f) }
+        assertEquals(repository.states.value, SettingsRepository(CameraSettingsStore(context)).states.value)
+        preferences.edit().putString("viewfinder-scale", "STRETCH").putFloat("chrome-opacity", 2f).commit()
+        val reloaded = CameraSettingsStore(context).load()
+        assertEquals(ViewfinderScale.FIT, reloaded.viewfinderScale)
+        assertEquals(MAX_CHROME_OPACITY, reloaded.chromeOpacity, 0f)
+    }
 }

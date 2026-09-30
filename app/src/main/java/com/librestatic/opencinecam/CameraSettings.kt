@@ -32,7 +32,18 @@ import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
+
+/** How the viewfinder covers the screen when the capture chrome floats over it. */
+enum class ViewfinderScale { FIT, FILL }
 enum class HistogramMode { RGB, LUMA }
+
+const val MIN_CHROME_OPACITY = 0.30f
+const val MAX_CHROME_OPACITY = 0.85f
+const val DEFAULT_CHROME_OPACITY = 0.55f
+
+/** Keeps the floating chrome legible and the image visible; non-finite values fall back to the default. */
+fun clampChromeOpacity(value: Float): Float =
+    if (value.isFinite()) value.coerceIn(MIN_CHROME_OPACITY, MAX_CHROME_OPACITY) else DEFAULT_CHROME_OPACITY
 
 enum class TimeLapseLimitMode { UNLIMITED, FRAME_COUNT, DURATION }
 
@@ -87,6 +98,10 @@ data class CameraSettings(
     val tapExposureMeteringEnabled: Boolean = true,
     val logViewAssistEnabled: Boolean = false,
     val modeSelectorStyle: ModeSelectorStyle = ModeSelectorStyle.DIAL,
+    /** Viewfinder spans the whole screen and the chrome floats over it with translucent panels. */
+    val translucentChrome: Boolean = false,
+    val viewfinderScale: ViewfinderScale = ViewfinderScale.FIT,
+    val chromeOpacity: Float = DEFAULT_CHROME_OPACITY,
     val recordingGeometryMode: RecordingGeometryMode = RecordingGeometryMode.COMPATIBLE,
     val videoWidth: Int = 1920,
     val videoHeight: Int = 1080,
@@ -317,6 +332,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         tapExposureMeteringEnabled = preferences.getBoolean(KEY_TAP_EXPOSURE_METERING, true),
         logViewAssistEnabled = preferences.getBoolean(KEY_LOG_VIEW_ASSIST, false),
         modeSelectorStyle = migratedModeSelectorStyle(),
+        translucentChrome = preferences.getBoolean(KEY_TRANSLUCENT_CHROME, false),
+        viewfinderScale = enumPreference(KEY_VIEWFINDER_SCALE, ViewfinderScale.FIT),
+        chromeOpacity = clampChromeOpacity(preferences.getFloat(KEY_CHROME_OPACITY, DEFAULT_CHROME_OPACITY)),
         recordingGeometryMode = enumPreference(KEY_RECORDING_GEOMETRY_MODE, RecordingGeometryMode.COMPATIBLE),
         videoWidth = preferences.getInt(KEY_VIDEO_WIDTH, 1920).takeUnless { it <= 0 } ?: 1920,
         videoHeight = preferences.getInt(KEY_VIDEO_HEIGHT, 1080).takeUnless { it <= 0 } ?: 1080,
@@ -495,6 +513,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_TAP_EXPOSURE_METERING, settings.tapExposureMeteringEnabled)
             .putBoolean(KEY_LOG_VIEW_ASSIST, settings.logViewAssistEnabled)
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
+            .putBoolean(KEY_TRANSLUCENT_CHROME, settings.translucentChrome)
+            .putString(KEY_VIEWFINDER_SCALE, settings.viewfinderScale.name)
+            .putFloat(KEY_CHROME_OPACITY, clampChromeOpacity(settings.chromeOpacity))
             .putString(KEY_RECORDING_GEOMETRY_MODE, settings.recordingGeometryMode.name)
             .putInt(KEY_VIDEO_WIDTH, settings.videoWidth)
             .putInt(KEY_VIDEO_HEIGHT, settings.videoHeight)
@@ -696,6 +717,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_LOG_VIEW_ASSIST = "log-view-assist-enabled"
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
+        const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
+        const val KEY_VIEWFINDER_SCALE = "viewfinder-scale"
+        const val KEY_CHROME_OPACITY = "chrome-opacity"
         const val KEY_RECORDING_GEOMETRY_MODE = "recording-geometry-mode"
         const val KEY_VIDEO_WIDTH = "video-geometry-width"
         const val KEY_VIDEO_HEIGHT = "video-geometry-height"

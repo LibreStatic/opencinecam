@@ -101,6 +101,8 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.offset
@@ -162,6 +164,8 @@ import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.ui.viewfinder.ZoomAnchorBar
 import com.librestatic.opencinecam.ui.viewfinder.ZoomRocker
+import com.librestatic.opencinecam.ui.viewfinder.LocalChromeOpacity
+import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -219,7 +223,7 @@ import kotlin.math.roundToInt
 import kotlin.math.max
 
 private val Graphite: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
-private val Panel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f)
+private val Panel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f).chromePanel()
 private val Amber: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
 private val VerifiedCyan: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.verified
 private val RecordRed: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.record
@@ -597,7 +601,13 @@ internal fun CaptureSurface(
         val stackedTopBar = if (captureWindowProfile(safeWidthDp.value, safeHeightDp.value) == CaptureWindowProfile.COMPACT_PORTRAIT)
             SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
         var stackedDeckHeightPx by remember { mutableIntStateOf(0) }
-        val previewPaneModifier = if (sideRails) {
+        // Translucent chrome floats over a viewfinder that spans the whole window. The pane is not
+        // inset, so a filled (cropped) frame overflows the physical screen rather than relying on
+        // Compose clipping, which a SurfaceView does not reliably honour.
+        val overlayChrome = fullChrome && settings.translucentChrome
+        val previewPaneModifier = if (overlayChrome) {
+            paneModifier(null)
+        } else if (sideRails) {
             paneModifier(null)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(start = SIDE_RAIL_START_WIDTH_DP.dp, end = SIDE_RAIL_END_WIDTH_DP.dp)
@@ -606,22 +616,30 @@ internal fun CaptureSurface(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(top = stackedTopBar, bottom = with(density) { stackedDeckHeightPx.toDp() })
         } else paneModifier(panes?.preview)
-        Box(previewPaneModifier.testTag("fold-preview-pane")) {
+        BoxWithConstraints(previewPaneModifier.testTag("fold-preview-pane")) {
         if (descriptor != null && binder != null) {
             val streamSize = requireNotNull(previewStreamSize)
             val displayRatio = requireNotNull(previewDisplayRatio)
+            // aspectRatio must receive the unconstrained Box bounds. Applying fillMaxWidth
+            // first can force a too-wide landscape view and make Compose violate the ratio
+            // when the remaining height is smaller than width / ratio.
+            val previewSizeModifier = if (overlayChrome && settings.viewfinderScale == ViewfinderScale.FILL) {
+                val filled = filledPreviewViewport(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), displayRatio)
+                with(density) {
+                    Modifier.wrapContentSize(unbounded = true).requiredSize(filled.width.toDp(), filled.height.toDp())
+                }
+            } else Modifier.aspectRatio(displayRatio)
             PreviewSurfaceView(
                 descriptor.cameraId,
                 streamSize.width,
                 streamSize.height,
-                displayRatio,
                 state.gpuViewfinder || state.selectedMode == CaptureMode.LOG,
                 state.targetFps,
                 descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && state.selectedMode != CaptureMode.LOG,
                 widthPx,
                 heightPx,
                 binder,
-                Modifier.align(Alignment.Center),
+                Modifier.align(Alignment.Center).then(previewSizeModifier),
             )
             MonitoringOverlay(
                 state = state,
@@ -639,10 +657,7 @@ internal fun CaptureSurface(
                 // The capture chrome stacks the histogram with the zoom and audio instruments;
                 // only the minimal self-recording chrome leaves it to the overlay.
                 drawHistogram = state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls,
-                // aspectRatio must receive the unconstrained Box bounds. Applying fillMaxWidth
-                // first can force a too-wide landscape view and make Compose violate the ratio
-                // when the remaining height is smaller than width / ratio.
-                modifier = Modifier.align(Alignment.Center).aspectRatio(displayRatio),
+                modifier = Modifier.align(Alignment.Center).then(previewSizeModifier),
             )
         }
 
@@ -650,13 +665,15 @@ internal fun CaptureSurface(
         Box(paneModifier(panes?.controls).testTag("fold-controls-pane")) {
         if (state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls) {
             SelfCaptureChrome(state, binder, settings, onSettingsChanged, onOpenSettings)
-        } else AdaptiveCaptureChrome(
+        } else CompositionLocalProvider(LocalChromeOpacity provides settings.chromeOpacity.takeIf { overlayChrome }) {
+        AdaptiveCaptureChrome(
             state = state,
             binder = binder,
             settings = settings,
             landscape = landscape,
             previewAspectRatio = previewDisplayRatio,
             previewGesturesEnabled = panes == null,
+            overlayViewfinderScale = settings.viewfinderScale.takeIf { overlayChrome },
             onStackedDeckHeight = { stackedDeckHeightPx = it },
             zebra = zebra,
             peaking = peaking,
@@ -691,6 +708,7 @@ internal fun CaptureSurface(
             onOpenMedia = onOpenMedia,
             onOpenSettings = onOpenSettings,
         )
+        }
 
         }
         Box(paneModifier(panes?.preview)) {
@@ -1078,7 +1096,6 @@ private fun PreviewSurfaceView(
     cameraId: String,
     bufferWidth: Int,
     bufferHeight: Int,
-    displayRatio: Float,
     layoutSizedBuffer: Boolean,
     targetFps: Int,
     mirrorViewfinder: Boolean,
@@ -1204,9 +1221,10 @@ private fun PreviewSurfaceView(
     AndroidView(
         factory = { view },
         update = { it.scaleX = if (mirrorViewfinder) -1f else 1f },
-        // Let aspectRatio choose the largest rectangle that fits both width and height. A
+        // The caller sizes the view: aspectRatio picks the largest rectangle that fits both width
+        // and height, and a filled viewfinder uses an oversized box with the same ratio. A
         // preceding fillMaxWidth would lock the landscape width and squeeze the EGL output.
-        modifier = modifier.aspectRatio(displayRatio).testTag("preview-surface"),
+        modifier = modifier.testTag("preview-surface"),
     )
 }
 
@@ -1218,6 +1236,8 @@ internal fun AdaptiveCaptureChrome(
     landscape: Boolean,
     previewAspectRatio: Float? = null,
     previewGesturesEnabled: Boolean = true,
+    // Non-null when the viewfinder spans the whole window under translucent chrome.
+    overlayViewfinderScale: ViewfinderScale? = null,
     // Reports the visible deck height of the compact portrait layout, which the viewfinder sits above.
     onStackedDeckHeight: (Int) -> Unit = {},
     zebra: Boolean,
@@ -1328,13 +1348,28 @@ internal fun AdaptiveCaptureChrome(
         LaunchedEffect(controlDeckHeightPx) {
             if (controlDeckHeightPx > 0) stableDeckHeightPx = controlDeckHeightPx
         }
-        LaunchedEffect(sideRails, stableDeckHeightPx) { onStackedDeckHeight(if (sideRails) 0 else stableDeckHeightPx) }
+        LaunchedEffect(sideRails, stableDeckHeightPx, overlayViewfinderScale) {
+            onStackedDeckHeight(if (sideRails || overlayViewfinderScale != null) 0 else stableDeckHeightPx)
+        }
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         val width = constraints.maxWidth.toFloat()
         val height = constraints.maxHeight.toFloat()
         val ratio = previewAspectRatio
-        val previewViewport = if (sideRails) {
+        val safeInsets = WindowInsets.safeDrawing
+        val chromeLayoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+        val previewViewport = if (overlayViewfinderScale != null && previewGesturesEnabled) {
+            // The viewfinder spans the window around this inset box; map it into chrome coordinates.
+            val insetLeft = safeInsets.getLeft(density, chromeLayoutDirection).toFloat()
+            val insetTop = safeInsets.getTop(density).toFloat()
+            val window = overlayPreviewViewport(
+                width + insetLeft + safeInsets.getRight(density, chromeLayoutDirection),
+                height + insetTop + safeInsets.getBottom(density),
+                ratio,
+                overlayViewfinderScale,
+            )
+            window.copy(left = window.left - insetLeft, top = window.top - insetTop)
+        } else if (sideRails) {
             sideRailPreviewViewport(
                 width, height,
                 with(density) { startRail.toPx() }, with(density) { endRail.toPx() },
@@ -1427,8 +1462,11 @@ internal fun AdaptiveCaptureChrome(
                     },
             ) {
                 val side = minOf(48.dp.toPx(), previewWidth, previewHeight)
-                val left = (point.x - side / 2f).coerceIn(previewLeft, previewLeft + previewWidth - side)
-                val top = (point.y - side / 2f).coerceIn(previewTop, previewTop + previewHeight - side)
+                // A filled viewfinder overflows the screen; keep the reticle on its visible part.
+                val minLeft = maxOf(previewLeft, 0f)
+                val minTop = maxOf(previewTop, 0f)
+                val left = (point.x - side / 2f).coerceIn(minLeft, maxOf(minLeft, minOf(previewLeft + previewWidth, size.width) - side))
+                val top = (point.y - side / 2f).coerceIn(minTop, maxOf(minTop, minOf(previewTop + previewHeight, size.height) - side))
                 drawRect(
                     color = color,
                     topLeft = Offset(left, top),
@@ -1977,7 +2015,11 @@ private fun PortraitControlDeck(
         if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, slim = true)
         else Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SelectedModeButton(state, onShowModes) }
         Spacer(Modifier.height(4.dp))
-        PortraitCaptureTransport(state, binder, settings, onOpenMedia = onOpenMedia, onShowMonitoring = onShowMonitoring)
+        PortraitCaptureTransport(
+            state, binder, settings, onOpenMedia = onOpenMedia, onShowMonitoring = onShowMonitoring,
+            // Stacked translucent panels would compound into a darker band under the shutter.
+            panelBackground = LocalChromeOpacity.current == null,
+        )
     }
 }
 
@@ -1989,9 +2031,13 @@ internal fun PortraitCaptureTransport(
     settings: CameraSettings,
     // The gallery sits under the thumb, opposite monitoring, when the top bar does not carry it.
     onOpenMedia: (() -> Unit)? = null,
+    panelBackground: Boolean = true,
     onShowMonitoring: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(Panel), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.fillMaxWidth().then(if (panelBackground) Modifier.background(Panel) else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             onOpenMedia?.let { open ->
                 Box(Modifier.align(Alignment.CenterStart).padding(start = 24.dp)) {
@@ -2183,7 +2229,7 @@ private fun ExposureStrip(controls: List<ControlDial>, state: CameraUiState, onC
                 .then(if (fits) Modifier.fillMaxWidth() else Modifier.horizontalScroll(rememberScrollState()))
                 .height(IntrinsicSize.Min)
                 .clip(shape)
-                .background(Color(0xFF12171A))
+                .background(Color(0xFF12171A).chromePanel())
                 .border(1.dp, Color(0xFF263036), shape)
                 .testTag("exposure-strip"),
         ) {
@@ -2266,8 +2312,8 @@ private fun LockButton(
     val bg = when {
         active -> VerifiedCyan
         pending -> Amber
-        enabled -> Color(0xFF1B2023)
-        else -> Color(0xFF161A1C)
+        enabled -> Color(0xFF1B2023).chromePanel()
+        else -> Color(0xFF161A1C).chromePanel()
     }
     val fg = if (active) Color.Black else if (enabled) Color.White else Color(0xFF626A6D)
     val border = if (active) VerifiedCyan else if (pending) Amber else if (enabled) Color(0xFF41494C) else Color(0xFF2A3033)
@@ -2328,7 +2374,7 @@ private fun QuickControlButton(
                 else Modifier
                     .height(56.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF1B2023))
+                    .background(Color(0xFF1B2023).chromePanel())
                     .border(1.dp, Color(0xFF41494C), RoundedCornerShape(8.dp)),
             )
             .clickable(enabled = enabled) { onControl(control) }
@@ -2596,7 +2642,7 @@ private fun SelectedModeButton(state: CameraUiState, onClick: () -> Unit) {
             .widthIn(min = 112.dp)
             .height(52.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF202528))
+            .background(Color(0xFF202528).chromePanel())
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalArrangement = Arrangement.Center,
@@ -2670,7 +2716,7 @@ private fun ContextualPanel(
                 )
                 .widthIn(min = 260.dp, max = 380.dp)
                 .heightIn(max = maximumHeight)
-                .background(Color(0xF21A1F21), RoundedCornerShape(10.dp))
+                .background(Color(0xF21A1F21).chromePanel(), RoundedCornerShape(10.dp))
                 .border(1.dp, Color(0xFF4A5154), RoundedCornerShape(10.dp))
                 .clickable { }
                 .padding(12.dp),
@@ -3142,7 +3188,7 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
         textAlign = if (chip) TextAlign.Center else null,
         modifier = if (chip) modifier
             .testTag("capture-status-chip")
-            .background(Panel.copy(alpha = 0.92f), RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f).chromePanel(), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
         else modifier.fillMaxWidth().padding(horizontal = 8.dp),
     )
@@ -3610,6 +3656,44 @@ internal fun SettingsContent(
                                 fontWeight = if (settings.modeSelectorStyle == style) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
+                    }
+                }
+            }
+        }
+        if ("translucent-chrome" in visibleIds) settingsCard("translucent-chrome") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SettingsToggleRow(
+                    title = stringResource(R.string.translucent_chrome),
+                    summary = stringResource(R.string.translucent_chrome_summary),
+                    checked = settings.translucentChrome,
+                    onCheckedChange = { onSettingsChange(settings.copy(translucentChrome = it)) },
+                )
+                if (settings.translucentChrome) {
+                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                        Text(stringResource(R.string.viewfinder_scale), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.viewfinder_scale_summary), color = Muted, fontSize = 14.sp)
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ViewfinderScale.entries.forEach { scale ->
+                                TextButton(onClick = { onSettingsChange(settings.copy(viewfinderScale = scale)) }) {
+                                    Text(
+                                        if (scale == ViewfinderScale.FIT) stringResource(R.string.viewfinder_scale_fit) else stringResource(R.string.viewfinder_scale_fill),
+                                        color = if (settings.viewfinderScale == scale) Amber else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (settings.viewfinderScale == scale) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "${stringResource(R.string.chrome_opacity)} · ${(settings.chromeOpacity * 100).roundToInt()}%",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Slider(
+                            value = settings.chromeOpacity,
+                            onValueChange = { onSettingsChange(settings.copy(chromeOpacity = clampChromeOpacity((it * 20f).roundToInt() / 20f))) },
+                            valueRange = MIN_CHROME_OPACITY..MAX_CHROME_OPACITY,
+                            steps = 10,
+                        )
                     }
                 }
             }

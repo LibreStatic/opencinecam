@@ -52,7 +52,7 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val ZoomPanel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f)
+private val ZoomPanel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f).chromePanel()
 private val ZoomAccent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
 private val ZoomHandle: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.secondary
 private const val MaxRockerTickSeconds = 0.05f
