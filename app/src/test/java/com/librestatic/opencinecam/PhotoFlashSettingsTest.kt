@@ -40,14 +40,14 @@ class PhotoFlashSettingsTest {
     @Test fun currentVersionExportsAndRestoresPhotoIntent() {
         val preset = CameraPreset(name = "Flash", settings = CameraSettings(photoFlash = PhotoFlashSelection(PhotoFlashMode.ON, 3)), mode = CaptureMode.PHOTO)
         val decoded = CameraPresetCodec.decode(CameraPresetCodec.encode(preset))
-        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(preset.settings, decoded.settings)
+        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(preset.settings, decoded.settings)
         assertEquals(CaptureMode.PHOTO, decoded.mode)
     }
     @Test fun versionFourPreservesTorchAndDefaultsPhotoFlashOff() {
         val preset = CameraPreset(name = "Legacy", settings = CameraSettings(flashEnabled = true))
         val root = Json.parseToJsonElement(CameraPresetCodec.encode(preset)).jsonObject
         val legacy = JsonObject(root + mapOf("version" to JsonPrimitive(4),
-            "settings" to JsonObject(root.getValue("settings").jsonObject.filterKeys { !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - setOf("photo-aspect-enabled", "photo-aspect-width", "photo-aspect-height", "bracket-count", "bracket-step", "accumulation-mode", "accumulation-duration-ms", "accumulation-interval-ms", "accumulation-max-edge", "accumulation-stars-threshold", "photo-flash-mode", "photo-flash-strength", "photo-format", "photo-quality"))))
+            "settings" to JsonObject(root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - setOf("photo-aspect-enabled", "photo-aspect-width", "photo-aspect-height", "bracket-count", "bracket-step", "accumulation-mode", "accumulation-duration-ms", "accumulation-interval-ms", "accumulation-max-edge", "accumulation-stars-threshold", "photo-flash-mode", "photo-flash-strength", "photo-format", "photo-quality"))))
         assertEquals(93, legacy.getValue("settings").jsonObject.size)
         val decoded = CameraPresetCodec.decode(legacy.toString())
         assertTrue(decoded.settings.flashEnabled); assertEquals(PhotoFlashSelection(), decoded.settings.photoFlash)

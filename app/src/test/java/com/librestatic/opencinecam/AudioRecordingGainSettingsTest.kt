@@ -31,13 +31,13 @@ class AudioRecordingGainSettingsTest {
         val original = CameraSettings(audioRecordingGain = DigitalRecordingGain(true, 0))
         val decoded = CameraPresetCodec.decode(document(original).toString())
         assertEquals(original, decoded.settings)
-        assertEquals(19, CameraPresetCodec.VERSION)
-        assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(20, CameraPresetCodec.VERSION)
+        assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
     }
     @Test fun versionTenRetainsExact127FieldsAndManualIsNeverEnabledByMigration() {
         val root = document(CameraSettings(automaticGainControlEnabled = false, photoQuality = 71))
-        val historical = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
+        val historical = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
         assertEquals(127, historical.size)
         val old = JsonObject(root + mapOf("version" to JsonPrimitive(10), "settings" to JsonObject(historical)))
         val decoded = CameraPresetCodec.decode(old.toString()).settings

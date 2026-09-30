@@ -21,9 +21,9 @@ class PlaybackSettingsTest {
         }
     }
     @Test fun versionEighteenHas160KeysAndSeventeenRetains157WithExactDefaults() {
-        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
         val original = CameraSettings(captureNaming = CaptureNamingSettings(true, "{scene}"))
-        val root = document(original); val old = root.getValue("settings").jsonObject - keys - "gallery-auto-thumbnails"
+        val root = document(original); val old = root.getValue("settings").jsonObject - keys - "gallery-auto-thumbnails" - PRESET_V20_KEYS
         assertEquals(157, old.size)
         val historical = JsonObject(root + mapOf("version" to JsonPrimitive(17), "settings" to JsonObject(old)))
         assertEquals(original, CameraPresetCodec.decode(historical.toString()).settings)

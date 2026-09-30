@@ -26,7 +26,7 @@ class GallerySettingsTest {
         val root = document(off)
         assertFalse(CameraPresetCodec.decode(root.toString()).settings.gallery.autoThumbnails)
         val v18 = JsonObject(root + mapOf("version" to JsonPrimitive(18),
-            "settings" to JsonObject(root.getValue("settings").jsonObject - "gallery-auto-thumbnails")))
+            "settings" to JsonObject(root.getValue("settings").jsonObject - "gallery-auto-thumbnails" - PRESET_V20_KEYS)))
         assertTrue(CameraPresetCodec.decode(v18.toString()).settings.gallery.autoThumbnails)
         // A version 18 preset never carried the key, so one that does is rejected rather than trusted.
         assertThrows(Exception::class.java) { CameraPresetCodec.decode(JsonObject(root + ("version" to JsonPrimitive(18))).toString()) }
@@ -43,10 +43,10 @@ class GallerySettingsTest {
         }
     }
     @Test fun versionFifteenHas160KeysAndVersionFourteenRetains147AndMigratesDefaults() {
-        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         val source = CameraSettings(productionSlate = ProductionSlateSettings(project = "Keep", goodTake = true))
-        val root = document(source); val fields = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") && it != "gallery-auto-thumbnails" } - keys
+        val root = document(source); val fields = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") && it != "gallery-auto-thumbnails" } - keys
         assertEquals(147, fields.size)
         val old = JsonObject(root + mapOf("version" to JsonPrimitive(14), "settings" to JsonObject(fields)))
         assertEquals(source, CameraPresetCodec.decode(old.toString()).settings)

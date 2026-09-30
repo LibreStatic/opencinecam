@@ -15,12 +15,12 @@ class MonitoringSettingsTest {
         assertEquals(original, store.load())
         assertEquals(20, prefs.all.keys.count { it.startsWith("monitor-") })
         assertEquals(original, CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Monitor", settings = original))).settings)
-        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
     }
     @Test fun versionNineKeeps107KeysAndDefaultsOnlyMonitoring() {
         val original = CameraSettings(photoQuality = 71, zebraEnabled = true)
         val root = Json.parseToJsonElement(CameraPresetCodec.encode(CameraPreset(name = "V9", settings = original))).jsonObject
-        val old = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") }
+        val old = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") }
         assertEquals(107, old.size)
         val text = JsonObject(root + mapOf("version" to JsonPrimitive(9), "settings" to JsonObject(old))).toString()
         assertEquals(original, CameraPresetCodec.decode(text).settings)

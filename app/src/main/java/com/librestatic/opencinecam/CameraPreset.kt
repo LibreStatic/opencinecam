@@ -23,7 +23,7 @@ data class CameraPreset(
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 19
+    const val VERSION = 20
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -129,6 +129,7 @@ object CameraPresetCodec {
     private val portableV17 = portableV16 + setOf("capture-naming-enabled", "capture-naming-template")
     private val portableV18 = portableV17 + setOf("playback-muted", "playback-loop", "playback-show-frame-position")
     private val portableV19 = portableV18 + setOf("gallery-auto-thumbnails")
+    private val portableV20 = portableV19 + setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity")
     /**
      * The exact key set a payload of [version] must carry. Every published version stays frozen
      * here, so a payload written by an older build keeps decoding without its keys being guessed.
@@ -139,11 +140,12 @@ object CameraPresetCodec {
         version == 8 -> portableV8; version == 9 -> portableV9; version == 10 -> portableV10
         version == 11 -> portableV11; version == 12 -> portableV12; version == 13 -> portableV13
         version == 14 -> portableV14; version == 15 -> portableV15; version == 16 -> portableV16
-        version == 17 -> portableV17; version == 18 -> portableV18; else -> portableV19
+        version == 17 -> portableV17; version == 18 -> portableV18; version == 19 -> portableV19
+        else -> portableV20
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV19 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV20 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys

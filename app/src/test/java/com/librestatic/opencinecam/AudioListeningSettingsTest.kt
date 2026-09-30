@@ -40,7 +40,7 @@ class AudioListeningSettingsTest {
     @Test fun portableV18Has160KeysAndPhysicalOutputIsLocalAcrossImport() {
         val original = CameraSettings(audioListening = AudioListeningSettings(true, 34, AudioListeningOutput.BLUETOOTH), audioListeningOutputDeviceId = 212)
         val root = document(original)
-        assertEquals(19, CameraPresetCodec.VERSION); assertEquals(161, CameraPresetCodec.portableKeys.size)
+        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         assertFalse(root.getValue("settings").jsonObject.containsKey("audio-listening-output-device-id"))
         val decoded = CameraPresetCodec.decode(root.toString()).settings
@@ -52,7 +52,7 @@ class AudioListeningSettingsTest {
     }
     @Test fun versionElevenRetains129KeysAndMigratesListeningDisabledAtFiftyPercent() {
         val original = CameraSettings(audioRecordingGain = DigitalRecordingGain(true, 12))
-        val root = document(original); val values = root.getValue("settings").jsonObject.filterKeys { !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
+        val root = document(original); val values = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys
         assertEquals(129, values.size)
         val historical = JsonObject(root + mapOf("version" to JsonPrimitive(11), "settings" to JsonObject(values)))
         assertEquals(original, CameraPresetCodec.decode(historical.toString()).settings)
