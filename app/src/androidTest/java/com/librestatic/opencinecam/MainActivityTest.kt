@@ -12,10 +12,19 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
+import org.junit.rules.ExternalResource
 import org.junit.Test
 
 class MainActivityTest {
-    @get:Rule
+    /** The first-run wizard has its own test (OnboardingUiTest); this one covers returning users. */
+    @get:Rule(order = 0)
+    val onboardingDone = object : ExternalResource() {
+        override fun before() {
+            OnboardingStore(InstrumentationRegistry.getInstrumentation().targetContext).markCompleted()
+        }
+    }
+
+    @get:Rule(order = 1)
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     /**

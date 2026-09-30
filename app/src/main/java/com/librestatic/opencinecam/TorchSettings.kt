@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
@@ -57,16 +58,16 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
                 }.testTag("torch-toggle"),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, modifier = Modifier.weight(1f))
             Switch(checked = torchOn, onCheckedChange = null, enabled = switchEnabled)
         }
-        if (locked) Text(stringResource(R.string.operator_locked), color = Color.LightGray, fontSize = 14.sp)
-        if (!available) Text(stringResource(R.string.settings_torch_unavailable), color = Color.LightGray, fontSize = 14.sp)
+        if (locked) Text(stringResource(R.string.operator_locked), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        if (!available) Text(stringResource(R.string.settings_torch_unavailable), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         if (available && capabilities?.adjustable == true) {
             val levelDescription = stringResource(R.string.settings_torch_level, level.roundToInt(), max)
             val strengthLabel = stringResource(R.string.settings_torch_strength_label)
             val sliderInteraction = remember { MutableInteractionSource() }
-            Text(levelDescription, color = Color.White, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().testTag("torch-level-label"))
+            Text(levelDescription, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().testTag("torch-level-label"))
             Slider(
                 value = level,
                 onValueChange = { level = it },
@@ -110,7 +111,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
                     onChange(settings.copy(torchStrengthLevel = level.roundToInt()))
                 }
             }
-        } else if (available) Text(stringResource(R.string.settings_torch_fixed), color = Color.LightGray, fontSize = 14.sp)
+        } else if (available) Text(stringResource(R.string.settings_torch_fixed), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         val unknown = stringResource(R.string.settings_unknown)
         val reported = when (state.torchReported) {
             true -> stringResource(R.string.settings_on)
@@ -119,7 +120,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
         }
         Text(
             stringResource(R.string.settings_torch_reported, reported, state.torchStrengthReported?.toString() ?: unknown),
-            color = Color.LightGray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp,
             modifier = Modifier.fillMaxWidth().testTag("torch-reported"),
         )

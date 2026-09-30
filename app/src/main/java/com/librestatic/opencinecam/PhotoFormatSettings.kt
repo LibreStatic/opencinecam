@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,7 +28,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
         StillPhotoFormat.DNG -> false // The existing RAW capture mode owns DNG-only.
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.photo_format_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.photo_format_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_format_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC).forEach { format ->
@@ -37,10 +39,10 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
             }
         }
         if (!supported(settings.photoFormat)) Text(stringResource(R.string.photo_format_unavailable),
-            color = Color(0xFFFFCF66), modifier = Modifier.testTag("photo-format-unavailable"))
+            color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-format-unavailable"))
         var quality by remember(settings.photoQuality) { mutableFloatStateOf(settings.photoQuality.toFloat()) }
         val label = stringResource(R.string.photo_quality, quality.roundToInt())
-        Text(label, color = Color.White)
+        Text(label, color = MaterialTheme.colorScheme.onSurface)
         Slider(value = quality, onValueChange = { quality = it },
             onValueChangeFinished = { onChange(settings.copy(photoQuality = quality.roundToInt())) },
             valueRange = 1f..100f, steps = 98,
@@ -55,10 +57,10 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
             }
         }
         SettingsHelp(stringResource(R.string.photo_quality_help))
-        if (state.settingsPending) Text(stringResource(R.string.photo_format_pending), color = Color(0xFFFFCF66))
+        if (state.settingsPending) Text(stringResource(R.string.photo_format_pending), color = LocalCineColors.current.pending)
         state.lastStillPublication?.let { publication ->
             Text(stringResource(R.string.photo_capture_saved, publication.images.joinToString(" + ") { it.kind.name }),
-                color = Color.LightGray, modifier = Modifier.testTag("photo-format-publication"))
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("photo-format-publication"))
         }
     }
 }

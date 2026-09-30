@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <!-- Material You dark is always AMOLED black. -->
+    <color name="window_you">#FF000000</color>
+</resources>

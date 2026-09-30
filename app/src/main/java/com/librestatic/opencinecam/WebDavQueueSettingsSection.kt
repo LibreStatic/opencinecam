@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.Alignment
@@ -45,13 +46,13 @@ import kotlinx.coroutines.withContext
         }
     }
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.webdav_queue_title), style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(stringResource(R.string.webdav_queue_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         SettingsHelp(stringResource(R.string.webdav_queue_help))
         OutlinedTextField(draft, { draft = it }, label = { Text(stringResource(R.string.webdav_queue_endpoint)) },
             supportingText = { Text(stringResource(R.string.webdav_queue_https)) }, singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                focusedLabelColor = Color.White, unfocusedLabelColor = Color.LightGray,
-                focusedSupportingTextColor = Color.LightGray, unfocusedSupportingTextColor = Color.LightGray),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedLabelColor = MaterialTheme.colorScheme.onSurface, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedSupportingTextColor = MaterialTheme.colorScheme.onSurfaceVariant, unfocusedSupportingTextColor = MaterialTheme.colorScheme.onSurfaceVariant),
             enabled = !busy && !state.storageFailed,
             modifier = Modifier.fillMaxWidth().testTag("webdav-queue-endpoint"))
         Button(onClick = { save(draft, preferences.enabled, preferences.allowCellular) },
@@ -71,8 +72,8 @@ import kotlinx.coroutines.withContext
             !busy && !state.storageFailed && preferences.activeEndpoint?.let { WebDavLanTls.isLocalAddress(URI(it.url)) } == true) {
             save(preferences.activeEndpoint?.url.orEmpty(), preferences.enabled, preferences.allowCellular, it)
         }
-        Text(stringResource(R.string.webdav_queue_ignore_tls_help), color = Color.LightGray)
-        Text(stringResource(R.string.webdav_queue_future_takes), color = Color.LightGray)
+        Text(stringResource(R.string.webdav_queue_ignore_tls_help), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.webdav_queue_future_takes), color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (failed || state.storageFailed) Text(stringResource(R.string.webdav_queue_settings_failed),
             color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("webdav-queue-error"))
         if (!state.storageFailed) preferences.activeEndpointId?.let { endpointId ->
@@ -86,7 +87,7 @@ import kotlinx.coroutines.withContext
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag(tag)
         .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(label, Modifier.weight(1f), color = if (enabled) Color.White else Color.LightGray)
+        Text(label, Modifier.weight(1f), color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
         Switch(checked, onCheckedChange = null, enabled = enabled)
     }
 }

@@ -15,7 +15,15 @@ import org.junit.Test
 
 /** Real activity → media tab → MediaStore catalog → live shared settings, without a mock source. */
 class GalleryNavigationDeviceTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    /** Starts on the camera: past the first-run wizard (OnboardingUiTest covers it) with the camera allowed. */
+    @get:Rule(order = 0) val onboardingDone = object : org.junit.rules.ExternalResource() {
+        override fun before() {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            OnboardingStore(instrumentation.targetContext).markCompleted()
+            instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, android.Manifest.permission.CAMERA)
+        }
+    }
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
     @Test fun activityGalleryFindsSavedSlateAndFilterEditsPreserveCaptureIntent() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val repository = SettingsRepositories.get(context)

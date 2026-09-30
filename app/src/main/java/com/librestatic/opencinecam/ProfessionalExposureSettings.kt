@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import android.hardware.camera2.CaptureRequest
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -34,16 +36,16 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
     })
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.pro_exposure_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.pro_exposure_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.pro_exposure_help))
-        if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = Color(0xFFFFCF66), fontSize = 16.sp)
+        if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ExposureMode.entries.forEach { mode ->
                 FilterChip(selected = exposure.mode == mode, onClick = { updateExposure(exposure.copy(mode = mode)) },
                     enabled = caps.supports(mode), modifier = Modifier.heightIn(min = 48.dp), label = { Text(stringResource(mode.titleResource())) })
             }
         }
-        if (resolved.unavailable) Text(stringResource(R.string.pro_exposure_unavailable), color = Color(0xFFFFCF66), fontSize = 16.sp)
+        if (resolved.unavailable) Text(stringResource(R.string.pro_exposure_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         caps.isoRange?.takeIf { it.first < it.last }?.let { range ->
             ProSlider(stringResource(R.string.pro_iso), exposure.iso.toFloat(), range.first.toFloat()..range.last.toFloat(),
                 enabled = caps.supports(exposure.mode) && exposure.mode in setOf(ExposureMode.MANUAL, ExposureMode.ISO_PRIORITY),
@@ -74,9 +76,9 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             }
         }
         Text(stringResource(R.string.pro_exposure_values, exposure.requestedTimeNs(CaptureFrameRate(state.targetFps)).toString(),
-            resolved.timeNs?.toString() ?: unknown, state.exposureTimeNs?.toString() ?: unknown, state.sensitivityIso?.toString() ?: unknown), color = Color.White, fontSize = 14.sp)
-        if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = Color(0xFFFFCF66), fontSize = 14.sp)
-        Text(stringResource(R.string.pro_antibanding), color = Color.White, fontSize = 18.sp)
+            resolved.timeNs?.toString() ?: unknown, state.exposureTimeNs?.toString() ?: unknown, state.sensitivityIso?.toString() ?: unknown), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+        if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = LocalCineColors.current.pending, fontSize = 14.sp)
+        Text(stringResource(R.string.pro_antibanding), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Antibanding.entries.forEach { band ->
                 FilterChip(exposure.antibanding == band, { updateExposure(exposure.copy(antibanding = band)) }, enabled = band in caps.antibanding,
@@ -96,8 +98,8 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_50HZ -> "50 Hz"
             CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ -> "60 Hz"
             else -> unknown
-        }), color = Color.LightGray, fontSize = 14.sp)
-        Text(stringResource(R.string.pro_white_balance), color = Color.White, fontSize = 18.sp)
+        }), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        Text(stringResource(R.string.pro_white_balance), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         RecordingWhiteBalanceSettings(state, settings, onChange)
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
         val kelvinRange = descriptor?.kelvinRange.takeUnless { hfr }
@@ -115,14 +117,14 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
                 enabled = kelvinRange != null, modifier = Modifier.heightIn(min = 48.dp), label = { Text("Kelvin / CCT") })
         }
         val adapted = wb.adaptTo(kelvinRange, descriptor?.tintSupported == true, presets)
-        if (adapted != wb) Text(stringResource(R.string.pro_wb_unavailable), color = Color(0xFFFFCF66), fontSize = 14.sp)
+        if (adapted != wb) Text(stringResource(R.string.pro_wb_unavailable), color = LocalCineColors.current.pending, fontSize = 14.sp)
         if (wb is WhiteBalanceSelection.Kelvin && kelvinRange != null) {
             ProSlider("Kelvin", wb.kelvin.toFloat(), kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
                 format = { "${it.roundToInt()} K" }, onChange = { onChange(settings.copy(whiteBalance = wb.copy(kelvin = snapKelvinTo100(it.roundToInt(), kelvinRange) ?: wb.kelvin))) })
             ProSlider(stringResource(R.string.pro_tint), wb.tint.toFloat(), -50f..50f, descriptor?.tintSupported == true,
                 format = { it.roundToInt().toString() }, onChange = { onChange(settings.copy(whiteBalance = wb.copy(tint = it.roundToInt()))) })
         }
-        Text(stringResource(R.string.pro_wb_reported, state.reportedColorTemperatureK?.toString() ?: unknown, state.reportedColorTint?.toString() ?: unknown), color = Color.LightGray, fontSize = 14.sp)
+        Text(stringResource(R.string.pro_wb_reported, state.reportedColorTemperatureK?.toString() ?: unknown, state.reportedColorTint?.toString() ?: unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         OutlinedButton({ onChange(settings.copy(exposure = exposure.copy(mode = ExposureMode.AUTO), whiteBalance = WhiteBalanceSelection.Auto)) }, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.pro_restore_auto))
         }
@@ -143,7 +145,7 @@ private fun ProSlider(label: String, value: Float, range: ClosedFloatingPointRan
     format: (Float) -> String, onChange: (Float) -> Unit) {
     var draft by remember(value, range) { mutableFloatStateOf(value.coerceIn(range)) }
     Column {
-        Text("$label: ${format(draft)}", color = Color.White, fontSize = 16.sp)
+        Text("$label: ${format(draft)}", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
         Slider(value = draft, onValueChange = { draft = it }, onValueChangeFinished = { onChange(draft) }, enabled = enabled,
             valueRange = range, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label })
     }
@@ -152,7 +154,7 @@ private fun ProSlider(label: String, value: Float, range: ClosedFloatingPointRan
 @Composable
 internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.pro_wb_record_policy), color = Color.White, fontSize = 18.sp)
+        Text(stringResource(R.string.pro_wb_record_policy), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             RecordingWhiteBalancePolicy.entries.forEach { policy ->
                 FilterChip(settings.recordingWhiteBalance == policy, { onChange(settings.copy(recordingWhiteBalance = policy)) },
@@ -163,19 +165,19 @@ internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: Camer
         }
         SettingsHelp(stringResource(R.string.pro_wb_record_help))
         if (state.descriptor?.awbLockSupported != true || state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true) {
-            Text(stringResource(R.string.pro_wb_lock_unavailable), color = Color(0xFFFFCF66), fontSize = 14.sp)
+            Text(stringResource(R.string.pro_wb_lock_unavailable), color = LocalCineColors.current.pending, fontSize = 14.sp)
         }
-        if (state.structuralSettingsFrozen) Text(stringResource(R.string.pro_wb_record_pending), color = Color(0xFFFFCF66), fontSize = 14.sp)
+        if (state.structuralSettingsFrozen) Text(stringResource(R.string.pro_wb_record_pending), color = LocalCineColors.current.pending, fontSize = 14.sp)
         Text(stringResource(R.string.pro_wb_lock_reported, stringResource(when (state.reportedAwbLocked) {
             true -> R.string.pro_wb_locked
             false -> R.string.pro_wb_unlocked
             null -> R.string.pro_unknown
-        })), color = Color.LightGray, fontSize = 14.sp)
+        })), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         if (state.recordingWhiteBalanceStatus != RecordingWhiteBalanceStatus.IDLE) Text(stringResource(when (state.recordingWhiteBalanceStatus) {
             RecordingWhiteBalanceStatus.CONVERGING, RecordingWhiteBalanceStatus.LOCKING -> R.string.pro_wb_preparing
             RecordingWhiteBalanceStatus.LOCKED -> R.string.pro_wb_locked
             RecordingWhiteBalanceStatus.FIXED -> R.string.pro_wb_fixed
             else -> R.string.pro_wb_prepare_failed
-        }), color = Color.White, fontSize = 16.sp)
+        }), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
     }
 }

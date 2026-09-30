@@ -17,4 +17,10 @@ class OnboardingStoreTest {
     fun leavingWithCameraFinishes() {
         assertNull(onboardingExitTarget(cameraGranted = true))
     }
+
+    @Test
+    fun theTourEndsOnTheClosingStep() {
+        assertEquals(OnboardingPage.DONE, OnboardingPage.entries.last())
+        assertEquals(OnboardingPage.WELCOME, OnboardingPage.entries.first())
+    }
 }

@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -60,7 +62,7 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
     }
     val falseColor: @Composable () -> Unit = {
         MonitorGroup(R.string.monitoring_group_false, CineIcon.HISTOGRAM_MODE) {
-            Text(stringResource(R.string.monitoring_false_palette), color = Color.White)
+            Text(stringResource(R.string.monitoring_false_palette), color = MaterialTheme.colorScheme.onSurface)
             val classic = stringResource(R.string.monitoring_palette_classic)
             val contrast = stringResource(R.string.monitoring_palette_high_contrast)
             SettingsChips(FalseColorPalette.entries, options.falseColorPalette,
@@ -72,7 +74,7 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
     }
     val guides: @Composable () -> Unit = {
         MonitorGroup(R.string.monitoring_group_guides, CineIcon.GRID) {
-            Text(stringResource(R.string.monitoring_aspect), color = Color.White)
+            Text(stringResource(R.string.monitoring_aspect), color = MaterialTheme.colorScheme.onSurface)
             SettingsChips(MonitorAspectGuide.entries, options.aspectGuide,
                 label = { guide -> stringResource(when (guide) {
                     MonitorAspectGuide.NONE -> R.string.monitoring_aspect_none
@@ -123,7 +125,7 @@ private fun MonitorGroup(titleId: Int, icon: CineIcon, content: @Composable Colu
 private fun MonitorSwitch(labelId: Int, tag: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val label = stringResource(labelId)
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, color = Color.White, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange,
             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label }.testTag("monitoring-$tag"))
     }
@@ -132,7 +134,7 @@ private fun MonitorSwitch(labelId: Int, tag: String, checked: Boolean, onChange:
 @Composable
 private fun MonitorField(labelId: Int, tag: String, value: String, invalid: Boolean, onChange: (String) -> Unit) {
     val label = stringResource(labelId)
-    Text(label, color = Color.White)
+    Text(label, color = MaterialTheme.colorScheme.onSurface)
     OutlinedTextField(value = value, onValueChange = { onChange(it.take(4)) }, singleLine = true, isError = invalid,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label }.testTag("monitoring-$tag"))
@@ -151,7 +153,7 @@ private fun MonitorInteger(labelId: Int, tag: String, value: Int, range: IntRang
     var text by remember(value) { mutableStateOf(value.toString()) }
     val number = text.toIntOrNull()?.takeIf { it in range }
     val label = stringResource(labelId)
-    Text(label, color = Color.White)
+    Text(label, color = MaterialTheme.colorScheme.onSurface)
     // The draft and its apply action share a line; the range sits under the field.
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(value = text, onValueChange = { text = it.take(4) }, singleLine = true, isError = number == null,
@@ -164,7 +166,7 @@ private fun MonitorInteger(labelId: Int, tag: String, value: Int, range: IntRang
 
 @Composable
 private fun MonitorColors(labelId: Int, tag: String, value: MonitorColor, onChange: (MonitorColor) -> Unit) {
-    Text(stringResource(labelId), color = Color.White)
+    Text(stringResource(labelId), color = MaterialTheme.colorScheme.onSurface)
     SettingsSwatches(MonitorColor.entries, value, color = { it.composeColor() },
         label = { color -> stringResource(when (color) {
             MonitorColor.CYAN -> R.string.monitoring_color_cyan
@@ -186,7 +188,7 @@ private fun ZebraThresholds(options: MonitoringOptions, onChange: (MonitoringOpt
         Column(Modifier.weight(1f)) { MonitorField(R.string.monitoring_zebra_low, "zebra-low", low, !valid) { low = it } }
         Column(Modifier.weight(1f)) { MonitorField(R.string.monitoring_zebra_high, "zebra-high", high, !valid) { high = it } }
     }
-    Text(stringResource(R.string.monitoring_zebra_order), color = if (valid) Color.LightGray else Color(0xFFFFCF66))
+    Text(stringResource(R.string.monitoring_zebra_order), color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else LocalCineColors.current.pending)
     MonitorApply("zebra", valid) { if (valid) onChange(options.copy(zebraLowPercent = requireNotNull(lo), zebraHighPercent = requireNotNull(hi))) }
 }
 
@@ -206,7 +208,7 @@ private fun FalseColorThresholds(options: MonitoringOptions, onChange: (Monitori
         Column(Modifier.weight(1f)) { MonitorField(R.string.monitoring_false_highlight, "false-highlight", highlight, !valid) { highlight = it } }
         Column(Modifier.weight(1f)) { MonitorField(R.string.monitoring_false_clip, "false-clip", clip, !valid) { clip = it } }
     }
-    Text(stringResource(R.string.monitoring_false_order), color = if (valid) Color.LightGray else Color(0xFFFFCF66),
+    Text(stringResource(R.string.monitoring_false_order), color = if (valid) MaterialTheme.colorScheme.onSurfaceVariant else LocalCineColors.current.pending,
         modifier = Modifier.testTag("monitoring-false-order"))
     MonitorApply("false", valid) {
         if (valid) onChange(options.copy(falseColorBlackPercent = requireNotNull(values[0]), falseColorShadowPercent = requireNotNull(values[1]),

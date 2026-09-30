@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,7 +51,7 @@ internal fun SettingsScreen(
         if (query.isNotEmpty()) query = "" else selectedName = null
     }
     HingeSafeSettingsPane(fold.hinge) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF101417))) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
     val wide = maxWidth >= 840.dp && LocalDensity.current.fontScale <= 1.3f
     Column(Modifier.fillMaxSize()) {
         // Inside a page, the search names the page it searches, so one row carries both.
@@ -64,7 +66,7 @@ internal fun SettingsScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 modifier = modifier.testTag("settings-search"),
-                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface),
             )
         }
         if (wide) {
@@ -72,12 +74,12 @@ internal fun SettingsScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(vertical = 16.dp),
-                    fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 search(Modifier.weight(1f).widthIn(max = 520.dp))
             }
         } else {
             if (!inPage) Text(stringResource(R.string.settings_tab), modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                fontSize = 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             // The field keeps its place in the tree when a page opens, so typing never loses focus.
             Row(Modifier.fillMaxWidth().padding(start = if (inPage) 4.dp else 16.dp, end = 16.dp, top = if (inPage) 8.dp else 0.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -87,14 +89,14 @@ internal fun SettingsScreen(
                         .clickable(onClickLabel = back) { query = ""; selectedName = null }
                         .semantics { contentDescription = back }
                         .testTag("settings-back"), contentAlignment = Alignment.Center) {
-                        CineGlyph(CineIcon.BACK, Color.White, Modifier.size(22.dp))
+                        CineGlyph(CineIcon.BACK, MaterialTheme.colorScheme.onSurface, Modifier.size(22.dp))
                     }
                 }
                 search(Modifier.weight(1f))
             }
         }
         if (state.settingsPending) Text(
-            stringResource(R.string.settings_recording_pending), color = Color(0xFFF4BA55), fontSize = 14.sp,
+            stringResource(R.string.settings_recording_pending), color = LocalCineColors.current.pending, fontSize = 14.sp,
             modifier = Modifier.padding(16.dp),
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -110,16 +112,16 @@ internal fun SettingsScreen(
                             // marking the open page, so the list reads at a glance and costs little width.
                             Row(Modifier.fillMaxWidth().heightIn(min = 56.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (selected) Color(0xFF1B2226) else Color.Transparent)
+                                .background(if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent)
                                 .clickable { selectedName = item.name; query = "" }
                                 .testTag("settings-category-${item.name}"),
                                 verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.width(3.dp).height(32.dp).background(if (selected) Color(0xFFFFB000) else Color.Transparent))
-                                CineGlyph(item.icon, if (selected) Color(0xFFFFB000) else Color(0xFFAAB4BA),
+                                Box(Modifier.width(3.dp).height(32.dp).background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent))
+                                CineGlyph(item.icon, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     Modifier.padding(start = 12.dp).size(22.dp))
                                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                    Text(stringResource(item.title), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(stringResource(item.summary), color = Color(0xFFAAB4BA), fontSize = 12.sp, maxLines = 1,
+                                    Text(stringResource(item.title), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(item.summary), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                             }
@@ -131,10 +133,10 @@ internal fun SettingsScreen(
                         // Compact panes already name the page in the search row.
                         if (wide) Text(
                             if (query.isNotBlank()) stringResource(R.string.settings_results) else stringResource((category ?: SettingsCategory.CAPTURE).title),
-                            color = Color.White, fontSize = 18.sp, modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, modifier = Modifier.padding(16.dp),
                         )
                         val visible = if (wide && category == null && query.isBlank()) SettingsCatalog.search("", SettingsCategory.CAPTURE, context::getString) else ids
-                        if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = Color.White, modifier = Modifier.padding(16.dp))
+                        if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(16.dp))
                         listStates.SaveableStateProvider(if (query.isNotBlank()) "search" else (category ?: SettingsCategory.CAPTURE).name) {
                             SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset)
                         }

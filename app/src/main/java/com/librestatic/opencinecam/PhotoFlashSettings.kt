@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.*
@@ -28,7 +30,7 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
             automatic.copy(strength = caps.singleDefault) else automatic
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.photo_flash_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.photo_flash_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_flash_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PhotoFlashMode.entries.forEach { mode ->
@@ -54,11 +56,11 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
                 PhotoFlashRejection.STRENGTH_OUT_OF_RANGE -> R.string.photo_flash_reason_range
                 PhotoFlashRejection.STRENGTH_WITH_AUTO -> R.string.photo_flash_reason_auto
             })),
-            color = Color(0xFFFFCF66), modifier = Modifier.testTag("photo-flash-rejected"))
+            color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-flash-rejected"))
         if (selection.mode == PhotoFlashMode.ON && caps.singleMax > 1) {
             var level by remember(selection.strength, caps) { mutableFloatStateOf((selection.strength ?: caps.singleDefault).coerceIn(1, caps.singleMax).toFloat()) }
             val label = stringResource(R.string.photo_flash_strength, level.roundToInt(), caps.singleMax)
-            Text(if (selection.strength == null) stringResource(R.string.photo_flash_default_strength) else label, color = Color.White)
+            Text(if (selection.strength == null) stringResource(R.string.photo_flash_default_strength) else label, color = MaterialTheme.colorScheme.onSurface)
             val interaction = remember { MutableInteractionSource() }
             Slider(value = level, interactionSource = interaction,
                 thumb = { Box(Modifier.heightIn(min = 48.dp)) { SliderDefaults.Thumb(interactionSource = interaction) } }, onValueChange = { level = it },
@@ -81,7 +83,7 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
                 modifier = Modifier.heightIn(min = 48.dp).testTag("photo-flash-default-strength")) {
                 Text(stringResource(R.string.photo_flash_default_strength))
             }
-        } else Text(stringResource(R.string.photo_flash_strength_help), color = Color.LightGray, fontSize = 14.sp)
+        } else Text(stringResource(R.string.photo_flash_strength_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         val report = state.photoFlashReport
         val unknown = stringResource(R.string.settings_unknown)
         val flash = when (report?.reportedFlashState) {
@@ -93,6 +95,6 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
             else -> R.string.settings_unknown
         }
         Text(stringResource(R.string.photo_flash_report, (if (report?.submittedFlashMode == 2) stringResource(R.string.flash_torch) + " / " else "") + stringResource(flash), report?.reportedStrength?.toString() ?: unknown),
-            color = Color.LightGray, modifier = Modifier.testTag("photo-flash-report"))
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("photo-flash-report"))
     }
 }

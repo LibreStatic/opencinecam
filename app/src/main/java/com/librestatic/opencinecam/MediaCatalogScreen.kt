@@ -1,6 +1,27 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.librestatic.opencinecam
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
@@ -92,6 +113,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     onDelete: ((LocalMediaTake) -> Unit)? = null, refreshGeneration: Int = 0,
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
     onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null, onOpen: (LocalMediaArtifact) -> Unit) {
+    val reducedMotion = LocalReducedMotion.current
     var query by rememberSaveable { mutableStateOf("") }
     // What the operator typed, which is not always what we search for. Keeping it lets the field
     // show a rejected edit long enough to explain it: a controlled field that silently discards the
@@ -135,14 +157,18 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             }
         }
     }
-    LazyColumn(Modifier.fillMaxSize().testTag("gallery-list"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+    val listState = rememberLazyListState()
+    val entrance = rememberListEntrance(listState) { visible.takes.isNotEmpty() }
+    // On tablets and unfolded screens the list, its buttons and fields stop at a readable width.
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    LazyColumn(Modifier.widthIn(max = 720.dp).fillMaxSize().testTag("gallery-list"), state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item(key = "controls") {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // One header row: the title and the catalog actions as icon keys, instead of a
                 // stack of full-width buttons above the first take.
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.media_tab), Modifier.weight(1f), color = Color.White,
+                    Text(stringResource(R.string.media_tab), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     onProxyCatalog?.let { action -> GalleryIconAction("proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
                     GalleryIconAction("filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
@@ -169,8 +195,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                     color = GalleryWarning, fontSize = 13.sp)
             }
         }
-        items(visible.takes, key = { it.id }) { take ->
-            GalleryTakeCard(take, settings, source, onShare, onDelete, onRename, onProxy) { artifact ->
+        itemsIndexed(visible.takes, key = { _, take -> take.id }) { index, take ->
+            // The controls row is item 0, so a take's list index is its position plus one.
+            GalleryTakeCard(take, settings, source, onShare, onDelete, onRename, onProxy, Modifier.listEntrance(entrance, index + 1)) { artifact ->
                 try {
                     if (onReview != null && artifact.mimeType.substringBefore('/') in setOf("video", "audio", "image"))
                         onReview(MediaReviewSelection(visible.takes.toList(), artifact, settings, query, visible.next))
@@ -182,8 +209,19 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         }
         item(key = "status") {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Full height: a wavy indicator clipped to a strip looks like the old flat bar.
+                AnimatedVisibility(
+                    visible = visible.loading,
+                    enter = if (reducedMotion) EnterTransition.None else fadeIn() + expandVertically(),
+                    exit = if (reducedMotion) ExitTransition.None else fadeOut(tween(400)) + shrinkVertically(tween(500, delayMillis = 150)),
+                ) {
+                    Column(Modifier.fillMaxWidth().testTag("gallery-loading"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                        Text(stringResource(R.string.gallery_loading), Modifier.fillMaxWidth(), color = SettingsMuted, fontSize = 13.sp)
+                    }
+                }
                 when {
-                    visible.loading -> Text(stringResource(R.string.gallery_loading), Modifier.fillMaxWidth().testTag("gallery-loading"), color = SettingsMuted)
                     visible.failed -> {
                         Text(stringResource(R.string.gallery_load_failed), Modifier.fillMaxWidth().testTag("gallery-error"), color = GalleryWarning)
                         GalleryButton("retry", R.string.gallery_retry) { load = load.copy(loading = true); batch++ }
@@ -199,6 +237,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             }
         }
     }
+    }
 }
 
 internal fun validGalleryQuery(query: String): Boolean = query.length <= 128 && query.none { it.isISOControl() }
@@ -213,11 +252,11 @@ private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, acti
     }
 }
 
-private val GalleryWarning = Color(0xFFFFB000)
+private val GalleryWarning: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.pending
 
 /** A catalog action as a 48 dp icon key; its name is the spoken label and the long-press hint. */
 @Composable
-private fun GalleryIconAction(tag: String, icon: CineIcon, label: Int, selected: Boolean = false, tint: Color = Color.White,
+private fun GalleryIconAction(tag: String, icon: CineIcon, label: Int, selected: Boolean = false, tint: Color = MaterialTheme.colorScheme.onSurface,
     onClick: () -> Unit) {
     val name = stringResource(label)
     Box(
@@ -235,11 +274,12 @@ private fun GalleryIconAction(tag: String, icon: CineIcon, label: Int, selected:
 @Composable
 private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?,
-    onRename: ((LocalMediaTake) -> Unit)?, onProxy: ((LocalMediaTake) -> Unit)?, onOpen: (LocalMediaArtifact) -> Unit) {
+    onRename: ((LocalMediaTake) -> Unit)?, onProxy: ((LocalMediaTake) -> Unit)?, modifier: Modifier = Modifier,
+    onOpen: (LocalMediaArtifact) -> Unit) {
     var expanded by rememberSaveable(take.id) { mutableStateOf(false) }
     val shape = RoundedCornerShape(12.dp)
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(shape)
             .background(SettingsSurface)
@@ -252,7 +292,7 @@ private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, sou
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             GalleryThumbnailTile(take.id, take, thumbnail) { onOpen(take.primary) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-name-${take.id}"), color = Color.White,
+                Text(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-name-${take.id}"), color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 val slate = take.slate
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -272,7 +312,7 @@ private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, sou
                     LocalMediaRelationStatus.INVALID_METADATA -> R.string.gallery_invalid
                     LocalMediaRelationStatus.INCOMPLETE -> R.string.gallery_incomplete
                 }), Modifier.fillMaxWidth().testTag("gallery-relation-${take.id}"),
-                    color = if (relationWarning) GalleryWarning else Color(0xFF7F8A90), fontSize = 11.sp, lineHeight = 14.sp)
+                    color = if (relationWarning) GalleryWarning else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 14.sp)
             }
         }
         if (thumbnail.unavailable) Text(stringResource(R.string.gallery_thumbnail_unavailable),
@@ -321,13 +361,13 @@ private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, sou
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                CineGlyph(CineIcon.FILES, if (expanded) SettingsAccent else Color.White, Modifier.size(20.dp))
-                Text("${take.originals.size + take.metadata.size}", color = if (expanded) SettingsAccent else Color.White,
+                CineGlyph(CineIcon.FILES, if (expanded) SettingsAccent else MaterialTheme.colorScheme.onSurface, Modifier.size(20.dp))
+                Text("${take.originals.size + take.metadata.size}", color = if (expanded) SettingsAccent else MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("gallery-files-${take.id}-label"))
             }
             Spacer(Modifier.weight(1f))
             if (onDelete != null) GalleryIconAction("delete-${take.id}", CineIcon.DELETE, R.string.media_delete_action,
-                tint = Color(0xFFF04444)) { onDelete(take) }
+                tint = MaterialTheme.colorScheme.error) { onDelete(take) }
         }
         if (expanded) {
             take.originals.forEach { GalleryArtifact(it, false, settings.showTechnical, onOpen) }
@@ -360,7 +400,7 @@ private fun GalleryArtifact(artifact: LocalMediaArtifact, metadata: Boolean, tec
     ) {
         CineGlyph(if (metadata) CineIcon.INFO else CineIcon.MEDIA, SettingsMuted, Modifier.size(18.dp))
         Text(stringResource(if (metadata) R.string.gallery_metadata else R.string.gallery_original, artifact.name),
-            Modifier.weight(1f).testTag("gallery-open-${artifact.uri}-label"), color = Color.White, fontSize = 13.sp,
+            Modifier.weight(1f).testTag("gallery-open-${artifact.uri}-label"), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
     if (technical) GalleryTechnical(artifact, artifact.uri)
@@ -369,7 +409,7 @@ private fun GalleryArtifact(artifact: LocalMediaArtifact, metadata: Boolean, tec
 @Composable
 private fun GalleryTechnical(artifact: LocalMediaArtifact, tag: String) {
     Text(stringResource(R.string.gallery_technical, artifact.mimeType, artifact.sizeBytes, artifact.modifiedSeconds),
-        Modifier.fillMaxWidth().testTag("gallery-technical-$tag"), color = Color(0xFF7F8A90), fontSize = 11.sp)
+        Modifier.fillMaxWidth().testTag("gallery-technical-$tag"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
 }
 
 private class GalleryThumbnailState {
@@ -410,7 +450,7 @@ private fun GalleryThumbnailTile(id: String, take: LocalMediaTake, state: Galler
         Modifier
             .size(width = 104.dp, height = 78.dp)
             .clip(shape)
-            .background(Color(0xFF0B0F11))
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             .border(1.dp, SettingsBorder, shape)
             .then(
                 if (bitmap != null) Modifier.clickable(onClick = onOpen)
@@ -424,9 +464,7 @@ private fun GalleryThumbnailTile(id: String, take: LocalMediaTake, state: Galler
         if (bitmap != null) {
             Image(bitmap.asImageBitmap(), stringResource(R.string.gallery_thumbnail_description, take.primary.name),
                 Modifier.fillMaxSize().testTag("gallery-thumbnail-$id"), contentScale = ContentScale.Crop)
-        } else if (state.loading) {
-            CircularProgressIndicator(Modifier.size(22.dp), color = SettingsAccent, strokeWidth = 2.dp)
-        } else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        } else if (!state.loading) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             CineGlyph(when (take.kind) {
                 LocalMediaKind.PHOTO -> CineIcon.CAMERA
                 LocalMediaKind.VIDEO -> CineIcon.VIDEO
@@ -435,6 +473,12 @@ private fun GalleryThumbnailTile(id: String, take: LocalMediaTake, state: Galler
             if (!state.unavailable) Text(stringResource(R.string.gallery_thumbnail_tap), color = SettingsMuted, fontSize = 10.sp,
                 textAlign = TextAlign.Center, maxLines = 1)
         }
+        val reducedMotion = LocalReducedMotion.current
+        AnimatedVisibility(
+            visible = bitmap == null && state.loading,
+            enter = if (reducedMotion) EnterTransition.None else fadeIn(),
+            exit = if (reducedMotion) ExitTransition.None else fadeOut(),
+        ) { LoadingIndicator(color = SettingsAccent) }
         // Video and audio takes carry their kind over the picture, like a camera's playback index.
         if (take.kind != LocalMediaKind.PHOTO && bitmap != null) Box(
             Modifier.align(Alignment.BottomStart).padding(4.dp).size(20.dp).background(Color(0xCC090C0E), RoundedCornerShape(5.dp)),

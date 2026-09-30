@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -29,13 +30,13 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
     val subject = settings.subjectDisplay
     fun update(next: SubjectDisplaySettings) = onChange(settings.copy(subjectDisplay = next))
     Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (showTitle) Text(stringResource(R.string.fold_settings_title), color = Color.White, fontSize = 18.sp)
-        Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_dual), capabilityLabel(display.presentation)), color = Color.White, fontSize = 14.sp)
-        Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_transfer), capabilityLabel(display.transfer)), color = Color.White, fontSize = 14.sp)
-        Text(stringResource(R.string.fold_posture, postureLabel(display.posture)), color = Color.LightGray, fontSize = 14.sp)
-        display.failure?.let { Text(stringResource(R.string.fold_failure, it), color = Color(0xFFFFB399), fontSize = 14.sp) }
+        if (showTitle) Text(stringResource(R.string.fold_settings_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
+        Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_dual), capabilityLabel(display.presentation)), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+        Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_transfer), capabilityLabel(display.transfer)), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+        Text(stringResource(R.string.fold_posture, postureLabel(display.posture)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        display.failure?.let { Text(stringResource(R.string.fold_failure, it), color = MaterialTheme.colorScheme.error, fontSize = 14.sp) }
         if (display.phase != DisplaySessionPhase.IDLE) {
-            Text(stringResource(if (display.phase == DisplaySessionPhase.STARTING) R.string.fold_starting else if (display.visible) R.string.fold_visible else R.string.fold_hidden), color = Color.White, fontSize = 14.sp)
+            Text(stringResource(if (display.phase == DisplaySessionPhase.STARTING) R.string.fold_starting else if (display.visible) R.string.fold_visible else R.string.fold_hidden), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             Button(onClick = { coordinator?.closeSession() }, modifier = Modifier.heightIn(min = 48.dp).testTag("fold-close")) { Text(stringResource(R.string.fold_close)) }
         } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Side by side when the pane has room; they wrap only on narrow displays.
@@ -45,10 +46,10 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
                 modifier = Modifier.heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
         }
         SettingsHelp(stringResource(R.string.fold_transfer_help))
-        Text(stringResource(R.string.self_title), color = Color.White, fontSize = 18.sp)
+        Text(stringResource(R.string.self_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         SettingsHelp(stringResource(R.string.self_timer_help))
         // One segmented row: the unit repeats in each segment, the name of the setting once above.
-        Text(stringResource(R.string.self_timer_label), color = Color.White, fontSize = 14.sp)
+        Text(stringResource(R.string.self_timer_label), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         val timers = listOf(0, 3, 5, 10)
         SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
             timers.forEachIndexed { index, seconds ->
@@ -99,19 +100,19 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
             true -> R.string.fold_close_policy_help
             false -> R.string.fold_close_sensor_missing
             null -> R.string.fold_close_sensor_unknown
-        }), color = Color.LightGray, fontSize = 14.sp)
+        }), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         FoldToggle(stringResource(R.string.fold_adapt), subject.adaptToHinge) { update(subject.copy(adaptToHinge = it)) }
         FoldToggle(stringResource(R.string.fold_swap), subject.swapPanes) { update(subject.copy(swapPanes = it)) }
     }
 }
 
 @Composable
-private fun readableFieldColors() = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+private fun readableFieldColors() = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface)
 
 @Composable
 private fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     var draft by remember(value) { mutableFloatStateOf(value) }
-    Text(label, color = Color.White, fontSize = 14.sp)
+    Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
     Slider(draft, { draft = it }, valueRange = range, onValueChangeFinished = { onChange(draft) },
         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label })
 }
@@ -119,7 +120,7 @@ private fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRa
 @Composable
 private fun FoldToggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value, role = Role.Switch, onValueChange = onChange), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, modifier = Modifier.weight(1f))
         Switch(value, onCheckedChange = null)
     }
 }

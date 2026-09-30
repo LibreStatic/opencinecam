@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -149,7 +151,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
     val available = !busy && library.error == null
     val validName = runCatching { LutLibrary.requireName(name) }.isSuccess
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.lut_library_title), color = Color.White)
+        Text(stringResource(R.string.lut_library_title), color = MaterialTheme.colorScheme.onSurface)
         SettingsHelp(stringResource(R.string.lut_library_help) + "\n\n" + stringResource(R.string.lut_preview_help), tag = "lut-preview-help")
         val statusLabel = when (state.operatorLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_status_disabled
@@ -158,7 +160,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             OperatorLutState.ACTIVE -> R.string.lut_status_active
             OperatorLutState.FAILED -> R.string.lut_status_failed
         }
-        Text(stringResource(statusLabel), color = Color.White, modifier = Modifier.testTag("lut-operator-status"))
+        Text(stringResource(statusLabel), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-operator-status"))
         SettingsHelp(stringResource(R.string.lut_subject_help), tag = "lut-subject-help")
         val subjectStatusLabel = when (state.subjectLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_subject_status_disabled
@@ -167,8 +169,8 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             OperatorLutState.ACTIVE -> R.string.lut_subject_status_active
             OperatorLutState.FAILED -> R.string.lut_subject_status_failed
         }
-        Text(stringResource(subjectStatusLabel), color = Color.White, modifier = Modifier.testTag("lut-subject-status"))
-        Text(stringResource(R.string.lut_recording_help), color = Color(0xFFFFCF66), modifier = Modifier.testTag("lut-recording-help"))
+        Text(stringResource(subjectStatusLabel), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-subject-status"))
+        Text(stringResource(R.string.lut_recording_help), color = LocalCineColors.current.pending, modifier = Modifier.testTag("lut-recording-help"))
         val recordingStatusLabel = when (state.recordingLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_recording_status_disabled
             OperatorLutState.WAITING_FOR_GPU -> R.string.lut_recording_status_waiting
@@ -176,29 +178,29 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             OperatorLutState.ACTIVE -> R.string.lut_recording_status_active
             OperatorLutState.FAILED -> R.string.lut_recording_status_failed
         }
-        Text(stringResource(recordingStatusLabel), color = Color.White, modifier = Modifier.testTag("lut-recording-status"))
-        if (state.recordingLutSelectionPending) Text(stringResource(R.string.lut_recording_pending), color = Color(0xFFFFCF66),
+        Text(stringResource(recordingStatusLabel), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-recording-status"))
+        if (state.recordingLutSelectionPending) Text(stringResource(R.string.lut_recording_pending), color = LocalCineColors.current.pending,
             modifier = Modifier.testTag("lut-recording-pending"))
-        if (recordingFrozen) Text(stringResource(R.string.lut_recording_locked), color = Color.LightGray,
+        if (recordingFrozen) Text(stringResource(R.string.lut_recording_locked), color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("lut-recording-locked"))
-        if (busy) Text(stringResource(R.string.lut_busy), color = Color.LightGray, modifier = Modifier.testTag("lut-busy"))
-        if (failed) Text(stringResource(R.string.lut_error), color = Color(0xFFFFCF66), modifier = Modifier.testTag("lut-operation-error"))
-        if (completed) Text(stringResource(R.string.lut_done), color = Color.White, modifier = Modifier.testTag("lut-complete"))
+        if (busy) Text(stringResource(R.string.lut_busy), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("lut-busy"))
+        if (failed) Text(stringResource(R.string.lut_error), color = LocalCineColors.current.pending, modifier = Modifier.testTag("lut-operation-error"))
+        if (completed) Text(stringResource(R.string.lut_done), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-complete"))
         if (library.error != null) {
-            Text(stringResource(R.string.lut_corrupt), color = Color(0xFFFFCF66), modifier = Modifier.testTag("lut-storage-error"))
+            Text(stringResource(R.string.lut_corrupt), color = LocalCineColors.current.pending, modifier = Modifier.testTag("lut-storage-error"))
             LutButton(R.string.lut_reset, "reset", !busy && !recordingFrozen) { resetting = true }
         }
         val nameLabel = stringResource(R.string.lut_name)
-        Text(nameLabel, color = Color.White)
+        Text(nameLabel, color = MaterialTheme.colorScheme.onSurface)
         OutlinedTextField(value = name, onValueChange = { name = it.take(121) }, singleLine = false,
             enabled = available, isError = name.isNotEmpty() && !validName,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("lut-name").semantics { contentDescription = nameLabel })
-        Text(stringResource(R.string.lut_kind), color = Color.White)
+        Text(stringResource(R.string.lut_kind), color = MaterialTheme.colorScheme.onSurface)
         SettingsPillRow { for (value in LutTransformKind.entries) {
             LutButton(if (value == LutTransformKind.TECHNICAL) R.string.lut_technical else R.string.lut_creative,
                 "kind-${value.name}", available, kind == value) { kind = value }
         } }
-        Text(stringResource(R.string.lut_input), color = Color.White)
+        Text(stringResource(R.string.lut_input), color = MaterialTheme.colorScheme.onSurface)
         SettingsPillRow { for (value in LutSignalDomain.entries) {
             LutButton(if (value == LutSignalDomain.SDR_BT709_CODE) R.string.lut_sdr else R.string.lut_log,
                 "input-${value.name}", available, input == value) { input = value }
@@ -211,21 +213,21 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
         LutButton(R.string.lut_subject_disable, "subject-disable", available && library.subjectHash != null) { onSelectSubject(null) }
         LutButton(R.string.lut_recording_disable, "recording-disable", recordingEditable && library.recordingHash != null) { onSelectRecording(null) }
         }
-        if (library.entries.isEmpty()) Text(stringResource(R.string.lut_empty), color = Color.LightGray)
+        if (library.entries.isEmpty()) Text(stringResource(R.string.lut_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
         for (entry in library.entries) {
             HorizontalDivider()
-            Text(entry.name, color = Color.White, modifier = Modifier.testTag("lut-name-${entry.hash}"))
-            Text(stringResource(R.string.lut_entry_details, entry.size, entry.bytes, entry.hash), color = Color.LightGray)
-            Text(stringResource(if (entry.kind == LutTransformKind.TECHNICAL) R.string.lut_technical else R.string.lut_creative), color = Color.LightGray)
-            Text(stringResource(if (entry.input == LutSignalDomain.SDR_BT709_CODE) R.string.lut_sdr else R.string.lut_log), color = Color.LightGray)
-            Text(stringResource(R.string.lut_domain_range, entry.domainMin.joinToString(), entry.domainMax.joinToString()), color = Color.LightGray)
+            Text(entry.name, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-name-${entry.hash}"))
+            Text(stringResource(R.string.lut_entry_details, entry.size, entry.bytes, entry.hash), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(if (entry.kind == LutTransformKind.TECHNICAL) R.string.lut_technical else R.string.lut_creative), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(if (entry.input == LutSignalDomain.SDR_BT709_CODE) R.string.lut_sdr else R.string.lut_log), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.lut_domain_range, entry.domainMin.joinToString(), entry.domainMax.joinToString()), color = MaterialTheme.colorScheme.onSurfaceVariant)
             val selected = library.operatorHash == entry.hash
             val subjectSelected = library.subjectHash == entry.hash
             val recordingSelected = library.recordingHash == entry.hash
-            if (selected) Text(stringResource(R.string.lut_selected), color = Color.White, modifier = Modifier.testTag("lut-selected-${entry.hash}"))
-            if (subjectSelected) Text(stringResource(R.string.lut_subject_selected), color = Color.White,
+            if (selected) Text(stringResource(R.string.lut_selected), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-selected-${entry.hash}"))
+            if (subjectSelected) Text(stringResource(R.string.lut_subject_selected), color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag("lut-subject-selected-${entry.hash}"))
-            if (recordingSelected) Text(stringResource(R.string.lut_recording_selected), color = Color(0xFFFFCF66),
+            if (recordingSelected) Text(stringResource(R.string.lut_recording_selected), color = LocalCineColors.current.pending,
                 modifier = Modifier.testTag("lut-recording-selected-${entry.hash}"))
             SettingsPillRow {
             LutButton(R.string.lut_select, "select-${entry.hash}", available && !selected, selected) { onSelect(entry.hash) }

@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -22,14 +24,14 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
     val unavailable = selected.resolve(caps, reported, hfr).unavailable
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.image_processing_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.image_processing_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.image_processing_help))
         if (state.structuralSettingsFrozen && state.effectiveSettings?.imageProcessing != selected) {
-            Text(stringResource(R.string.image_processing_deferred), color = Color(0xFFFFCF66), fontSize = 16.sp)
+            Text(stringResource(R.string.image_processing_deferred), color = LocalCineColors.current.pending, fontSize = 16.sp)
         }
-        if (hfr) Text(stringResource(R.string.image_processing_hfr), color = Color(0xFFFFCF66), fontSize = 14.sp)
+        if (hfr) Text(stringResource(R.string.image_processing_hfr), color = LocalCineColors.current.pending, fontSize = 14.sp)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.image_stabilization), color = Color.White, fontSize = 18.sp)
+        Text(stringResource(R.string.image_stabilization), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         SettingsHelp(stringResource(R.string.image_stabilization_help))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO).forEach { mode ->
@@ -46,17 +48,17 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
         IspModeChoices(stringResource(R.string.image_edge), "image-edge", selected.edge,
             { !hfr && caps.supports(it, ImageProcessingControl.EDGE) },
             { onChange(settings.copy(imageProcessing = selected.copy(edge = it))) })
-        if (unavailable.isNotEmpty()) Text(stringResource(R.string.image_processing_unavailable), color = Color(0xFFFFCF66), fontSize = 16.sp)
-        if (caps.sessionControls.isNotEmpty()) Text(stringResource(R.string.image_session_keys), color = Color.LightGray, fontSize = 14.sp)
+        if (unavailable.isNotEmpty()) Text(stringResource(R.string.image_processing_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
+        if (caps.sessionControls.isNotEmpty()) Text(stringResource(R.string.image_session_keys), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         state.submittedImageProcessing?.let { sent ->
             Text(stringResource(R.string.image_submitted, sent.optical?.toString() ?: unknown, sent.video?.toString() ?: unknown,
-                reportedIspLabel(sent.noise), reportedIspLabel(sent.edge)), color = Color.LightGray, fontSize = 14.sp)
+                reportedIspLabel(sent.noise), reportedIspLabel(sent.edge)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
         Text(stringResource(R.string.image_reported_stabilization,
             state.reportedOpticalStabilization?.let { if (it == 0) "OFF" else if (it == 1) "ON" else "#$it" } ?: unknown,
-            state.reportedVideoStabilization?.let { if (it == 0) "OFF" else if (it == 1) "ON" else if (it == 2) "PREVIEW" else "#$it" } ?: unknown), color = Color.White, fontSize = 16.sp)
-        Text(stringResource(R.string.image_reported_isp, reportedIspLabel(state.reportedNoiseReduction), reportedIspLabel(state.reportedEdgeEnhancement)), color = Color.White, fontSize = 16.sp)
-        Text(stringResource(R.string.image_crop_region, state.reportedCropRegion?.joinToString(", ") ?: unknown), color = Color.LightGray, fontSize = 14.sp)
+            state.reportedVideoStabilization?.let { if (it == 0) "OFF" else if (it == 1) "ON" else if (it == 2) "PREVIEW" else "#$it" } ?: unknown), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+        Text(stringResource(R.string.image_reported_isp, reportedIspLabel(state.reportedNoiseReduction), reportedIspLabel(state.reportedEdgeEnhancement)), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+        Text(stringResource(R.string.image_crop_region, state.reportedCropRegion?.joinToString(", ") ?: unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         OutlinedButton({ onChange(settings.copy(imageProcessing = ImageProcessingSelection())) }, modifier = Modifier.heightIn(min = 48.dp).testTag("image-reset")) {
             Text(stringResource(R.string.image_reset), fontSize = 16.sp)
         }
@@ -66,7 +68,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
 @Composable
 private fun IspModeChoices(title: String, tag: String, value: IspMode, supported: (IspMode) -> Boolean, onChange: (IspMode) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(title, color = Color.White, fontSize = 18.sp)
+    Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(IspMode.DEFAULT, IspMode.OFF, IspMode.FAST, IspMode.HIGH_QUALITY).forEach { mode ->
             FilterChip(value == mode, { onChange(mode) }, enabled = mode == IspMode.DEFAULT || supported(mode),

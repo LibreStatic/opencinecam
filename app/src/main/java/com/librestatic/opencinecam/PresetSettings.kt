@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -76,26 +78,26 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
         }
     }
     Column(Modifier.fillMaxWidth().testTag("preset-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.presets_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.presets_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.presets_help))
-        if (state.structuralSettingsFrozen) Text(stringResource(R.string.presets_pending), color = Color(0xFFFFCF66), fontSize = 16.sp)
-        state.pendingPresetName?.let { Text(stringResource(R.string.presets_pending_name, it), color = Color(0xFFFFCF66), fontSize = 16.sp) }
+        if (state.structuralSettingsFrozen) Text(stringResource(R.string.presets_pending), color = LocalCineColors.current.pending, fontSize = 16.sp)
+        state.pendingPresetName?.let { Text(stringResource(R.string.presets_pending_name, it), color = LocalCineColors.current.pending, fontSize = 16.sp) }
         library.error?.let {
-            Text(stringResource(R.string.presets_library_error), color = Color(0xFFFFCF66), fontSize = 16.sp)
+            Text(stringResource(R.string.presets_library_error), color = LocalCineColors.current.pending, fontSize = 16.sp)
             OutlinedButton({ reset = true }, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_reset)) }
         }
-        message?.let { Text(it, color = Color(0xFFFFCF66), fontSize = 16.sp) }
+        message?.let { Text(it, color = LocalCineColors.current.pending, fontSize = 16.sp) }
         OutlinedTextField(name, { name = it.take(64) }, label = { Text(stringResource(R.string.presets_name)) },
             modifier = Modifier.fillMaxWidth().testTag("preset-name"), singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White))
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Button({ attempt { repository.save(snapshot(name)) } }, enabled = !busy && library.error == null && name.isNotBlank(), modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_save_new)) }
             OutlinedButton({ importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy && library.error == null,
                 modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_import)) }
         }
         library.presets.forEach { preset ->
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(preset.name, color = Color.White, fontSize = 18.sp)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(preset.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ review = preset }, Modifier.heightIn(min = 48.dp), enabled = onApply != null && !busy) { Text(stringResource(R.string.presets_review)) }
                     OutlinedButton({ updating = preset; renameOnly = false; name = preset.name }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_update)) }
@@ -152,10 +154,10 @@ internal fun PresetQuickAccess(state: CameraUiState, settings: CameraSettings, o
     repository: PresetRepository = PresetRepositories.get(LocalContext.current)) {
     val library by repository.states.collectAsState()
     var review by remember { mutableStateOf<CameraPreset?>(null) }
-    if (library.slots.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.85f)), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (library.slots.isNotEmpty()) FlowRow(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f)), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("C1", "C2").forEach { slot -> library.presets.firstOrNull { it.id == library.slots[slot] }?.let { preset ->
             OutlinedButton({ review = preset }, Modifier.heightIn(min = 48.dp).testTag("preset-$slot"), enabled = onApply != null) {
-                Text("$slot · ${preset.name}", color = Color.White, fontSize = 16.sp)
+                Text("$slot · ${preset.name}", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
             }
         } }
     }

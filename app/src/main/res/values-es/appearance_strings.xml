@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <string name="appearance_title">Apariencia</string>
+    <string name="appearance_summary">Cine mantiene el aspecto oscuro grafito y ámbar. Material You toma los colores del fondo de pantalla y sigue el modo claro u oscuro del sistema, con fondo negro puro en modo oscuro.</string>
+    <string name="appearance_cine">Cine</string>
+    <string name="appearance_you">Material You</string>
+</resources>

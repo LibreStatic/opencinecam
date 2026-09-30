@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,9 +36,9 @@ import com.librestatic.opencinecam.transfers.*
     val canRequest = !state.busy && state.message !in setOf(WebDavTransferMessage.WAITING_RECORDING, WebDavTransferMessage.WAITING_MEDIA)
     Column(Modifier.fillMaxWidth().testTag("webdav-transfer-section"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider()
-        Text(stringResource(R.string.webdav_transfer_title), style = MaterialTheme.typography.titleMedium, color = Color.White)
+        Text(stringResource(R.string.webdav_transfer_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         SettingsHelp(stringResource(R.string.webdav_transfer_help))
-        Text(stringResource(transferMessage(state.message)), color = Color.White,
+        Text(stringResource(transferMessage(state.message)), color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag("webdav-transfer-message").semantics { liveRegion = LiveRegionMode.Polite })
         OutlinedButton(onClick = onRefresh, enabled = canRequest,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("webdav-transfer-refresh")) {
@@ -47,23 +48,23 @@ import com.librestatic.opencinecam.transfers.*
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("webdav-transfer-cancel")) {
             Text(stringResource(R.string.webdav_transfer_cancel))
         }
-        if (bundles.isEmpty()) Text(stringResource(R.string.webdav_transfer_empty), color = Color.LightGray,
+        if (bundles.isEmpty()) Text(stringResource(R.string.webdav_transfer_empty), color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("webdav-transfer-empty"))
         for (bundle in bundles) key(bundle.id) {
             Column(Modifier.fillMaxWidth().testTag("webdav-transfer-bundle-${bundle.id}"),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(bundle.artifacts.single { it.spec.role == WebDavArtifactRole.VIDEO }.spec.sourceName,
-                    style = MaterialTheme.typography.titleSmall, color = Color.White)
+                    style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 // Durable state is shown per bundle, independently of the last operation message.
-                Text(stringResource(bundleStatus(bundle.state)), color = Color.LightGray,
+                Text(stringResource(bundleStatus(bundle.state)), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("webdav-transfer-status-${bundle.id}"))
                 if (state.busy && state.activeBundleId == bundle.id) {
-                    Text(stringResource(R.string.webdav_transfer_selected), color = Color.White)
+                    Text(stringResource(R.string.webdav_transfer_selected), color = MaterialTheme.colorScheme.onSurface)
                 }
                 for (artifact in bundle.artifacts) Text(
                     stringResource(R.string.webdav_transfer_artifact_status,
                         stringResource(artifactRole(artifact.spec.role)), stringResource(artifactStatus(artifact.state))),
-                    color = Color.LightGray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("webdav-transfer-artifact-${artifact.spec.id}"),
                 )
                 val eligible = bundle.artifacts.none { it.state == WebDavArtifactState.CONFLICT || it.attempt != null } &&

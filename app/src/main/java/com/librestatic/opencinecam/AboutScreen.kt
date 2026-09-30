@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -45,11 +48,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
 
-private val AboutGraphite = Color(0xFF0B0D0E)
-private val AboutCard = Color(0xFF1A1F21)
-private val AboutAmber = Color(0xFFFFB300)
-private val AboutCyan = Color(0xFF45D6E8)
-private val AboutMuted = Color(0xFF9CA6AA)
+private val AboutGraphite: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
+private val AboutCard: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
+private val AboutAmber: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+private val AboutCyan: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.verified
+private val AboutMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
 private const val PROJECT_WEBSITE = "https://librestatic.com/opencinecam"
 private const val PROJECT_SOURCE = "https://github.com/librestatic/opencinecam"
@@ -126,7 +129,7 @@ internal fun AboutScreen(
                 TextButton(
                     onClick = onBack,
                     modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = backDescription },
-                ) { Text("←", color = Color.White, fontSize = 22.sp) }
+                ) { Text("←", color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp) }
                 Text(stringResource(R.string.about_title), color = AboutAmber, fontWeight = FontWeight.Bold)
             }
         }
@@ -150,10 +153,10 @@ internal fun AboutScreen(
                         modifier = Modifier.size(92.dp),
                     )
                 }
-                Text(stringResource(R.string.app_name), color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.app_name), color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.about_version, appVersion(context)), color = AboutCyan, fontSize = 12.sp)
                 Text(stringResource(R.string.about_description), color = AboutMuted, fontSize = 12.sp)
-                Text(stringResource(R.string.about_developed_by), color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.about_developed_by), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.about_privacy), color = AboutMuted, fontSize = 11.sp)
             }
         }
@@ -189,7 +192,7 @@ internal fun AboutScreen(
                 Text(stringResource(R.string.about_third_party), color = AboutAmber, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.about_third_party_count, components.size), color = AboutMuted, fontSize = 11.sp)
                 if (componentsResult.isFailure) {
-                    Text(stringResource(R.string.about_license_error), color = Color(0xFFE23A3A), fontSize = 11.sp)
+                    Text(stringResource(R.string.about_license_error), color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                 }
             }
         }
@@ -237,12 +240,12 @@ private fun LicenseCard(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(if (expanded) "−" else "+", color = AboutAmber, fontSize = 18.sp)
         }
         Text(subtitle, color = AboutMuted, fontSize = 10.sp)
         if (expanded) {
-            Text(licenseText, color = Color.White, fontSize = 10.sp, lineHeight = 14.sp)
+            Text(licenseText, color = MaterialTheme.colorScheme.onSurface, fontSize = 10.sp, lineHeight = 14.sp)
         }
     }
 }

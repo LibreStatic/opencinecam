@@ -32,6 +32,7 @@
         android:theme="@style/Theme.OpenCineCam">
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.OpenCineCam.Starting"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTop"

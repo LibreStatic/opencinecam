@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,11 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val SettingsSurface = Color(0xFF12171A)
-internal val SettingsSurfaceRaised = Color(0xFF1B2226)
-internal val SettingsBorder = Color(0xFF263036)
-internal val SettingsAccent = Color(0xFFFFB000)
-internal val SettingsMuted = Color(0xFFAAB4BA)
+internal val SettingsSurface: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer
+internal val SettingsSurfaceRaised: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
+internal val SettingsBorder: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant
+internal val SettingsAccent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+internal val SettingsMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
 /**
  * One settings card in the adaptive grid. Small sections share a row with a neighbour on wide
@@ -74,7 +77,7 @@ internal fun SettingsHeading(title: String, description: String? = null, icon: C
     Row(verticalAlignment = Alignment.CenterVertically) {
         icon?.let { CineGlyph(it, SettingsAccent, Modifier.padding(end = 10.dp).size(20.dp)) }
         Column {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             description?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
         }
     }
@@ -112,7 +115,7 @@ internal fun <T> SettingsChips(
             ) {
                 Text(
                     label(choice),
-                    color = when { !available -> Color(0xFF69747A); on -> Color.Black; else -> Color.White },
+                    color = when { !available -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); on -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface },
                     fontSize = 14.sp,
                     fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.width(IntrinsicSize.Max).then(tag?.let { Modifier.testTag(it(choice) + "-label") } ?: Modifier),
@@ -142,7 +145,7 @@ internal fun SettingsPill(label: String, tag: String, selected: Boolean = false,
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = when { !enabled -> Color(0xFF69747A); selected -> Color.Black; else -> Color.White },
+        Text(label, color = when { !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); selected -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface },
             fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.width(IntrinsicSize.Max).testTag("$tag-label"))
     }
@@ -168,7 +171,7 @@ internal fun SettingsSwitchRow(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f).padding(end = 12.dp).then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
-            color = if (enabled) Color.White else SettingsMuted)
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else SettingsMuted)
         androidx.compose.material3.Switch(checked, onCheckedChange, enabled = enabled,
             modifier = Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = label })
     }
@@ -192,7 +195,7 @@ internal fun <T> SettingsSwatches(
                 Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .border(if (on) 3.dp else 1.dp, if (on) Color.White else SettingsBorder, CircleShape)
+                    .border(if (on) 3.dp else 1.dp, if (on) MaterialTheme.colorScheme.onSurface else SettingsBorder, CircleShape)
                     .padding(6.dp)
                     .clip(CircleShape)
                     .background(color(choice))
@@ -201,7 +204,7 @@ internal fun <T> SettingsSwatches(
                     .then(tag?.let { Modifier.testTag(it(choice)) } ?: Modifier),
                 contentAlignment = Alignment.Center,
             ) {
-                if (on) CineGlyph(CineIcon.CHECK, Color.Black, Modifier.size(18.dp))
+                if (on) CineGlyph(CineIcon.CHECK, MaterialTheme.colorScheme.onPrimary, Modifier.size(18.dp))
             }
         }
     }
@@ -217,7 +220,7 @@ internal fun SettingsHelp(text: String, modifier: Modifier = Modifier, tag: Stri
     Column(modifier) {
         Text(
             stringResource(if (open) R.string.settings_help_hide else R.string.settings_help_show),
-            color = Color(0xFF5BD6E5),
+            color = LocalCineColors.current.verified,
             fontSize = 13.sp,
             modifier = Modifier.heightIn(min = 40.dp).clickable { open = !open }.padding(vertical = 10.dp)
                 .then(tag?.let { Modifier.testTag("$it-toggle") } ?: Modifier),

@@ -1,8 +1,34 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 OpenCineCam contributors */
 
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.librestatic.opencinecam
 
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.runtime.ReadOnlyComposable
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.material3.MaterialTheme
+import com.librestatic.opencinecam.ui.theme.CaptureTheme
+import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
@@ -192,20 +218,20 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.max
 
-private val Graphite = Color(0xFF0B0D0E)
-private val Panel = Color(0xD914181A)
-private val Amber = Color(0xFFFFB300)
-private val VerifiedCyan = Color(0xFF45D6E8)
-private val RecordRed = Color(0xFFE23A3A)
-private val Muted = Color(0xFF9CA6AA)
-private val OkGreen = Color(0xFF4BD28A)
+private val Graphite: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
+private val Panel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f)
+private val Amber: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+private val VerifiedCyan: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.verified
+private val RecordRed: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.record
+private val Muted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+private val OkGreen: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.ok
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
 private enum class SettingsPage { MAIN, ABOUT }
 private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
-fun CameraRootScreen() {
+fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), onReady: () -> Unit = {}) {
     val context = LocalContext.current
     var permissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -228,6 +254,10 @@ fun CameraRootScreen() {
     val state by stateFlow.collectAsStateWithLifecycle()
     val settingsRepository = remember(context) { SettingsRepositories.get(context) }
     val settings by settingsRepository.states.collectAsStateWithLifecycle()
+    // A normal start keeps the splash until this: the camera has opened (or failed), or there is a
+    // screen other than the viewfinder to show first.
+    val readyForSplash = !permissionGranted || !onboardingDone || state.phase != CameraUiPhase.PREPARING
+    LaunchedEffect(readyForSplash) { if (readyForSplash) onReady() }
     val foldDisplays = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val foldState by (foldDisplays?.states ?: foldFallback).collectAsStateWithLifecycle()
@@ -287,20 +317,8 @@ fun CameraRootScreen() {
         }
     }
 
-    if (!onboardingDone) {
-        OnboardingScreen(
-            onPermissionsChanged = {
-                permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-                audioPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                binder?.refreshAudioCapabilities()
-            },
-            onFinished = {
-                onboardingStore.markCompleted()
-                onboardingDone = true
-            },
-        )
-        return
-    }
+    @Composable
+    fun MainContent() {
 
     if (!permissionGranted) {
         PermissionScreen { permissionLauncher.launch(Manifest.permission.CAMERA) }
@@ -310,8 +328,10 @@ fun CameraRootScreen() {
     val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
     CompositionLocalProvider(LocalOperatorActions provides operatorActions,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
-    Box(modifier = Modifier.fillMaxSize().background(Graphite)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (section == AppSection.CAPTURE) {
+            // The chrome over the viewfinder stays dark in every theme.
+            CaptureTheme {
             CaptureSurface(
                 state = state,
                 fold = foldState,
@@ -327,6 +347,7 @@ fun CameraRootScreen() {
                     section = AppSection.SETTINGS
                 },
             )
+            }
         } else {
             HingeSafeSettingsPane(foldState.hinge) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -374,6 +395,82 @@ fun CameraRootScreen() {
         }
     }
 }
+    }
+
+    val reducedMotion = LocalReducedMotion.current
+    // 0 shows the wizard, 1 the app. Finishing the wizard runs it up once the app has drawn its first
+    // frame: composing the capture screen is slow the first time, and an animation started in the
+    // same frame would be over before anything reached the screen.
+    val handoff = remember { Animatable(if (onboardingDone) 1f else 0f) }
+    // Derived, so the running handoff only redraws the layers instead of recomposing this screen.
+    val handoffRunning by remember { derivedStateOf { handoff.value < 1f } }
+    val wizardShown = !onboardingDone || handoffRunning
+    val finished = rememberUpdatedState(onboardingDone)
+    val cameraSettled = rememberUpdatedState(
+        !permissionGranted || (state.phase != CameraUiPhase.PREPARING && state.phase != CameraUiPhase.OPENING && state.phase != CameraUiPhase.READY),
+    )
+    // Replaying the tour from About brings the wizard back at full strength.
+    LaunchedEffect(onboardingDone) { if (!onboardingDone) handoff.snapTo(0f) }
+    // An opaque themed floor under both layers: a fading frame never reveals the window.
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    if (onboardingDone) Box(
+        Modifier.fillMaxSize().graphicsLayer {
+            val enter = FastOutSlowInEasing.transform(((handoff.value * 720f - 120f) / 600f).coerceIn(0f, 1f))
+            alpha = ((handoff.value * 720f - 120f) / 420f).coerceIn(0f, 1f)
+            scaleX = 0.94f + 0.06f * enter; scaleY = scaleX
+        },
+    ) {
+        LaunchedEffect(Unit) {
+            if (handoff.value >= 1f) return@LaunchedEffect
+            if (reducedMotion) {
+                handoff.snapTo(1f)
+                return@LaunchedEffect
+            }
+            // Opening the camera and attaching its preview also block the main thread for a moment;
+            // the wizard stays up (the app is already composed under it) until that has passed.
+            withTimeoutOrNull(HandoffWaitMillis) { snapshotFlow { cameraSettled.value }.first { it } }
+            awaitSmoothFrames()
+            handoff.animateTo(1f, tween(720, easing = LinearEasing))
+        }
+        MainContent()
+    }
+    if (wizardShown) Box(
+        Modifier.fillMaxSize().graphicsLayer {
+            val t = if (finished.value) handoff.value * 720f else 0f
+            alpha = 1f - (t / 300f).coerceIn(0f, 1f)
+            val grow = FastOutSlowInEasing.transform((t / 450f).coerceIn(0f, 1f))
+            scaleX = 1f + 0.06f * grow; scaleY = scaleX
+        },
+    ) {
+        OnboardingScreen(
+            splash = splash,
+            onPermissionsChanged = {
+                permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                audioPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                binder?.refreshAudioCapabilities()
+            },
+            onFinished = {
+                onboardingStore.markCompleted()
+                onboardingDone = true
+            },
+        )
+    }
+    }
+
+}
+
+private const val HandoffWaitMillis = 1_500L
+
+/** Returns after three frames in a row arrive on time, or after a second whatever happens. */
+private suspend fun awaitSmoothFrames() {
+    val start = withFrameNanos { it }
+    var last = start
+    var smooth = 0
+    while (smooth < 3 && last - start < 1_000_000_000L) {
+        val now = withFrameNanos { it }
+        smooth = if (now - last < 34_000_000L) smooth + 1 else 0
+        last = now
+    }
 }
 
 @Composable
@@ -408,11 +505,11 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(stringResource(R.string.camera_permission_title), color = Color.White, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.camera_permission_title), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.camera_permission_body), color = Muted)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onGrant, colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black)) {
+        Button(onClick = onGrant, colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = MaterialTheme.colorScheme.onPrimary)) {
             Text(stringResource(R.string.grant_camera))
         }
     }
@@ -598,12 +695,21 @@ internal fun CaptureSurface(
         }
         Box(paneModifier(panes?.preview)) {
         if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
-        if (state.phase == CameraUiPhase.PREPARING || state.phase == CameraUiPhase.OPENING || state.phase == CameraUiPhase.READY) {
-            Text(
-                stringResource(R.string.camera_loading),
-                color = Color.White,
-                modifier = Modifier.align(Alignment.Center).background(Panel, RoundedCornerShape(8.dp)).padding(12.dp),
-            )
+        val cameraLoading = state.phase == CameraUiPhase.PREPARING || state.phase == CameraUiPhase.OPENING || state.phase == CameraUiPhase.READY
+        val reducedMotion = LocalReducedMotion.current
+        AnimatedVisibility(
+            visible = cameraLoading,
+            modifier = Modifier.align(Alignment.Center),
+            enter = if (reducedMotion) EnterTransition.None else fadeIn() + expandVertically(),
+            exit = if (reducedMotion) ExitTransition.None else fadeOut(tween(400)) + shrinkVertically(tween(500, delayMillis = 150)),
+        ) {
+            Column(
+                Modifier.background(Panel, RoundedCornerShape(16.dp)).padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                LoadingIndicator(color = Amber)
+                Text(stringResource(R.string.camera_loading), color = Color.White)
+            }
         }
         if (state.phase == CameraUiPhase.ERROR) {
             val knownGood = remember(state.errorCode, state.message) { knownGoodStore.load() }
@@ -837,6 +943,7 @@ private fun MonitoringOverlay(
     val analysisFresh = rememberScopeAnalysisFresh(state, options)
     BoxWithConstraints(modifier) {
         ProfessionalScopeImage(state, options, analysisFresh, displayRotationProvider() * 90, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
+        val levelColor = VerifiedCyan; val tiltColor = Amber
         Canvas(Modifier.matchParentSize()) {
             val gpuScale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
                 monitoringPreviewScale(sourceWidth, sourceHeight, size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1),
@@ -883,8 +990,8 @@ private fun MonitoringOverlay(
                 if (snap != null && !snap.degrees.isNaN()) {
                     val degrees = snap.degrees.coerceIn(-90f, 90f)
                     val color = when {
-                        kotlin.math.abs(degrees) <= HorizonRollColors.LEVEL_BAND -> VerifiedCyan
-                        kotlin.math.abs(degrees) <= HorizonRollColors.WARNING_BAND -> Amber
+                        kotlin.math.abs(degrees) <= HorizonRollColors.LEVEL_BAND -> levelColor
+                        kotlin.math.abs(degrees) <= HorizonRollColors.WARNING_BAND -> tiltColor
                         else -> Color.White
                     }
                     val centerY = size.height / 2f
@@ -2708,11 +2815,19 @@ internal fun CaptureButton(
                 },
             )
             // Starting and closing a take both spin; the colour says which one is in progress.
-            if (busy) CircularProgressIndicator(
-                color = if (recordState == RecordButtonState.PREPARING) RecordRed else Amber,
-                strokeWidth = 3.dp,
-                modifier = Modifier.matchParentSize().padding(2.dp).testTag("record-busy-indicator"),
-            )
+            val reducedMotion = LocalReducedMotion.current
+            AnimatedVisibility(
+                visible = busy,
+                modifier = Modifier.matchParentSize(),
+                enter = if (reducedMotion) EnterTransition.None else fadeIn(),
+                exit = if (reducedMotion) ExitTransition.None else fadeOut(),
+            ) {
+                CircularWavyProgressIndicator(
+                    color = if (recordState == RecordButtonState.PREPARING) RecordRed else Amber,
+                    trackColor = Color.Transparent,
+                    modifier = Modifier.fillMaxSize().padding(2.dp).testTag("record-busy-indicator"),
+                )
+            }
         }
     }
     if (labelBeside) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { label(); button() }
@@ -2724,14 +2839,23 @@ internal fun CaptureButton(
  * reads REC only once the service reports RECORDING, and a closing file is never shown as saved.
  * Still modes return null because their button has no recording lifecycle to explain.
  */
-internal enum class RecordButtonState(val label: Int, val color: Color) {
-    READY(R.string.rec_state_ready, Color.White),
-    PREPARING(R.string.rec_state_preparing, Amber),
-    RECORDING(R.string.rec_state_recording, RecordRed),
-    FINALIZING(R.string.rec_state_finalizing, Amber),
-    SAVED(R.string.rec_state_saved, OkGreen),
-    UNAVAILABLE(R.string.rec_state_unavailable, Muted),
+internal enum class RecordButtonState(val label: Int) {
+    READY(R.string.rec_state_ready),
+    PREPARING(R.string.rec_state_preparing),
+    RECORDING(R.string.rec_state_recording),
+    FINALIZING(R.string.rec_state_finalizing),
+    SAVED(R.string.rec_state_saved),
+    UNAVAILABLE(R.string.rec_state_unavailable),
 }
+
+internal val RecordButtonState.color: Color
+    @Composable @ReadOnlyComposable get() = when (this) {
+        RecordButtonState.READY -> Color.White
+        RecordButtonState.PREPARING, RecordButtonState.FINALIZING -> Amber
+        RecordButtonState.RECORDING -> RecordRed
+        RecordButtonState.SAVED -> OkGreen
+        RecordButtonState.UNAVAILABLE -> Muted
+    }
 
 internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
     if (state.selectedMode.isStillMode()) return null
@@ -2934,6 +3058,7 @@ internal fun AudioMeterHud(
             val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(label, color = Muted, fontSize = 9.sp)
+                val meterRed = RecordRed; val meterAmber = Amber
                 Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
                     drawRect(Color(0xFF283033))
                     if (value != null) {
@@ -2941,8 +3066,8 @@ internal fun AudioMeterHud(
                         val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
                         fun fraction(db: Float) = ((db - minimum) / (maximum - minimum)).coerceIn(0f, 1f)
                         val signalColor = when {
-                            (level?.peakDbfs ?: -120f) >= -3f -> RecordRed
-                            (level?.peakDbfs ?: -120f) >= -12f -> Amber
+                            (level?.peakDbfs ?: -120f) >= -3f -> meterRed
+                            (level?.peakDbfs ?: -120f) >= -12f -> meterAmber
                             else -> Color(0xFF46C36F)
                         }
                         drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
@@ -2951,7 +3076,7 @@ internal fun AudioMeterHud(
                                 androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
                         }
                         held.getOrNull(index)?.let { peak ->
-                            drawLine(Amber, androidx.compose.ui.geometry.Offset(size.width * fraction(peak), 0f),
+                            drawLine(meterAmber, androidx.compose.ui.geometry.Offset(size.width * fraction(peak), 0f),
                                 androidx.compose.ui.geometry.Offset(size.width * fraction(peak), size.height), strokeWidth = 2.dp.toPx())
                         }
                     }
@@ -3364,7 +3489,7 @@ private fun PanelHeader(title: String, onClose: () -> Unit) {
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
-        ) { Text("×", color = Color.White, fontSize = 20.sp) }
+        ) { Text("×", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp) }
     }
 }
 
@@ -3377,21 +3502,21 @@ internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = M
             .background(
                 when {
                     selected -> Amber
-                    !enabled -> Color(0xFF22272A)
-                    else -> Color(0xFF303638)
+                    !enabled -> MaterialTheme.colorScheme.surfaceContainerLow
+                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
                 },
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (selected) Color.Black else if (!enabled) Color(0xFF6E7A80) else Color.White, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun NavigationBar(selected: AppSection, onSelect: (AppSection) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().height(54.dp).background(Color(0xFF111516))) {
+    Row(modifier = Modifier.fillMaxWidth().height(54.dp).background(MaterialTheme.colorScheme.surfaceContainer)) {
         AppSection.entries.forEach { section ->
             val label = when (section) {
                 AppSection.CAPTURE -> stringResource(R.string.capture_tab)
@@ -3471,16 +3596,17 @@ internal fun SettingsContent(
         if ("fold-displays" in visibleIds) settingsCard("fold-displays", fullLine = true) {
             FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
         }
+        if ("appearance" in visibleIds) settingsCard("appearance") { AppearanceSettings() }
         if ("layout" in visibleIds) settingsCard("layout") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.mode_selector_style), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.mode_selector_style), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 14.sp)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ModeSelectorStyle.entries.forEach { style ->
                         TextButton(onClick = { onSettingsChange(settings.copy(modeSelectorStyle = style)) }) {
                             Text(
                                 if (style == ModeSelectorStyle.DIAL) stringResource(R.string.mode_selector_dial) else stringResource(R.string.mode_selector_buttons),
-                                color = if (settings.modeSelectorStyle == style) Amber else Color.White,
+                                color = if (settings.modeSelectorStyle == style) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (settings.modeSelectorStyle == style) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3505,7 +3631,7 @@ internal fun SettingsContent(
             if ("audio-permission" in visibleIds) settingsCard("audio-permission") {
                 Button(
                     onClick = onRequestAudioPermission,
-                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = MaterialTheme.colorScheme.onPrimary),
                 ) { Text(stringResource(R.string.grant_microphone)) }
             }
         }
@@ -3522,9 +3648,9 @@ internal fun SettingsContent(
             }
         }
         if ("burst" in visibleIds) settingsCard("burst") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 SettingsHelp(stringResource(R.string.burst_capture_help))
-                Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Slider(
                     value = settings.burstCount.toFloat(),
                     onValueChange = { onSettingsChange(settings.copy(burstCount = it.roundToInt().coerceIn(3, 10))) },
@@ -3534,14 +3660,14 @@ internal fun SettingsContent(
             }
         }
         if ("bitrate" in visibleIds) settingsCard("bitrate") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.video_bitrate), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.video_bitrate), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(12, 20, 40).forEach { bitrate ->
                         TextButton(onClick = { onSettingsChange(settings.copy(videoBitrateMbps = bitrate)) }) {
                             Text(
                                 "$bitrate Mbps",
-                                color = if (settings.videoBitrateMbps == bitrate) Amber else Color.White,
+                                color = if (settings.videoBitrateMbps == bitrate) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (settings.videoBitrateMbps == bitrate) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3550,8 +3676,8 @@ internal fun SettingsContent(
             }
         }
         if ("geometry" in visibleIds) settingsCard("geometry") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.recording_geometry), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.recording_geometry), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 14.sp)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     RecordingGeometryMode.entries.forEach { mode ->
@@ -3564,7 +3690,7 @@ internal fun SettingsContent(
                                         R.string.recording_geometry_native
                                     },
                                 ),
-                                color = if (settings.recordingGeometryMode == mode) Amber else Color.White,
+                                color = if (settings.recordingGeometryMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (settings.recordingGeometryMode == mode) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3573,8 +3699,8 @@ internal fun SettingsContent(
             }
         }
         if ("anamorphic" in visibleIds) settingsCard("anamorphic") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.anamorphic), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.anamorphic), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 14.sp)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     AnamorphicSqueeze.entries.forEach { squeeze ->
@@ -3589,7 +3715,7 @@ internal fun SettingsContent(
                                     AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
                                     AnamorphicSqueeze.SQUEEZE_2X -> "2x"
                                 },
-                                color = if (settings.anamorphicSqueeze == squeeze) Amber else Color.White,
+                                color = if (settings.anamorphicSqueeze == squeeze) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,
                                 fontWeight = if (settings.anamorphicSqueeze == squeeze) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -3609,7 +3735,7 @@ internal fun SettingsContent(
                                         AnamorphicOutputMode.SQUEEZED -> "SQUEEZE+SAR"
                                         AnamorphicOutputMode.DESQUEEZED -> "DESQUEEZE"
                                     },
-                                    color = if (settings.anamorphicOutputMode == mode) Amber else Color.White,
+                                    color = if (settings.anamorphicOutputMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp,
                                     fontWeight = if (settings.anamorphicOutputMode == mode) FontWeight.Bold else FontWeight.Normal,
                                 )
@@ -3668,14 +3794,14 @@ internal fun SettingsContent(
             )
         }
         if ("grid-mode" in visibleIds) settingsCard("grid-mode") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.composition_grid_mode), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.composition_grid_mode), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompositionGridMode.entries.forEach { mode ->
                         TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
                             Text(
                                 stringResource(compositionGridModeTitle(mode)),
-                                color = if (settings.compositionGridMode == mode) Amber else Color.White,
+                                color = if (settings.compositionGridMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (settings.compositionGridMode == mode) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3709,8 +3835,8 @@ internal fun SettingsContent(
             )
         }
         if ("focus-lock" in visibleIds) settingsCard("focus-lock") {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.af_lock_behavior), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.af_lock_behavior), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 14.sp)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AfLockBehavior.entries.forEach { behavior ->
@@ -3718,7 +3844,7 @@ internal fun SettingsContent(
                             Text(
                                 if (behavior == AfLockBehavior.FREEZE_CURRENT) stringResource(R.string.af_lock_freeze_current)
                                 else stringResource(R.string.af_lock_focus_and_lock),
-                                color = if (settings.afLockBehavior == behavior) Amber else Color.White,
+                                color = if (settings.afLockBehavior == behavior) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (settings.afLockBehavior == behavior) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3727,8 +3853,8 @@ internal fun SettingsContent(
             }
         }
         if ("zoom-lens" in visibleIds) settingsCard("zoom-lens", fullLine = true) {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.zoom_lens_switch_mode), color = Color.White, fontWeight = FontWeight.Bold)
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
+                Text(stringResource(R.string.zoom_lens_switch_mode), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ZoomLensSwitchMode.entries.forEach { mode ->
@@ -3737,7 +3863,7 @@ internal fun SettingsContent(
                             modifier = Modifier.heightIn(min = 48.dp).testTag("zoom-lens-switch-$mode").semantics { selected = chosen }) {
                             Text(
                                 stringResource(if (mode == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic),
-                                color = if (chosen) Amber else Color.White,
+                                color = if (chosen) Amber else MaterialTheme.colorScheme.onSurface,
                                 fontWeight = if (chosen) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -3750,9 +3876,9 @@ internal fun SettingsContent(
         }
         if ("hardware" in visibleIds) settingsCard("hardware", fullLine = true) {
             val descriptor = state.descriptor
-            Column(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp)) {
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.hardware_camera_line, descriptor?.cameraId ?: "—", descriptor?.previewSize?.width ?: 0, descriptor?.previewSize?.height ?: 0), color = Color.White)
+                Text(stringResource(R.string.hardware_camera_line, descriptor?.cameraId ?: "—", descriptor?.previewSize?.width ?: 0, descriptor?.previewSize?.height ?: 0), color = MaterialTheme.colorScheme.onSurface)
                 Text(stringResource(R.string.hardware_still_line, descriptor?.jpegSize?.width ?: 0, descriptor?.jpegSize?.height ?: 0,
                     stringResource(if (descriptor?.supportsRaw == true) R.string.hardware_supported else R.string.hardware_not_supported)), color = Muted)
                 val profilesVerifiedTemplate = stringResource(R.string.hardware_log_profiles_verified)
@@ -3783,8 +3909,8 @@ internal fun SettingsContent(
         }
         if ("modes" in visibleIds) items(CaptureMode.entries) { mode ->
             val gate = state.modeGates.getValue(mode)
-            Row(Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(7.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(modeLabel(mode), color = Color.White, fontSize = 14.sp)
+            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(7.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(modeLabel(mode), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
                 Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -3795,7 +3921,7 @@ internal fun SettingsContent(
                     .fillMaxWidth()
                     .heightIn(min = 56.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF1A1F21))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable(onClick = onOpenAbout)
                     .semantics { contentDescription = aboutDescription }
                     .padding(12.dp),
@@ -3803,7 +3929,7 @@ internal fun SettingsContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.about_title), color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.about_title), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Text(aboutDescription, color = Muted, fontSize = 14.sp)
                 }
                 Text("›", color = Amber, fontSize = 22.sp)
@@ -3820,7 +3946,7 @@ private fun ProfessionalAudioSettings(
 ) {
     val capabilities = state.audioCapabilities
     Column(
-        Modifier.fillMaxWidth().background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(stringResource(R.string.professional_audio), color = VerifiedCyan, fontWeight = FontWeight.Bold)
@@ -3971,7 +4097,7 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("slate-take"))
         if (take == null) Text(stringResource(R.string.production_slate_invalid_take), Modifier.testTag("slate-take-invalid"), color = Amber, fontSize = 14.sp)
-        Text(stringResource(R.string.production_slate_location), color = Color.White)
+        Text(stringResource(R.string.production_slate_location), color = MaterialTheme.colorScheme.onSurface)
         SettingsPillRow { for (location in ProductionSlateLocation.entries) {
             SettingsPill(stringResource(when (location) {
                 ProductionSlateLocation.UNSPECIFIED -> R.string.production_slate_unspecified
@@ -3981,7 +4107,7 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
                 onSettingsChange(settings.copy(productionSlate = slate.copy(location = location)))
             }
         } }
-        Text(stringResource(R.string.production_slate_time), color = Color.White)
+        Text(stringResource(R.string.production_slate_time), color = MaterialTheme.colorScheme.onSurface)
         SettingsPillRow { for (time in ProductionSlateTimeOfDay.entries) {
             SettingsPill(stringResource(when (time) {
                 ProductionSlateTimeOfDay.UNSPECIFIED -> R.string.production_slate_unspecified
@@ -4027,7 +4153,7 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
             }
         } }
         val referenceLabel = stringResource(R.string.audio_meter_reference, options.vuReferenceDbfs)
-        Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = Color.White)
+        Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = MaterialTheme.colorScheme.onSurface)
         val referenceInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
         Slider(options.vuReferenceDbfs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(vuReferenceDbfs = it.roundToInt()))) },
             valueRange = -24f..-6f, steps = 17, interactionSource = referenceInteraction,
@@ -4035,7 +4161,7 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
             track = { androidx.compose.material3.SliderDefaults.Track(it) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-meter-settings-reference").semantics { contentDescription = referenceLabel })
         val holdLabel = stringResource(R.string.audio_meter_hold, options.peakHoldMs)
-        Text(holdLabel, Modifier.testTag("audio-meter-settings-hold-label"), color = Color.White)
+        Text(holdLabel, Modifier.testTag("audio-meter-settings-hold-label"), color = MaterialTheme.colorScheme.onSurface)
         val holdInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
         Slider(options.peakHoldMs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(peakHoldMs = it.roundToInt()))) },
             valueRange = 0f..3000f, interactionSource = holdInteraction,
@@ -4079,8 +4205,8 @@ private fun AudioEffectStatusRow(tag: String, title: Int, requested: Boolean,
     val yes = stringResource(R.string.audio_effect_yes)
     val no = stringResource(R.string.audio_effect_no)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(title), field("title"), color = Color.White, fontWeight = FontWeight.Bold)
-        Text(stringResource(R.string.audio_effect_requested, if (requested) yes else no), field("requested"), color = Color.White, fontSize = 14.sp)
+        Text(stringResource(title), field("title"), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.audio_effect_requested, if (requested) yes else no), field("requested"), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         if (observation == null) {
             Text(stringResource(R.string.audio_effect_unobserved), field("state"), color = Muted, fontSize = 14.sp)
         } else {
@@ -4092,7 +4218,7 @@ private fun AudioEffectStatusRow(tag: String, title: Int, requested: Boolean,
                 com.librestatic.opencinecam.camera.AudioEffectState.DISABLED -> R.string.audio_effect_disabled
                 com.librestatic.opencinecam.camera.AudioEffectState.FAILED -> R.string.audio_effect_failed
             })
-            Text(stringResource(R.string.audio_effect_observed, stateLabel), field("state"), color = Color.White, fontSize = 14.sp)
+            Text(stringResource(R.string.audio_effect_observed, stateLabel), field("state"), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             val implementation = stringResource(when (observation.implementation) {
                 com.librestatic.opencinecam.camera.AudioEffectImplementation.NONE -> R.string.audio_effect_none
                 com.librestatic.opencinecam.camera.AudioEffectImplementation.PLATFORM -> R.string.audio_effect_platform
@@ -4125,12 +4251,12 @@ internal fun AudioListeningSettingsControls(
         Text(stringResource(R.string.audio_listening_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
         SettingsHelp(stringResource(R.string.audio_listening_help), tag = "audio-listening-help")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(enabledLabel, Modifier.weight(1f).padding(end = 12.dp), color = Color.White)
+            Text(enabledLabel, Modifier.weight(1f).padding(end = 12.dp), color = MaterialTheme.colorScheme.onSurface)
             Switch(checked = request.enabled,
                 onCheckedChange = { onSettingsChange(settings.copy(audioListening = request.copy(enabled = it))) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("audio-listening-enable").semantics { contentDescription = enabledLabel })
         }
-        Text(volumeLabel, Modifier.testTag("audio-listening-volume-label"), color = Color.White)
+        Text(volumeLabel, Modifier.testTag("audio-listening-volume-label"), color = MaterialTheme.colorScheme.onSurface)
         Slider(value = request.volumePercent.toFloat(), onValueChange = {
             onSettingsChange(settings.copy(audioListening = request.copy(volumePercent = it.roundToInt())))
         }, valueRange = 0f..100f, steps = 99, interactionSource = interaction,
@@ -4162,7 +4288,7 @@ internal fun AudioListeningSettingsControls(
         }
         Text(stringResource(R.string.audio_listening_requested_device,
             settings.audioListeningOutputDeviceId?.toString() ?: stringResource(R.string.audio_listening_auto)),
-            Modifier.testTag("audio-listening-requested-device"), color = Color.White, fontSize = 14.sp)
+            Modifier.testTag("audio-listening-requested-device"), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         val phaseLabel = stringResource(when (status.phase) {
             AudioListeningPhase.DISABLED -> R.string.audio_listening_disabled
             AudioListeningPhase.NEEDS_CONNECT -> R.string.audio_listening_needs_connect
@@ -4177,7 +4303,7 @@ internal fun AudioListeningSettingsControls(
         Text(phaseLabel, Modifier.testTag("audio-listening-status"), color = if (status.phase == AudioListeningPhase.ACTIVE) VerifiedCyan else Muted)
         status.effectiveDeviceId?.let { id ->
             Text(stringResource(R.string.audio_listening_effective_device, status.deviceName ?: id.toString(), id),
-                Modifier.testTag("audio-listening-effective-device"), color = Color.White, fontSize = 14.sp)
+                Modifier.testTag("audio-listening-effective-device"), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         }
         Text(stringResource(R.string.audio_listening_counters, status.acceptedFrames, status.droppedPackets),
             Modifier.testTag("audio-listening-counters"), color = Muted, fontSize = 14.sp)
@@ -4209,7 +4335,7 @@ internal fun AudioRecordingGainSettings(
         SettingsSwitchRow(manualLabel, gain.enabled,
             { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) }, tag = "audio-gain-manual")
         Text(requestedLabel,
-            Modifier.testTag("audio-gain-value"), color = Color.White)
+            Modifier.testTag("audio-gain-value"), color = MaterialTheme.colorScheme.onSurface)
         Slider(value = gain.decibels.toFloat(), valueRange = -24f..24f, steps = 47,
             enabled = gain.enabled,
             onValueChange = { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(decibels = it.roundToInt()))) },
@@ -4247,7 +4373,7 @@ private fun AudioChoiceRow(
 ) {
     // Options share one row of pills and wrap only when the card is too narrow for them.
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         val labels = choices.toMap()
         SettingsChips(choices.map { it.first }, selected, label = { labels.getValue(it) }, onSelect = onSelected)
     }
@@ -4282,12 +4408,12 @@ private fun SettingsToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange).background(Color(0xFF1A1F21), RoundedCornerShape(8.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, color = if (enabled) Color.White else Muted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else Muted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             summary?.let { Text(it, color = Muted, fontSize = 14.sp) }
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = null)
@@ -4317,6 +4443,8 @@ private fun gateLabel(gate: ModeGateState): String = when (gate) {
     ModeGateState.FAILED -> stringResource(R.string.failed)
 }
 
+@Composable
+@ReadOnlyComposable
 private fun gateColor(gate: ModeGateState): Color = when (gate) {
     ModeGateState.AVAILABLE -> VerifiedCyan
     ModeGateState.CANDIDATE -> Amber

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<!--
+  Launch logo: the launcher foreground scaled by 0.6 around the centre so it fits the splash icon
+  mask. The ring is there from the first frame; the iris blades close in, the monitoring arcs trace
+  around the ring and the record light comes on. LogoArt.kt draws the same geometry with the same
+  scale, so the onboarding intro can take over from the last frame without a jump.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="108dp" android:height="108dp" android:viewportWidth="1000" android:viewportHeight="1000">
+            <group android:name="logo" android:pivotX="500" android:pivotY="500" android:scaleX="0.6" android:scaleY="0.6">
+                <path android:fillColor="@color/brand_amber" android:pathData="M697.99,697.99 L768.70,768.70 A380,380 0,1 1,768.70 231.30 L697.99,302.01 A280,280 0,1 0,697.99 697.99 Z" />
+                <path android:name="arc_grey" android:pathData="M627.50,720.84 A255,255 0,1 1,627.50 279.16" android:strokeColor="@color/brand_grey" android:strokeLineCap="butt" android:strokeWidth="12" android:trimPathEnd="0" />
+                <path android:name="arc_cyan_top" android:pathData="M646.26,291.12 A255,255 0,0 1,746.31 434.00" android:strokeColor="@color/brand_cyan" android:strokeLineCap="butt" android:strokeWidth="12" android:trimPathEnd="0" />
+                <path android:name="arc_cyan_bottom" android:pathData="M746.31,566.00 A255,255 0,0 1,646.26 708.88" android:strokeColor="@color/brand_cyan" android:strokeLineCap="butt" android:strokeWidth="12" android:trimPathEnd="0" />
+                <group android:name="light" android:pivotX="755" android:pivotY="500" android:scaleX="0" android:scaleY="0">
+                    <path android:fillColor="@color/brand_record" android:pathData="M755,484 A16,16 0,1 1,755 516 A16,16 0,1 1,755 484" />
+                </group>
+                <group android:name="iris" android:pivotX="500" android:pivotY="500" android:rotation="70">
+                    <clip-path android:pathData="M500,285 A215,215 0,1 1,500 715 A215,215 0,1 1,500 285" />
+                    <path android:name="blade0" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M564.95,537.50 L500,575 L-149.52,950 L564.95,1287.50 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                    <path android:name="blade1" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M500,575 L435.05,537.50 L-214.47,162.50 L-149.52,950 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                    <path android:name="blade2" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M435.05,537.50 L435.05,462.50 L435.05,-287.50 L-214.47,162.50 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                    <path android:name="blade3" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M435.05,462.50 L500,425 L1149.52,50 L435.05,-287.50 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                    <path android:name="blade4" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M500,425 L564.95,462.50 L1214.47,837.50 L1149.52,50 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                    <path android:name="blade5" android:fillAlpha="0" android:strokeAlpha="0" android:fillColor="@color/brand_amber" android:pathData="M564.95,462.50 L564.95,537.50 L564.95,1287.50 L1214.47,837.50 Z" android:strokeColor="@color/brand_separator" android:strokeLineJoin="miter" android:strokeWidth="8" />
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="iris">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="720" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="rotation" android:valueFrom="70" android:valueTo="0" />
+        </aapt:attr>
+    </target>
+    <target android:name="blade0">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="blade1">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="blade2">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="blade3">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="blade4">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="blade5">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="290" android:propertyName="fillAlpha" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="290" android:propertyName="strokeAlpha" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="arc_grey">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="520" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="trimPathEnd" android:startOffset="260" android:valueFrom="0" android:valueTo="1" />
+        </aapt:attr>
+    </target>
+    <target android:name="arc_cyan_top">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="520" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="trimPathEnd" android:startOffset="260" android:valueFrom="0" android:valueTo="1" />
+        </aapt:attr>
+    </target>
+    <target android:name="arc_cyan_bottom">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="520" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="trimPathEnd" android:startOffset="260" android:valueFrom="0" android:valueTo="1" />
+        </aapt:attr>
+    </target>
+    <target android:name="light">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="140" android:propertyName="scaleX" android:startOffset="700" android:valueFrom="0" android:valueTo="1.35" />
+                <objectAnimator android:duration="140" android:propertyName="scaleY" android:startOffset="700" android:valueFrom="0" android:valueTo="1.35" />
+                <objectAnimator android:duration="120" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="scaleX" android:startOffset="840" android:valueFrom="1.35" android:valueTo="1" />
+                <objectAnimator android:duration="120" android:interpolator="@android:interpolator/fast_out_slow_in" android:propertyName="scaleY" android:startOffset="840" android:valueFrom="1.35" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

@@ -3,18 +3,34 @@
 
 package com.librestatic.opencinecam
 
+import android.app.Activity
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.librestatic.opencinecam.ui.theme.AppTheme
+import com.librestatic.opencinecam.ui.theme.AppThemeStore
+import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
+import com.librestatic.opencinecam.ui.theme.SyncWindowBackground
+import com.librestatic.opencinecam.ui.theme.rememberAppTheme
 
 class MainActivity : ComponentActivity() {
     private val operatorKeys = OperatorKeyLatch()
@@ -50,8 +66,16 @@ class MainActivity : ComponentActivity() {
             eligible, mapping ?: OperatorAction.SYSTEM_VOLUME) { operatorAction?.invoke(it) }
     }
     private lateinit var foldDisplays: FoldDisplayCoordinator
+    private val splashHandoff = mutableStateOf(SplashHandoff(onScreen = true))
+    @Volatile private var contentReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
+        // installSplashScreen applied the Cine post-splash theme; Material You needs its own window colour.
+        val theme = AppThemeStore(this).load()
+        setTheme(windowThemeFor(theme))
         super.onCreate(savedInstanceState)
+        applySplashTheme(this, theme)
         com.librestatic.opencinecam.storage.MediaProxyQueue.get(this).start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -59,8 +83,31 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         foldDisplays = FoldDisplayCoordinator(this)
+
+        // The logo intro plays once per process, on a start from scratch that lands on the wizard.
+        val playIntro = savedInstanceState == null && !introPlayed && !OnboardingStore(this).isCompleted()
+        introPlayed = true
+        splashHandoff.value = SplashHandoff(onScreen = savedInstanceState == null, playIntro = playIntro)
+        // A normal start holds the splash while the camera opens, so "Preparing camera" never flashes
+        // by; never for long, so a slow or failing camera does not trap the user on the logo.
+        val start = SystemClock.uptimeMillis()
+        splashScreen.setKeepOnScreenCondition { !contentReady && SystemClock.uptimeMillis() - start < KeepSplashMaxMillis }
+        splashScreen.setOnExitAnimationListener { provider ->
+            val bounds = runCatching {
+                val icon = provider.iconView
+                val location = IntArray(2).also(icon::getLocationInWindow)
+                Rect(Offset(location[0].toFloat(), location[1].toFloat()), Size(icon.width.toFloat(), icon.height.toFloat()))
+            }.getOrNull()
+            splashHandoff.value = splashHandoff.value.copy(onScreen = false, iconBounds = bounds)
+            // The wizard draws the same logo in the same place, so the splash fades over an identical
+            // frame. The short delay lets Compose draw one frame with the real bounds first.
+            provider.view.animate().alpha(0f).setStartDelay(SplashFadeDelayMillis).setDuration(SplashFadeMillis)
+                .withEndAction(provider::remove).start()
+        }
         setContent {
-            CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays) { OpenCineCamApp() }
+            CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays) {
+                OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true })
+            }
         }
     }
 
@@ -69,34 +116,39 @@ class MainActivity : ComponentActivity() {
         if (::foldDisplays.isInitialized) foldDisplays.close()
         super.onDestroy()
     }
+
+    private companion object {
+        var introPlayed = false
+        const val SplashFadeMillis = 200L
+        const val SplashFadeDelayMillis = 34L
+        const val KeepSplashMaxMillis = 800L
+    }
+}
+
+internal fun windowThemeFor(theme: AppTheme): Int =
+    if (theme == AppTheme.YOU) R.style.Theme_OpenCineCam_You else R.style.Theme_OpenCineCam
+
+/**
+ * The platform draws the next splash before any app code runs, so on Android 13+ it is told ahead
+ * of time which splash matches the chosen theme. Older versions keep the Cine splash; its short
+ * fade covers the change of colour.
+ */
+internal fun applySplashTheme(activity: Activity, theme: AppTheme) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val splash = if (theme == AppTheme.YOU) R.style.Theme_OpenCineCam_Starting_You else R.style.Theme_OpenCineCam_Starting
+    runCatching { activity.splashScreen.setSplashScreenTheme(splash) }
 }
 
 @Composable
-fun OpenCineCamApp() {
-    MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme(
-        primary = androidx.compose.ui.graphics.Color(0xFFFFB300),
-        onPrimary = androidx.compose.ui.graphics.Color.Black,
-        secondary = androidx.compose.ui.graphics.Color(0xFF45D6E8),
-        onSecondary = androidx.compose.ui.graphics.Color.Black,
-        background = androidx.compose.ui.graphics.Color(0xFF0B0D0E),
-        surface = androidx.compose.ui.graphics.Color(0xFF101417),
-        onSurface = androidx.compose.ui.graphics.Color.White,
-        // Material uses this pair for selected chips and for the inactive part of a slider, so a
-        // dim amber reads as "selected" on a chip and as the unfilled track on a slider.
-        secondaryContainer = androidx.compose.ui.graphics.Color(0xFF4A3A12),
-        onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFFFFCF66),
-        primaryContainer = androidx.compose.ui.graphics.Color(0xFF3A2E12),
-        onPrimaryContainer = androidx.compose.ui.graphics.Color(0xFFFFCF66),
-        surfaceVariant = androidx.compose.ui.graphics.Color(0xFF1B2226),
-        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFAAB4BA),
-        surfaceContainer = androidx.compose.ui.graphics.Color(0xFF12171A),
-        surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFF1B2226),
-        surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF232B30),
-        outline = androidx.compose.ui.graphics.Color(0xFF41494C),
-        outlineVariant = androidx.compose.ui.graphics.Color(0xFF263036),
-    )) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            CameraRootScreen()
+fun OpenCineCamApp(splash: SplashHandoff = SplashHandoff(onScreen = false), onReady: () -> Unit = {}) {
+    val theme by rememberAppTheme()
+    val activity = LocalActivity.current
+    LaunchedEffect(theme, activity) { activity?.let { applySplashTheme(it, theme) } }
+    OpenCineCamTheme(theme) {
+        SyncWindowBackground()
+        // An opaque themed floor: crossfades and frames that draw nothing never reveal the window.
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            CameraRootScreen(splash = splash, onReady = onReady)
         }
     }
 }

@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam.ui.viewfinder
 
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,9 +52,9 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private val ZoomPanel = Color(0xD914181A)
-private val ZoomAccent = Color(0xFFFFB300)
-private val ZoomHandle = Color(0xFF45D6E8)
+private val ZoomPanel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f)
+private val ZoomAccent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+private val ZoomHandle: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.secondary
 private const val MaxRockerTickSeconds = 0.05f
 
 internal fun rockerTickDeltaSeconds(previousTickNs: Long, currentTickNs: Long): Float =

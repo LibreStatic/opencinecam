@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.ContextWrapper
 import android.view.KeyEvent
@@ -221,8 +224,8 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
     }
 }
 
-private val OperatorActiveAccent = Color(0xFFFFCF66)
-private val OperatorActiveContainer = Color(0xFF3A2E12)
+private val OperatorActiveAccent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimaryContainer
+private val OperatorActiveContainer: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primaryContainer
 
 /** Geometric glyphs matching the app's stroke language; letters where a letter is the symbol. */
 @Composable
@@ -328,7 +331,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOperatorGlyph(a
 internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val operation = settings.operation
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.operator_title), color = Color.White, fontSize = 20.sp)
+        Text(stringResource(R.string.operator_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.operator_help) + "\n\n" + stringResource(R.string.operator_help_hint))
         operation.buttons.forEachIndexed { index, action ->
             OperatorChoice(stringResource(R.string.operator_button, index + 1), action, OperatorAction.entries.filter { it != OperatorAction.SYSTEM_VOLUME }, "operator-map-${index + 1}") { selected ->
@@ -337,7 +340,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         }
         OperatorChoice(stringResource(R.string.operator_volume_up), operation.volumeUp, OperatorAction.entries, "operator-volume-up") { onChange(settings.copy(operation = operation.copy(volumeUp = it))) }
         OperatorChoice(stringResource(R.string.operator_volume_down), operation.volumeDown, OperatorAction.entries, "operator-volume-down") { onChange(settings.copy(operation = operation.copy(volumeDown = it))) }
-        Text(stringResource(R.string.operator_startup), color = Color.White, fontSize = 18.sp)
+        Text(stringResource(R.string.operator_startup), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StartupMode.entries.forEach { mode ->
                 FilterChip(selected = operation.startupMode == mode, onClick = { onChange(settings.copy(operation = operation.copy(startupMode = mode))) },
@@ -348,7 +351,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         OperatorToggle(R.string.operator_restore_torch, "operator-restore-torch", operation.restoreTorch) { onChange(settings.copy(operation = operation.copy(restoreTorch = it))) }
         SettingsHelp(stringResource(R.string.operator_startup_help))
         OperatorToggle(R.string.operator_lock, "operator-lock", operation.lockDuringTake) { onChange(settings.copy(operation = operation.copy(lockDuringTake = it))) }
-        Text(stringResource(if (state.captureControlsLocked) R.string.operator_locked else R.string.operator_lock_help), color = Color.LightGray, fontSize = 16.sp)
+        Text(stringResource(if (state.captureControlsLocked) R.string.operator_locked else R.string.operator_lock_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         OutlinedButton({ onChange(settings.copy(operation = OperatorPreferences())) }, Modifier.heightIn(min = 48.dp).testTag("operator-reset")) { Text(stringResource(R.string.operator_reset)) }
     }
 }
@@ -363,7 +366,7 @@ private fun OperatorChoice(title: String, value: OperatorAction, options: List<O
             options.forEach { action -> TextButton({ onChange(action); open = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("operator-choice-$action")) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text(stringResource(action.labelResource()), fontSize = 16.sp)
-                    Text(stringResource(action.helpResource()), color = Color.LightGray, fontSize = 13.sp)
+                    Text(stringResource(action.helpResource()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 }
             } }
         } }, confirmButton = { TextButton({ open = false }) { Text(stringResource(android.R.string.cancel)) } })
@@ -371,7 +374,7 @@ private fun OperatorChoice(title: String, value: OperatorAction, options: List<O
 @Composable
 private fun OperatorToggle(label: Int, tag: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(checked, role = Role.Switch, onValueChange = onChange).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(label), Modifier.weight(1f), color = Color.White, fontSize = 16.sp)
+        Text(stringResource(label), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
         Switch(checked, onCheckedChange = null)
     }
 }

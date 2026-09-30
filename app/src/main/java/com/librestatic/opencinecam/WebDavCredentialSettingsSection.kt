@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -74,16 +75,16 @@ import kotlinx.coroutines.withContext
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.webdav_credentials_title), color = Color.White, style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.webdav_credentials_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
         SettingsHelp(stringResource(R.string.webdav_credentials_help), tag = "webdav-credentials-help")
         Text(stringResource(when (status) {
             WebDavCredentialStatus.AVAILABLE -> R.string.webdav_credentials_available
             WebDavCredentialStatus.MISSING -> R.string.webdav_credentials_missing
             WebDavCredentialStatus.UNAVAILABLE -> R.string.webdav_credentials_unavailable
             null -> R.string.webdav_credentials_loading
-        }), color = Color.LightGray, modifier = Modifier.testTag("webdav-credentials-status"))
-        val colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-            focusedLabelColor = Color.White, unfocusedLabelColor = Color.LightGray)
+        }), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("webdav-credentials-status"))
+        val colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            focusedLabelColor = MaterialTheme.colorScheme.onSurface, unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(username, { if (it.length <= 8192) username = it }, singleLine = true,
             label = { Text(stringResource(R.string.webdav_credentials_username)) }, colors = colors,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false), enabled = !busy,

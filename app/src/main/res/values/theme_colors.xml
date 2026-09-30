@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <!-- Window colours before Compose draws: the Cine graphite and the Material You baseline surface. -->
+    <color name="window_cine">#FF0B0D0E</color>
+    <color name="window_you">#FFFEF7FF</color>
+    <!-- Separator stroke between the iris blades, as in the launcher icon. -->
+    <color name="brand_separator">#FF0B0D0E</color>
+    <!-- Brand colours of the logo (ic_launcher_foreground.xml). -->
+    <color name="brand_amber">#FFFFB300</color>
+    <color name="brand_cyan">#FF45D6E8</color>
+    <color name="brand_grey">#FF9CA6AA</color>
+    <color name="brand_record">#FFE23A3A</color>
+</resources>

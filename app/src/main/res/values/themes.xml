@@ -2,8 +2,32 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 OpenCineCam contributors -->
 <resources>
+    <!--
+      The window background only shows before Compose draws its first frame (Compose then keeps it
+      equal to the theme background). It must never be the platform default: the parent is a fixed
+      theme, so without this a light or dark system mode could flash the wrong colour.
+    -->
     <style name="Theme.OpenCineCam" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#00BFA5</item>
+        <item name="android:windowBackground">@color/window_cine</item>
+    </style>
+
+    <!-- Material You: light or AMOLED black, following the system mode (values-night). -->
+    <style name="Theme.OpenCineCam.You">
+        <item name="android:windowBackground">@color/window_you</item>
+    </style>
+
+    <style name="Theme.OpenCineCam.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_cine</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo_animated</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Theme.OpenCineCam</item>
+    </style>
+
+    <!-- Chosen with SplashScreen.setSplashScreenTheme on Android 13+ once the user picks Material You. -->
+    <style name="Theme.OpenCineCam.Starting.You">
+        <item name="windowSplashScreenBackground">@color/window_you</item>
+        <item name="postSplashScreenTheme">@style/Theme.OpenCineCam.You</item>
     </style>
 </resources>
