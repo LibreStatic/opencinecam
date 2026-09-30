@@ -14,8 +14,15 @@ android {
         applicationId = "com.librestatic.opencinecam"
         minSdk = 29
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.3.4"
+        // -Popencinecam.versionCode wins; CI derives it from the run number plus an offset
+        // (-Popencinecam.versionCodeOffset, default 100) that keeps it above the last manual
+        // upload; local builds fall back to the constant below (tools/*.sh read that line).
+        versionCode = providers.gradleProperty("opencinecam.versionCode").orNull?.toInt()
+            ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let {
+                it + (providers.gradleProperty("opencinecam.versionCodeOffset").orNull?.toInt() ?: 100)
+            }
+            ?: 10
+        versionName = "0.1.0-beta"
 
         ndk {
             abiFilters += listOf("arm64-v8a")

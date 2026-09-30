@@ -7,7 +7,12 @@ cd "$ROOT"
 SDK_DIR="${ANDROID_SDK_ROOT:-$(sed -n 's/^sdk.dir=//p' local.properties)}"
 BUILD_TOOLS="$(find "$SDK_DIR/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
 VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)"/\1/p' app/build.gradle.kts | head -1)"
-VERSION_CODE="$(sed -n 's/^[[:space:]]*versionCode = \([0-9][0-9]*\)/\1/p' app/build.gradle.kts | head -1)"
+# Mirrors app/build.gradle.kts: CI run number plus offset, otherwise the local fallback constant.
+if [[ -n "${GITHUB_RUN_NUMBER:-}" ]]; then
+    VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))
+else
+    VERSION_CODE="$(sed -n 's/^[[:space:]]*?: \([0-9][0-9]*\)$/\1/p' app/build.gradle.kts | head -1)"
+fi
 UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
 OUTPUT_DIR="${RELEASE_OUTPUT_DIR:-build/release}"
 ALIGNED="$OUTPUT_DIR/OpenCineCam-$VERSION_NAME-arm64-aligned.apk"
