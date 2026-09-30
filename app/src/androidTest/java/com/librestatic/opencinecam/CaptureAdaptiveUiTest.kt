@@ -347,7 +347,7 @@ class CaptureAdaptiveUiTest {
         // The authority is verifyThirdPartyLicenses, which re-derives this catalog from
         // app/gradle.lockfile on every preBuild; this number is the deliberate review tripwire,
         // so bump it only together with the dependency that moved it.
-        assertEquals(118, components.size)
+        assertEquals(126, components.size)
         assertEquals(components.size, components.map { it.coordinate }.toSet().size)
         assertTrue(components.all { it.licenseId.isNotBlank() && it.licenseTextAsset.isNotBlank() })
 

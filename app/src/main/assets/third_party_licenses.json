@@ -49,6 +49,14 @@
       "version": "1.10.0"
     },
     {
+      "group": "androidx.appcompat",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "appcompat-resources",
+      "version": "1.7.0"
+    },
+    {
       "group": "androidx.arch.core",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
@@ -190,7 +198,7 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "material3",
-      "version": "1.4.0"
+      "version": "1.5.0-alpha26"
     },
     {
       "group": "androidx.compose.material3",
@@ -198,7 +206,23 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "material3-android",
-      "version": "1.4.0"
+      "version": "1.5.0-alpha26"
+    },
+    {
+      "group": "androidx.compose.material3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "material3-ripple",
+      "version": "1.5.0-alpha26"
+    },
+    {
+      "group": "androidx.compose.material3",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "material3-ripple-android",
+      "version": "1.5.0-alpha26"
     },
     {
       "group": "androidx.compose.runtime",
@@ -405,6 +429,14 @@
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "core-splashscreen",
+      "version": "1.2.0-alpha02"
+    },
+    {
+      "group": "androidx.core",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "core-viewtree",
       "version": "1.0.0"
     },
@@ -438,6 +470,22 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "graphics-path",
+      "version": "1.0.1"
+    },
+    {
+      "group": "androidx.graphics",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "graphics-shapes",
+      "version": "1.0.1"
+    },
+    {
+      "group": "androidx.graphics",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "graphics-shapes-android",
       "version": "1.0.1"
     },
     {
@@ -751,6 +799,22 @@
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "tracing",
       "version": "1.2.0"
+    },
+    {
+      "group": "androidx.vectordrawable",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "vectordrawable",
+      "version": "1.1.0"
+    },
+    {
+      "group": "androidx.vectordrawable",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "vectordrawable-animated",
+      "version": "1.1.0"
     },
     {
       "group": "androidx.versionedparcelable",
