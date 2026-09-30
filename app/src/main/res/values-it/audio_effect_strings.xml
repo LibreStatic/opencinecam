@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_effect_title">Osservazioni sull\'elaborazione audio</string>
+    <string name="audio_effect_ns">Soppressione del rumore (NS)</string>
+    <string name="audio_effect_agc">Controllo automatico del guadagno (AGC)</string>
+    <string name="audio_effect_aec">Cancellazione dell\'eco acustico (AEC)</string>
+    <string name="audio_effect_help">Solo il produttore PCM corrente segnala queste osservazioni. Disponibilità e richieste non dimostrano l\'applicazione. Senza una ricevuta PCM, incluso MediaRecorder, l\'elaborazione non viene osservata; la parità tra backend non è presunta.</string>
+    <string name="audio_effect_request_help">Richiesta per la prossima configurazione audio; lo stato osservato è mostrato separatamente.</string>
+    <string name="audio_effect_manual">Il guadagno di registrazione manuale sospende la richiesta AGC per la prossima configurazione. La ricevuta corrente può ancora descrivere la ripresa bloccata.</string>
+    <string name="audio_effect_yes">Sì</string>
+    <string name="audio_effect_no">No</string>
+    <string name="audio_effect_requested">Preferenza corrente: %1$s</string>
+    <string name="audio_effect_receipt_requested">Richiesto dal produttore corrente: %1$s</string>
+    <string name="audio_effect_unobserved">Non osservato — nessuna ricevuta PCM corrente</string>
+    <string name="audio_effect_observed">Stato osservato: %1$s</string>
+    <string name="audio_effect_unknown">Sconosciuto</string>
+    <string name="audio_effect_unavailable">Non disponibile</string>
+    <string name="audio_effect_enabled">Attivo</string>
+    <string name="audio_effect_disabled">Disattivato</string>
+    <string name="audio_effect_failed">Non riuscito</string>
+    <string name="audio_effect_implementation">Implementazione: %1$s</string>
+    <string name="audio_effect_none">Nessuna</string>
+    <string name="audio_effect_platform">Piattaforma Android</string>
+    <string name="audio_effect_software">Elaborazione software</string>
+    <string name="audio_effect_control">Controllo di piattaforma osservato: %1$s</string>
+    <string name="audio_effect_control_unknown">Non osservato / non applicabile</string>
+    <string name="audio_effect_pending">Preferenza in attesa per la prossima ripresa; l\'osservazione corrente non cambia.</string>
+    <string name="audio_effect_configuration_failed">Un tentativo di configurare l\'effetto non è riuscito. Lo stato osservato e l\'eventuale ripiego software sono mostrati separatamente.</string>
+</resources>

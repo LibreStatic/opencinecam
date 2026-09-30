@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Claquete de produção</string>
+    <string name="production_slate_help">Metadados descritivos para a próxima captura. A claquete admitida fica congelada durante a gravação e a publicação; edições durante uma tomada ficam pendentes. A numeração automática só avança depois de uma captura salva e somente se a claquete não tiver mudado. O UUID, e não o número da tomada, identifica uma captura. Estes campos não alteram nomes de arquivo, não detectam a lente nem coletam coordenadas GPS.</string>
+    <string name="production_slate_pending">Alterações da claquete pendentes para a próxima captura; a captura atual mantém seus metadados admitidos.</string>
+    <string name="production_slate_project">Projeto</string>
+    <string name="production_slate_camera">Nome da câmera</string>
+    <string name="production_slate_scene">Cena</string>
+    <string name="production_slate_reel">Rolo</string>
+    <string name="production_slate_lens">Nome da lente (manual)</string>
+    <string name="production_slate_take">Número da tomada (1–999999)</string>
+    <string name="production_slate_invalid_text">Use no máximo 128 unidades UTF-16, sem caracteres de controle, quebras de linha nem Unicode inválido. Esta edição não foi salva.</string>
+    <string name="production_slate_invalid_take">Informe um número inteiro de 1 a 999999 sem zeros à esquerda. Esta edição não foi salva.</string>
+    <string name="production_slate_location">Local da cena</string>
+    <string name="production_slate_time">Hora do dia da cena</string>
+    <string name="production_slate_unspecified">Não especificado</string>
+    <string name="production_slate_interior">Interna</string>
+    <string name="production_slate_exterior">Externa</string>
+    <string name="production_slate_day">Dia</string>
+    <string name="production_slate_night">Noite</string>
+    <string name="production_slate_good">Marcar como boa tomada</string>
+    <string name="production_slate_increment">Avançar o número da tomada após uma captura salva (nunca além de 999999)</string>
+    <string name="production_slate_increment_failed">Mídia salva mantida; verifique o próximo número de tomada da claquete.</string>
+</resources>

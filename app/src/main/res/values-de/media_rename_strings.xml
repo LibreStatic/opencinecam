@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_rename_action">Zugehörige Dateien umbenennen…</string>
+    <string name="media_rename_title">Diesen lokalen Take umbenennen</string>
+    <string name="media_rename_help">Gib einen Basisnamen ein und prüfe jeden resultierenden Dateinamen. Nur lokale Anzeigenamen und ihre zugehörigen Metadaten werden aktualisiert; die Bytes der Originalmedien, URIs und der Aufnahme-Namensraum bleiben erhalten. Das Bearbeiten dieses Felds schreibt keine Dateien.</string>
+    <string name="media_rename_remote_warning">Nur LOKALES Umbenennen: Remote-Kopien werden nicht umbenannt. Ausstehende Übertragungen der vorherigen Version erfordern Aufmerksamkeit und werden nicht automatisch fortgesetzt. Der verifizierte Remote-Verlauf bleibt erhalten.</string>
+    <string name="media_rename_stem">Neuer Basisname</string>
+    <string name="media_rename_invalid">Gib einen gültigen Basisnamen ein, um jeden Dateinamen in der Vorschau zu sehen. Umbenennen ist für einen nicht unterstützten oder mehrdeutigen Dateisatz nicht möglich.</string>
+    <string name="media_rename_old">Aktuelle Auswahl: %1$s</string>
+    <string name="media_rename_new">Vorgeschlagener Name: %1$s</string>
+    <string name="media_rename_current">Beobachteter Name nach dem Vorgang: %1$s</string>
+    <string name="media_rename_unknown_name">Aktueller Name unbekannt; aktualisiere und prüfe die Datei.</string>
+    <string name="media_rename_confirm">Lokales Umbenennen bestätigen</string>
+    <string name="media_rename_cancel">Abbrechen / schließen</string>
+    <string name="media_rename_busy">Das Umbenennen läuft. Abbrechen ist nicht mehr möglich; warte auf das verifizierte Ergebnis. Das Verlassen dieses Bildschirms stoppt einen bereits bestätigten Vorgang nicht.</string>
+    <string name="media_rename_complete">Der gesamte lokale Dateisatz wurde umbenannt. Remote-Kopien wurden nicht umbenannt.</string>
+    <string name="media_rename_compensated">Das Umbenennen ist fehlgeschlagen; die vorherigen Dateinamen und die Bytes der zugehörigen Metadaten wurden wiederhergestellt. Prüfe das Ergebnis vor einem neuen Versuch.</string>
+    <string name="media_rename_partial">Die lokale Änderung wurde nicht abgeschlossen oder nicht vollständig wiederhergestellt. Prüfe jeden beobachteten Namen, bevor du weitere Schritte unternimmst.</string>
+    <string name="media_rename_rejected">Das Umbenennen wurde vor einer vollständigen Aktualisierung abgelehnt. Aktualisiere den Katalog und prüfe die Auswahl.</string>
+    <string name="media_rename_unknown">Das Ergebnis des Umbenennens ist unbekannt. Gehe nicht davon aus, dass Namen oder Metadaten wiederhergestellt wurden. Aktualisiere den Katalog und prüfe jede Datei.</string>
+    <string name="media_rename_refresh">Eine Katalogaktualisierung wurde angefordert. Aus einem Lade- oder Lesefehler wird kein Ergebnis abgeleitet.</string>
+    <string name="media_rename_status_renamed">Umbenannt</string>
+    <string name="media_rename_status_unchanged">Unverändert</string>
+    <string name="media_rename_status_restored">Wiederhergestellt</string>
+    <string name="media_rename_status_partial">Teilweise Änderung</string>
+    <string name="media_rename_status_not_attempted">Nicht versucht</string>
+    <string name="media_rename_status_unknown">Unbekanntes Ergebnis</string>
+</resources>
+

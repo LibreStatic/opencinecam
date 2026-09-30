@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_playback_close">Fechar revisão</string>
+    <string name="media_playback_member">Item %1$d de %2$d: %3$s</string>
+    <string name="media_playback_previous_member">Item anterior</string>
+    <string name="media_playback_next_member">Próximo item</string>
+    <string name="media_playback_previous_take">Tomada anterior</string>
+    <string name="media_playback_next_take">Próxima tomada</string>
+    <string name="media_playback_loading">Lendo a mídia…</string>
+    <string name="media_playback_page_error">Não foi possível ler a próxima página. Tente Próxima tomada novamente.</string>
+    <string name="media_playback_paused">Pausado</string>
+    <string name="media_playback_playing">Reproduzindo · o tempo do player é aproximado</string>
+    <string name="media_playback_ended">Fim da mídia</string>
+    <string name="media_playback_error">Falha na leitura da mídia; nenhum quadro aproximado foi substituído.</string>
+    <string name="media_playback_closed">Leitor fechado</string>
+    <string name="media_playback_retry">Tentar ler novamente</string>
+    <string name="media_playback_exact">Quadro verificado %1$d / %2$d · PTS %3$d µs</string>
+    <string name="media_playback_estimated">Posição do player: %1$d ms (não é um quadro verificado)</string>
+    <string name="media_playback_pause">Pausar</string>
+    <string name="media_playback_play">Reproduzir</string>
+    <string name="media_playback_start">Ir para o início</string>
+    <string name="media_playback_end">Ir para o fim</string>
+    <string name="media_playback_previous_frame">Quadro anterior</string>
+    <string name="media_playback_next_frame">Próximo quadro</string>
+    <string name="media_playback_seek_label">Posição de busca (pausa a reprodução)</string>
+    <string name="media_playback_color_interpreted">Cor interpretada a partir das tags da trilha, não verificada. O PTS exato não muda. A reprodução contínua usa a interpretação de cor do próprio player. Esta escolha é redefinida ao sair deste item.</string>
+    <string name="media_playback_color_tags">Interpretação da trilha: padrão %1$d, faixa %2$d. Decodificador: padrão %3$d, faixa %4$d.</string>
+    <string name="media_playback_color_strict">Voltar à leitura de cor estrita</string>
+    <string name="media_playback_color_choice">A cor do decodificador não é compatível. Você pode interpretar explicitamente esta revisão com as tags SDR da trilha sem alterar o arquivo; a precisão de cor não é verificada.</string>
+    <string name="media_playback_interpret_track">Interpretar esta revisão com a cor SDR da trilha</string>
+    <string name="media_playback_hdr_preview">Amostras %1$s decodificadas em 10 bits · quadros pausados precisos usam uma pré-visualização SDR com tone mapping (referência de 203 nits; tela HLG de 1000 nits). A reprodução contínua usa o pipeline de cor do sistema. Isso não verifica a fidelidade de exibição HDR nativa; os originais não mudam.</string>
+    <string name="media_playback_dng_preview">DNG — pré-visualização decodificada pela plataforma (%1$d × %2$d px). O arquivo RAW original não muda.</string>
+</resources>

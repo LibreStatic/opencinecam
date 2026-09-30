@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Elimina originali correlati…</string>
+    <string name="media_delete_title">Elimina definitivamente questa ripresa</string>
+    <string name="media_delete_help">Questo elimina i media originali elencati e i metadati correlati, non solo un\'anteprima o un proxy. L\'azione non può essere annullata. Controlla ogni file prima di confermare.</string>
+    <string name="media_delete_acknowledge">Capisco che questi file originali e metadati verranno eliminati definitivamente.</string>
+    <string name="media_delete_sources">File selezionati — Originali: %1$d; Metadati: %2$d</string>
+    <string name="media_delete_original">Originale: %1$s</string>
+    <string name="media_delete_metadata">Metadati: %1$s</string>
+    <string name="media_delete_confirm">Elimina definitivamente i file elencati</string>
+    <string name="media_delete_cancel">Annulla / chiudi</string>
+    <string name="media_delete_busy">Eliminazione in corso. L\'annullamento non è più disponibile; attendi il risultato per ogni file. Uscire da questa schermata non interrompe un\'operazione già confermata.</string>
+    <string name="media_delete_complete">Tutti i file selezionati sono stati eliminati.</string>
+    <string name="media_delete_partial">Eliminazione parziale. Controlla il risultato di ogni file; non presumere che la ripresa sia stata eliminata del tutto.</string>
+    <string name="media_delete_rejected">Eliminazione rifiutata. Controlla il catalogo corrente prima di fare una nuova selezione.</string>
+    <string name="media_delete_unknown">L\'esito dell\'eliminazione è sconosciuto. Aggiorna il catalogo e controlla i file rimasti prima di agire ulteriormente.</string>
+    <string name="media_delete_absent">Assenza verificata</string>
+    <string name="media_delete_remaining">Non eliminato</string>
+    <string name="media_delete_member_unknown">Risultato sconosciuto</string>
+    <string name="media_delete_refresh">È stato richiesto un aggiornamento del catalogo. Un errore di caricamento o lettura non dimostra che un file sia assente.</string>
+    <string name="media_delete_not_attempted">Non tentato</string>
+</resources>

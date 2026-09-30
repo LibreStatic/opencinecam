@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Préférences de lecture</string>
+    <string name="playback_settings_help">Ces préférences s\'appliquent au lecteur local, pas à l\'audio de capture, au gain d\'enregistrement ni aux fichiers médias. La lecture exige une action Lecture explicite. La position de lecture n\'est pas enregistrée dans les préférences ni les presets.</string>
+    <string name="playback_settings_muted">Couper le son de la lecture</string>
+    <string name="playback_settings_loop">Répéter à la fin de la lecture</string>
+    <string name="playback_settings_frame_position">Afficher la position d\'image du lecteur</string>
+</resources>

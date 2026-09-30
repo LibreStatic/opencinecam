@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_gain_title">Guadagno di registrazione</string>
+    <string name="audio_gain_help">Elaborazione digitale dei campioni registrati, non guadagno hardware del microfono né volume delle cuffie. Un guadagno positivo può causare clipping; non ripara un ingresso già saturo. I soli indicatori di livello non confermano la riproduzione.</string>
+    <string name="audio_gain_manual">Attiva guadagno digitale manuale</string>
+    <string name="audio_gain_requested">Guadagno manuale richiesto: %1$d dB (da −24 a +24)</string>
+    <string name="audio_gain_agc_requested">Richiedi controllo automatico del guadagno (AGC)</string>
+    <string name="audio_gain_agc_suspended">La modalità manuale sospende l\'AGC, anche a 0 dB. La preferenza AGC viene mantenuta per quando la modalità manuale sarà disattivata.</string>
+    <string name="audio_gain_agc_backend">L\'AGC è una richiesta, non una prova di applicazione. Gli effetti hardware e l\'AGC software dipendono dal backend di registrazione attivo e dal formato PCM; MediaRecorder non espone questo controllo.</string>
+    <string name="audio_gain_pending">Le modifiche al guadagno di registrazione sono in attesa per la prossima ripresa. Questa ripresa mantiene il guadagno e la configurazione AGC ammessi.</string>
+    <string name="audio_gain_aac_backend">L\'AAC-LC è incorporato nell\'MP4. MediaRecorder diretto non espone il guadagno manuale dei campioni né l\'AGC controllato dall\'app; richiedono un percorso di codifica PCM supportato.</string>
+    <string name="audio_gain_no_receipt">Nessuna ricevuta di applicazione del guadagno PCM corrente. Il valore configurato è solo una richiesta.</string>
+    <string name="audio_gain_applied">Guadagno PCM digitale applicato: %1$d dB</string>
+    <string name="audio_gain_manual_not_applied">La sorgente PCM attiva segnala il guadagno manuale disattivato; ciò non conferma l\'AGC.</string>
+    <string name="audio_retirement_preparing">In attesa che il precedente proprietario del microfono finisca di chiuderlo…</string>
+    <string name="audio_retirement_failed">Il precedente proprietario audio non ha confermato la chiusura. La registrazione non è iniziata.</string>
+    <string name="audio_retirement_cancel_capture">Annulla preparazione</string>
+</resources>

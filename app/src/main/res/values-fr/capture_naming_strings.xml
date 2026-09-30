@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Noms des fichiers de capture</string>
+    <string name="capture_naming_enabled">Utiliser un modèle de nom de fichier personnalisé</string>
+    <string name="capture_naming_template">Modèle de nom de fichier</string>
+    <string name="capture_naming_help">Enregistrez ces préférences pour la prochaine capture. Elles ne renomment pas les fichiers existants et ne modifient pas une capture déjà admise. Le nommage désactivé conserve OCC_UUID.</string>
+    <string name="capture_naming_tokens">Jetons : {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Limite du modèle : 128 caractères. La date et l\'heure utilisent l\'UTC ; les numéros de prise comptent au moins quatre chiffres.</string>
+    <string name="capture_naming_identity">Chaque nom conserve l\'UUID complet de la capture et son suffixe d\'extension/rôle. Les espaces et les caractères éditoriaux non portables deviennent des tirets bas, dans les noms uniquement. Le préfixe lisible est limité à 160 octets UTF-8 ; un préfixe vide devient untitled. Les métadonnées de clap ne sont pas réécrites.</string>
+    <string name="capture_naming_example">Exemple uniquement — clap actuel, instant UTC fixe 2 janv. 2026 03:04:05.006 et UUID d\'exemple. Les captures réelles utilisent leur instant d\'admission et leur propre UUID.</string>
+    <string name="capture_naming_invalid">Modèle invalide. Utilisez uniquement les jetons listés, sans chemins, caractères de contrôle, texte vide ni espaces/points finaux. Les brouillons invalides ne sont pas enregistrés.</string>
+    <string name="capture_naming_save">Enregistrer pour la prochaine capture</string>
+    <string name="capture_naming_preview">Exemple de nom de fichier (radical) : %1$s</string>
+</resources>

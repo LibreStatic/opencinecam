@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="geotagging_title">Geolokalisierung der Aufnahme</string>
+    <string name="geotagging_enabled">Standort für neue Aufnahmen speichern</string>
+    <string name="geotagging_help">Standardmäßig aus. Wenn aktiviert, werden verfügbare Koordinaten und die gemeldete Genauigkeit in den Produktionsmetadaten gespeichert, auch wenn diese Metadaten geteilt werden. Die Standortberechtigung allein aktiviert die Aufzeichnung nicht. Das Deaktivieren dieser Option lässt frühere Aufnahmen unverändert. Presets ändern diese Auswahl nie. Der Standort wird nur angefordert, solange die App im Vordergrund ist.</string>
+    <string name="geotagging_permission_none">Android-Standortzugriff: nicht erteilt.</string>
+    <string name="geotagging_permission_approximate">Android-Standortzugriff: ungefähr. Ein ungefährer Standort wird unterstützt.</string>
+    <string name="geotagging_permission_precise">Android-Standortzugriff: genau. Diese Berechtigung garantiert keine physische Genauigkeit.</string>
+    <string name="geotagging_status_disabled">Die Standortaufzeichnung ist aus. Neue Aufnahmen enthalten keine Geolokalisierung.</string>
+    <string name="geotagging_status_no_permission">Die Standortaufzeichnung ist aktiviert, aber der Android-Zugriff fehlt. Neue Aufnahmen speichern den Status „nicht verfügbar“, ohne Koordinaten.</string>
+    <string name="geotagging_status_available">Ein aktueller Standort ist verfügbar. Jede Aufnahme speichert bei der Übernahme die Verfügbarkeit und die gemeldete Genauigkeit.</string>
+    <string name="geotagging_status_inactive">Der Standortzugriff ist inaktiv. Neue Aufnahmen enthalten im inaktiven Zustand keine Koordinaten.</string>
+    <string name="geotagging_status_unavailable">Warten auf einen Standort. Neue Aufnahmen enthalten keine Koordinaten, solange kein Standort verfügbar ist.</string>
+    <string name="geotagging_status_stale">Der letzte Standort ist zu alt. Neue Aufnahmen enthalten keine Koordinaten, bis ein aktueller Standort verfügbar ist.</string>
+    <string name="geotagging_denied">Der Standortzugriff wurde nicht erteilt. Du kannst ihn erneut anfordern; zeigt Android keine Abfrage mehr an, ändere den Standortzugriff in den System-App-Einstellungen. Deine Aufnahmeauswahl hat sich nicht geändert.</string>
+    <string name="geotagging_request">Standortzugriff anfordern / erneut versuchen</string>
+    <string name="geotagging_requesting">Standortzugriff wird angefordert…</string>
+    <string name="geotagging_open_settings">Android-App-Berechtigungseinstellungen öffnen</string>
+</resources>

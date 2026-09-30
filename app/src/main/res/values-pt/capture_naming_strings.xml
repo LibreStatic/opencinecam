@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Nomes dos arquivos de captura</string>
+    <string name="capture_naming_enabled">Usar um modelo personalizado de nome de arquivo</string>
+    <string name="capture_naming_template">Modelo de nome de arquivo</string>
+    <string name="capture_naming_help">Salve estas preferências para a próxima captura. Elas não renomeiam arquivos existentes nem alteram uma captura já admitida. Com a nomenclatura desativada, OCC_UUID é mantido.</string>
+    <string name="capture_naming_tokens">Tokens: {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Limite do modelo: 128 caracteres. Data e hora usam UTC; os números de tomada têm pelo menos quatro dígitos.</string>
+    <string name="capture_naming_identity">Todo nome mantém o UUID completo da captura e seu sufixo de extensão/função. Espaços e caracteres editoriais não portáteis viram sublinhados, apenas nos nomes. O prefixo legível é limitado a 160 bytes UTF-8; um prefixo vazio vira untitled. Os metadados da claquete não são reescritos.</string>
+    <string name="capture_naming_example">Apenas um exemplo — claquete atual, instante UTC fixo 2 jan. 2026 03:04:05.006 e um UUID de exemplo. As capturas reais usam seu instante de admissão e seu próprio UUID.</string>
+    <string name="capture_naming_invalid">Modelo inválido. Use apenas os tokens listados, sem caminhos, caracteres de controle, texto em branco nem espaços/pontos no final. Rascunhos inválidos não são salvos.</string>
+    <string name="capture_naming_save">Salvar para a próxima captura</string>
+    <string name="capture_naming_preview">Exemplo de nome de arquivo (radical): %1$s</string>
+</resources>

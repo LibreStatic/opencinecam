@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_sharing_title">Condivisione ed esportazione</string>
+    <string name="media_share_action">Condividi o esporta ripresa</string>
+    <string name="media_share_help">Scegli esattamente cosa esce da questa app. Gli originali non vengono riscritti. I metadati di produzione vengono esportati separatamente; i metadati tecnici escludono il ciak di produzione. Ogni pacchetto include un manifesto delle relazioni.</string>
+    <string name="media_share_content_both">Originali e metadati selezionati</string>
+    <string name="media_share_content_originals">Solo originali (più manifesto delle relazioni)</string>
+    <string name="media_share_content_metadata">Solo metadati selezionati (più manifesto delle relazioni)</string>
+    <string name="media_share_production">Metadati del ciak di produzione</string>
+    <string name="media_share_technical">Metadati tecnici</string>
+    <string name="media_share_both">Metadati di produzione e tecnici</string>
+    <string name="media_share_lut">Includi i file LUT referenziati esatti con i metadati tecnici</string>
+    <string name="media_share_lut_help">Una LUT referenziata mancante interrompe la preparazione, a meno che tu non escluda esplicitamente i file LUT. Una LUT di registrazione incorporata non deve essere applicata di nuovo ai pixel registrati.</string>
+    <string name="media_share_temporary">I file generati scadono dopo 24 ore e possono essere recuperati dalla cache prima. Conserva una copia esterna se necessario. Aprire il selettore Android non verifica la consegna.</string>
+    <string name="media_share_relation_required">I metadati selezionati richiedono una relazione dichiarata completa. I metadati di produzione richiedono anche un ciak leggibile e coerente. Scegli un\'altra selezione o aggiorna il catalogo; nessun ripiego viene applicato automaticamente.</string>
+    <string name="media_share_sources">Sorgenti disponibili — Originali: %1$d; Metadati: %2$d</string>
+    <string name="media_share_confirm">Prepara e apri il selettore Android</string>
+    <string name="media_share_preparing">Preparazione dell\'esportazione selezionata…</string>
+    <string name="media_share_cancel">Annulla / chiudi</string>
+    <string name="media_share_error">L\'esportazione non è stata consegnata correttamente. Riprova, cambia la selezione, oppure chiudi e aggiorna il catalogo. Gli originali sono conservati.</string>
+    <string name="media_share_cleanup_error">Pulizia dell\'esportazione temporanea non riuscita; gli originali sono conservati.</string>
+    <string name="media_share_launched">Selettore Android aperto — la consegna non è verificata.</string>
+    <string name="media_share_prepared_files">File preparati: %1$d</string>
+    <string name="media_share_chooser">Invia i file di acquisizione selezionati</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="proxy_title">Proxy</string>
+    <string name="proxy_help">À générer après la capture. Le média original reste inchangé. Les paquets audio et les horodatages sont préservés. Les demandes survivent à la fermeture de cette boîte de dialogue et reprennent à la réouverture de l\'app. Réessayer conserve les réglages admis. L\'audio intégré est pris en charge ; la composition avec fichiers séparés et les politiques automatiques sont en attente.</string>
+    <string name="proxy_busy">Traitement et vérification du média…</string>
+    <string name="proxy_complete">Proxy et relation vérifiés. Original inchangé.</string>
+    <string name="proxy_sizes">Original : %1$d o · Proxy : %2$d o. Les petits clips peuvent grossir à cause de la surcharge du conteneur.</string>
+    <string name="proxy_open">Ouvrir le proxy</string>
+    <string name="proxy_create">Générer le proxy / réessayer</string>
+    <string name="proxy_cancel">Annuler la génération</string>
+    <string name="proxy_close">Fermer</string>
+    <string name="proxy_queued">En file d\'attente</string>
+    <string name="proxy_running">Génération du proxy</string>
+    <string name="proxy_cancelling">Annulation — attente du nettoyage</string>
+    <string name="proxy_succeeded">Terminé</string>
+    <string name="proxy_failed">Échec — nouvel essai possible</string>
+    <string name="proxy_cancelled">Annulé</string>
+    <string name="proxy_policy_help">La politique d\'admission s\'applique à la prochaine tentative ; le travail actif se termine. Modifiez ces réglages locaux pour libérer les demandes en attente.</string>
+    <string name="proxy_policy_charging">Exiger la charge</string>
+    <string name="proxy_policy_battery">Batterie minimale : %1$d%%</string>
+    <string name="proxy_policy_space">Espace réservé : %1$d Mio</string>
+    <string name="proxy_wait_battery_unknown">En attente : niveau de batterie indisponible</string>
+    <string name="proxy_wait_charging">En attente de la charge</string>
+    <string name="proxy_wait_battery">En attente du niveau de batterie</string>
+    <string name="proxy_wait_storage_unknown">En attente : état du stockage indisponible</string>
+    <string name="proxy_wait_storage">En attente d\'espace de travail et de réserve</string>
+    <string name="proxy_wait_capture">En attente de la fin de l\'enregistrement</string>
+    <string name="proxy_wait_transfer">En attente de la fin du transfert WebDAV</string>
+    <string name="proxy_wait_media_busy">En attente de la fin d\'une autre action sur les médias</string>
+</resources>

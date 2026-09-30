@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_sharing_title">Partage et export</string>
+    <string name="media_share_action">Partager ou exporter la prise</string>
+    <string name="media_share_help">Choisissez exactement ce qui quitte cette app. Les originaux ne sont pas réécrits. Les métadonnées de production sont exportées séparément ; les métadonnées techniques excluent le clap de production. Chaque paquet inclut un manifeste de relations.</string>
+    <string name="media_share_content_both">Originaux et métadonnées sélectionnées</string>
+    <string name="media_share_content_originals">Originaux uniquement (plus manifeste de relations)</string>
+    <string name="media_share_content_metadata">Métadonnées sélectionnées uniquement (plus manifeste de relations)</string>
+    <string name="media_share_production">Métadonnées du clap de production</string>
+    <string name="media_share_technical">Métadonnées techniques</string>
+    <string name="media_share_both">Métadonnées de production et techniques</string>
+    <string name="media_share_lut">Inclure les fichiers LUT référencés exacts avec les métadonnées techniques</string>
+    <string name="media_share_lut_help">Une LUT référencée manquante arrête la préparation, sauf si vous excluez explicitement les fichiers LUT. Une LUT d\'enregistrement incrustée ne doit pas être appliquée une seconde fois aux pixels enregistrés.</string>
+    <string name="media_share_temporary">Les fichiers générés expirent après 24 heures et peuvent être récupérés du cache plus tôt. Conservez une copie externe si nécessaire. Ouvrir le sélecteur Android ne vérifie pas la livraison.</string>
+    <string name="media_share_relation_required">Les métadonnées sélectionnées exigent une relation déclarée complète. Les métadonnées de production exigent aussi un clap lisible et cohérent. Choisissez une autre sélection ou actualisez le catalogue ; aucun repli n\'est appliqué automatiquement.</string>
+    <string name="media_share_sources">Sources disponibles — Originaux : %1$d ; Métadonnées : %2$d</string>
+    <string name="media_share_confirm">Préparer et ouvrir le sélecteur Android</string>
+    <string name="media_share_preparing">Préparation de l\'export sélectionné…</string>
+    <string name="media_share_cancel">Annuler / fermer</string>
+    <string name="media_share_error">L\'export n\'a pas été transmis correctement. Réessayez, changez la sélection, ou fermez et actualisez le catalogue. Les originaux sont conservés.</string>
+    <string name="media_share_cleanup_error">Le nettoyage de l\'export temporaire a échoué ; les originaux sont conservés.</string>
+    <string name="media_share_launched">Sélecteur Android ouvert — la livraison n\'est pas vérifiée.</string>
+    <string name="media_share_prepared_files">Fichiers préparés : %1$d</string>
+    <string name="media_share_chooser">Envoyer les fichiers de capture sélectionnés</string>
+</resources>

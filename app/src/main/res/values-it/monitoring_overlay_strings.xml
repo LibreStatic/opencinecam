@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_reduce">Riduci scope</string>
+    <string name="scope_enlarge">Ingrandisci scope</string>
+    <string name="scope_live">Campione live</string>
+    <string name="scope_suspended">Sospeso · in attesa di un campione recente</string>
+    <string name="scope_domain_isp">ISP YUV → RGB8 SDR stimato</string>
+    <string name="scope_domain_sdr">Codice RGB8 SDR BT.709</string>
+    <string name="scope_domain_log">Codice RGB8 OC-Log2</string>
+    <string name="scope_domain_waiting">Segnale non ricevuto</string>
+    <string name="scope_rate">Richiesto ≤%1$d Hz · ultimo intervallo %2$.1f Hz</string>
+    <string name="scope_pre_assist">Prima dell\'assistenza di visualizzazione · solo operatore · non incorporato. Valori di codice, non IRE/HDR. Età dalla consegna dell\'analisi.</string>
+    <string name="scope_waveform_axes" formatted="false">Waveform · codice 100% ↑ 0% ↓ · campione X →</string>
+    <string name="scope_vector_axes">Vectorscope · +Cb → · +Cr ↑ · coefficienti BT.709</string>
+    <string name="scope_black">Nero</string>
+    <string name="scope_shadow">Ombre</string>
+    <string name="scope_mid">Mezzitoni</string>
+    <string name="scope_highlight">Luci</string>
+    <string name="scope_clip">Clip</string>
+</resources>

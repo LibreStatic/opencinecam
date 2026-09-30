@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Supprimer les originaux associés…</string>
+    <string name="media_delete_title">Supprimer définitivement cette prise</string>
+    <string name="media_delete_help">Cela supprime les médias originaux listés et les métadonnées associées, pas seulement un aperçu ou un proxy. Cette action est irréversible. Vérifiez chaque fichier avant de confirmer.</string>
+    <string name="media_delete_acknowledge">Je comprends que ces fichiers originaux et ces métadonnées seront supprimés définitivement.</string>
+    <string name="media_delete_sources">Fichiers sélectionnés — Originaux : %1$d ; Métadonnées : %2$d</string>
+    <string name="media_delete_original">Original : %1$s</string>
+    <string name="media_delete_metadata">Métadonnées : %1$s</string>
+    <string name="media_delete_confirm">Supprimer définitivement les fichiers listés</string>
+    <string name="media_delete_cancel">Annuler / fermer</string>
+    <string name="media_delete_busy">Suppression en cours. L\'annulation n\'est plus possible ; attendez le résultat par fichier. Quitter cet écran n\'arrête pas une opération déjà confirmée.</string>
+    <string name="media_delete_complete">Tous les fichiers sélectionnés ont été supprimés.</string>
+    <string name="media_delete_partial">Suppression partielle. Vérifiez le résultat de chaque fichier ; ne supposez pas que la prise a été entièrement supprimée.</string>
+    <string name="media_delete_rejected">La suppression a été rejetée. Examinez le catalogue actuel avant de faire une nouvelle sélection.</string>
+    <string name="media_delete_unknown">Le résultat de la suppression est inconnu. Actualisez le catalogue et inspectez les fichiers restants avant toute autre action.</string>
+    <string name="media_delete_absent">Absence vérifiée</string>
+    <string name="media_delete_remaining">Non supprimé</string>
+    <string name="media_delete_member_unknown">Résultat inconnu</string>
+    <string name="media_delete_refresh">Une actualisation du catalogue a été demandée. Une erreur de chargement ou de lecture ne prouve pas qu\'un fichier est absent.</string>
+    <string name="media_delete_not_attempted">Non tenté</string>
+</resources>

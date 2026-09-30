@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Wiedergabe-Einstellungen</string>
+    <string name="playback_settings_help">Diese Einstellungen gelten für den lokalen Viewer, nicht für Aufnahme-Audio, Aufnahmeverstärkung oder Mediendateien. Die Wiedergabe erfordert eine ausdrückliche Aktion „Wiedergabe“. Die Wiedergabeposition wird nicht in Einstellungen oder Presets gespeichert.</string>
+    <string name="playback_settings_muted">Wiedergabe-Audio stummschalten</string>
+    <string name="playback_settings_loop">Nach Erreichen des Endes wiederholen</string>
+    <string name="playback_settings_frame_position">Frame-Position des Viewers anzeigen</string>
+</resources>

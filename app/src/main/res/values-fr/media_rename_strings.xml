@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_rename_action">Renommer les fichiers associés…</string>
+    <string name="media_rename_title">Renommer cette prise locale</string>
+    <string name="media_rename_help">Saisissez un nom de base et vérifiez chaque nom de fichier résultant. Seuls les noms d\'affichage locaux et leurs métadonnées associées sont mis à jour ; les octets des médias originaux, les URI et l\'espace de noms de capture sont préservés. Modifier ce champ n\'écrit aucun fichier.</string>
+    <string name="media_rename_remote_warning">Renommage LOCAL uniquement : les copies distantes ne sont pas renommées. Les transferts en attente de la version précédente demandent votre attention et ne se poursuivront pas automatiquement. L\'historique distant vérifié est conservé.</string>
+    <string name="media_rename_stem">Nouveau nom de base</string>
+    <string name="media_rename_invalid">Saisissez un nom de base valide pour prévisualiser chaque nom de fichier. Le renommage est indisponible pour un ensemble de fichiers non pris en charge ou ambigu.</string>
+    <string name="media_rename_old">Sélection actuelle : %1$s</string>
+    <string name="media_rename_new">Nom proposé : %1$s</string>
+    <string name="media_rename_current">Nom observé après l\'opération : %1$s</string>
+    <string name="media_rename_unknown_name">Nom actuel inconnu ; actualisez et inspectez le fichier.</string>
+    <string name="media_rename_confirm">Confirmer le renommage local</string>
+    <string name="media_rename_cancel">Annuler / fermer</string>
+    <string name="media_rename_busy">Renommage en cours. L\'annulation n\'est plus possible ; attendez le résultat vérifié. Quitter cet écran n\'arrête pas une opération déjà confirmée.</string>
+    <string name="media_rename_complete">L\'ensemble des fichiers locaux a été renommé. Les copies distantes n\'ont pas été renommées.</string>
+    <string name="media_rename_compensated">Le renommage a échoué ; les noms de fichiers précédents et les octets de métadonnées associés ont été restaurés. Vérifiez le résultat avant une nouvelle tentative.</string>
+    <string name="media_rename_partial">Le changement local n\'a pas été terminé ni entièrement restauré. Vérifiez chaque nom observé avant toute autre action.</string>
+    <string name="media_rename_rejected">Le renommage a été rejeté avant une mise à jour complète. Actualisez le catalogue et vérifiez la sélection.</string>
+    <string name="media_rename_unknown">Le résultat du renommage est inconnu. Ne supposez pas que les noms ou les métadonnées ont été restaurés. Actualisez le catalogue et inspectez chaque fichier.</string>
+    <string name="media_rename_refresh">Une actualisation du catalogue a été demandée. Aucun résultat n\'est déduit d\'une erreur de chargement ou de lecture.</string>
+    <string name="media_rename_status_renamed">Renommé</string>
+    <string name="media_rename_status_unchanged">Inchangé</string>
+    <string name="media_rename_status_restored">Restauré</string>
+    <string name="media_rename_status_partial">Changement partiel</string>
+    <string name="media_rename_status_not_attempted">Non tenté</string>
+    <string name="media_rename_status_unknown">Résultat inconnu</string>
+</resources>
+

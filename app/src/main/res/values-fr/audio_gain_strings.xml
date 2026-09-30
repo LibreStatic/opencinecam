@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_gain_title">Gain d\'enregistrement</string>
+    <string name="audio_gain_help">Traitement numérique des échantillons enregistrés, et non gain matériel du microphone ni volume du casque. Un gain positif peut écrêter ; il ne répare pas une entrée déjà écrêtée. Les indicateurs de niveau seuls ne confirment pas la lecture.</string>
+    <string name="audio_gain_manual">Activer le gain numérique manuel</string>
+    <string name="audio_gain_requested">Gain manuel demandé : %1$d dB (−24 à +24)</string>
+    <string name="audio_gain_agc_requested">Demander le contrôle automatique du gain (AGC)</string>
+    <string name="audio_gain_agc_suspended">Le mode manuel suspend l\'AGC, y compris à 0 dB. La préférence AGC est conservée pour quand le mode manuel sera désactivé.</string>
+    <string name="audio_gain_agc_backend">L\'AGC est une demande, pas une preuve d\'application. Les effets matériels et l\'AGC logiciel dépendent du backend d\'enregistrement actif et du format PCM ; MediaRecorder n\'expose pas ce contrôle.</string>
+    <string name="audio_gain_pending">Les changements de gain d\'enregistrement sont en attente pour la prochaine prise. Cette prise conserve son gain et sa configuration AGC admis.</string>
+    <string name="audio_gain_aac_backend">L\'AAC-LC est intégré au MP4. MediaRecorder direct n\'expose ni gain d\'échantillon manuel ni AGC contrôlé par l\'application ; ils nécessitent un chemin d\'encodage PCM pris en charge.</string>
+    <string name="audio_gain_no_receipt">Aucun accusé d\'application du gain PCM actuel. La valeur configurée n\'est qu\'une demande.</string>
+    <string name="audio_gain_applied">Gain PCM numérique appliqué : %1$d dB</string>
+    <string name="audio_gain_manual_not_applied">La source PCM active indique que le gain manuel est désactivé ; cela ne confirme pas l\'AGC.</string>
+    <string name="audio_retirement_preparing">En attente de la fermeture du microphone par son propriétaire précédent…</string>
+    <string name="audio_retirement_failed">Le propriétaire audio précédent n\'a pas confirmé la fermeture. L\'enregistrement n\'a pas démarré.</string>
+    <string name="audio_retirement_cancel_capture">Annuler la préparation</string>
+</resources>

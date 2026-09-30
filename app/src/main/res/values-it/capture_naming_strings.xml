@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Nomi dei file di acquisizione</string>
+    <string name="capture_naming_enabled">Usa un modello di nome file personalizzato</string>
+    <string name="capture_naming_template">Modello di nome file</string>
+    <string name="capture_naming_help">Salva queste preferenze per la prossima acquisizione. Non rinominano i file esistenti né modificano un\'acquisizione già ammessa. Con la denominazione disattivata viene mantenuto OCC_UUID.</string>
+    <string name="capture_naming_tokens">Token: {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Limite del modello: 128 caratteri. Data e ora usano UTC; i numeri di ripresa hanno almeno quattro cifre.</string>
+    <string name="capture_naming_identity">Ogni nome mantiene l\'UUID completo dell\'acquisizione e il suffisso di estensione/ruolo. Spazi e caratteri editoriali non portabili diventano trattini bassi, solo nei nomi. Il prefisso leggibile è limitato a 160 byte UTF-8; un prefisso vuoto diventa untitled. I metadati del ciak non vengono riscritti.</string>
+    <string name="capture_naming_example">Solo un esempio — ciak corrente, istante UTC fisso 2 gen 2026 03:04:05.006 e un UUID di esempio. Le acquisizioni reali usano il proprio istante di ammissione e il proprio UUID.</string>
+    <string name="capture_naming_invalid">Modello non valido. Usa solo i token elencati, senza percorsi, caratteri di controllo, testo vuoto né spazi/punti finali. Le bozze non valide non vengono salvate.</string>
+    <string name="capture_naming_save">Salva per la prossima acquisizione</string>
+    <string name="capture_naming_preview">Esempio di nome file (radice): %1$s</string>
+</resources>

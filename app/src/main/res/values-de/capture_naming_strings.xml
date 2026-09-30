@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_naming_title">Dateinamen der Aufnahmen</string>
+    <string name="capture_naming_enabled">Eigene Vorlage für Aufnahme-Dateinamen verwenden</string>
+    <string name="capture_naming_template">Dateinamenvorlage</string>
+    <string name="capture_naming_help">Speichere diese Einstellungen für die nächste Aufnahme. Bestehende Dateien werden nicht umbenannt und eine bereits übernommene Aufnahme bleibt unverändert. Bei deaktivierter Benennung bleibt OCC_UUID erhalten.</string>
+    <string name="capture_naming_tokens">Platzhalter: {project}, {camera}, {scene}, {take}, {reel}, {date}, {time}. Vorlagenlimit: 128 Zeichen. Datum und Uhrzeit verwenden UTC; Take-Nummern haben mindestens vier Stellen.</string>
+    <string name="capture_naming_identity">Jeder Name behält die vollständige Aufnahme-UUID und das Dateiendungs-/Rollensuffix. Leerzeichen und nicht portable redaktionelle Zeichen werden nur in Namen zu Unterstrichen. Das lesbare Präfix ist auf 160 UTF-8-Bytes begrenzt; ein leeres Präfix wird zu untitled. Slate-Metadaten werden nicht umgeschrieben.</string>
+    <string name="capture_naming_example">Nur ein Beispiel – aktueller Slate, fester UTC-Zeitpunkt 2. Jan. 2026 03:04:05.006 und eine Beispiel-UUID. Echte Aufnahmen verwenden ihren Übernahmezeitpunkt und ihre eigene UUID.</string>
+    <string name="capture_naming_invalid">Ungültige Vorlage. Verwende nur die aufgelisteten Platzhalter und keine Pfade, Steuerzeichen, leeren Texte oder Leerzeichen/Punkte am Ende. Ungültige Entwürfe werden nicht gespeichert.</string>
+    <string name="capture_naming_save">Für die nächste Aufnahme speichern</string>
+    <string name="capture_naming_preview">Beispiel für den Dateinamenstamm: %1$s</string>
+</resources>

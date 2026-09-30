@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_gain_title">Aufnahmeverstärkung</string>
+    <string name="audio_gain_help">Digitale Verarbeitung der aufgenommenen Samples, keine Hardware-Verstärkung des Mikrofons und keine Kopfhörerlautstärke. Positive Verstärkung kann übersteuern; ein bereits übersteuertes Eingangssignal lässt sich nicht reparieren. Pegelanzeigen allein bestätigen die Wiedergabe nicht.</string>
+    <string name="audio_gain_manual">Manuelle digitale Verstärkung aktivieren</string>
+    <string name="audio_gain_requested">Angeforderte manuelle Verstärkung: %1$d dB (−24 bis +24)</string>
+    <string name="audio_gain_agc_requested">Automatische Verstärkungsregelung (AGC) anfordern</string>
+    <string name="audio_gain_agc_suspended">Der manuelle Modus setzt AGC aus, auch bei 0 dB. Die AGC-Einstellung bleibt erhalten, bis der manuelle Modus deaktiviert wird.</string>
+    <string name="audio_gain_agc_backend">AGC ist eine Anforderung, kein Nachweis der Anwendung. Hardware-Effekte und Software-AGC hängen vom aktiven Aufnahme-Backend und PCM-Format ab; MediaRecorder stellt diese Steuerung nicht bereit.</string>
+    <string name="audio_gain_pending">Änderungen der Aufnahmeverstärkung sind für den nächsten Take vorgemerkt. Dieser Take behält seine übernommene Verstärkungs- und AGC-Konfiguration.</string>
+    <string name="audio_gain_aac_backend">AAC-LC ist in MP4 eingebettet. Direktes MediaRecorder stellt weder manuelle Sample-Verstärkung noch von der App gesteuertes AGC bereit; dafür ist ein unterstützter PCM-Kodierungspfad nötig.</string>
+    <string name="audio_gain_no_receipt">Kein aktueller Beleg über die PCM-Verstärkung. Der konfigurierte Wert ist nur eine Anforderung.</string>
+    <string name="audio_gain_applied">Angewendete digitale PCM-Verstärkung: %1$d dB</string>
+    <string name="audio_gain_manual_not_applied">Die aktive PCM-Quelle meldet manuelle Verstärkung als deaktiviert; das bestätigt AGC nicht.</string>
+    <string name="audio_retirement_preparing">Warten, bis der vorherige Mikrofonbesitzer das Schließen beendet hat…</string>
+    <string name="audio_retirement_failed">Der vorherige Audiobesitzer hat das Schließen nicht bestätigt. Die Aufnahme wurde nicht gestartet.</string>
+    <string name="audio_retirement_cancel_capture">Vorbereitung abbrechen</string>
+</resources>

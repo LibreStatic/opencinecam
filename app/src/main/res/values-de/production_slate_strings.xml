@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Produktions-Slate</string>
+    <string name="production_slate_help">Beschreibende Metadaten für die nächste Aufnahme. Der übernommene Slate bleibt während Aufnahme und Veröffentlichung eingefroren; Änderungen während eines Takes bleiben vorgemerkt. Die automatische Nummerierung rückt erst nach einer gespeicherten Aufnahme vor und nur, wenn der Slate unverändert ist. Die UUID, nicht die Take-Nummer, identifiziert eine Aufnahme. Diese Felder ändern keine Dateinamen, erkennen kein Objektiv und erfassen keine GPS-Koordinaten.</string>
+    <string name="production_slate_pending">Slate-Änderungen sind für die nächste Aufnahme vorgemerkt; die aktuelle Aufnahme behält ihre übernommenen Metadaten.</string>
+    <string name="production_slate_project">Projekt</string>
+    <string name="production_slate_camera">Kamerabezeichnung</string>
+    <string name="production_slate_scene">Szene</string>
+    <string name="production_slate_reel">Reel</string>
+    <string name="production_slate_lens">Objektivbezeichnung (manuell)</string>
+    <string name="production_slate_take">Take-Nummer (1–999999)</string>
+    <string name="production_slate_invalid_text">Verwende höchstens 128 UTF-16-Einheiten, ohne Steuerzeichen, Zeilenumbrüche oder ungültiges Unicode. Diese Änderung wurde nicht gespeichert.</string>
+    <string name="production_slate_invalid_take">Gib eine ganze Zahl von 1 bis 999999 ohne führende Nullen ein. Diese Änderung wurde nicht gespeichert.</string>
+    <string name="production_slate_location">Szenenort</string>
+    <string name="production_slate_time">Tageszeit der Szene</string>
+    <string name="production_slate_unspecified">Nicht angegeben</string>
+    <string name="production_slate_interior">Innen</string>
+    <string name="production_slate_exterior">Außen</string>
+    <string name="production_slate_day">Tag</string>
+    <string name="production_slate_night">Nacht</string>
+    <string name="production_slate_good">Als guten Take markieren</string>
+    <string name="production_slate_increment">Take-Nummer nach einer gespeicherten Aufnahme erhöhen (nie über 999999)</string>
+    <string name="production_slate_increment_failed">Gespeicherte Medien bleiben erhalten; prüfe die nächste Take-Nummer des Slates.</string>
+</resources>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Clap de production</string>
+    <string name="production_slate_help">Métadonnées descriptives pour la prochaine capture. Le clap admis reste figé pendant l\'enregistrement et la publication ; les modifications faites pendant une prise restent en attente. La numérotation automatique n\'avance qu\'après une capture enregistrée et seulement si le clap n\'a pas changé. L\'UUID, et non le numéro de prise, identifie une capture. Ces champs ne modifient pas les noms de fichiers, ne détectent pas l\'objectif et ne collectent pas de coordonnées GPS.</string>
+    <string name="production_slate_pending">Modifications du clap en attente pour la prochaine capture ; la capture actuelle conserve ses métadonnées admises.</string>
+    <string name="production_slate_project">Projet</string>
+    <string name="production_slate_camera">Nom de la caméra</string>
+    <string name="production_slate_scene">Scène</string>
+    <string name="production_slate_reel">Bobine</string>
+    <string name="production_slate_lens">Nom de l\'objectif (manuel)</string>
+    <string name="production_slate_take">Numéro de prise (1–999999)</string>
+    <string name="production_slate_invalid_text">Utilisez au plus 128 unités UTF-16, sans caractères de contrôle, sauts de ligne ni Unicode invalide. Cette modification n\'a pas été enregistrée.</string>
+    <string name="production_slate_invalid_take">Saisissez un nombre entier de 1 à 999999 sans zéros initiaux. Cette modification n\'a pas été enregistrée.</string>
+    <string name="production_slate_location">Lieu de la scène</string>
+    <string name="production_slate_time">Moment de la journée de la scène</string>
+    <string name="production_slate_unspecified">Non précisé</string>
+    <string name="production_slate_interior">Intérieur</string>
+    <string name="production_slate_exterior">Extérieur</string>
+    <string name="production_slate_day">Jour</string>
+    <string name="production_slate_night">Nuit</string>
+    <string name="production_slate_good">Marquer comme bonne prise</string>
+    <string name="production_slate_increment">Avancer le numéro de prise après une capture enregistrée (jamais au-delà de 999999)</string>
+    <string name="production_slate_increment_failed">Média enregistré conservé ; vérifiez le prochain numéro de prise du clap.</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_meter_title">Indicatori audio</string>
+    <string name="audio_meter_help">Solo visualizzazione: le modifiche in tempo reale non alterano il file registrato né riavviano il microfono. Picco/RMS mostra il picco di campione e l\'RMS istantaneo. Il VU usa una balistica di 300 ms; il quasi-PPM usa un attacco rapido e un rilascio lento. VU e PPM sono calibrati sul picco di un\'onda sinusoidale. Il riferimento imposta 0 VU. L\'hold mantiene il valore mostrato in modo indipendente per canale. Non sono misure LUFS, true-peak, di calibrazione analogica né di conformità hardware. Viene mostrato solo il PCM corrente, non più vecchio di 500 ms; il clip è indipendente dalla modalità.</string>
+    <string name="audio_meter_visible">Mostra HUD indicatori audio</string>
+    <string name="audio_meter_peak_rms">Picco / RMS</string>
+    <string name="audio_meter_vu">VU</string>
+    <string name="audio_meter_ppm">Quasi-PPM</string>
+    <string name="audio_meter_reference">Riferimento 0 VU: %1$d dBFS</string>
+    <string name="audio_meter_hold">Hold del picco mostrato: %1$d ms (0 disattiva)</string>
+    <string name="audio_meter_numbers">Mostra valori numerici</string>
+    <string name="audio_meter_reset_clip">Azzera indicatore di clip audio memorizzato</string>
+    <string name="audio_meter_no_pcm">Nessun PCM corrente</string>
+    <string name="audio_meter_peak_rms_values">Picco %1$s / RMS %2$s dBFS</string>
+    <string name="audio_meter_vu_value">%1$s VU</string>
+    <string name="audio_meter_ppm_value">%1$s dBFS</string>
+    <string name="audio_meter_hold_value">Hold %1$s</string>
+</resources>

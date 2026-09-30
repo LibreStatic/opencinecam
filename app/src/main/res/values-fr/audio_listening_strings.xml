@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_listening_title">Sortie d\'écoute</string>
+    <string name="audio_listening_help">Lecture uniquement : cela ne modifie ni le gain du microphone ni les échantillons enregistrés. Activer, importer un preset ou rouvrir l\'app ne connecte pas l\'audio ; appuyez explicitement sur Connecter. Les indicateurs de niveau seuls ne confirment pas la lecture.</string>
+    <string name="audio_listening_enable">Activer la préférence d\'écoute</string>
+    <string name="audio_listening_volume">Volume d\'écoute demandé : %1$d%%</string>
+    <string name="audio_listening_wired">Casque filaire ou USB</string>
+    <string name="audio_listening_bluetooth">Sortie Bluetooth</string>
+    <string name="audio_listening_speaker">Haut-parleur intégré (sélection explicite)</string>
+    <string name="audio_listening_speaker_warning">La lecture par haut-parleur peut retourner dans le microphone et être enregistrée acoustiquement. Baissez le volume d\'écoute avant de connecter. Aucun repli automatique sur le haut-parleur.</string>
+    <string name="audio_listening_latency">La latence d\'écoute n\'est pas mesurée ; le Bluetooth peut introduire un délai important. Le choix de sortie n\'est qu\'une demande tant que l\'exécution ne confirme pas la route.</string>
+    <string name="audio_listening_auto">Tout appareil disponible du type de sortie sélectionné</string>
+    <string name="audio_listening_requested_device">Sortie demandée : %1$s</string>
+    <string name="audio_listening_effective_device">Sortie signalée : %1$s · ID %2$d</string>
+    <string name="audio_listening_disabled">Écoute désactivée</string>
+    <string name="audio_listening_needs_connect">Connexion explicite requise</string>
+    <string name="audio_listening_waiting_pcm">En attente du PCM source</string>
+    <string name="audio_listening_no_output">Aucune sortie correspondante disponible</string>
+    <string name="audio_listening_connecting">Connexion de la sortie d\'écoute…</string>
+    <string name="audio_listening_active">Sortie d\'écoute active</string>
+    <string name="audio_listening_disconnected">Sortie déconnectée ; reconnectez explicitement</string>
+    <string name="audio_listening_failed">Échec de la sortie d\'écoute</string>
+    <string name="audio_listening_retiring">En attente de la fermeture de la sortie d\'écoute…</string>
+    <string name="audio_listening_counters">Trames acceptées : %1$d · paquets perdus : %2$d</string>
+    <string name="audio_listening_connect">Connecter / reconnecter l\'écoute</string>
+</resources>

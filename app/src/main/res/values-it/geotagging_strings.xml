@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="geotagging_title">Geolocalizzazione delle acquisizioni</string>
+    <string name="geotagging_enabled">Registra la posizione nelle nuove acquisizioni</string>
+    <string name="geotagging_help">Disattivata per impostazione predefinita. Quando è attiva, le coordinate disponibili e l\'accuratezza segnalata viaggiano nei metadati di produzione, anche quando tali metadati vengono condivisi. Il solo permesso di posizione non attiva la registrazione. Disattivare questa opzione non modifica le acquisizioni precedenti. I preset non cambiano mai questa scelta. La posizione viene richiesta solo mentre l\'app è in primo piano.</string>
+    <string name="geotagging_permission_none">Accesso Android alla posizione: non concesso.</string>
+    <string name="geotagging_permission_approximate">Accesso Android alla posizione: approssimativa. La posizione approssimativa è supportata.</string>
+    <string name="geotagging_permission_precise">Accesso Android alla posizione: precisa. Questo permesso non garantisce l\'accuratezza fisica.</string>
+    <string name="geotagging_status_disabled">La registrazione della posizione è disattivata. Le nuove acquisizioni omettono la geolocalizzazione.</string>
+    <string name="geotagging_status_no_permission">La registrazione della posizione è attiva, ma manca l\'accesso Android. Le nuove acquisizioni registrano lo stato non disponibile, senza coordinate.</string>
+    <string name="geotagging_status_available">È disponibile una posizione recente. Ogni acquisizione registra disponibilità e accuratezza segnalata all\'ammissione.</string>
+    <string name="geotagging_status_inactive">L\'accesso alla posizione non è attivo. Finché è inattivo, le nuove acquisizioni omettono le coordinate.</string>
+    <string name="geotagging_status_unavailable">In attesa di una posizione. Finché non ce n\'è una disponibile, le nuove acquisizioni omettono le coordinate.</string>
+    <string name="geotagging_status_stale">L\'ultima posizione è troppo vecchia. Le nuove acquisizioni omettono le coordinate finché non è disponibile una posizione recente.</string>
+    <string name="geotagging_denied">L\'accesso alla posizione non è stato concesso. Puoi richiederlo di nuovo; se Android non mostra più la richiesta, modifica l\'accesso alla posizione nelle impostazioni di sistema dell\'app. La tua scelta di registrazione non è cambiata.</string>
+    <string name="geotagging_request">Richiedi accesso alla posizione / riprova</string>
+    <string name="geotagging_requesting">Richiesta di accesso alla posizione…</string>
+    <string name="geotagging_open_settings">Apri impostazioni permessi Android dell\'app</string>
+</resources>

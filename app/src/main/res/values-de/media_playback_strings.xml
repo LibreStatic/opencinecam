@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_playback_close">Ansicht schließen</string>
+    <string name="media_playback_member">Element %1$d von %2$d: %3$s</string>
+    <string name="media_playback_previous_member">Vorheriges Element</string>
+    <string name="media_playback_next_member">Nächstes Element</string>
+    <string name="media_playback_previous_take">Vorheriger Take</string>
+    <string name="media_playback_next_take">Nächster Take</string>
+    <string name="media_playback_loading">Medien werden gelesen…</string>
+    <string name="media_playback_page_error">Die nächste Seite konnte nicht gelesen werden. Versuche „Nächster Take“ erneut.</string>
+    <string name="media_playback_paused">Pausiert</string>
+    <string name="media_playback_playing">Wiedergabe · Player-Zeit ist ungefähr</string>
+    <string name="media_playback_ended">Ende der Medien</string>
+    <string name="media_playback_error">Lesen der Medien fehlgeschlagen; kein ungefährer Frame wurde ersetzt.</string>
+    <string name="media_playback_closed">Leser geschlossen</string>
+    <string name="media_playback_retry">Erneut lesen</string>
+    <string name="media_playback_exact">Verifizierter Frame %1$d / %2$d · PTS %3$d µs</string>
+    <string name="media_playback_estimated">Player-Position: %1$d ms (kein verifizierter Frame)</string>
+    <string name="media_playback_pause">Pause</string>
+    <string name="media_playback_play">Wiedergabe</string>
+    <string name="media_playback_start">Zum Anfang</string>
+    <string name="media_playback_end">Zum Ende</string>
+    <string name="media_playback_previous_frame">Vorheriger Frame</string>
+    <string name="media_playback_next_frame">Nächster Frame</string>
+    <string name="media_playback_seek_label">Suchposition (pausiert die Wiedergabe)</string>
+    <string name="media_playback_color_interpreted">Farbe aus den Spur-Tags interpretiert, nicht verifiziert. Das exakte PTS bleibt unverändert. Die kontinuierliche Wiedergabe verwendet die eigene Farbinterpretation des Players. Diese Auswahl wird zurückgesetzt, wenn du dieses Element verlässt.</string>
+    <string name="media_playback_color_tags">Spurinterpretation: Standard %1$d, Bereich %2$d. Vom Decoder gemeldet: Standard %3$d, Bereich %4$d.</string>
+    <string name="media_playback_color_strict">Zur strikten Farbauswertung zurückkehren</string>
+    <string name="media_playback_color_choice">Die Decoder-Farbe wird nicht unterstützt. Du kannst diese Ansicht ausdrücklich anhand der SDR-Tags der Spur interpretieren, ohne die Datei zu ändern; die Farbgenauigkeit ist nicht verifiziert.</string>
+    <string name="media_playback_interpret_track">Diese Ansicht mit der SDR-Spurfarbe interpretieren</string>
+    <string name="media_playback_hdr_preview">10-Bit-dekodierte %1$s-Samples · präzise pausierte Frames verwenden eine SDR-Tone-Mapping-Vorschau (203-Nit-Referenz; HLG-1000-Nit-Display). Die kontinuierliche Wiedergabe verwendet die Farbpipeline des Systems. Das verifiziert nicht die native HDR-Anzeigetreue; Originale bleiben unverändert.</string>
+    <string name="media_playback_dng_preview">DNG – von der Plattform dekodierte Vorschau (%1$d × %2$d px). Die RAW-Originaldatei bleibt unverändert.</string>
+</resources>

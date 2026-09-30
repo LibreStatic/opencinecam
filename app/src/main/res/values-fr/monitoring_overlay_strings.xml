@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_reduce">Réduire les scopes</string>
+    <string name="scope_enlarge">Agrandir les scopes</string>
+    <string name="scope_live">Échantillon en direct</string>
+    <string name="scope_suspended">Suspendu · en attente d\'un échantillon récent</string>
+    <string name="scope_domain_isp">ISP YUV → RGB8 SDR estimé</string>
+    <string name="scope_domain_sdr">Code RGB8 SDR BT.709</string>
+    <string name="scope_domain_log">Code RGB8 OC-Log2</string>
+    <string name="scope_domain_waiting">Signal non reçu</string>
+    <string name="scope_rate">Demandé ≤%1$d Hz · dernier intervalle %2$.1f Hz</string>
+    <string name="scope_pre_assist">Avant l\'assistance de vue · opérateur uniquement · non incrusté. Valeurs de code, pas IRE/HDR. Âge depuis la livraison de l\'analyse.</string>
+    <string name="scope_waveform_axes" formatted="false">Waveform · code 100% ↑ 0% ↓ · échantillon X →</string>
+    <string name="scope_vector_axes">Vectorscope · +Cb → · +Cr ↑ · coefficients BT.709</string>
+    <string name="scope_black">Noir</string>
+    <string name="scope_shadow">Ombres</string>
+    <string name="scope_mid">Tons moyens</string>
+    <string name="scope_highlight">Hautes lumières</string>
+    <string name="scope_clip">Écrêtage</string>
+</resources>

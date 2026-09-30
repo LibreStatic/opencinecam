@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_meter_title">Audiopegelanzeigen</string>
+    <string name="audio_meter_help">Nur Anzeige: Live-Änderungen verändern weder die aufgenommene Datei noch starten sie das Mikrofon neu. Peak/RMS zeigt den Sample-Spitzenwert und den momentanen RMS. VU verwendet eine Ballistik von 300 ms; Quasi-PPM hat einen schnellen Anstieg und langsamen Rücklauf. VU und PPM sind auf Sinus-Spitzen kalibriert. Die Referenz legt 0 VU fest. Hold behält den angezeigten Wert pro Kanal unabhängig bei. Dies sind keine Messungen von LUFS, True Peak, analoger Kalibrierung oder Hardware-Konformität. Es werden nur aktuelle PCM-Daten angezeigt, die nicht älter als 500 ms sind; Clip ist vom Modus unabhängig.</string>
+    <string name="audio_meter_visible">Audiopegel-HUD anzeigen</string>
+    <string name="audio_meter_peak_rms">Peak / RMS</string>
+    <string name="audio_meter_vu">VU</string>
+    <string name="audio_meter_ppm">Quasi-PPM</string>
+    <string name="audio_meter_reference">0-VU-Referenz: %1$d dBFS</string>
+    <string name="audio_meter_hold">Angezeigte Spitzenwerthaltung: %1$d ms (0 deaktiviert)</string>
+    <string name="audio_meter_numbers">Zahlenwerte anzeigen</string>
+    <string name="audio_meter_reset_clip">Gespeicherte Audio-Clip-Anzeige zurücksetzen</string>
+    <string name="audio_meter_no_pcm">Kein aktuelles PCM</string>
+    <string name="audio_meter_peak_rms_values">Peak %1$s / RMS %2$s dBFS</string>
+    <string name="audio_meter_vu_value">%1$s VU</string>
+    <string name="audio_meter_ppm_value">%1$s dBFS</string>
+    <string name="audio_meter_hold_value">Hold %1$s</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_gain_title">Ganho de gravação</string>
+    <string name="audio_gain_help">Processamento digital das amostras gravadas, não ganho de hardware do microfone nem volume do fone. Ganho positivo pode causar clipping; não corrige uma entrada já saturada. Os medidores de nível sozinhos não confirmam a reprodução.</string>
+    <string name="audio_gain_manual">Ativar ganho digital manual</string>
+    <string name="audio_gain_requested">Ganho manual solicitado: %1$d dB (−24 a +24)</string>
+    <string name="audio_gain_agc_requested">Solicitar controle automático de ganho (AGC)</string>
+    <string name="audio_gain_agc_suspended">O modo manual suspende o AGC, inclusive em 0 dB. A preferência de AGC é mantida para quando o modo manual for desativado.</string>
+    <string name="audio_gain_agc_backend">O AGC é uma solicitação, não uma prova de aplicação. Os efeitos de hardware e o AGC por software dependem do backend de gravação ativo e do formato PCM; o MediaRecorder não expõe esse controle.</string>
+    <string name="audio_gain_pending">As alterações de ganho de gravação estão pendentes para a próxima tomada. Esta tomada mantém o ganho e a configuração de AGC admitidos.</string>
+    <string name="audio_gain_aac_backend">O AAC-LC é incorporado ao MP4. O MediaRecorder direto não expõe ganho manual de amostras nem AGC controlado pelo app; isso exige um caminho de codificação PCM compatível.</string>
+    <string name="audio_gain_no_receipt">Sem recibo de aplicação de ganho PCM atual. O valor configurado é apenas uma solicitação.</string>
+    <string name="audio_gain_applied">Ganho PCM digital aplicado: %1$d dB</string>
+    <string name="audio_gain_manual_not_applied">A fonte PCM ativa informa que o ganho manual está desativado; isso não confirma o AGC.</string>
+    <string name="audio_retirement_preparing">Aguardando o proprietário anterior do microfone terminar de fechá-lo…</string>
+    <string name="audio_retirement_failed">O proprietário de áudio anterior não confirmou o fechamento. A gravação não foi iniciada.</string>
+    <string name="audio_retirement_cancel_capture">Cancelar preparação</string>
+</resources>

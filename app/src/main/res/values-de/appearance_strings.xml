@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <string name="appearance_title">Darstellung</string>
+    <string name="appearance_summary">Cine behält das dunkle Graphit-und-Bernstein-Design. Material You übernimmt die Farben deines Hintergrundbilds und folgt dem hellen oder dunklen Systemmodus, im dunklen Modus mit rein schwarzem Hintergrund.</string>
+    <string name="appearance_cine">Cine</string>
+    <string name="appearance_you">Material You</string>
+</resources>

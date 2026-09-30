@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_settings_title">Proxy-Einstellungen</string>
+    <string name="proxy_settings_help">Erzeuge einen Proxy nach der Aufnahme manuell in der Mediengalerie. Das Original bleibt unverändert. Diese Einstellungen starten keinen Auftrag und aktivieren keine automatische Verarbeitung. Kleinere Quellen werden nicht hochskaliert.</string>
+    <string name="proxy_settings_edge">Maximale lange Kante</string>
+    <string name="proxy_settings_edge_value">Bis zu %1$d px · keine Hochskalierung</string>
+    <string name="proxy_settings_bitrate">Angeforderte Video-Bitrate · die tatsächliche Bitrate kann abweichen</string>
+    <string name="proxy_settings_bitrate_value">%1$d Mbit/s angefordert</string>
+    <string name="proxy_settings_audio">Das Audio wird vom Original übernommen. Die Proxy-Einstellungen ändern weder das Aufnahme-Audio noch die Originaldatei.</string>
+</resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_listening_title">Mithörausgang</string>
+    <string name="audio_listening_help">Nur Wiedergabe: Mikrofonverstärkung und aufgenommene Samples bleiben unverändert. Aktivieren, Importieren eines Presets oder erneutes Öffnen der App verbindet kein Audio; tippe ausdrücklich auf Verbinden. Pegelanzeigen allein bestätigen die Wiedergabe nicht.</string>
+    <string name="audio_listening_enable">Mithör-Einstellung aktivieren</string>
+    <string name="audio_listening_volume">Angeforderte Mithörlautstärke: %1$d%%</string>
+    <string name="audio_listening_wired">Kabelgebundene Kopfhörer oder USB</string>
+    <string name="audio_listening_bluetooth">Bluetooth-Ausgang</string>
+    <string name="audio_listening_speaker">Eingebauter Lautsprecher (ausdrückliche Auswahl)</string>
+    <string name="audio_listening_speaker_warning">Die Lautsprecherwiedergabe kann in das Mikrofon zurückkoppeln und akustisch aufgenommen werden. Verringere die Mithörlautstärke vor dem Verbinden. Es gibt kein automatisches Lautsprecher-Fallback.</string>
+    <string name="audio_listening_latency">Die Mithörlatenz wird nicht gemessen; Bluetooth kann erhebliche Verzögerung verursachen. Die Ausgangsauswahl ist eine Anforderung, bis die Laufzeit die Route bestätigt.</string>
+    <string name="audio_listening_auto">Beliebiges verfügbares Gerät des gewählten Ausgangstyps</string>
+    <string name="audio_listening_requested_device">Angeforderter Ausgang: %1$s</string>
+    <string name="audio_listening_effective_device">Gemeldeter Ausgang: %1$s · ID %2$d</string>
+    <string name="audio_listening_disabled">Mithören deaktiviert</string>
+    <string name="audio_listening_needs_connect">Ausdrückliche Verbindung erforderlich</string>
+    <string name="audio_listening_waiting_pcm">Warten auf Quell-PCM</string>
+    <string name="audio_listening_no_output">Kein passender Ausgang verfügbar</string>
+    <string name="audio_listening_connecting">Mithörausgang wird verbunden…</string>
+    <string name="audio_listening_active">Mithörausgang aktiv</string>
+    <string name="audio_listening_disconnected">Ausgang getrennt; ausdrücklich neu verbinden</string>
+    <string name="audio_listening_failed">Mithörausgang fehlgeschlagen</string>
+    <string name="audio_listening_retiring">Warten auf das Schließen des Mithörausgangs…</string>
+    <string name="audio_listening_counters">Akzeptierte Frames: %1$d · verworfene Pakete: %2$d</string>
+    <string name="audio_listening_connect">Mithören verbinden / neu verbinden</string>
+</resources>

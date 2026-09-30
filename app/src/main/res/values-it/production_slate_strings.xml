@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Ciak di produzione</string>
+    <string name="production_slate_help">Metadati descrittivi per la prossima acquisizione. Il ciak ammesso resta bloccato durante la registrazione e la pubblicazione; le modifiche durante una ripresa restano in sospeso. La numerazione automatica avanza solo dopo un\'acquisizione salvata e solo se il ciak non è cambiato. L\'UUID, non il numero di ripresa, identifica un\'acquisizione. Questi campi non cambiano i nomi dei file, non rilevano l\'obiettivo né raccolgono coordinate GPS.</string>
+    <string name="production_slate_pending">Modifiche al ciak in sospeso per la prossima acquisizione; l\'acquisizione corrente mantiene i metadati ammessi.</string>
+    <string name="production_slate_project">Progetto</string>
+    <string name="production_slate_camera">Etichetta camera</string>
+    <string name="production_slate_scene">Scena</string>
+    <string name="production_slate_reel">Rullo</string>
+    <string name="production_slate_lens">Etichetta obiettivo (manuale)</string>
+    <string name="production_slate_take">Numero di ripresa (1–999999)</string>
+    <string name="production_slate_invalid_text">Usa al massimo 128 unità UTF-16, senza caratteri di controllo, interruzioni di riga né Unicode non valido. Questa modifica non è stata salvata.</string>
+    <string name="production_slate_invalid_take">Inserisci un numero intero da 1 a 999999 senza zeri iniziali. Questa modifica non è stata salvata.</string>
+    <string name="production_slate_location">Luogo della scena</string>
+    <string name="production_slate_time">Momento del giorno della scena</string>
+    <string name="production_slate_unspecified">Non specificato</string>
+    <string name="production_slate_interior">Interno</string>
+    <string name="production_slate_exterior">Esterno</string>
+    <string name="production_slate_day">Giorno</string>
+    <string name="production_slate_night">Notte</string>
+    <string name="production_slate_good">Segna come ripresa buona</string>
+    <string name="production_slate_increment">Avanza il numero di ripresa dopo un\'acquisizione salvata (mai oltre 999999)</string>
+    <string name="production_slate_increment_failed">Media salvato conservato; controlla il prossimo numero di ripresa del ciak.</string>
+</resources>

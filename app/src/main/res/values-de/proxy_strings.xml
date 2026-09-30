@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="proxy_title">Proxy</string>
+    <string name="proxy_help">Nach der Aufnahme erzeugen. Die Originalmedien bleiben unverändert. Audiopakete und Zeitstempel bleiben erhalten. Anfragen überdauern das Schließen dieses Dialogs und werden beim erneuten Öffnen der App fortgesetzt. Ein neuer Versuch behält die übernommenen Einstellungen. Eingebettetes Audio wird unterstützt; Sidecar-Komposition und automatische Richtlinien stehen noch aus.</string>
+    <string name="proxy_busy">Medien werden verarbeitet und verifiziert…</string>
+    <string name="proxy_complete">Proxy und Beziehung verifiziert. Original unverändert.</string>
+    <string name="proxy_sizes">Original: %1$d B · Proxy: %2$d B. Kleine Clips können durch den Container-Overhead größer werden.</string>
+    <string name="proxy_open">Proxy öffnen</string>
+    <string name="proxy_create">Proxy erzeugen / erneut versuchen</string>
+    <string name="proxy_cancel">Erzeugung abbrechen</string>
+    <string name="proxy_close">Schließen</string>
+    <string name="proxy_queued">In Warteschlange</string>
+    <string name="proxy_running">Proxy wird erzeugt</string>
+    <string name="proxy_cancelling">Wird abgebrochen – warten auf Bereinigung</string>
+    <string name="proxy_succeeded">Abgeschlossen</string>
+    <string name="proxy_failed">Fehlgeschlagen – erneuter Versuch möglich</string>
+    <string name="proxy_cancelled">Abgebrochen</string>
+    <string name="proxy_policy_help">Die Zulassungsrichtlinie gilt für den nächsten Versuch; aktive Arbeit wird beendet. Ändere diese lokalen Einstellungen, um wartende Anfragen freizugeben.</string>
+    <string name="proxy_policy_charging">Laden erforderlich</string>
+    <string name="proxy_policy_battery">Mindest-Akkustand: %1$d%%</string>
+    <string name="proxy_policy_space">Reservierter Speicher: %1$d MiB</string>
+    <string name="proxy_wait_battery_unknown">Warten: Akkustand nicht verfügbar</string>
+    <string name="proxy_wait_charging">Warten auf Ladevorgang</string>
+    <string name="proxy_wait_battery">Warten auf Akkustand</string>
+    <string name="proxy_wait_storage_unknown">Warten: Speicherstand nicht verfügbar</string>
+    <string name="proxy_wait_storage">Warten auf Arbeitsspeicherplatz und Reserve</string>
+    <string name="proxy_wait_capture">Warten, bis die Aufnahme beendet ist</string>
+    <string name="proxy_wait_transfer">Warten, bis die WebDAV-Übertragung beendet ist</string>
+    <string name="proxy_wait_media_busy">Warten, bis eine andere Medienaktion beendet ist</string>
+</resources>

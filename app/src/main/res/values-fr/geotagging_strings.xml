@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="geotagging_title">Géolocalisation des captures</string>
+    <string name="geotagging_enabled">Enregistrer la position des nouvelles captures</string>
+    <string name="geotagging_help">Désactivé par défaut. Une fois activé, les coordonnées disponibles et la précision signalée sont incluses dans les métadonnées de production, y compris lorsque celles-ci sont partagées. L\'autorisation de localisation seule n\'active pas l\'enregistrement. Désactiver cette option ne modifie pas les captures précédentes. Les presets ne changent jamais ce choix. La position n\'est demandée que lorsque l\'app est au premier plan.</string>
+    <string name="geotagging_permission_none">Accès Android à la position : non accordé.</string>
+    <string name="geotagging_permission_approximate">Accès Android à la position : approximatif. La position approximative est prise en charge.</string>
+    <string name="geotagging_permission_precise">Accès Android à la position : précis. Cette autorisation ne garantit pas la précision physique.</string>
+    <string name="geotagging_status_disabled">L\'enregistrement de la position est désactivé. Les nouvelles captures omettent la géolocalisation.</string>
+    <string name="geotagging_status_no_permission">L\'enregistrement de la position est activé, mais l\'accès Android manque. Les nouvelles captures enregistrent le statut indisponible, sans coordonnées.</string>
+    <string name="geotagging_status_available">Une position récente est disponible. Chaque capture enregistre la disponibilité et la précision signalée à l\'admission.</string>
+    <string name="geotagging_status_inactive">L\'accès à la position est inactif. Les nouvelles captures omettent les coordonnées tant qu\'il est inactif.</string>
+    <string name="geotagging_status_unavailable">En attente d\'une position. Les nouvelles captures omettent les coordonnées tant qu\'aucune position n\'est disponible.</string>
+    <string name="geotagging_status_stale">La dernière position est trop ancienne. Les nouvelles captures omettent les coordonnées jusqu\'à ce qu\'une position récente soit disponible.</string>
+    <string name="geotagging_denied">L\'accès à la position n\'a pas été accordé. Vous pouvez le redemander ; si Android n\'affiche plus de demande, modifiez l\'accès à la position dans les paramètres système de l\'app. Votre choix d\'enregistrement n\'a pas changé.</string>
+    <string name="geotagging_request">Demander l\'accès à la position / réessayer</string>
+    <string name="geotagging_requesting">Demande d\'accès à la position…</string>
+    <string name="geotagging_open_settings">Ouvrir les paramètres d\'autorisation Android de l\'app</string>
+</resources>

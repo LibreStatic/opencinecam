@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Excluir originais relacionados…</string>
+    <string name="media_delete_title">Excluir esta tomada permanentemente</string>
+    <string name="media_delete_help">Isso exclui as mídias originais listadas e os metadados relacionados, não apenas uma pré-visualização ou proxy. Esta ação não pode ser desfeita. Revise cada arquivo antes de confirmar.</string>
+    <string name="media_delete_acknowledge">Entendo que estes arquivos originais e metadados serão excluídos permanentemente.</string>
+    <string name="media_delete_sources">Arquivos selecionados — Originais: %1$d; Metadados: %2$d</string>
+    <string name="media_delete_original">Original: %1$s</string>
+    <string name="media_delete_metadata">Metadados: %1$s</string>
+    <string name="media_delete_confirm">Excluir permanentemente os arquivos listados</string>
+    <string name="media_delete_cancel">Cancelar / fechar</string>
+    <string name="media_delete_busy">A exclusão está em andamento. O cancelamento não está mais disponível; aguarde o resultado de cada arquivo. Sair desta tela não interrompe uma operação já confirmada.</string>
+    <string name="media_delete_complete">Todos os arquivos selecionados foram excluídos.</string>
+    <string name="media_delete_partial">A exclusão foi parcial. Revise o resultado de cada arquivo; não presuma que a tomada foi totalmente excluída.</string>
+    <string name="media_delete_rejected">A exclusão foi rejeitada. Revise o catálogo atual antes de fazer uma nova seleção.</string>
+    <string name="media_delete_unknown">O resultado da exclusão é desconhecido. Atualize o catálogo e inspecione os arquivos restantes antes de qualquer outra ação.</string>
+    <string name="media_delete_absent">Ausência verificada</string>
+    <string name="media_delete_remaining">Não excluído</string>
+    <string name="media_delete_member_unknown">Resultado desconhecido</string>
+    <string name="media_delete_refresh">Uma atualização do catálogo foi solicitada. Um erro de carregamento ou leitura não prova que um arquivo está ausente.</string>
+    <string name="media_delete_not_attempted">Não tentado</string>
+</resources>

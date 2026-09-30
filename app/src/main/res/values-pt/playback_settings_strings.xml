@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Preferências de reprodução</string>
+    <string name="playback_settings_help">Estas preferências se aplicam ao visualizador local, não ao áudio de captura, ao ganho de gravação nem aos arquivos de mídia. A reprodução exige uma ação explícita de Reproduzir. A posição de reprodução não é salva nas preferências nem nos presets.</string>
+    <string name="playback_settings_muted">Silenciar o áudio da reprodução</string>
+    <string name="playback_settings_loop">Repetir ao chegar ao fim da reprodução</string>
+    <string name="playback_settings_frame_position">Mostrar a posição do quadro no visualizador</string>
+</resources>

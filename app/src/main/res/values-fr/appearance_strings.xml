@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <string name="appearance_title">Apparence</string>
+    <string name="appearance_summary">Cine conserve l\'aspect sombre graphite et ambre. Material You reprend les couleurs de votre fond d\'écran et suit le mode clair ou sombre du système, avec un fond noir pur en mode sombre.</string>
+    <string name="appearance_cine">Cine</string>
+    <string name="appearance_you">Material You</string>
+</resources>

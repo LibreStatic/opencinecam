@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Preferenze di riproduzione</string>
+    <string name="playback_settings_help">Queste preferenze riguardano il visualizzatore locale, non l\'audio di acquisizione, il guadagno di registrazione né i file media. La riproduzione richiede un\'azione Riproduci esplicita. La posizione di riproduzione non viene salvata nelle preferenze né nei preset.</string>
+    <string name="playback_settings_muted">Disattiva audio della riproduzione</string>
+    <string name="playback_settings_loop">Ripeti al termine della riproduzione</string>
+    <string name="playback_settings_frame_position">Mostra la posizione del frame nel visualizzatore</string>
+</resources>

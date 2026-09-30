@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Zugehörige Originale löschen…</string>
+    <string name="media_delete_title">Diesen Take dauerhaft löschen</string>
+    <string name="media_delete_help">Dadurch werden die aufgelisteten Originalmedien und zugehörigen Metadaten gelöscht, nicht nur eine Vorschau oder ein Proxy. Dies kann nicht rückgängig gemacht werden. Prüfe jede Datei vor der Bestätigung.</string>
+    <string name="media_delete_acknowledge">Ich verstehe, dass diese Originaldateien und Metadaten dauerhaft gelöscht werden.</string>
+    <string name="media_delete_sources">Ausgewählte Dateien – Originale: %1$d; Metadaten: %2$d</string>
+    <string name="media_delete_original">Original: %1$s</string>
+    <string name="media_delete_metadata">Metadaten: %1$s</string>
+    <string name="media_delete_confirm">Aufgelistete Dateien dauerhaft löschen</string>
+    <string name="media_delete_cancel">Abbrechen / schließen</string>
+    <string name="media_delete_busy">Das Löschen läuft. Abbrechen ist nicht mehr möglich; warte auf das Ergebnis pro Datei. Das Verlassen dieses Bildschirms stoppt einen bereits bestätigten Vorgang nicht.</string>
+    <string name="media_delete_complete">Alle ausgewählten Dateien wurden gelöscht.</string>
+    <string name="media_delete_partial">Das Löschen war teilweise erfolgreich. Prüfe jedes Dateiergebnis; gehe nicht davon aus, dass der Take vollständig gelöscht wurde.</string>
+    <string name="media_delete_rejected">Das Löschen wurde abgelehnt. Prüfe den aktuellen Katalog, bevor du eine neue Auswahl triffst.</string>
+    <string name="media_delete_unknown">Das Ergebnis des Löschens ist unbekannt. Aktualisiere den Katalog und prüfe die verbleibenden Dateien, bevor du weitere Schritte unternimmst.</string>
+    <string name="media_delete_absent">Abwesenheit bestätigt</string>
+    <string name="media_delete_remaining">Nicht gelöscht</string>
+    <string name="media_delete_member_unknown">Unbekanntes Ergebnis</string>
+    <string name="media_delete_refresh">Eine Katalogaktualisierung wurde angefordert. Ein Lade- oder Lesefehler ist kein Beweis dafür, dass eine Datei fehlt.</string>
+    <string name="media_delete_not_attempted">Nicht versucht</string>
+</resources>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_effect_title">Beobachtungen zur Audioverarbeitung</string>
+    <string name="audio_effect_ns">Rauschunterdrückung (NS)</string>
+    <string name="audio_effect_agc">Automatische Verstärkungsregelung (AGC)</string>
+    <string name="audio_effect_aec">Akustische Echounterdrückung (AEC)</string>
+    <string name="audio_effect_help">Nur der aktuelle PCM-Erzeuger meldet diese Beobachtungen. Verfügbarkeit und Anforderungen belegen keine Anwendung. Ohne PCM-Beleg, auch bei MediaRecorder, wird die Verarbeitung nicht beobachtet; Gleichwertigkeit der Backends wird nicht vorausgesetzt.</string>
+    <string name="audio_effect_request_help">Anforderung für die nächste Audiokonfiguration; der beobachtete Zustand wird separat angezeigt.</string>
+    <string name="audio_effect_manual">Die manuelle Aufnahmeverstärkung setzt die AGC-Anforderung für die nächste Konfiguration aus. Der aktuelle Beleg kann weiterhin den bereits festgelegten Take beschreiben.</string>
+    <string name="audio_effect_yes">Ja</string>
+    <string name="audio_effect_no">No</string>
+    <string name="audio_effect_requested">Aktuelle Einstellung: %1$s</string>
+    <string name="audio_effect_receipt_requested">Vom aktuellen Erzeuger angefordert: %1$s</string>
+    <string name="audio_effect_unobserved">Nicht beobachtet – kein aktueller PCM-Beleg</string>
+    <string name="audio_effect_observed">Beobachteter Zustand: %1$s</string>
+    <string name="audio_effect_unknown">Unbekannt</string>
+    <string name="audio_effect_unavailable">Nicht verfügbar</string>
+    <string name="audio_effect_enabled">Aktiviert</string>
+    <string name="audio_effect_disabled">Deaktiviert</string>
+    <string name="audio_effect_failed">Fehlgeschlagen</string>
+    <string name="audio_effect_implementation">Implementierung: %1$s</string>
+    <string name="audio_effect_none">Keine</string>
+    <string name="audio_effect_platform">Android-Plattform</string>
+    <string name="audio_effect_software">Softwareverarbeitung</string>
+    <string name="audio_effect_control">Beobachtete Plattformsteuerung: %1$s</string>
+    <string name="audio_effect_control_unknown">Nicht beobachtet / nicht zutreffend</string>
+    <string name="audio_effect_pending">Einstellung für den nächsten Take vorgemerkt; die aktuelle Beobachtung bleibt unverändert.</string>
+    <string name="audio_effect_configuration_failed">Ein Versuch, einen Effekt zu konfigurieren, ist fehlgeschlagen. Der beobachtete Zustand und ein eventuelles Software-Fallback werden separat angezeigt.</string>
+</resources>

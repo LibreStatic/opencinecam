@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_sharing_title">Teilen und Exportieren</string>
+    <string name="media_share_action">Take teilen oder exportieren</string>
+    <string name="media_share_help">Wähle genau aus, was diese App verlässt. Originale werden nicht neu geschrieben. Produktionsmetadaten werden separat exportiert; technische Metadaten enthalten den Produktions-Slate nicht. Jedes Paket enthält ein Beziehungsmanifest.</string>
+    <string name="media_share_content_both">Originale und ausgewählte Metadaten</string>
+    <string name="media_share_content_originals">Nur Originale (plus Beziehungsmanifest)</string>
+    <string name="media_share_content_metadata">Nur ausgewählte Metadaten (plus Beziehungsmanifest)</string>
+    <string name="media_share_production">Produktions-Slate-Metadaten</string>
+    <string name="media_share_technical">Technische Metadaten</string>
+    <string name="media_share_both">Produktions- und technische Metadaten</string>
+    <string name="media_share_lut">Exakt referenzierte LUT-Dateien mit den technischen Metadaten einschließen</string>
+    <string name="media_share_lut_help">Eine fehlende referenzierte LUT stoppt die Vorbereitung, sofern du LUT-Dateien nicht ausdrücklich ausschließt. Eine eingebrannte Aufnahme-LUT darf nicht erneut auf die aufgenommenen Pixel angewendet werden.</string>
+    <string name="media_share_temporary">Erzeugte Dateien laufen nach 24 Stunden ab und können früher aus dem Cache entfernt werden. Behalte bei Bedarf eine externe Kopie. Das Öffnen der Android-Auswahl verifiziert die Zustellung nicht.</string>
+    <string name="media_share_relation_required">Ausgewählte Metadaten erfordern eine vollständige deklarierte Beziehung. Produktionsmetadaten erfordern außerdem einen konsistenten lesbaren Slate. Wähle eine andere Auswahl oder aktualisiere den Katalog; es wird kein Fallback automatisch angewendet.</string>
+    <string name="media_share_sources">Verfügbare Quellen – Originale: %1$d; Metadaten: %2$d</string>
+    <string name="media_share_confirm">Vorbereiten und Android-Auswahl öffnen</string>
+    <string name="media_share_preparing">Ausgewählter Export wird vorbereitet…</string>
+    <string name="media_share_cancel">Abbrechen / schließen</string>
+    <string name="media_share_error">Der Export wurde nicht erfolgreich übergeben. Versuche es erneut, ändere die Auswahl oder schließe und aktualisiere den Katalog. Originale bleiben erhalten.</string>
+    <string name="media_share_cleanup_error">Das Bereinigen des temporären Exports ist fehlgeschlagen; Originale bleiben erhalten.</string>
+    <string name="media_share_launched">Android-Auswahl geöffnet – die Zustellung ist nicht verifiziert.</string>
+    <string name="media_share_prepared_files">Vorbereitete Dateien: %1$d</string>
+    <string name="media_share_chooser">Ausgewählte Aufnahmedateien senden</string>
+</resources>
