@@ -1129,6 +1129,12 @@ class Camera2PreviewEngine(
     private fun CameraCaptureSession.setPhotoAwareRepeatingRequest(
         request: CaptureRequest, executor: Executor, callback: CameraCaptureSession.CaptureCallback,
     ) {
+        // Constrained high-speed sessions reject setRepeatingRequest; they only accept bursts
+        // built by createHighSpeedRequestList (zoom/lock reissues land here too).
+        if (this is CameraConstrainedHighSpeedCaptureSession) {
+            setRepeatingBurstRequests(createHighSpeedRequestList(request), executor, callback)
+            return
+        }
         val burst = burstRequest.get()
         if (burst != null && sameBurstGraph(burst) && this === burst.session &&
             (request.tag !is PhotoTag || (request.tag as PhotoTag).id != photoRequest.get()?.id)) {
