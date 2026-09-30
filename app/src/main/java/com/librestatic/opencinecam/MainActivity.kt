@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
         splashScreen.setOnExitAnimationListener { provider ->
             val bounds = runCatching {
                 val icon = provider.iconView
+                // An icon-less splash hands back a detached, empty stand-in view; its zero bounds
+                // would draw the intro logo at 0 px, so the wizard centres it instead.
+                if (!icon.isAttachedToWindow || icon.width <= 0 || icon.height <= 0) return@runCatching null
                 val location = IntArray(2).also(icon::getLocationInWindow)
                 Rect(Offset(location[0].toFloat(), location[1].toFloat()), Size(icon.width.toFloat(), icon.height.toFloat()))
             }.getOrNull()
