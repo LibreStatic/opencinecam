@@ -72,13 +72,14 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             format = extractor.getTrackFormat(track)
             mime = requireNotNull(format.getString(MediaFormat.KEY_MIME))
             requireDimensions(format.getInteger(MediaFormat.KEY_WIDTH), format.getInteger(MediaFormat.KEY_HEIGHT))
-            hdr = when (format.integerOr(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)) {
+            // The OCLog2 sidecar outranks the track's transfer tag: some encoders (c2.qti.hevc on the
+            // Razr Fold) write PQ even though the recorder requested an unspecified transfer.
+            hdr = if (log != null) { requireLog(format); null } else when (format.integerOr(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)) {
                 MediaFormat.COLOR_TRANSFER_ST2084 -> PreciseHdrTransfer.PQ
                 MediaFormat.COLOR_TRANSFER_HLG -> PreciseHdrTransfer.HLG
-                else -> { if (log == null) requireSdr(format) else requireLog(format); null }
+                else -> { requireSdr(format); null }
             }
             if (log != null) {
-                require(hdr == null) { "OCLog2 sidecar conflicts with the track's HDR transfer" }
                 if (requireCpuPreview) require(Build.VERSION.SDK_INT >= 33) { "Precise OCLog2 requires Android 13+ and a CPU-readable P010 decoder" }
                 require(colorPolicy == PreciseVideoColorPolicy.STRICT) { "SDR track interpretation does not apply to OCLog2" }
             }
@@ -392,11 +393,12 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
         if (hdr != null) requireHdr(value, hdr) else if (log != null) requireLog(value) else requireSdr(value)
     }
 
-    /** OCLog2 tracks carry BT.2020 and an unspecified transfer; the sidecar declares the range. */
+    /**
+     * OCLog2 tracks carry BT.2020; the sidecar declares the curve and range. The transfer tag is
+     * ignored because the samples are OCLog2 codes whatever the encoder wrote there.
+     */
     private fun requireLog(value: MediaFormat) {
         val signal = requireNotNull(log)
-        val transfer = value.integerOr(MediaFormat.KEY_COLOR_TRANSFER, 0)
-        require(transfer != MediaFormat.COLOR_TRANSFER_ST2084 && transfer != MediaFormat.COLOR_TRANSFER_HLG) { "OCLog2 track reports an HDR transfer: $value" }
         require(value.integerOr(MediaFormat.KEY_COLOR_STANDARD, 0) in setOf(0, MediaFormat.COLOR_STANDARD_BT2020)) { "OCLog2 track is not BT.2020: $value" }
         val range = value.integerOr(MediaFormat.KEY_COLOR_RANGE, 0)
         require(range == 0 || range == if (signal.fullRange) MediaFormat.COLOR_RANGE_FULL else MediaFormat.COLOR_RANGE_LIMITED) {
