@@ -2045,7 +2045,7 @@ private fun PortraitControlDeck(
     Column(modifier.fillMaxWidth().background(Panel).padding(top = 8.dp, bottom = 8.dp)) {
         QuickControls(state, onControl, landscape = false)
         Spacer(Modifier.height(6.dp))
-        if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, slim = true)
+        if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder)
         else Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SelectedModeButton(state, onShowModes) }
         Spacer(Modifier.height(4.dp))
         PortraitCaptureTransport(
@@ -2116,7 +2116,7 @@ private fun LandscapeControlDeck(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = false)
+                if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder)
                 else SelectedModeButton(state, onShowModes)
             }
             TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
@@ -2437,8 +2437,6 @@ private fun ModeDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     compact: Boolean = false,
-    // One line of text with a dot under the chosen mode, for decks that cannot spare the framed cursor.
-    slim: Boolean = false,
 ) {
     val selection = LocalModeSelection.current
     val displayedMode = selection?.displayed ?: state.selectedMode
@@ -2449,9 +2447,10 @@ private fun ModeDial(
     val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(displayedMode))
     fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
 
-    // A mode wheel: a linear carousel with a fixed center selection indicator. Several
-    // neighbors stay visible on both sides, the active mode snaps to the marker, drag
-    // settles on the nearest mode and tapping any visible mode selects it directly.
+    // A mode wheel: a linear carousel whose centered mode is the active one, marked only by amber
+    // text and a dot (no frame, so it reads the same on phones, foldables and tablets). Several
+    // neighbors stay visible on both sides, drag settles on the nearest mode and tapping any
+    // visible mode selects it directly.
     if (compact) {
         // Vertical wheel for the right panel in landscape.
         val itemHeight = 28.dp
@@ -2504,14 +2503,22 @@ private fun ModeDial(
                         val mode = modes[index]
                         val isSelected = index == focusedIndex
                         val enabled = selectable(mode)
-                        Box(
+                        Row(
                             Modifier
                                 .fillMaxWidth()
                                 .height(itemHeight)
                                 .semantics { selected = isSelected }
                                 .clickable(enabled = enabled && !isSelected) { selectMode(mode) },
-                            contentAlignment = Alignment.Center,
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            if (isSelected) Box(
+                                Modifier
+                                    .padding(end = 6.dp)
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(Amber),
+                            )
                             Text(
                                 modeLabel(mode),
                                 color = when {
@@ -2527,14 +2534,7 @@ private fun ModeDial(
                         }
                     }
                 }
-                SelectionCursor(
-                    Modifier
-                        .align(Alignment.Center)
-                        .fillMaxWidth()
-                        .height(itemHeight),
-                )
             }
-            ModePositionDots(modes, focusedIndex)
         }
     } else {
         // Horizontal mode wheel, full width so several modes stay visible with room to breathe.
@@ -2546,8 +2546,8 @@ private fun ModeDial(
                 .semantics { contentDescription = dialDescription },
         ) {
             val totalWidth = maxWidth
-            val itemWidth = if (slim) (totalWidth / 4.2f).coerceIn(76.dp, 140.dp) else (totalWidth / 3.3f).coerceIn(88.dp, 150.dp)
-            val rowHeight = if (slim) 40.dp else 38.dp
+            val itemWidth = (totalWidth / 4.2f).coerceIn(76.dp, 140.dp)
+            val rowHeight = 40.dp
             val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
             val fling = rememberSnapFlingBehavior(listState, SnapPosition.Center)
             val focusedIndex by remember(listState, selectedIndex) {
@@ -2607,12 +2607,12 @@ private fun ModeDial(
                                         enabled -> Color.White
                                         else -> Muted
                                     },
-                                    fontSize = if (slim) (if (isSelected) 15.sp else 13.sp) else if (isSelected) 16.sp else 12.sp,
+                                    fontSize = if (isSelected) 15.sp else 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                if (slim) Box(
+                                Box(
                                     Modifier
                                         .padding(top = 3.dp)
                                         .size(5.dp)
@@ -2622,48 +2622,8 @@ private fun ModeDial(
                             }
                         }
                     }
-                    if (!slim) SelectionCursor(
-                        Modifier
-                            .align(Alignment.Center)
-                            .width(itemWidth)
-                            .height(rowHeight),
-                    )
                 }
-                if (!slim) ModePositionDots(modes, focusedIndex)
             }
-        }
-    }
-}
-
-@Composable
-private fun SelectionCursor(modifier: Modifier = Modifier) {
-    Box(
-        modifier.border(1.dp, Amber, RoundedCornerShape(8.dp)),
-    ) {
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .width(22.dp)
-                .height(3.dp)
-                .background(Amber, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)),
-        )
-    }
-}
-
-@Composable
-private fun ModePositionDots(modes: List<CaptureMode>, selectedIndex: Int) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(top = 2.dp),
-    ) {
-        modes.forEachIndexed { index, _ ->
-            Box(
-                Modifier
-                    .size(if (index == selectedIndex) 5.dp else 3.dp)
-                    .clip(CircleShape)
-                    .background(if (index == selectedIndex) Amber else Color(0xFF4A5154)),
-            )
         }
     }
 }
@@ -4800,7 +4760,6 @@ private fun ModeWheelPortraitPreview() {
         ModeDial(
             CameraUiState(selectedMode = CaptureMode.PHOTO),
             binder = null,
-            compact = false,
         )
     }
 }
