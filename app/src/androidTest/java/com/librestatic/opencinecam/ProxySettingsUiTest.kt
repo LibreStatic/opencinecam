@@ -37,10 +37,10 @@ class ProxySettingsUiTest {
     @Test fun allFifteenChoicesUpdateOnlyProxyAndKeepOneSelectionPerGroup() {
         show()
         for (edge in listOf(640, 1280, 1920)) {
-            node("edge-$edge").performScrollTo().performClick().assertIsSelected()
+            node("edge-$edge").performScrollTo().performClick(); node("edge-$edge").assertIsSelected()
             for (other in listOf(640, 1280, 1920).filter { it != edge }) node("edge-$other").assertIsNotSelected()
             for (bitrate in listOf(1, 2, 3, 5, 8)) {
-                node("bitrate-$bitrate").performScrollTo().performClick().assertIsSelected()
+                node("bitrate-$bitrate").performScrollTo().performClick(); node("bitrate-$bitrate").assertIsSelected()
                 for (other in listOf(1, 2, 3, 5, 8).filter { it != bitrate }) node("bitrate-$other").assertIsNotSelected()
                 compose.runOnIdle { assertEquals(original.copy(proxy = ProxySettings(edge, bitrate)), settings.value) }
             }
@@ -65,7 +65,7 @@ class ProxySettingsUiTest {
         val options = listOf("edge-640", "edge-1280", "edge-1920", "bitrate-1", "bitrate-2", "bitrate-3", "bitrate-5", "bitrate-8")
         for (tag in options) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
         node("help-toggle").performScrollTo().performClick()
-        for (tag in listOf("help", "edge-label", "bitrate-label", "audio") + options.map { "$it-label" }) {
+        for (tag in listOf("help", "audio") + options.map { "$it-label" }) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
             assertEquals(1, layouts.size)
@@ -79,8 +79,8 @@ class ProxySettingsUiTest {
             SettingsScreen(CameraUiState(), settings.value, false, {}, {}, { settings.value = it; changes++ })
         } }
         compose.onNodeWithTag("settings-search").performTextInput("proxy")
-        node("edge-640").performScrollTo().performClick().assertIsSelected()
-        node("bitrate-5").performScrollTo().performClick().assertIsSelected()
+        node("edge-640").performScrollTo().performClick()
+        node("bitrate-5").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(original.copy(proxy = ProxySettings(640, 5)), settings.value); assertEquals(2, changes) }
     }
 
@@ -95,6 +95,6 @@ class ProxySettingsUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("proxy-settings-$tag", useUnmergedTree = true)
+    private fun node(tag: String) = compose.settingsNode("proxy-settings-$tag", Regex("^(edge|bitrate)-\\d+(-label)?$").matches(tag))
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 }

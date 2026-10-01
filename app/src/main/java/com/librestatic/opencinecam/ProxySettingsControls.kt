@@ -33,45 +33,26 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.proxy_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         SettingsHelp(stringResource(R.string.proxy_settings_help), tag = "proxy-settings-help")
-        Text(stringResource(R.string.proxy_settings_edge), Modifier.fillMaxWidth().testTag("proxy-settings-edge-label"))
-        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (edge in listOf(640, 1280, 1920)) ProxySettingOption(
-                "edge-$edge", stringResource(R.string.proxy_settings_edge_value, edge), settings.maxLongEdge == edge,
-            ) { if (settings.maxLongEdge != edge) onSettings(settings.copy(maxLongEdge = edge)) }
-        }
-        Text(stringResource(R.string.proxy_settings_bitrate), Modifier.fillMaxWidth().testTag("proxy-settings-bitrate-label"))
-        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (bitrate in listOf(1, 2, 3, 5, 8)) ProxySettingOption(
-                "bitrate-$bitrate", stringResource(R.string.proxy_settings_bitrate_value, bitrate), settings.videoBitrateMbps == bitrate,
-            ) { if (settings.videoBitrateMbps != bitrate) onSettings(settings.copy(videoBitrateMbps = bitrate)) }
-        }
+        SettingsChips(stringResource(R.string.proxy_settings_edge), listOf(640, 1280, 1920), settings.maxLongEdge,
+            label = { stringResource(R.string.proxy_settings_edge_value, it) },
+            onSelect = { if (settings.maxLongEdge != it) onSettings(settings.copy(maxLongEdge = it)) },
+            tag = { "proxy-settings-edge-$it" }, rowTag = "proxy-settings-edge-label")
+        SettingsChips(stringResource(R.string.proxy_settings_bitrate), listOf(1, 2, 3, 5, 8), settings.videoBitrateMbps,
+            label = { stringResource(R.string.proxy_settings_bitrate_value, it) },
+            onSelect = { if (settings.videoBitrateMbps != it) onSettings(settings.copy(videoBitrateMbps = it)) },
+            tag = { "proxy-settings-bitrate-$it" }, rowTag = "proxy-settings-bitrate-label")
         SettingsHelp(stringResource(R.string.proxy_policy_help))
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .toggleable(value = policy.requireCharging, role = Role.Checkbox,
-                onValueChange = { update { current -> current.copy(requireCharging = !current.requireCharging) } })
-            .testTag("proxy-settings-charging"), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = policy.requireCharging, onCheckedChange = null)
-            Text(stringResource(R.string.proxy_policy_charging), Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 8.dp)
-                .testTag("proxy-settings-charging-label"))
-        }
-        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (level in listOf(0, 10, 20, 30, 50)) ProxySettingOption("battery-$level",
-                stringResource(R.string.proxy_policy_battery, level), policy.minimumBatteryPercent == level) {
-                update { it.copy(minimumBatteryPercent = level) }
-            }
-        }
-        androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (space in listOf(64, 256, 512, 1024, 2048)) ProxySettingOption("space-$space",
-                stringResource(R.string.proxy_policy_space, space), policy.reserveSpaceMiB == space) {
-                update { it.copy(reserveSpaceMiB = space) }
-            }
-        }
+        SettingsSwitchRow(stringResource(R.string.proxy_policy_charging), policy.requireCharging,
+            { update { current -> current.copy(requireCharging = !current.requireCharging) } },
+            tag = "proxy-settings-charging", labelTag = "proxy-settings-charging-label")
+        SettingsChips(stringResource(R.string.proxy_policy_battery_title), listOf(0, 10, 20, 30, 50), policy.minimumBatteryPercent,
+            label = { stringResource(R.string.proxy_policy_battery, it) },
+            onSelect = { level -> update { it.copy(minimumBatteryPercent = level) } }, tag = { "proxy-settings-battery-$it" })
+        SettingsChips(stringResource(R.string.proxy_policy_space_title), listOf(64, 256, 512, 1024, 2048), policy.reserveSpaceMiB,
+            label = { stringResource(R.string.proxy_policy_space, it) },
+            onSelect = { space -> update { it.copy(reserveSpaceMiB = space) } }, tag = { "proxy-settings-space-$it" })
         error?.let { Text(it, Modifier.fillMaxWidth()) }
         Text(stringResource(R.string.proxy_settings_audio), Modifier.fillMaxWidth().testTag("proxy-settings-audio"))
     }
 }
 
-@Composable
-private fun ProxySettingOption(tag: String, label: String, selected: Boolean, onSelect: () -> Unit) {
-    SettingsPill(label, "proxy-settings-$tag", selected, onClick = onSelect)
-}

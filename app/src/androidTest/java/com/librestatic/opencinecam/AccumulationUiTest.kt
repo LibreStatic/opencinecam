@@ -24,17 +24,17 @@ class AccumulationUiTest {
             AccumulationSettings(CameraUiState(),settings.value) {settings.value=it}
         }}}
         for(mode in AccumulationMode.entries) {
-            compose.onNodeWithTag("accumulation-mode-$mode").performScrollTo().performClick()
+            compose.pickChoice("accumulation-mode-$mode")
             compose.runOnIdle {assertEquals(mode,settings.value.accumulation.mode)}
             compose.onNodeWithTag("accumulation-algorithm").assertExists()
         }
-        compose.onNodeWithTag("accumulation-duration-30").performScrollTo().performClick()
-        compose.onNodeWithTag("accumulation-interval-10000").performScrollTo().performClick()
-        compose.onNodeWithTag("accumulation-duration-1").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithTag("accumulation-interval-100").performScrollTo().performClick()
-        compose.onNodeWithTag("accumulation-duration-1").performScrollTo().performClick()
-        compose.onNodeWithTag("accumulation-edge-720").performScrollTo().performClick()
-        compose.onNodeWithTag("accumulation-mode-STARS").performScrollTo().performClick()
+        compose.pickChoice("accumulation-duration-30")
+        compose.pickChoice("accumulation-interval-10000")
+        compose.openChoice("accumulation-duration-1").assertIsNotEnabled()
+        compose.pickChoice("accumulation-interval-100")
+        compose.pickChoice("accumulation-duration-1")
+        compose.pickChoice("accumulation-edge-720")
+        compose.pickChoice("accumulation-mode-STARS")
         compose.onNodeWithTag("accumulation-threshold").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) {it(32f)}
         compose.runOnIdle {assertEquals(AccumulationSelection(AccumulationMode.STARS,1000,100,720,32),settings.value.accumulation);assertEquals(73,settings.value.photoQuality)}
     }

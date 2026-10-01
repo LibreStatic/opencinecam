@@ -685,6 +685,7 @@
     <string name="caps_copy">Copier le rapport</string>
     <string name="caps_copied">Rapport copié dans le presse-papiers</string>
     <string name="caps_copy_failed">Le rapport n\'a pas pu être copié</string>
+    <string name="caps_camera">Caméra</string>
     <string name="caps_camera_id">Caméra %1$s</string>
     <string name="caps_physical_of">Objectif physique de la caméra %1$s</string>
     <string name="caps_physical_usage">OpenCineCam n\'ouvre pas cet objectif directement : il y accède via la caméra %1$s, avec le zoom et les boutons d\'objectif.</string>
@@ -753,4 +754,20 @@
     <string name="caps_usage_flash">Modes de flash photo et, si disponible, puissance du flash.</string>
     <string name="caps_feature_sensor_clock">Horloge du capteur</string>
     <string name="caps_usage_sensor_clock">Aligne les fichiers audio WAV/FLAC séparés sur la vidéo grâce à l\'horloge du capteur.</string>
+    <string name="settings_mode">Mode</string>
+    <string name="photo_format_label">Format</string>
+    <string name="pro_shutter_unit">Unité d’obturation</string>
+    <string name="pro_angle_presets">Angles courants</string>
+    <string name="fold_subject_mode">Contenu de l’écran extérieur</string>
+    <string name="proxy_policy_battery_title">Batterie minimale</string>
+    <string name="proxy_policy_space_title">Espace réservé</string>
+    <string name="media_share_content_title">Contenu partagé</string>
+    <string name="media_share_metadata_title">Métadonnées</string>
+    <string name="gallery_kind_title">Type de média</string>
+    <string name="audio_listening_output_title">Sortie</string>
+    <string name="audio_listening_device_title">Appareil</string>
+    <string name="presets_assign_slot">Attribuer à %1$s</string>
+    <string name="presets_unassign_slot">Retirer de %1$s</string>
+    <string name="pro_flicker_suggestions">Obturation sans scintillement</string>
+    <string name="lut_disable_title">Désactiver les LUT</string>
 </resources>

@@ -685,6 +685,7 @@
     <string name="caps_copy">Copy report</string>
     <string name="caps_copied">Report copied to the clipboard</string>
     <string name="caps_copy_failed">The report could not be copied</string>
+    <string name="caps_camera">Camera</string>
     <string name="caps_camera_id">Camera %1$s</string>
     <string name="caps_physical_of">Physical lens of camera %1$s</string>
     <string name="caps_physical_usage">OpenCineCam does not open this lens on its own: it reaches it through camera %1$s, with the zoom and lens buttons.</string>
@@ -753,4 +754,20 @@
     <string name="caps_usage_flash">Photo flash modes and, where available, flash strength.</string>
     <string name="caps_feature_sensor_clock">Sensor clock</string>
     <string name="caps_usage_sensor_clock">Aligns separate WAV/FLAC audio files with the video through the sensor clock.</string>
+    <string name="settings_mode">Mode</string>
+    <string name="photo_format_label">Format</string>
+    <string name="pro_shutter_unit">Shutter unit</string>
+    <string name="pro_angle_presets">Common angles</string>
+    <string name="fold_subject_mode">Exterior display content</string>
+    <string name="proxy_policy_battery_title">Minimum battery</string>
+    <string name="proxy_policy_space_title">Reserved space</string>
+    <string name="media_share_content_title">Shared content</string>
+    <string name="media_share_metadata_title">Metadata</string>
+    <string name="gallery_kind_title">Media type</string>
+    <string name="audio_listening_output_title">Output</string>
+    <string name="audio_listening_device_title">Device</string>
+    <string name="presets_assign_slot">Assign to %1$s</string>
+    <string name="presets_unassign_slot">Remove from %1$s</string>
+    <string name="pro_flicker_suggestions">Flicker-safe shutter</string>
+    <string name="lut_disable_title">Disable LUTs</string>
 </resources>

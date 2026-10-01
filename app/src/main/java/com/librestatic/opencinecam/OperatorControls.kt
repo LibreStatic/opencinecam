@@ -363,13 +363,9 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         }
         OperatorChoice(stringResource(R.string.operator_volume_up), operation.volumeUp, OperatorAction.entries, "operator-volume-up") { onChange(settings.copy(operation = operation.copy(volumeUp = it))) }
         OperatorChoice(stringResource(R.string.operator_volume_down), operation.volumeDown, OperatorAction.entries, "operator-volume-down") { onChange(settings.copy(operation = operation.copy(volumeDown = it))) }
-        Text(stringResource(R.string.operator_startup), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StartupMode.entries.forEach { mode ->
-                FilterChip(selected = operation.startupMode == mode, onClick = { onChange(settings.copy(operation = operation.copy(startupMode = mode))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("operator-startup-$mode"), label = { Text(stringResource(when (mode) { StartupMode.PHOTO -> R.string.operator_startup_photo; StartupMode.VIDEO -> R.string.operator_startup_video; StartupMode.LAST -> R.string.operator_startup_last })) })
-            }
-        }
+        SettingsChips(stringResource(R.string.operator_startup), StartupMode.entries, operation.startupMode,
+            label = { stringResource(when (it) { StartupMode.PHOTO -> R.string.operator_startup_photo; StartupMode.VIDEO -> R.string.operator_startup_video; StartupMode.LAST -> R.string.operator_startup_last }) },
+            onSelect = { onChange(settings.copy(operation = operation.copy(startupMode = it))) }, tag = { "operator-startup-$it" })
         OperatorToggle(R.string.operator_restore_manual, "operator-restore-manual", operation.restoreExposureWhiteBalance) { onChange(settings.copy(operation = operation.copy(restoreExposureWhiteBalance = it))) }
         OperatorToggle(R.string.operator_restore_torch, "operator-restore-torch", operation.restoreTorch) { onChange(settings.copy(operation = operation.copy(restoreTorch = it))) }
         SettingsHelp(stringResource(R.string.operator_startup_help))
@@ -381,9 +377,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
 @Composable
 private fun OperatorChoice(title: String, value: OperatorAction, options: List<OperatorAction>, tag: String, onChange: (OperatorAction) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    OutlinedButton({ open = true }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) {
-        Text("$title: ${stringResource(value.labelResource())}", fontSize = 16.sp)
-    }
+    SettingsValueRow(title, stringResource(value.labelResource()), Modifier.testTag(tag)) { open = true }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) },
         text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             options.forEach { action -> TextButton({ onChange(action); open = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("operator-choice-$action")) {

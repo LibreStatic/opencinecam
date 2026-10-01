@@ -20,11 +20,9 @@ internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (Gal
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.gallery_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         SettingsHelp(stringResource(R.string.gallery_settings_help), tag = "gallery-settings-help")
-        if (showKinds) SettingsPillRow { for (kind in GalleryMediaKind.entries) {
-            SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-kind-$kind", settings.kind == kind) {
-                onSettings(settings.copy(kind = kind))
-            }
-        } }
+        if (showKinds) SettingsChips(stringResource(R.string.gallery_kind_title), GalleryMediaKind.entries, settings.kind,
+            label = { stringResource(galleryKindLabel(it)) }, onSelect = { onSettings(settings.copy(kind = it)) },
+            tag = { "gallery-kind-$it" })
         GalleryToggle("newest", R.string.gallery_newest_first, settings.newestFirst) { onSettings(settings.copy(newestFirst = it)) }
         GalleryToggle("good", R.string.gallery_good_only, settings.goodTakesOnly) { onSettings(settings.copy(goodTakesOnly = it)) }
         GalleryToggle("slate", R.string.gallery_show_slate, settings.showSlate) { onSettings(settings.copy(showSlate = it)) }

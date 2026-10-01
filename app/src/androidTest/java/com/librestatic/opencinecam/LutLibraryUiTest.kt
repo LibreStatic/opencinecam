@@ -250,7 +250,16 @@ class LutLibraryUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("lut-$tag")
+    // Kind and input live in choice dialogs, and per-entry actions in the entry's actions dialog.
+    private fun node(tag: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        val entryAction = Regex("^(select|subject-select|recording-select|export|delete)-(.+)$").find(tag)
+        return when {
+            tag.startsWith("kind-") || tag.startsWith("input-") -> compose.openChoice("lut-$tag")
+            tag in setOf("disable", "subject-disable", "recording-disable") -> compose.openChoice("lut-$tag", "lut-disable-row")
+            entryAction != null -> compose.openChoice("lut-$tag", "lut-name-${entryAction.groupValues[2]}")
+            else -> { compose.closeChoices(); compose.onNodeWithTag("lut-$tag") }
+        }
+    }
     private fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
     private fun string(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun entry(name: String = "Exact original"): LutLibraryEntry {

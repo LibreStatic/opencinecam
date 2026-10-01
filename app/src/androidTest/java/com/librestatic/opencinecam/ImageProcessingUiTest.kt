@@ -22,17 +22,17 @@ class ImageProcessingUiTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     @Test fun unknownCameraOnlyOffersTemplateDefaults() {
         content(CameraUiState(), CameraSettings())
-        compose.onNodeWithTag("stabilization-DEFAULT").assertIsEnabled()
-        compose.onNodeWithTag("stabilization-OPTICAL").assertIsNotEnabled()
-        compose.onNodeWithTag("stabilization-VIDEO").assertIsNotEnabled()
-        compose.onNodeWithTag("image-noise-HIGH_QUALITY").assertIsNotEnabled()
-        compose.onNodeWithTag("image-edge-OFF").assertIsNotEnabled()
+        compose.openChoice("stabilization-DEFAULT").assertIsEnabled()
+        compose.openChoice("stabilization-OPTICAL").assertIsNotEnabled()
+        compose.openChoice("stabilization-VIDEO").assertIsNotEnabled()
+        compose.openChoice("image-noise-HIGH_QUALITY").assertIsNotEnabled()
+        compose.openChoice("image-edge-OFF").assertIsNotEnabled()
     }
     @Test fun independentNoiseChoiceDoesNotChangeEdgeOrStabilization() {
         var changed: CameraSettings? = null
         val original = CameraSettings(imageProcessing = ImageProcessingSelection(StabilizationMode.OPTICAL, IspMode.FAST, IspMode.OFF))
         content(state(), original) { changed = it }
-        compose.onNodeWithTag("image-noise-HIGH_QUALITY").performScrollTo().performClick()
+        compose.pickChoice("image-noise-HIGH_QUALITY")
         assertEquals(IspMode.HIGH_QUALITY, changed?.imageProcessing?.noiseReduction)
         assertEquals(IspMode.OFF, changed?.imageProcessing?.edge)
         assertEquals(StabilizationMode.OPTICAL, changed?.imageProcessing?.stabilization)

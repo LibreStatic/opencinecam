@@ -48,6 +48,7 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
     var name by rememberSaveable { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var review by remember { mutableStateOf<CameraPreset?>(null) }
+    var actions by remember { mutableStateOf<CameraPreset?>(null) }
     var imported by remember { mutableStateOf<CameraPreset?>(null) }
     var delete by remember { mutableStateOf<CameraPreset?>(null) }
     var updating by remember { mutableStateOf<CameraPreset?>(null) }
@@ -95,26 +96,30 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
             OutlinedButton({ importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy && library.error == null,
                 modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.presets_import)) }
         }
+        // One row per preset; its actions and slot assignments live in a dialog instead of a
+        // wrapping row of buttons that stacks on narrow screens.
         library.presets.forEach { preset ->
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(preset.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton({ review = preset }, Modifier.heightIn(min = 48.dp), enabled = onApply != null && !busy) { Text(stringResource(R.string.presets_review)) }
-                    OutlinedButton({ updating = preset; renameOnly = false; name = preset.name }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_update)) }
-                    OutlinedButton({ updating = preset; renameOnly = true; name = preset.name }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_rename)) }
-                    OutlinedButton({ exportData = CameraPresetCodec.encode(preset); export.launch(preset.name.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_") + ".json") },
-                        Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_export)) }
-                    OutlinedButton({ delete = preset }, Modifier.heightIn(min = 48.dp), enabled = !busy) { Text(stringResource(R.string.presets_delete)) }
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("C1", "C2").forEach { slot ->
-                        val assigned = library.slots[slot] == preset.id
-                        FilterChip(assigned, { attempt { repository.assign(slot, if (assigned) null else preset.id) } }, enabled = !busy,
-                            modifier = Modifier.heightIn(min = 48.dp), label = { Text("$slot · ${preset.name}", fontSize = 16.sp) })
-                    }
-                }
-            }
+            val slots = listOf("C1", "C2").filter { library.slots[it] == preset.id }
+            SettingsValueRow(preset.name, slots.joinToString(" · ").ifEmpty { null },
+                Modifier.testTag("preset-row-${preset.id}"), enabled = !busy) { actions = preset }
         }
+    }
+    actions?.let { preset ->
+        SettingsActionsDialog(preset.name, buildList {
+            if (onApply != null) add(SettingsAction(stringResource(R.string.presets_review), "preset-action-review") { review = preset })
+            add(SettingsAction(stringResource(R.string.presets_update), "preset-action-update") { updating = preset; renameOnly = false; name = preset.name })
+            add(SettingsAction(stringResource(R.string.presets_rename), "preset-action-rename") { updating = preset; renameOnly = true; name = preset.name })
+            add(SettingsAction(stringResource(R.string.presets_export), "preset-action-export") {
+                exportData = CameraPresetCodec.encode(preset); export.launch(preset.name.replace(Regex("[^\\p{L}\\p{N}._ -]"), "_") + ".json")
+            })
+            listOf("C1", "C2").forEach { slot ->
+                val assigned = library.slots[slot] == preset.id
+                add(SettingsAction(stringResource(if (assigned) R.string.presets_unassign_slot else R.string.presets_assign_slot, slot), "preset-action-slot-$slot") {
+                    attempt { repository.assign(slot, if (assigned) null else preset.id) }
+                })
+            }
+            add(SettingsAction(stringResource(R.string.presets_delete), "preset-action-delete") { delete = preset })
+        }) { actions = null }
     }
     review?.let { preset -> PresetReviewDialog(preset, state, settings, { review = null }) { onApply?.invoke(preset); review = null } }
     if (imported != null || updating != null) AlertDialog(onDismissRequest = { imported = null; updating = null },

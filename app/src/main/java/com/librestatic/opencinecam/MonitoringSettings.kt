@@ -62,10 +62,9 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
     }
     val falseColor: @Composable () -> Unit = {
         MonitorGroup(R.string.monitoring_group_false, CineIcon.HISTOGRAM_MODE) {
-            Text(stringResource(R.string.monitoring_false_palette), color = MaterialTheme.colorScheme.onSurface)
             val classic = stringResource(R.string.monitoring_palette_classic)
             val contrast = stringResource(R.string.monitoring_palette_high_contrast)
-            SettingsChips(FalseColorPalette.entries, options.falseColorPalette,
+            SettingsChips(stringResource(R.string.monitoring_false_palette), FalseColorPalette.entries, options.falseColorPalette,
                 label = { if (it == FalseColorPalette.CLASSIC) classic else contrast },
                 onSelect = { update(options.copy(falseColorPalette = it)) },
                 tag = { "monitoring-palette-${it.name}" })
@@ -74,8 +73,7 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
     }
     val guides: @Composable () -> Unit = {
         MonitorGroup(R.string.monitoring_group_guides, CineIcon.GRID) {
-            Text(stringResource(R.string.monitoring_aspect), color = MaterialTheme.colorScheme.onSurface)
-            SettingsChips(MonitorAspectGuide.entries, options.aspectGuide,
+            SettingsChips(stringResource(R.string.monitoring_aspect), MonitorAspectGuide.entries, options.aspectGuide,
                 label = { guide -> stringResource(when (guide) {
                     MonitorAspectGuide.NONE -> R.string.monitoring_aspect_none
                     MonitorAspectGuide.WIDE -> R.string.monitoring_aspect_wide

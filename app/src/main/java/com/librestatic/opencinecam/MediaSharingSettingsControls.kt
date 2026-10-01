@@ -19,22 +19,21 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.media_sharing_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
         SettingsHelp(stringResource(R.string.media_share_help), tag = "media-share-help")
-        SettingsPillRow { for (content in MediaShareContent.entries) {
-            ShareChoice("content-$content", when (content) {
+        SettingsChips(stringResource(R.string.media_share_content_title), MediaShareContent.entries, settings.content,
+            label = { stringResource(when (it) {
                 MediaShareContent.ORIGINALS_AND_METADATA -> R.string.media_share_content_both
                 MediaShareContent.ORIGINALS_ONLY -> R.string.media_share_content_originals
                 MediaShareContent.METADATA_ONLY -> R.string.media_share_content_metadata
-            }, settings.content == content, enabled) { onSettings(settings.copy(content = content)) }
-        } }
-        SettingsPillRow { for (metadata in MediaShareMetadata.entries) {
-            ShareChoice("metadata-$metadata", when (metadata) {
+            }) },
+            onSelect = { onSettings(settings.copy(content = it)) }, tag = { "media-share-content-$it" }, rowEnabled = enabled)
+        SettingsChips(stringResource(R.string.media_share_metadata_title), MediaShareMetadata.entries, settings.metadata,
+            label = { stringResource(when (it) {
                 MediaShareMetadata.PRODUCTION -> R.string.media_share_production
                 MediaShareMetadata.TECHNICAL -> R.string.media_share_technical
                 MediaShareMetadata.BOTH -> R.string.media_share_both
-            }, settings.metadata == metadata, enabled && settings.content != MediaShareContent.ORIGINALS_ONLY) {
-                onSettings(settings.copy(metadata = metadata))
-            }
-        } }
+            }) },
+            onSelect = { onSettings(settings.copy(metadata = it)) }, tag = { "media-share-metadata-$it" },
+            rowEnabled = enabled && settings.content != MediaShareContent.ORIGINALS_ONLY)
         val lutLabel = stringResource(R.string.media_share_lut)
         SettingsSwitchRow(lutLabel, settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
             tag = "media-share-lut", labelTag = "media-share-lut-label",
@@ -43,7 +42,3 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
     }
 }
 
-@Composable
-private fun ShareChoice(tag: String, label: Int, selected: Boolean, enabled: Boolean, action: () -> Unit) {
-    SettingsPill(stringResource(label), "media-share-$tag", selected, enabled, onClick = action)
-}

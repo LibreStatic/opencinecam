@@ -49,13 +49,15 @@ class PresetUiTest {
         compose.onNodeWithText(context.getString(R.string.presets_save_new)).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         compose.waitUntil { repository.states.value.presets.size == 1 }
         assertEquals(settings, repository.states.value.presets.single().settings)
-        compose.onNodeWithText("C1 · Ensayo").performScrollTo().performClick()
+        compose.onNodeWithTag("preset-row-${repository.states.value.presets.single().id}").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNodeWithTag("preset-action-slot-C1").performClick()
         assertEquals(repository.states.value.presets.single().id, repository.states.value.slots["C1"])
     }
     @Test fun renameDoesNotReplaceSavedSettingsWithCurrentConfiguration() {
         val repository = PresetRepository(Memory()); val p = CameraPreset(name = "Original", settings = CameraSettings(zebraEnabled = true))
         repository.save(p); content(repository, CameraSettings(zebraEnabled = false))
-        compose.onNodeWithText(context.getString(R.string.presets_rename)).performScrollTo().performClick()
+        compose.onNodeWithTag("preset-row-${p.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("preset-action-rename").performClick()
         compose.onNodeWithTag("preset-dialog-name").performTextReplacement("Renamed")
         compose.onNodeWithText(context.getString(R.string.presets_confirm_save)).performClick()
         compose.waitUntil { repository.states.value.presets.single().name == "Renamed" }
@@ -65,7 +67,8 @@ class PresetUiTest {
     @Test fun updateReplacesCurrentSnapshotOnlyAfterConfirmation() {
         val repository = PresetRepository(Memory()); val p = CameraPreset(name = "Original", settings = CameraSettings())
         repository.save(p); content(repository, CameraSettings(peakingEnabled = true))
-        compose.onNodeWithText(context.getString(R.string.presets_update)).performScrollTo().performClick()
+        compose.onNodeWithTag("preset-row-${p.id}").performScrollTo().performClick()
+        compose.onNodeWithTag("preset-action-update").performClick()
         assertFalse(repository.states.value.presets.single().settings.peakingEnabled)
         compose.onNodeWithText(context.getString(R.string.presets_confirm_save)).performClick()
         compose.waitUntil { repository.states.value.presets.single().settings.peakingEnabled }

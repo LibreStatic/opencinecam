@@ -67,8 +67,8 @@ class GalleryNavigationDeviceTest {
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
             compose.onNodeWithTag("gallery-share-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-share-dialog",useUnmergedTree = true).assertExists()
-            compose.onNodeWithTag("media-share-content-METADATA_ONLY",useUnmergedTree = true).performScrollTo().performClick()
-            compose.onNodeWithTag("media-share-metadata-PRODUCTION",useUnmergedTree = true).performScrollTo().performClick()
+            compose.pickChoice("media-share-content-METADATA_ONLY")
+            compose.pickChoice("media-share-metadata-PRODUCTION")
             compose.runOnIdle {
                 assertEquals(MediaShareContent.METADATA_ONLY, repository.states.value.mediaSharing.content)
                 assertEquals(MediaShareMetadata.PRODUCTION, repository.states.value.mediaSharing.metadata)

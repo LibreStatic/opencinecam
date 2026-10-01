@@ -147,7 +147,11 @@ class AudioMeterSettingsUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("audio-meter-$tag", useUnmergedTree = true)
+    // Meter mode choices live in a dialog behind their value row.
+    private fun node(tag: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        if (tag.startsWith("settings-mode-")) compose.openChoice("audio-meter-${tag.removeSuffix("-label")}") else compose.closeChoices()
+        return compose.onNodeWithTag("audio-meter-$tag", useUnmergedTree = true)
+    }
     private fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
     private fun progress(tag: String, value: Float) { node(tag).performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(value)) } }
     private fun text(id: Int, vararg args: Any) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)

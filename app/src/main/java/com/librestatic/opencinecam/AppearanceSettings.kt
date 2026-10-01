@@ -20,6 +20,7 @@ internal fun AppearanceSettings() {
     val theme by rememberAppTheme()
     SettingsHeading(stringResource(R.string.appearance_title), stringResource(R.string.appearance_summary), CineIcon.DISPLAYS)
     SettingsChips(
+        title = stringResource(R.string.appearance_title),
         choices = AppTheme.entries,
         selected = theme,
         label = { stringResource(if (it == AppTheme.CINE) R.string.appearance_cine else R.string.appearance_you) },

@@ -24,23 +24,15 @@ internal fun BracketSettings(state: CameraUiState, settings: CameraSettings, onC
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.bracket_settings_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.bracket_settings_help))
-        Text(stringResource(R.string.bracket_count_title), color = MaterialTheme.colorScheme.onSurface)
         // Preferences remain editable even when this lens rejects the current combination:
         // lowering count and then step must not leave both controls mutually disabled.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (count in listOf(3, 5, 7, 9)) FilterChip(selected = settings.bracket.count == count,
-                onClick = { onChange(settings.copy(bracket = settings.bracket.copy(count = count))) },
-                modifier = Modifier.heightIn(min = 48.dp).testTag("bracket-count-$count"), label = { Text(count.toString()) })
-        }
-        Text(stringResource(R.string.bracket_step_title), color = MaterialTheme.colorScheme.onSurface)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BracketStep.entries.forEach { step ->
-                val label = when (step) { BracketStep.THIRD_EV -> "1/3"; BracketStep.HALF_EV -> "1/2"; BracketStep.ONE_EV -> "1"; BracketStep.TWO_EV -> "2" }
-                FilterChip(selected = settings.bracket.step == step,
-                    onClick = { onChange(settings.copy(bracket = settings.bracket.copy(step = step))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("bracket-step-${step.name}"), label = { Text("$label EV") })
-            }
-        }
+        SettingsChips(stringResource(R.string.bracket_count_title), listOf(3, 5, 7, 9), settings.bracket.count,
+            label = { it.toString() }, onSelect = { onChange(settings.copy(bracket = settings.bracket.copy(count = it))) },
+            tag = { "bracket-count-$it" })
+        SettingsChips(stringResource(R.string.bracket_step_title), BracketStep.entries, settings.bracket.step,
+            label = { step -> when (step) { BracketStep.THIRD_EV -> "1/3"; BracketStep.HALF_EV -> "1/2"; BracketStep.ONE_EV -> "1"; BracketStep.TWO_EV -> "2" } + " EV" },
+            onSelect = { onChange(settings.copy(bracket = settings.bracket.copy(step = it))) },
+            tag = { "bracket-step-${it.name}" })
         when (plan) {
             is BracketResolution.Plan -> Text(stringResource(R.string.bracket_exposures,
                 plan.exposures.joinToString(" / ") { "%.2f".format(it.ev) }), color = MaterialTheme.colorScheme.onSurfaceVariant,

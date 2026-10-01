@@ -116,7 +116,11 @@ class AudioListeningSettingsUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("audio-listening-$tag", useUnmergedTree = tag.endsWith("-label"))
+    // Output and device choices live in dialogs behind their value rows.
+    private fun node(tag: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        if (tag.startsWith("output-") || tag.startsWith("device-")) compose.openChoice("audio-listening-${tag.removeSuffix("-label")}") else compose.closeChoices()
+        return compose.onNodeWithTag("audio-listening-$tag", useUnmergedTree = tag.endsWith("-label"))
+    }
     private fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
     private fun text(id: Int, vararg args: Any) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
 }

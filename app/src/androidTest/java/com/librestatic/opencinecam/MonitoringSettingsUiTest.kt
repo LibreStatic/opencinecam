@@ -134,7 +134,11 @@ class MonitoringSettingsUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("monitoring-$tag")
+    // Palette and aspect guide choices live in dialogs behind their value rows.
+    private fun node(tag: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        if (tag.startsWith("palette-") || tag.startsWith("aspect-")) compose.openChoice("monitoring-${tag.removeSuffix("-label")}") else compose.closeChoices()
+        return compose.onNodeWithTag("monitoring-$tag")
+    }
     private fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
     private fun edit(tag: String, value: String) { node(tag).performScrollTo().performTextReplacement(value) }
     private fun integer(tag: String, value: String) { edit(tag, value); click("$tag-apply") }

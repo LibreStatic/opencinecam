@@ -39,15 +39,10 @@ internal fun PhotoAspectSettings(state: CameraUiState, settings: CameraSettings,
             Switch(checked = selection.enabled, onCheckedChange = { onChange(settings.copy(photoAspect = selection.copy(enabled = it))) },
                 modifier = Modifier.semantics { contentDescription = toggleLabel }.testTag("photo-aspect-enabled"))
         }
-        Text(stringResource(R.string.photo_aspect_selected, selection.width, selection.height), color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.testTag("photo-aspect-selected"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((w, h) in listOf(1 to 1, 4 to 3, 3 to 2, 16 to 9, 239 to 100)) {
-                FilterChip(selected = selection.width == w && selection.height == h,
-                    onClick = { onChange(settings.copy(photoAspect = PhotoAspectSelection(true, w, h))) },
-                    label = { Text("$w:$h") }, modifier = Modifier.heightIn(min = 48.dp).testTag("photo-aspect-$w-$h"))
-            }
-        }
+        SettingsChips(stringResource(R.string.photo_aspect_selected, selection.width, selection.height),
+            listOf(1 to 1, 4 to 3, 3 to 2, 16 to 9, 239 to 100), selection.width to selection.height,
+            label = { (w, h) -> "$w:$h" }, onSelect = { (w, h) -> onChange(settings.copy(photoAspect = PhotoAspectSelection(true, w, h))) },
+            tag = { (w, h) -> "photo-aspect-$w-$h" }, rowTag = "photo-aspect-selected")
         OutlinedTextField(value = width, onValueChange = { width = it.take(5) }, singleLine = true,
             label = { Text(stringResource(R.string.photo_aspect_width)) }, isError = candidate == null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

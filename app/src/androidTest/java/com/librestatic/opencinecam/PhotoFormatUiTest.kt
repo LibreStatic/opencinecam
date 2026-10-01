@@ -22,9 +22,9 @@ class PhotoFormatUiTest {
     @get:Rule val compose = createComposeRule()
     @Test fun advertisedFormatsAndAccessibleQualityControlsUpdateOnlyTheirPreference() {
         val settings=show(raw=true,heic=true)
-        compose.onNodeWithTag("photo-format-RAW_JPEG").performScrollTo().performClick()
+        compose.pickChoice("photo-format-RAW_JPEG")
         compose.runOnIdle { assertEquals(StillPhotoFormat.RAW_JPEG,settings.value.photoFormat) }
-        compose.onNodeWithTag("photo-format-HEIC").performScrollTo().performClick()
+        compose.pickChoice("photo-format-HEIC")
         compose.onNodeWithTag("photo-quality").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { assertTrue(it(100f)) }
         compose.onNodeWithTag("photo-quality-increase").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("photo-quality-decrease").performClick()
@@ -35,11 +35,11 @@ class PhotoFormatUiTest {
     }
     @Test fun unsupportedPersistedFormatRemainsVisibleUntilUserChoosesJpeg() {
         val settings=show(raw=false,heic=false,format=StillPhotoFormat.HEIC)
-        compose.onNodeWithTag("photo-format-HEIC").assertIsSelected().assertIsNotEnabled()
-        compose.onNodeWithTag("photo-format-RAW_JPEG").assertIsNotEnabled()
+        compose.openChoice("photo-format-HEIC").assertIsSelected().assertIsNotEnabled()
+        compose.openChoice("photo-format-RAW_JPEG").assertIsNotEnabled()
         compose.onNodeWithTag("photo-format-unavailable").assertExists()
         compose.runOnIdle { assertEquals(StillPhotoFormat.HEIC,settings.value.photoFormat) }
-        compose.onNodeWithTag("photo-format-JPEG").performScrollTo().performClick()
+        compose.pickChoice("photo-format-JPEG")
         compose.onNodeWithTag("photo-format-unavailable").assertDoesNotExist()
     }
     private fun show(raw:Boolean,heic:Boolean,format:StillPhotoFormat=StillPhotoFormat.JPEG): androidx.compose.runtime.MutableState<CameraSettings> {

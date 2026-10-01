@@ -22,14 +22,16 @@ class ProfessionalExposureUiTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     @Test fun unknownCameraNeverEnablesNativePriorityOrManualExposure() {
         content(CameraSettings())
+        compose.openChoice("pro-mode-AUTO")
         for (mode in listOf(ExposureMode.MANUAL, ExposureMode.ISO_PRIORITY, ExposureMode.SHUTTER_PRIORITY)) {
-            compose.onNodeWithText(context.getString(mode.titleResource())).assertIsNotEnabled()
+            compose.onNodeWithTag("pro-mode-${mode.name}").assertIsNotEnabled()
         }
-        compose.onNodeWithText(context.getString(R.string.pro_mode_auto)).assertIsEnabled().assertIsDisplayed()
+        compose.onNodeWithTag("pro-mode-AUTO").assertIsEnabled().assertIsDisplayed()
     }
     @Test fun doubleFontKeepsAccessibleAutomaticControlAndUnavailableExplanation() {
         content(CameraSettings(exposure = ExposureSelection(ExposureMode.ISO_PRIORITY)), doubleFont = true)
-        compose.onNodeWithText(context.getString(R.string.pro_mode_auto)).performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.openChoice("pro-mode-AUTO").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.closeChoices()
         compose.onNodeWithText(context.getString(R.string.pro_exposure_unavailable)).performScrollTo().assertIsDisplayed()
     }
     @Test fun returnToAutoUpdatesCanonicalIntentWithoutDiscardingStoredManualValues() {

@@ -24,33 +24,21 @@ internal fun TimecodeSettings(settings: CameraSettings, onChange: (CameraSetting
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.settings_timecode), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.settings_timecode_description), style = MaterialTheme.typography.bodyMedium)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.timecode_enabled))
-            Switch(settings.timecodeEnabled, { onChange(settings.copy(timecodeEnabled = it)) }, Modifier.testTag("timecode-enabled"))
-        }
+        SettingsSwitchRow(stringResource(R.string.timecode_enabled), settings.timecodeEnabled,
+            { onChange(settings.copy(timecodeEnabled = it)) }, "timecode-enabled")
         if (settings.timecodeEnabled) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TimecodeMode.entries.forEach { mode ->
-                    FilterChip(settings.timecodeMode == mode, { onChange(settings.copy(timecodeMode = mode)) },
-                        label = { Text(when (mode) { TimecodeMode.FREE_RUN -> "FREE"; TimecodeMode.RECORD_RUN -> "REC"; TimecodeMode.REGEN -> "REGEN" }) })
-                }
-            }
-            Text(stringResource(R.string.timecode_rate))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(24, 25, 30, 50, 60).forEach { fps ->
-                    FilterChip(settings.timecodeNominalFps == fps && !settings.timecodeDropFrame,
-                        { onChange(settings.withTimecodeRate(fps, false)) }, label = { Text("$fps NDF") })
-                }
-                listOf(30, 60).forEach { fps ->
-                    FilterChip(settings.timecodeNominalFps == fps && settings.timecodeDropFrame,
-                        { onChange(settings.withTimecodeRate(fps, true)) }, label = { Text(if (fps == 30) "29.97 DF" else "59.94 DF") })
-                }
-            }
+            SettingsChips(stringResource(R.string.settings_mode), TimecodeMode.entries, settings.timecodeMode,
+                label = { when (it) { TimecodeMode.FREE_RUN -> "FREE"; TimecodeMode.RECORD_RUN -> "REC"; TimecodeMode.REGEN -> "REGEN" } },
+                onSelect = { onChange(settings.copy(timecodeMode = it)) }, tag = { "timecode-mode-${it.name}" })
+            SettingsChips(stringResource(R.string.timecode_rate),
+                listOf(24, 25, 30, 50, 60).map { it to false } + listOf(30 to true, 60 to true),
+                settings.timecodeNominalFps to settings.timecodeDropFrame,
+                label = { (fps, df) -> if (!df) "$fps NDF" else if (fps == 30) "29.97 DF" else "59.94 DF" },
+                onSelect = { (fps, df) -> onChange(settings.withTimecodeRate(fps, df)) },
+                tag = { (fps, df) -> "timecode-rate-$fps${if (df) "DF" else "NDF"}" })
             TimecodeStartEditor(settings, onChange)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.timecode_remember), Modifier.weight(1f))
-                Switch(settings.timecodeRememberPosition, { onChange(settings.copy(timecodeRememberPosition = it)) }, Modifier.testTag("timecode-remember"))
-            }
+            SettingsSwitchRow(stringResource(R.string.timecode_remember), settings.timecodeRememberPosition,
+                { onChange(settings.copy(timecodeRememberPosition = it)) }, "timecode-remember")
             Text(stringResource(R.string.timecode_remember_help), style = MaterialTheme.typography.bodySmall)
             var confirmReset by remember { mutableStateOf(false) }
             OutlinedButton({ confirmReset = true }, Modifier.testTag("timecode-reset")) { Text(stringResource(R.string.timecode_reset)) }

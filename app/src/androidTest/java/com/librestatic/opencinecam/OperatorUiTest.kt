@@ -97,7 +97,7 @@ class OperatorUiTest {
         }
         compose.onNodeWithTag("operator-lock").performScrollTo().assertIsOn().performClick()
         compose.onNodeWithTag("operator-lock").assertIsOff()
-        compose.onNodeWithTag("operator-startup-LAST").performScrollTo().performClick()
+        compose.pickChoice("operator-startup-LAST")
         assertFalse(CameraSettingsStore(memory).load().operation.lockDuringTake)
         assertEquals(StartupMode.LAST, CameraSettingsStore(memory).load().operation.startupMode)
     }

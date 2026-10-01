@@ -197,7 +197,7 @@ class MediaCatalogUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("gallery-$tag", useUnmergedTree = true)
+    private fun node(tag: String) = compose.settingsNode("gallery-$tag", Regex("^kind-[A-Z_]+(-label)?$").matches(tag))
     private fun reveal(tag: String): SemanticsNodeInteraction {
         compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-$tag"))
         return node(tag)

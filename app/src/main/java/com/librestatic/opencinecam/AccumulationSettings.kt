@@ -21,48 +21,28 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.accumulation_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.accumulation_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AccumulationMode.entries.forEach { mode ->
-                FilterChip(selected = selection.mode == mode,
-                    onClick = { onChange(settings.copy(accumulation = selection.copy(mode = mode))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("accumulation-mode-$mode"),
-                    label = { Text(mode.name) })
-            }
-        }
+        SettingsChips(stringResource(R.string.settings_mode), AccumulationMode.entries, selection.mode,
+            label = { it.name }, onSelect = { onChange(settings.copy(accumulation = selection.copy(mode = it))) },
+            tag = { "accumulation-mode-$it" })
         Text(stringResource(when (selection.mode) {
             AccumulationMode.LIGHT -> R.string.accumulation_light_help
             AccumulationMode.WATER -> R.string.accumulation_water_help
             AccumulationMode.STARS -> R.string.accumulation_stars_help
             AccumulationMode.BULB -> R.string.accumulation_bulb_help
         }), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("accumulation-algorithm"))
-        Text(stringResource(R.string.accumulation_duration, selection.durationMs), color = MaterialTheme.colorScheme.onSurface)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(1L, 5L, 10L, 30L, 60L, 300L).forEach { seconds ->
-                FilterChip(selected = selection.durationMs == seconds * 1000,
-                    enabled = selection.intervalMs <= seconds * 500,
-                    onClick = { onChange(settings.copy(accumulation = selection.copy(durationMs = seconds * 1000))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("accumulation-duration-$seconds"),
-                    label = { Text("$seconds s") })
-            }
-        }
-        Text(stringResource(R.string.accumulation_interval, selection.intervalMs), color = MaterialTheme.colorScheme.onSurface)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(100L, 250L, 500L, 1000L, 5000L, 10000L).forEach { ms ->
-                FilterChip(selected = selection.intervalMs == ms, enabled = ms <= selection.durationMs / 2,
-                    onClick = { onChange(settings.copy(accumulation = selection.copy(intervalMs = ms))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("accumulation-interval-$ms"),
-                    label = { Text("$ms ms") })
-            }
-        }
-        Text(stringResource(R.string.accumulation_edge, selection.maxEdge), color = MaterialTheme.colorScheme.onSurface)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(720, 1080, 2048).forEach { edge ->
-                FilterChip(selected = selection.maxEdge == edge,
-                    onClick = { onChange(settings.copy(accumulation = selection.copy(maxEdge = edge))) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("accumulation-edge-$edge"),
-                    label = { Text("$edge px") })
-            }
-        }
+        // The long labels keep their caveats (early finish, processing time, no upscaling) as the
+        // row title; the chosen value is the row's supporting text.
+        SettingsChips(stringResource(R.string.accumulation_duration, selection.durationMs), listOf(1L, 5L, 10L, 30L, 60L, 300L),
+            selection.durationMs / 1000, label = { "$it s" },
+            onSelect = { onChange(settings.copy(accumulation = selection.copy(durationMs = it * 1000))) },
+            tag = { "accumulation-duration-$it" }, enabled = { selection.intervalMs <= it * 500 })
+        SettingsChips(stringResource(R.string.accumulation_interval, selection.intervalMs), listOf(100L, 250L, 500L, 1000L, 5000L, 10000L),
+            selection.intervalMs, label = { "$it ms" },
+            onSelect = { onChange(settings.copy(accumulation = selection.copy(intervalMs = it))) },
+            tag = { "accumulation-interval-$it" }, enabled = { it <= selection.durationMs / 2 })
+        SettingsChips(stringResource(R.string.accumulation_edge, selection.maxEdge), listOf(720, 1080, 2048), selection.maxEdge,
+            label = { "$it px" }, onSelect = { onChange(settings.copy(accumulation = selection.copy(maxEdge = it))) },
+            tag = { "accumulation-edge-$it" })
         if (selection.mode == AccumulationMode.STARS) {
             Text(stringResource(R.string.accumulation_threshold, selection.starsThreshold), color = MaterialTheme.colorScheme.onSurface)
             Slider(value = selection.starsThreshold.toFloat(), valueRange = 0f..255f, steps = 254,

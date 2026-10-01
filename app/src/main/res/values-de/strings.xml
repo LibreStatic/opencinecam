@@ -685,6 +685,7 @@
     <string name="caps_copy">Bericht kopieren</string>
     <string name="caps_copied">Bericht in die Zwischenablage kopiert</string>
     <string name="caps_copy_failed">Der Bericht konnte nicht kopiert werden</string>
+    <string name="caps_camera">Kamera</string>
     <string name="caps_camera_id">Kamera %1$s</string>
     <string name="caps_physical_of">Physisches Objektiv von Kamera %1$s</string>
     <string name="caps_physical_usage">OpenCineCam öffnet dieses Objektiv nicht direkt, sondern über Kamera %1$s mit dem Zoom und den Objektivtasten.</string>
@@ -753,4 +754,20 @@
     <string name="caps_usage_flash">Fotoblitzmodi und, falls verfügbar, Blitzstärke.</string>
     <string name="caps_feature_sensor_clock">Sensoruhr</string>
     <string name="caps_usage_sensor_clock">Richtet separate WAV/FLAC-Audiodateien über die Sensoruhr am Video aus.</string>
+    <string name="settings_mode">Modus</string>
+    <string name="photo_format_label">Format</string>
+    <string name="pro_shutter_unit">Verschlusseinheit</string>
+    <string name="pro_angle_presets">Gängige Winkel</string>
+    <string name="fold_subject_mode">Inhalt der Außenanzeige</string>
+    <string name="proxy_policy_battery_title">Mindestakku</string>
+    <string name="proxy_policy_space_title">Reservierter Speicher</string>
+    <string name="media_share_content_title">Geteilte Inhalte</string>
+    <string name="media_share_metadata_title">Metadaten</string>
+    <string name="gallery_kind_title">Medientyp</string>
+    <string name="audio_listening_output_title">Ausgabe</string>
+    <string name="audio_listening_device_title">Gerät</string>
+    <string name="presets_assign_slot">%1$s zuweisen</string>
+    <string name="presets_unassign_slot">Von %1$s entfernen</string>
+    <string name="pro_flicker_suggestions">Flimmerfreier Verschluss</string>
+    <string name="lut_disable_title">LUTs deaktivieren</string>
 </resources>

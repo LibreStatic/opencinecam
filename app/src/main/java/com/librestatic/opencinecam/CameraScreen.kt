@@ -4227,26 +4227,20 @@ internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: Cam
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("slate-take"))
         if (take == null) Text(stringResource(R.string.production_slate_invalid_take), Modifier.testTag("slate-take-invalid"), color = Amber, fontSize = 14.sp)
-        Text(stringResource(R.string.production_slate_location), color = MaterialTheme.colorScheme.onSurface)
-        SettingsPillRow { for (location in ProductionSlateLocation.entries) {
-            SettingsPill(stringResource(when (location) {
+        SettingsChips(stringResource(R.string.production_slate_location), ProductionSlateLocation.entries, slate.location,
+            label = { stringResource(when (it) {
                 ProductionSlateLocation.UNSPECIFIED -> R.string.production_slate_unspecified
                 ProductionSlateLocation.INTERIOR -> R.string.production_slate_interior
                 ProductionSlateLocation.EXTERIOR -> R.string.production_slate_exterior
-            }), "slate-location-$location", slate.location == location) {
-                onSettingsChange(settings.copy(productionSlate = slate.copy(location = location)))
-            }
-        } }
-        Text(stringResource(R.string.production_slate_time), color = MaterialTheme.colorScheme.onSurface)
-        SettingsPillRow { for (time in ProductionSlateTimeOfDay.entries) {
-            SettingsPill(stringResource(when (time) {
+            }) },
+            onSelect = { onSettingsChange(settings.copy(productionSlate = slate.copy(location = it))) }, tag = { "slate-location-$it" })
+        SettingsChips(stringResource(R.string.production_slate_time), ProductionSlateTimeOfDay.entries, slate.timeOfDay,
+            label = { stringResource(when (it) {
                 ProductionSlateTimeOfDay.UNSPECIFIED -> R.string.production_slate_unspecified
                 ProductionSlateTimeOfDay.DAY -> R.string.production_slate_day
                 ProductionSlateTimeOfDay.NIGHT -> R.string.production_slate_night
-            }), "slate-time-$time", slate.timeOfDay == time) {
-                onSettingsChange(settings.copy(productionSlate = slate.copy(timeOfDay = time)))
-            }
-        } }
+            }) },
+            onSelect = { onSettingsChange(settings.copy(productionSlate = slate.copy(timeOfDay = it))) }, tag = { "slate-time-$it" })
         val goodLabel = stringResource(R.string.production_slate_good)
         SettingsSwitchRow(goodLabel, slate.goodTake, { onSettingsChange(settings.copy(productionSlate = slate.copy(goodTake = it))) },
             tag = "slate-good", labelTag = "slate-good-label")
@@ -4277,11 +4271,9 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
         SettingsHelp(stringResource(R.string.audio_meter_help), tag = "audio-meter-settings-help")
         SettingsSwitchRow(stringResource(R.string.audio_meter_visible), options.visible,
             { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) }, tag = "audio-meter-settings-visible")
-        SettingsPillRow { for (mode in AudioMeterMode.entries) {
-            SettingsPill(stringResource(audioMeterModeLabel(mode)), "audio-meter-settings-mode-$mode", options.mode == mode) {
-                onSettingsChange(settings.copy(audioMeter = options.copy(mode = mode)))
-            }
-        } }
+        SettingsChips(stringResource(R.string.settings_mode), AudioMeterMode.entries, options.mode,
+            label = { stringResource(audioMeterModeLabel(it)) },
+            onSelect = { onSettingsChange(settings.copy(audioMeter = options.copy(mode = it))) }, tag = { "audio-meter-settings-mode-$it" })
         val referenceLabel = stringResource(R.string.audio_meter_reference, options.vuReferenceDbfs)
         Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = MaterialTheme.colorScheme.onSurface)
         val referenceInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -4394,28 +4386,23 @@ internal fun AudioListeningSettingsControls(
                 thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
             track = { androidx.compose.material3.SliderDefaults.Track(sliderState = it) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("audio-listening-volume").semantics { contentDescription = volumeLabel })
-        SettingsPillRow { for (output in AudioListeningOutput.entries) {
-            val label = stringResource(when (output) {
+        SettingsChips(stringResource(R.string.audio_listening_output_title), AudioListeningOutput.entries, request.output,
+            label = { stringResource(when (it) {
                 AudioListeningOutput.WIRED_USB -> R.string.audio_listening_wired
                 AudioListeningOutput.BLUETOOTH -> R.string.audio_listening_bluetooth
                 AudioListeningOutput.SPEAKER -> R.string.audio_listening_speaker
-            })
-            SettingsPill(label, "audio-listening-output-${output.name}", request.output == output) {
-                onSettingsChange(settings.copy(audioListening = request.copy(output = output), audioListeningOutputDeviceId = null))
-            }
-        } }
+            }) },
+            onSelect = { onSettingsChange(settings.copy(audioListening = request.copy(output = it), audioListeningOutputDeviceId = null)) },
+            tag = { "audio-listening-output-${it.name}" })
         Text(stringResource(if (request.output == AudioListeningOutput.SPEAKER) R.string.audio_listening_speaker_warning else R.string.audio_listening_latency),
             Modifier.testTag("audio-listening-route-help"), color = Muted, fontSize = 14.sp)
-        SettingsPillRow {
-            SettingsPill(stringResource(R.string.audio_listening_auto), "audio-listening-device-auto", settings.audioListeningOutputDeviceId == null) {
-                onSettingsChange(settings.copy(audioListeningOutputDeviceId = null))
-            }
-            for (device in state.audioListeningOutputs.filter { it.output == request.output }) {
-                SettingsPill(device.name, "audio-listening-device-${device.id}", settings.audioListeningOutputDeviceId == device.id) {
-                    onSettingsChange(settings.copy(audioListeningOutputDeviceId = device.id))
-                }
-            }
-        }
+        val devices = state.audioListeningOutputs.filter { it.output == request.output }
+        val autoDevice = stringResource(R.string.audio_listening_auto)
+        SettingsChips(stringResource(R.string.audio_listening_device_title), listOf<Int?>(null) + devices.map { it.id },
+            settings.audioListeningOutputDeviceId,
+            label = { id -> if (id == null) autoDevice else devices.firstOrNull { it.id == id }?.name ?: id.toString() },
+            onSelect = { onSettingsChange(settings.copy(audioListeningOutputDeviceId = it)) },
+            tag = { "audio-listening-device-${it ?: "auto"}" })
         Text(stringResource(R.string.audio_listening_requested_device,
             settings.audioListeningOutputDeviceId?.toString() ?: stringResource(R.string.audio_listening_auto)),
             Modifier.testTag("audio-listening-requested-device"), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
@@ -4501,12 +4488,8 @@ private fun AudioChoiceRow(
     selected: String,
     onSelected: (String) -> Unit,
 ) {
-    // Options share one row of pills and wrap only when the card is too narrow for them.
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        val labels = choices.toMap()
-        SettingsChips(choices.map { it.first }, selected, label = { labels.getValue(it) }, onSelect = onSelected)
-    }
+    val labels = choices.toMap()
+    SettingsChips(title, choices.map { it.first }, selected, label = { labels.getValue(it) }, onSelect = onSelected)
 }
 
 private fun formatAudioRate(rate: Int): String = if (rate % 1_000 == 0) "${rate / 1_000} kHz" else "${rate / 1_000.0} kHz"

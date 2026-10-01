@@ -38,43 +38,26 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
         if (display.phase != DisplaySessionPhase.IDLE) {
             Text(stringResource(if (display.phase == DisplaySessionPhase.STARTING) R.string.fold_starting else if (display.visible) R.string.fold_visible else R.string.fold_hidden), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             Button(onClick = { coordinator?.closeSession() }, modifier = Modifier.heightIn(min = 48.dp).testTag("fold-close")) { Text(stringResource(R.string.fold_close)) }
-        } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Side by side when the pane has room; they wrap only on narrow displays.
+        } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { coordinator?.start(DisplayOperation.PRESENT) }, enabled = display.presentation == DisplayCapability.AVAILABLE,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("fold-present")) { Text(stringResource(R.string.fold_start_subject)) }
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("fold-present")) { Text(stringResource(R.string.fold_start_subject)) }
             Button(onClick = { coordinator?.start(DisplayOperation.TRANSFER) }, enabled = display.transfer == DisplayCapability.AVAILABLE && camera.phase != CameraUiPhase.RECORDING,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
         }
         SettingsHelp(stringResource(R.string.fold_transfer_help))
         Text(stringResource(R.string.self_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
         SettingsHelp(stringResource(R.string.self_timer_help))
-        // One segmented row: the unit repeats in each segment, the name of the setting once above.
-        Text(stringResource(R.string.self_timer_label), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-        val timers = listOf(0, 3, 5, 10)
-        SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
-            timers.forEachIndexed { index, seconds ->
-                val description = stringResource(R.string.self_timer_value, seconds)
-                SegmentedButton(
-                    selected = subject.selfTimerSeconds == seconds,
-                    onClick = { update(subject.copy(selfTimerSeconds = seconds)) },
-                    shape = SegmentedButtonDefaults.itemShape(index, timers.size),
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
-                ) { Text(stringResource(R.string.self_timer_short, seconds)) }
-            }
-        }
+        SettingsChips(stringResource(R.string.self_timer_label), listOf(0, 3, 5, 10), subject.selfTimerSeconds,
+            label = { stringResource(R.string.self_timer_short, it) },
+            onSelect = { update(subject.copy(selfTimerSeconds = it)) }, tag = { "self-timer-$it" })
         FoldToggle(stringResource(R.string.self_minimal), subject.selfMinimalControls) { update(subject.copy(selfMinimalControls = it)) }
-        SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
-            SubjectDisplayMode.entries.forEachIndexed { index, mode ->
-                SegmentedButton(selected = subject.mode == mode, onClick = { update(subject.copy(mode = mode)) },
-                    shape = SegmentedButtonDefaults.itemShape(index, SubjectDisplayMode.entries.size),
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    label = { Text(stringResource(when (mode) {
-                        SubjectDisplayMode.STATUS -> R.string.fold_mode_status
-                        SubjectDisplayMode.TELEPROMPTER -> R.string.fold_mode_prompter
-                        SubjectDisplayMode.PREVIEW -> R.string.fold_mode_preview
-                    }), maxLines = 1) })
-            }
-        }
+        SettingsChips(stringResource(R.string.fold_subject_mode), SubjectDisplayMode.entries, subject.mode,
+            label = { mode -> stringResource(when (mode) {
+                SubjectDisplayMode.STATUS -> R.string.fold_mode_status
+                SubjectDisplayMode.TELEPROMPTER -> R.string.fold_mode_prompter
+                SubjectDisplayMode.PREVIEW -> R.string.fold_mode_preview
+            }) },
+            onSelect = { update(subject.copy(mode = it)) }, tag = { "fold-mode-${it.name}" })
         FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }
         FoldToggle(stringResource(R.string.fold_lock_touch), subject.touchLocked) { update(subject.copy(touchLocked = it)) }
         if (subject.mode != SubjectDisplayMode.STATUS) {

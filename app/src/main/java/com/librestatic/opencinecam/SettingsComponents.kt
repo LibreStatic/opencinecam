@@ -7,6 +7,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -84,11 +86,15 @@ internal fun SettingsHeading(title: String, description: String? = null, icon: C
 }
 
 /**
- * Mutually exclusive choices as one row of pills that wraps only when the pane is too narrow,
- * instead of a column of full-width buttons.
+ * Mutually exclusive choices as one full-width tappable row showing the current value; tapping it
+ * opens a single-choice dialog. Unlike a row of pills, this never wraps or stacks on narrow panes
+ * such as a flip phone's cover screen. The row carries [rowTag], or else the first choice's [tag]
+ * with its last "-segment" replaced by "-row" (e.g. "appearance-row"); each
+ * dialog option carries its [tag] and its label "[tag]-label".
  */
 @Composable
 internal fun <T> SettingsChips(
+    title: String,
     choices: List<T>,
     selected: T,
     label: @Composable (T) -> String,
@@ -96,33 +102,108 @@ internal fun <T> SettingsChips(
     modifier: Modifier = Modifier,
     tag: ((T) -> String)? = null,
     enabled: (T) -> Boolean = { true },
+    rowEnabled: Boolean = true,
+    rowTag: String? = null,
 ) {
-    FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        choices.forEach { choice ->
-            val on = choice == selected
-            val available = enabled(choice)
-            androidx.compose.foundation.layout.Box(
-                Modifier
-                    .heightIn(min = 48.dp)
-                    .widthIn(min = 56.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(if (on) SettingsAccent else SettingsSurfaceRaised)
-                    .border(1.dp, if (on) SettingsAccent else SettingsBorder, RoundedCornerShape(24.dp))
-                    .selectable(selected = on, enabled = available, role = Role.RadioButton) { onSelect(choice) }
-                    .then(tag?.let { Modifier.testTag(it(choice)) } ?: Modifier)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label(choice),
-                    color = when { !available -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); on -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface },
-                    fontSize = 14.sp,
-                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.width(IntrinsicSize.Max).then(tag?.let { Modifier.testTag(it(choice) + "-label") } ?: Modifier),
-                )
+    var open by rememberSaveable(title) { mutableStateOf(false) }
+    val labels = choices.map { label(it) }
+    val current = choices.indexOf(selected).takeIf { it >= 0 }?.let { labels[it] }
+    SettingsValueRow(
+        title = title,
+        value = current,
+        enabled = rowEnabled,
+        modifier = modifier.then(
+            (rowTag ?: tag?.takeIf { choices.isNotEmpty() }?.let { t -> t(choices.first()).substringBeforeLast('-') + "-row" })
+                ?.let { Modifier.testTag(it) } ?: Modifier,
+        ),
+    ) { open = true }
+    if (open) SettingsChoiceDialog(
+        title = title,
+        labels = labels,
+        selected = choices.indexOf(selected),
+        tags = tag?.let { t -> choices.map(t) },
+        enabled = choices.map(enabled),
+        onDismiss = { open = false },
+    ) { index -> open = false; onSelect(choices[index]) }
+}
+
+/**
+ * A Material 3 Expressive list row: title, current value as supporting text, and a chevron. The
+ * whole row is the touch target (≥ 56 dp), so it reads the same on a cover screen and a tablet.
+ */
+@Composable
+internal fun SettingsValueRow(
+    title: String,
+    value: String?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(SettingsSurfaceRaised)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f))
+            value?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium,
+                    color = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
             }
         }
+        CineGlyph(CineIcon.CHEVRON, if (enabled) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f), Modifier.size(20.dp))
     }
+}
+
+/** Single-choice dialog with radio rows, matching the ugallery settings pattern. */
+@Composable
+internal fun SettingsChoiceDialog(
+    title: String,
+    labels: List<String>,
+    selected: Int,
+    tags: List<String>?,
+    enabled: List<Boolean> = labels.map { true },
+    onDismiss: () -> Unit,
+    onSelect: (Int) -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                labels.forEachIndexed { index, text ->
+                    val available = enabled.getOrElse(index) { true }
+                    val tag = tags?.getOrNull(index)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clip(MaterialTheme.shapes.large)
+                            .selectable(selected = index == selected, enabled = available, role = Role.RadioButton) { onSelect(index) }
+                            .then(tag?.let { Modifier.testTag(it) } ?: Modifier)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = index == selected, onClick = null, enabled = available)
+                        Text(text, style = MaterialTheme.typography.bodyLarge,
+                            color = if (available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            modifier = Modifier.weight(1f).padding(start = 16.dp).then(tag?.let { Modifier.testTag("$it-label") } ?: Modifier))
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
 }
 
 /**
@@ -227,4 +308,47 @@ internal fun SettingsHelp(text: String, modifier: Modifier = Modifier, tag: Stri
         )
         if (open) Text(text, color = SettingsMuted, fontSize = 13.sp, modifier = tag?.let { Modifier.testTag(it) } ?: Modifier)
     }
+}
+
+/** One entry of a [SettingsActionsDialog]. */
+internal data class SettingsAction(val label: String, val tag: String? = null, val enabled: Boolean = true, val onClick: () -> Unit)
+
+/**
+ * The actions of one list item (a preset, a LUT) as a dialog of full-width rows, instead of a
+ * wrapping row of buttons under the item. Picking an action dismisses the dialog first. Each row
+ * carries its action's tag and its label "[tag]-label".
+ */
+@Composable
+internal fun SettingsActionsDialog(title: String, actions: List<SettingsAction>, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                actions.forEach { action ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clip(MaterialTheme.shapes.large)
+                            .clickable(enabled = action.enabled, role = Role.Button) { onDismiss(); action.onClick() }
+                            .then(action.tag?.let { Modifier.testTag(it) } ?: Modifier)
+                            .padding(horizontal = 8.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            action.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (action.enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                            modifier = Modifier.weight(1f).then(action.tag?.let { Modifier.testTag("$it-label") } ?: Modifier),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+        },
+    )
 }

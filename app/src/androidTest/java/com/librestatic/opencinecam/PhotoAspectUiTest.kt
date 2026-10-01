@@ -22,7 +22,7 @@ class PhotoAspectUiTest {
         compose.setContent { MaterialTheme { Column(Modifier.width(280.dp).height(420.dp).verticalScroll(rememberScrollState())) {
             PhotoAspectSettings(CameraUiState(), settings.value) { settings.value = it }
         } } }
-        compose.onNodeWithTag("photo-aspect-16-9").performScrollTo().performClick()
+        compose.pickChoice("photo-aspect-16-9")
         compose.runOnIdle { assertEquals(PhotoAspectSelection(true, 16, 9), settings.value.photoAspect) }
         compose.onNodeWithTag("photo-aspect-width").performScrollTo().performTextReplacement("0")
         compose.onNodeWithTag("photo-aspect-apply").performScrollTo().assertIsNotEnabled()

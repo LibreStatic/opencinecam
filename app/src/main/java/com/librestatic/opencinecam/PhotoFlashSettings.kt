@@ -32,20 +32,15 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_flash_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_flash_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PhotoFlashMode.entries.forEach { mode ->
-                val candidate = choice(mode)
-                FilterChip(selected = selection.mode == mode,
-                    onClick = { onChange(settings.copy(photoFlash = candidate)) },
-                    enabled = candidate.resolve(caps, settings.exposure.mode) is PhotoFlashResolution.Plan,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("photo-flash-${mode.name}"),
-                    label = { Text(stringResource(when (mode) {
-                        PhotoFlashMode.OFF -> R.string.settings_off
-                        PhotoFlashMode.AUTO -> R.string.photo_flash_auto
-                        PhotoFlashMode.ON -> R.string.photo_flash_on
-                    })) })
-            }
-        }
+        SettingsChips(stringResource(R.string.settings_mode), PhotoFlashMode.entries, selection.mode,
+            label = { mode -> stringResource(when (mode) {
+                PhotoFlashMode.OFF -> R.string.settings_off
+                PhotoFlashMode.AUTO -> R.string.photo_flash_auto
+                PhotoFlashMode.ON -> R.string.photo_flash_on
+            }) },
+            onSelect = { onChange(settings.copy(photoFlash = choice(it))) },
+            tag = { "photo-flash-${it.name}" },
+            enabled = { choice(it).resolve(caps, settings.exposure.mode) is PhotoFlashResolution.Plan })
         val resolved = selection.resolve(caps, settings.exposure.mode)
         if (resolved is PhotoFlashResolution.Rejected) Text(
             stringResource(R.string.photo_flash_rejected, stringResource(when (resolved.reason) {

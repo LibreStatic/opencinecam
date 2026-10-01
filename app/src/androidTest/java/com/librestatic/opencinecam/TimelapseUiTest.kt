@@ -114,7 +114,7 @@ class TimelapseUiTest {
     }
     @Test fun projectRateIsIndependentOfTheSensorVideoPreferenceAndRoundTripsInPresets() {
         content()
-        compose.onNodeWithTag("timelapse-fps-25").performScrollTo().performClick()
+        compose.pickChoice("timelapse-fps-25")
         assertEquals(25, CameraSettingsStore(memory).load().timelapseFps)
         assertEquals(30, repository.states.value.videoFps)
         val preset = CameraPreset(name = "Interval", settings = repository.states.value)
@@ -123,7 +123,7 @@ class TimelapseUiTest {
     @Test fun frameLimitAndActualProgressRemainReachableWhilePending() {
         content(recording = true)
         compose.onNodeWithTag("timelapse-pending").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("timelapse-limit-FRAME_COUNT").performScrollTo().performClick()
+        compose.pickChoice("timelapse-limit-FRAME_COUNT")
         compose.onNodeWithTag("timelapse-frames").performScrollTo().performTextReplacement("3")
         compose.onNodeWithTag("timelapse-frames-apply").performScrollTo().performClick()
         compose.onNodeWithTag("timelapse-actual").performScrollTo().assertIsDisplayed()
@@ -132,7 +132,7 @@ class TimelapseUiTest {
     }
     @Test fun rationalProjectSelectionPersistsAndRemainsDistinctFromTheActiveTake() {
         content(recording = true)
-        compose.onNodeWithTag("timelapse-fps-30000/1001").performScrollTo().performClick()
+        compose.pickChoice("timelapse-fps-30000/1001")
         assertEquals(com.librestatic.opencinecam.camera.CaptureFrameRate(30000,1001),CameraSettingsStore(memory).load().timelapseProjectRate)
         assertEquals(30,repository.states.value.videoFps)
     }
@@ -144,7 +144,7 @@ class TimelapseUiTest {
             } }
         }
         compose.onNodeWithTag("video-off-speed").performScrollTo().assertIsOff().performClick()
-        compose.onNodeWithTag("video-fps-24000/1001").performScrollTo().performClick()
+        compose.pickChoice("video-fps-24000/1001")
         assertTrue(repository.states.value.audioEnabled);assertTrue(CameraSettingsStore(memory).load().videoOffSpeed)
         assertEquals(com.librestatic.opencinecam.camera.CaptureFrameRate(24000,1001),CameraSettingsStore(memory).load().videoProjectRate)
     }

@@ -31,16 +31,13 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
         }
         if (hfr) Text(stringResource(R.string.image_processing_hfr), color = LocalCineColors.current.pending, fontSize = 14.sp)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.image_stabilization), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
-        SettingsHelp(stringResource(R.string.image_stabilization_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO).forEach { mode ->
-                FilterChip(selected.stabilization == mode, { onChange(settings.copy(imageProcessing = selected.copy(stabilization = mode))) },
-                    enabled = mode == null || (!hfr && caps.supports(mode)), modifier = Modifier.heightIn(min = 48.dp).testTag("stabilization-${mode?.name ?: "DEFAULT"}"),
-                    label = { Text(stringResource(when (mode) { null -> R.string.image_template_default; StabilizationMode.OFF -> R.string.image_mode_off;
-                        StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video }), fontSize = 16.sp) })
-            }
-        }
+            SettingsChips(stringResource(R.string.image_stabilization),
+                listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO), selected.stabilization,
+                label = { mode -> stringResource(when (mode) { null -> R.string.image_template_default; StabilizationMode.OFF -> R.string.image_mode_off;
+                    StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video }) },
+                onSelect = { onChange(settings.copy(imageProcessing = selected.copy(stabilization = it))) },
+                tag = { "stabilization-${it?.name ?: "DEFAULT"}" }, enabled = { it == null || (!hfr && caps.supports(it)) })
+            SettingsHelp(stringResource(R.string.image_stabilization_help))
         }
         IspModeChoices(stringResource(R.string.image_noise), "image-noise", selected.noiseReduction,
             { !hfr && caps.supports(it, ImageProcessingControl.NOISE_REDUCTION) },
@@ -67,15 +64,9 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
 
 @Composable
 private fun IspModeChoices(title: String, tag: String, value: IspMode, supported: (IspMode) -> Boolean, onChange: (IspMode) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(IspMode.DEFAULT, IspMode.OFF, IspMode.FAST, IspMode.HIGH_QUALITY).forEach { mode ->
-            FilterChip(value == mode, { onChange(mode) }, enabled = mode == IspMode.DEFAULT || supported(mode),
-                modifier = Modifier.heightIn(min = 48.dp).testTag("$tag-${mode.name}"), label = { Text(stringResource(mode.titleResource()), fontSize = 16.sp) })
-        }
-    }
-    }
+    SettingsChips(title, listOf(IspMode.DEFAULT, IspMode.OFF, IspMode.FAST, IspMode.HIGH_QUALITY), value,
+        label = { stringResource(it.titleResource()) }, onSelect = onChange,
+        tag = { "$tag-${it.name}" }, enabled = { it == IspMode.DEFAULT || supported(it) })
 }
 internal fun IspMode.titleResource(): Int = when (this) {
     IspMode.DEFAULT -> R.string.image_template_default

@@ -30,14 +30,9 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.photo_format_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
         SettingsHelp(stringResource(R.string.photo_format_help))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC).forEach { format ->
-                FilterChip(selected = settings.photoFormat == format, enabled = supported(format),
-                    onClick = { onChange(settings.copy(photoFormat = format)) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("photo-format-${format.name}"),
-                    label = { Text(if (format == StillPhotoFormat.RAW_JPEG) "RAW + JPEG" else format.name) })
-            }
-        }
+        SettingsChips(stringResource(R.string.photo_format_label), listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC),
+            settings.photoFormat, label = { if (it == StillPhotoFormat.RAW_JPEG) "RAW + JPEG" else it.name },
+            onSelect = { onChange(settings.copy(photoFormat = it)) }, tag = { "photo-format-${it.name}" }, enabled = ::supported)
         if (!supported(settings.photoFormat)) Text(stringResource(R.string.photo_format_unavailable),
             color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-format-unavailable"))
         var quality by remember(settings.photoQuality) { mutableFloatStateOf(settings.photoQuality.toFloat()) }

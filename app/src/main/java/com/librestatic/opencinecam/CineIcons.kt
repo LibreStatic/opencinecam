@@ -54,6 +54,7 @@ internal enum class CineIcon {
     REFRESH,
     STAR,
     BACK,
+    CHEVRON,
 }
 
 @Composable
@@ -244,6 +245,7 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             poly(.66f to .08f, .70f to .28f, .50f to .30f, close = false)
         }
         CineIcon.BACK -> poly(.62f to .18f, .30f to .50f, .62f to .82f, close = false)
+        CineIcon.CHEVRON -> poly(.38f to .18f, .70f to .50f, .38f to .82f, close = false)
         CineIcon.STAR -> {
             val path = Path()
             for (i in 0 until 10) {

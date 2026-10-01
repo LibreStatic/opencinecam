@@ -127,7 +127,7 @@ class ProductionSlateSettingsUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("slate-$tag", useUnmergedTree = true)
+    private fun node(tag: String) = compose.settingsNode("slate-$tag", Regex("^(location|time)-[A-Z_]+(-label)?$").matches(tag))
     private fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
     private fun edit(tag: String, value: String) { node(tag).performScrollTo().performTextReplacement(value) }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)

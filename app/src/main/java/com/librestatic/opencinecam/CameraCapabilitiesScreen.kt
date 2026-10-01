@@ -143,6 +143,7 @@ internal fun CameraCapabilitiesScreen(
                 item(key = "intro") { Text(stringResource(R.string.caps_intro), color = SettingsMuted, fontSize = 13.sp) }
                 item(key = "chips") {
                     SettingsChips(
+                        title = stringResource(R.string.caps_camera),
                         choices = loaded.map { it.cameraId },
                         selected = selected.cameraId,
                         label = { id -> cameraChipLabel(loaded.first { it.cameraId == id }, active = id == activeCameraId) },

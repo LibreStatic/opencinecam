@@ -35,7 +35,8 @@ class RecordingWhiteBalanceUiTest {
     @Test fun policyIsConfigurableAtDoubleFontWithoutDiscardingOtherPreferences() {
         var changed: CameraSettings? = null
         content(onChange = { changed = it })
-        compose.onNodeWithText(context.getString(R.string.pro_wb_lock_record)).performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
+        compose.openChoice("pro-wb-policy-LOCK_ON_RECORD")
+        compose.onNodeWithTag("pro-wb-policy-LOCK_ON_RECORD").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         assertEquals(RecordingWhiteBalancePolicy.LOCK_ON_RECORD, changed?.recordingWhiteBalance)
         assertEquals(CameraSettings().whiteBalance, changed?.whiteBalance)
     }

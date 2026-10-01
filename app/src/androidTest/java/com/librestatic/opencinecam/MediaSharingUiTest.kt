@@ -49,13 +49,13 @@ class MediaSharingUiTest {
     @Test fun editingAllSelectionsDoesNotPrepareAndDisabledChoicesRetainPreferences() {
         show()
         for (content in MediaShareContent.entries) {
-            reveal("content-$content").performClick().assertIsSelected()
+            reveal("content-$content").performClick(); reveal("content-$content").assertIsSelected()
             if (content == MediaShareContent.ORIGINALS_ONLY) {
-                reveal("metadata-PRODUCTION").assertIsNotEnabled()
+                reveal("metadata-row").assertIsNotEnabled()
                 reveal("lut").assertIsNotEnabled().assertIsOn()
             } else {
                 for (metadata in MediaShareMetadata.entries) {
-                    reveal("metadata-$metadata").performClick().assertIsSelected()
+                    reveal("metadata-$metadata").performClick(); reveal("metadata-$metadata").assertIsSelected()
                     if (metadata == MediaShareMetadata.PRODUCTION) reveal("lut").assertIsNotEnabled()
                     else reveal("lut").assertIsEnabled()
                 }
@@ -116,7 +116,7 @@ class MediaSharingUiTest {
         try {
             show(); node("confirm").performClick(); await { barrier.entered.count == 0L }
             node("confirm").assertIsNotEnabled()
-            reveal("content-ORIGINALS_ONLY").assertIsNotEnabled()
+            reveal("content-row").assertIsNotEnabled()
             node("cancel").performClick(); node("dialog").assertDoesNotExist()
             barrier.release.countDown()
             awaitDiscard()
@@ -211,7 +211,7 @@ class MediaSharingUiTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("media-share-$tag", useUnmergedTree = true)
+    private fun node(tag: String) = compose.settingsNode("media-share-$tag", Regex("^(content|metadata)-[A-Z_]+(-label)?$").matches(tag))
     private fun reveal(tag: String) = node(tag).performScrollTo()
     private fun await(condition: () -> Boolean) = compose.waitUntil(timeoutMillis = 5000, condition = condition)
     private fun awaitDiscard() = await { results.singleOrNull()?.discardCalls?.get() == 1 }

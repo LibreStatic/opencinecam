@@ -29,10 +29,10 @@ class BracketUiTest {
             BracketSettings(state,settings.value) {settings.value=it}
         }}}
         compose.onNodeWithTag("bracket-rejected").assertExists()
-        compose.onNodeWithTag("bracket-count-3").performScrollTo().performClick()
-        compose.onNodeWithTag("bracket-step-HALF_EV").performScrollTo().performClick()
+        compose.pickChoice("bracket-count-3")
+        compose.pickChoice("bracket-step-HALF_EV")
         compose.onNodeWithTag("bracket-rejected").assertExists() // 1/2 EV cannot map exactly to thirds.
-        compose.onNodeWithTag("bracket-step-THIRD_EV").performScrollTo().performClick()
+        compose.pickChoice("bracket-step-THIRD_EV")
         compose.onNodeWithTag("bracket-rejected").assertDoesNotExist()
         compose.onNodeWithTag("bracket-exposures").performScrollTo().assertIsDisplayed()
         compose.runOnIdle {assertEquals(BracketSelection(3,BracketStep.THIRD_EV),settings.value.bracket);assertEquals(73,settings.value.photoQuality)}

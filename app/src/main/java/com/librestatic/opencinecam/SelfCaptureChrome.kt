@@ -58,13 +58,9 @@ internal fun SelfCaptureChrome(
                 .verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.self_title), color = Color.White, fontSize = 18.sp)
                 Text(stringResource(R.string.self_timer_value, settings.subjectDisplay.selfTimerSeconds), color = Color.White, fontSize = 16.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.cameras.forEach { camera ->
-                        FilterChip(selected = state.selectedCameraId == camera.cameraId, enabled = !locked,
-                            onClick = { binder?.selectCamera(camera.cameraId) }, modifier = Modifier.heightIn(min = 48.dp),
-                            label = { Text(stringResource(R.string.self_lens, camera.cameraId)) })
-                    }
-                }
+                SettingsChips(stringResource(R.string.caps_camera), state.cameras.map<_, String?> { it.cameraId }, state.selectedCameraId,
+                    label = { stringResource(R.string.self_lens, it.orEmpty()) }, onSelect = { id -> id?.let { binder?.selectCamera(it) } },
+                    tag = { "self-lens-$it" }, rowEnabled = !locked)
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.self_audio), color = Color.White, fontSize = 16.sp, modifier = Modifier.weight(1f))
                     Switch(settings.audioEnabled, { onSettingsChanged(settings.copy(audioEnabled = it)) }, enabled = !locked)

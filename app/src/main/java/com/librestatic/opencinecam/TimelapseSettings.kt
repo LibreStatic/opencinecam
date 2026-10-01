@@ -29,25 +29,18 @@ internal fun TimelapseSettings(state: CameraUiState, settings: CameraSettings, o
         state.recordingProjectRate?.takeIf { state.selectedMode == CaptureMode.TIME_LAPSE }?.let {
             Text(stringResource(R.string.project_active_rate, it.projectLabel()), fontSize = 16.sp, modifier = Modifier.testTag("timelapse-active-project"))
         }
-        Text(stringResource(R.string.timelapse_resolution, settings.timelapseWidth, settings.timelapseHeight), fontSize = 16.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.descriptor?.videoProfiles.orEmpty().filter { !it.constrainedHighSpeed && it.fps == 30 }
-                .distinctBy { it.size }.forEach { profile ->
-                    FilterChip(selected = settings.timelapseWidth == profile.size.width && settings.timelapseHeight == profile.size.height,
-                        onClick = { onChange(settings.copy(timelapseWidth = profile.size.width, timelapseHeight = profile.size.height)) },
-                        label = { Text("${profile.size.width}×${profile.size.height}", fontSize = 16.sp) }, modifier = Modifier.heightIn(min = 48.dp))
-                }
-        }
-        Text(stringResource(R.string.timelapse_limit), fontSize = 18.sp)
-        TimeLapseLimitMode.entries.forEach { mode ->
-            val label = when (mode) {
+        SettingsChips(stringResource(R.string.timelapse_resolution, settings.timelapseWidth, settings.timelapseHeight),
+            state.descriptor?.videoProfiles.orEmpty().filter { !it.constrainedHighSpeed && it.fps == 30 }.map { it.size.width to it.size.height }.distinct(),
+            settings.timelapseWidth to settings.timelapseHeight, label = { (w, h) -> "$w×$h" },
+            onSelect = { (w, h) -> onChange(settings.copy(timelapseWidth = w, timelapseHeight = h)) },
+            tag = { (w, h) -> "timelapse-size-${w}x$h" }, rowTag = "timelapse-size-row")
+        SettingsChips(stringResource(R.string.timelapse_limit), TimeLapseLimitMode.entries, settings.timelapseLimitMode,
+            label = { mode -> stringResource(when (mode) {
                 TimeLapseLimitMode.UNLIMITED -> R.string.timelapse_limit_unlimited
                 TimeLapseLimitMode.FRAME_COUNT -> R.string.timelapse_limit_frame_count
                 TimeLapseLimitMode.DURATION -> R.string.timelapse_limit_duration
-            }
-            FilterChip(selected = settings.timelapseLimitMode == mode, onClick = { onChange(settings.copy(timelapseLimitMode = mode)) },
-                label = { Text(stringResource(label), fontSize = 16.sp) }, modifier = Modifier.heightIn(min = 48.dp).testTag("timelapse-limit-$mode"))
-        }
+            }) },
+            onSelect = { onChange(settings.copy(timelapseLimitMode = it)) }, tag = { "timelapse-limit-$it" })
         if (settings.timelapseLimitMode == TimeLapseLimitMode.FRAME_COUNT) {
             IntervalNumber("timelapse-frames", stringResource(R.string.timelapse_frame_count), settings.timelapseFrameCount.toLong(), 2L..100_000L) {
                 onChange(settings.copy(timelapseFrameCount = it.toInt()))
