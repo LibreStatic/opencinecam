@@ -48,12 +48,22 @@ range, assumed/reported color space and transfer, source-precision claim boundar
 dataspace, middle-grey reference and scene gain, and exact shader SHA-256. A changed shader is
 a new transform build even when the curve equation remains unchanged.
 
-The container signals full range and BT.2020 primaries and matrix, but deliberately leaves
-the transfer **unspecified** (H.273 value 2). OCLog2 is not a standard transfer, and a
-"linear" tag would invite players and editors to decode it wrongly, so the sidecar is the
-authority for the transfer. Some device encoders may still write a default VUI transfer
-even when the format key is absent. Check each physical device's files with
-`ffprobe -show_streams` before you trust the container signaling.
+The container signals full range, BT.2020 primaries and matrix, and an **unspecified**
+transfer (H.273 value 2). OCLog2 is not a standard transfer, so the sidecar is the authority for
+it, and editors must be told to interpret the clip as OCLog2.
+
+Android has no API that requests an unspecified transfer, and encoders write a concrete one
+anyway. Qualcomm `c2.qti.hevc.encoder` wrote ST 2084 (PQ) into the SPS of every BT.2020 OCLog2
+recording, whatever buffer dataspace or EGL colorspace it was given. A PQ tag makes decoders treat
+the log image as HDR10. The app therefore rewrites `transfer_characteristics` to 2 in every
+sequence parameter set before muxing (`HevcVuiTransfer`), both in the codec configuration and in
+any keyframe that repeats it, and leaves the transfer out of the track format so the MP4 `colr`
+box says unspecified too. Only those 8 bits change, so the coded pictures are untouched.
+
+The sidecar records the transfer the encoder wrote (`encoding.encoderVuiTransfer`) and the one the
+file carries (`encoding.containerVuiTransfer`). If an encoder's SPS cannot be parsed, its tag is
+kept and reported, and `tools/qualify_oclog2.py` fails any clip whose `ffprobe` transfer is not
+unspecified (`container-transfer`). Baked-LUT recordings keep their BT.709 SDR tag.
 
 ## Middle-grey reference
 

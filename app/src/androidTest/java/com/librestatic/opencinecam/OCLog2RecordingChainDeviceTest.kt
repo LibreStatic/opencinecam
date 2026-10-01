@@ -23,6 +23,7 @@ import android.util.Size
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.RequiresDevice
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.camera.HevcVuiTransfer
 import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
@@ -383,6 +384,9 @@ class OCLog2RecordingChainDeviceTest {
         val trackTransfer = decoded.trackFormat.integerOrNull(MediaFormat.KEY_COLOR_TRANSFER)
         if (trackRange != MediaFormat.COLOR_RANGE_FULL) reasons += "container-color-range:$trackRange"
         if (trackStandard != MediaFormat.COLOR_STANDARD_BT2020) reasons += "container-color-standard:$trackStandard"
+        // OCLog2 claims no standard transfer: an HDR tag would make players tone-map the log image.
+        if (evidence.containerVuiTransfer != HevcVuiTransfer.UNSPECIFIED) reasons += "container-vui-transfer:${evidence.containerVuiTransfer}"
+        if (trackTransfer == MediaFormat.COLOR_TRANSFER_ST2084 || trackTransfer == MediaFormat.COLOR_TRANSFER_HLG) reasons += "container-color-transfer:$trackTransfer"
         return JSONObject()
             .put("schema", SCHEMA)
             .put("tier", tier.label)
@@ -419,6 +423,8 @@ class OCLog2RecordingChainDeviceTest {
                 .put("range", evidence.range)
                 .put("transformSha256", evidence.transformSha256)
                 .put("ycbcrConversion", evidence.ycbcrConversion ?: JSONObject.NULL)
+                .put("encoderVuiTransfer", evidence.encoderVuiTransfer ?: JSONObject.NULL)
+                .put("containerVuiTransfer", evidence.containerVuiTransfer ?: JSONObject.NULL)
                 .put("expectedTransformSha256", OpenCineLogGpuPipeline.transformSha256(tier.sourcePath)))
             .put("decode", JSONObject()
                 .put("decoder", decoded.decoder)

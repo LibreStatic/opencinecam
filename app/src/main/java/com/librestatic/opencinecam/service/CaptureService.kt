@@ -3099,7 +3099,14 @@ class CaptureService : Service() {
             .put("codecName", evidence.codecName)
             .put("eglRenderTargetBits", evidence.eglRenderTargetBits)
             .put("colorPrimaries", if (evidence.recordingLut != null) "BT.709" else evidence.gamut)
-            .put("transfer", if (evidence.recordingLut != null) "BT.709 SDR video" else "unspecified (H.273 transfer 2 requested); OCLog2 sidecar authoritative")
+            .put("transfer", when {
+                evidence.recordingLut != null -> "BT.709 SDR video"
+                evidence.containerVuiTransfer == 2 -> "unspecified (H.273 2); OCLog2 sidecar authoritative"
+                else -> "encoder tag H.273 ${evidence.containerVuiTransfer ?: "absent"} kept; OCLog2 sidecar authoritative"
+            })
+            // H.273 transfer the encoder wrote, and the one the app left in the file.
+            .put("encoderVuiTransfer", evidence.encoderVuiTransfer ?: JSONObject.NULL)
+            .put("containerVuiTransfer", evidence.containerVuiTransfer ?: JSONObject.NULL)
             .put("range", evidence.range))
         .put("geometry", JSONObject()
             .put("mode", evidence.geometryMode.name)

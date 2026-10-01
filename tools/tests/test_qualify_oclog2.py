@@ -132,6 +132,18 @@ class OpenCineLogQualificationTest(unittest.TestCase):
         check = next(item for item in result["checks"] if item["name"] == "runtime-shader")
         self.assertEqual("driver-ycbcr-conversion", check["reason"])
 
+    def test_container_transfer_must_be_unspecified(self) -> None:
+        for transfer, status in ((None, "QUALIFIED"), ("unknown", "QUALIFIED"), ("smpte2084", "FAILED"), ("linear", "FAILED")):
+            with self.subTest(transfer=transfer):
+                stream = {"codec_type": "video", "codec_name": "hevc", "profile": "Main 10", "width": 1920, "height": 1080}
+                if transfer is not None:
+                    stream["color_transfer"] = transfer
+                self.ffprobe.write_text(json.dumps({"streams": [stream]}))
+                result = evaluate(self.manifest(), self.root)
+                self.assertEqual(status, result["status"])
+                if status == "FAILED":
+                    self.assertIn("container-transfer", result["failed"])
+
     def test_ycbcr_conversion_must_be_reported_from_the_dataspace(self) -> None:
         for conversion, status, bucket in (
             (None, "NOT_RUN", "notRun"),

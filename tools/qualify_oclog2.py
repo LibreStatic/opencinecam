@@ -305,6 +305,18 @@ def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
             and video.get("height") == profile.get("height")
         )
     checks.append(Check("ffprobe-contract", "PASS" if ffprobe_valid else "NOT_RUN" if ffprobe is None else "FAIL", "file-metadata-match" if ffprobe_valid else "file-metadata-missing-or-mismatch"))
+    # OCLog2 claims no standard transfer. The app clears the encoder's VUI tag to H.273 unspecified,
+    # which ffprobe omits or prints as "unknown"; an HDR or linear tag would mislead every player.
+    if ffprobe is None:
+        checks.append(Check("container-transfer", "NOT_RUN", "ffprobe-missing"))
+    else:
+        streams = ffprobe.get("streams") if isinstance(ffprobe.get("streams"), list) else []
+        video = next((stream for stream in streams if isinstance(stream, dict) and stream.get("codec_type") == "video"), None)
+        transfer = video.get("color_transfer", "unknown") if video else None
+        if transfer == "unknown":
+            checks.append(Check("container-transfer", "PASS", "container-transfer-unspecified"))
+        else:
+            checks.append(Check("container-transfer", "FAIL", f"container-transfer-tagged:{transfer}"))
 
     workflows = manifest.get("workflows") if isinstance(manifest.get("workflows"), list) else []
     ffmpeg_pass = any(isinstance(item, dict) and str(item.get("name", "")).lower() == "ffmpeg" and item.get("status") == "PASS" for item in workflows)

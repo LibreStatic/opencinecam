@@ -158,6 +158,10 @@ data class OpenCineLogRecordingEvidence(
      * driver's external sampler converted with a matrix and range the app cannot observe.
      */
     val ycbcrConversion: String? = null,
+    /** H.273 transfer the encoder wrote into the SPS VUI, or null when it wrote no colour description. */
+    val encoderVuiTransfer: Int? = null,
+    /** H.273 transfer the file carries after the app rewrote it; 2 (unspecified) for OCLog2. */
+    val containerVuiTransfer: Int? = null,
 )
 
 internal data class OpenCineLogPreviewGeometry(
@@ -661,7 +665,7 @@ class OpenCineLogGpuPipeline(
                     encoderEglSurface = eglSurface
                     val takeGreyReference = if (passthroughSdr) OpenCineLogGreyReference.NATIVE else greyReference
                     val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied,
-                        takeGreyReference, sceneGain(takeGreyReference))
+                        takeGreyReference, sceneGain(takeGreyReference), clearsVuiTransfer = !passthroughSdr && recordingLut == null)
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -1280,6 +1284,31 @@ class OpenCineLogGpuPipeline(
             pending.clear()
         }
 
+        // OCLog2 is no standard transfer, but encoders write one anyway (PQ on Qualcomm). Clear it to
+        // H.273 unspecified in every SPS; an SPS that cannot be parsed keeps the encoder's tag.
+        fun clearTransfer(annexB: ByteArray): ByteArray = try {
+            HevcVuiTransfer.rewrite(annexB, HevcVuiTransfer.UNSPECIFIED).let { result ->
+                result.previousTransfer?.let { if (active.encoderVuiTransfer == null) active.encoderVuiTransfer = it }
+                result.bytes
+            }
+        } catch (failure: IllegalArgumentException) {
+            if (!active.vuiRewriteLogged) {
+                active.vuiRewriteLogged = true
+                android.util.Log.w(LOG_TAG, "HEVC SPS could not be parsed; the encoder's transfer tag stays.", failure)
+            }
+            annexB
+        }
+
+        fun clearFormatTransfer(format: MediaFormat) {
+            val csd = format.getByteBuffer("csd-0")?.duplicate()?.let { value -> ByteArray(value.remaining()).also { value.get(it) } } ?: return
+            val cleared = clearTransfer(csd)
+            active.containerVuiTransfer = runCatching { HevcVuiTransfer.transferOf(cleared) }.getOrNull()
+            if (active.containerVuiTransfer != HevcVuiTransfer.UNSPECIFIED) return
+            format.setByteBuffer("csd-0", ByteBuffer.wrap(cleared))
+            // MediaMuxer writes the colr box from this key; without it the box says unspecified too.
+            format.removeKey(MediaFormat.KEY_COLOR_TRANSFER)
+        }
+
         fun drainOne(codec: MediaCodec, info: MediaCodec.BufferInfo, video: Boolean, timeoutUs: Long): Boolean {
             when (val index = codec.dequeueOutputBuffer(info, timeoutUs)) {
                 MediaCodec.INFO_TRY_AGAIN_LATER -> return false
@@ -1298,6 +1327,7 @@ class OpenCineLogGpuPipeline(
                             }
                         }
                         check(videoTrack < 0) { "Video encoder emitted its format twice." }
+                        if (active.clearsVuiTransfer) clearFormatTransfer(format)
                         videoTrack = active.muxer.addTrack(format)
                     } else {
                         check(audioTrack < 0) { "AAC encoder emitted its format twice." }
@@ -1317,16 +1347,24 @@ class OpenCineLogGpuPipeline(
                     if (info.size > 0 && buffer != null && !isCodecConfig) {
                         buffer.position(info.offset)
                         buffer.limit(info.offset + info.size)
+                        val inBandParameterSets = video && active.clearsVuiTransfer && info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
                         if (muxerStarted) {
                             val normalizedPtsUs = timestampNormalizer.normalize(video, info.presentationTimeUs)
                             val normalizedInfo = MediaCodec.BufferInfo().apply { set(info.offset, info.size, normalizedPtsUs, info.flags) }
-                            active.muxer.writeSampleData(if (video) videoTrack else audioTrack, buffer, normalizedInfo)
+                            val sample = if (!inBandParameterSets) buffer else {
+                                val bytes = ByteArray(info.size).also { buffer.get(it) }
+                                clearTransfer(bytes).let { cleared ->
+                                    normalizedInfo.set(0, cleared.size, normalizedPtsUs, info.flags)
+                                    ByteBuffer.wrap(cleared)
+                                }
+                            }
+                            active.muxer.writeSampleData(if (video) videoTrack else audioTrack, sample, normalizedInfo)
                             noteVideoSample(video, normalizedPtsUs)
                         } else {
                             check(pending.size < maxPendingSamples) { "Muxer format/epoch negotiation buffer overflowed." }
                             val bytes = ByteArray(info.size)
                             buffer.get(bytes)
-                            pending.add(PendingMuxSample(video, bytes, info.presentationTimeUs, info.flags))
+                            pending.add(PendingMuxSample(video, if (inBandParameterSets) clearTransfer(bytes) else bytes, info.presentationTimeUs, info.flags))
                         }
                     }
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
@@ -1465,6 +1503,8 @@ class OpenCineLogGpuPipeline(
                     greyReference = active.greyReference,
                     sceneGain = active.sceneGain,
                     ycbcrConversion = if (shaderYcbcr) active.ycbcrConversion else null,
+                    encoderVuiTransfer = active.encoderVuiTransfer,
+                    containerVuiTransfer = active.containerVuiTransfer,
                 )
             } else null
             if (recording === active) recording = null
@@ -1885,6 +1925,8 @@ class OpenCineLogGpuPipeline(
         val onRecordingLutApplied: ((BakedLutEvidence) -> Unit)?,
         val greyReference: OpenCineLogGreyReference,
         val sceneGain: Float,
+        /** OCLog2 takes clear the encoder's VUI transfer; baked-LUT and SDR takes keep their real tag. */
+        val clearsVuiTransfer: Boolean,
     ) {
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
         var lutApplied = false
@@ -1926,6 +1968,9 @@ class OpenCineLogGpuPipeline(
         var dataSpaceMismatchLogged = false
         /** Label of the shader YCbCr conversion applied to the first recorded frame. */
         var ycbcrConversion: String? = null
+        var encoderVuiTransfer: Int? = null
+        var containerVuiTransfer: Int? = null
+        var vuiRewriteLogged = false
         fun noteSourceDataSpace(dataSpace: Int?, sourcePath: OpenCineLogSourcePath) {
             if (dataSpace == null) return
             val mismatched = !sourcePath.acceptsDataSpace(dataSpace)
