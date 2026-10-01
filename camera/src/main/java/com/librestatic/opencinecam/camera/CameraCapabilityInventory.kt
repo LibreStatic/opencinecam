@@ -144,11 +144,12 @@ object CharacteristicFormatter {
         is Rational -> "${value.numerator}/${value.denominator}"
         is StreamConfigurationMap -> streams(value)
         is MandatoryStreamCombination -> value.description.toString()
-        else -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) profiles(value) else null
+        else -> profiles(value)
     }
 
     private fun profiles(value: Any): String? = when {
-        value is DynamicRangeProfiles -> value.supportedProfiles.sorted().joinToString(", ") { DYNAMIC_RANGE.label(it.toInt()) }
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && value is DynamicRangeProfiles ->
+            value.supportedProfiles.sorted().joinToString(", ") { DYNAMIC_RANGE.label(it.toInt()) }
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && value is ColorSpaceProfiles ->
             value.getSupportedColorSpaces(ImageFormat.UNKNOWN).sortedBy { it.name }.joinToString("\n") { space ->
                 "${space.name}: " + value.getSupportedImageFormatsForColorSpace(space).sorted().joinToString(", ") { IMAGE_FORMATS.label(it) }
