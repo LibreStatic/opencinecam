@@ -22,6 +22,9 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
     private val instrumentation=InstrumentationRegistry.getInstrumentation()
     val runtime get()=CaptureLocations.get(context)
     init {
+        // addTestProvider needs the mock-location app-op; allowing it never restarts the process.
+        instrumentation.uiAutomation.executeShellCommand("appops set ${context.packageName} android:mock_location allow")
+            .let { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { out -> out.readBytes() } } // Waits for the command.
         try {
             val candidates=listOf(LocationManager.GPS_PROVIDER,LocationManager.NETWORK_PROVIDER) +
                 if(android.os.Build.VERSION.SDK_INT>=31) listOf(LocationManager.FUSED_PROVIDER) else emptyList()
