@@ -41,6 +41,9 @@ import org.junit.runner.RunWith
 /** Bounded 60-second RAW10 graph/storage benchmark; never promotes RAW video by itself. */
 @RunWith(AndroidJUnit4::class)
 class RawThroughputDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun qualifiesSixtySecondRaw10Window() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

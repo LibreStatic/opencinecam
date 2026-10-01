@@ -45,6 +45,9 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class HlgRecordingDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun recordsShortHlgMain10ClipAndWritesEvidence() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

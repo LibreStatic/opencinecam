@@ -38,6 +38,9 @@ import org.junit.runner.RunWith
 /** Physical public Camera2 RAW_SENSOR/DNG gate for OCC-PLAN-040. */
 @RunWith(AndroidJUnit4::class)
 class RawStillDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun writesRawStillDngEvidence() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -40,6 +40,9 @@ import org.junit.runner.RunWith
 /** One bounded RAW10 frame validates the public packed layout without claiming RAW video. */
 @RunWith(AndroidJUnit4::class)
 class RawPackedDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun parsesOnePublicRaw10Frame() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

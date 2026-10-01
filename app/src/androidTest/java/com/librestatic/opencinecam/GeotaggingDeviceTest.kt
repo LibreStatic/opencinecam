@@ -22,6 +22,7 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
     private val instrumentation=InstrumentationRegistry.getInstrumentation()
     val runtime get()=CaptureLocations.get(context)
     init {
+        instrumentation.uiAutomation.dropShellPermissionIdentity() // A leaked adopted identity would make addTestProvider run as shell.
         // addTestProvider needs the mock-location app-op; allowing it never restarts the process. Both the package
         // and the uid mode are set and read back, because an earlier case in a long run can leave either one different.
         fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
@@ -41,7 +42,20 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
                 if(android.os.Build.VERSION.SDK_INT>=31) listOf(LocationManager.FUSED_PROVIDER) else emptyList()
             for(provider in candidates) {
                 @Suppress("DEPRECATION")
-                manager.addTestProvider(provider,false,false,false,false,false,false,false,Criteria.POWER_LOW,Criteria.ACCURACY_FINE)
+                var added=false
+                for(attempt in 0 until 6) {
+                    try {
+                        manager.addTestProvider(provider,false,false,false,false,false,false,false,Criteria.POWER_LOW,Criteria.ACCURACY_FINE)
+                        added=true;break
+                    } catch(denied:SecurityException) {
+                        // The server can still see a stale mode right after an earlier case; re-assert and retry.
+                        if(attempt==5) throw SecurityException("${denied.message}; appops: ${shell(get).trim()}; uid ${android.os.Process.myUid()}",denied)
+                        shell("appops set ${context.packageName} android:mock_location allow")
+                        shell("appops set --uid ${context.packageName} android:mock_location allow")
+                        Thread.sleep(500)
+                    }
+                }
+                check(added)
                 providers+=provider;manager.setTestProviderEnabled(provider,true)
             }
         } catch(failure:Exception) {close();throw failure}

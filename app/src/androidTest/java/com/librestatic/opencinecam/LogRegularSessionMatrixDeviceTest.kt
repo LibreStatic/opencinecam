@@ -33,6 +33,9 @@ import org.junit.runner.RunWith
 /** Physical HAL intersection check for regular HLG10/BT.2020 LOG resolutions at 60 fps. */
 @RunWith(AndroidJUnit4::class)
 class LogRegularSessionMatrixDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun verifiesRegularHlg10ResolutionCeilings() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

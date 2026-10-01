@@ -38,6 +38,9 @@ import org.junit.runner.RunWith
 /** Folded-hardware probe for an HLG10 SurfaceTexture in Motorola's constrained HFR route. */
 @RunWith(AndroidJUnit4::class)
 class LogHighSpeedSessionDeviceTest {
+    // The adopted shell identity is process-wide; leaving it set breaks later cases that need the app's own uid.
+    @org.junit.After fun dropAdoptedShellIdentity() = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+
     @Test
     fun verifiesHlg10HighSpeedSessions() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
