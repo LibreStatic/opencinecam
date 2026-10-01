@@ -55,6 +55,17 @@ internal enum class CineIcon {
     STAR,
     BACK,
     CHEVRON,
+    PAUSE,
+    SKIP_START,
+    SKIP_END,
+    FRAME_BACK,
+    FRAME_FORWARD,
+    FULLSCREEN,
+    FULLSCREEN_EXIT,
+    EXPAND,
+    COLLAPSE,
+    CHEVRON_LEFT,
+    CHEVRON_RIGHT,
 }
 
 @Composable
@@ -246,6 +257,48 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
         }
         CineIcon.BACK -> poly(.62f to .18f, .30f to .50f, .62f to .82f, close = false)
         CineIcon.CHEVRON -> poly(.38f to .18f, .70f to .50f, .38f to .82f, close = false)
+        CineIcon.PAUSE -> {
+            box(.26f, .18f, .42f, .82f, filled = true)
+            box(.58f, .18f, .74f, .82f, filled = true)
+        }
+        CineIcon.SKIP_START -> {
+            // To the first frame: a bar and a double rewind.
+            line(.14f, .22f, .14f, .78f)
+            poly(.52f to .22f, .22f to .50f, .52f to .78f, filled = true)
+            poly(.86f to .22f, .56f to .50f, .86f to .78f, filled = true)
+        }
+        CineIcon.SKIP_END -> {
+            poly(.14f to .22f, .44f to .50f, .14f to .78f, filled = true)
+            poly(.48f to .22f, .78f to .50f, .48f to .78f, filled = true)
+            line(.86f, .22f, .86f, .78f)
+        }
+        CineIcon.FRAME_BACK -> {
+            // One frame back: a single step against the frame line.
+            poly(.62f to .22f, .26f to .50f, .62f to .78f, filled = true)
+            line(.78f, .22f, .78f, .78f)
+        }
+        CineIcon.FRAME_FORWARD -> {
+            line(.22f, .22f, .22f, .78f)
+            poly(.38f to .22f, .74f to .50f, .38f to .78f, filled = true)
+        }
+        CineIcon.FULLSCREEN -> {
+            // Corners pointing out.
+            poly(.14f to .36f, .14f to .14f, .36f to .14f, close = false)
+            poly(.64f to .14f, .86f to .14f, .86f to .36f, close = false)
+            poly(.86f to .64f, .86f to .86f, .64f to .86f, close = false)
+            poly(.36f to .86f, .14f to .86f, .14f to .64f, close = false)
+        }
+        CineIcon.FULLSCREEN_EXIT -> {
+            // Corners pointing in.
+            poly(.14f to .36f, .36f to .36f, .36f to .14f, close = false)
+            poly(.64f to .14f, .64f to .36f, .86f to .36f, close = false)
+            poly(.86f to .64f, .64f to .64f, .64f to .86f, close = false)
+            poly(.36f to .86f, .36f to .64f, .14f to .64f, close = false)
+        }
+        CineIcon.EXPAND -> poly(.20f to .36f, .50f to .66f, .80f to .36f, close = false)
+        CineIcon.COLLAPSE -> poly(.20f to .64f, .50f to .34f, .80f to .64f, close = false)
+        CineIcon.CHEVRON_LEFT -> poly(.62f to .22f, .34f to .50f, .62f to .78f, close = false)
+        CineIcon.CHEVRON_RIGHT -> poly(.38f to .22f, .66f to .50f, .38f to .78f, close = false)
         CineIcon.STAR -> {
             val path = Path()
             for (i in 0 until 10) {

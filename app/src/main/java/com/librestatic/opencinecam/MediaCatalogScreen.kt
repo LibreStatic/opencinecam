@@ -170,9 +170,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.media_tab), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    onProxyCatalog?.let { action -> GalleryIconAction("proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
-                    GalleryIconAction("filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
-                    GalleryIconAction("refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
+                    onProxyCatalog?.let { action -> CineIconButton("gallery-proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
+                    CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
+                    CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
                 }
                 val queryInvalid = !validGalleryQuery(typedQuery)
                 OutlinedTextField(typedQuery, { candidate ->
@@ -254,23 +254,6 @@ private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, acti
 
 private val GalleryWarning: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.pending
 
-/** A catalog action as a 48 dp icon key; its name is the spoken label and the long-press hint. */
-@Composable
-private fun GalleryIconAction(tag: String, icon: CineIcon, label: Int, selected: Boolean = false, tint: Color = MaterialTheme.colorScheme.onSurface,
-    onClick: () -> Unit) {
-    val name = stringResource(label)
-    Box(
-        Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) SettingsAccent.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable(onClickLabel = name, onClick = onClick)
-            .semantics { contentDescription = name; if (selected) this.selected = true }
-            .testTag("gallery-$tag"),
-        contentAlignment = Alignment.Center,
-    ) { CineGlyph(icon, if (selected) SettingsAccent else tint, Modifier.size(22.dp)) }
-}
-
 @Composable
 private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?,
@@ -344,10 +327,10 @@ private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, sou
         if (settings.showTechnical) GalleryTechnical(take.primary, "primary-${take.id}")
         // Every action of a take on one row of icon keys; delete sits apart at the end.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            GalleryIconAction("primary-${take.id}", CineIcon.PLAY, R.string.gallery_open_primary) { onOpen(take.primary) }
-            if (onShare != null) GalleryIconAction("share-${take.id}", CineIcon.SHARE, R.string.media_share_action) { onShare(take) }
-            if (onProxy != null && take.kind == LocalMediaKind.VIDEO) GalleryIconAction("proxy-${take.id}", CineIcon.PROXY, R.string.proxy_title) { onProxy(take) }
-            if (onRename != null) GalleryIconAction("rename-${take.id}", CineIcon.RENAME, R.string.media_rename_action) { onRename(take) }
+            CineIconButton("gallery-primary-${take.id}", CineIcon.PLAY, R.string.gallery_open_primary) { onOpen(take.primary) }
+            if (onShare != null) CineIconButton("gallery-share-${take.id}", CineIcon.SHARE, R.string.media_share_action) { onShare(take) }
+            if (onProxy != null && take.kind == LocalMediaKind.VIDEO) CineIconButton("gallery-proxy-${take.id}", CineIcon.PROXY, R.string.proxy_title) { onProxy(take) }
+            if (onRename != null) CineIconButton("gallery-rename-${take.id}", CineIcon.RENAME, R.string.media_rename_action) { onRename(take) }
             val filesLabel = stringResource(R.string.gallery_files, take.originals.size, take.metadata.size)
             Row(
                 Modifier
@@ -366,7 +349,7 @@ private fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, sou
                     fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("gallery-files-${take.id}-label"))
             }
             Spacer(Modifier.weight(1f))
-            if (onDelete != null) GalleryIconAction("delete-${take.id}", CineIcon.DELETE, R.string.media_delete_action,
+            if (onDelete != null) CineIconButton("gallery-delete-${take.id}", CineIcon.DELETE, R.string.media_delete_action,
                 tint = MaterialTheme.colorScheme.error) { onDelete(take) }
         }
         if (expanded) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_detail_show">Show technical detail</string>
+    <string name="playback_detail_hide">Hide technical detail</string>
+</resources>
