@@ -25,7 +25,8 @@ OCLog2 uses `tools/qualify_oclog2.py` and the protocol in
 `docs/color/opencine-log-v2.md`. Record at least 30 seconds with zero dropped frames for each
 candidate fingerprint/camera/size/FPS/source tuple. Hash the clip, OCLog2 sidecar, and parseable
 `ffprobe` JSON; then execute forward/inverse checks through FFmpeg and an independent editor.
-All six reference paths (`cpu`, `gpu`, `lut1d`, `lut3d`, `ocio`, `dctl`) must remain within
+The DaVinci Resolve editor workflow, fixture and comparator are specified in
+`docs/color/oclog2-resolve-protocol.md`. All six reference paths (`cpu`, `gpu`, `lut1d`, `lut3d`, `ocio`, `dctl`) must remain within
 `2e-5` absolute error. Qualification of one source branch never broadens to another.
 
 An emulator, missing editor, missing fixture, hash mismatch, stale shader, or different tuple

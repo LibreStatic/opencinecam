@@ -94,6 +94,9 @@ python3 tools/qualify_oclog2.py \
   --output evidence/plan-061/qualification-result.json
 ```
 
+The independent-editor evidence follows [oclog2-resolve-protocol.md](oclog2-resolve-protocol.md),
+whose `tools/oclog2_editor_fixture.py record` output is the `workflows[]` editor entry.
+
 An emulator is useful for contracts but is never a physical qualification target. Missing
 hardware or editor access remains `NOT_RUN`, not promoted or treated as fabricated success.
 
