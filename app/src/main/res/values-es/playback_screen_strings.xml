@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_screen_title">OpenCineCam · Reproducción de clip</string>
+    <string name="playback_screen_share">Compartir clip</string>
+    <string name="playback_screen_delete">Eliminar clip</string>
+    <string name="playback_screen_take_position">%1$d de %2$d</string>
+    <string name="playback_screen_take_position_more">%1$d de %2$d+</string>
+    <string name="playback_screen_fullscreen">Pantalla completa</string>
+    <string name="playback_screen_fullscreen_exit">Salir de pantalla completa</string>
+    <string name="playback_screen_frame_counter">Fotograma %1$d/%2$d</string>
+    <string name="playback_screen_monitoring">LUT de monitoreo</string>
+    <string name="playback_screen_histogram">Histograma de luminancia</string>
+    <string name="playback_screen_settings">Ajustes de reproducción</string>
+    <string name="playback_screen_native_surface">Usar Surface nativa</string>
+    <string name="playback_screen_cpu_frames">Usar cuadros por CPU</string>
+    <string name="playback_screen_retry">Reintentar</string>
+    <string name="playback_screen_interpret_track">Interpretar pista</string>
+    <string name="playback_screen_exact_error_title">No pudimos activar cuadros exactos en este dispositivo.</string>
+    <string name="playback_screen_exact_error_message">La reproducción sigue disponible.</string>
+    <string name="playback_screen_read_error_title">No pudimos leer este archivo.</string>
+    <string name="playback_screen_read_error_message">El original no cambió. Intentá leerlo de nuevo.</string>
+    <string name="playback_screen_color_error_title">No se puede leer el color de este clip con exactitud.</string>
+    <string name="playback_screen_color_error_message">Podés interpretarlo con las etiquetas SDR de la pista; la precisión del color no se verifica.</string>
+    <string name="playback_screen_stage_error_title">Vista de monitoreo OCLog2 no disponible</string>
+    <string name="playback_screen_stage_error_message">El clip se muestra sin la etapa de vista LOG.</string>
+</resources>

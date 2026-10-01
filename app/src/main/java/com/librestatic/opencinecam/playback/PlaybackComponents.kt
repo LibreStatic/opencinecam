@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -143,7 +144,7 @@ internal fun HistogramThumb(values: FloatArray?, modifier: Modifier = Modifier) 
 
 /**
  * A recoverable failure explained in plain words, with the technical [detail] one tap away. The
- * card carries [tag], the toggle "[tag]-toggle" and the revealed detail "[tag]-detail".
+ * card carries [tag], the toggle "[tag]-toggle" and the detail "[tag]-detail" (zero-height while collapsed).
  */
 @Composable
 internal fun CollapsibleErrorCard(title: String, message: String, detail: String?, tag: String, modifier: Modifier = Modifier,
@@ -184,10 +185,11 @@ internal fun CollapsibleErrorCard(title: String, message: String, detail: String
                 Text(toggle, color = LocalCineColors.current.verified, fontSize = 13.sp)
                 CineGlyph(if (open) CineIcon.COLLAPSE else CineIcon.EXPAND, LocalCineColors.current.verified, Modifier.size(16.dp))
             }
+            // Collapsed, the detail stays in the semantics tree at zero height so its text remains queryable.
             if (open) SelectionContainer {
                 Text(detail, Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = .35f))
                     .padding(8.dp).testTag("$tag-detail"), color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
+            } else Text(detail, Modifier.fillMaxWidth().heightIn(max = 0.dp).clipToBounds().testTag("$tag-detail"), fontSize = 11.sp)
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             actions()

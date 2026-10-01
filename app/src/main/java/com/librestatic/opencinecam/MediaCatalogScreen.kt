@@ -58,6 +58,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
@@ -80,6 +81,8 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     var proxyTake by remember { mutableStateOf<LocalMediaTake?>(null) }
     var renamingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
     var deletionRefresh by remember { mutableIntStateOf(0) }
+    var deletedTakeIds by remember { mutableStateOf(emptySet<String>()) }
+    val scope = rememberCoroutineScope()
     val source = remember(context.applicationContext) {
         val repository = LocalMediaRepository(context.applicationContext)
         object : MediaCatalogSource {
@@ -90,18 +93,29 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     }
     MediaCatalogContent(settings, onSettings, source, onShare = { sharingTake = it },
         onDelete = { deletingTake = it }, onRename = { renamingTake = it }, refreshGeneration = deletionRefresh,
-        onReview = { review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true }) { artifact ->
+        onReview = { deletedTakeIds = emptySet(); review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true }) { artifact ->
         context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(artifact.uri.toUri(), artifact.mimeType)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
     }
     if (proxyCatalog) ProxyCatalogDialog(onDismiss = { proxyCatalog = false })
+    // Mounted before the share/delete dialogs so those open above the review window.
     review?.let { selected -> MediaPlaybackDialog(selected, playbackSettings, onPlaybackSettings,
-        onDismiss = { review = null }, onPage = { cursor -> source.page(selected.settings, selected.query, cursor, 60) }) }
+        onDismiss = { review = null }, onPage = { cursor -> source.page(selected.settings, selected.query, cursor, 60) },
+        onShare = { sharingTake = it }, onDelete = { deletingTake = it }, deleted = deletedTakeIds) }
     sharingTake?.let { MediaShareDialog(it, sharingSettings, onSharingSettings, onDismiss = { sharingTake = null }) }
-    deletingTake?.let { MediaDeleteDialog(it, onDismiss = { deletingTake = null }, onCompleted = { deletionRefresh++ }) }
+    deletingTake?.let { take -> MediaDeleteDialog(take, onDismiss = { deletingTake = null },
+        onCompleted = {
+            deletionRefresh++
+            // The dialog reports completion, not success: the review drops the take only once its originals are gone.
+            scope.launch { if (withContext(Dispatchers.IO) { take.originals.all { artifactGone(context, it.uri) } }) deletedTakeIds = deletedTakeIds + take.id }
+        }) }
     proxyTake?.let { MediaProxyDialog(it, proxySettings, onProxySettings, onDismiss = { proxyTake = null }) }
     renamingTake?.let { MediaRenameDialog(it, onDismiss = { renamingTake = null }, onCompleted = { deletionRefresh++ }) }
 }
+
+private fun artifactGone(context: android.content.Context, uri: String): Boolean =
+    runCatching { context.contentResolver.openFileDescriptor(uri.toUri(), "r")?.use { false } ?: true }
+        .getOrElse { it is java.io.FileNotFoundException }
 
 private data class GalleryRequest(val kind: GalleryMediaKind, val newestFirst: Boolean, val goodTakesOnly: Boolean, val query: String, val refresh: Int, val externalRefresh: Int)
 private data class GalleryLoad(val request: GalleryRequest? = null, val takes: List<LocalMediaTake> = emptyList(),

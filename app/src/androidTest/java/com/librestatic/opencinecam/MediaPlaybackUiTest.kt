@@ -58,6 +58,7 @@ class MediaPlaybackUiTest {
             node("next-frame").performScrollTo().assertIsNotEnabled()
             click("start")
             compose.waitUntil(20_000) { runCatching { node("exact").assertTextEquals(context.getString(R.string.media_playback_exact,1,4,0L)) }.isSuccess }
+            click("settings-toggle")
             compose.onNodeWithTag("playback-frame-position",useUnmergedTree=true).performScrollTo().performClick()
             compose.runOnIdle { assertEquals(PlaybackSettings(muted=true,showFramePosition=false),settings.value) }
             node("exact").assertDoesNotExist()

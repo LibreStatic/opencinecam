@@ -88,7 +88,7 @@ class MediaPlaybackAnamorphicUiTest {
             rendered(rotation, null)
             node("play-pause").performScrollTo()
             val pauseMatcher = hasTestTag("media-playback-play-pause") and
-                hasText(context.getString(R.string.media_playback_pause)) and isEnabled()
+                hasContentDescription(context.getString(R.string.media_playback_pause)) and isEnabled()
             compose.waitUntil(20_000) { compose.onAllNodes(pauseMatcher).fetchSemanticsNodes().size == 1 || present("error-detail") }
             node("error-detail").assertDoesNotExist()
             // Exactly one action for the displayed Pause intent; do not resend clicks or disable loop.

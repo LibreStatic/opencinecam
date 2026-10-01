@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_screen_title">OpenCineCam · Clip playback</string>
+    <string name="playback_screen_share">Share clip</string>
+    <string name="playback_screen_delete">Delete clip</string>
+    <string name="playback_screen_take_position">%1$d of %2$d</string>
+    <string name="playback_screen_take_position_more">%1$d of %2$d+</string>
+    <string name="playback_screen_fullscreen">Full screen</string>
+    <string name="playback_screen_fullscreen_exit">Exit full screen</string>
+    <string name="playback_screen_frame_counter">Frame %1$d/%2$d</string>
+    <string name="playback_screen_monitoring">Monitoring LUT</string>
+    <string name="playback_screen_log" translatable="false">LOG</string>
+    <string name="playback_screen_rec709" translatable="false">Rec.709</string>
+    <string name="playback_screen_histogram">Luma histogram</string>
+    <string name="playback_screen_settings">Playback settings</string>
+    <string name="playback_screen_native_surface">Use native Surface</string>
+    <string name="playback_screen_cpu_frames">Use CPU frames</string>
+    <string name="playback_screen_retry">Retry</string>
+    <string name="playback_screen_interpret_track">Interpret track</string>
+    <string name="playback_screen_exact_error_title">We couldn\'t enable exact frames on this device.</string>
+    <string name="playback_screen_exact_error_message">Playback is still available.</string>
+    <string name="playback_screen_read_error_title">We couldn\'t read this file.</string>
+    <string name="playback_screen_read_error_message">The original is unchanged. Try reading it again.</string>
+    <string name="playback_screen_color_error_title">This clip\'s colour can\'t be read exactly.</string>
+    <string name="playback_screen_color_error_message">You can interpret it using the track\'s SDR tags; colour accuracy won\'t be verified.</string>
+    <string name="playback_screen_stage_error_title">OCLog2 monitoring view unavailable</string>
+    <string name="playback_screen_stage_error_message">The clip shows without the LOG view stage.</string>
+</resources>

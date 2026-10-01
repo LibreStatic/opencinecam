@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_screen_title">OpenCineCam · Lecture du clip</string>
+    <string name="playback_screen_share">Partager le clip</string>
+    <string name="playback_screen_delete">Supprimer le clip</string>
+    <string name="playback_screen_take_position">%1$d sur %2$d</string>
+    <string name="playback_screen_take_position_more">%1$d sur %2$d+</string>
+    <string name="playback_screen_fullscreen">Plein écran</string>
+    <string name="playback_screen_fullscreen_exit">Quitter le plein écran</string>
+    <string name="playback_screen_frame_counter">Image %1$d/%2$d</string>
+    <string name="playback_screen_monitoring">LUT de monitoring</string>
+    <string name="playback_screen_histogram">Histogramme de luminance</string>
+    <string name="playback_screen_settings">Réglages de lecture</string>
+    <string name="playback_screen_native_surface">Utiliser la Surface native</string>
+    <string name="playback_screen_cpu_frames">Utiliser les images CPU</string>
+    <string name="playback_screen_retry">Réessayer</string>
+    <string name="playback_screen_interpret_track">Interpréter la piste</string>
+    <string name="playback_screen_exact_error_title">Impossible d\'activer les images exactes sur cet appareil.</string>
+    <string name="playback_screen_exact_error_message">La lecture reste disponible.</string>
+    <string name="playback_screen_read_error_title">Impossible de lire ce fichier.</string>
+    <string name="playback_screen_read_error_message">L\'original n\'est pas modifié. Réessayez de le lire.</string>
+    <string name="playback_screen_color_error_title">La couleur de ce clip ne peut pas être lue exactement.</string>
+    <string name="playback_screen_color_error_message">Vous pouvez l\'interpréter avec les balises SDR de la piste ; la précision des couleurs n\'est pas vérifiée.</string>
+    <string name="playback_screen_stage_error_title">Vue de monitoring OCLog2 indisponible</string>
+    <string name="playback_screen_stage_error_message">Le clip s\'affiche sans l\'étape de vue LOG.</string>
+</resources>
