@@ -30,6 +30,12 @@ class MediaPlaybackHdrUiTest {
     }
     @Test fun pqHlgExactReviewLabelsSdrPreviewAndRetiresBeforeLeavingOriginalsUnchanged() {
         assertTrue("Positive P010 UI acceptance requires API33+", Build.VERSION.SDK_INT >= 33)
+        org.junit.Assume.assumeTrue("No HEVC decoder outputs P010 on this device",
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                !info.isEncoder && "video/hevc" in info.supportedTypes.map { it.lowercase() } &&
+                    android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010 in
+                    info.getCapabilitiesForType("video/hevc").colorFormats
+            })
         val files = mutableListOf<File>()
         val visible = mutableStateOf(true)
         val settings = mutableStateOf(PlaybackSettings(muted = true))

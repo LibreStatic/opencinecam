@@ -94,7 +94,7 @@ class ProxyCatalogActionsUiTest {
             assertArrayEquals(receiptBytes, receipt.openRead().use { it.readBytes() })
 
             val stem = "Edicio\u0301n proxy-${proxyId.take(8)}"
-            val expectedName = "Café proxy-${proxyId.take(8)}.mp4"
+            val expectedName = "Edici\u00f3n proxy-${proxyId.take(8)}.mp4"
             compose.setContent { MaterialTheme {
                 if (visible.value) ProxyCatalogDialog(onDismiss = { visible.value = false })
             } }

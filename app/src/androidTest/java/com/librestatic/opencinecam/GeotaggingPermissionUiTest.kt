@@ -37,10 +37,18 @@ class GeotaggingPermissionUiTest {
                 flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
             }
             assertTrue("Runner requires API 33+", Build.VERSION.SDK_INT >= 33)
-            assertEquals("Runner must pregrant CAMERA", PackageManager.PERMISSION_GRANTED,
+            // Granting never restarts the process, so CAMERA is granted here; revoking would kill it,
+            // so a location grant left by an earlier run can only be skipped.
+            instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+            assertEquals("CAMERA grant failed", PackageManager.PERMISSION_GRANTED,
                 ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA))
-            assertNull("Runner must revoke both location permissions before instrumentation", locationPermission(context))
+            org.junit.Assume.assumeTrue("Revoke location before running: adb shell pm revoke ${context.packageName} " +
+                "android.permission.ACCESS_FINE_LOCATION (and ACCESS_COARSE_LOCATION)", locationPermission(context) == null)
             instrumentation.runOnMainSync { repository.set(initial) }
+            compose.activityRule.scenario.recreate() // MainActivity started before CAMERA was granted.
+            compose.waitUntil(15_000) {
+                compose.onAllNodesWithContentDescription(context.getString(R.string.settings_tab)).fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNodeWithContentDescription(context.getString(R.string.settings_tab)).performClick()
             compose.onNodeWithTag("settings-search").performTextInput("geotagging")
             node("enabled").performScrollTo().assertIsOff()
