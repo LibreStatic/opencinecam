@@ -105,6 +105,7 @@ internal fun CameraCapabilitiesScreen(
     val backDescription = stringResource(R.string.about_back)
     val copied = stringResource(R.string.caps_copied)
     val copyFailed = stringResource(R.string.caps_copy_failed)
+    val clipLabel = stringResource(R.string.caps_title)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("capabilities-list"),
@@ -127,7 +128,7 @@ internal fun CameraCapabilitiesScreen(
                         val text = capabilityReportText(deviceLine(), loaded, cameras, context::getString)
                         val ok = runCatching {
                             context.getSystemService(ClipboardManager::class.java)
-                                .setPrimaryClip(ClipData.newPlainText(context.getString(R.string.caps_title), text))
+                                .setPrimaryClip(ClipData.newPlainText(clipLabel, text))
                         }.isSuccess
                         Toast.makeText(context, if (ok) copied else copyFailed, Toast.LENGTH_SHORT).show()
                     },
