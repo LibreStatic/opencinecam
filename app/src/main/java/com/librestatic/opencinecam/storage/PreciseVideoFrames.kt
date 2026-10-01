@@ -26,15 +26,17 @@ import java.io.InterruptedIOException
 import java.util.concurrent.TimeoutException
 
 /** The caller owns and must recycle bitmap after display. No original bytes are modified. */
-data class DecodedVideoFrame(val bitmap: Bitmap, val presentationTimeUs: Long, val index: Int, val color: PreciseVideoColor? = null, val hdrPreview: PreciseHdrPreview? = null, val displayWidth: Int = bitmap.width, val displayHeight: Int = bitmap.height)
+data class DecodedVideoFrame(val bitmap: Bitmap, val presentationTimeUs: Long, val index: Int, val color: PreciseVideoColor? = null, val hdrPreview: PreciseHdrPreview? = null, val displayWidth: Int = bitmap.width, val displayHeight: Int = bitmap.height, val logView: PreciseLogView? = null)
 
 data class RenderedVideoFrame(val presentationTimeUs: Long, val index: Int, val renderedAtNs: Long, val displayWidth: Int, val displayHeight: Int)
 
 /** Construct and call frame on serial IO. A missing exact PTS is an error, never nearest-frame fallback.
  * Bounds: 250000 samples, 30 seconds per index/decode, 64 MiB per compressed sample,
  * 8192 pixels per edge and 4096*2160 output pixels. SDR8 YUV420 and API33+ P010 PQ/HLG
- * are supported. P010 decoded samples retain10 bits until explicitly labelled SDR tone mapping. */
-class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy: PreciseVideoColorPolicy = PreciseVideoColorPolicy.STRICT, requireCpuPreview: Boolean = true) : Closeable {
+ * are supported. P010 decoded samples retain10 bits until explicitly labelled SDR tone mapping.
+ * [log] comes only from the clip's OCLog2 sidecar: BT.2020 P010 with an unspecified container transfer. */
+class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy: PreciseVideoColorPolicy = PreciseVideoColorPolicy.STRICT, requireCpuPreview: Boolean = true,
+    private val log: PreciseLogSignal? = null) : Closeable {
     private val extractor = MediaExtractor()
     private val format: MediaFormat
     private val mime: String
@@ -42,6 +44,8 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
     private val hdr: PreciseHdrTransfer?
     private var closed = false
     val hdrTransfer: PreciseHdrTransfer? get() = hdr
+    /** Applies to CPU frames decoded after the change; Surface output is interpreted by its consumer. */
+    @Volatile var logView: PreciseLogView = PreciseLogView.FLAT_LOG
     val displayWidth: Int get() = displayGeometry(format).width
     val displayHeight: Int get() = displayGeometry(format).height
     val timeline: VideoFrameTimeline
@@ -71,7 +75,12 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             hdr = when (format.integerOr(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)) {
                 MediaFormat.COLOR_TRANSFER_ST2084 -> PreciseHdrTransfer.PQ
                 MediaFormat.COLOR_TRANSFER_HLG -> PreciseHdrTransfer.HLG
-                else -> { requireSdr(format); null }
+                else -> { if (log == null) requireSdr(format) else requireLog(format); null }
+            }
+            if (log != null) {
+                require(hdr == null) { "OCLog2 sidecar conflicts with the track's HDR transfer" }
+                if (requireCpuPreview) require(Build.VERSION.SDK_INT >= 33) { "Precise OCLog2 requires Android 13+ and a CPU-readable P010 decoder" }
+                require(colorPolicy == PreciseVideoColorPolicy.STRICT) { "SDR track interpretation does not apply to OCLog2" }
             }
             if (hdr != null) {
                 if (requireCpuPreview) require(Build.VERSION.SDK_INT >= 33) { "Precise HDR10 requires Android 13+ and a CPU-readable P010 decoder" }
@@ -116,14 +125,14 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
         checkWork(deadline)
         val target = timeline.timestampsUs[index]
         if (surface != null) require(surface.isValid) { "Exact frame Surface is unavailable" }
-        if (surface == null && hdr != null) require(Build.VERSION.SDK_INT >= 33) {
-            "Precise HDR10 requires Android 13+ and a CPU-readable P010 decoder"
+        if (surface == null && (hdr != null || log != null)) require(Build.VERSION.SDK_INT >= 33) {
+            "Precise 10-bit review requires Android 13+ and a CPU-readable P010 decoder"
         }
         val decodeFormat = MediaFormat(format)
         if (surface == null) {
             // Only CPU output rotates manually. Surface output retains track rotation and CSD.
             decodeFormat.setInteger(MediaFormat.KEY_ROTATION, 0)
-            decodeFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, if (Build.VERSION.SDK_INT >= 33 && hdr != null)
+            decodeFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, if (Build.VERSION.SDK_INT >= 33 && (hdr != null || log != null))
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010 else MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
         } else decodeFormat.removeKey(MediaFormat.KEY_COLOR_FORMAT)
         extractor.seekTo(target, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
@@ -134,7 +143,7 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
         val compatible = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { candidate ->
             !candidate.isEncoder && candidate.supportedTypes.any { it.equals(mime, ignoreCase = true) } &&
                 candidate.getCapabilitiesForType(mime).let { capabilities ->
-                    capabilities.isFormatSupported(decodeFormat) && (surface != null || hdr == null || (Build.VERSION.SDK_INT >= 33 &&
+                    capabilities.isFormatSupported(decodeFormat) && (surface != null || hdr == null && log == null || (Build.VERSION.SDK_INT >= 33 &&
                         MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010 in capabilities.colorFormats))
                 }
         }
@@ -188,7 +197,7 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
                 when (val output = codec.dequeueOutputBuffer(info, 1_000)) {
                     MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                        if (hdr == null) requireSdr(codec.outputFormat) else requireHdr(codec.outputFormat, hdr)
+                        requireOutput(codec.outputFormat)
                         requireDimensions(codec.outputFormat.getInteger(MediaFormat.KEY_WIDTH), codec.outputFormat.getInteger(MediaFormat.KEY_HEIGHT))
                     }
                     MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> Unit
@@ -202,7 +211,7 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
                                 if (info.presentationTimeUs == target) {
                                     if (surface != null) {
                                         val outputFormat = codec.getOutputFormat(output)
-                                        if (hdr != null) requireHdr(outputFormat, hdr) else requireSdr(outputFormat)
+                                        requireOutput(outputFormat)
                                         val geometry = displayGeometry(outputFormat)
                                         checkWork(deadline)
                                         require(surface.isValid) { "Exact frame Surface retired" }
@@ -217,12 +226,13 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
                                         require(surface.isValid) { "Exact frame Surface retired after render confirmation" }
                                         rendered = RenderedVideoFrame(target, index, renderedNs.get(), geometry.width, geometry.height)
                                     } else requireNotNull(codec.getOutputImage(output)) { "Decoder does not expose readable YUV420 images" }.use { image ->
-                                        val (bitmap, color) = imageBitmap(image, codec.getOutputFormat(output), rotation, deadline, decoderName)
+                                        val view = log?.let { logView }
+                                        val (bitmap, color) = imageBitmap(image, codec.getOutputFormat(output), rotation, deadline, decoderName, view)
                                         try {
                                             // Image.cropRect has exclusive right/bottom and imageBitmap already
                                             // applied that crop and rotation. Only its presentation ratio changes.
                                             val geometry = displayGeometry(codec.getOutputFormat(output), image.cropRect.width(), image.cropRect.height())
-                                            decoded = DecodedVideoFrame(bitmap, info.presentationTimeUs, index, color, hdr?.let { PreciseHdrPreview(it) }, geometry.width, geometry.height)
+                                            decoded = DecodedVideoFrame(bitmap, info.presentationTimeUs, index, color, hdr?.let { PreciseHdrPreview(it) }, geometry.width, geometry.height, view)
                                         } catch (failure: Throwable) { bitmap.recycle(); throw failure }
                                     }
                                     break@decode
@@ -256,8 +266,17 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
         }
     }
 
-    private fun imageBitmap(image: Image, output: MediaFormat, rotation: Int, deadline: Long, decoderName: String): Pair<Bitmap, PreciseVideoColor?> {
-        if (hdr != null) return hdrBitmap(image, output, rotation, deadline) to null
+    private fun imageBitmap(image: Image, output: MediaFormat, rotation: Int, deadline: Long, decoderName: String, view: PreciseLogView?): Pair<Bitmap, PreciseVideoColor?> {
+        if (hdr != null) {
+            requireHdr(output, hdr)
+            val full = output.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
+            return p010Bitmap(image, output, rotation, deadline) { y, u, v -> hdr10ToSdrArgb(y, u, v, full, hdr) } to null
+        }
+        if (log != null) {
+            requireLog(output)
+            val selected = requireNotNull(view)
+            return p010Bitmap(image, output, rotation, deadline) { y, u, v -> oclog2P010ToArgb(y, u, v, log.fullRange, selected) } to null
+        }
         requireSdr(output)
         require(image.format == ImageFormat.YUV_420_888 && image.planes.size == 3) { "Decoder output is not 8-bit YUV420" }
         val crop = image.cropRect
@@ -305,12 +324,10 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
     }
 
     /** P010 is three logical planes even though Cb/Cr share semiplanar storage. No 8-bit fallback. */
-    private fun hdrBitmap(image: Image, output: MediaFormat, rotation: Int, deadline: Long): Bitmap {
-        val transfer = requireNotNull(hdr)
-        requireHdr(output, transfer)
+    private fun p010Bitmap(image: Image, output: MediaFormat, rotation: Int, deadline: Long, pixel: (Int, Int, Int) -> Int): Bitmap {
         require(Build.VERSION.SDK_INT >= 33 && image.format == ImageFormat.YCBCR_P010 && image.planes.size == 3 &&
             output.integerOr(MediaFormat.KEY_COLOR_FORMAT, 0) == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010) {
-            "Precise HDR decoder must expose real10-bit P010 images; output=$output imageFormat=${image.format}"
+            "Precise 10-bit decoder must expose real10-bit P010 images; output=$output imageFormat=${image.format}"
         }
         val crop = image.cropRect
         require(crop.left >= 0 && crop.top >= 0 && crop.right <= image.width && crop.bottom <= image.height)
@@ -321,7 +338,6 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             val (buffer, rowStride, pixelStride) = planes[plane]
             return readP010Sample(buffer, rowStride, pixelStride, x, y)
         }
-        val full = output.getInteger(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
         val bitmap = createBitmap(crop.width(), crop.height(), Bitmap.Config.ARGB_8888)
         try {
             val row = IntArray(crop.width())
@@ -329,7 +345,7 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
                 if (y % 16 == 0) checkWork(deadline)
                 for (x in row.indices) {
                     val px = crop.left + x; val py = crop.top + y
-                    row[x] = hdr10ToSdrArgb(sample(0, px, py), sample(1, px / 2, py / 2), sample(2, px / 2, py / 2), full, transfer)
+                    row[x] = pixel(sample(0, px, py), sample(1, px / 2, py / 2), sample(2, px / 2, py / 2))
                 }
                 bitmap.setPixels(row, 0, row.size, 0, y, row.size, 1)
             }
@@ -370,6 +386,22 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             value.integerOr("crop-left", 0), value.integerOr("crop-top", 0),
             value.integerOr("crop-right", width - 1), value.integerOr("crop-bottom", height - 1),
             sampleAspect.first, sampleAspect.second, rotation, legacyWidth, legacyHeight)
+    }
+
+    private fun requireOutput(value: MediaFormat) {
+        if (hdr != null) requireHdr(value, hdr) else if (log != null) requireLog(value) else requireSdr(value)
+    }
+
+    /** OCLog2 tracks carry BT.2020 and an unspecified transfer; the sidecar declares the range. */
+    private fun requireLog(value: MediaFormat) {
+        val signal = requireNotNull(log)
+        val transfer = value.integerOr(MediaFormat.KEY_COLOR_TRANSFER, 0)
+        require(transfer != MediaFormat.COLOR_TRANSFER_ST2084 && transfer != MediaFormat.COLOR_TRANSFER_HLG) { "OCLog2 track reports an HDR transfer: $value" }
+        require(value.integerOr(MediaFormat.KEY_COLOR_STANDARD, 0) in setOf(0, MediaFormat.COLOR_STANDARD_BT2020)) { "OCLog2 track is not BT.2020: $value" }
+        val range = value.integerOr(MediaFormat.KEY_COLOR_RANGE, 0)
+        require(range == 0 || range == if (signal.fullRange) MediaFormat.COLOR_RANGE_FULL else MediaFormat.COLOR_RANGE_LIMITED) {
+            "OCLog2 track range contradicts its sidecar: $value"
+        }
     }
 
     private fun requireHdr(value: MediaFormat, transfer: PreciseHdrTransfer) {

@@ -432,6 +432,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("playback-muted", settings.playback.muted)
             .putBoolean("playback-loop", settings.playback.loop)
             .putBoolean("playback-show-frame-position", settings.playback.showFramePosition)
+            .putString("review-log-view", settings.playback.logView.name)
             .putBoolean("geotagging-enabled", settings.geotaggingEnabled)
             .putBoolean("capture-naming-enabled", settings.captureNaming.enabled)
             .putString("capture-naming-template", settings.captureNaming.template)
@@ -567,7 +568,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
 
     private fun loadPlayback() = runCatching {
         PlaybackSettings(preferences.getBoolean("playback-muted", false),
-            preferences.getBoolean("playback-loop", false), preferences.getBoolean("playback-show-frame-position", true))
+            preferences.getBoolean("playback-loop", false), preferences.getBoolean("playback-show-frame-position", true),
+            com.librestatic.opencinecam.storage.PreciseLogView.entries.firstOrNull { it.name == preferences.getString("review-log-view", null) }
+                ?: com.librestatic.opencinecam.storage.PreciseLogView.FLAT_LOG)
     }.getOrDefault(PlaybackSettings())
 
     private fun loadCaptureNaming() = runCatching {

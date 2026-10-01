@@ -211,6 +211,8 @@ object CameraPresetCodec {
         audioListeningOutputDeviceId = current.audioListeningOutputDeviceId,
         // Not yet a portable preset key (needs a schema revision); keep the device value.
         logGreyReference = current.logGreyReference,
+        // OCLog2 review view is a viewing habit of this device, not part of a look.
+        playback = preset.playback.copy(logView = current.playback.logView),
         subjectDisplay = preset.subjectDisplay.copy(prompterText = current.subjectDisplay.prompterText, operatorCue = current.subjectDisplay.operatorCue))
 
     fun differences(current: CameraSettings, preset: CameraSettings): List<String> {

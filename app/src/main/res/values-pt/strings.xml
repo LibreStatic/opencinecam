@@ -616,6 +616,9 @@
     <string name="webdav_transfer_waiting_media">As transferências aguardam enquanto os arquivos de mídia locais estão sendo alterados.</string>
     <string name="media_playback_native_frames">Usar Surface nativa para quadros exatos</string>
     <string name="media_playback_cpu_frames">Usar pré-visualização de quadros por CPU (SDR)</string>
+    <string name="media_playback_log_view_rec709">Mostrar assistência Rec.709</string>
+    <string name="media_playback_log_view_flat">Mostrar OCLog2 plano</string>
+    <string name="media_playback_log_stage_error">Vista OCLog2 indisponível; mostrando códigos brutos: %1$s</string>
     <string name="media_playback_native_frame_mode">Quadros em Surface nativa: posições exatas exigem um callback de renderização. A cor segue o pipeline do sistema; trocar a saída reinicia a revisão sem reprodução automática.</string>
     <string name="media_playback_native_hdr_available">%1$s: esta tela anuncia o tipo de HDR correspondente. A fidelidade física do HDR não é verificada.</string>
     <string name="media_playback_native_hdr_unavailable">%1$s: esta tela não anuncia o tipo de HDR correspondente. O sistema pode fazer tone mapping para SDR.</string>

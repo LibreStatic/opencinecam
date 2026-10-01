@@ -46,6 +46,8 @@ internal class MediaPlaybackSession(
     context: Context, val artifact: LocalMediaArtifact, settings: PlaybackSettings,
     private val colorPolicy: PreciseVideoColorPolicy = PreciseVideoColorPolicy.STRICT,
     private val nativeSurfaceFrames: Boolean = false,
+    /** Sidecar-declared OCLog2 signal; exact CPU frames then honour [PlaybackSettings.logView]. */
+    private val log: PreciseLogSignal? = null,
     private val observe: (PlaybackObservation) -> Unit,
 ) : Closeable {
     private val context = context.applicationContext
@@ -57,6 +59,7 @@ internal class MediaPlaybackSession(
     @Volatile private var closed = false
     private var generation = 0L
     private var options = settings
+    @Volatile private var logView = settings.logView
     private var player: MediaPlayer? = null
     private var prepared = false
     private var playerWidth = 0
@@ -96,7 +99,8 @@ internal class MediaPlaybackSession(
             try {
                 if (!video || !nativeSurfaceFrames) preparePlayer()
                 if (video) read {
-                    val reader = PreciseVideoFrames(this.context, artifact.uri, colorPolicy, requireCpuPreview = !nativeSurfaceFrames)
+                    val reader = PreciseVideoFrames(this.context, artifact.uri, colorPolicy, requireCpuPreview = !nativeSurfaceFrames, log = log)
+                    reader.logView = logView
                     frames = reader
                     if (nativeSurfaceFrames) {
                         { publish(state.copy(timeline = reader.timeline, durationUs = reader.timeline.timestampsUs.last(),
@@ -240,7 +244,7 @@ internal class MediaPlaybackSession(
         }
         publish(state.copy(phase = PlaybackPhase.SEEKING))
         read {
-            val frame = checkNotNull(frames).frame(index);
+            val frame = checkNotNull(frames).also { it.logView = logView }.frame(index);
             { publish(state.copy(phase = if (ended) PlaybackPhase.ENDED else PlaybackPhase.PAUSED,
                 videoWidth = frame.displayWidth, videoHeight = frame.displayHeight,
                             frameIndex = frame.index, positionUs = frame.presentationTimeUs, bitmap = frame.bitmap, frameColor = frame.color, hdrPreview = frame.hdrPreview)) }
@@ -285,6 +289,13 @@ internal class MediaPlaybackSession(
     fun update(settings: PlaybackSettings) {
         if (closed) return
         options = settings
+        if (log != null && logView != settings.logView) {
+            logView = settings.logView
+            // Native frames go through the review GL stage, which switches views itself.
+            val shown = state.frameIndex
+            if (!nativeSurfaceFrames && shown != null && state.phase in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED))
+                decode(shown, ended = state.phase == PlaybackPhase.ENDED)
+        }
         try { player?.setVolume(if (settings.muted) 0f else 1f, if (settings.muted) 0f else 1f) }
         catch (failure: Exception) { fail(failure.message); return }
         if (settings.muted) releaseFocus()

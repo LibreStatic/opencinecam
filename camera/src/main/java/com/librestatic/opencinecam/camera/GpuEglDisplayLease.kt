@@ -4,8 +4,9 @@ package com.librestatic.opencinecam.camera
 import android.opengl.EGL14
 import android.opengl.EGLDisplay
 
-/** EGL initialization is not reference-counted by the API. Retired output windows may outlive a pipeline. */
-internal object GpuEglDisplayLease {
+/** EGL initialization is not reference-counted by the API. Retired output windows may outlive a pipeline.
+ * Every EGL user in the process (capture pipeline, review playback) must share this lease. */
+object GpuEglDisplayLease {
     private var display = EGL14.EGL_NO_DISPLAY
     private var clients = 0
 

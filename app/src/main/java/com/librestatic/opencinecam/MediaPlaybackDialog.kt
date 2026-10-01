@@ -32,9 +32,12 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.librestatic.opencinecam.playback.LogPlaybackRenderer
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal data class MediaReviewSelection(val takes: List<LocalMediaTake>, val artifact: LocalMediaArtifact,
     val settings: GallerySettings, val query: String, val next: LocalMediaCursor?)
@@ -88,7 +91,7 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
                     Text(take.primary.name, Modifier.fillMaxWidth().testTag("media-playback-take"), style = MaterialTheme.typography.titleLarge)
                     Text(stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name),
                         Modifier.fillMaxWidth().testTag("media-playback-member"))
-                    key(members[memberIndex].uri) { MediaPlaybackView(members[memberIndex], settings, onSettings) }
+                    key(members[memberIndex].uri) { MediaPlaybackView(take, members[memberIndex], settings, onSettings) }
                     PlaybackButton("previous-member", R.string.media_playback_previous_member, memberIndex > 0 && !pageBusy) { memberIndex-- }
                     PlaybackButton("next-member", R.string.media_playback_next_member, memberIndex < members.lastIndex && !pageBusy) { memberIndex++ }
                     PlaybackButton("previous-take", R.string.media_playback_previous_take, takeIndex > 0 && !pageBusy) { takeIndex-- }
@@ -103,8 +106,33 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
 }
 
 @Composable
-private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit) {
+private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact, settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit) {
     val context = LocalContext.current
+    val video = artifact.mimeType.startsWith("video/")
+    val photo = artifact.mimeType.startsWith("image/")
+    // OCLog2 is declared only by the sidecar; the session waits for that answer so it never starts as SDR.
+    var logResolved by remember(artifact) { mutableStateOf(!video) }
+    var logClip by remember(artifact) { mutableStateOf<OcLogClip?>(null) }
+    LaunchedEffect(take, artifact) {
+        if (video) {
+            logClip = withContext(Dispatchers.IO) { runCatching { readOcLogClip(context.contentResolver, take, artifact) }.getOrNull() }
+            logResolved = true
+        }
+    }
+    val currentSettings by rememberUpdatedState(settings)
+    var renderer by remember(artifact) { mutableStateOf<LogPlaybackRenderer?>(null) }
+    var stageError by remember(artifact) { mutableStateOf<String?>(null) }
+    /** OCLog2 clips decode into the review GL stage, which draws the selected view to the holder Surface. */
+    fun output(holder: Surface?): Surface? {
+        val clip = logClip
+        if (holder == null || !holder.isValid || clip == null) return holder
+        val stage = renderer ?: runCatching { LogPlaybackRenderer(holder, clip.fullRange, currentSettings.logView) }
+            .onFailure { stageError = it.message ?: it.javaClass.simpleName }.getOrNull()?.also { renderer = it }
+        return stage?.inputSurface ?: holder
+    }
+    fun retireStage() { renderer?.close(); renderer = null }
+    DisposableEffect(artifact) { onDispose { retireStage() } }
+    LaunchedEffect(renderer, settings.logView) { renderer?.setView(settings.logView) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var state by remember(artifact) { mutableStateOf(PlaybackObservation()) }
     var session by remember(artifact) { mutableStateOf<MediaPlaybackSession?>(null) }
@@ -131,7 +159,8 @@ private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSe
     }
     var retry by remember { mutableIntStateOf(0) }
     var colorPolicy by remember(artifact) { mutableStateOf(PreciseVideoColorPolicy.STRICT) }
-    DisposableEffect(artifact, retry, colorPolicy, nativeFrames, lifecycle) {
+    DisposableEffect(artifact, retry, colorPolicy, nativeFrames, lifecycle, logResolved) {
+        if (!logResolved) return@DisposableEffect onDispose { }
         var disposed = false
         var reader: MediaPlaybackSession? = null
         val observer = LifecycleEventObserver { _, event ->
@@ -141,10 +170,10 @@ private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSe
         lifecycle.addObserver(observer)
         fun attach() {
             if (!disposed) {
-                val next = MediaPlaybackSession(context, artifact, settings, colorPolicy, nativeFrames) { state = it }
+                val next = MediaPlaybackSession(context, artifact, settings, colorPolicy, nativeFrames, logClip?.signal) { state = it }
                 reader = next; session = next
                 if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) next.suspendOutput()
-                next.setSurface(surface)
+                next.setSurface(output(surface))
             }
         }
         val previous = retiring[0]
@@ -161,8 +190,6 @@ private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSe
         }
     }
     LaunchedEffect(settings, session) { session?.update(settings) }
-    val video = artifact.mimeType.startsWith("video/")
-    val photo = artifact.mimeType.startsWith("image/")
     if (video || photo) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(220.dp)) {
             val density = LocalDensity.current
@@ -176,13 +203,15 @@ private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSe
                     surfaceView = this
                     holder.addCallback(object : SurfaceHolder.Callback {
                         override fun surfaceCreated(holder: SurfaceHolder) {
-                            surface = holder.surface; updateDisplay(); session?.setSurface(holder.surface)
+                            surface = holder.surface; updateDisplay(); session?.setSurface(output(holder.surface))
                         }
                         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                            surface = holder.surface; updateDisplay(); session?.setSurface(holder.surface)
+                            surface = holder.surface; updateDisplay(); renderer?.resize(width, height)
+                            session?.setSurface(output(holder.surface))
                         }
                         override fun surfaceDestroyed(holder: SurfaceHolder) {
-                            session?.setSurface(null); surface = null; displayHdrTypes = emptySet()
+                            // Producers first, then the GL stage's window, before the holder destroys its Surface.
+                            session?.setSurface(null); retireStage(); surface = null; displayHdrTypes = emptySet()
                         }
                     })
                 }
@@ -223,6 +252,12 @@ private fun MediaPlaybackView(artifact: LocalMediaArtifact, settings: PlaybackSe
             }
         }
     }
+    if (logClip != null) {
+        PlaybackButton("log-view", if (settings.logView == PreciseLogView.FLAT_LOG) R.string.media_playback_log_view_rec709 else R.string.media_playback_log_view_flat) {
+            onSettings(settings.copy(logView = if (settings.logView == PreciseLogView.FLAT_LOG) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG))
+        }
+    }
+    stageError?.let { Text(stringResource(R.string.media_playback_log_stage_error, it), Modifier.fillMaxWidth().testTag("media-playback-log-stage-error")) }
     state.hdrPreview?.let { preview ->
         Text(stringResource(R.string.media_playback_hdr_preview, preview.transfer.name),
             Modifier.fillMaxWidth().testTag("media-playback-hdr-preview"))

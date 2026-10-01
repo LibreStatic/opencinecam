@@ -20,6 +20,14 @@ class PlaybackSettingsTest {
             assertEquals(original.playback, CameraPresetCodec.decode(document(original).toString()).settings.playback)
         }
     }
+    @Test fun ocLogReviewViewPersistsLocallyButStaysOutOfPresets() {
+        val original = CameraSettings(playback = PlaybackSettings(logView = com.librestatic.opencinecam.storage.PreciseLogView.REC709))
+        val store = CameraSettingsStore(PresetPreferences()); store.save(original)
+        assertEquals(original.playback, store.load().playback)
+        assertFalse("review-log-view" in CameraPresetCodec.portableKeys)
+        assertEquals(com.librestatic.opencinecam.storage.PreciseLogView.REC709, CameraPresetCodec.mergeLocal(CameraSettings(), original).playback.logView)
+        assertEquals(PlaybackSettings(), CameraSettingsStore(PresetPreferences(mapOf("review-log-view" to "SEPIA"))).load().playback)
+    }
     @Test fun versionEighteenHas160KeysAndSeventeenRetains157WithExactDefaults() {
         assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
         val original = CameraSettings(captureNaming = CaptureNamingSettings(true, "{scene}"))

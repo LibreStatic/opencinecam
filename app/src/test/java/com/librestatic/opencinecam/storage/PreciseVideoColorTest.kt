@@ -18,6 +18,14 @@ class PreciseVideoColorTest {
         assertTrue(failure.message!!.contains("declared=1/2/3"))
     }
 
+    @Test fun strictModeStillRejectsBt2020WithoutAnOcLog2Sidecar() {
+        // OCLog2 review bypasses this resolver only when the sidecar declares the clip.
+        assertThrows(PreciseVideoColorException::class.java) {
+            resolvePreciseVideoColor(MediaFormat.COLOR_STANDARD_BT2020, MediaFormat.COLOR_RANGE_FULL,
+                MediaFormat.COLOR_STANDARD_BT2020, MediaFormat.COLOR_RANGE_FULL, 2, strict)
+        }
+    }
+
     @Test fun manualChoiceUsesTrackTagsAndPreservesReportedEvidence() {
         assertEquals(PreciseVideoColor(1, 2, true, 130817, 2), resolvePreciseVideoColor(130817, 2, 1, 2, 3, interpreted))
         assertThrows(PreciseVideoColorException::class.java) { resolvePreciseVideoColor(130817, 2, 1, 2, 3, strict) }
