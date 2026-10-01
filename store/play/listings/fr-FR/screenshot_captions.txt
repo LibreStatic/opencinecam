@@ -1,0 +1,8 @@
+ISO, vitesse, balance, mise au point
+Zebra, focus peaking et fausses couleurs
+Histogramme, forme d'onde, vectorscope
+Mode LOG avec contrôle par LUT
+Audio WAV et FLAC, vumètres en direct
+Timecode et clap de production
+Galerie avec proxys et partage
+Interfaces pour tablettes et pliables

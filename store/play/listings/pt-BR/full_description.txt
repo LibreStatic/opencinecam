@@ -1,0 +1,52 @@
+O OpenCineCam é uma câmera de cinema manual de código aberto para Android. Ele coloca o hardware Camera2 do seu celular sob seu controle, com as ferramentas de monitoramento e os metadados de arquivo que cineastas esperam. Sem conta, sem anúncios, sem análises.
+
+BETA INICIAL
+O OpenCineCam está em uma beta inicial. A captura principal funciona, mas alguns recursos são experimentais e ficam indisponíveis em celulares que não os suportam. Seus comentários são bem-vindos e definem o que vem a seguir: abra uma issue na página do projeto no GitHub.
+
+CONTROLE MANUAL
+• ISO, tempo ou ângulo de obturação, balanço de branco em Kelvin com matiz, foco manual e zoom
+• Valores solicitados e informados lado a lado, para ver o que a câmera realmente aplicou
+• Bloqueio de exposição e de balanço de branco, lanterna, sugestões de obturador a 50/60 Hz contra cintilação
+• Opções de estabilização, ruído e nitidez de bordas quando o celular as oferece
+
+MODOS DE CAPTURA
+• Foto, rajada, bracketing, rastro de luz, vídeo, câmera lenta e time-lapse
+• Foto RAW (DNG) e vídeo LOG são modos experimentais restritos, disponíveis apenas em celulares que se qualificam
+• Desanamorfose para lentes adaptadoras
+• Temporizador e botões atribuíveis, incluindo as teclas de volume
+
+MONITORAMENTO
+• Zebra, focus peaking, falsa cor, histograma, forma de onda e vectorscópio
+• Grade e nível de horizonte
+• LUTs de monitoramento (.cube) e assistente de visualização LOG para pré-visualizar o visual enquanto o arquivo continua plano
+• O monitoramento nunca é gravado no arquivo
+
+VÍDEO E ÁUDIO
+• Codificação de vídeo AVC ou HEVC por hardware
+• Áudio AAC dentro do MP4, ou arquivos WAV ou FLAC sem perdas separados
+• Medidores de áudio ao vivo, controle de ganho e escuta com fones
+• Pausa e retomada dentro de uma mesma tomada
+
+FLUXO DE PRODUÇÃO
+• Timecode SMPTE salvo em um arquivo JSON auxiliar
+• Claquete de produção: projeto, câmera, cena, rolo, lente e tomada
+• Predefinições portáteis que você pode salvar, importar e exportar
+• Geomarcação opcional, desativada por padrão
+
+MÍDIA E TRANSFERÊNCIA
+• Galeria integrada com reprodução, renomear, compartilhar e excluir
+• Proxies de edição gerados no aparelho quando você pede
+• Envio opcional das tomadas finalizadas para o seu próprio servidor WebDAV por HTTPS, somente quando você inicia
+
+PENSADO PARA DOBRÁVEIS
+• Layouts que se adaptam a celulares, tablets e dobráveis, incluindo a dobradiça
+• Pré-visualização opcional na tela externa para o sujeito
+
+O QUE O SEU CELULAR PODE FAZER
+Os recursos dependem do que a implementação Camera2 do seu celular expõe. O OpenCineCam mostra o que o hardware realmente informa, e as opções que o seu celular não consegue oferecer aparecem como indisponíveis em vez de serem simuladas.
+
+PRIVACIDADE
+• Suas gravações ficam no seu aparelho
+• Câmera e microfone são usados só para captura; localização apenas se você ativar a geomarcação
+• O único uso de rede é o envio WebDAV opcional que você configurar
+• Licença Apache-2.0

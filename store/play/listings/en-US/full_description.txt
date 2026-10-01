@@ -1,0 +1,52 @@
+OpenCineCam is an open-source manual cinema camera for Android. It puts your phone's Camera2 hardware under your control, with the monitoring tools and file metadata filmmakers expect. No account, no ads, no analytics.
+
+EARLY BETA
+OpenCineCam is an early beta. Core capture works, but some features are experimental and stay unavailable on phones that cannot support them. Your feedback is welcome and shapes what comes next: open an issue on the project page on GitHub.
+
+MANUAL CONTROL
+• ISO, shutter time or shutter angle, white balance in Kelvin with tint, manual focus and zoom
+• Requested and reported values side by side, so you see what the camera really applied
+• Exposure and white balance lock, torch, 50/60 Hz shutter suggestions against flicker
+• Stabilization, noise and edge processing choices when the phone offers them
+
+CAPTURE MODES
+• Photo, burst, bracket, light trail, video, slow motion and time-lapse
+• RAW photo (DNG) and LOG video are gated experimental modes, available only on phones that qualify
+• Anamorphic de-squeeze for adapter lenses
+• Self-timer and assignable buttons, including the volume keys
+
+MONITORING
+• Zebra, focus peaking, false color, histogram, waveform and vectorscope
+• Grid and horizon level
+• Monitoring LUTs (.cube) and LOG view assist to preview the look while the file stays flat
+• Monitoring is never baked into the recording
+
+VIDEO AND AUDIO
+• Hardware AVC or HEVC video encoding
+• AAC audio inside the MP4, or separate lossless WAV or FLAC files
+• Live audio meters, gain control and headphone listening
+• Pause and resume within a single take
+
+PRODUCTION WORKFLOW
+• SMPTE timecode saved in a JSON sidecar
+• Production slate: project, camera, scene, reel, lens and take
+• Portable presets you can save, import and export
+• Optional geotagging, off by default
+
+MEDIA AND TRANSFER
+• Built-in gallery with playback, rename, share and delete
+• Editing proxies generated on the device when you ask for them
+• Optional upload of finished takes to your own WebDAV server over HTTPS, only when you start it
+
+FOLDABLE AWARE
+• Layouts that adapt to phones, tablets and foldables, including the hinge
+• Optional preview on the outer display for the subject
+
+WHAT YOUR PHONE CAN DO
+Capabilities depend on what your phone's Camera2 implementation exposes. OpenCineCam shows what the hardware really reports, and options your phone cannot do are shown as unavailable instead of being faked.
+
+PRIVACY
+• Your footage stays on your device
+• The camera and microphone are used only for capture; location only if you turn geotagging on
+• The only network use is the optional WebDAV upload you configure
+• Licensed under Apache-2.0

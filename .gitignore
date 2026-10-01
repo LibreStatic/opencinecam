@@ -27,3 +27,8 @@ keystore.properties
 .env
 .env.*
 signing/
+
+# Play store generated graphics (scripts are committed)
+store/play/images/
+store/play/raw/*
+!store/play/raw/MEDIA_LICENSES.md

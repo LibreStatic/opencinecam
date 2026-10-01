@@ -1,0 +1,52 @@
+OpenCineCam ist eine quelloffene manuelle Kinokamera für Android. Sie gibt dir die Kontrolle über die Camera2-Hardware deines Smartphones, mit den Monitoring-Werkzeugen und Datei-Metadaten, die Filmemacher erwarten. Kein Konto, keine Werbung, keine Analysen.
+
+FRÜHE BETA
+OpenCineCam befindet sich in einer frühen Beta. Die Kernaufnahme funktioniert, einige Funktionen sind jedoch experimentell und bleiben auf Geräten nicht verfügbar, die sie nicht unterstützen. Dein Feedback ist willkommen und bestimmt, was als Nächstes kommt: Eröffne ein Issue auf der Projektseite bei GitHub.
+
+MANUELLE KONTROLLE
+• ISO, Verschlusszeit oder Shutter Angle, Weißabgleich in Kelvin mit Tint, manueller Fokus und Zoom
+• Angefragte und gemeldete Werte nebeneinander, damit du siehst, was die Kamera wirklich angewendet hat
+• Belichtungs- und Weißabgleichsspeicher, Taschenlampe, 50/60-Hz-Verschlussvorschläge gegen Flimmern
+• Optionen für Stabilisierung, Rauschen und Kantenverarbeitung, wenn das Smartphone sie anbietet
+
+AUFNAHMEMODI
+• Foto, Serienbild, Belichtungsreihe, Lichtspuren, Video, Zeitlupe und Zeitraffer
+• RAW-Foto (DNG) und LOG-Video sind eingeschränkte experimentelle Modi, nur auf qualifizierten Geräten verfügbar
+• Anamorphot-Entzerrung für Adapterobjektive
+• Selbstauslöser und belegbare Tasten, auch die Lautstärketasten
+
+MONITORING
+• Zebra, Focus Peaking, Falschfarben, Histogramm, Waveform und Vektorskop
+• Raster und Horizont-Wasserwaage
+• Monitoring-LUTs (.cube) und LOG-Ansichtshilfe, um den Look zu sehen, während die Datei flach bleibt
+• Monitoring wird nie in die Aufnahme eingebrannt
+
+VIDEO UND AUDIO
+• Hardware-Videokodierung mit AVC oder HEVC
+• AAC-Audio im MP4 oder separate verlustfreie WAV- oder FLAC-Dateien
+• Live-Audiopegel, Gain-Regelung und Kopfhörer-Monitoring
+• Pause und Fortsetzen innerhalb einer Einstellung
+
+PRODUKTIONS-WORKFLOW
+• SMPTE-Timecode in einer JSON-Begleitdatei
+• Produktions-Klappe: Projekt, Kamera, Szene, Rolle, Objektiv und Take
+• Portable Presets zum Speichern, Importieren und Exportieren
+• Optionales Geotagging, standardmäßig aus
+
+MEDIEN UND ÜBERTRAGUNG
+• Integrierte Galerie mit Wiedergabe, Umbenennen, Teilen und Löschen
+• Schnitt-Proxys, die auf dem Gerät erzeugt werden, wenn du sie anforderst
+• Optionaler Upload fertiger Takes auf deinen eigenen WebDAV-Server per HTTPS, nur wenn du ihn startest
+
+FÜR FOLDABLES GEMACHT
+• Layouts für Smartphones, Tablets und Foldables, einschließlich Scharnier
+• Optionale Vorschau auf dem Außendisplay für die gefilmte Person
+
+WAS DEIN SMARTPHONE KANN
+Die Fähigkeiten hängen davon ab, was die Camera2-Implementierung deines Smartphones bereitstellt. OpenCineCam zeigt, was die Hardware tatsächlich meldet; Optionen, die dein Gerät nicht beherrscht, erscheinen als nicht verfügbar, statt vorgetäuscht zu werden.
+
+DATENSCHUTZ
+• Dein Material bleibt auf deinem Gerät
+• Kamera und Mikrofon dienen nur der Aufnahme; der Standort nur, wenn du Geotagging aktivierst
+• Netzwerk wird nur für den optionalen WebDAV-Upload genutzt, den du einrichtest
+• Lizenz: Apache-2.0

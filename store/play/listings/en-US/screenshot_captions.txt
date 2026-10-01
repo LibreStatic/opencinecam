@@ -1,0 +1,8 @@
+Manual ISO, shutter, WB and focus
+Zebra, focus peaking and false color
+Histogram, waveform and vectorscope
+LOG mode with LUT monitoring
+WAV and FLAC audio with live meters
+Timecode and production slate
+Gallery with proxies and sharing
+Layouts for tablets and foldables

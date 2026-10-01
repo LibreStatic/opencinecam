@@ -1,0 +1,1 @@
+Cinecamera manuale: scope, LUT, LOG, audio pro e timecode.

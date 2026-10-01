@@ -1,0 +1,8 @@
+ISO, Verschluss, Weißabgleich, Fokus
+Zebra, Focus Peaking und Falschfarben
+Histogramm, Waveform und Vektorskop
+LOG-Modus mit LUT-Monitoring
+WAV- und FLAC-Audio mit Live-Pegeln
+Timecode und Produktions-Klappe
+Galerie mit Proxys und Teilen
+Layouts für Tablets und Foldables

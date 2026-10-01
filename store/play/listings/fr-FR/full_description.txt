@@ -1,0 +1,52 @@
+OpenCineCam est une caméra cinéma manuelle open source pour Android. Elle vous donne la main sur le matériel Camera2 de votre téléphone, avec les outils de monitoring et les métadonnées de fichier attendus par les cinéastes. Sans compte, sans publicité, sans statistiques.
+
+BÊTA PRÉCOCE
+OpenCineCam est en bêta précoce. La capture de base fonctionne, mais certaines fonctions sont expérimentales et restent indisponibles sur les téléphones qui ne les prennent pas en charge. Vos retours sont les bienvenus et orientent la suite : ouvrez un ticket sur la page du projet sur GitHub.
+
+CONTRÔLE MANUEL
+• ISO, vitesse ou angle d'obturation, balance des blancs en Kelvin avec teinte, mise au point manuelle et zoom
+• Valeurs demandées et valeurs rapportées côte à côte, pour voir ce que la caméra a réellement appliqué
+• Verrouillage de l'exposition et de la balance des blancs, torche, suggestions de vitesse 50/60 Hz contre le scintillement
+• Choix de stabilisation, de réduction du bruit et de netteté des contours lorsque le téléphone les propose
+
+MODES DE CAPTURE
+• Photo, rafale, bracketing, traînées lumineuses, vidéo, ralenti et time-lapse
+• La photo RAW (DNG) et la vidéo LOG sont des modes expérimentaux restreints, disponibles uniquement sur les téléphones qualifiés
+• Désanamorphose pour objectifs d'adaptation
+• Retardateur et boutons assignables, y compris les touches de volume
+
+MONITORING
+• Zebra, focus peaking, fausses couleurs, histogramme, forme d'onde et vectorscope
+• Grille et niveau d'horizon
+• LUT de monitoring (.cube) et aide à la vue LOG pour prévisualiser le rendu pendant que le fichier reste plat
+• Le monitoring n'est jamais incrusté dans l'enregistrement
+
+VIDÉO ET AUDIO
+• Encodage vidéo AVC ou HEVC matériel
+• Audio AAC dans le MP4, ou fichiers WAV ou FLAC sans perte séparés
+• Vumètres audio en direct, réglage du gain et écoute au casque
+• Pause et reprise au sein d'une même prise
+
+FLUX DE PRODUCTION
+• Timecode SMPTE enregistré dans un fichier JSON annexe
+• Clap de production : projet, caméra, scène, bobine, objectif et prise
+• Préréglages portables à enregistrer, importer et exporter
+• Géolocalisation facultative, désactivée par défaut
+
+MÉDIAS ET TRANSFERT
+• Galerie intégrée avec lecture, renommage, partage et suppression
+• Proxys de montage générés sur l'appareil à votre demande
+• Envoi facultatif des prises terminées vers votre propre serveur WebDAV en HTTPS, uniquement quand vous le lancez
+
+ADAPTÉ AUX PLIABLES
+• Interfaces adaptées aux téléphones, tablettes et pliables, charnière comprise
+• Aperçu facultatif sur l'écran extérieur pour le sujet
+
+CE QUE VOTRE TÉLÉPHONE PEUT FAIRE
+Les capacités dépendent de ce que l'implémentation Camera2 de votre téléphone expose. OpenCineCam affiche ce que le matériel rapporte réellement, et les options que votre téléphone ne peut pas offrir apparaissent comme indisponibles au lieu d'être simulées.
+
+CONFIDENTIALITÉ
+• Vos rushes restent sur votre appareil
+• La caméra et le micro servent uniquement à la capture ; la position seulement si vous activez la géolocalisation
+• Le seul usage du réseau est l'envoi WebDAV facultatif que vous configurez
+• Licence Apache-2.0

@@ -1,0 +1,52 @@
+OpenCineCam è una cinecamera manuale open source per Android. Ti dà il controllo dell'hardware Camera2 del tuo telefono, con gli strumenti di monitoraggio e i metadati dei file che i filmmaker si aspettano. Nessun account, nessuna pubblicità, nessuna analisi.
+
+BETA INIZIALE
+OpenCineCam è in beta iniziale. La ripresa di base funziona, ma alcune funzioni sono sperimentali e restano non disponibili sui telefoni che non le supportano. I tuoi commenti sono benvenuti e orientano ciò che verrà: apri una issue nella pagina del progetto su GitHub.
+
+CONTROLLO MANUALE
+• ISO, tempo o angolo di otturazione, bilanciamento del bianco in Kelvin con tinta, messa a fuoco manuale e zoom
+• Valori richiesti e riportati affiancati, per vedere cosa la fotocamera ha davvero applicato
+• Blocco di esposizione e bilanciamento del bianco, torcia, suggerimenti di otturatore a 50/60 Hz contro lo sfarfallio
+• Opzioni di stabilizzazione, rumore e nitidezza dei bordi quando il telefono le offre
+
+MODALITÀ DI RIPRESA
+• Foto, raffica, bracketing, scie luminose, video, slow motion e time-lapse
+• Foto RAW (DNG) e video LOG sono modalità sperimentali vincolate, disponibili solo sui telefoni che le qualificano
+• De-squeeze anamorfico per obiettivi con adattatore
+• Autoscatto e pulsanti assegnabili, inclusi i tasti del volume
+
+MONITORAGGIO
+• Zebra, focus peaking, falsi colori, istogramma, waveform e vettorscopio
+• Griglia e livella dell'orizzonte
+• LUT di monitoraggio (.cube) e assistente di visualizzazione LOG per vedere il look mentre il file resta piatto
+• Il monitoraggio non viene mai incorporato nella registrazione
+
+VIDEO E AUDIO
+• Codifica video AVC o HEVC hardware
+• Audio AAC nell'MP4, oppure file WAV o FLAC lossless separati
+• Misuratori audio live, controllo del guadagno e ascolto in cuffia
+• Pausa e ripresa all'interno della stessa ripresa
+
+FLUSSO DI PRODUZIONE
+• Timecode SMPTE salvato in un file JSON ausiliario
+• Ciak di produzione: progetto, camera, scena, bobina, obiettivo e ciak
+• Preset portatili da salvare, importare ed esportare
+• Geotag facoltativo, disattivato per impostazione predefinita
+
+MEDIA E TRASFERIMENTO
+• Galleria integrata con riproduzione, rinomina, condivisione ed eliminazione
+• Proxy di montaggio generati sul dispositivo quando li richiedi
+• Caricamento facoltativo delle riprese concluse sul tuo server WebDAV via HTTPS, solo quando lo avvii
+
+PENSATA PER I PIEGHEVOLI
+• Layout che si adattano a telefoni, tablet e pieghevoli, cerniera compresa
+• Anteprima facoltativa sul display esterno per il soggetto
+
+COSA PUÒ FARE IL TUO TELEFONO
+Le funzionalità dipendono da ciò che l'implementazione Camera2 del tuo telefono espone. OpenCineCam mostra ciò che l'hardware riporta davvero, e le opzioni che il tuo telefono non supporta compaiono come non disponibili invece di essere simulate.
+
+PRIVACY
+• Le tue riprese restano sul tuo dispositivo
+• Fotocamera e microfono servono solo per la ripresa; la posizione solo se attivi il geotag
+• L'unico uso della rete è il caricamento WebDAV facoltativo che configuri
+• Licenza Apache-2.0

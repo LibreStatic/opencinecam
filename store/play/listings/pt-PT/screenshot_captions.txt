@@ -1,0 +1,8 @@
+ISO, obturador, brancos e foco manuais
+Zebra, focus peaking e falsa cor
+Histograma, forma de onda e vectorscópio
+Modo LOG com monitorização por LUT
+Áudio WAV e FLAC com medidores em direto
+Timecode e claquete de produção
+Galeria com proxies e partilha
+Layouts para tablets e dobráveis

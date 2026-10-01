@@ -1,0 +1,1 @@
+Câmara de cinema manual: scopes, LUTs, LOG, áudio pro e timecode.
