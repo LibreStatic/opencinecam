@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_title_scene_take">Esc %1$s · Toma %2$s</string>
+    <string name="playback_title_scene">Esc %1$s</string>
+    <string name="playback_info_reel">Rollo %1$s</string>
+    <string name="playback_info_camera">Cámara %1$s</string>
+</resources>

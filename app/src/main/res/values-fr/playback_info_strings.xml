@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_title_scene_take">Scène %1$s · Prise %2$s</string>
+    <string name="playback_title_scene">Scène %1$s</string>
+    <string name="playback_info_reel">Bobine %1$s</string>
+    <string name="playback_info_camera">Caméra %1$s</string>
+</resources>

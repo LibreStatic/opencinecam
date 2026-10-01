@@ -18,8 +18,17 @@ data class PreciseLogSignal(val fullRange: Boolean)
  * BT.2020 non-constant-luminance YCbCr to OCLog2 R'G'B' codes, then either the Rec.709 view assist
  * (decode, BT.2020 to BT.709, Rec.709 OETF) or the flat monitor (display gamut, 0.68 saturation, OCLog2).
  */
-fun oclog2P010ToArgb(y: Int, u: Int, v: Int, fullRange: Boolean, view: PreciseLogView): Int {
-    val code = oclog2Codes(y, u, v, fullRange)
+fun oclog2P010ToArgb(y: Int, u: Int, v: Int, fullRange: Boolean, view: PreciseLogView): Int =
+    oclog2CodeValuesToArgb(oclog2Codes(y, u, v, fullRange), view)
+
+/**
+ * 8-bit OCLog2 R'G'B' code values through the same view math as [oclog2P010ToArgb]. Review thumbnails
+ * feed it the RGB a platform decoder produced for an OCLog2 clip, which only approximates the codes.
+ */
+fun oclog2CodesToArgb(r: Int, g: Int, b: Int, view: PreciseLogView): Int =
+    oclog2CodeValuesToArgb(doubleArrayOf(r.coerceIn(0, 255) / 255.0, g.coerceIn(0, 255) / 255.0, b.coerceIn(0, 255) / 255.0), view)
+
+private fun oclog2CodeValuesToArgb(code: DoubleArray, view: PreciseLogView): Int {
     val linear = DoubleArray(3) { OpenCineLog2Curve.decode(code[it].coerceIn(OpenCineLog2Curve.BLACK_CODE, OpenCineLog2Curve.WHITE_CODE)) }
     val display = bt2020ToBt709(linear).map { max(it, 0.0) }
     val out = when (view) {
