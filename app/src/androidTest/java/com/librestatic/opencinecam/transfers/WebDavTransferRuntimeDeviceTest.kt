@@ -336,7 +336,11 @@ class WebDavTransferRuntimeDeviceTest {
                 parcel.setDataPosition(0)
                 network.writeToParcel(parcel, 0)
                 parcel.setDataPosition(0)
-                check(parcel.readInt() == id && parcel.dataAvail() == 0) { "Network fixture parcel roundtrip changed" }
+                // Newer releases append fields after netId (API 36 does), so compare the leading
+                // netId and the reread identity instead of the exact parcel length.
+                check(parcel.readInt() == id) { "Network fixture parcel roundtrip changed" }
+                parcel.setDataPosition(0)
+                check(Network.CREATOR.createFromParcel(parcel) == network) { "Network fixture identity changed" }
                 network
             } finally { parcel.recycle() }
         }

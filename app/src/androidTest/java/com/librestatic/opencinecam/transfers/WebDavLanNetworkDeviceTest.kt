@@ -11,15 +11,19 @@ import org.junit.Test
  * These cases do not claim physical offline Wi-Fi acceptance. */
 class WebDavLanNetworkDeviceTest {
     @Test fun wifiLanWithoutInternetValidationCanTransfer() {
-        val lan = classifyWebDavNetwork(wifi = true, internet = false, validated = false)
+        val lan = classifyWebDavNetwork(wifi = true, internet = false, validated = false, notMetered = true)
         assertEquals(WebDavNetwork.WIFI, lan)
         assertNull(WebDavUploadPolicy(enabled = true, network = lan).stopReason())
-        assertEquals(WebDavNetwork.WIFI, classifyWebDavNetwork(wifi = true, internet = true, validated = false))
+        assertEquals(WebDavNetwork.WIFI, classifyWebDavNetwork(wifi = true, internet = true, validated = false, notMetered = true))
+        // Metered Wi-Fi (a hotspot) is not free Wi-Fi: it needs the cellular consent.
+        assertEquals(WebDavNetwork.CELLULAR, classifyWebDavNetwork(wifi = true, internet = true, validated = true))
     }
 
     @Test fun lanAdmissionNeverBypassesVpnCellularOrRecordingGates() {
-        val wifi = classifyWebDavNetwork(wifi = true)
-        assertEquals(WebDavNetwork.OTHER, classifyWebDavNetwork(wifi = true, vpn = true))
+        val wifi = classifyWebDavNetwork(wifi = true, notMetered = true)
+        // A VPN without a known underlying transport fails closed; over Wi-Fi it keeps that metering.
+        assertEquals(WebDavNetwork.OTHER, classifyWebDavNetwork(vpn = true, internet = true, validated = true))
+        assertEquals(WebDavNetwork.CELLULAR, classifyWebDavNetwork(wifi = true, vpn = true))
         val cellular = classifyWebDavNetwork(cellular = true, internet = true, validated = true)
         assertEquals(WebDavNetwork.CELLULAR, cellular)
         assertEquals(WebDavStopReason.CELLULAR_CONSENT_REQUIRED, WebDavUploadPolicy(enabled = true, network = cellular).stopReason())
@@ -39,6 +43,7 @@ class WebDavLanNetworkDeviceTest {
             vpn = actual.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
             internet = actual.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
             validated = actual.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+            notMetered = actual.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
         )
         assertEquals(expected, classifyWebDavNetwork(actual))
         assertEquals(WebDavNetwork.WIFI, classifyWebDavNetwork(actual)) // Private test emulator's real route.

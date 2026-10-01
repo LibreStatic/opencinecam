@@ -53,6 +53,7 @@ class WebDavHttpsUiDeviceTest {
     @Test fun defaultTrustRejectsFixtureCaBeforeAnyHttpAndPreservesLocalCapture() = runCase(trusted = false)
 
     private fun runCase(trusted: Boolean) {
+        assumeHostHttpsFixture()
         val fixture = Fixture(trusted)
         var runtime: WebDavTransferRuntime? = null
         var clicked: String? = null
@@ -100,7 +101,7 @@ class WebDavHttpsUiDeviceTest {
                 assertNotEquals(WebDavBundleState.COMPLETE, bundle.state)
                 assertNotEquals(WebDavArtifactState.VERIFIED, bundle.artifacts.single().state)
                 assertTrue(fixture.trace.responses.isEmpty())
-                assertTrue("Failure must be certificate/TLS validation, not connectivity", fixture.trace.failures.any {
+                assertTrue("Failure must be certificate/TLS validation, not connectivity: ${fixture.trace.failures}", fixture.trace.failures.any {
                     it.contains("SSLHandshakeException") || it.contains("CertificateException")
                 })
                 assertEquals(1, fixture.trace.connections.size) // No automatic retry or GET after failure.

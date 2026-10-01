@@ -150,6 +150,7 @@ class OperatorServiceTest {
                 override fun close() = Unit
             })
         }
+        if (serviceHttps) assumeHostHttpsFixture()
         val httpsFixture = if (serviceHttps) E1ServiceHttpsFixture(context, lanOptIn) else null
         var httpsPrepared = false
         var firstQueueEndpoint: String? = null
