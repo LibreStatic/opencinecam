@@ -45,8 +45,40 @@ monitoring branch is baked into the encoded file.
 
 Every recording sidecar identifies OCLog2, this version, the source tier, requested dynamic
 range, assumed/reported color space and transfer, source-precision claim boundary, runtime
-dataspace, and exact shader SHA-256. A changed shader is a new transform build even when the
-curve equation remains unchanged.
+dataspace, middle-grey reference and scene gain, and exact shader SHA-256. A changed shader is
+a new transform build even when the curve equation remains unchanged.
+
+The container signals full range and BT.2020 primaries and matrix, but deliberately leaves
+the transfer **unspecified** (H.273 value 2). OCLog2 is not a standard transfer, and a
+"linear" tag would invite players and editors to decode it wrongly, so the sidecar is the
+authority for the transfer. Some device encoders may still write a default VUI transfer
+even when the format key is absent. Check each physical device's files with
+`ffprobe -show_streams` before you trust the container signaling.
+
+## Middle-grey reference
+
+The two tiers place an 18% grey card at different scene-linear levels. BT.2408 puts HLG
+reference grey at 38% signal, and the inverse HLG OETF low branch (`E²/3`) maps that to
+`0.38² / 3 = 0.0481333`. The SDR tier inverts the Rec.709 OETF, so a grey card exposed
+to Rec.709 18% returns to exactly `0.18`. The tier grey ratio is
+`R = 0.18 / (0.38² / 3) = 0.54 / 0.1444 = 3.7396` (about 1.90 stops). The often-quoted
+3.76 comes from rounding the Rec.709 grey code to 0.41.
+
+The capture setting **Middle-grey reference** applies one scalar `uSceneGain` to
+scene-linear BT.2020, before the OCLog2 curve, in both fragment shaders:
+
+| Mode | HLG-derived gain | HFR ISP-derived gain | Trade-off |
+|---|---|---|---|
+| `NATIVE` (default) | 1 | 1 | Each tier keeps its own grey; grey sits about 0.22 code apart between tiers |
+| `MATCH_HLG` | 1 | 1/R | Lossless: the SDR tier only moves down, and its peak stays inside `[0, 1]` |
+| `MATCH_SDR` | R | 1 | HLG signal above about 0.752 (the HLG OETF of `1/R`) clips at scene white 1.0 |
+
+The gain is a runtime uniform, so it does not change the pinned shader SHA-256. The gain is
+frozen for each take: changes stay pending while a take records, and monitoring, scopes and
+the encoder see the same scaled light. The sidecar `transform` section records
+`greyReference` and the exact float `sceneGain`. The qualifier includes both in the
+qualification tuple, and fails a sidecar that omits the gain or disagrees with the profile
+evidence.
 
 Each shader assumes its tier's source transfer, so the pipeline checks the dataspace of every
 recorded frame. The HLG tier accepts only BT.2020 primaries with the HLG transfer, in either
@@ -54,6 +86,29 @@ range. The SDR tier rejects BT.2020, HLG and PQ frames. The sidecar records how 
 match and the first unexpected dataspace. `tools/qualify_oclog2.py` fails a bundle with any
 mismatched frame and leaves it `NOT_RUN` when the platform did not report a dataspace. The
 recording itself is kept, because a lost take is worse than a disclosed mismatch.
+
+## YCbCr decoding
+
+The camera delivers YCbCr. With the default external sampler, the GPU driver converts it to
+R'G'B' with a matrix and range of its own choosing. On a Snapdragon 8 Gen 3 (Adreno 750), a P010
+buffer tagged BT.2020 HLG full range was decoded as BT.601 limited range, which moved mid-tones by
+up to 76 ten-bit codes. The driver conversion is not observable from the app, so it cannot be
+qualified.
+
+When the GPU exposes `GL_EXT_YUV_target`, both tier shaders sample through
+`__samplerExternal2DY2YEXT` and convert in the shader:
+`rgb = clamp(uYcbcrToRgb * (yuv - uYcbcrOffset), 0, 1)`. The matrix and offset come from each
+frame's dataspace (`OpenCineLogYcbcrConversion`): BT.601, BT.709 or BT.2020 coefficients, full or
+limited range, ten-bit for the HLG tier and eight-bit for the SDR tier. An unspecified standard or
+range falls back to BT.601 limited and is labelled `(default)`. The shader variant is derived
+textually from the tier shader, so the transform body is identical. It is the pinned
+`runtimeShaderSha256`.
+
+Without the extension, or if the variant fails to link, the pipeline uses the driver sampler. The
+sidecar then records `transform.ycbcrConversion: null` and the driver-sampler shader hash, listed
+as `driverSamplerShaderSha256` in the spec. `tools/qualify_oclog2.py` fails that hash by name
+(`driver-ycbcr-conversion`). It also checks the recorded conversion against the tier, and leaves a
+`(default)` conversion `NOT_RUN`.
 
 The inverse HLG step clamps its input to [0, 1] first. Without the clamp, a below-black code from
 the sampler would square to positive light.

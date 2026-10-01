@@ -23,6 +23,13 @@ class CameraSettingsTest {
         assertEquals(30, next.videoFps)
     }
 
+    @Test fun logGreyReferenceDefaultsToNativeAndStaysPendingDuringRecording() {
+        val before = CameraSettings()
+        assertEquals(com.librestatic.opencinecam.camera.OpenCineLogGreyReference.NATIVE, before.logGreyReference)
+        val next = before.copy(logGreyReference = com.librestatic.opencinecam.camera.OpenCineLogGreyReference.MATCH_SDR)
+        assertEquals(before, before.withLivePreferencesFrom(next))
+    }
+
     @Test
     fun defaultsAreSafeForFoldedLogPreflight() {
         val settings = CameraSettings()

@@ -3952,6 +3952,9 @@ internal fun SettingsContent(
                 onCheckedChange = { onSettingsChange(settings.copy(logViewAssistEnabled = it)) },
             )
         }
+        if ("log-grey-reference" in visibleIds) settingsCard("log-grey-reference") {
+            LogGreyReferenceSettings(state, settings, onSettingsChange)
+        }
         if ("focus-lock" in visibleIds) settingsCard("focus-lock") {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.af_lock_behavior), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)

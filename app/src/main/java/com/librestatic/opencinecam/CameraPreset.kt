@@ -209,6 +209,8 @@ object CameraPresetCodec {
         timecodeResetRevision = current.timecodeResetRevision,
         audioInputDeviceId = current.audioInputDeviceId,
         audioListeningOutputDeviceId = current.audioListeningOutputDeviceId,
+        // Not yet a portable preset key (needs a schema revision); keep the device value.
+        logGreyReference = current.logGreyReference,
         subjectDisplay = preset.subjectDisplay.copy(prompterText = current.subjectDisplay.prompterText, operatorCue = current.subjectDisplay.operatorCue))
 
     fun differences(current: CameraSettings, preset: CameraSettings): List<String> {

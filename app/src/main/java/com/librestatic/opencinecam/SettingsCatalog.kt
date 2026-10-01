@@ -61,6 +61,7 @@ object SettingsCatalog {
         SettingEntry("horizon", SettingsCategory.MONITORING, R.string.horizon_level, "horizonte nivel level horizon"),
         SettingEntry("metering", SettingsCategory.CAPTURE, R.string.tap_exposure_metering, "tap touch toque exposicion exposure metering medicion"),
         SettingEntry("assist", SettingsCategory.MONITORING, R.string.log_view_assist, "LUT LOG Rec709 asistencia assist color"),
+        SettingEntry("log-grey-reference", SettingsCategory.RECORDING, R.string.log_grey_reference, "LOG OCLog2 gris medio middle grey gray 18% HLG SDR exposicion exposure referencia reference ganancia gain"),
         SettingEntry("focus-lock", SettingsCategory.CAPTURE, R.string.af_lock_behavior, "focus enfoque AF bloqueo lock"),
         SettingEntry("zoom-lens", SettingsCategory.CAPTURE, R.string.zoom_lens_switch_mode, "zoom lente lens cambio switch automatico automatic manual preajuste preset tele gran angular wide pellizco pinch"),
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),

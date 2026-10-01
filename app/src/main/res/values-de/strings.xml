@@ -141,6 +141,14 @@
     <string name="mode_integrating">Die %1$s-Aufnahme wird integriert.</string>
     <string name="log_view_assist">LOG View Assist</string>
     <string name="log_view_assist_summary">Nur Monitoring: wandelt OCLog2/BT.2020 in Rec.709 um. Wird nie in die Aufnahme eingebrannt.</string>
+    <string name="log_grey_reference">LOG-Mittelgrau-Referenz</string>
+    <string name="log_grey_reference_summary" formatted="false">Wo 18 % Grau in OCLog2 liegt. Die HLG-Quelle setzt es etwa 1,9 Blenden tiefer als die SDR-Quelle (hohe Bildrate).</string>
+    <string name="log_grey_reference_native">Nativ</string>
+    <string name="log_grey_reference_match_hlg">An HLG angleichen</string>
+    <string name="log_grey_reference_match_sdr">An SDR angleichen</string>
+    <string name="log_grey_reference_native_detail">Jede Quelle behält ihre eigene Kurve. Es wird keine Verstärkung angewendet.</string>
+    <string name="log_grey_reference_match_hlg_detail">SDR-Clips werden auf das HLG-Grau abgesenkt. Verlustfrei: nichts clippt.</string>
+    <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG-Clips werden auf das SDR-Grau angehoben. Lichter über etwa 75 % HLG-Signal clippen.</string>
     <string name="capture_status_free">%1$s frei</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s frei</string>
     <string name="camera_switch_timeout">Kamera %1$s wurde nicht gestartet; Kamera %2$s wiederhergestellt.</string>

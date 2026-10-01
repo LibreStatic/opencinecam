@@ -79,6 +79,21 @@
         "shaderSha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "greyReference": {
+          "enum": [
+            "NATIVE",
+            "MATCH_HLG",
+            "MATCH_SDR"
+          ]
+        },
+        "sceneGain": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "ycbcrConversion": {
+          "type": ["string", "null"],
+          "pattern": "^(BT601|BT709|BT2020)/(full|limited)/(8|10)-bit( \\(default\\))?$"
         }
       },
       "additionalProperties": true

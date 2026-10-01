@@ -2063,6 +2063,7 @@ class CaptureService : Service() {
             }
             previewEngine.setMonitoringOptions(settings.monitoring)
             if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.logViewAssistEnabled)
+            if (previous.logGreyReference != settings.logGreyReference) previewEngine.setOpenCineLogGreyReference(settings.logGreyReference)
             if (previous.anamorphicSqueeze != settings.anamorphicSqueeze) previewEngine.setOpenCineLogSqueezeFactor(settings.anamorphicSqueeze.factor)
             timecodeTracker.configure(
                 TimecodeRate(settings.timecodeNominalFps, settings.timecodeDropFrame),
@@ -3083,14 +3084,20 @@ class CaptureService : Service() {
             .put("domain", evidence.recordingLut?.input?.name ?: "scene-linear")
             .put("gamut", evidence.gamut)
             .put("range", evidence.range)
-            .put(if (evidence.recordingLut != null) "sourceShaderSha256" else "shaderSha256", evidence.transformSha256))
+            .put(if (evidence.recordingLut != null) "sourceShaderSha256" else "shaderSha256", evidence.transformSha256)
+            // Runtime shader parameter, part of the qualified tuple: scene-linear gain before OCLog2.
+            .put("greyReference", evidence.greyReference.name)
+            .put("sceneGain", evidence.sceneGain.toDouble())
+            // Matrix/range/bit depth the shader decoded the camera YCbCr with; null means the
+            // driver's sampler chose them and the code values are not verifiable.
+            .put("ycbcrConversion", evidence.ycbcrConversion ?: JSONObject.NULL))
         .put("encoding", JSONObject()
             .put("mime", evidence.codecMime)
             .put("profile", evidence.codecProfile)
             .put("codecName", evidence.codecName)
             .put("eglRenderTargetBits", evidence.eglRenderTargetBits)
             .put("colorPrimaries", if (evidence.recordingLut != null) "BT.709" else evidence.gamut)
-            .put("transfer", if (evidence.recordingLut != null) "BT.709 SDR video" else "linear-container-surrogate; OCLog2 sidecar authoritative")
+            .put("transfer", if (evidence.recordingLut != null) "BT.709 SDR video" else "unspecified (H.273 transfer 2 requested); OCLog2 sidecar authoritative")
             .put("range", evidence.range))
         .put("geometry", JSONObject()
             .put("mode", evidence.geometryMode.name)

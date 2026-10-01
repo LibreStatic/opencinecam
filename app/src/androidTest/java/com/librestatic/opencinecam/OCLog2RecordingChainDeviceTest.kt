@@ -418,6 +418,7 @@ class OCLog2RecordingChainDeviceTest {
                 .put("sourceDataSpaceMismatchedFrames", evidence.sourceDataSpaceMismatchedFrames ?: JSONObject.NULL)
                 .put("range", evidence.range)
                 .put("transformSha256", evidence.transformSha256)
+                .put("ycbcrConversion", evidence.ycbcrConversion ?: JSONObject.NULL)
                 .put("expectedTransformSha256", OpenCineLogGpuPipeline.transformSha256(tier.sourcePath)))
             .put("decode", JSONObject()
                 .put("decoder", decoded.decoder)

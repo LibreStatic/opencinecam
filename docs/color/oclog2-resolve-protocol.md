@@ -63,7 +63,10 @@ This writes the following to `local-evidence/oclog2-resolve/`:
 
 - the two 1920×1080 RGB float EXR stills;
 - a 1-second, 30 fps, lossless HEVC Main10 clip. Its signaling matches the app's OCLog2
-  recordings: full range, BT.2020 primaries and matrix, transfer signaled as linear;
+  recordings: full range, BT.2020 primaries and matrix, transfer left unspecified (H.273
+  value 2). The container never claims a standard transfer; the OCLog2 sidecar is the
+  authority. Some device encoders may still write a default VUI transfer, so check each
+  device recording with `ffprobe` before you rely on this;
 - `fixture-manifest.json`, which records the generator SHA-256.
 
 A comparison against a fixture built by a different generator revision fails as stale.

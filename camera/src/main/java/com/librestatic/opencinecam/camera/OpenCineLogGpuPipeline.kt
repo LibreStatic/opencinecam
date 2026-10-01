@@ -150,6 +150,14 @@ data class OpenCineLogRecordingEvidence(
     val pixelAspectRatioWidth: Int = 1,
     val pixelAspectRatioHeight: Int = 1,
     val recordingLut: BakedLutEvidence? = null,
+    /** Middle-grey reference and the scene-linear gain it applied before OCLog2 encoding. */
+    val greyReference: OpenCineLogGreyReference = OpenCineLogGreyReference.NATIVE,
+    val sceneGain: Float = 1f,
+    /**
+     * YCbCr conversion the shader applied itself (e.g. `BT2020/full/10-bit`), or null when the
+     * driver's external sampler converted with a matrix and range the app cannot observe.
+     */
+    val ycbcrConversion: String? = null,
 )
 
 internal data class OpenCineLogPreviewGeometry(
@@ -334,6 +342,7 @@ class OpenCineLogGpuPipeline(
     private val onAnalysis: ((Camera2Analysis) -> Unit)? = null,
     private val onPreviewLost: ((String) -> Unit)? = null,
     private val onOperatorLutStatus: ((OperatorLutStatus) -> Unit)? = null,
+    greyReference: OpenCineLogGreyReference = OpenCineLogGreyReference.NATIVE,
     private val onFailure: (String, String) -> Unit,
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
@@ -389,10 +398,18 @@ class OpenCineLogGpuPipeline(
     private var positionScaleLocation = -1
     private var previewRotationLocation = -1
     private var mirrorPreviewLocation = -1
+    private var sceneGainLocation = -1
+    private var ycbcrToRgbLocation = -1
+    private var ycbcrOffsetLocation = -1
+    /** True when the programs sample raw YCbCr through GL_EXT_YUV_target and convert in the shader. */
+    private var shaderYcbcr = false
+    private var ycbcrConversion: OpenCineLogYcbcrConversion? = null
+    private var ycbcrDataSpace: Int? = null
     private val textureMatrix = FloatArray(16)
     private var surfaceTexture: SurfaceTexture? = null
     private var inputSurface: Surface? = null
     @Volatile private var viewAssistEnabled = viewAssist
+    @Volatile private var greyReference = greyReference
     @Volatile private var previewSqueezeFactor = 1f
     @Volatile private var previewDisplayRotationDegrees = displayRotationDegrees
     @Volatile private var recording: Recording? = null
@@ -445,6 +462,14 @@ class OpenCineLogGpuPipeline(
     fun setViewAssist(enabled: Boolean) {
         viewAssistEnabled = enabled
     }
+
+    /** Takes effect for monitoring at once and for the next take; an active take keeps its gain. */
+    fun setGreyReference(reference: OpenCineLogGreyReference) {
+        greyReference = reference
+    }
+
+    private fun sceneGain(reference: OpenCineLogGreyReference): Float =
+        if (passthroughSdr) 1f else reference.sceneGain(sourcePath)
 
     fun setPreviewSqueezeFactor(factor: Float) {
         previewSqueezeFactor = factor.coerceAtLeast(1f)
@@ -595,7 +620,10 @@ class OpenCineLogGpuPipeline(
                     } else {
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
                         setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_FULL)
-                        setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_LINEAR)
+                        // No container transfer is claimed: OCLog2 has no H.273 code, and "linear" made
+                        // NLEs misread the file. Leaving the key unset aims for VUI transfer 2
+                        // (unspecified); some encoders still write a default, so verify with ffprobe.
+                        // The sidecar is authoritative.
                     }
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_WIDTH, geometry.pixelAspectRatioWidth)
@@ -631,7 +659,9 @@ class OpenCineLogGpuPipeline(
                     )
                     check(eglSurface != EGL14.EGL_NO_SURFACE) { "Encoder did not accept the EGL window surface." }
                     encoderEglSurface = eglSurface
-                    val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied)
+                    val takeGreyReference = if (passthroughSdr) OpenCineLogGreyReference.NATIVE else greyReference
+                    val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied,
+                        takeGreyReference, sceneGain(takeGreyReference))
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -825,19 +855,40 @@ class OpenCineLogGpuPipeline(
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-        program = linkProgram(VERTEX_SHADER, if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else fragmentShader(sourcePath))
+        program = if (passthroughSdr) linkProgram(VERTEX_SHADER, PASSTHROUGH_FRAGMENT_SHADER) else linkTransformProgram()
         quad = PreviewQuad()
         textureMatrixLocation = GLES30.glGetUniformLocation(program, "uTextureMatrix")
         outputModeLocation = GLES30.glGetUniformLocation(program, "uOutputMode")
         positionScaleLocation = GLES30.glGetUniformLocation(program, "uPositionScale")
         previewRotationLocation = GLES30.glGetUniformLocation(program, "uPreviewRotation")
         mirrorPreviewLocation = GLES30.glGetUniformLocation(program, "uMirrorPreview")
+        sceneGainLocation = GLES30.glGetUniformLocation(program, "uSceneGain")
+        ycbcrToRgbLocation = GLES30.glGetUniformLocation(program, "uYcbcrToRgb")
+        ycbcrOffsetLocation = GLES30.glGetUniformLocation(program, "uYcbcrOffset")
         val createdTexture = SurfaceTexture(textureId).apply {
             setDefaultBufferSize(size.width, size.height)
             setOnFrameAvailableListener({ renderLatestFrame() }, handler)
         }
         surfaceTexture = createdTexture
         inputSurface = Surface(createdTexture)
+    }
+
+    /**
+     * Prefers the shader YCbCr variant: the external sampler's driver conversion ignores the buffer
+     * dataspace on some GPUs. Falls back to the driver sampler, which the evidence then reports.
+     */
+    private fun linkTransformProgram(): Int {
+        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().split(' ')
+        if ("GL_EXT_YUV_target" in extensions) {
+            try {
+                return linkProgram(VERTEX_SHADER, transformShader(sourcePath, shaderYcbcr = true)).also { shaderYcbcr = true }
+            } catch (failure: Exception) {
+                android.util.Log.w(LOG_TAG, "GL_EXT_YUV_target shader did not link; using the driver YCbCr conversion.", failure)
+                for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+            }
+        }
+        shaderYcbcr = false
+        return linkProgram(VERTEX_SHADER, transformShader(sourcePath, shaderYcbcr = false))
     }
 
     private fun renderLatestFrame() {
@@ -850,9 +901,14 @@ class OpenCineLogGpuPipeline(
             texture.getTransformMatrix(textureMatrix)
             val frameDataSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) texture.dataSpace else null
             lastSourceDataSpace = frameDataSpace
+            if (shaderYcbcr && (ycbcrConversion == null || ycbcrDataSpace != frameDataSpace)) {
+                ycbcrConversion = OpenCineLogYcbcrConversion.forDataSpace(frameDataSpace, sourcePath)
+                ycbcrDataSpace = frameDataSpace
+            }
             val timestampNs = texture.timestamp
             recording?.takeIf { it.acceptFrames.get() && recordingFrameMeetsWhiteBalanceBoundary(timestampNs, it.minimumSensorTimestampNs) }?.let { active ->
                 active.noteSourceDataSpace(frameDataSpace, sourcePath)
+                if (active.ycbcrConversion == null) active.ycbcrConversion = ycbcrConversion?.label
                 val capturePts = active.captureEpoch?.mapVideoInput(timestampNs)
                 if (!active.videoRegressionLogged && (active.captureEpoch?.regressedVideoFrames() ?: 0L) > 0L) {
                     active.videoRegressionLogged = true
@@ -966,7 +1022,7 @@ class OpenCineLogGpuPipeline(
     private fun operatorProgram(lut: MonitorLut, forSubject: Boolean = false, forRecording: Boolean = false): Int {
         check(!forSubject || !forRecording)
         if (operatorLutProgram == 0) {
-            val source = if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else fragmentShader(sourcePath)
+            val source = if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else transformShader(sourcePath, shaderYcbcr)
             val declarations = """
                 uniform highp sampler3D uOperatorLut;
                 uniform vec3 uLutMin;
@@ -1098,6 +1154,12 @@ class OpenCineLogGpuPipeline(
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
         GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
         GLES30.glUniform1i(location("uOutputMode", outputModeLocation), outputMode)
+        // Monitors, scopes and the encoder see the same scaled light; a take freezes its gain.
+        GLES30.glUniform1f(location("uSceneGain", sceneGainLocation), recording?.sceneGain ?: sceneGain(greyReference))
+        ycbcrConversion?.takeIf { shaderYcbcr }?.let { conversion ->
+            GLES30.glUniformMatrix3fv(location("uYcbcrToRgb", ycbcrToRgbLocation), 1, false, conversion.matrix, 0)
+            GLES30.glUniform3fv(location("uYcbcrOffset", ycbcrOffsetLocation), 1, conversion.offset, 0)
+        }
         val geometry = outputGeometry ?: if (previewOutput) {
             OpenCineLogPreviewGeometryCalculator.calculate(
                 sourceWidth = size.width,
@@ -1383,7 +1445,7 @@ class OpenCineLogGpuPipeline(
                     sourceDataSpace = lastSourceDataSpace,
                     sourceDataSpaceMismatchedFrames = active.dataSpaceMismatchedFrames,
                     unexpectedSourceDataSpace = active.unexpectedDataSpace,
-                    transformSha256 = transformSha256(sourcePath),
+                    transformSha256 = transformSha256(sourcePath, shaderYcbcr),
                     encodedFrames = active.frames,
                     firstPtsUs = active.firstPtsUs,
                     lastPtsUs = active.lastPtsUs,
@@ -1400,6 +1462,9 @@ class OpenCineLogGpuPipeline(
                     displayHeight = active.geometry.displaySize.height,
                     pixelAspectRatioWidth = active.geometry.pixelAspectRatioWidth,
                     pixelAspectRatioHeight = active.geometry.pixelAspectRatioHeight,
+                    greyReference = active.greyReference,
+                    sceneGain = active.sceneGain,
+                    ycbcrConversion = if (shaderYcbcr) active.ycbcrConversion else null,
                 )
             } else null
             if (recording === active) recording = null
@@ -1818,6 +1883,8 @@ class OpenCineLogGpuPipeline(
         val fileRetirement: RecordingFileRetirement,
         val recordingLut: MonitorLut?,
         val onRecordingLutApplied: ((BakedLutEvidence) -> Unit)?,
+        val greyReference: OpenCineLogGreyReference,
+        val sceneGain: Float,
     ) {
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
         var lutApplied = false
@@ -1857,6 +1924,8 @@ class OpenCineLogGpuPipeline(
         var dataSpaceMismatchedFrames: Long? = null
         var unexpectedDataSpace: Int? = null
         var dataSpaceMismatchLogged = false
+        /** Label of the shader YCbCr conversion applied to the first recorded frame. */
+        var ycbcrConversion: String? = null
         fun noteSourceDataSpace(dataSpace: Int?, sourcePath: OpenCineLogSourcePath) {
             if (dataSpace == null) return
             val mismatched = !sourcePath.acceptsDataSpace(dataSpace)
@@ -1957,12 +2026,14 @@ class OpenCineLogGpuPipeline(
         """.trimIndent()
 
         // The exact source is hashed into every clip sidecar. Changing it is a pipeline-version change.
+        // uSceneGain is the runtime middle-grey reference gain (OpenCineLogGreyReference), recorded separately.
         private val HLG_FRAGMENT_SHADER = """
             #version 300 es
             #extension GL_OES_EGL_image_external_essl3 : require
             precision highp float;
             uniform samplerExternalOES uTexture;
             uniform int uOutputMode;
+            uniform float uSceneGain;
             in vec2 vTexCoord;
             out vec4 outColor;
             const float HLG_A = 0.17883277;
@@ -1997,7 +2068,7 @@ class OpenCineLogGpuPipeline(
                 return mix(highPart, lowPart, low);
             }
             void main() {
-                vec3 sceneLinearBt2020 = inverseHlg(texture(uTexture, vTexCoord).rgb);
+                vec3 sceneLinearBt2020 = uSceneGain * inverseHlg(texture(uTexture, vTexCoord).rgb);
                 vec3 ocLog = encodeOcLog2(sceneLinearBt2020);
                 vec3 displayLinear = max(bt2020ToBt709(decodeOcLog2(ocLog)), vec3(0.0));
                 vec3 monitored = rec709Oetf(displayLinear);
@@ -2014,6 +2085,7 @@ class OpenCineLogGpuPipeline(
             precision highp float;
             uniform samplerExternalOES uTexture;
             uniform int uOutputMode;
+            uniform float uSceneGain;
             in vec2 vTexCoord;
             out vec4 outColor;
             vec3 inverseRec709(vec3 e) {
@@ -2051,7 +2123,7 @@ class OpenCineLogGpuPipeline(
                 return mix(highPart, lowPart, low);
             }
             void main() {
-                vec3 sceneLinearBt2020 = bt709ToBt2020(inverseRec709(texture(uTexture, vTexCoord).rgb));
+                vec3 sceneLinearBt2020 = uSceneGain * bt709ToBt2020(inverseRec709(texture(uTexture, vTexCoord).rgb));
                 vec3 ocLog = encodeOcLog2(sceneLinearBt2020);
                 vec3 displayLinear = max(bt2020ToBt709(decodeOcLog2(ocLog)), vec3(0.0));
                 vec3 monitored = rec709Oetf(displayLinear);
@@ -2067,8 +2139,40 @@ class OpenCineLogGpuPipeline(
             OpenCineLogSourcePath.SDR_BT709_ISP -> SDR_FRAGMENT_SHADER
         }
 
-        fun transformSha256(sourcePath: OpenCineLogSourcePath): String = MessageDigest.getInstance("SHA-256")
-            .digest(fragmentShader(sourcePath).toByteArray())
+        /**
+         * The tier shader as linked. With [shaderYcbcr] the sampler returns raw YCbCr through
+         * `GL_EXT_YUV_target` and the shader converts it with `uYcbcrToRgb`/`uYcbcrOffset`
+         * ([OpenCineLogYcbcrConversion]), clamped to [0, 1] like a normalized sampler result.
+         * Derived textually so both variants share one transform body.
+         */
+        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean): String {
+            val base = fragmentShader(sourcePath)
+            if (!shaderYcbcr) return base
+            for (anchor in YCBCR_ANCHORS) check(base.split(anchor).size == 2) { "YCbCr shader anchor drifted: $anchor" }
+            return base
+                .replace(
+                    "#extension GL_OES_EGL_image_external_essl3 : require",
+                    "#extension GL_OES_EGL_image_external_essl3 : require\n#extension GL_EXT_YUV_target : require",
+                )
+                .replace(
+                    "uniform samplerExternalOES uTexture;",
+                    "uniform __samplerExternal2DY2YEXT uTexture;\nuniform mat3 uYcbcrToRgb;\nuniform vec3 uYcbcrOffset;",
+                )
+                .replace(
+                    "texture(uTexture, vTexCoord).rgb",
+                    "clamp(uYcbcrToRgb * (texture(uTexture, vTexCoord).rgb - uYcbcrOffset), 0.0, 1.0)",
+                )
+        }
+
+        private val YCBCR_ANCHORS = listOf(
+            "#extension GL_OES_EGL_image_external_essl3 : require",
+            "uniform samplerExternalOES uTexture;",
+            "texture(uTexture, vTexCoord).rgb",
+        )
+
+        /** Identity of the linked transform; the shader-YCbCr variant is the qualified one. */
+        fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
+            .digest(transformShader(sourcePath, shaderYcbcr).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Backward-compatible identity of the qualified HLG transform. */

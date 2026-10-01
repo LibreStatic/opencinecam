@@ -17,14 +17,37 @@ class OpenCineLogGpuPipelineContractTest {
     @Test
     fun productionShaderIsPinnedToTheSidecarIdentity() {
         assertEquals(
-            "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
+            "38d6e5012470a4b1e6b31c2a2c47d0d9241a175a77a6b2b8b6e90a09b3023f9c",
             OpenCineLogGpuPipeline.TRANSFORM_SHA256,
         )
         assertEquals(
-            "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b",
+            "fec609172dfc90e6f802d27e21b1f81e590f053cf77fd37ce44ce3e9f3b35c0e",
             OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256,
         )
         assertNotEquals(OpenCineLogGpuPipeline.TRANSFORM_SHA256, OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256)
+        // Driver-sampler fallback identities, recorded so qualification can name and reject them.
+        assertEquals(
+            "78890c17ab1a4f2896667982e409fd3a296be723ee697a16866005cd359533de",
+            OpenCineLogGpuPipeline.transformSha256(OpenCineLogSourcePath.HLG10_BT2020, shaderYcbcr = false),
+        )
+        assertEquals(
+            "01184aec3c8a1a2c1c3f1ab576f7db06c3e3907e71150fca272a9e542aa5ffa4",
+            OpenCineLogGpuPipeline.transformSha256(OpenCineLogSourcePath.SDR_BT709_ISP, shaderYcbcr = false),
+        )
+    }
+
+    @Test
+    fun shaderYcbcrVariantOnlySwapsTheSampler() {
+        for (path in OpenCineLogSourcePath.entries) {
+            val driver = OpenCineLogGpuPipeline.transformShader(path, shaderYcbcr = false)
+            val shader = OpenCineLogGpuPipeline.transformShader(path, shaderYcbcr = true)
+            assertTrue(shader.contains("#extension GL_EXT_YUV_target : require"))
+            assertTrue(shader.contains("uniform __samplerExternal2DY2YEXT uTexture;"))
+            assertFalse(shader.contains("samplerExternalOES"))
+            assertEquals(1, shader.split("uYcbcrToRgb * (texture(uTexture, vTexCoord).rgb - uYcbcrOffset)").size - 1)
+            // Everything after the sampled value is the same transform body.
+            assertEquals(driver.substringAfter("texture(uTexture, vTexCoord).rgb"), shader.substringAfter("uYcbcrOffset), 0.0, 1.0)"))
+        }
     }
 
     @Test

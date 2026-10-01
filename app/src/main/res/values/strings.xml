@@ -141,6 +141,14 @@
     <string name="mode_integrating">%1$s capture is being integrated.</string>
     <string name="log_view_assist">LOG View Assist</string>
     <string name="log_view_assist_summary">Monitoring only: transform OCLog2/BT.2020 to Rec.709. It is never baked into the recording.</string>
+    <string name="log_grey_reference">LOG middle-grey reference</string>
+    <string name="log_grey_reference_summary" formatted="false">Where 18% grey lands in OCLog2. The HLG source places it about 1.9 stops lower than the SDR (high frame rate) source.</string>
+    <string name="log_grey_reference_native">Native</string>
+    <string name="log_grey_reference_match_hlg">Match HLG</string>
+    <string name="log_grey_reference_match_sdr">Match SDR</string>
+    <string name="log_grey_reference_native_detail">Each source keeps its own curve. No gain is applied.</string>
+    <string name="log_grey_reference_match_hlg_detail">SDR clips are scaled down to the HLG grey. Lossless: nothing clips.</string>
+    <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG clips are scaled up to the SDR grey. Highlights above about 75% HLG signal clip.</string>
     <string name="capture_status_free">%1$s free</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s free</string>
     <string name="camera_switch_timeout">Camera %1$s did not start; restored camera %2$s.</string>

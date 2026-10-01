@@ -141,6 +141,14 @@
     <string name="mode_integrating">La capture %1$s est en cours d\'intégration.</string>
     <string name="log_view_assist">Assistance de vue LOG</string>
     <string name="log_view_assist_summary">Monitoring uniquement : transforme OCLog2/BT.2020 en Rec.709. N\'est jamais incrusté dans l\'enregistrement.</string>
+    <string name="log_grey_reference">Référence de gris moyen LOG</string>
+    <string name="log_grey_reference_summary" formatted="false">Position du gris 18 % en OCLog2. La source HLG le place environ 1,9 IL plus bas que la source SDR (haute cadence).</string>
+    <string name="log_grey_reference_native">Native</string>
+    <string name="log_grey_reference_match_hlg">Aligner sur HLG</string>
+    <string name="log_grey_reference_match_sdr">Aligner sur SDR</string>
+    <string name="log_grey_reference_native_detail">Chaque source garde sa propre courbe. Aucun gain n\'est appliqué.</string>
+    <string name="log_grey_reference_match_hlg_detail">Les clips SDR sont abaissés au gris HLG. Sans perte : rien n\'est écrêté.</string>
+    <string name="log_grey_reference_match_sdr_detail" formatted="false">Les clips HLG sont relevés au gris SDR. Les hautes lumières au-delà d\'environ 75 % du signal HLG sont écrêtées.</string>
     <string name="capture_status_free">%1$s libres</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s libres</string>
     <string name="camera_switch_timeout">La caméra %1$s n\'a pas démarré ; caméra %2$s restaurée.</string>

@@ -1,14 +1,20 @@
 import hashlib
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 
-from tools.qualify_oclog2 import EXPECTED_SHADERS, evaluate
+from tools.qualify_oclog2 import DRIVER_SAMPLER_SHADERS, EXPECTED_SHADERS, TIER_GREY_RATIO, evaluate
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def float32(value: float) -> float:
+    """The app records the gain as a Kotlin Float widened to a JSON double."""
+    return struct.unpack("f", struct.pack("f", value))[0]
 
 
 class OpenCineLogQualificationTest(unittest.TestCase):
@@ -31,6 +37,9 @@ class OpenCineLogQualificationTest(unittest.TestCase):
                 "curve": "OCLog2",
                 "version": "2.0.0",
                 "shaderSha256": EXPECTED_SHADERS["HLG10_BT2020"],
+                "greyReference": "NATIVE",
+                "sceneGain": 1.0,
+                "ycbcrConversion": "BT2020/full/10-bit",
             },
         }))
         self.ffprobe.write_text(json.dumps({"streams": [{
@@ -61,6 +70,8 @@ class OpenCineLogQualificationTest(unittest.TestCase):
                 "sourcePath": "HLG10_BT2020",
                 "specVersion": "2.0.0",
                 "shaderSha256": EXPECTED_SHADERS["HLG10_BT2020"],
+                "greyReference": "NATIVE",
+                "sceneGain": 1.0,
             },
             "provenance": {
                 "dynamicRange": "HLG10",
@@ -113,6 +124,28 @@ class OpenCineLogQualificationTest(unittest.TestCase):
         self.assertEqual("FAILED", result["status"])
         self.assertIn("runtime-shader", result["failed"])
 
+    def test_driver_ycbcr_conversion_fails_by_name(self) -> None:
+        manifest = self.manifest()
+        manifest["profile"]["shaderSha256"] = DRIVER_SAMPLER_SHADERS["HLG10_BT2020"]
+        result = evaluate(manifest, self.root)
+        self.assertEqual("FAILED", result["status"])
+        check = next(item for item in result["checks"] if item["name"] == "runtime-shader")
+        self.assertEqual("driver-ycbcr-conversion", check["reason"])
+
+    def test_ycbcr_conversion_must_be_reported_from_the_dataspace(self) -> None:
+        for conversion, status, bucket in (
+            (None, "NOT_RUN", "notRun"),
+            ("BT601/limited/10-bit (default)", "NOT_RUN", "notRun"),
+            ("BT709/limited/8-bit", "FAILED", "failed"),
+            ("BT2020/limited/10-bit", "QUALIFIED", None),
+        ):
+            with self.subTest(conversion=conversion):
+                self.write_sidecar_transform(ycbcrConversion=conversion)
+                result = evaluate(self.manifest(), self.root)
+                self.assertEqual(status, result["status"])
+                if bucket:
+                    self.assertIn("ycbcr-conversion", result[bucket])
+
     def rewrite_sidecar_source(self, **fields: object) -> dict:
         sidecar = json.loads(self.sidecar.read_text())
         sidecar["source"].update(fields)
@@ -148,6 +181,60 @@ class OpenCineLogQualificationTest(unittest.TestCase):
         self.assertEqual("FAILED", result["status"])
         self.assertIn("implementation-gpu", result["failed"])
         self.assertIn("implementation-ocio", result["notRun"])
+
+    def write_sidecar_transform(self, **changes: object) -> None:
+        sidecar = json.loads(self.sidecar.read_text())
+        sidecar["transform"].update(changes)
+        for key in [key for key, value in changes.items() if value is None]:
+            del sidecar["transform"][key]
+        self.sidecar.write_text(json.dumps(sidecar))
+
+    def test_scene_gain_is_part_of_the_tuple(self) -> None:
+        result = evaluate(self.manifest(), self.root)
+        self.assertEqual("NATIVE", result["tuple"]["greyReference"])
+        self.assertEqual(1.0, result["tuple"]["sceneGain"])
+
+    def test_matched_reference_qualifies_with_the_recorded_float_gain(self) -> None:
+        gain = float32(TIER_GREY_RATIO)
+        self.write_sidecar_transform(greyReference="MATCH_SDR", sceneGain=gain)
+        manifest = self.manifest()
+        manifest["profile"].update(greyReference="MATCH_SDR", sceneGain=gain)
+        manifest["files"]["sidecar"]["sha256"] = sha256(self.sidecar)
+        result = evaluate(manifest, self.root)
+        self.assertEqual("QUALIFIED", result["status"])
+        self.assertAlmostEqual(3.7396, result["tuple"]["sceneGain"], places=4)
+
+    def test_sidecar_without_gain_is_a_mismatch(self) -> None:
+        self.write_sidecar_transform(greyReference=None, sceneGain=None)
+        manifest = self.manifest()
+        manifest["files"]["sidecar"]["sha256"] = sha256(self.sidecar)
+        result = evaluate(manifest, self.root)
+        self.assertEqual("FAILED", result["status"])
+        self.assertIn("sidecar-contract", result["failed"])
+
+    def test_sidecar_with_a_different_gain_is_a_mismatch(self) -> None:
+        self.write_sidecar_transform(greyReference="MATCH_SDR", sceneGain=float32(TIER_GREY_RATIO))
+        manifest = self.manifest()
+        manifest["files"]["sidecar"]["sha256"] = sha256(self.sidecar)
+        result = evaluate(manifest, self.root)
+        self.assertEqual("FAILED", result["status"])
+        self.assertIn("sidecar-contract", result["failed"])
+
+    def test_gain_inconsistent_with_reference_and_tier_fails(self) -> None:
+        manifest = self.manifest()
+        # MATCH_HLG leaves the HLG tier untouched; a ratio gain there is not a valid tuple.
+        manifest["profile"].update(greyReference="MATCH_HLG", sceneGain=TIER_GREY_RATIO)
+        result = evaluate(manifest, self.root)
+        self.assertEqual("FAILED", result["status"])
+        self.assertIn("scene-gain", result["failed"])
+
+    def test_profile_without_gain_is_not_run(self) -> None:
+        manifest = self.manifest()
+        del manifest["profile"]["greyReference"]
+        del manifest["profile"]["sceneGain"]
+        result = evaluate(manifest, self.root)
+        self.assertIn("scene-gain", result["notRun"])
+        self.assertIn("sidecar-contract", result["failed"])
 
 
 if __name__ == "__main__":

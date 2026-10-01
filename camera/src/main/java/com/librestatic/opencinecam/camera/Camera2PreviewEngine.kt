@@ -562,6 +562,7 @@ class Camera2PreviewEngine(
     private var subjectRetry: Runnable? = null
     private var logPreviewEnabled = false
     private var logViewAssistEnabled = false
+    @Volatile private var logGreyReference = OpenCineLogGreyReference.NATIVE
     private var imageProcessing = ImageProcessingSelection()
     private val processingDefaults = java.util.WeakHashMap<CaptureRequest.Builder, ImageProcessingDefaults>()
     private var professionalExposure: ExposureSelection? = null
@@ -717,6 +718,7 @@ class Camera2PreviewEngine(
                         onAnalysis = { analysis -> deliverGpuAnalysis(currentGeneration, { analysisPipeline }, analysis) },
                         onOperatorLutStatus = { status -> deliverGpuLutStatus(currentGeneration, { analysisPipeline }, status) },
                         onPreviewLost = { message -> listener.onPreviewSurfaceLost(message) },
+                            greyReference = logGreyReference,
                         ) { code, message -> listener.onFailure(code, message, false) }
                     } catch (failure: Throwable) {
                         observeFailedInitialization(failure)
@@ -2794,6 +2796,12 @@ class Camera2PreviewEngine(
        logViewAssistEnabled = enabled
        logPipeline?.setViewAssist(enabled)
    }
+
+    /** Middle-grey reference for OCLog2; an active take keeps the gain it started with. */
+    fun setOpenCineLogGreyReference(reference: OpenCineLogGreyReference) {
+        logGreyReference = reference
+        logPipeline?.setGreyReference(reference)
+    }
 
     fun setOpenCineLogSqueezeFactor(factor: Float) {
         logPipeline?.setPreviewSqueezeFactor(factor)

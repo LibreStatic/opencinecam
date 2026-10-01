@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,9 +18,28 @@ from typing import Any
 
 SPEC_VERSION = "2.0.0"
 EXPECTED_SHADERS = {
-    "HLG10_BT2020": "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
-    "SDR_BT709_ISP": "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b",
+    "HLG10_BT2020": "38d6e5012470a4b1e6b31c2a2c47d0d9241a175a77a6b2b8b6e90a09b3023f9c",
+    "SDR_BT709_ISP": "fec609172dfc90e6f802d27e21b1f81e590f053cf77fd37ce44ce3e9f3b35c0e",
 }
+# Same transforms with the GPU driver's YCbCr conversion (no GL_EXT_YUV_target): never qualified.
+DRIVER_SAMPLER_SHADERS = {
+    "HLG10_BT2020": "78890c17ab1a4f2896667982e409fd3a296be723ee697a16866005cd359533de",
+    "SDR_BT709_ISP": "01184aec3c8a1a2c1c3f1ab576f7db06c3e3907e71150fca272a9e542aa5ffa4",
+}
+# Middle-grey reference between source tiers (OpenCineLogGreyReference): BT.2408 places 18% grey
+# at 38% HLG signal, which the inverse HLG OETF maps to 0.38^2/3; the SDR tier's inverse BT.709
+# returns 0.18. The scene-linear gain is a runtime shader parameter, so it is part of the tuple.
+TIER_GREY_RATIO = 0.18 / (0.38 * 0.38 / 3.0)
+EXPECTED_SCENE_GAINS = {
+    ("NATIVE", "HLG10_BT2020"): 1.0,
+    ("NATIVE", "SDR_BT709_ISP"): 1.0,
+    ("MATCH_HLG", "HLG10_BT2020"): 1.0,
+    ("MATCH_HLG", "SDR_BT709_ISP"): 1.0 / TIER_GREY_RATIO,
+    ("MATCH_SDR", "HLG10_BT2020"): TIER_GREY_RATIO,
+    ("MATCH_SDR", "SDR_BT709_ISP"): 1.0,
+}
+# The app records a 32-bit float gain; compare relatively, far tighter than any mode difference.
+SCENE_GAIN_RELATIVE_TOLERANCE = 1e-6
 REQUIRED_IMPLEMENTATIONS = {"cpu", "gpu", "lut1d", "lut3d", "ocio", "dctl"}
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MIN_DURATION_SECONDS = 30
@@ -105,6 +125,26 @@ def dataspace_matches(source_path: object, dataspace: int) -> bool:
     return False
 
 
+def ycbcr_conversion_matches(source_path: object, conversion: str) -> bool:
+    """The HLG tier is decoded as ten-bit BT.2020; the SDR tier as eight-bit non-BT.2020."""
+    parts = conversion.split("/")
+    if len(parts) != 3 or parts[1] not in {"full", "limited"}:
+        return False
+    if source_path == "HLG10_BT2020":
+        return parts[0] == "BT2020" and parts[2] == "10-bit"
+    if source_path == "SDR_BT709_ISP":
+        return parts[0] in {"BT601", "BT709"} and parts[2] == "8-bit"
+    return False
+
+
+def is_gain(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+
+
+def same_gain(left: object, right: object) -> bool:
+    return is_gain(left) and is_gain(right) and math.isclose(left, right, rel_tol=SCENE_GAIN_RELATIVE_TOLERANCE)
+
+
 def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
     checks: list[Check] = []
     if manifest.get("schema") != "opencinecam-oclog2-qualification-input-v1":
@@ -151,7 +191,22 @@ def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
     checks.append(Check("spec-version", "PASS" if spec_version == SPEC_VERSION else "FAIL", "spec-match" if spec_version == SPEC_VERSION else "stale-or-unknown-spec"))
     expected_shader = EXPECTED_SHADERS.get(str(source_path))
     shader_valid = expected_shader is not None and shader == expected_shader
-    checks.append(Check("runtime-shader", "PASS" if shader_valid else "FAIL", "shader-match" if shader_valid else "source-or-shader-mismatch"))
+    if shader_valid:
+        checks.append(Check("runtime-shader", "PASS", "shader-match"))
+    elif shader is not None and shader == DRIVER_SAMPLER_SHADERS.get(str(source_path)):
+        # The fallback lets the GPU driver pick the YCbCr matrix and range, which on tested
+        # hardware ignored the buffer dataspace; such a file cannot vouch for its code values.
+        checks.append(Check("runtime-shader", "FAIL", "driver-ycbcr-conversion"))
+    else:
+        checks.append(Check("runtime-shader", "FAIL", "source-or-shader-mismatch"))
+    grey_reference = profile.get("greyReference")
+    scene_gain = profile.get("sceneGain")
+    if grey_reference is None and scene_gain is None:
+        checks.append(Check("scene-gain", "NOT_RUN", "scene-gain-missing"))
+    else:
+        expected_gain = EXPECTED_SCENE_GAINS.get((str(grey_reference), str(source_path)))
+        gain_valid = expected_gain is not None and same_gain(scene_gain, expected_gain)
+        checks.append(Check("scene-gain", "PASS" if gain_valid else "FAIL", "gain-match" if gain_valid else "reference-or-gain-mismatch"))
 
     provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
     if source_path == "HLG10_BT2020":
@@ -210,8 +265,22 @@ def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
             and transform.get("curve") == "OCLog2"
             and transform.get("version") in {"2.0", SPEC_VERSION}
             and transform.get("shaderSha256") == shader
+            # A sidecar that does not declare the applied gain cannot vouch for the code values.
+            and transform.get("greyReference") == grey_reference
+            and same_gain(transform.get("sceneGain"), scene_gain)
         )
     checks.append(Check("sidecar-contract", "PASS" if sidecar_valid else "NOT_RUN" if sidecar is None else "FAIL", "sidecar-match" if sidecar_valid else "sidecar-missing-or-mismatch"))
+
+    transform = sidecar.get("transform") if sidecar is not None and isinstance(sidecar.get("transform"), dict) else {}
+    conversion = transform.get("ycbcrConversion")
+    if not isinstance(conversion, str) or not conversion:
+        checks.append(Check("ycbcr-conversion", "NOT_RUN", "ycbcr-conversion-unreported"))
+    elif conversion.endswith("(default)"):
+        checks.append(Check("ycbcr-conversion", "NOT_RUN", "ycbcr-conversion-assumed"))
+    elif ycbcr_conversion_matches(source_path, conversion):
+        checks.append(Check("ycbcr-conversion", "PASS", "ycbcr-conversion-from-dataspace"))
+    else:
+        checks.append(Check("ycbcr-conversion", "FAIL", "ycbcr-conversion-mismatch"))
 
     # The shader assumes the tier's transfer; a frame in another dataspace is decoded wrongly even
     # though every hash and timing check passes, so the runtime dataspace is evidence in its own right.
@@ -267,6 +336,8 @@ def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
         "sourcePath": source_path,
         "specVersion": spec_version,
         "shaderSha256": shader,
+        "greyReference": grey_reference,
+        "sceneGain": scene_gain,
     }
     return {
         "schema": "opencinecam-oclog2-qualification-result-v1",

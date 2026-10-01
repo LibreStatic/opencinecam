@@ -362,15 +362,16 @@ def encode_signal_clip(path: Path) -> None:
         raise SystemExit("ffmpeg with libx265 is required to build the signal clip")
     frame = signal_yuv_frame()
     # Lossless x265 keeps every flat patch bit-exact. VUI mirrors the app's OCLog2 recordings:
-    # full range, BT.2020 primaries/matrix, transfer signaled as linear (the curve is in the sidecar).
+    # full range, BT.2020 primaries/matrix, transfer left unspecified (H.273 value 2, x265
+    # "unknown"); the curve is in the sidecar.
     command = [
         "ffmpeg", "-v", "error", "-y",
         "-f", "rawvideo", "-pix_fmt", "yuv420p10le", "-s", f"{WIDTH}x{HEIGHT}", "-r", str(SIGNAL_FPS),
-        "-color_range", "pc", "-color_primaries", "bt2020", "-color_trc", "linear", "-colorspace", "bt2020nc",
+        "-color_range", "pc", "-color_primaries", "bt2020", "-color_trc", "unspecified", "-colorspace", "bt2020nc",
         "-i", "-",
         "-c:v", "libx265", "-pix_fmt", "yuv420p10le", "-profile:v", "main10",
-        "-x265-params", "lossless=1:range=full:colorprim=bt2020:transfer=linear:colormatrix=bt2020nc:log-level=error",
-        "-color_range", "pc", "-color_primaries", "bt2020", "-color_trc", "linear", "-colorspace", "bt2020nc",
+        "-x265-params", "lossless=1:range=full:colorprim=bt2020:transfer=unknown:colormatrix=bt2020nc:log-level=error",
+        "-color_range", "pc", "-color_primaries", "bt2020", "-color_trc", "unspecified", "-colorspace", "bt2020nc",
         "-tag:v", "hvc1", "-movflags", "+faststart", "-map_metadata", "-1", "-fflags", "+bitexact",
         str(path),
     ]

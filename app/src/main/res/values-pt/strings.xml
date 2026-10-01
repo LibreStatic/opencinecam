@@ -141,6 +141,14 @@
     <string name="mode_integrating">A captura %1$s está sendo integrada.</string>
     <string name="log_view_assist">Assistência de visualização LOG</string>
     <string name="log_view_assist_summary">Somente monitoramento: converte OCLog2/BT.2020 em Rec.709. Nunca é aplicado à gravação.</string>
+    <string name="log_grey_reference">Referência de cinza médio LOG</string>
+    <string name="log_grey_reference_summary" formatted="false">Onde o cinza 18% fica em OCLog2. A fonte HLG o coloca cerca de 1,9 stop abaixo da fonte SDR (alta taxa de quadros).</string>
+    <string name="log_grey_reference_native">Nativa</string>
+    <string name="log_grey_reference_match_hlg">Igualar ao HLG</string>
+    <string name="log_grey_reference_match_sdr">Igualar ao SDR</string>
+    <string name="log_grey_reference_native_detail">Cada fonte mantém sua própria curva. Nenhum ganho é aplicado.</string>
+    <string name="log_grey_reference_match_hlg_detail">Clipes SDR são reduzidos ao cinza do HLG. Sem perdas: nada é cortado.</string>
+    <string name="log_grey_reference_match_sdr_detail" formatted="false">Clipes HLG são elevados ao cinza do SDR. Altas luzes acima de cerca de 75% do sinal HLG são cortadas.</string>
     <string name="capture_status_free">%1$s livres</string>
     <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s livres</string>
     <string name="camera_switch_timeout">A câmera %1$s não iniciou; câmera %2$s restaurada.</string>

@@ -23,8 +23,13 @@ BASE = Decimal(50)
 LUT_1D_SIZE = 4096
 LUT_3D_SIZE = 17
 RUNTIME_SHADERS = {
-    "HLG10_BT2020": "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
-    "SDR_BT709_ISP": "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b",
+    "HLG10_BT2020": "38d6e5012470a4b1e6b31c2a2c47d0d9241a175a77a6b2b8b6e90a09b3023f9c",
+    "SDR_BT709_ISP": "fec609172dfc90e6f802d27e21b1f81e590f053cf77fd37ce44ce3e9f3b35c0e",
+}
+# Same transforms with the GPU driver's YCbCr conversion (no GL_EXT_YUV_target): never qualified.
+DRIVER_SAMPLER_SHADERS = {
+    "HLG10_BT2020": "78890c17ab1a4f2896667982e409fd3a296be723ee697a16866005cd359533de",
+    "SDR_BT709_ISP": "01184aec3c8a1a2c1c3f1ab576f7db06c3e3907e71150fca272a9e542aa5ffa4",
 }
 
 
@@ -102,7 +107,21 @@ def spec() -> dict[str, object]:
                 "claimBoundary": "ISP-derived; no source HDR, gamut, or bit-depth claim",
             },
         },
+        "middleGreyReference": {
+            "application": "runtime scene-linear gain (uniform uSceneGain) applied before OCLog2; recorded in the sidecar transform",
+            "hlgGreyLinear": "0.38^2 / 3 (ITU-R BT.2408 18% grey at 38% HLG signal, inverse BT.2100 HLG OETF)",
+            "sdrGreyLinear": "0.18 (inverse BT.709 OETF of the 18% grey code)",
+            "tierGreyRatio": float(Decimal("0.18") / (Decimal("0.38") * Decimal("0.38") / Decimal(3))),
+            "modes": {
+                "NATIVE": {"HLG10_BT2020": "1", "SDR_BT709_ISP": "1"},
+                "MATCH_HLG": {"HLG10_BT2020": "1", "SDR_BT709_ISP": "1 / tierGreyRatio"},
+                "MATCH_SDR": {"HLG10_BT2020": "tierGreyRatio", "SDR_BT709_ISP": "1"},
+            },
+            "default": "NATIVE",
+            "highlightBoundary": "MATCH_SDR clips HLG scene light above 1 / tierGreyRatio (about 0.752 HLG signal)",
+        },
         "runtimeShaderSha256": RUNTIME_SHADERS,
+        "driverSamplerShaderSha256": DRIVER_SAMPLER_SHADERS,
     }
 
 
