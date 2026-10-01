@@ -8,6 +8,16 @@ OpenCineCam is a native, open-source cinema camera for Android. It keeps four th
 - **License:** [Apache-2.0](LICENSE)
 - **Languages:** English, Spanish, French, Portuguese, Italian and German
 
+## Screenshots
+
+| Capture | Zebra, peaking, false color | Scopes | Media |
+|---|---|---|---|
+| ![Viewfinder with manual shutter, ISO, white balance, EV and focus](docs/screenshots/capture.jpg) | ![Split view with zebra, focus peaking and false color](docs/screenshots/zebra-peaking-false-color.jpg) | ![Waveform, histogram and vectorscope over the viewfinder](docs/screenshots/scopes.jpg) | ![Media catalog with take metadata and actions](docs/screenshots/media.jpg) |
+
+![Tablet layout with scopes in landscape](docs/screenshots/tablet-scopes.jpg)
+
+Real app screens captured on an emulator, whose camera feed is a flat frame, so the viewfinder photos (CC0 / public domain, see [`store/play/raw/MEDIA_LICENSES.md`](store/play/raw/MEDIA_LICENSES.md)) and the overlays computed from them were composited in afterwards.
+
 ## Features
 
 ### Capture
