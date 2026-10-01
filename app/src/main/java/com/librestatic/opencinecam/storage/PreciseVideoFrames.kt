@@ -46,9 +46,17 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
     val hdrTransfer: PreciseHdrTransfer? get() = hdr
     /** Applies to CPU frames decoded after the change; Surface output is interpreted by its consumer. */
     @Volatile var logView: PreciseLogView = PreciseLogView.FLAT_LOG
+    /**
+     * Converts only every Nth P010 pixel in each direction. Thumbnails set it; exact review keeps 1,
+     * because the per-pixel 10-bit transform dominates and a full 1080p frame takes seconds.
+     */
+    @Volatile var cpuPixelStep: Int = 1
+        set(value) { require(value >= 1) { "Pixel step must be positive" }; field = value }
     val displayWidth: Int get() = displayGeometry(format).width
     val displayHeight: Int get() = displayGeometry(format).height
     val timeline: VideoFrameTimeline
+    /** Presentation times of sync samples; decoding one of them needs no preceding frames. */
+    val syncTimestampsUs: List<Long>
 
     init {
         val deadline = deadline()
@@ -93,14 +101,17 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             displayGeometry(format) // Validate presentation metadata independently of CPU decoding.
             extractor.selectTrack(track)
             val timestamps = ArrayList<Long>()
+            val sync = ArrayList<Long>()
             while (extractor.sampleTime != -1L) {
                 checkWork(deadline)
                 require(timestamps.size < VideoFrameTimeline.MAX_FRAMES) { "Precise frame index exceeds ${VideoFrameTimeline.MAX_FRAMES} samples" }
                 requireSample()
                 timestamps.add(extractor.sampleTime)
+                if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) sync.add(extractor.sampleTime)
                 if (!extractor.advance()) break
             }
             timeline = VideoFrameTimeline(timestamps)
+            syncTimestampsUs = sync.sorted()
             checkWork(deadline)
         } catch (failure: Throwable) {
             try { extractor.release() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
@@ -339,13 +350,14 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
             val (buffer, rowStride, pixelStride) = planes[plane]
             return readP010Sample(buffer, rowStride, pixelStride, x, y)
         }
-        val bitmap = createBitmap(crop.width(), crop.height(), Bitmap.Config.ARGB_8888)
+        val step = cpuPixelStep
+        val bitmap = createBitmap((crop.width() / step).coerceAtLeast(1), (crop.height() / step).coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         try {
-            val row = IntArray(crop.width())
-            for (y in 0 until crop.height()) {
+            val row = IntArray(bitmap.width)
+            for (y in 0 until bitmap.height) {
                 if (y % 16 == 0) checkWork(deadline)
                 for (x in row.indices) {
-                    val px = crop.left + x; val py = crop.top + y
+                    val px = crop.left + x * step; val py = crop.top + y * step
                     row[x] = pixel(sample(0, px, py), sample(1, px / 2, py / 2), sample(2, px / 2, py / 2))
                 }
                 bitmap.setPixels(row, 0, row.size, 0, y, row.size, 1)

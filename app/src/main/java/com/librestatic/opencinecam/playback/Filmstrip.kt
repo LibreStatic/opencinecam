@@ -7,18 +7,22 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.librestatic.opencinecam.storage.OcLogClip
 import com.librestatic.opencinecam.storage.PreciseLogView
+import com.librestatic.opencinecam.storage.PreciseVideoFrames
 import com.librestatic.opencinecam.storage.oclog2CodesToArgb
 import kotlin.math.roundToInt
 
 /**
  * [count] sync frames centred in equal slices of the clip, [heightPx] tall. Blocking and interrupt-aware
  * (stops early, keeping the interrupt flag); never throws, skipping frames that fail to decode.
- * For OCLog2 clips the platform's RGB is read back as approximate OCLog2 codes and run through the
- * review [view], so LOG thumbnails are an approximation of the shader-rendered picture.
+ * OCLog2 clips decode through [PreciseVideoFrames] (P010, the same view math as the paused frame),
+ * because the platform retriever tone-maps whatever transfer the encoder tagged (PQ on some devices)
+ * and its RGB is then not OCLog2 codes. If that reader is unavailable, the platform RGB is read back
+ * as approximate OCLog2 codes and run through the review [view].
  */
 fun loadFilmstrip(context: Context, uri: String, durationUs: Long, count: Int, heightPx: Int,
     log: OcLogClip?, view: PreciseLogView): List<Bitmap> {
     if (count <= 0 || heightPx <= 0) return emptyList()
+    if (log != null) preciseLogFilmstrip(context, uri, count, heightPx, log, view)?.let { return it }
     val frames = ArrayList<Bitmap>(count)
     val retriever = MediaMetadataRetriever()
     try {
@@ -48,6 +52,35 @@ fun loadFilmstrip(context: Context, uri: String, durationUs: Long, count: Int, h
         runCatching { retriever.release() }
     }
     return frames
+}
+
+/** Null when the exact reader cannot open the clip; frames that fail individually are skipped. */
+private fun preciseLogFilmstrip(context: Context, uri: String, count: Int, heightPx: Int, log: OcLogClip, view: PreciseLogView): List<Bitmap>? {
+    val reader = runCatching { PreciseVideoFrames(context, uri, log = log.signal) }.getOrNull() ?: return null
+    return try {
+        reader.logView = view
+        // Converting the whole 10-bit frame costs seconds; about twice the strip's height is enough before scaling.
+        reader.cpuPixelStep = (reader.displayHeight / (heightPx * 2)).coerceAtLeast(1)
+        val timestamps = reader.timeline.timestampsUs
+        if (timestamps.isEmpty()) return null
+        val widthPx = (heightPx.toDouble() * reader.displayWidth / reader.displayHeight.coerceAtLeast(1)).roundToInt().coerceAtLeast(1)
+        val frames = ArrayList<Bitmap>(count)
+        for (slot in 0 until count) {
+            if (Thread.interrupted()) {
+                Thread.currentThread().interrupt()
+                break
+            }
+            val nominal = ((2L * slot + 1) * timestamps.size / (2L * count)).toInt().coerceIn(0, timestamps.lastIndex)
+            // The nearest sync sample decodes alone; any other frame first decodes its whole GOP prefix.
+            val index = reader.syncTimestampsUs.minByOrNull { kotlin.math.abs(it - timestamps[nominal]) }
+                ?.let { reader.timeline.indexAt(it) } ?: nominal
+            val frame = runCatching { reader.frame(index).bitmap }.getOrNull() ?: continue
+            frames += Bitmap.createScaledBitmap(frame, widthPx, heightPx, true).also { if (it !== frame) frame.recycle() }
+        }
+        frames.takeIf { it.isNotEmpty() }
+    } finally {
+        runCatching { reader.close() }
+    }
 }
 
 private fun logThumbnail(frame: Bitmap, view: PreciseLogView): Bitmap {

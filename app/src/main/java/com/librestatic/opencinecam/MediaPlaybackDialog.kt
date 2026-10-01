@@ -306,6 +306,8 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     var filmstrip by remember(artifact) { mutableStateOf(emptyList<Bitmap>()) }
     val stripHeight = with(LocalDensity.current) { 40.dp.roundToPx() }
     LaunchedEffect(artifact, started, logClip, settings.logView, durationUs > 0) {
+        // A strip rendered in the other LOG view would misrepresent the clip while the new one decodes.
+        if (logClip != null) filmstrip = emptyList()
         if (video && started && durationUs > 0) filmstrip = runInterruptible(Dispatchers.IO) {
             loadFilmstrip(context, artifact.uri, durationUs, FILMSTRIP_FRAMES, stripHeight, logClip, settings.logView)
         }
