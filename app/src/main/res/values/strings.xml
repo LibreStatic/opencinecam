@@ -467,6 +467,7 @@
     <string name="timecode_reset">Restart at initial value</string>
     <string name="timecode_reset_help">The next take starts at the configured initial value. A running take keeps its timecode; existing files remain unchanged.</string>
     <string name="timecode_continuity_failed">Timecode continuity storage failed; reopening may restart the counter.</string>
+    <string name="recording_orientation_assumed_upright">Orientation unknown (phone held flat); recording as upright portrait.</string>
     <string name="settings_torch_strength_label">Torch intensity</string>
     <string name="settings_torch_decrease">Decrease torch intensity</string>
     <string name="settings_torch_increase">Increase torch intensity</string>

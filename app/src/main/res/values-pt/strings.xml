@@ -467,6 +467,7 @@
     <string name="timecode_reset">Reiniciar no valor inicial</string>
     <string name="timecode_reset_help">A próxima tomada começa no valor inicial configurado. Uma tomada em andamento mantém seu timecode; os arquivos existentes não mudam.</string>
     <string name="timecode_continuity_failed">Falha no armazenamento da continuidade do timecode; reabrir pode reiniciar o contador.</string>
+    <string name="recording_orientation_assumed_upright">Orientação desconhecida (telefone deitado); gravando como retrato vertical normal.</string>
     <string name="settings_torch_strength_label">Intensidade da lanterna</string>
     <string name="settings_torch_decrease">Diminuir intensidade da lanterna</string>
     <string name="settings_torch_increase">Aumentar intensidade da lanterna</string>

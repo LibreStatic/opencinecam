@@ -467,6 +467,7 @@
     <string name="timecode_reset">Beim Startwert neu beginnen</string>
     <string name="timecode_reset_help">Der nächste Take beginnt beim konfigurierten Startwert. Ein laufender Take behält seinen Timecode; bestehende Dateien bleiben unverändert.</string>
     <string name="timecode_continuity_failed">Das Speichern der Timecode-Kontinuität ist fehlgeschlagen; beim erneuten Öffnen kann der Zähler neu beginnen.</string>
+    <string name="recording_orientation_assumed_upright">Ausrichtung unbekannt (Telefon liegt flach); Aufnahme erfolgt als aufrechtes Hochformat.</string>
     <string name="settings_torch_strength_label">Taschenlampenintensität</string>
     <string name="settings_torch_decrease">Taschenlampenintensität verringern</string>
     <string name="settings_torch_increase">Taschenlampenintensität erhöhen</string>

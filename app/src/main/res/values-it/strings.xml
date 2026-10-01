@@ -467,6 +467,7 @@
     <string name="timecode_reset">Riparti dal valore iniziale</string>
     <string name="timecode_reset_help">La prossima ripresa parte dal valore iniziale configurato. Una ripresa in corso mantiene il suo timecode; i file esistenti non cambiano.</string>
     <string name="timecode_continuity_failed">Archiviazione della continuità del timecode non riuscita; la riapertura può riavviare il contatore.</string>
+    <string name="recording_orientation_assumed_upright">Orientamento sconosciuto (telefono in piano); registrazione come verticale normale.</string>
     <string name="settings_torch_strength_label">Intensità della torcia</string>
     <string name="settings_torch_decrease">Diminuisci intensità della torcia</string>
     <string name="settings_torch_increase">Aumenta intensità della torcia</string>

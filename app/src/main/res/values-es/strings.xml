@@ -467,6 +467,7 @@
     <string name="timecode_reset">Reiniciar en valor inicial</string>
     <string name="timecode_reset_help">La próxima toma empieza en el valor inicial configurado. Una toma en curso conserva su timecode; los archivos existentes quedan intactos.</string>
     <string name="timecode_continuity_failed">Falló el guardado de continuidad de timecode; al reabrir el contador puede reiniciarse.</string>
+    <string name="recording_orientation_assumed_upright">Orientación desconocida (teléfono acostado); se graba como vertical normal.</string>
     <string name="settings_torch_strength_label">Intensidad de la luz</string>
     <string name="settings_torch_decrease">Reducir intensidad de la luz</string>
     <string name="settings_torch_increase">Aumentar intensidad de la luz</string>

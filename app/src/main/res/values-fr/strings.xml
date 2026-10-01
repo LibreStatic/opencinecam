@@ -467,6 +467,7 @@
     <string name="timecode_reset">Redémarrer à la valeur initiale</string>
     <string name="timecode_reset_help">La prochaine prise démarre à la valeur initiale configurée. Une prise en cours conserve son timecode ; les fichiers existants ne changent pas.</string>
     <string name="timecode_continuity_failed">Échec du stockage de la continuité du timecode ; la réouverture peut redémarrer le compteur.</string>
+    <string name="recording_orientation_assumed_upright">Orientation inconnue (téléphone à plat) ; enregistrement en portrait vertical.</string>
     <string name="settings_torch_strength_label">Intensité de la torche</string>
     <string name="settings_torch_decrease">Diminuer l\'intensité de la torche</string>
     <string name="settings_torch_increase">Augmenter l\'intensité de la torche</string>

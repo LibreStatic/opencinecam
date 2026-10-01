@@ -2578,11 +2578,7 @@ class CaptureService : Service() {
                         stopPreviewAudioMonitor(clearLevels = false)
                         cameraState.value = cameraState.value.copy(audioClipLatched = false, audioLevels = null)
                         val requestedAudioEnabled = !settings.videoOffSpeed && (audioForThisTake ?: settings.audioEnabled)
-                        val orientation = physicalOrientationTracker.snapshot()?.degrees
-                        if (orientation == null) {
-                            fail("recording-orientation-unknown", "Hold the phone upright for a moment before recording to lock the file orientation.")
-                            return false
-                        }
+                        val orientation = recordingOrientationDegrees()
                         val descriptor = current.descriptor
                         val sourceSize = current.activeVideoProfile?.size ?: descriptor?.previewSize
                         if (sourceSize == null || descriptor == null) {
@@ -2717,11 +2713,7 @@ class CaptureService : Service() {
                         stopPreviewAudioMonitor(clearLevels = false)
                         cameraState.value = cameraState.value.copy(audioClipLatched = false, audioLevels = null)
                         val requestedAudioEnabled = audioForThisTake ?: settings.audioEnabled
-                        val orientation = physicalOrientationTracker.snapshot()?.degrees
-                        if (orientation == null) {
-                            fail("recording-orientation-unknown", "Hold the phone upright for a moment before recording to lock the file orientation.")
-                            return false
-                        }
+                        val orientation = recordingOrientationDegrees()
                         val descriptor = current.descriptor
                         val sourceSize = current.activeLogProfile?.size
                             ?: descriptor?.preferredLogProfile?.size
@@ -2840,8 +2832,7 @@ class CaptureService : Service() {
                         activeRecordingGain = null
                         val descriptor = current.descriptor ?: return false
                         val sourceSize = current.activeVideoProfile?.size ?: descriptor.previewSize
-                        val orientation = physicalOrientationTracker.snapshot()?.degrees
-                        if (orientation == null) { fail("recording-orientation-unknown", "Hold the camera upright to resolve recording orientation."); return false }
+                        val orientation = recordingOrientationDegrees()
                         val projectRate = settings.timelapseProjectRate
                         val geometry = RecordingGeometryCalculator.calculate(sourceSize, descriptor.sensorOrientation, orientation, descriptor.lensFacing,
                             settings.recordingGeometryMode, settings.anamorphicSqueeze, settings.anamorphicOutputMode, ::encoderSupportsRaster)
@@ -2992,6 +2983,17 @@ class CaptureService : Service() {
         cameraState.update { it.copy(stillCapturePending = false, burstSaving = false, bracketSaving = false, accumulationSaving = false) }
         fail(code, message)
     }
+
+    /**
+     * The chassis orientation that locks the file's rotation. A phone held flat (pointing up or down)
+     * never reports a stable quadrant, so recording proceeds as upright portrait with a warning
+     * instead of refusing the take.
+     */
+    private fun recordingOrientationDegrees(): Int =
+        physicalOrientationTracker.snapshot()?.degrees ?: run {
+            cameraState.update { state -> state.copy(message = getString(R.string.recording_orientation_assumed_upright), messageTransient = true) }
+            0
+        }
 
     private fun fail(code: String, message: String) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
