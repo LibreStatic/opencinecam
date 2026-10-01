@@ -382,15 +382,18 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
         var seek by remember { mutableFloatStateOf(0f) }
         var dragging by remember { mutableStateOf(false) }
         val strip = remember(filmstrip) { filmstrip.map { it.asImageBitmap() } }
-        Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
-            if (strip.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(40.dp).clip(RoundedCornerShape(6.dp))) {
-                strip.forEach { Image(it, null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop, alpha = 0.55f) }
+        val sliderValue = if (dragging) seek else (state.positionUs.toDouble() / maximum).toFloat().coerceIn(0f, 1f)
+        Slider(value = sliderValue,
+            onValueChange = { seek = it; dragging = true }, onValueChangeFinished = {
+                session?.seek((maximum * seek.toDouble()).toLong()); dragging = false
+            }, enabled = ready && (video || state.canPlay), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .testTag("media-playback-seek").semantics { contentDescription = seekLabel })
+        // The strip sits under the slider rather than behind it: the Material track is opaque and would hide it.
+        if (strip.isNotEmpty()) BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(40.dp).clip(RoundedCornerShape(6.dp))) {
+            Row(Modifier.fillMaxSize()) {
+                strip.forEach { Image(it, null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop, alpha = 0.85f) }
             }
-            Slider(value = if (dragging) seek else (state.positionUs.toDouble() / maximum).toFloat().coerceIn(0f, 1f),
-                onValueChange = { seek = it; dragging = true }, onValueChangeFinished = {
-                    session?.seek((maximum * seek.toDouble()).toLong()); dragging = false
-                }, enabled = ready && (video || state.canPlay), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .testTag("media-playback-seek").semantics { contentDescription = seekLabel })
+            Box(Modifier.offset(x = (maxWidth - 2.dp) * sliderValue).width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
         }
         val pauseIntent = state.phase == PlaybackPhase.PLAYING
         val toggleSession = session
