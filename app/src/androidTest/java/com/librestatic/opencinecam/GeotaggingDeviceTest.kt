@@ -22,9 +22,20 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
     private val instrumentation=InstrumentationRegistry.getInstrumentation()
     val runtime get()=CaptureLocations.get(context)
     init {
-        // addTestProvider needs the mock-location app-op; allowing it never restarts the process.
-        instrumentation.uiAutomation.executeShellCommand("appops set ${context.packageName} android:mock_location allow")
-            .let { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { out -> out.readBytes() } } // Waits for the command.
+        // addTestProvider needs the mock-location app-op; allowing it never restarts the process. Both the package
+        // and the uid mode are set and read back, because an earlier case in a long run can leave either one different.
+        fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
+            .use { out -> out.readBytes().decodeToString() } // Reading to EOF waits for the command.
+        val get="appops get ${context.packageName} MOCK_LOCATION"
+        var state=""
+        for(attempt in 0 until 5) {
+            shell("appops set ${context.packageName} android:mock_location allow")
+            shell("appops set --uid ${context.packageName} android:mock_location allow")
+            state=shell(get)
+            if(state.contains("allow")) break
+            Thread.sleep(200)
+        }
+        check(state.contains("allow")) { "mock_location app-op is not allowed for ${context.packageName}: $state" }
         try {
             val candidates=listOf(LocationManager.GPS_PROVIDER,LocationManager.NETWORK_PROVIDER) +
                 if(android.os.Build.VERSION.SDK_INT>=31) listOf(LocationManager.FUSED_PROVIDER) else emptyList()

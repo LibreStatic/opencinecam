@@ -104,7 +104,22 @@ class MediaPlaybackDeviceTest {
             assertEquals(paused.timeline!!.timestampsUs[paused.frameIndex!!],paused.positionUs)
         } finally { main { session?.close() };sink.close();assertTrue(file.delete()) }
     }
+    /** Audible playback needs transient audio focus; the platform withholds it while another client (call, assistant, other app) holds it. */
+    private fun assumeAudioFocusAvailable() {
+        val audio = context.getSystemService(android.media.AudioManager::class.java)
+        val probe = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE).build())
+            .setOnAudioFocusChangeListener { }.build()
+        val result = audio.requestAudioFocus(probe)
+        audio.abandonAudioFocusRequest(probe)
+        val focusStack = android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("dumpsys audio"))
+            .use { it.readBytes().decodeToString() }.substringAfter("Audio Focus stack entries", "").take(600)
+        org.junit.Assume.assumeTrue("The platform denied audio focus to a plain probe request (result=$result), so audible playback cannot be tested now: $focusStack",
+            result == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+    }
     @Test fun actualPcmAudioPlaysSeeksAndPausesWithoutInventingVideoFrames() {
+        assumeAudioFocusAvailable()
         val file=File(context.cacheDir,"review-audio-${java.util.UUID.randomUUID()}.wav")
         val pcm=ByteArray(48_000*2)
         val header=java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
