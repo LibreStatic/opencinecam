@@ -231,7 +231,7 @@ private val Muted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.c
 private val OkGreen: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.ok
 
 private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
-private enum class SettingsPage { MAIN, ABOUT }
+private enum class SettingsPage { MAIN, ABOUT, CAPABILITIES }
 private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
@@ -281,11 +281,11 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
     val settingsStateHolder = rememberSaveableStateHolder()
 
-    BackHandler(enabled = section != AppSection.CAPTURE && settingsPage != SettingsPage.ABOUT) {
+    BackHandler(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN) {
         section = AppSection.CAPTURE
     }
 
-    BackHandler(enabled = section == AppSection.SETTINGS && settingsPage == SettingsPage.ABOUT) {
+    BackHandler(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
         settingsPage = SettingsPage.MAIN
     }
 
@@ -374,6 +374,12 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                                     onboardingDone = false
                                 },
                             )
+                        } else if (settingsPage == SettingsPage.CAPABILITIES) {
+                            CameraCapabilitiesScreen(
+                                cameras = state.cameras,
+                                activeCameraId = state.selectedCameraId,
+                                onBack = { settingsPage = SettingsPage.MAIN },
+                            )
                         } else {
                             settingsStateHolder.SaveableStateProvider("settings") {
                             SettingsScreen(
@@ -384,6 +390,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                                 onOpenAbout = { settingsPage = SettingsPage.ABOUT },
                                 onSettingsChange = settingsRepository::set,
                                 onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
+                                onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
                             )
                             }
                         }
@@ -3615,6 +3622,7 @@ internal fun SettingsContent(
     onSettingsChange: (CameraSettings) -> Unit,
     visibleIds: Set<String>,
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
+    onOpenCapabilities: (() -> Unit)? = null,
 ) {
     // Cards flow into two columns wherever each keeps a usable width (an unfolded foldable
     // already qualifies); long forms and libraries always take the whole row.
@@ -3984,6 +3992,10 @@ internal fun SettingsContent(
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
         }
+        if ("camera-capabilities" in visibleIds && onOpenCapabilities != null) settingsCard("camera-capabilities", fullLine = true) {
+            SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
+                Modifier.testTag("settings-open-capabilities"))
+        }
         if ("hardware" in visibleIds) settingsCard("hardware", fullLine = true) {
             val descriptor = state.descriptor
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
@@ -4025,26 +4037,31 @@ internal fun SettingsContent(
             }
         }
         if ("about" in visibleIds) settingsCard("about") {
-            val aboutDescription = stringResource(R.string.about_settings_summary)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .clickable(onClick = onOpenAbout)
-                    .semantics { contentDescription = aboutDescription }
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.about_title), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                    Text(aboutDescription, color = Muted, fontSize = 14.sp)
-                }
-                Text("›", color = Amber, fontSize = 22.sp)
-            }
+            SettingsLinkRow(stringResource(R.string.about_title), stringResource(R.string.about_settings_summary), onOpenAbout)
         }
+    }
+}
+
+/** A row that opens a full page of its own (About, camera capabilities). */
+@Composable
+private fun SettingsLinkRow(title: String, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description }
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+            Text(description, color = Muted, fontSize = 14.sp)
+        }
+        Text("›", color = Amber, fontSize = 22.sp)
     }
 }
 

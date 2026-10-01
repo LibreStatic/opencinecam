@@ -37,6 +37,7 @@ internal fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
+    onOpenCapabilities: (() -> Unit)? = null,
 ) {
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { kotlinx.coroutines.flow.MutableStateFlow(FoldDisplayState()) }
@@ -138,7 +139,7 @@ internal fun SettingsScreen(
                         val visible = if (wide && category == null && query.isBlank()) SettingsCatalog.search("", SettingsCategory.CAPTURE, context::getString) else ids
                         if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(16.dp))
                         listStates.SaveableStateProvider(if (query.isNotBlank()) "search" else (category ?: SettingsCategory.CAPTURE).name) {
-                            SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset)
+                            SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities)
                         }
                     }
                 }
