@@ -405,6 +405,8 @@
     <string name="operator_action_peaking_help">Souligne les bords nets sur le viseur. Monitoring uniquement : n\'atteint jamais le fichier enregistré.</string>
     <string name="operator_action_zebra_help">Hachure les zones au-dessus du seuil d\'exposition. Monitoring uniquement : n\'atteint jamais le fichier enregistré.</string>
     <string name="operator_action_histogram_help">Affiche la répartition tonale de l\'image. Monitoring uniquement : n\'atteint jamais le fichier enregistré.</string>
+    <string name="operator_action_waveform_help">Trace les niveaux de luma sur toute la largeur de l\'image, de gauche à droite, pour repérer d\'un coup d\'œil les hautes lumières brûlées et les ombres bouchées. Monitoring uniquement : n\'atteint jamais le fichier enregistré.</string>
+    <string name="operator_action_vectorscope_help">Trace la couleur de l\'image sur un cercle de teintes, pour contrôler la saturation et les tons chair. Monitoring uniquement : n\'atteint jamais le fichier enregistré.</string>
     <string name="operator_action_view_assist_help">Affiche le LOG en Rec.709 au lieu de l\'image OCLog2 plate. Monitoring uniquement : le fichier enregistré reste en OCLog2. Désactivé, le viseur paraît délavé, car c\'est l\'aspect du LOG. Disponible uniquement en mode LOG.</string>
     <string name="operator_action_auto_focus_help">Retire le repère de mise au point manuelle et rend la main à la caméra.</string>
     <string name="operator_action_focus_a_help">Fait le point sur le repère A selon la durée et l\'accélération configurées.</string>

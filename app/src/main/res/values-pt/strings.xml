@@ -405,6 +405,8 @@
     <string name="operator_action_peaking_help">Contorna as bordas em foco sobre o visor. Somente monitoramento: nunca chega ao arquivo gravado.</string>
     <string name="operator_action_zebra_help">Listra as áreas acima do limite de exposição. Somente monitoramento: nunca chega ao arquivo gravado.</string>
     <string name="operator_action_histogram_help">Mostra a distribuição tonal do quadro. Somente monitoramento: nunca chega ao arquivo gravado.</string>
+    <string name="operator_action_waveform_help">Desenha os níveis de luma ao longo do quadro, da esquerda para a direita, para ver de relance altas luzes estouradas e sombras empastadas. Somente monitoramento: nunca chega ao arquivo gravado.</string>
+    <string name="operator_action_vectorscope_help">Desenha a cor do quadro sobre um círculo de matizes, para controlar saturação e tons de pele. Somente monitoramento: nunca chega ao arquivo gravado.</string>
     <string name="operator_action_view_assist_help">Monitora o LOG como Rec.709 em vez da imagem OCLog2 plana. Somente monitoramento: o arquivo gravado continua em OCLog2. Desativado, o visor parece lavado porque é assim que o LOG é. Disponível apenas no modo LOG.</string>
     <string name="operator_action_auto_focus_help">Remove a marca de foco manual e devolve o foco à câmera.</string>
     <string name="operator_action_focus_a_help">Puxa o foco para a marca A na duração e suavização configuradas.</string>

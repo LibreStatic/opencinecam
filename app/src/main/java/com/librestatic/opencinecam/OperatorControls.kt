@@ -130,10 +130,15 @@ internal fun OperatorButtonColumn(state: CameraUiState, settings: CameraSettings
 
 @Composable
 private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, actions: OperatorActions?, compact: Boolean) {
-    settings.operation.buttons.forEachIndexed { index, action ->
+    val buttons = settings.operation.buttons
+    // F-keys first, then the scope toggles the F-keys do not already carry.
+    val keys = buttons.mapIndexed { index, action -> "F${index + 1}" to action } +
+        OperatorQuickToggles.filter { it !in buttons }.map { null to it }
+    keys.forEachIndexed { index, (fKey, action) ->
         val paused = operatorActionThermallyPaused(action, state)
         OperatorButton(
-            index = index,
+            keyName = fKey,
+            tag = if (fKey != null) "operator-button-${index + 1}" else "operator-quick-${action.name.lowercase()}",
             action = action,
             available = !paused && actions?.available?.invoke(action) == true,
             // A row rendered without the action bundle still reads the settings it was given.
@@ -155,7 +160,7 @@ private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, acti
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun OperatorButton(index: Int, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
+private fun OperatorButton(keyName: String?, tag: String, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
     thermallyPaused: Boolean = false, compact: Boolean = false) {
     val context = LocalContext.current
     val on = latched == true
@@ -169,7 +174,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
         on -> OperatorActiveAccent
         else -> Color(0xFF49535A)
     }
-    val actionName = "F${index + 1} · ${stringResource(action.labelResource())}"
+    val actionName = stringResource(action.labelResource()).let { if (keyName != null) "$keyName · $it" else it }
     val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
     val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
         else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
@@ -185,7 +190,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
                 .background(if (available && isOn) OperatorActiveAccent else Color.Transparent)
                 .border(BorderStroke(1.dp, if (available && isOn) OperatorActiveAccent else border), RoundedCornerShape(4.dp))
                 .padding(horizontal = if (compact) 3.dp else 5.dp, vertical = 1.dp)
-                .testTag("operator-button-${index + 1}-state"),
+                .testTag("$tag-state"),
         )
     } }
     val key = Modifier
@@ -204,7 +209,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
             if (!available) disabled()
         }
     if (compact) Column(
-        key.size(52.dp).testTag("operator-button-${index + 1}"),
+        key.size(52.dp).testTag(tag),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -215,7 +220,7 @@ private fun OperatorButton(index: Int, action: OperatorAction, available: Boolea
             .heightIn(min = 48.dp)
             .widthIn(min = 48.dp)
             .padding(horizontal = 10.dp, vertical = 6.dp)
-            .testTag("operator-button-${index + 1}"),
+            .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Compact chip: symbol and state only, so the row costs one line of viewfinder. The name
@@ -312,6 +317,23 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOperatorGlyph(a
             rect(w * .06f, h * .16f, w * .40f, h * .68f, filled = true)
             rect(w * .54f, h * .16f, w * .40f, h * .68f)
         }
+        OperatorAction.WAVEFORM -> {
+            // Graticule lines with a trace climbing through them, as on a waveform monitor.
+            rect(w * .08f, h * .14f, w * .84f, h * .72f)
+            drawLine(color, Offset(w * .08f, h * .50f), Offset(w * .92f, h * .50f), strokeWidth = w * .04f)
+            drawPath(androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * .14f, h * .74f); lineTo(w * .32f, h * .56f); lineTo(w * .46f, h * .66f)
+                lineTo(w * .64f, h * .30f); lineTo(w * .86f, h * .44f)
+            }, color, style = stroke)
+        }
+        OperatorAction.VECTORSCOPE -> {
+            // Round graticule, crosshair and a hue vector out from the centre.
+            drawCircle(color, radius = w * .42f, style = stroke)
+            drawLine(color, Offset(cx, h * .08f), Offset(cx, h * .92f), strokeWidth = w * .04f)
+            drawLine(color, Offset(w * .08f, h / 2f), Offset(w * .92f, h / 2f), strokeWidth = w * .04f)
+            drawLine(color, Offset(cx, h / 2f), Offset(w * .70f, h * .26f), strokeWidth = w * .09f)
+            drawCircle(color, radius = w * .08f, center = Offset(w * .70f, h * .26f))
+        }
         OperatorAction.NONE -> {
             drawCircle(color, radius = w * .40f, style = stroke)
             drawLine(color, Offset(w * .16f, h * .84f), Offset(w * .84f, h * .16f), strokeWidth = w * .09f)
@@ -396,6 +418,8 @@ internal fun OperatorAction.labelResource(): Int = when (this) {
     OperatorAction.PRESET_C2 -> R.string.operator_action_preset_c2
     OperatorAction.EXTERIOR -> R.string.operator_action_exterior
     OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock
+    OperatorAction.WAVEFORM -> R.string.monitoring_waveform
+    OperatorAction.VECTORSCOPE -> R.string.monitoring_vectorscope
 }
 /** What the action actually does, including whether it only affects monitoring. */
 internal fun OperatorAction.helpResource(): Int = when (this) {
@@ -415,4 +439,6 @@ internal fun OperatorAction.helpResource(): Int = when (this) {
     OperatorAction.PRESET_C2 -> R.string.operator_action_preset_c2_help
     OperatorAction.EXTERIOR -> R.string.operator_action_exterior_help
     OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock_help
+    OperatorAction.WAVEFORM -> R.string.operator_action_waveform_help
+    OperatorAction.VECTORSCOPE -> R.string.operator_action_vectorscope_help
 }

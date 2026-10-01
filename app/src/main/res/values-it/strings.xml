@@ -405,6 +405,8 @@
     <string name="operator_action_peaking_help">Evidenzia i bordi a fuoco sul mirino. Solo monitoraggio: non arriva mai al file registrato.</string>
     <string name="operator_action_zebra_help">Tratteggia le aree sopra la soglia di esposizione. Solo monitoraggio: non arriva mai al file registrato.</string>
     <string name="operator_action_histogram_help">Mostra la distribuzione tonale del fotogramma. Solo monitoraggio: non arriva mai al file registrato.</string>
+    <string name="operator_action_waveform_help">Traccia i livelli di luma lungo il fotogramma, da sinistra a destra, per vedere a colpo d\'occhio alte luci bruciate e ombre chiuse. Solo monitoraggio: non arriva mai al file registrato.</string>
+    <string name="operator_action_vectorscope_help">Traccia il colore del fotogramma su un cerchio delle tinte, per controllare saturazione e incarnato. Solo monitoraggio: non arriva mai al file registrato.</string>
     <string name="operator_action_view_assist_help">Monitora il LOG come Rec.709 invece dell\'immagine OCLog2 piatta. Solo monitoraggio: il file registrato resta in OCLog2. Disattivata, il mirino appare slavato perché è così che appare il LOG. Disponibile solo in modalità LOG.</string>
     <string name="operator_action_auto_focus_help">Rimuove il segno di fuoco manuale e restituisce il fuoco alla fotocamera.</string>
     <string name="operator_action_focus_a_help">Sposta il fuoco sul segno A con la durata e l\'easing configurati.</string>

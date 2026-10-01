@@ -2141,6 +2141,8 @@ class CaptureService : Service() {
                 OperatorAction.PEAKING -> repository.update { it.copy(peakingEnabled = !it.peakingEnabled) }
                 OperatorAction.ZEBRA -> repository.update { it.copy(zebraEnabled = !it.zebraEnabled) }
                 OperatorAction.HISTOGRAM -> repository.update { it.copy(histogramEnabled = !it.histogramEnabled) }
+                OperatorAction.WAVEFORM -> repository.update { it.copy(monitoring = it.monitoring.copy(waveformEnabled = !it.monitoring.waveformEnabled)) }
+                OperatorAction.VECTORSCOPE -> repository.update { it.copy(monitoring = it.monitoring.copy(vectorscopeEnabled = !it.monitoring.vectorscopeEnabled)) }
                 OperatorAction.VIEW_ASSIST -> repository.update { it.copy(logViewAssistEnabled = !it.logViewAssistEnabled) }
                 OperatorAction.CONTROL_LOCK -> repository.update { it.copy(operation = it.operation.copy(lockDuringTake = !it.operation.lockDuringTake)) }
                 OperatorAction.AUTO_FOCUS -> setManualFocus(null)

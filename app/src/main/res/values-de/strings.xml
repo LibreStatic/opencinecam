@@ -405,6 +405,8 @@
     <string name="operator_action_peaking_help">Umrandet die scharfen Kanten im Sucher. Nur Monitoring: gelangt nie in die aufgenommene Datei.</string>
     <string name="operator_action_zebra_help">Schraffiert die Bereiche über der Belichtungsschwelle. Nur Monitoring: gelangt nie in die aufgenommene Datei.</string>
     <string name="operator_action_histogram_help">Zeigt die Tonwertverteilung des Bildes. Nur Monitoring: gelangt nie in die aufgenommene Datei.</string>
+    <string name="operator_action_waveform_help">Zeichnet die Luma-Pegel über die Bildbreite von links nach rechts, damit ausgefressene Lichter und abgesoffene Schatten auf einen Blick sichtbar sind. Nur Monitoring: gelangt nie in die aufgenommene Datei.</string>
+    <string name="operator_action_vectorscope_help">Zeichnet die Farben des Bildes auf einem Farbtonkreis, um Sättigung und Hauttöne zu prüfen. Nur Monitoring: gelangt nie in die aufgenommene Datei.</string>
     <string name="operator_action_view_assist_help">Zeigt LOG als Rec.709 statt als flaches OCLog2-Bild. Nur Monitoring: die aufgenommene Datei bleibt OCLog2. Ausgeschaltet wirkt der Sucher flau, weil LOG eben so aussieht. Nur im LOG-Modus verfügbar.</string>
     <string name="operator_action_auto_focus_help">Verwirft die manuelle Fokusmarke und gibt den Fokus an die Kamera zurück.</string>
     <string name="operator_action_focus_a_help">Zieht den Fokus mit der konfigurierten Dauer und Kurve zur Marke A.</string>

@@ -43,6 +43,21 @@ class OperatorUiTest {
         for (i in 1..3) compose.onNodeWithTag("operator-button-$i").assertHeightIsAtLeast(48.dp).performClick()
         assertEquals(listOf(OperatorAction.TORCH, OperatorAction.PEAKING, OperatorAction.VIEW_ASSIST), seen)
     }
+    @Test fun scopeQuickTogglesFollowTheFKeysAndLatchTheirMonitoringState() {
+        val seen = mutableListOf<OperatorAction>()
+        val settings = mutableStateOf(CameraSettings(monitoring = com.librestatic.opencinecam.camera.MonitoringOptions(waveformEnabled = true)))
+        compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), settings.value, OperatorActions({}, { seen.add(it) }, { true })) } }
+        compose.onNodeWithTag("operator-quick-waveform").assertHeightIsAtLeast(48.dp)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).performClick()
+        compose.onNodeWithTag("operator-quick-waveform-state", useUnmergedTree = true).assertTextEquals("ON")
+        compose.onNodeWithTag("operator-quick-vectorscope-state", useUnmergedTree = true).assertTextEquals("OFF")
+        compose.onNodeWithTag("operator-quick-vectorscope").performClick()
+        assertEquals(listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE), seen)
+        // A scope already on an F-key is not repeated as a quick toggle.
+        compose.runOnUiThread { settings.value = settings.value.copy(operation = OperatorPreferences(button3 = OperatorAction.VECTORSCOPE)) }
+        compose.onNodeWithTag("operator-quick-vectorscope").assertDoesNotExist()
+        compose.onNodeWithTag("operator-quick-waveform").assertExists()
+    }
     @Test fun unsupportedActionIsDisabledRatherThanPretendingToExecute() {
         var invoked = false
         compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), CameraSettings(), OperatorActions({}, { invoked = true }, { it == OperatorAction.PEAKING })) } }
