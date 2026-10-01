@@ -42,7 +42,7 @@ class AudioRecordingGainDeviceTest {
 
     @Test fun unavailablePcm24RejectsBeforePublishingAnyAudioRow() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        assertTrue("This negative fixture requires a device without PCM24 input", AudioRecord.getMinBufferSize(
+        org.junit.Assume.assumeTrue("This negative fixture requires a device without PCM24 input (this device supports it; run on hardware lacking 24-bit capture)", AudioRecord.getMinBufferSize(
             48000, AudioFormat.CHANNEL_IN_MONO, AudioBitDepth.PCM_24.androidEncoding) <= 0)
         val stem = "E15_UNAVAILABLE_${UUID.randomUUID()}"
         val settings = CameraSettings(audioOutputFormat = AudioOutputFormat.WAV_PCM, audioBitDepth = AudioBitDepth.PCM_24,

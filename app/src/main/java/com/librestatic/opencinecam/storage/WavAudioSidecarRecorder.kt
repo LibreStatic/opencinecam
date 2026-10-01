@@ -478,7 +478,7 @@ class WavAudioSidecarRecorder private constructor(
                         .setEncoding(settings.audioBitDepth.androidEncoding)
                         .setChannelMask(mask)
                         .build())
-                    .setBufferSizeInBytes((minimum * 2).coerceAtLeast(16_384))
+                    .setBufferSizeInBytes(frameAlignedBufferBytes(minimum, settings.audioChannels * settings.audioBitDepth.bits / 8))
                     .build()
                 check(record.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed." }
                 check(record.sampleRate == settings.audioSampleRateHz && record.channelCount == settings.audioChannels &&

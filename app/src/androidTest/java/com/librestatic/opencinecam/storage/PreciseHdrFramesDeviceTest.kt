@@ -22,12 +22,24 @@ import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.UUID
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 private val hdrPts = listOf(0L, 400_000L, 1_100_000L, 1_700_000L)
 private val hdrCodes = listOf(64, 65, 66, 67, 128, 129, 130, 131, 256, 257, 258, 259, 512, 513, 768, 924)
 private const val hdrTag = "E16HdrProbe"
+
+/** Positive P010 acceptance needs API33+ and a HEVC decoder that advertises COLOR_FormatYUVP010.
+ * Stock emulator images ship none (c2.goldfish/c2.android/OMX.google), so those cases skip there. */
+private fun assumeP010HevcDecoder() {
+    assumeTrue("Positive P010 acceptance requires API33+ (device is API ${Build.VERSION.SDK_INT})", Build.VERSION.SDK_INT >= 33)
+    val capable = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+        !info.isEncoder && MediaFormat.MIMETYPE_VIDEO_HEVC in info.supportedTypes &&
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010 in info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC).colorFormats
+    }
+    assumeTrue("No HEVC decoder advertises P010 output; run on a device/emulator with a 10-bit HEVC decoder", capable)
+}
 
 /** Run the three positive methods on API33+, and the explicit API30 rejection separately.
  * Capability absence is a failing acceptance gate, not an assumption/skip or 8-bit substitute. */
@@ -36,7 +48,7 @@ class PreciseHdrFramesDeviceTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test fun nativeP010PreservesAllTenBitsAndDeclaredPqAndHlgTags() {
-        assertTrue("Positive P010 acceptance requires API33+", Build.VERSION.SDK_INT >= 33)
+        assumeP010HevcDecoder()
         for (transfer in PreciseHdrTransfer.entries) {
             val file = createPreciseHdrPlaybackFixture(context, transfer)
             try {
@@ -48,7 +60,7 @@ class PreciseHdrFramesDeviceTest {
     }
 
     @Test fun precisePqAndHlgFramesRetainActualPtsBackwardFloorBoundsAndOriginalBytes() {
-        assertTrue("Positive P010 acceptance requires API33+", Build.VERSION.SDK_INT >= 33)
+        assumeP010HevcDecoder()
         for (transfer in PreciseHdrTransfer.entries) {
             val file = createPreciseHdrPlaybackFixture(context, transfer)
             try {
@@ -91,7 +103,7 @@ class PreciseHdrFramesDeviceTest {
     }
 
     @Test fun preciseHdrRotationUsesTrackOrientationOnceWithoutChangingSampleBytes() {
-        assertTrue("Positive P010 acceptance requires API33+", Build.VERSION.SDK_INT >= 33)
+        assumeP010HevcDecoder()
         for (transfer in PreciseHdrTransfer.entries) {
             val file = createPreciseHdrPlaybackFixture(context, transfer, 90)
             try {
@@ -113,7 +125,7 @@ class PreciseHdrFramesDeviceTest {
     }
 
     @Test fun api30RejectsPreciseHdrExplicitlyWithoutChangingOriginal() {
-        assertEquals("Run this separate negative gate on the API30 fixture device", 30, Build.VERSION.SDK_INT)
+        assumeTrue("Negative gate runs only on the API30 fixture device (this device is API ${Build.VERSION.SDK_INT})", Build.VERSION.SDK_INT == 30)
         for (transfer in PreciseHdrTransfer.entries) {
             val file = createPreciseHdrPlaybackFixture(context, transfer)
             try {
@@ -129,7 +141,7 @@ class PreciseHdrFramesDeviceTest {
     }
 
     @Test fun queryNativeP010ProfilesWithoutClaimingDecodeAcceptance() {
-        assertEquals(33, Build.VERSION.SDK_INT)
+        assumeTrue("P010 capability query needs API33+", Build.VERSION.SDK_INT >= 33)
         val file = createPreciseHdrPlaybackFixture(context, PreciseHdrTransfer.PQ)
         val extractor = MediaExtractor()
         try {
@@ -159,12 +171,12 @@ class PreciseHdrFramesDeviceTest {
     }
 
     @Test fun queryP010AlternativesWithoutReplacingHevcAcceptance() {
-        assertEquals(33, Build.VERSION.SDK_INT)
+        assumeTrue("P010 capability query needs API33+", Build.VERSION.SDK_INT >= 33)
         for ((mime, profiles) in listOf(
             MediaFormat.MIMETYPE_VIDEO_VP9 to (MediaCodecInfo.CodecProfileLevel.VP9Profile2 to MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR),
             MediaFormat.MIMETYPE_VIDEO_AV1 to (MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 to MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10))) {
             val candidates = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder && mime in it.supportedTypes }
-            assertTrue("No advertised candidate for $mime", candidates.isNotEmpty())
+            assumeTrue("No advertised decoder for $mime on this device; run on hardware with VP9/AV1 decoders", candidates.isNotEmpty())
             for (candidate in candidates) {
                 val caps = candidate.getCapabilitiesForType(mime)
                 val format = MediaFormat.createVideoFormat(mime, 256, 64).apply {

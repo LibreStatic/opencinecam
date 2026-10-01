@@ -123,3 +123,9 @@ internal fun releaseAudioResources(actions: List<() -> Unit>) {
     }
     failure?.let { throw it }
 }
+
+/** AudioRecord requires a buffer size that is a whole number of frames (24-bit stereo frames are 6 bytes, not a power of two). */
+internal fun frameAlignedBufferBytes(minimumBytes: Int, frameBytes: Int): Int {
+    val wanted = (minimumBytes * 2).coerceAtLeast(16_384)
+    return (wanted + frameBytes - 1) / frameBytes * frameBytes
+}

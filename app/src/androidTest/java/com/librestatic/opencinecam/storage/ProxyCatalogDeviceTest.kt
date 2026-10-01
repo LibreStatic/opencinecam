@@ -147,11 +147,23 @@ class ProxyCatalogDeviceTest {
             assertTrue(repository.catalog().isEmpty())
             check(receipts.mkdir())
             val key = "a".repeat(64)
-            for (name in listOf("unknown", "$key.json.bak", "$key.json.new")) {
-                val file = File(receipts, name)
-                try { file.writeText("{}"); expectRejected { repository.catalog() } }
-                finally { check(file.delete()) }
-            }
+            val unknown = File(receipts, "unknown")
+            try { unknown.writeText("{}"); expectRejected { repository.catalog() } }
+            finally { check(unknown.delete()) }
+            // Process-death residue is resolved before enumeration (AtomicFile semantics): a legacy .bak is the
+            // committed state and replaces its base, so the invalid content is then rejected as a receipt...
+            val backup = File(receipts, "$key.json.bak")
+            val promoted = File(receipts, "$key.json")
+            try {
+                backup.writeText("{}"); expectRejected { repository.catalog() }
+                assertFalse(backup.exists()); assertEquals("{}", promoted.readText())
+            } finally { if (promoted.exists()) check(promoted.delete()); if (backup.exists()) check(backup.delete()) }
+            // ...while a .new is an unfinished write, never evidence: it is discarded and the catalog stays empty.
+            val unfinished = File(receipts, "$key.json.new")
+            try {
+                unfinished.writeText("{}")
+                assertTrue(repository.catalog().isEmpty()); assertFalse(unfinished.exists())
+            } finally { if (unfinished.exists()) check(unfinished.delete()) }
             val target = File(privateRoot, "outside-receipt").apply { writeText("{}") }
             val symlink = File(receipts, "$key.json")
             try {

@@ -7,6 +7,7 @@ import android.Manifest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -33,6 +34,27 @@ class OnboardingUiTest {
 
     private fun tap(text: Int) = rule.onNodeWithText(context.getString(text)).performClick()
 
+    /** The header counter ("5 / 6 · ...") names the settled page; tapping again before the pager and its shared-axis buttons settle races them. */
+    private fun awaitPage(number: Int) {
+        rule.waitUntil(15_000) { rule.onAllNodesWithText("$number / 6", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitForIdle()
+    }
+
+    /**
+     * A tap that lands while the shared-axis button swap is still running is dropped (the page header already
+     * shows the new page by then), so retry after a bounded wait instead of assuming the first tap is delivered.
+     */
+    private fun tapUntilPage(text: Int, number: Int) {
+        repeat(3) {
+            tap(text)
+            val reached = runCatching {
+                rule.waitUntil(3_000) { rule.onAllNodesWithText("$number / 6", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            }.isSuccess
+            if (reached) { rule.waitForIdle(); return }
+        }
+        awaitPage(number)
+    }
+
     private fun awaitCamera() {
         // Leaving waits for the backdrop to scatter and the camera to open; with animations off both snap.
         rule.waitUntil(15_000) { rule.onAllNodesWithTag("onboarding").fetchSemanticsNodes().isEmpty() }
@@ -43,13 +65,13 @@ class OnboardingUiTest {
     @Test
     fun walkingEveryStepEndsOnTheCamera() {
         rule.onNodeWithTag("onboarding").assertIsDisplayed()
-        tap(R.string.onb_get_started)
-        tap(R.string.onb_next)
-        tap(R.string.onb_next)
+        tap(R.string.onb_get_started); awaitPage(2)
+        tap(R.string.onb_next); awaitPage(3)
+        tap(R.string.onb_next); awaitPage(4)
         rule.onNodeWithTag("perm-camera").assertIsDisplayed()
         // With every optional permission still open the continue action is the text button.
-        tap(R.string.onb_continue)
-        tap(R.string.onb_next)
+        tap(R.string.onb_continue); awaitPage(5)
+        tapUntilPage(R.string.onb_next, 6)
         rule.onNodeWithText(context.getString(R.string.onb_ready_title)).assertIsDisplayed()
         rule.onNodeWithTag("onboarding-finish").performClick()
         awaitCamera()

@@ -209,7 +209,11 @@ class AacTailProbeTest {
             }
             val window = com.librestatic.opencinecam.camera.AacSourceWindow(rate, inputFrames.toLong(), 2048,
                 packets.length().toLong(), if (eosOnData) 250123 else 0)
-            if (paddingFrames > 0) windowResult = com.librestatic.opencinecam.camera.finalizeAacSourceWindow(access, window)
+            // Production requires priming + source <= encoded frames. Whether an encoder flushed its tail without
+            // padding is encoder behaviour (some, e.g. the API 36 software encoder, do), so derive the expectation
+            // from the packets actually produced instead of assuming every encoder truncates.
+            val complete = (2048L + inputFrames) <= packets.length() * 1024L
+            if (complete) windowResult = com.librestatic.opencinecam.camera.finalizeAacSourceWindow(access, window)
             else {
                 try {
                     com.librestatic.opencinecam.camera.finalizeAacSourceWindow(access, window)

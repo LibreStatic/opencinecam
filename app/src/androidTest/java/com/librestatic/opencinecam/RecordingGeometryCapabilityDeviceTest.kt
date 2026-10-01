@@ -13,8 +13,12 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class RecordingGeometryCapabilityDeviceTest {
     @Test fun atLeastOneHardwareSurfaceEncoderAcceptsLandscapeAndPortrait1080p() {
-        listOf(MediaFormat.MIMETYPE_VIDEO_AVC, MediaFormat.MIMETYPE_VIDEO_HEVC).forEach { mime ->
-            val accepted = hardwareSurfaceEncoders(mime).any { capabilities ->
+        val mimes = listOf(MediaFormat.MIMETYPE_VIDEO_AVC, MediaFormat.MIMETYPE_VIDEO_HEVC)
+        val encoders = mimes.associateWith { hardwareSurfaceEncoders(it) }.filterValues { it.isNotEmpty() }
+        // Emulators only ship software (c2.android/goldfish) encoders; there is nothing to gate there.
+        org.junit.Assume.assumeTrue("No hardware Surface video encoder is advertised on this device; run on a physical device", encoders.isNotEmpty())
+        encoders.forEach { (mime, candidates) ->
+            val accepted = candidates.any { capabilities ->
                 capabilities.areSizeAndRateSupported(1920, 1080, 30.0) &&
                     capabilities.areSizeAndRateSupported(1080, 1920, 30.0)
             }

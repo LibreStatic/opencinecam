@@ -31,6 +31,7 @@ import com.librestatic.opencinecam.camera.SoftAgc
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.storage.AudioRetirementGate
+import com.librestatic.opencinecam.storage.frameAlignedBufferBytes
 import com.librestatic.opencinecam.storage.releaseAudioResources
 import com.librestatic.opencinecam.storage.toMeterEncoding
 import java.nio.ByteBuffer
@@ -143,7 +144,7 @@ internal class PreviewAudioMonitor private constructor(
                         .setEncoding(depth.androidEncoding)
                         .build(),
                 )
-                .setBufferSizeInBytes((minimum * 2).coerceAtLeast(16_384))
+                .setBufferSizeInBytes(frameAlignedBufferBytes(minimum, settings.audioChannels * depth.bits / 8))
                 .build()
             val effects = mutableListOf<AudioEffect>()
             try {

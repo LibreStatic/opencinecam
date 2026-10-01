@@ -65,7 +65,10 @@ class ProxySidecarCompositionDeviceTest {
                 Log.i("E17SidecarComposition", "offsetInput expected=$videoOffsetUs actual=$before path=${diagnostic.absolutePath}")
             }
             assertEquals(videoOffsetUs, before.video.timestampsUs.min())
-            assertEquals(3_400_000L, before.video.durationUs)
+            // MediaExtractor's KEY_DURATION excludes a leading empty edit on older platforms and includes it on
+            // newer ones (API 36 reports 3.4 s + offset). The exact shared-clock end is asserted via videoEnd below.
+            assertTrue("Unexpected video duration ${before.video.durationUs}",
+                before.video.durationUs == 3_400_000L || before.video.durationUs == 3_400_000L + videoOffsetUs)
             val videoEnd = probeProxyVideoEndUs(context, videoUri)
             assertEquals(3_400_000L + videoOffsetUs, videoEnd)
             val audioStart = audioStartUs ?: if (videoOffsetUs == 0L) 125_000L else 0L

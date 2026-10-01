@@ -89,7 +89,10 @@ class AudioEffectsDeviceTest {
         val type = Class.forName("com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline\$EmbeddedAac")
         val companion = type.getDeclaredField("Companion").apply { isAccessible = true }.get(null)
         val create = companion.javaClass.declaredMethods.single { it.name == "create" }.apply { isAccessible = true }
-        val audio = create.invoke(companion, context, config, clock,
+        // Production qualifies the AAC encoder off the GL looper first and hands the evidence to create().
+        val calibrate = companion.javaClass.declaredMethods.single { it.name == "calibrate" }.apply { isAccessible = true }
+        val calibration = calibrate.invoke(companion, context, config, { false })
+        val audio = create.invoke(companion, context, config, calibration, clock,
             { failure: Throwable -> retirementFailures += failure }, { false })
         val codec = field(audio, "codec") as MediaCodec
         val eos = CountDownLatch(1); val packet = CountDownLatch(1); val packets = AtomicInteger()
