@@ -641,6 +641,13 @@ internal fun CaptureSurface(
                 binder,
                 Modifier.align(Alignment.Center).then(previewSizeModifier),
             )
+            // A frame narrower than its pane leaves a strip at each side (a tablet or an unfolded
+            // screen in portrait). The scopes panel then sits in the end strip, clear of the zoom
+            // rocker, instead of covering the picture. Floating chrome may occupy that strip.
+            val framedWidthPx = if (overlayChrome && settings.viewfinderScale == ViewfinderScale.FILL) constraints.maxWidth.toFloat()
+                else minOf(constraints.maxWidth.toFloat(), constraints.maxHeight * displayRatio)
+            val sideStrip = with(density) { ((constraints.maxWidth - framedWidthPx) / 2f).toDp() }
+            val scopesBeside = !overlayChrome && sideStrip - SCOPES_BESIDE_END_CLEARANCE - SCOPES_BESIDE_START_GAP >= SCOPES_BESIDE_MIN_WIDTH
             MonitoringOverlay(
                 state = state,
                 options = settings.monitoring,
@@ -658,6 +665,14 @@ internal fun CaptureSurface(
                 // only the minimal self-recording chrome leaves it to the overlay.
                 drawHistogram = state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls,
                 modifier = Modifier.align(Alignment.Center).then(previewSizeModifier),
+                drawScopesPanel = !scopesBeside,
+                // 52 dp keys 8 dp from the window edge, plus a gap.
+                scopesPanelEndPadding = if (stacked && captureWindowProfile(safeWidthDp.value, safeHeightDp.value) == CaptureWindowProfile.COMPACT_PORTRAIT) 72.dp else 12.dp,
+            )
+            if (scopesBeside) ProfessionalScopesPanel(
+                state, settings.monitoring, rememberScopeAnalysisFresh(state, settings.monitoring),
+                Modifier.align(Alignment.CenterEnd).padding(end = SCOPES_BESIDE_END_CLEARANCE)
+                    .width(sideStrip - SCOPES_BESIDE_END_CLEARANCE - SCOPES_BESIDE_START_GAP).testTag("monitoring-panel-beside"),
             )
         }
 
@@ -944,6 +959,10 @@ private fun MonitoringOverlay(
     showHorizon: Boolean,
     drawHistogram: Boolean,
     modifier: Modifier = Modifier,
+    /** False when the caller lays the scopes panel out beside the frame instead of over it. */
+    drawScopesPanel: Boolean = true,
+    /** Clears the F-key column that compact portrait chrome lays over the frame's end edge. */
+    scopesPanelEndPadding: androidx.compose.ui.unit.Dp = 12.dp,
 ) {
     val context = LocalContext.current
     val displayView = LocalView.current
@@ -1039,12 +1058,19 @@ private fun MonitoringOverlay(
         if (drawHistogram && showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
             HistogramGraph(state, options, histogramMode, Modifier.padding(start = 12.dp, top = 12.dp).width(maxWidth * .28f).height(maxHeight * .09f))
         }
-        ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = 12.dp))
+        if (drawScopesPanel) ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = scopesPanelEndPadding))
         // The overlay spans the whole screen: clear the top bar and the AE/AF lock toggles
         // (top end, from 62 dp) and keep right of the zoom column (top start).
         AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 116.dp, start = 88.dp, end = 12.dp))
     }
 }
+
+/** The zoom rocker: 28 dp wide, 8 dp from the pane end, plus a gap before the panel. */
+private val SCOPES_BESIDE_END_CLEARANCE = 44.dp
+/** Gap between the frame edge and a panel laid out beside it. */
+private val SCOPES_BESIDE_START_GAP = 12.dp
+/** Narrowest strip worth moving the panel into; below it the panel stays over the frame. */
+private val SCOPES_BESIDE_MIN_WIDTH = 140.dp
 
 /** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
 @Composable
