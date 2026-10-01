@@ -71,6 +71,14 @@ identity `.cube`, an OCIO v2 configuration, forward GLSL, forward/inverse DCTL, 
 JSON specification. The dense shaper is required because a bare 17³ sampling exceeds the
 declared tolerance near black.
 
+The two `.cube` files use different dialects. The Adobe Cube LUT Specification 1.0 allows one 1D
+or one 3D table per file, so only `oclog2-v2-4096.cube` is an Adobe Cube file (`TITLE`,
+`LUT_1D_SIZE`, `DOMAIN_MIN`/`DOMAIN_MAX`). `oclog2-v2-17.cube` uses DaVinci Resolve's combined
+shaper format instead: leading `#` comments, then `LUT_1D_SIZE`, `LUT_1D_INPUT_RANGE`,
+`LUT_3D_SIZE`, `LUT_3D_INPUT_RANGE`, the shaper rows, and the lattice rows. It has no `TITLE` or
+`DOMAIN_*` keywords. OpenColorIO reads it with its `resolve_cube` reader as a 1D LUT followed by a
+3D LUT. Adobe-only readers cannot load it, and they should use the 1D file.
+
 ```bash
 python3 tools/generate_oclog2_artifacts.py
 python3 tools/generate_oclog2_artifacts.py --check

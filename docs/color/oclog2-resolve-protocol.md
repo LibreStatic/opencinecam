@@ -15,7 +15,7 @@ retried until it passes.
 | `inverse-dctl` | `oclog2-inverse-input.exr` | `oclog2-v2-inverse.dctl` | `decode(clamp(y, 0.10, 0.90))` | max abs ≤ `2e-5`, monotonic |
 | `roundtrip-dctl` | `oclog2-forward-input.exr` | forward then inverse DCTL in serial nodes | `clamp(x, 0, 1)` | max abs ≤ `2e-5` |
 | `forward-lut1d` | `oclog2-forward-input.exr` | `oclog2-v2-4096.cube` | `encode(clamp(x, 0, 1))` | max abs ≤ `2e-5`, monotonic |
-| `forward-lut3d` | `oclog2-forward-input.exr` | `oclog2-v2-17.cube` (shaper + 17³) | `encode(clamp(x, 0, 1))` | max abs ≤ `2e-5`, monotonic |
+| `forward-lut3d` | `oclog2-forward-input.exr` | `oclog2-v2-17.cube` (Resolve combined format: 4096 shaper + 17³ identity) | `encode(clamp(x, 0, 1))` | max abs ≤ `2e-5`, monotonic |
 | `signal-hevc` | `oclog2-signal-main10.mp4` | none (decode only) | H.273 full-range BT.2020 decode of the coded values | patch mean ≤ 0.5 LSB; sub-black and super-white codes preserved |
 | `camera-clip` | recorded OCLog2 MP4 | none (decode only) | FFmpeg 10-bit decode + H.273 conversion | median ≤ 0.5 LSB, p95 ≤ 2 LSB |
 | `forward-ocio` (optional) | `oclog2-forward-input.exr` | `oclog2-v2.ocio`, scene_linear → oclog2 | `encode(clamp(x, 0, 1))` | max abs ≤ `2e-5` |
@@ -74,6 +74,13 @@ Copy these files from `docs/color/oclog2-v2/` into Resolve's LUT folder:
 - `oclog2-v2-inverse.dctl`
 - `oclog2-v2-4096.cube`
 - `oclog2-v2-17.cube`
+
+`oclog2-v2-4096.cube` is an Adobe Cube 1.0 1D file. `oclog2-v2-17.cube` uses Resolve's combined
+shaper layout (`LUT_1D_SIZE`, `LUT_1D_INPUT_RANGE`, `LUT_3D_SIZE`, `LUT_3D_INPUT_RANGE`), so
+Resolve applies the 1D shaper first and then the 3D lattice. The lattice is an identity, so the
+3D interpolation setting cannot change the result. Note whether Resolve lists and loads the file
+without an error. If Resolve rejects it, leave `forward-lut3d` `NOT_RUN` and report the error
+text as a defect in the artifact package.
 
 To find the folder, open Project Settings → Color Management → Lookup Tables → Open LUT Folder.
 Then click Update Lists. Check that the copies are byte-identical to the hash-pinned files:

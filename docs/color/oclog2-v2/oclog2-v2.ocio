@@ -1,4 +1,4 @@
-ocio_profile_version: 2.4
+ocio_profile_version: 2
 name: OpenCineCam OCLog2 v2.0.0
 description: Normative scene-linear BT.2020 to OCLog2 interchange config
 search_path: .
@@ -6,6 +6,11 @@ strictparsing: true
 roles:
   scene_linear: scene_linear_bt2020
   reference: scene_linear_bt2020
+file_rules:
+  - !<Rule> {name: Default, colorspace: scene_linear_bt2020}
+displays:
+  OCLog2:
+    - !<View> {name: OCLog2 code values, colorspace: oclog2_bt2020}
 colorspaces:
   - !<ColorSpace>
     name: scene_linear_bt2020

@@ -128,6 +128,8 @@ def vectors() -> dict[str, object]:
 
 
 def cube_1d() -> bytes:
+    # Adobe Cube LUT Specification 1.0, section 6: one LUT_1D_SIZE table with optional TITLE and
+    # DOMAIN_MIN/DOMAIN_MAX. Readers clamp to the declared [0, 1] domain.
     lines = [
         'TITLE "OpenCineCam OCLog2 v2.0.0 scene-linear BT.2020 to OCLog2"',
         f"LUT_1D_SIZE {LUT_1D_SIZE}",
@@ -142,17 +144,23 @@ def cube_1d() -> bytes:
 
 
 def cube_3d() -> bytes:
+    # The Adobe Cube 1.0 format allows either one 1D or one 3D table per file, so a combined
+    # shaper plus lattice must use the DaVinci Resolve .cube variant: LUT_1D_SIZE,
+    # LUT_1D_INPUT_RANGE, LUT_3D_SIZE, LUT_3D_INPUT_RANGE, then the 1D rows, then the 3D rows.
+    # That variant has no TITLE or DOMAIN_* keywords (OpenColorIO's resolve_cube reader rejects
+    # TITLE), and comments may only precede the header.
     lines = [
-        'TITLE "OpenCineCam OCLog2 v2.0.0 4096-shaper plus 17-cube"',
+        f"# OpenCineCam OCLog2 v{VERSION} {LUT_1D_SIZE}-entry shaper plus {LUT_3D_SIZE}-point identity cube",
+        "# DaVinci Resolve combined 1D shaper + 3D .cube; not an Adobe Cube 1.0 file.",
         f"LUT_1D_SIZE {LUT_1D_SIZE}",
+        "LUT_1D_INPUT_RANGE 0.0 1.0",
         f"LUT_3D_SIZE {LUT_3D_SIZE}",
-        "DOMAIN_MIN 0.0 0.0 0.0",
-        "DOMAIN_MAX 1.0 1.0 1.0",
+        "LUT_3D_INPUT_RANGE 0.0 1.0",
     ]
-    # A bare 17^3 sampling of this steep curve misses the 2e-5 contract near black. The
-    # standard .cube shaper applies the dense component curve first; the following 17^3
-    # identity lattice makes the artifact a real combined 1D+3D transform without adding
-    # interpolation error.
+    # A bare 17^3 sampling of this steep curve misses the 2e-5 contract near black. The shaper
+    # applies the dense component curve first; its [0.10, 0.90] output stays inside the 3D input
+    # range, and the following 17^3 identity lattice makes the artifact a real combined 1D+3D
+    # transform without adding interpolation error under trilinear or tetrahedral lookup.
     for index in range(LUT_1D_SIZE):
         value = encode_decimal(Decimal(index) / Decimal(LUT_1D_SIZE - 1))
         encoded = decimal_text(value)
@@ -206,7 +214,10 @@ __DEVICE__ float3 transform(int width, int height, int x, int y, float r, float 
 
 
 def ocio() -> bytes:
-    return b"""ocio_profile_version: 2.4
+    # Profile version 2 keeps the config loadable by every OCIO 2.x host; it uses no later
+    # feature. OCIO v2 refuses to load a config without a Default file rule (or a default role)
+    # and fails validation without at least one display.
+    return b"""ocio_profile_version: 2
 name: OpenCineCam OCLog2 v2.0.0
 description: Normative scene-linear BT.2020 to OCLog2 interchange config
 search_path: .
@@ -214,6 +225,11 @@ strictparsing: true
 roles:
   scene_linear: scene_linear_bt2020
   reference: scene_linear_bt2020
+file_rules:
+  - !<Rule> {name: Default, colorspace: scene_linear_bt2020}
+displays:
+  OCLog2:
+    - !<View> {name: OCLog2 code values, colorspace: oclog2_bt2020}
 colorspaces:
   - !<ColorSpace>
     name: scene_linear_bt2020
