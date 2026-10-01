@@ -29,7 +29,7 @@
     "whiteCode": 0.9
   },
   "runtimeShaderSha256": {
-    "HLG10_BT2020": "21ad5d65afb57b87377eac537c3e2cb33a362f25757069dfea6c22dc480bd8f4",
+    "HLG10_BT2020": "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
     "SDR_BT709_ISP": "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b"
   },
   "schema": "opencinecam-oclog2-spec-v1",

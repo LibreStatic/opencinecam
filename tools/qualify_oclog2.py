@@ -17,7 +17,7 @@ from typing import Any
 
 SPEC_VERSION = "2.0.0"
 EXPECTED_SHADERS = {
-    "HLG10_BT2020": "21ad5d65afb57b87377eac537c3e2cb33a362f25757069dfea6c22dc480bd8f4",
+    "HLG10_BT2020": "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
     "SDR_BT709_ISP": "2b76aeae8909164a3f1620f6c8d361715aa1ac55413a0215df3e3dadb1710a3b",
 }
 REQUIRED_IMPLEMENTATIONS = {"cpu", "gpu", "lut1d", "lut3d", "ocio", "dctl"}
@@ -81,6 +81,28 @@ def load_json_file(path: Path | None, name: str, checks: list[Check]) -> dict[st
         checks.append(Check(name, "FAIL", "json-root-not-object"))
         return None
     return value
+
+
+DATASPACE_STANDARD_MASK = 63 << 16
+DATASPACE_STANDARD_BT2020 = 6 << 16
+DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE = 7 << 16
+DATASPACE_TRANSFER_MASK = 31 << 22
+DATASPACE_TRANSFER_ST2084 = 7 << 22
+DATASPACE_TRANSFER_HLG = 8 << 22
+
+
+def dataspace_matches(source_path: object, dataspace: int) -> bool:
+    """Mirror of OpenCineLogSourcePath.acceptsDataSpace: can this tier's shader decode the frames?"""
+    standard = dataspace & DATASPACE_STANDARD_MASK
+    transfer = dataspace & DATASPACE_TRANSFER_MASK
+    if source_path == "HLG10_BT2020":
+        return standard == DATASPACE_STANDARD_BT2020 and transfer == DATASPACE_TRANSFER_HLG
+    if source_path == "SDR_BT709_ISP":
+        return (
+            standard not in {DATASPACE_STANDARD_BT2020, DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE}
+            and transfer not in {DATASPACE_TRANSFER_HLG, DATASPACE_TRANSFER_ST2084}
+        )
+    return False
 
 
 def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
@@ -190,6 +212,18 @@ def evaluate(manifest: dict[str, Any], root: Path) -> dict[str, Any]:
             and transform.get("shaderSha256") == shader
         )
     checks.append(Check("sidecar-contract", "PASS" if sidecar_valid else "NOT_RUN" if sidecar is None else "FAIL", "sidecar-match" if sidecar_valid else "sidecar-missing-or-mismatch"))
+
+    # The shader assumes the tier's transfer; a frame in another dataspace is decoded wrongly even
+    # though every hash and timing check passes, so the runtime dataspace is evidence in its own right.
+    source = sidecar.get("source") if sidecar is not None and isinstance(sidecar.get("source"), dict) else {}
+    dataspace = source.get("androidDataSpace")
+    mismatched = source.get("dataSpaceMismatchedFrames")
+    if not isinstance(dataspace, int) or isinstance(dataspace, bool) or not isinstance(mismatched, int) or isinstance(mismatched, bool):
+        checks.append(Check("source-dataspace", "NOT_RUN", "dataspace-unreported"))
+    elif mismatched == 0 and dataspace_matches(source_path, dataspace):
+        checks.append(Check("source-dataspace", "PASS", "dataspace-matches-tier"))
+    else:
+        checks.append(Check("source-dataspace", "FAIL", "dataspace-mismatch"))
 
     ffprobe_valid = False
     if ffprobe is not None:

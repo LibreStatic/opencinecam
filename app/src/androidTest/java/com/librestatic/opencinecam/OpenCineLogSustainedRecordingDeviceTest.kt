@@ -180,7 +180,9 @@ class OpenCineLogSustainedRecordingDeviceTest {
                     .put("transfer", observed.sourceTransfer)
                     .put("precision", observed.sourcePrecision)
                     .put("surface", observed.sourceSurface)
-                    .put("dataSpace", observed.sourceDataSpace))
+                    .put("androidDataSpace", observed.sourceDataSpace ?: JSONObject.NULL)
+                    .put("dataSpaceMismatchedFrames", observed.sourceDataSpaceMismatchedFrames ?: JSONObject.NULL)
+                    .put("unexpectedAndroidDataSpace", observed.unexpectedSourceDataSpace ?: JSONObject.NULL))
                 .put("transform", JSONObject()
                     .put("curve", observed.curve)
                     .put("version", "2.0.0")
@@ -216,6 +218,11 @@ class OpenCineLogSustainedRecordingDeviceTest {
                 if (observed.videoPtsGapsOverThreshold != 0L) {
                     add("video-pts-gap-count:${observed.videoPtsGapsOverThreshold}")
                 }
+                when (val mismatched = observed.sourceDataSpaceMismatchedFrames) {
+                    null -> add("source-dataspace-unreported")
+                    0L -> Unit
+                    else -> add("source-dataspace-mismatch:$mismatched:${observed.unexpectedSourceDataSpace}")
+                }
             }
             JSONObject()
                 .put("status", if (validationFailures.isEmpty()) "PASS" else "FAILED")
@@ -235,10 +242,11 @@ class OpenCineLogSustainedRecordingDeviceTest {
                 .put("fps", FPS)
                 .put("sourcePath", observed.sourcePath.name)
                 .put("sourceDataSpace", observed.sourceDataSpace)
+                .put("sourceDataSpaceMismatchedFrames", observed.sourceDataSpaceMismatchedFrames)
                 .put("sourceTransfer", observed.sourceTransfer)
                 .put("sourcePrecision", observed.sourcePrecision)
                 .put("shaderSha256", observed.transformSha256)
-                .put("expectedShaderSha256", OpenCineLogGpuPipeline.TRANSFORM_SHA256)
+                .put("expectedShaderSha256", OpenCineLogGpuPipeline.transformSha256(observed.sourcePath))
                 .put("durationSeconds", durationSeconds)
                 .put("encodedFrames", observed.encodedFrames)
                 .put("expectedFrames", expectedFrames)

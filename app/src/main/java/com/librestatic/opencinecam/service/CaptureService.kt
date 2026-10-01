@@ -3067,6 +3067,8 @@ class CaptureService : Service() {
             .put("transfer", evidence.sourceTransfer)
             .put("precision", evidence.sourcePrecision)
             .put("androidDataSpace", evidence.sourceDataSpace ?: JSONObject.NULL)
+            .put("dataSpaceMismatchedFrames", evidence.sourceDataSpaceMismatchedFrames ?: JSONObject.NULL)
+            .put("unexpectedAndroidDataSpace", evidence.unexpectedSourceDataSpace ?: JSONObject.NULL)
             .put(
                 "interpretation",
                 if (evidence.sourcePath == OpenCineLogSourcePath.HLG10_BT2020) {

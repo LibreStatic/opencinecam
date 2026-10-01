@@ -26,7 +26,7 @@ class OpenCineLogQualificationTest(unittest.TestCase):
         }))
         self.sidecar.write_text(json.dumps({
             "cameraId": "0",
-            "source": {"path": "HLG10_BT2020"},
+            "source": {"path": "HLG10_BT2020", "androidDataSpace": 168165376, "dataSpaceMismatchedFrames": 0},
             "transform": {
                 "curve": "OCLog2",
                 "version": "2.0.0",
@@ -112,6 +112,33 @@ class OpenCineLogQualificationTest(unittest.TestCase):
         result = evaluate(manifest, self.root)
         self.assertEqual("FAILED", result["status"])
         self.assertIn("runtime-shader", result["failed"])
+
+    def rewrite_sidecar_source(self, **fields: object) -> dict:
+        sidecar = json.loads(self.sidecar.read_text())
+        sidecar["source"].update(fields)
+        self.sidecar.write_text(json.dumps(sidecar))
+        manifest = self.manifest()
+        manifest["files"]["sidecar"]["sha256"] = sha256(self.sidecar)
+        return manifest
+
+    def test_limited_range_hlg_dataspace_is_accepted(self) -> None:
+        result = evaluate(self.rewrite_sidecar_source(androidDataSpace=302383104), self.root)
+        self.assertEqual("QUALIFIED", result["status"])
+
+    def test_sdr_dataspace_on_hlg_tier_fails(self) -> None:
+        # BT709 standard, SMPTE 170M transfer, limited range: the HLG decode would be wrong.
+        result = evaluate(self.rewrite_sidecar_source(androidDataSpace=(1 << 16) | (3 << 22) | (2 << 27)), self.root)
+        self.assertEqual("FAILED", result["status"])
+        self.assertIn("source-dataspace", result["failed"])
+
+    def test_mismatched_frames_fail_even_if_last_frame_matches(self) -> None:
+        result = evaluate(self.rewrite_sidecar_source(dataSpaceMismatchedFrames=3), self.root)
+        self.assertIn("source-dataspace", result["failed"])
+
+    def test_unreported_dataspace_is_not_run(self) -> None:
+        result = evaluate(self.rewrite_sidecar_source(androidDataSpace=None), self.root)
+        self.assertEqual("NOT_RUN", result["status"])
+        self.assertIn("source-dataspace", result["notRun"])
 
     def test_declared_failure_beats_missing_checks(self) -> None:
         manifest = self.manifest()

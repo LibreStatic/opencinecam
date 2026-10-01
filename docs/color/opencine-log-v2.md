@@ -48,6 +48,16 @@ range, assumed/reported color space and transfer, source-precision claim boundar
 dataspace, and exact shader SHA-256. A changed shader is a new transform build even when the
 curve equation remains unchanged.
 
+Each shader assumes its tier's source transfer, so the pipeline checks the dataspace of every
+recorded frame. The HLG tier accepts only BT.2020 primaries with the HLG transfer, in either
+range. The SDR tier rejects BT.2020, HLG and PQ frames. The sidecar records how many frames did not
+match and the first unexpected dataspace. `tools/qualify_oclog2.py` fails a bundle with any
+mismatched frame and leaves it `NOT_RUN` when the platform did not report a dataspace. The
+recording itself is kept, because a lost take is worse than a disclosed mismatch.
+
+The inverse HLG step clamps its input to [0, 1] first. Without the clamp, a below-black code from
+the sampler would square to positive light.
+
 The HLG and SDR-derived fragment shaders have independent pinned identities. A recording is
 not qualified merely because the camera session configures or the HEVC encoder advertises
 Main10: the exact size/FPS/source tuple must also sustain recording and produce a parseable

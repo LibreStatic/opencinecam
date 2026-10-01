@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam.camera
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
@@ -16,7 +17,7 @@ class OpenCineLogGpuPipelineContractTest {
     @Test
     fun productionShaderIsPinnedToTheSidecarIdentity() {
         assertEquals(
-            "21ad5d65afb57b87377eac537c3e2cb33a362f25757069dfea6c22dc480bd8f4",
+            "c6a5a876f332417230fde5ef1320e8e0844ba964d6f8af9efcf57162454e49a7",
             OpenCineLogGpuPipeline.TRANSFORM_SHA256,
         )
         assertEquals(
@@ -24,6 +25,25 @@ class OpenCineLogGpuPipelineContractTest {
             OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256,
         )
         assertNotEquals(OpenCineLogGpuPipeline.TRANSFORM_SHA256, OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256)
+    }
+
+    @Test
+    fun sourceDataSpaceMustMatchTheTierShader() {
+        val bt2020HlgFull = 168165376 // DataSpace.DATASPACE_BT2020_HLG
+        val bt2020HlgLimited = 302383104 // DataSpace.DATASPACE_BT2020_ITU_HLG
+        val bt2020PqFull = 163971072 // DataSpace.DATASPACE_BT2020_PQ
+        val bt709Limited = 281083904 // DataSpace.DATASPACE_BT709
+        val jfif = 146931712 // DataSpace.DATASPACE_JFIF
+        assertTrue(OpenCineLogSourcePath.HLG10_BT2020.acceptsDataSpace(bt2020HlgFull))
+        assertTrue(OpenCineLogSourcePath.HLG10_BT2020.acceptsDataSpace(bt2020HlgLimited))
+        assertFalse(OpenCineLogSourcePath.HLG10_BT2020.acceptsDataSpace(bt2020PqFull))
+        assertFalse(OpenCineLogSourcePath.HLG10_BT2020.acceptsDataSpace(bt709Limited))
+        assertFalse(OpenCineLogSourcePath.HLG10_BT2020.acceptsDataSpace(0))
+        assertTrue(OpenCineLogSourcePath.SDR_BT709_ISP.acceptsDataSpace(bt709Limited))
+        assertTrue(OpenCineLogSourcePath.SDR_BT709_ISP.acceptsDataSpace(jfif))
+        assertTrue(OpenCineLogSourcePath.SDR_BT709_ISP.acceptsDataSpace(0))
+        assertFalse(OpenCineLogSourcePath.SDR_BT709_ISP.acceptsDataSpace(bt2020HlgFull))
+        assertFalse(OpenCineLogSourcePath.SDR_BT709_ISP.acceptsDataSpace(bt2020PqFull))
     }
 
     @Test

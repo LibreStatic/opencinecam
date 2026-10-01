@@ -80,6 +80,32 @@ enum class OpenCineLogSourcePath(
         sourcePrecision = "standard-range ISP output; source gamut and bit depth are not claimed",
         highSpeedDerived = true,
     ),
+    ;
+
+    /**
+     * Whether a frame's Android dataspace is one this tier's shader decodes correctly. HLG needs
+     * BT.2020 primaries with the HLG transfer (either range); SDR rejects any BT.2020, HLG or PQ
+     * signal and accepts an unknown dataspace, because its BT.709 decode is an assumption anyway.
+     */
+    fun acceptsDataSpace(dataSpace: Int): Boolean {
+        val standard = dataSpace and DATASPACE_STANDARD_MASK
+        val transfer = dataSpace and DATASPACE_TRANSFER_MASK
+        return when (this) {
+            HLG10_BT2020 -> standard == DATASPACE_STANDARD_BT2020 && transfer == DATASPACE_TRANSFER_HLG
+            SDR_BT709_ISP -> standard != DATASPACE_STANDARD_BT2020 && standard != DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE &&
+                transfer != DATASPACE_TRANSFER_HLG && transfer != DATASPACE_TRANSFER_ST2084
+        }
+    }
+
+    private companion object {
+        // android.hardware.DataSpace bit fields; spelled out so the check also runs on host JVMs.
+        const val DATASPACE_STANDARD_MASK = 63 shl 16
+        const val DATASPACE_STANDARD_BT2020 = 6 shl 16
+        const val DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE = 7 shl 16
+        const val DATASPACE_TRANSFER_MASK = 31 shl 22
+        const val DATASPACE_TRANSFER_ST2084 = 7 shl 22
+        const val DATASPACE_TRANSFER_HLG = 8 shl 22
+    }
 }
 
 data class OpenCineLogRecordingEvidence(
@@ -93,6 +119,10 @@ data class OpenCineLogRecordingEvidence(
     val sourcePrecision: String,
     val sourceSurface: String = "PRIVATE",
     val sourceDataSpace: Int?,
+    /** Recorded frames whose dataspace the tier's shader cannot decode; null when the platform does not report it. */
+    val sourceDataSpaceMismatchedFrames: Long? = null,
+    /** First dataspace that did not match the tier, kept so a mismatch can be diagnosed from the sidecar. */
+    val unexpectedSourceDataSpace: Int? = null,
     val curve: String = "OCLog2",
     val curveVersion: String = "2.0",
     val gamut: String = "BT.2020",
@@ -818,11 +848,11 @@ class OpenCineLogGpuPipeline(
             texture.updateTexImage()
             val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
             texture.getTransformMatrix(textureMatrix)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                lastSourceDataSpace = texture.dataSpace
-            }
+            val frameDataSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) texture.dataSpace else null
+            lastSourceDataSpace = frameDataSpace
             val timestampNs = texture.timestamp
             recording?.takeIf { it.acceptFrames.get() && recordingFrameMeetsWhiteBalanceBoundary(timestampNs, it.minimumSensorTimestampNs) }?.let { active ->
+                active.noteSourceDataSpace(frameDataSpace, sourcePath)
                 val capturePts = active.captureEpoch?.mapVideoInput(timestampNs)
                 if (!active.videoRegressionLogged && (active.captureEpoch?.regressedVideoFrames() ?: 0L) > 0L) {
                     active.videoRegressionLogged = true
@@ -1351,6 +1381,8 @@ class OpenCineLogGpuPipeline(
                     codecName = active.candidate.codecName,
                     targetFps = targetFps,
                     sourceDataSpace = lastSourceDataSpace,
+                    sourceDataSpaceMismatchedFrames = active.dataSpaceMismatchedFrames,
+                    unexpectedSourceDataSpace = active.unexpectedDataSpace,
                     transformSha256 = transformSha256(sourcePath),
                     encodedFrames = active.frames,
                     firstPtsUs = active.firstPtsUs,
@@ -1822,6 +1854,19 @@ class OpenCineLogGpuPipeline(
         var lastPtsUs: Long? = null
         var maxVideoPtsGapUs: Long? = null
         var videoPtsGapsOverThreshold = 0L
+        var dataSpaceMismatchedFrames: Long? = null
+        var unexpectedDataSpace: Int? = null
+        var dataSpaceMismatchLogged = false
+        fun noteSourceDataSpace(dataSpace: Int?, sourcePath: OpenCineLogSourcePath) {
+            if (dataSpace == null) return
+            val mismatched = !sourcePath.acceptsDataSpace(dataSpace)
+            dataSpaceMismatchedFrames = (dataSpaceMismatchedFrames ?: 0L) + if (mismatched) 1L else 0L
+            if (mismatched && unexpectedDataSpace == null) unexpectedDataSpace = dataSpace
+            if (mismatched && !dataSpaceMismatchLogged) {
+                dataSpaceMismatchLogged = true
+                android.util.Log.w(LOG_TAG, "Source dataspace $dataSpace does not match ${sourcePath.name}; the OCLog2 decode is wrong for these frames.")
+            }
+        }
     }
 
     private data class PendingMuxSample(
@@ -1924,6 +1969,7 @@ class OpenCineLogGpuPipeline(
             const float HLG_B = 0.28466892;
             const float HLG_C = 0.55991073;
             vec3 inverseHlg(vec3 e) {
+                e = clamp(e, 0.0, 1.0);
                 bvec3 low = lessThanEqual(e, vec3(0.5));
                 vec3 lowPart = (e * e) / 3.0;
                 vec3 highPart = (exp((e - HLG_C) / HLG_A) + HLG_B) / 12.0;
