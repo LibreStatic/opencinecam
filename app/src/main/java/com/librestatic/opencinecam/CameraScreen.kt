@@ -1623,7 +1623,6 @@ internal fun AdaptiveCaptureChrome(
                     binder = binder,
                     settings = settings,
                     onSettingsChanged = onSettingsChanged,
-                    onOpenMedia = onOpenMedia,
                     onOpenSettings = onOpenSettings,
                     modifier = Modifier.width(startRail),
                 )
@@ -1642,6 +1641,7 @@ internal fun AdaptiveCaptureChrome(
                     onControl = { manualControl = it; showModeGrid = false; showMonitoring = false },
                     onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
                     onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
+                    onOpenMedia = onOpenMedia,
                     modifier = Modifier.width(endRail),
                 )
             }
@@ -1757,7 +1757,7 @@ private fun CaptureTopBar(
     modifier: Modifier = Modifier,
     // The side-rail layout stacks the same actions in the start rail instead of across the top.
     vertical: Boolean = false,
-    // Compact portrait keeps the gallery thumbnail beside the shutter, under the thumb.
+    // Compact portrait and the side rails keep the gallery thumbnail beside the shutter, under the thumb.
     showThumbnail: Boolean = true,
     height: androidx.compose.ui.unit.Dp = STACKED_TOP_BAR_HEIGHT_DP.dp,
 ) {
@@ -1800,7 +1800,7 @@ private fun CaptureTopBar(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
+            if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
             CaptureStatusLine(state, Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 3, textAlign = TextAlign.Center)
             ThermalHudChip()
             androidx.compose.foundation.layout.FlowRow(
@@ -2132,8 +2132,9 @@ private fun LandscapeControlDeck(
 }
 
 /**
- * Start rail of the side-rail layout: the top-bar actions, then the F-keys and preset slots. It
- * scrolls rather than clipping when a long F-key list does not fit the window height.
+ * Start rail of the side-rail layout: the top-bar actions, then the F-keys as a two-column grid
+ * and the preset slots. It still scrolls rather than clipping if preset slots push it past the
+ * window height.
  */
 @Composable
 private fun CaptureStartRail(
@@ -2141,7 +2142,6 @@ private fun CaptureStartRail(
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
-    onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -2152,25 +2152,27 @@ private fun CaptureStartRail(
             .verticalScroll(rememberScrollState())
             .testTag("capture-start-rail"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
     ) {
         CaptureTopBar(
             state = state,
             binder = binder,
-            onOpenMedia = onOpenMedia,
+            onOpenMedia = {},
             onOpenSettings = onOpenSettings,
             settings = settings,
             onSettingsChanged = onSettingsChanged,
             vertical = true,
+            showThumbnail = false,
         )
-        OperatorButtonRow(state, settings)
+        OperatorButtonGrid(state, settings, Modifier.fillMaxWidth())
         PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
     }
 }
 
 /**
- * End rail of the side-rail layout: exposure cells and the mode selector above, the shutter held
- * at the bottom so it never scrolls away, with monitoring beside it as the secondary action.
+ * End rail of the side-rail layout, in two columns: the exposure controls as one vertical strip
+ * that scrolls on its own, and beside it the mode selector over the shutter, which is held at the
+ * bottom so it never scrolls away, with monitoring above it as the secondary action.
  */
 @Composable
 private fun CaptureEndRail(
@@ -2181,6 +2183,7 @@ private fun CaptureEndRail(
     onControl: (ControlDial) -> Unit,
     onShowModes: () -> Unit,
     onShowMonitoring: () -> Unit,
+    onOpenMedia: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -2191,24 +2194,26 @@ private fun CaptureEndRail(
             .testTag("capture-end-rail"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            QuickControls(state, onControl, landscape = true)
-            if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = true)
-            else SelectedModeButton(state, onShowModes)
-            StatusInfoBar(state, settings)
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            QuickControls(state, onControl, landscape = true, modifier = Modifier.width(SIDE_RAIL_EXPOSURE_WIDTH_DP.dp).fillMaxHeight())
+            Column(
+                Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = true)
+                    else SelectedModeButton(state, onShowModes)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
+                    TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
+                }
+                Spacer(Modifier.height(6.dp))
+                CaptureButton(state, binder, settings, 64.dp)
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
-            CaptureButton(state, binder, settings, 64.dp)
-        }
+        Spacer(Modifier.height(4.dp))
+        StatusInfoBar(state, settings)
         RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
         BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
         BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
@@ -2218,7 +2223,7 @@ private fun CaptureEndRail(
 }
 
 @Composable
-private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit, landscape: Boolean) {
+private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit, landscape: Boolean, modifier: Modifier = Modifier) {
     val controls = buildList {
         if (state.selectedMode in CameraUiState.resolutionProfileModes) add(ControlDial.RESOLUTION)
         if (state.selectedMode == CaptureMode.TIME_LAPSE) add(ControlDial.INT)
@@ -2231,16 +2236,29 @@ private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit
         if (state.aeCompensationSupported) add(ControlDial.EV)
         add(ControlDial.FOCUS)
     }
-    if (landscape) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            controls.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    row.forEach { control -> QuickControlButton(control, state, onControl, Modifier.weight(1f)) }
-                    repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                }
+    if (landscape) ExposureColumn(controls, state, onControl, modifier) else ExposureStrip(controls, state, onControl)
+}
+
+/** The exposure strip turned upright for the side rail: one column that scrolls when it does not fit. */
+@Composable
+private fun ExposureColumn(controls: List<ControlDial>, state: CameraUiState, onControl: (ControlDial) -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(10.dp)
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(Color(0xFF12171A).chromePanel())
+                .border(1.dp, Color(0xFF263036), shape)
+                .verticalScroll(rememberScrollState())
+                .testTag("exposure-column"),
+        ) {
+            controls.forEachIndexed { index, control ->
+                if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 10.dp).background(Color(0xFF2E383E)))
+                QuickControlButton(control, state, onControl, Modifier.fillMaxWidth(), inStrip = true, stripValueSize = 14.sp)
             }
         }
-    } else ExposureStrip(controls, state, onControl)
+    }
 }
 
 /**
@@ -2487,7 +2505,7 @@ private fun ModeDial(
         }
         Column(
             Modifier
-                .width(150.dp)
+                .fillMaxWidth()
                 .height(itemHeight * 5)
                 .semantics { contentDescription = dialDescription },
             horizontalAlignment = Alignment.CenterHorizontally,

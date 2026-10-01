@@ -117,6 +117,25 @@ internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, a
 }
 
 /**
+ * The F-keys as square icon keys two to a row, for the side rail: five keys take three rows
+ * instead of five full-width chips, so the rail fits a phone's landscape height without scrolling.
+ */
+@Composable
+internal fun OperatorButtonGrid(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier,
+    actions: OperatorActions? = LocalOperatorActions.current) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 11.sp)
+        FlowRow(
+            maxItemsInEachRow = 2,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            OperatorButtons(state, settings, actions, compact = true)
+        }
+    }
+}
+
+/**
  * The same F-keys as a column of icon keys laid over the viewfinder edge, for portrait windows
  * where a full-width row would cost a line of viewfinder. Each key still states ON/OFF in text.
  */

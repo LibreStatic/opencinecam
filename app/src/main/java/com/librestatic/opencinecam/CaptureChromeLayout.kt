@@ -16,11 +16,14 @@ internal enum class CaptureChromeLayout { STACKED, SIDE_RAILS }
 /** Windows at least this tall have room for the stacked deck below the viewfinder. */
 internal const val SIDE_RAIL_MAX_HEIGHT_DP = 480f
 
-/** Start rail: camera actions and the F-keys. Wide enough for two 48 dp actions side by side. */
-internal const val SIDE_RAIL_START_WIDTH_DP = 104f
+/** Start rail: camera actions and the F-keys. Wide enough for two 52 dp F-keys side by side. */
+internal const val SIDE_RAIL_START_WIDTH_DP = 120f
 
-/** End rail: exposure cells, the mode selector and the shutter. Fits the 150 dp vertical dial. */
-internal const val SIDE_RAIL_END_WIDTH_DP = 176f
+/** End rail: the exposure column beside a column with the mode selector and the shutter. */
+internal const val SIDE_RAIL_END_WIDTH_DP = 196f
+
+/** Exposure column inside the end rail; the mode column takes what is left. */
+internal const val SIDE_RAIL_EXPOSURE_WIDTH_DP = 68f
 
 /**
  * Chooses the chrome arrangement from the safe window size in dp. Rails are only used when the
