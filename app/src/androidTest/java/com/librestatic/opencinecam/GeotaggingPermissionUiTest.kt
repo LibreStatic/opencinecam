@@ -16,13 +16,21 @@ import org.junit.Rule
 import org.junit.Test
 
 /** Real ActivityResult and PermissionController UI, not a simulated Content callback.
- * Runner preconditions: API 33+, CAMERA granted; COARSE/FINE revoked with user-set/user-fixed
+ * Runner preconditions: API 33+; COARSE/FINE revoked with user-set/user-fixed
  * flags cleared before instrumentation, so one denial still permits a second Android prompt.
  * Uses standard Android PermissionController resource IDs, independent of translated labels.
  * The grant remains after this case; the runner restores permissions outside instrumentation.
  */
 class GeotaggingPermissionUiTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    /** Onboarding and CAMERA are settled before MainActivity starts; granting never restarts the process. */
+    @get:Rule(order = 0) val preconditions = object : org.junit.rules.ExternalResource() {
+        override fun before() {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            OnboardingStore(instrumentation.targetContext).markCompleted()
+            instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, Manifest.permission.CAMERA)
+        }
+    }
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
 
@@ -37,15 +45,12 @@ class GeotaggingPermissionUiTest {
                 flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
             }
             assertTrue("Runner requires API 33+", Build.VERSION.SDK_INT >= 33)
-            // Granting never restarts the process, so CAMERA is granted here; revoking would kill it,
-            // so a location grant left by an earlier run can only be skipped.
-            instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+            // Revoking would kill the process, so a location grant left by an earlier run can only be skipped.
             assertEquals("CAMERA grant failed", PackageManager.PERMISSION_GRANTED,
                 ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA))
             org.junit.Assume.assumeTrue("Revoke location before running: adb shell pm revoke ${context.packageName} " +
                 "android.permission.ACCESS_FINE_LOCATION (and ACCESS_COARSE_LOCATION)", locationPermission(context) == null)
             instrumentation.runOnMainSync { repository.set(initial) }
-            compose.activityRule.scenario.recreate() // MainActivity started before CAMERA was granted.
             compose.waitUntil(15_000) {
                 compose.onAllNodesWithContentDescription(context.getString(R.string.settings_tab)).fetchSemanticsNodes().isNotEmpty()
             }
