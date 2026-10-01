@@ -65,6 +65,7 @@ class GalleryNavigationDeviceTest {
             compose.onNodeWithTag("media-playback-close",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-playback-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
+            compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
             compose.onNodeWithTag("gallery-share-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-share-dialog",useUnmergedTree = true).assertExists()
             compose.pickChoice("media-share-content-METADATA_ONLY")
@@ -80,12 +81,14 @@ class GalleryNavigationDeviceTest {
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
             // Rename through the real activity, preserving URI identity, original bytes and slate.
             val originalMetadata = related.associateWith { uri -> context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() } }
+            compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
             compose.onNodeWithTag("gallery-rename-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performTextReplacement("Vista previa")
             compose.onNodeWithTag("media-rename-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-rename-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertEquals(take, LocalMediaRepository(context).page(GallerySettings(),token).takes.single())
             for ((uri, content) in originalMetadata) assertArrayEquals(content, context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() })
+            compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
             compose.onNodeWithTag("gallery-rename-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performTextReplacement("Renamed café")
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performImeAction()
@@ -105,11 +108,13 @@ class GalleryNavigationDeviceTest {
                     compose.onNodeWithTag("gallery-name-${take.id}",useUnmergedTree = true).assertTextEquals(renamed.primary.name) }.isSuccess
             }
             // Real activity confirmation drives production deleter and the subsequent catalog query.
+            compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
             compose.onNodeWithTag("gallery-delete-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-delete-confirm",useUnmergedTree = true).assertIsNotEnabled()
             compose.onNodeWithTag("media-delete-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-delete-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
+            compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
             compose.onNodeWithTag("gallery-delete-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-delete-acknowledge",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-delete-confirm",useUnmergedTree = true).performClick()

@@ -104,5 +104,5 @@ class ProxyPolicyDeviceTest {
             }
         }
     }
-    private fun node(tag: String) = compose.onNodeWithTag("proxy-settings-$tag", useUnmergedTree = true)
+    private fun node(tag: String) = compose.settingsNode("proxy-settings-$tag", Regex("^(battery|space)-\\d+(-label)?$").matches(tag))
 }
