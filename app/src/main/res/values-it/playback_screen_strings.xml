@@ -23,4 +23,5 @@
     <string name="playback_screen_color_error_message">Puoi interpretarla con i tag SDR della traccia; la precisione del colore non è verificata.</string>
     <string name="playback_screen_stage_error_title">Vista di monitoraggio OCLog2 non disponibile</string>
     <string name="playback_screen_stage_error_message">La clip è mostrata senza la fase di vista LOG.</string>
+    <string name="playback_screen_info">Dettagli della clip</string>
 </resources>

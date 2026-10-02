@@ -23,4 +23,5 @@
     <string name="playback_screen_color_error_message">Du kannst ihn mit den SDR-Tags der Spur interpretieren; die Farbgenauigkeit wird nicht geprüft.</string>
     <string name="playback_screen_stage_error_title">OCLog2-Monitoransicht nicht verfügbar</string>
     <string name="playback_screen_stage_error_message">Der Clip wird ohne die LOG-Ansichtsstufe gezeigt.</string>
+    <string name="playback_screen_info">Clipdetails</string>
 </resources>
