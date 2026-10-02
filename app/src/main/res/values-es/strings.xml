@@ -260,7 +260,6 @@
     <string name="fold_preview_mirror">Espejar la vista exterior</string>
     <string name="fold_preview_assist">Asistencia de visualización LOG exterior</string>
     <string name="subject_preview_mode_unavailable">La vista de cámara requiere el modo Video o LOG.</string>
-    <string name="subject_preview_high_speed_unavailable">La vista de cámara no está disponible en alta velocidad: la toma va directo al codificador.</string>
     <string name="subject_preview_waiting">Esperando cuadros de cámara</string>
     <string name="subject_preview_stale">Vista pausada — el último cuadro está desactualizado</string>
     <string name="subject_preview_age">Vista · %1$d ms desde la recepción del cuadro</string>

@@ -12,16 +12,16 @@ interface SubjectPreviewPort {
 }
 
 /** Why the subject window cannot show the camera, or null when it can. */
-enum class SubjectPreviewBlock { MODE, HIGH_SPEED }
+enum class SubjectPreviewBlock { MODE }
 
 /**
- * The subject preview rides the GPU viewfinder. A constrained high-speed VIDEO take must reach the
- * encoder directly (the GPU texture only gets the ~30 fps preview share), so the subject preview
- * never switches that graph to the GPU: it reports HIGH_SPEED instead of degrading the file.
+ * The subject preview rides the GPU viewfinder, which every selectable mode can drive: photo
+ * modes keep their still readers, and a constrained high-speed take keeps the encoder surface
+ * direct while the GPU only fans the ~30 fps preview share out to the operator and subject.
+ * APV and RAW video own their own graphs and stay blocked.
  */
-fun subjectPreviewBlock(mode: CaptureMode, videoConstrainedHighSpeed: Boolean): SubjectPreviewBlock? = when {
-    mode != CaptureMode.VIDEO && mode != CaptureMode.LOG -> SubjectPreviewBlock.MODE
-    mode == CaptureMode.VIDEO && videoConstrainedHighSpeed -> SubjectPreviewBlock.HIGH_SPEED
+fun subjectPreviewBlock(mode: CaptureMode): SubjectPreviewBlock? = when (mode) {
+    CaptureMode.APV, CaptureMode.RAW_VIDEO -> SubjectPreviewBlock.MODE
     else -> null
 }
 

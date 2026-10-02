@@ -530,6 +530,9 @@ class Camera2PreviewEngine(
     private var passthroughVideoPipeline = false
     private var gpuPreviewEnabled = false
     @Volatile private var gpuPhotoPreviewEnabled = false
+    // A constrained high-speed MediaRecorder take running under the GPU viewfinder: the encoder
+    // surface stays direct and the pipeline only receives the preview share for its displays.
+    @Volatile private var recorderOverGpuPreview = false
     private var cameraOpening = false
     private var closingCamera: CameraDevice? = null
     private val retiringPipelines = mutableSetOf<OpenCineLogGpuPipeline>()
@@ -2505,13 +2508,18 @@ class Camera2PreviewEngine(
         if (recordingLut != null) return false
         val cameraGeneration = generation
         val device = camera ?: return false
-        val surface = previewSurface ?: return false
         val descriptor = activeDescriptor ?: return false
-        if (recording || gpuPreviewEnabled) return false
+        if (recording) return false
+        val overGpu = gpuPreviewEnabled
+        // Only a constrained high-speed take may bypass an active GPU viewfinder: its encoder needs
+        // every frame, while the GPU camera texture keeps the preview share for the displays.
+        if (overGpu && activeVideoProfile?.constrainedHighSpeed != true) return false
+        val surface = (if (overGpu) logPipeline?.cameraInputSurface else previewSurface) ?: return false
         val request = RecorderRequest(cameraGeneration, device)
         synchronized(stillAdmissionLock) {
             if (bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null || !recorderRequest.compareAndSet(null, request)) return false
         }
+        recorderOverGpuPreview = overGpu
         if (!ownsRecorderRequest(request)) {
             recorderRequest.compareAndSet(request, null)
             return false
@@ -2831,7 +2839,7 @@ class Camera2PreviewEngine(
 
     fun stopVideo(): Boolean {
         if (!recording) return false
-        logPipeline?.let { return it.stopRecording() }
+        if (!recorderOverGpuPreview) logPipeline?.let { return it.stopRecording() }
         val request = recorderRequest.get() ?: return false
         if (!request.stopRequested.compareAndSet(false, true)) return false
         cameraExecutor.execute {
@@ -2839,6 +2847,7 @@ class Camera2PreviewEngine(
             val descriptor = activeDescriptor
             val device = camera
             val surface = previewSurface
+            val pipeline = logPipeline?.takeIf { recorderOverGpuPreview && gpuPreviewEnabled }
             var success = true
             runCatching { session?.stopRepeating() }
             runCatching { session?.close() }
@@ -2850,7 +2859,9 @@ class Camera2PreviewEngine(
             Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
             releaseRecorder(request)
             reportRecordingStopped(success, recorderOutputRetirement())
-            if (success && descriptor != null && device != null && surface?.isValid == true) {
+            if (success && descriptor != null && device != null && pipeline != null) {
+                configureGpuPreviewSession(device, descriptor, pipeline, generation)
+            } else if (success && descriptor != null && device != null && surface?.isValid == true) {
                 if (activeVideoProfile?.constrainedHighSpeed == true) {
                     configureHighSpeedPreviewSession(device, descriptor, surface, generation)
                 } else configureSession(device, descriptor, surface, generation)
@@ -4798,6 +4809,7 @@ class Camera2PreviewEngine(
         }
         recorder = null
         recordSurface = null
+        recorderOverGpuPreview = false
         // Release the acceptance fence last, never while MediaRecorder still owns native I/O.
         recorderRequest.compareAndSet(expected, null)
     }

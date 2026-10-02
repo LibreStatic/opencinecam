@@ -260,7 +260,6 @@
     <string name="fold_preview_mirror">Mirror exterior preview</string>
     <string name="fold_preview_assist">Exterior LOG view assist</string>
     <string name="subject_preview_mode_unavailable">Camera preview requires Video or LOG mode.</string>
-    <string name="subject_preview_high_speed_unavailable">Camera preview is unavailable during high-speed capture: the take goes straight to the encoder.</string>
     <string name="subject_preview_waiting">Waiting for camera frames</string>
     <string name="subject_preview_stale">Preview paused — last frame is out of date</string>
     <string name="subject_preview_age">Preview · %1$d ms since frame receipt</string>

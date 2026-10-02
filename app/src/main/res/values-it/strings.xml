@@ -260,7 +260,6 @@
     <string name="fold_preview_mirror">Specchia anteprima esterna</string>
     <string name="fold_preview_assist">Assistenza di visualizzazione LOG esterna</string>
     <string name="subject_preview_mode_unavailable">L\'anteprima della fotocamera richiede la modalità Video o LOG.</string>
-    <string name="subject_preview_high_speed_unavailable">L\'anteprima della fotocamera non è disponibile ad alta velocità: la ripresa va direttamente all\'encoder.</string>
     <string name="subject_preview_waiting">In attesa dei frame della fotocamera</string>
     <string name="subject_preview_stale">Anteprima in pausa — l\'ultimo frame è obsoleto</string>
     <string name="subject_preview_age">Anteprima · %1$d ms dalla ricezione del frame</string>

@@ -30,7 +30,6 @@ import com.librestatic.opencinecam.CaptureCountdown
 
 import com.librestatic.opencinecam.SubjectPreviewPort
 import com.librestatic.opencinecam.SubjectSurfaceRegistry
-import com.librestatic.opencinecam.SubjectPreviewBlock
 import com.librestatic.opencinecam.subjectPreviewBlock
 import com.librestatic.opencinecam.SubjectDisplayMode
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
@@ -680,13 +679,13 @@ class CaptureService : Service() {
 
     private fun desiredGpuViewfinder(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
         mode in setOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE) ||
+        // The subject preview rides the GPU viewfinder in every mode it supports. A constrained
+        // high-speed take still reaches the encoder directly (startVideo); only the 30 fps preview
+        // share goes through the GPU to the operator and subject windows.
+        (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW && subjectPreviewBlock(mode) == null) ||
         // Off-speed conforms frames on the GPU only at regular rates: in a constrained high-speed
-        // session Camera2 feeds any non-encoder surface 30 fps, so those takes go to the encoder
-        // directly (see startVideo) and the viewfinder stays direct.
-        // The subject preview follows the same rule (subjectPreviewBlock): never for a high-speed take.
-        (mode == CaptureMode.VIDEO && ((settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW &&
-                subjectPreviewBlock(mode, cameraState.value.activeVideoProfile?.constrainedHighSpeed == true) == null) ||
-            (settings.videoOffSpeed && cameraState.value.activeVideoProfile?.constrainedHighSpeed != true) ||
+        // session Camera2 feeds any non-encoder surface 30 fps, so those takes go to the encoder directly.
+        (mode == CaptureMode.VIDEO && ((settings.videoOffSpeed && cameraState.value.activeVideoProfile?.constrainedHighSpeed != true) ||
             currentOperatorLut != null || currentRecordingLut != null || recordingLutIntent.get()?.lut != null)) ||
         (photoPreviewMode(mode) && currentOperatorLut != null)
 
@@ -705,11 +704,10 @@ class CaptureService : Service() {
         val epoch = subjectPreviewEpoch.incrementAndGet()
         if (subjectPortClosed) return
         val lease = subjectSurfaces.current ?: return
-        val block = subjectPreviewBlock(cameraState.value.selectedMode, cameraState.value.activeVideoProfile?.constrainedHighSpeed == true)
+        val block = subjectPreviewBlock(cameraState.value.selectedMode)
         if (block != null || settings.subjectDisplay.mode != SubjectDisplayMode.PREVIEW) {
             previewEngine.detachSubjectPreview(lease.token)
-            subjectStatus.value = SubjectPreviewStatus(failure = getString(
-                if (block == SubjectPreviewBlock.HIGH_SPEED) R.string.subject_preview_high_speed_unavailable else R.string.subject_preview_mode_unavailable))
+            subjectStatus.value = SubjectPreviewStatus(failure = getString(R.string.subject_preview_mode_unavailable))
             resetSubjectLutStatus()
             return
         }
@@ -719,7 +717,7 @@ class CaptureService : Service() {
             mainHandler.post {
                 fun ownsTarget(state: CameraUiState): Boolean = !serviceDestroyed && !subjectPortClosed &&
                     subjectSurfaces.owns(lease.token) && subjectPreviewEpoch.get() == epoch &&
-                    state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG) && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW
+                    subjectPreviewBlock(state.selectedMode) == null && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW
                 if (ownsTarget(cameraState.value)) {
                     val presented = status.lutStatus?.takeIf { it.selectionId == monitorLutIdentity(currentSubjectLut) }
                     subjectStatus.value = status.copy(lutStatus = presented)
@@ -1680,9 +1678,9 @@ class CaptureService : Service() {
                 previewEngine.detachPreviewWhileRecording()
                 return
             }
-            // Photographic subject preview is not routed yet: an auxiliary lease must not
-            // retain a hidden photographic graph after its queued capture was cancelled.
-            if (!photoPreviewMode() && subjectSurfaces.current != null && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW &&
+            // A live subject lease keeps the GPU graph (photo modes included) for the cover window.
+            if (subjectSurfaces.current != null && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW &&
+                subjectPreviewBlock(cameraState.value.selectedMode) == null &&
                 previewEngine.detachOperatorFromActiveGpuPreview()) return
             previewEngine.stopPreview()
             activePreviewKey = null
@@ -2683,7 +2681,7 @@ class CaptureService : Service() {
                         val recordingLutForTake = frozenRecordingLut()
                         val directHighSpeed = current.activeVideoProfile?.constrainedHighSpeed == true &&
                             recordingLutForTake == null && audioSidecarRecorder == null &&
-                            activeRecordingGain?.enabled != true && !previewEngine.usesGpuViewfinder() &&
+                            activeRecordingGain?.enabled != true &&
                             !settings.anamorphicSqueeze.isActive
                         // The encoder then stores the sensor raster and the MP4 matrix rotates it,
                         // so the take is described (and validated) as native raster.
