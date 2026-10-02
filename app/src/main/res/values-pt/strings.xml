@@ -252,6 +252,10 @@
     <string name="subject_status_only">Tela de status — sem pré-visualização da câmera</string>
     <string name="fold_close_sensor_unknown">A disponibilidade do sensor da dobradiça ainda não foi verificada.</string>
     <string name="fold_mode_preview">Pré-visualização da câmera</string>
+    <string name="fold_mode_fill_light">Luz de preenchimento</string>
+    <string name="fold_mode_review">Revisão de tomadas</string>
+    <string name="fold_mode_interview">Perguntas da entrevista</string>
+    <string name="fold_mode_slate">Claquete digital</string>
     <string name="fold_preview_help">A pré-visualização está disponível em Vídeo e LOG. O espelhamento externo e a assistência de visualização não alteram a imagem gravada. Uma sessão de tela só começa quando você a solicita.</string>
     <string name="fold_preview_mirror">Espelhar pré-visualização externa</string>
     <string name="fold_preview_assist">Assistência de visualização LOG externa</string>

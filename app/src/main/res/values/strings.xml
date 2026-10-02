@@ -252,6 +252,10 @@
     <string name="subject_status_only">Status display — no camera preview</string>
     <string name="fold_close_sensor_unknown">Hinge sensor availability has not been checked yet.</string>
     <string name="fold_mode_preview">Camera preview</string>
+    <string name="fold_mode_fill_light">Fill light</string>
+    <string name="fold_mode_review">Take review</string>
+    <string name="fold_mode_interview">Interview questions</string>
+    <string name="fold_mode_slate">Digital slate</string>
     <string name="fold_preview_help">Preview is available in Video and LOG. Exterior mirror and view assist do not change the recorded image. A display session starts only when you request it.</string>
     <string name="fold_preview_mirror">Mirror exterior preview</string>
     <string name="fold_preview_assist">Exterior LOG view assist</string>

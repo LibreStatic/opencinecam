@@ -252,6 +252,10 @@
     <string name="subject_status_only">Pantalla de estado — sin imagen de cámara</string>
     <string name="fold_close_sensor_unknown">Todavía no se comprobó la disponibilidad del sensor de bisagra.</string>
     <string name="fold_mode_preview">Vista de cámara</string>
+    <string name="fold_mode_fill_light">Luz de relleno</string>
+    <string name="fold_mode_review">Revisión de tomas</string>
+    <string name="fold_mode_interview">Preguntas de entrevista</string>
+    <string name="fold_mode_slate">Claqueta digital</string>
     <string name="fold_preview_help">La vista está disponible en Video y LOG. El espejo y la asistencia exterior no modifican la imagen grabada. La sesión de pantalla sólo comienza cuando la solicitás.</string>
     <string name="fold_preview_mirror">Espejar la vista exterior</string>
     <string name="fold_preview_assist">Asistencia de visualización LOG exterior</string>

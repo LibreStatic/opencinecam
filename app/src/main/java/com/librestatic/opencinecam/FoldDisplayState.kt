@@ -5,7 +5,12 @@ enum class DisplayCapability { UNKNOWN, UNSUPPORTED, UNAVAILABLE, AVAILABLE, ACT
 enum class DisplayOperation { PRESENT, TRANSFER }
 enum class DisplaySessionPhase { IDLE, STARTING, ACTIVE }
 enum class FoldPosture { NONE_REPORTED, FLAT, TABLETOP, BOOK, SEPARATING }
-enum class SubjectDisplayMode { STATUS, TELEPROMPTER, PREVIEW }
+enum class SubjectDisplayMode { STATUS, TELEPROMPTER, PREVIEW, FILL_LIGHT, REVIEW, INTERVIEW, SLATE }
+enum class SubjectPreviewGuide { NONE, THIRDS, SAFE_AREA }
+enum class SubjectSlateField { PROJECT, SCENE, TAKE, CAMERA, REEL, TIMECODE }
+
+const val SUBJECT_INTERVIEW_MAX_QUESTIONS = 50
+const val SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH = 300
 
 data class SubjectDisplaySettings(
     val mode: SubjectDisplayMode = SubjectDisplayMode.STATUS,
@@ -24,6 +29,24 @@ data class SubjectDisplaySettings(
     val previewViewAssist: Boolean = true,
     val selfTimerSeconds: Int = 0,
     val selfMinimalControls: Boolean = true,
+    // Subject self-monitor overlays; they draw on the exterior surface only, never the file.
+    val previewRecordedAreaBands: Boolean = true,
+    val previewGuide: SubjectPreviewGuide = SubjectPreviewGuide.NONE,
+    val previewAudioMeter: Boolean = false,
+    val tallyBorder: Boolean = true,
+    val giantCountdown: Boolean = true,
+    val fillLightKelvin: Int = 5000,
+    val fillLightTint: Int = 0,
+    // Zero keeps the fill light on until the operator changes mode.
+    val fillLightTimeoutSeconds: Int = 0,
+    // Kept apart from the teleprompter script; it shares only the font size.
+    val interviewQuestions: List<String> = emptyList(),
+    val slateFields: Set<SubjectSlateField> = SubjectSlateField.entries.toSet(),
+    val slateSyncFlash: Boolean = false,
+    // Off by default: the beep also lands in this phone's own recording.
+    val slateSyncBeep: Boolean = false,
+    val outOfFrameWarning: Boolean = false,
+    val outOfFrameDelaySeconds: Int = 2,
 ) {
     init {
         require(brightness.isFinite() && brightness in 0f..1f)
@@ -32,7 +55,21 @@ data class SubjectDisplaySettings(
         require(prompterFontSp in 16..72)
         require(prompterSpeedDpPerSecond in 5..120)
         require(selfTimerSeconds in setOf(0, 3, 5, 10))
+        require(fillLightKelvin in 2700..6500)
+        require(fillLightTint in -50..50)
+        require(fillLightTimeoutSeconds in 0..3600)
+        require(interviewQuestions.size <= SUBJECT_INTERVIEW_MAX_QUESTIONS)
+        require(interviewQuestions.all { it.isNotBlank() && it.length <= SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH })
+        require(outOfFrameDelaySeconds in 1..10)
     }
+}
+
+/** Operator-driven subject state that is never persisted: the review pick and the interview position. */
+data class SubjectSessionCues(
+    val reviewUri: String? = null,
+    val interviewIndex: Int = 0,
+) {
+    init { require(interviewIndex >= 0) }
 }
 
 data class FoldHinge(val left: Int, val top: Int, val right: Int, val bottom: Int, val horizontal: Boolean)

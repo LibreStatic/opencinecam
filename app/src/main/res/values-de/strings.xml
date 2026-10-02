@@ -252,6 +252,10 @@
     <string name="subject_status_only">Statusanzeige – keine Kameravorschau</string>
     <string name="fold_close_sensor_unknown">Die Verfügbarkeit des Scharniersensors wurde noch nicht geprüft.</string>
     <string name="fold_mode_preview">Kameravorschau</string>
+    <string name="fold_mode_fill_light">Aufhelllicht</string>
+    <string name="fold_mode_review">Take-Ansicht</string>
+    <string name="fold_mode_interview">Interviewfragen</string>
+    <string name="fold_mode_slate">Digitale Klappe</string>
     <string name="fold_preview_help">Die Vorschau ist in Video und LOG verfügbar. Externe Spiegelung und View Assist verändern das aufgenommene Bild nicht. Eine Display-Sitzung startet nur auf deine Anforderung.</string>
     <string name="fold_preview_mirror">Externe Vorschau spiegeln</string>
     <string name="fold_preview_assist">Externer LOG View Assist</string>

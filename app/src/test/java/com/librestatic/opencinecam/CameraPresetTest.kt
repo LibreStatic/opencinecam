@@ -18,6 +18,11 @@ class CameraPresetTest {
         val map = Json.parseToJsonElement(CameraPresetCodec.encode(preset())).jsonObject.toMutableMap(); change(map); return JsonObject(map).toString()
     }
     private fun invalid(text: String) { assertThrows(Exception::class.java) { CameraPresetCodec.decode(text) } }
+    // OCC-PLAN-068 subject preferences stay device-local until a schema revision and privacy review.
+    private val subjectFeatureKeys = setOf("subject-preview-bands", "subject-preview-guide", "subject-preview-audio-meter",
+        "subject-tally-border", "subject-giant-countdown", "subject-fill-kelvin", "subject-fill-tint", "subject-fill-timeout-seconds",
+        "subject-interview-questions", "subject-slate-fields", "subject-slate-sync-flash", "subject-slate-sync-beep",
+        "subject-out-of-frame", "subject-out-of-frame-delay")
     @Test fun completePortableSettingsRoundTripAndLocalValuesAreExcluded() {
         val original = preset(); val text = CameraPresetCodec.encode(original); val decoded = CameraPresetCodec.decode(text)
         assertEquals(original.settings, CameraPresetCodec.mergeLocal(decoded.settings, original.settings))
@@ -29,8 +34,18 @@ class CameraPresetTest {
         assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view"), CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
+    }
+    @Test fun subjectFeaturePreferencesAreNeitherExportedNorResetByAPreset() {
+        val local = SubjectDisplaySettings(interviewQuestions = listOf("private question"), fillLightKelvin = 3200, tallyBorder = false,
+            slateFields = setOf(SubjectSlateField.TIMECODE), outOfFrameWarning = true, previewGuide = SubjectPreviewGuide.THIRDS)
+        val current = CameraSettings(subjectDisplay = local)
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Subject", settings = current))
+        assertFalse(text.contains("private question"))
+        for (key in subjectFeatureKeys) assertFalse(key, text.contains(key))
+        val applied = CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, current.copy(subjectDisplay = local.copy(mode = SubjectDisplayMode.SLATE)))
+        assertEquals(local, applied.subjectDisplay)
     }
     @Test fun versionOneMigratesMissingSettingsAndCaptureIntentWithoutAppPreferenceMigrations() {
         val text = """{"format":"OpenCineCamPreset","version":1,"name":"Draft","settings":{"zebra-enabled":true,"audio-output-format":"WAV_PCM","mode-selector-style":"BUTTONS"}}"""

@@ -213,7 +213,17 @@ object CameraPresetCodec {
         logGreyReference = current.logGreyReference,
         // OCLog2 review view is a viewing habit of this device, not part of a look.
         playback = preset.playback.copy(logView = current.playback.logView),
-        subjectDisplay = preset.subjectDisplay.copy(prompterText = current.subjectDisplay.prompterText, operatorCue = current.subjectDisplay.operatorCue))
+        // Scripts, cues and the OCC-PLAN-068 subject preferences are not portable keys; only the
+        // registry-listed subject fields come from the preset.
+        subjectDisplay = current.subjectDisplay.copy(
+            mode = preset.subjectDisplay.mode, brightness = preset.subjectDisplay.brightness,
+            touchLocked = preset.subjectDisplay.touchLocked, showStatus = preset.subjectDisplay.showStatus,
+            prompterFontSp = preset.subjectDisplay.prompterFontSp, prompterSpeedDpPerSecond = preset.subjectDisplay.prompterSpeedDpPerSecond,
+            prompterPaused = preset.subjectDisplay.prompterPaused, continueRecordingOnFold = preset.subjectDisplay.continueRecordingOnFold,
+            adaptToHinge = preset.subjectDisplay.adaptToHinge, swapPanes = preset.subjectDisplay.swapPanes,
+            previewMirror = preset.subjectDisplay.previewMirror, previewViewAssist = preset.subjectDisplay.previewViewAssist,
+            selfTimerSeconds = preset.subjectDisplay.selfTimerSeconds, selfMinimalControls = preset.subjectDisplay.selfMinimalControls,
+        ))
 
     fun differences(current: CameraSettings, preset: CameraSettings): List<String> {
         val before = snapshot(current)

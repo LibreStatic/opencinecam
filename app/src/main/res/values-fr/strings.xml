@@ -252,6 +252,10 @@
     <string name="subject_status_only">Affichage d\'état — aucun aperçu caméra</string>
     <string name="fold_close_sensor_unknown">La disponibilité du capteur de charnière n\'a pas encore été vérifiée.</string>
     <string name="fold_mode_preview">Aperçu caméra</string>
+    <string name="fold_mode_fill_light">Lumière d\'appoint</string>
+    <string name="fold_mode_review">Revue des prises</string>
+    <string name="fold_mode_interview">Questions d\'interview</string>
+    <string name="fold_mode_slate">Clap numérique</string>
     <string name="fold_preview_help">L\'aperçu est disponible en Vidéo et LOG. Le miroir extérieur et l\'assistance de vue ne modifient pas l\'image enregistrée. Une session d\'affichage ne démarre que sur demande.</string>
     <string name="fold_preview_mirror">Miroir de l\'aperçu extérieur</string>
     <string name="fold_preview_assist">Assistance de vue LOG extérieure</string>

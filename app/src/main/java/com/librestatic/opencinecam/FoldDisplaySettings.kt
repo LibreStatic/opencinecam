@@ -56,6 +56,10 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
                 SubjectDisplayMode.STATUS -> R.string.fold_mode_status
                 SubjectDisplayMode.TELEPROMPTER -> R.string.fold_mode_prompter
                 SubjectDisplayMode.PREVIEW -> R.string.fold_mode_preview
+                SubjectDisplayMode.FILL_LIGHT -> R.string.fold_mode_fill_light
+                SubjectDisplayMode.REVIEW -> R.string.fold_mode_review
+                SubjectDisplayMode.INTERVIEW -> R.string.fold_mode_interview
+                SubjectDisplayMode.SLATE -> R.string.fold_mode_slate
             }) },
             onSelect = { update(subject.copy(mode = it)) }, tag = { "fold-mode-${it.name}" })
         FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }
@@ -93,7 +97,7 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
 private fun readableFieldColors() = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface)
 
 @Composable
-private fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+internal fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     var draft by remember(value) { mutableFloatStateOf(value) }
     Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
     Slider(draft, { draft = it }, valueRange = range, onValueChangeFinished = { onChange(draft) },
@@ -101,7 +105,7 @@ private fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRa
 }
 
 @Composable
-private fun FoldToggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
+internal fun FoldToggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value, role = Role.Switch, onValueChange = onChange), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, modifier = Modifier.weight(1f))
         Switch(value, onCheckedChange = null)

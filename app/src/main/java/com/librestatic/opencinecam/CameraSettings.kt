@@ -31,6 +31,9 @@ import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.OpenCineLogGreyReference
 
 import com.librestatic.opencinecam.camera.StillPhotoFormat
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 
 enum class ModeSelectorStyle { DIAL, BUTTONS }
 
@@ -284,6 +287,22 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             continueRecordingOnFold = preferences.getBoolean("fold-continue-recording", true),
             adaptToHinge = preferences.getBoolean("fold-adapt", true),
             swapPanes = preferences.getBoolean("fold-swap", false),
+            previewRecordedAreaBands = preferences.getBoolean("subject-preview-bands", true),
+            previewGuide = enumPreference("subject-preview-guide", SubjectPreviewGuide.NONE),
+            previewAudioMeter = preferences.getBoolean("subject-preview-audio-meter", false),
+            tallyBorder = preferences.getBoolean("subject-tally-border", true),
+            giantCountdown = preferences.getBoolean("subject-giant-countdown", true),
+            fillLightKelvin = preferences.getInt("subject-fill-kelvin", 5000).coerceIn(2700, 6500),
+            fillLightTint = preferences.getInt("subject-fill-tint", 0).coerceIn(-50, 50),
+            fillLightTimeoutSeconds = preferences.getInt("subject-fill-timeout-seconds", 0).coerceIn(0, 3600),
+            interviewQuestions = loadInterviewQuestions(),
+            slateFields = preferences.getString("subject-slate-fields", null)?.let { saved ->
+                saved.split(',').mapNotNullTo(linkedSetOf()) { name -> SubjectSlateField.entries.firstOrNull { it.name == name } }
+            } ?: SubjectSlateField.entries.toSet(),
+            slateSyncFlash = preferences.getBoolean("subject-slate-sync-flash", false),
+            slateSyncBeep = preferences.getBoolean("subject-slate-sync-beep", false),
+            outOfFrameWarning = preferences.getBoolean("subject-out-of-frame", false),
+            outOfFrameDelaySeconds = preferences.getInt("subject-out-of-frame-delay", 2).coerceIn(1, 10),
         ),
         audioEnabled = preferences.getBoolean(KEY_AUDIO, true),
         audioOutputFormat = migratedAudioOutputFormat(),
@@ -402,6 +421,20 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("fold-continue-recording", settings.subjectDisplay.continueRecordingOnFold)
             .putBoolean("fold-adapt", settings.subjectDisplay.adaptToHinge)
             .putBoolean("fold-swap", settings.subjectDisplay.swapPanes)
+            .putBoolean("subject-preview-bands", settings.subjectDisplay.previewRecordedAreaBands)
+            .putString("subject-preview-guide", settings.subjectDisplay.previewGuide.name)
+            .putBoolean("subject-preview-audio-meter", settings.subjectDisplay.previewAudioMeter)
+            .putBoolean("subject-tally-border", settings.subjectDisplay.tallyBorder)
+            .putBoolean("subject-giant-countdown", settings.subjectDisplay.giantCountdown)
+            .putInt("subject-fill-kelvin", settings.subjectDisplay.fillLightKelvin)
+            .putInt("subject-fill-tint", settings.subjectDisplay.fillLightTint)
+            .putInt("subject-fill-timeout-seconds", settings.subjectDisplay.fillLightTimeoutSeconds)
+            .putString("subject-interview-questions", JsonArray(settings.subjectDisplay.interviewQuestions.map(::JsonPrimitive)).toString())
+            .putString("subject-slate-fields", SubjectSlateField.entries.filter { it in settings.subjectDisplay.slateFields }.joinToString(",") { it.name })
+            .putBoolean("subject-slate-sync-flash", settings.subjectDisplay.slateSyncFlash)
+            .putBoolean("subject-slate-sync-beep", settings.subjectDisplay.slateSyncBeep)
+            .putBoolean("subject-out-of-frame", settings.subjectDisplay.outOfFrameWarning)
+            .putInt("subject-out-of-frame-delay", settings.subjectDisplay.outOfFrameDelaySeconds)
             .putString("image-stabilization", settings.imageProcessing.stabilization?.name ?: "DEFAULT")
             .putString("image-noise-reduction", settings.imageProcessing.noiseReduction.name)
             .putString("image-edge-enhancement", settings.imageProcessing.edge.name)
@@ -601,6 +634,13 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             goodTake = preferences.getBoolean("slate-good-take", false),
             autoIncrementTake = preferences.getBoolean("slate-auto-increment", false))
     }.getOrDefault(ProductionSlateSettings())
+
+    /** Stored as a JSON string array; malformed or oversized data is trimmed to the bounds, never rejected wholesale. */
+    private fun loadInterviewQuestions(): List<String> = runCatching {
+        (Json.parseToJsonElement(preferences.getString("subject-interview-questions", null) ?: return emptyList()) as JsonArray)
+            .mapNotNull { (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content?.take(SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH) }
+            .filter(String::isNotBlank).take(SUBJECT_INTERVIEW_MAX_QUESTIONS)
+    }.getOrDefault(emptyList())
 
     private fun loadAudioMeter() = runCatching {
         AudioMeterSettings(preferences.getBoolean("audio-meter-visible", true),

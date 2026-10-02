@@ -252,6 +252,10 @@
     <string name="subject_status_only">Display di stato — nessuna anteprima della fotocamera</string>
     <string name="fold_close_sensor_unknown">La disponibilità del sensore della cerniera non è ancora stata verificata.</string>
     <string name="fold_mode_preview">Anteprima fotocamera</string>
+    <string name="fold_mode_fill_light">Luce di riempimento</string>
+    <string name="fold_mode_review">Revisione riprese</string>
+    <string name="fold_mode_interview">Domande dell\'intervista</string>
+    <string name="fold_mode_slate">Ciak digitale</string>
     <string name="fold_preview_help">L\'anteprima è disponibile in Video e LOG. Lo specchio esterno e l\'assistenza di visualizzazione non modificano l\'immagine registrata. Una sessione display parte solo quando la richiedi.</string>
     <string name="fold_preview_mirror">Specchia anteprima esterna</string>
     <string name="fold_preview_assist">Assistenza di visualizzazione LOG esterna</string>
