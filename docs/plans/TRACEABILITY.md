@@ -118,4 +118,4 @@ Every accepted requirement maps to an accepted decision, risk, implementation pl
 
 | OCC-PRO-008 | OCC-PLAN-067 | ADR-0034 | InProgress; real conditional PUT/policy/MediaStore adapter, then complete finalized bundles, settings/worker/network/reconciliation and full H5 integration |
 
-| OCC-PRO-009 | OCC-PLAN-068 | ADR-0031 | Ready; tally/self-monitor/fill light/review/interview/slate/out-of-frame subject modes, then Razr Fold qualification of all subject roles |
+| OCC-PRO-009 | OCC-PLAN-068 | ADR-0031 | InProgress; tally/self-monitor/fill light/review/interview/slate/out-of-frame subject modes integrated and host/emulator verified (W0–W2); Razr Fold qualification of all subject roles (U8) open |

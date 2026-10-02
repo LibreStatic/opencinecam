@@ -1,8 +1,8 @@
 ---
 plan_id: OCC-PLAN-068
 title: "Exterior screen subject features and Razr Fold qualification"
-status: Ready
-revision: 2
+status: InProgress
+revision: 3
 milestone: H2
 intended_executor: Claude Code (Opus 5.5 subagents, parallel waves)
 execution_mode: implementation
@@ -186,7 +186,7 @@ python3 tools/validate_plan_system.py
 - [ ] U5: the operator advances questions without touching the subject screen; the bounds are enforced.
 - [ ] U6: the slate shows correct fields and timecode, and the sync marker time is in the sidecar, verified against the beep in the decoded audio.
 - [ ] U7: present only with capability, warns within the configured delay, and persists no face data.
-- [ ] Every new preference is in the settings catalog and searchable.
+- [x] Every new preference is in the settings catalog and searchable (host catalog tests and SettingsHubTest, W2).
 - [ ] U8: public capabilities recorded on the Razr Fold; every OCC-PLAN-064 and U1–U7 role is qualified or recorded as unsupported, with evidence.
 - [ ] U8: 20 open/close cycles in a 10-minute take with no file cut, lens change or geometry change.
 
@@ -211,4 +211,90 @@ Mark Done when all acceptance boxes pass on the physical device or are recorded 
 
 ## 21. Execution Record
 
-Created 2026-10-02 from the user's foldable feature selection. Revision 2 (same day, user decision): physical qualification moved last as U8, and execution assigned to parallel Opus 5.5 subagents in waves W0–W3. Not started.
+Created 2026-10-02 from the user's foldable feature selection. Revision 2 (same day, user decision): physical qualification moved last as U8, and execution assigned to parallel Opus 5.5 subagents in waves W0–W3.
+
+Revision 3 (2026-10-02): W0–W2 done; status InProgress until U8.
+
+- W0 foundation: `aaa260a` (modes, device-local preferences, unknown mode → STATUS) and `978ebda` (subject content, overlay and settings scaffold).
+- W1 units, one worktree branch each: `b09ca6a` A (U1 + U2), `1834da2` B (U3), `dbfcd73` C (U4), `96196d9` D (U5), `b027576` E (U6), `e715246` F (U7).
+- W2 integration: merge commits `5926464` (A), `76b2a18` (B), `7a0fbd5` (C), `1137b36` (D), `10e06cd` (E), `287a234` (F), then the integration fix commit `1aa1e92`. Conflicts were confined to `FoldDisplayCoordinator.kt` (C after B and E). Every unit's behaviour was kept: the subject composition nests the fill-light and review providers and receives the slate timecode rate and sync flash; `updateCameraState` feeds both the review controller and the sync marker; `ended`/`closeSession` stop review; `close` releases the fill-light monitor and the sync marker.
+- Integration fixes: FILL_LIGHT drew its own countdown badge under the giant numeral, so the subject saw two counts; it now uses the shared badge rule. The cover review player waits, bounded to 1.5 s, until the closing inner viewer's `MediaPlaybackSession` has closed and retired its exact reader, so the two decoders do not overlap after "Show to subject". If the operator leaves another viewer open past that bound, both still run (a recorded limit).
+- Review findings without change: the subject window still has no capture or settings action. `recordSubjectSyncMarker` only stores bounded evidence for the current take (rejected outside a take, once per take, never delays or stops it). With U7 off, `applyFaceDetect` leaves every builder untouched and `setSubjectFramingEnabled(false)` issues no request. With U7 on, the face-statistics key is added to the repeating request; the constrained high-speed graph never carries it, and a graph that ignores or fails it falls back without it. Face rectangles are reduced on the camera thread to a Boolean, an edge and a timestamp; nothing is logged, persisted or written to a sidecar. Z-order on the cover, bottom to top: mode content (including the full-bleed fill light), giant countdown, out-of-frame banner, tally border, sync flash. The operator interview control sits under the top bar in the preview pane and the out-of-frame chip sits in the top bar, so they do not overlap. Unknown stored modes still load as STATUS.
+- Decisions: a paused take shows an amber tally, not red. The fill light uses the shared subject window brightness request, capped by its timeout/thermal policy. The review LOG view follows `previewViewAssist` (REC709 when on, flat otherwise). The slate shows dashes for timecode while idle. Presets do not export the new subject keys (device-local).
+- Known limits: a REC start while REVIEW is on restores the previous mode in the same update, so a slate that was the previous mode does not fire the sync marker for that take. Out-of-frame banner and the fill-light thermal notice share the bottom centre and can overlap while both show. All cover output, brightness, decoder, thermal, audio and face-detect behaviour on real hardware is unqualified until U8.
+- Verification (W2): see the test record below; physical acceptance items remain unchecked for U8.
+
+### W2 verification record
+
+All Gradle calls ran one at a time under `flock ~/.cache/claude-tmp/opencinecam/gradle.lock` with `--no-daemon -Dorg.gradle.parallel=false --max-workers=2`.
+
+| Command | Exit | Result |
+|---|---|---|
+| `:core:model:test --rerun` | 0 | 53 tests, 0 failures |
+| `:media:testDebugUnitTest --rerun` | 0 | 54 tests, 0 failures |
+| `:camera:testDebugUnitTest --rerun` | 0 | 700 tests, 0 failures |
+| `:app:testDebugUnitTest --rerun` | 0 | 1,231 tests, 0 failures |
+| `:app:lintDebug` | 0 | 0 errors, 58 warnings, 2 hints; none in PLAN-068 files |
+| `./tools/check_format.sh` | 0 | 1,135 files |
+| `python3 tools/validate_plan_system.py` | 0 | 68 plans, traceability 100% |
+| Instrumented, API 36 `Pixel_9_Pro` read-only emulator on port 5570 (`adb -s` install, `am instrument`) | 0 | 75 tests: Subject Overlay/FillLight/Review/Interview/Slate/OutOfFrame/Preview, FoldDisplay, FoldPane, SettingsHub, SettingsPersistence, CaptureAdaptive. 74 passed on the first run. |
+| Rerun `SubjectReviewUiTest` after the test fix | 0 | 5 of 5 passed |
+| `MediaPlaybackDeviceTest`, `MediaPlaybackExactSurfaceDeviceTest` (touched session) | 0 | 8 of 8 passed |
+
+The single first-run failure was `SubjectReviewUiTest.operatorBarIsAbsentWithoutACoordinator`. It came from W1 C, not from the merge: the test expected the how-to text, but `SettingsHelp` starts collapsed. The test now opens the help before asserting. No physical device was used.
+
+## 22. U8 consolidated physical checklist
+
+Before anything else, ask the user to connect the Razr Fold. Assume it is disconnected, never reuse an earlier adb address, and re-detect it with `adb devices -l` after the user confirms. Install only with `adb -s <razr> install -r`; never `installDebug`. Record each item as PASS, FAIL (with the fix) or UNSUPPORTED (with evidence).
+
+Platform (OCC-PLAN-064 carry-over):
+
+- [ ] `FoldDisplayProbeTest` on the device: presentation and transfer capability, window areas, extension version, hinge sensor.
+- [ ] Dual presentation with STATUS, TELEPROMPTER and PREVIEW on the cover.
+- [ ] Self-recording transfer: 0/3/5/10 s timers, minimal deck, lens switching, microphone dialog.
+- [ ] 20 open/close cycles during a 10-minute take: no file cut, lens change or geometry change.
+- [ ] LOG with PREVIEW active; HFR with the exterior active (reduced cadence or explicit rejection).
+- [ ] Stop-on-close policy with the real hinge sensor.
+- [ ] Thermal state after 10 minutes of dual output.
+
+U1/U2 overlays:
+
+- [ ] Tally legible at 3 m; amber clearly distinct from red; red never stuck after stop.
+- [ ] Recorded-area bands match the decoded file for VIDEO and LOG, portrait and landscape, anamorphic; about 1 px band alignment on the 720 px subject buffer.
+- [ ] Guides and meter never appear in the file; mirror affects only the cover; meter reacts to sound.
+- [ ] Giant countdown at 3/5/10 s with TalkBack; overlays realign after rotation or aspect change; tally clears the punch-hole.
+
+U3 fill light:
+
+- [ ] Kelvin and tint visibly correct against a reference swatch; brightness request honoured (or recorded as capped by the system).
+- [ ] Timeout at 60 s and "turn back on"; thermal dim during a 20–30 minute 4K take with no take change; thermal listener released after leaving the mode.
+- [ ] AE/AWB suggestion shown, never auto-locked; 200% font.
+
+U4 review:
+
+- [ ] "Show to subject" only during a presentation; SDR plays fitted and looping, no touch; no audio and other apps' audio not paused.
+- [ ] OCLog2 709/flat matches the inner viewer; photo and DNG display.
+- [ ] REC stops review and restores the mode; a still photo does not; stop bar works; a new session starts clean.
+- [ ] Corrupt clip returns to STATUS; opening the same item inside stops the cover; no decoder overlap after "Show to subject"; 10-minute thermal.
+
+U5 interview:
+
+- [ ] "1 / 5" large and touch-inert on the cover; operator control placement in all layouts; buttons disable at the ends, with TalkBack.
+- [ ] Advancing during REC causes no cut; 300 characters at 72 sp and 200% font fit; shrinking the list clamps the index; a new session starts at 1.
+- [ ] More than 50 questions or 300 characters rejected; persistence; no control in transfer or other modes; legibility.
+
+U6 slate and sync marker:
+
+- [ ] Slate legible at 3 m by eye and on a second camera, at 100% and 200%.
+- [ ] Timecode ticks and matches the sidecar first/last frame TC for RECORD_RUN, REGEN, FREE_RUN and 29.97 DF; dashes while idle; holds while paused.
+- [ ] Flash about 3 frames, once per take, not on reconnect or countdown.
+- [ ] Beep at 1 kHz present in the decoded audio near `beepOffsetFromTakeStartUs`; measure the offset; plays on the speaker with headphones connected.
+- [ ] Media volume 0 records FAILED and the take is saved; no sidecar node when disarmed.
+
+U7 out-of-frame:
+
+- [ ] Face-detect modes per camera id (SIMPLE preferred).
+- [ ] Warning after the delay on both screens for PREVIEW/VIDEO/LOG, clears on return; with 4:3 visible, a face outside the 16:9 recorded area counts as out.
+- [ ] HFR shows unavailable and its request is untouched; a graph ignoring the key falls back.
+- [ ] File, cadence and metadata identical with the option on and off for SDR, LOG and HFR, with no face fields.
+- [ ] Arrows correct in all orientations and cameras; heat and battery impact; logcat contains no coordinates.

@@ -414,3 +414,8 @@ The first66-case targeted native integration passed65 cases and retained one str
 
 
 The repaired66-case targeted suite passed with zero failures/errors/skips in1m2s. Independent read-only review then found a connection-configuration ownership gap in conditional PUT: a throwing setter could prevent assigning the created connection to cleanup. A minimal ownership-first fix and held-cleanup regression are being integrated before the final shared acceptance. Review also records duplicate MediaRecorder preparation admission as separate unfinished work; the completed close-intent fence does not claim to solve it.
+
+
+## OCC-PLAN-068 exterior subject features (W0–W2)
+
+2026-10-02: W0 foundation and the six W1 units (tally/countdown and self-monitor, fill light, review, interview queue, slate and sync marker, out-of-frame warning) were merged on `feat/plan-068-exterior-subject`. W2 integration fixed a duplicate countdown under FILL_LIGHT and made the cover review player wait (bounded) for the inner viewer's decoder to retire. Host: 53 core, 54 media, 700 camera and 1,231 app unit tests passed; lint has no errors; format and plan validation pass. A read-only API 36 emulator passed 75 subject/fold/settings UI tests after a W1 test expectation fix, plus 8 playback device tests. These are emulator results only. U8 physical qualification on the Razr Fold (consolidated checklist in PLAN-068 §22) remains open, and the plan stays InProgress.

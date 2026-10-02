@@ -896,8 +896,8 @@ plans:
 
   - id: OCC-PLAN-068
     title: "Exterior screen subject features and Razr Fold qualification"
-    status: Ready
-    revision: 2
+    status: InProgress
+    revision: 3
     milestone: H2
     path: docs/plans/PLAN-068-exterior-screen-subject-features.md
     depends_on: [OCC-PLAN-064]
