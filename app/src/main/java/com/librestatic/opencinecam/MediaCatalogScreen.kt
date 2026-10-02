@@ -188,6 +188,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                     CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
                     CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
                 }
+                SubjectReviewOperatorBar()
                 val queryInvalid = !validGalleryQuery(typedQuery)
                 OutlinedTextField(typedQuery, { candidate ->
                     typedQuery = galleryQueryInput(candidate)

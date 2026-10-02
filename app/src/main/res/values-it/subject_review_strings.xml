@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="subject_review_waiting">L\'operatore non ha scelto una ripresa da rivedere.</string>
+    <string name="subject_review_show">Mostra al soggetto</string>
+    <string name="subject_review_stop">Interrompi</string>
+    <string name="subject_review_on_cover">Sullo schermo esterno: %1$s</string>
+    <string name="subject_review_help">Apri una ripresa o una foto nel visualizzatore della galleria e scegli Mostra al soggetto. Lo schermo esterno la riproduce senza audio e si ferma quando inizia la registrazione.</string>
 </resources>

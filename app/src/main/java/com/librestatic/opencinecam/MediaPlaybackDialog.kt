@@ -136,7 +136,7 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
                 val scroll = rememberScrollState()
                 LaunchedEffect(fullscreen) { if (fullscreen) scroll.scrollTo(0) }
                 Column(Modifier.fillMaxSize()) {
-                    if (!fullscreen) PlaybackTopBar(take, onDismiss, onShare, onDelete)
+                    if (!fullscreen) PlaybackTopBar(take, onDismiss, onShare, onDelete) { SubjectReviewShowAction(take, members[memberIndex], onDismiss) }
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).testTag("media-playback-scroll")
                         .padding(horizontal = if (fullscreen) 0.dp else 16.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally) {
@@ -161,11 +161,13 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
 }
 
 @Composable
-private fun PlaybackTopBar(take: LocalMediaTake, onClose: () -> Unit, onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?) {
+private fun PlaybackTopBar(take: LocalMediaTake, onClose: () -> Unit, onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?,
+    subjectAction: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         CineIconButton("media-playback-close", CineIcon.BACK, R.string.media_playback_close, onClick = onClose)
         Text(stringResource(R.string.playback_screen_title), Modifier.weight(1f).padding(horizontal = 8.dp), color = SettingsMuted,
             fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        subjectAction()
         onShare?.let { share -> CineIconButton("media-playback-share", CineIcon.SHARE, R.string.playback_screen_share) { share(take) } }
         onDelete?.let { delete -> CineIconButton("media-playback-delete", CineIcon.DELETE, R.string.playback_screen_delete) { delete(take) } }
     }

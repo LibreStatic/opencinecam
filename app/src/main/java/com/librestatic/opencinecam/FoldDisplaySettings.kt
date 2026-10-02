@@ -62,6 +62,7 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
                 SubjectDisplayMode.SLATE -> R.string.fold_mode_slate
             }) },
             onSelect = { update(subject.copy(mode = it)) }, tag = { "fold-mode-${it.name}" })
+        SubjectReviewOperatorBar(help = subject.mode == SubjectDisplayMode.REVIEW)
         FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }
         FoldToggle(stringResource(R.string.fold_lock_touch), subject.touchLocked) { update(subject.copy(touchLocked = it)) }
         if (subject.mode != SubjectDisplayMode.STATUS) {

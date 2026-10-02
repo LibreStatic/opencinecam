@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="subject_review_waiting">Die Bedienperson hat keinen Take zur Ansicht gewählt.</string>
+    <string name="subject_review_show">Der Person zeigen</string>
+    <string name="subject_review_stop">Beenden</string>
+    <string name="subject_review_on_cover">Auf dem Außendisplay: %1$s</string>
+    <string name="subject_review_help">Öffne eine Aufnahme oder ein Foto im Galerie-Viewer und wähle Der Person zeigen. Das Außendisplay spielt sie stumm ab und stoppt, sobald die Aufnahme beginnt.</string>
 </resources>
