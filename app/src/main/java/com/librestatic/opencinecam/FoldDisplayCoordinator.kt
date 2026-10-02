@@ -5,7 +5,9 @@ package com.librestatic.opencinecam
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -252,4 +254,14 @@ private fun WindowAreaCapability.Status?.toCapability(): DisplayCapability = whe
     WindowAreaCapability.Status.WINDOW_AREA_STATUS_UNAVAILABLE -> DisplayCapability.UNAVAILABLE
     WindowAreaCapability.Status.WINDOW_AREA_STATUS_UNSUPPORTED, null -> DisplayCapability.UNSUPPORTED
     else -> DisplayCapability.UNKNOWN
+}
+
+/**
+ * Forwards every operator state to the subject window. A key whitelist here once left the cover
+ * with a stale subjectFraming (Razr U8: "out of frame" forever while the HAL saw the face) and a
+ * frozen audio meter, so nothing is filtered: the window reads whatever fields it needs.
+ */
+@Composable
+internal fun SubjectStateForwarder(state: CameraUiState, onState: (CameraUiState) -> Unit) {
+    LaunchedEffect(state) { onState(state) }
 }

@@ -4,6 +4,10 @@ package com.librestatic.opencinecam
 import android.os.SystemClock
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -14,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.Density
 import com.librestatic.opencinecam.camera.FramingEdge
 import com.librestatic.opencinecam.camera.SubjectFramingStatus
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
 
@@ -62,4 +67,22 @@ class SubjectOutOfFrameUiTest {
         compose.setContent { MaterialTheme { SubjectOutOfFrameSettings(CameraUiState(), SubjectDisplaySettings()) {} } }
         compose.onNodeWithTag("subject-out-of-frame-unavailable").assertIsDisplayed()
     }
+
+    @Test fun aFramingOnlyChangeReachesTheSubjectWindow() {
+        // Razr U8: the operator state reached the cover only on phase/mode/countdown changes, so a
+        // face entering the frame never cleared the subject banner.
+        var operator by mutableStateOf(CameraUiState(phase = CameraUiPhase.PREVIEWING, subjectFraming = absentFor(5)))
+        val subject = MutableStateFlow(CameraUiState())
+        compose.setContent {
+            SubjectStateForwarder(operator) { subject.value = it }
+            val forwarded by subject.collectAsState()
+            MaterialTheme { SubjectDisplayScreen(forwarded, SubjectDisplaySettings(outOfFrameWarning = true, outOfFrameDelaySeconds = 2)) }
+        }
+        compose.onNodeWithTag("subject-out-of-frame").assertIsDisplayed()
+        operator = operator.copy(subjectFraming = operator.subjectFraming.copy(
+            facePresentInFrame = true, lastSeenMonotonicNanos = SystemClock.elapsedRealtimeNanos(), exitEdge = FramingEdge.NONE))
+        compose.waitForIdle()
+        compose.onAllNodesWithTag("subject-out-of-frame").assertCountEquals(0)
+    }
 }
+

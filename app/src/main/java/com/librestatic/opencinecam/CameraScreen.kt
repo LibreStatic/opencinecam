@@ -266,9 +266,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     val foldDisplays = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val foldState by (foldDisplays?.states ?: foldFallback).collectAsStateWithLifecycle()
-    LaunchedEffect(foldDisplays, state.phase, state.recordingFinalizing, state.recordingPauseStatus, state.recordingElapsedMs, state.errorCode, state.selectedMode, state.countdownSeconds) {
-        foldDisplays?.updateCameraState(state)
-    }
+    SubjectStateForwarder(state) { foldDisplays?.updateCameraState(it) }
     DisposableEffect(foldDisplays, binder) {
         foldDisplays?.updatePreviewPort(binder?.subjectPreview)
         foldDisplays?.updateSelfRoleObserver { binder?.setSelfRecordingActive(it) }
