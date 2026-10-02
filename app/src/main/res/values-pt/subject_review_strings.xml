@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="subject_review_waiting">O operador não escolheu uma tomada para revisar.</string>
+    <string name="subject_review_show">Mostrar ao sujeito</string>
+    <string name="subject_review_stop">Parar</string>
+    <string name="subject_review_on_cover">Na tela externa: %1$s</string>
+    <string name="subject_review_help">Abra um take ou foto no visualizador da galeria e escolha Mostrar ao sujeito. A tela externa reproduz sem som e para quando a gravação começa.</string>
 </resources>

@@ -44,6 +44,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     /** Operator commands (review pick, interview position) reach the subject only through these cues. */
     val subjectCues = cues.asStateFlow()
     private val preferences = SettingsRepositories.get(activity)
+    /** OCC-PLAN-068 U4: the operator's review pick, stopped by a take start or the end of the session. */
+    val review = SubjectReviewController(preferences, activity.lifecycleScope) { uri -> updateSubjectCues { it.copy(reviewUri = uri) } }
     private val executor = ContextCompat.getMainExecutor(activity)
     private val controller = runCatching { WindowAreaController.getOrCreate() }.getOrNull()
     private var area: WindowAreaInfo? = null
@@ -121,7 +123,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         observer?.invoke(machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.TRANSFER)
     }
 
-    fun updateCameraState(state: CameraUiState) { subject.value = state }
+    fun updateCameraState(state: CameraUiState) { subject.value = state; review.onCameraState(state) }
 
     fun updateSubjectCues(transform: (SubjectSessionCues) -> SubjectSessionCues) { cues.value = transform(cues.value) }
 
@@ -150,7 +152,10 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val sessionCues by cues.collectAsState()
                                     val fill by fillLightOutput.collectAsState()
                                     MaterialTheme {
-                                        CompositionLocalProvider(LocalSubjectFillLightOutput provides fill) {
+                                        CompositionLocalProvider(
+                                            LocalSubjectFillLightOutput provides fill,
+                                            LocalSubjectReviewFeed provides review,
+                                        ) {
                                             SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
                                                 cues = sessionCues, productionSlate = settings.productionSlate)
                                         }
@@ -193,6 +198,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     private fun ended(token: Long, failure: Throwable?) {
         if (!machine.ended(token, failure?.message)) return
         session = null
+        review.onSessionEnded()
         subjectView?.disposeComposition()
         subjectView = null
         publish()
@@ -202,6 +208,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         val previous = session
         session = null
         machine.close(failure)
+        review.onSessionEnded()
         subjectView?.disposeComposition()
         subjectView = null
         publish()

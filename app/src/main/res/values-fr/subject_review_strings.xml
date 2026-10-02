@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="subject_review_waiting">L\'opérateur n\'a pas choisi de prise à revoir.</string>
+    <string name="subject_review_show">Montrer au sujet</string>
+    <string name="subject_review_stop">Arrêter</string>
+    <string name="subject_review_on_cover">Sur l\'écran externe : %1$s</string>
+    <string name="subject_review_help">Ouvrez une prise ou une photo dans la visionneuse de la galerie et choisissez Montrer au sujet. L\'écran externe la lit sans son et s\'arrête au début de l\'enregistrement.</string>
 </resources>

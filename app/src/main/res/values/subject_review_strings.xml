@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="subject_review_waiting">The operator has not chosen a take to review.</string>
+    <string name="subject_review_show">Show to subject</string>
+    <string name="subject_review_stop">Stop</string>
+    <string name="subject_review_on_cover">On the cover: %1$s</string>
+    <string name="subject_review_help">Open a take or photo in the gallery viewer and choose Show to subject. The cover plays it muted and stops when recording starts.</string>
 </resources>
