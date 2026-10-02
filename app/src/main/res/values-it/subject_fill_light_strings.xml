@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Trasforma lo schermo esterno in una luce morbida. La luminosità è una richiesta al sistema, non luce misurata. Blocca esposizione e bilanciamento del bianco prima di una ripresa, così la luce non li fa variare.</string>
     <string name="subject_fill_light_kelvin">Temperatura colore: %1$d K</string>
-    <string name="subject_fill_light_tint">Tinta: %1$d</string>
-    <string name="subject_fill_light_timeout">Spegni dopo</string>
+    <string name="subject_fill_light_tint">Tinta: %1$d (− verde, + magenta)</string>
+    <string name="subject_fill_light_timeout">Attenua dopo</string>
     <string name="subject_fill_light_timeout_off">Mai</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Usa lo schermo esterno come luce di riempimento</string>
+    <string name="subject_fill_light_lock_suggestion">La luce di riempimento è accesa. Blocca esposizione (AE) e bilanciamento del bianco (AWB) prima della ripresa: se questa luce cambia, variano. L\'app non li blocca mai al posto tuo.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">La luce di riempimento è accesa e l\'esposizione è bloccata. Blocca anche il bilanciamento del bianco (AWB), così un cambio di questa luce non sposta il colore. L\'app non lo blocca mai al posto tuo.</string>
+    <string name="subject_fill_light_notice_timeout">Il tempo della luce di riempimento è scaduto ed è attenuata. L\'operatore può riaccenderla.</string>
+    <string name="subject_fill_light_notice_warm">Il telefono è caldo: la luce è attenuata per proteggere la registrazione.</string>
+    <string name="subject_fill_light_notice_hot">Il telefono è molto caldo: la luce è molto attenuata per proteggere la registrazione.</string>
+    <string name="subject_fill_light_restart">Riaccendi la luce</string>
+    <string name="subject_fill_light_swatch">Anteprima del colore della luce, %1$d K, tinta %2$d</string>
+    <string name="subject_fill_light_swatch_note">Colore approssimativo; lo schermo esterno non è calibrato.</string>
+    <string name="subject_fill_light_brightness">Luminosità richiesta: %1$d%% (una richiesta, non luce misurata)</string>
+    <string name="subject_fill_light_thermal_help">Quando il telefono si scalda (stato termico moderato o superiore) la luce si attenua da sola ed entrambi gli schermi lo segnalano. La cattura non cambia mai.</string>
 </resources>

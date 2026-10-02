@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Turns the exterior screen into a soft light. Brightness is a request to the system, not measured light. Lock exposure and white balance before a take so the light does not make them drift.</string>
     <string name="subject_fill_light_kelvin">Colour temperature: %1$d K</string>
-    <string name="subject_fill_light_tint">Tint: %1$d</string>
-    <string name="subject_fill_light_timeout">Turn off after</string>
+    <string name="subject_fill_light_tint">Tint: %1$d (− green, + magenta)</string>
+    <string name="subject_fill_light_timeout">Dim after</string>
     <string name="subject_fill_light_timeout_off">Never</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Use the exterior screen as a fill light</string>
+    <string name="subject_fill_light_lock_suggestion">Fill light is on. Lock exposure (AE) and white balance (AWB) before the take: if this light changes, they drift. The app never locks them for you.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">Fill light is on and exposure is locked. Lock white balance (AWB) too, so a change in this light does not shift colour. The app never locks it for you.</string>
+    <string name="subject_fill_light_notice_timeout">Fill light timed out and is dimmed. The operator can turn it back on.</string>
+    <string name="subject_fill_light_notice_warm">Phone is warm: the light is dimmed to protect the recording.</string>
+    <string name="subject_fill_light_notice_hot">Phone is hot: the light is strongly dimmed to protect the recording.</string>
+    <string name="subject_fill_light_restart">Turn the light back on</string>
+    <string name="subject_fill_light_swatch">Light colour preview, %1$d K, tint %2$d</string>
+    <string name="subject_fill_light_swatch_note">Approximate colour; the cover panel is not calibrated.</string>
+    <string name="subject_fill_light_brightness">Requested brightness: %1$d%% (a request, not measured light)</string>
+    <string name="subject_fill_light_thermal_help">When the phone warms up (moderate thermal status or above) the light dims on its own and both screens say so. Capture is never changed.</string>
 </resources>

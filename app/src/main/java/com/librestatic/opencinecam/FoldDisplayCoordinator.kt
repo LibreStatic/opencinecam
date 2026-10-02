@@ -5,6 +5,7 @@ package com.librestatic.opencinecam
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -24,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 internal val LocalFoldDisplayCoordinator = staticCompositionLocalOf<FoldDisplayCoordinator?> { null }
@@ -50,8 +52,26 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     private var disposed = false
     private var selfRoleObserver: ((Boolean) -> Unit)? = null
     private val observation: Job
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val fillLightOutput = MutableStateFlow<FillLightOutput?>(null)
+    /** OCC-PLAN-068 U3: the fill light's current dim policy, null unless FILL_LIGHT is on an active presentation. */
+    val fillLight = fillLightOutput.asStateFlow()
+    private val fillLightMonitor = SubjectFillLightMonitor(
+        thermal = activity.getSystemService(android.os.PowerManager::class.java)?.let { PowerManagerThermalSource(it, executor) },
+        clock = android.os.SystemClock::elapsedRealtime,
+        schedule = { delayMs, block -> val task = Runnable(block); mainHandler.postDelayed(task, delayMs); { mainHandler.removeCallbacks(task) } },
+        onOutput = { fillLightOutput.value = it; applyBrightness() },
+    )
+    private val fillLightObservation: Job
 
     init {
+        // The fill light, its thermal listener and its timeout live only while FILL_LIGHT is on an active presentation.
+        fillLightObservation = activity.lifecycleScope.launch {
+            combine(preferences.states, mutableState) { settings, display ->
+                settings.subjectDisplay to (display.phase == DisplaySessionPhase.ACTIVE && display.operation == DisplayOperation.PRESENT &&
+                    settings.subjectDisplay.mode == SubjectDisplayMode.FILL_LIGHT)
+            }.collect { (subjectSettings, active) -> fillLightMonitor.update(active, subjectSettings) }
+        }
         observation = activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
@@ -91,6 +111,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         }
     }
 
+    fun restartFillLight() = fillLightMonitor.restart()
+
     fun updatePreviewPort(port: SubjectPreviewPort?) { previewPort.value = port }
 
     fun updateSelfRoleObserver(observer: ((Boolean) -> Unit)?) {
@@ -126,9 +148,12 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val output by previewPort.collectAsState()
                                     val windowState by mutableState.collectAsState()
                                     val sessionCues by cues.collectAsState()
+                                    val fill by fillLightOutput.collectAsState()
                                     MaterialTheme {
-                                        SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
-                                            cues = sessionCues, productionSlate = settings.productionSlate)
+                                        CompositionLocalProvider(LocalSubjectFillLightOutput provides fill) {
+                                            SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
+                                                cues = sessionCues, productionSlate = settings.productionSlate)
+                                        }
                                     }
                                 }
                             }
@@ -160,7 +185,9 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
 
     fun applyBrightness() {
         val window = (session as? WindowAreaSessionPresenter)?.window ?: return
-        window.attributes = window.attributes.apply { screenBrightness = preferences.states.value.subjectDisplay.brightness }
+        // Fill light replaces the request with its timeout/thermal-capped level; it is still only a request.
+        val requested = fillLightMonitor.output?.windowBrightness ?: preferences.states.value.subjectDisplay.brightness
+        window.attributes = window.attributes.apply { screenBrightness = requested }
     }
 
     private fun ended(token: Long, failure: Throwable?) {
@@ -189,6 +216,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     override fun close() {
         disposed = true
         observation.cancel()
+        fillLightObservation.cancel()
+        fillLightMonitor.stop()
         closeSession()
     }
 }
