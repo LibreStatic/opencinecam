@@ -44,6 +44,24 @@ fun fillLightColor(kelvin: Int, tint: Int = 0): FillLightColor {
     return FillLightColor((r / peak).coerceIn(0f, 1f), (g / peak).coerceIn(0f, 1f), (b / peak).coerceIn(0f, 1f))
 }
 
+/**
+ * One-tap starting points for the fill light. A preset only writes Kelvin and tint, which stay adjustable;
+ * fluorescent leans green and beauty leans magenta on the same tint scale as the slider.
+ */
+enum class FillLightPreset(val kelvin: Int, val tint: Int) {
+    CANDLE(2700, 0),
+    TUNGSTEN(3200, 0),
+    FLUORESCENT(4000, -20),
+    BEAUTY(4800, 20),
+    DAYLIGHT(5600, 0),
+    NEUTRAL(6500, 0);
+
+    companion object {
+        /** The preset the current Kelvin/tint exactly equal, or null after a manual adjustment. */
+        fun matching(kelvin: Int, tint: Int): FillLightPreset? = entries.firstOrNull { it.kelvin == kelvin && it.tint == tint }
+    }
+}
+
 enum class FillLightNotice { TIMED_OUT, THERMAL_WARM, THERMAL_HOT }
 
 /**

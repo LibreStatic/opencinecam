@@ -53,4 +53,20 @@ class SubjectFillLightUiTest {
         compose.onNodeWithTag("subject-fill-light-lock-suggestion").assertIsDisplayed()
         compose.onNodeWithTag("subject-fill-light-swatch").assertExists()
     }
+
+    @Test fun aPresetSetsKelvinAndTintAndAManualChangeDeselectsIt() {
+        val subject = mutableStateOf(SubjectDisplaySettings(mode = SubjectDisplayMode.FILL_LIGHT))
+        compose.setContent { MaterialTheme { SubjectFillLightSettings(CameraUiState(), subject.value) { subject.value = it } } }
+        compose.onNodeWithTag("subject-fill-preset-tungsten").performClick()
+        compose.waitForIdle()
+        assertEquals(3200, subject.value.fillLightKelvin)
+        assertEquals(0, subject.value.fillLightTint)
+        compose.onNodeWithTag("subject-fill-preset-tungsten").assertIsSelected()
+        compose.onNodeWithTag("subject-fill-preset-fluorescent").performClick()
+        compose.waitForIdle()
+        assertEquals(FillLightPreset.FLUORESCENT.tint, subject.value.fillLightTint)
+        subject.value = subject.value.copy(fillLightTint = 3)
+        compose.waitForIdle()
+        FillLightPreset.entries.forEach { compose.onNodeWithTag("subject-fill-preset-${it.name.lowercase()}").assertIsNotSelected() }
+    }
 }

@@ -154,4 +154,23 @@ class SubjectFillLightPolicyTest {
         harness.monitor.update(true, timed)
         assertNull(harness.monitor.output?.notice)
     }
+
+    @Test fun presetsAreValidDistinctAndRecognisedOnlyOnAnExactMatch() {
+        FillLightPreset.entries.forEach { preset ->
+            // Every preset must be storable as is.
+            SubjectDisplaySettings(fillLightKelvin = preset.kelvin, fillLightTint = preset.tint)
+            assertEquals(preset, FillLightPreset.matching(preset.kelvin, preset.tint))
+        }
+        assertEquals(FillLightPreset.entries.size, FillLightPreset.entries.map { it.kelvin to it.tint }.toSet().size)
+        assertNull(FillLightPreset.matching(3300, 0))
+        assertNull(FillLightPreset.matching(3200, 5))
+        // Fluorescent leans green (less red/blue), beauty leans magenta (less green).
+        val fluorescent = fillLightColor(FillLightPreset.FLUORESCENT.kelvin, FillLightPreset.FLUORESCENT.tint)
+        val plainFluorescent = fillLightColor(FillLightPreset.FLUORESCENT.kelvin)
+        // Colours are normalized to their strongest channel, so compare ratios.
+        assertTrue(fluorescent.red / fluorescent.green < plainFluorescent.red / plainFluorescent.green)
+        val beauty = fillLightColor(FillLightPreset.BEAUTY.kelvin, FillLightPreset.BEAUTY.tint)
+        val plainBeauty = fillLightColor(FillLightPreset.BEAUTY.kelvin)
+        assertTrue(beauty.green / beauty.red < plainBeauty.green / plainBeauty.red)
+    }
 }

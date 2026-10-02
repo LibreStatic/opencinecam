@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,6 +107,7 @@ internal fun SubjectFillLightSettings(state: CameraUiState, subject: SubjectDisp
             if (notice == FillLightNotice.TIMED_OUT) Button(onClick = { coordinator?.restartFillLight() },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("subject-fill-light-restart")) { Text(stringResource(R.string.subject_fill_light_restart)) }
         }
+        FillLightPresetRow(subject) { preset -> onChange(subject.copy(fillLightKelvin = preset.kelvin, fillLightTint = preset.tint)) }
         val swatchDescription = stringResource(R.string.subject_fill_light_swatch, subject.fillLightKelvin, subject.fillLightTint)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(48.dp).background(fillLightColor(subject.fillLightKelvin, subject.fillLightTint).toComposeColor(), RoundedCornerShape(8.dp))
@@ -129,3 +134,39 @@ internal fun SubjectFillLightSettings(state: CameraUiState, subject: SubjectDisp
         Text(stringResource(R.string.subject_fill_light_thermal_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
     }
 }
+
+@Composable
+private fun fillLightPresetLabel(preset: FillLightPreset): String = stringResource(when (preset) {
+    FillLightPreset.CANDLE -> R.string.subject_fill_light_preset_candle
+    FillLightPreset.TUNGSTEN -> R.string.subject_fill_light_preset_tungsten
+    FillLightPreset.FLUORESCENT -> R.string.subject_fill_light_preset_fluorescent
+    FillLightPreset.BEAUTY -> R.string.subject_fill_light_preset_beauty
+    FillLightPreset.DAYLIGHT -> R.string.subject_fill_light_preset_daylight
+    FillLightPreset.NEUTRAL -> R.string.subject_fill_light_preset_neutral
+})
+
+/** Colour presets as swatch chips; the selected one follows the stored Kelvin/tint. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FillLightPresetRow(subject: SubjectDisplaySettings, onSelect: (FillLightPreset) -> Unit) {
+    val selected = FillLightPreset.matching(subject.fillLightKelvin, subject.fillLightTint)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(stringResource(R.string.subject_fill_light_presets), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FillLightPreset.entries.forEach { preset ->
+                val label = fillLightPresetLabel(preset)
+                FilterChip(
+                    selected = preset == selected,
+                    onClick = { onSelect(preset) },
+                    label = { Text(stringResource(R.string.subject_fill_light_preset_label, label, preset.kelvin)) },
+                    leadingIcon = {
+                        Box(Modifier.size(18.dp).background(fillLightColor(preset.kelvin, preset.tint).toComposeColor(), CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("subject-fill-preset-${preset.name.lowercase()}"),
+                )
+            }
+        }
+    }
+}
+

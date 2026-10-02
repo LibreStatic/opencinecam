@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -54,6 +55,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     private var session: WindowAreaSession? = null
     private var subjectView: ComposeView? = null
     private var disposed = false
+    private var activityBrightnessOverridden = false
     private var selfRoleObserver: ((Boolean) -> Unit)? = null
     private val observation: Job
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -205,6 +207,14 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     }
 
     fun applyBrightness() {
+        // Transfer moves this activity's own window to the cover: it carries the request while there and
+        // drops it on return, so the inner screen is never left at the exterior level.
+        val transferRequest = transferBrightnessRequest(machine.state, preferences.states.value.subjectDisplay.brightness)
+        if (transferRequest != null || activityBrightnessOverridden) {
+            val value = transferRequest ?: WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            activity.window.attributes = activity.window.attributes.apply { screenBrightness = value }
+            activityBrightnessOverridden = transferRequest != null
+        }
         val window = (session as? WindowAreaSessionPresenter)?.window ?: return
         // Fill light replaces the request with its timeout/thermal-capped level; it is still only a request.
         val requested = fillLightMonitor.output?.windowBrightness ?: preferences.states.value.subjectDisplay.brightness
@@ -233,6 +243,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
 
     private fun publish() {
         mutableState.value = machine.state
+        applyBrightness()
         // The interview position belongs to one session: a new session starts at the first question.
         if (machine.state.phase == DisplaySessionPhase.IDLE) cues.value = cues.value.copy(interviewIndex = 0)
         selfRoleObserver?.invoke(machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.TRANSFER)
@@ -265,3 +276,11 @@ private fun WindowAreaCapability.Status?.toCapability(): DisplayCapability = whe
 internal fun SubjectStateForwarder(state: CameraUiState, onState: (CameraUiState) -> Unit) {
     LaunchedEffect(state) { onState(state) }
 }
+
+/**
+ * Brightness request for the activity window while it is transferred to the cover, or null when this
+ * activity is not there (inner screen, or a presentation that carries its own window).
+ */
+internal fun transferBrightnessRequest(state: FoldDisplayState, brightness: Float): Float? =
+    brightness.takeIf { state.phase == DisplaySessionPhase.ACTIVE && state.operation == DisplayOperation.TRANSFER }
+

@@ -225,4 +225,12 @@ class FoldDisplayTest {
     }
 
     private fun available() = FoldSessionStateMachine().apply { capabilities(DisplayCapability.AVAILABLE, DisplayCapability.AVAILABLE) }
+
+    @Test fun onlyAnActiveTransferCarriesTheBrightnessRequestOnTheActivityWindow() {
+        val active = FoldDisplayState(phase = DisplaySessionPhase.ACTIVE, operation = DisplayOperation.TRANSFER)
+        assertEquals(0.4f, transferBrightnessRequest(active, 0.4f))
+        assertNull(transferBrightnessRequest(active.copy(operation = DisplayOperation.PRESENT), 0.4f))
+        assertNull(transferBrightnessRequest(active.copy(phase = DisplaySessionPhase.STARTING), 0.4f))
+        assertNull(transferBrightnessRequest(FoldDisplayState(), 0.4f))
+    }
 }

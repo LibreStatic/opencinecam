@@ -17,4 +17,12 @@
     <string name="subject_fill_light_swatch_note">Color aproximado; la pantalla exterior no está calibrada.</string>
     <string name="subject_fill_light_brightness">Brillo solicitado: %1$d%% (una solicitud, no luz medida)</string>
     <string name="subject_fill_light_thermal_help">Cuando el teléfono se calienta (estado térmico moderado o superior) la luz se atenúa sola y ambas pantallas lo avisan. La captura nunca cambia.</string>
+    <string name="subject_fill_light_presets">Colores predefinidos</string>
+    <string name="subject_fill_light_preset_label">%1$s · %2$d K</string>
+    <string name="subject_fill_light_preset_candle">Vela</string>
+    <string name="subject_fill_light_preset_tungsten">Tungsteno</string>
+    <string name="subject_fill_light_preset_fluorescent">Fluorescente</string>
+    <string name="subject_fill_light_preset_beauty">Belleza</string>
+    <string name="subject_fill_light_preset_daylight">Luz de día</string>
+    <string name="subject_fill_light_preset_neutral">Neutra</string>
 </resources>
