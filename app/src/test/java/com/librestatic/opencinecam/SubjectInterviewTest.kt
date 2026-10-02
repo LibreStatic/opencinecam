@@ -95,4 +95,16 @@ class SubjectInterviewTest {
         fitInterviewFontSp(72, 16) { calls++; it <= 30 }
         assertTrue("binary search, not a linear scan: $calls", calls <= 8)
     }
+
+    @Test fun ownWritesAreEchoesInAnyOrderButExternalValuesAreNot() {
+        val echoes = InterviewEchoFilter()
+        echoes.sent(listOf("Como"))
+        echoes.sent(listOf("Como empezo"))
+        echoes.sent(listOf("Como empezo?"))
+        assertTrue(echoes.isEcho(listOf("Como empezo")))
+        // The older write was forgotten together with the matched one; the newest is still pending.
+        assertFalse(echoes.isEcho(listOf("Como")))
+        assertTrue(echoes.isEcho(listOf("Como empezo?")))
+        assertFalse(echoes.isEcho(listOf("Reset?")))
+    }
 }

@@ -78,4 +78,21 @@ class SubjectInterviewUiTest {
         compose.onNodeWithTag("subject-interview-rejected", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("subject-interview-remaining", useUnmergedTree = true).assertTextEquals(context.getString(R.string.subject_interview_remaining, 0))
     }
+
+    @Test fun lateEchoOfAnEarlierKeystrokeDoesNotEraseNewerTyping() {
+        // Razr U8: the settings flow echoed an older keystroke after the IME had committed more text.
+        val sent = mutableListOf<SubjectDisplaySettings>()
+        var subject by mutableStateOf(SubjectDisplaySettings())
+        compose.setContent { MaterialTheme { SubjectInterviewSettings(CameraUiState(), subject) { sent += it } } }
+        val editor = compose.onNodeWithTag("subject-interview-editor")
+        editor.performTextInput("Como")
+        editor.performTextInput(" empezo?")
+        compose.runOnIdle { subject = sent.first() }
+        editor.assertTextContains("Como empezo?")
+        compose.runOnIdle { subject = sent.last() }
+        editor.assertTextContains("Como empezo?")
+        // A value this editor never wrote is an external change and still replaces the draft.
+        compose.runOnIdle { subject = SubjectDisplaySettings(interviewQuestions = listOf("Reset?")) }
+        editor.assertTextContains("Reset?")
+    }
 }

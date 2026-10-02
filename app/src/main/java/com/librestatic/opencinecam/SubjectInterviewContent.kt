@@ -58,6 +58,28 @@ internal fun parseInterviewQuestions(text: String): List<String> = text.lines().
     .map { it.take(SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH) }.take(SUBJECT_INTERVIEW_MAX_QUESTIONS)
 
 /**
+ * Questions this editor stored that can still come back through the settings flow. The store
+ * echoes a frame late while the IME keeps committing, so an echo of an older keystroke is not an
+ * external change and must not overwrite newer typing (Razr U8: fast input lost characters).
+ */
+internal class InterviewEchoFilter {
+    private val pending = ArrayDeque<List<String>>()
+
+    fun sent(questions: List<String>) {
+        pending.addLast(questions)
+        while (pending.size > 64) pending.removeFirst()
+    }
+
+    /** True when [incoming] is one of this editor's writes; it and every older write are forgotten. */
+    fun isEcho(incoming: List<String>): Boolean {
+        val index = pending.lastIndexOf(incoming)
+        if (index < 0) return false
+        repeat(index + 1) { pending.removeFirst() }
+        return true
+    }
+}
+
+/**
  * Applies the bounds while typing: each line keeps at most [SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH]
  * characters after its indentation, and text after the last allowed question is rejected. Blank
  * lines between questions are kept so the editor does not fight the cursor.
@@ -191,8 +213,10 @@ internal fun SubjectInterviewSettings(state: CameraUiState, subject: SubjectDisp
     val coordinator = LocalFoldDisplayCoordinator.current
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(subject.interviewQuestions.joinToString("\n"))) }
     var rejected by rememberSaveable { mutableStateOf(false) }
+    val echoes = remember { InterviewEchoFilter() }
     // Keep blank lines while typing, but follow external changes such as a reset or another editor.
     LaunchedEffect(subject.interviewQuestions) {
+        if (echoes.isEcho(subject.interviewQuestions)) return@LaunchedEffect
         if (parseInterviewQuestions(draft.text) != subject.interviewQuestions) {
             val text = subject.interviewQuestions.joinToString("\n")
             draft = TextFieldValue(text, TextRange(text.length))
@@ -207,6 +231,7 @@ internal fun SubjectInterviewSettings(state: CameraUiState, subject: SubjectDisp
             draft = if (limited == edited.text) edited else TextFieldValue(limited, TextRange(minOf(edited.selection.end, limited.length)))
             val questions = parseInterviewQuestions(limited)
             if (questions != subject.interviewQuestions) {
+                echoes.sent(questions)
                 onChange(subject.copy(interviewQuestions = questions))
                 coordinator?.updateSubjectCues { it.copy(interviewIndex = clampInterviewIndex(it.interviewIndex, questions.size)) }
             }
