@@ -3,4 +3,11 @@
     <string name="subject_interview_questions">Perguntas, uma por linha (50 × 300 caracteres)</string>
     <string name="subject_interview_help">As perguntas ficam salvas só neste dispositivo, separadas do roteiro do teleprompter. A tela externa usa o tamanho de texto do roteiro.</string>
     <string name="subject_interview_empty">O operador não carregou perguntas.</string>
+    <string name="subject_interview_position">Pergunta %1$d de %2$d</string>
+    <string name="subject_interview_operator_empty">Nenhuma pergunta de entrevista carregada</string>
+    <string name="subject_interview_previous">Pergunta anterior</string>
+    <string name="subject_interview_next">Próxima pergunta</string>
+    <string name="subject_interview_count">Perguntas: %1$d / %2$d</string>
+    <string name="subject_interview_remaining">Caracteres restantes nesta pergunta: %1$d</string>
+    <string name="subject_interview_rejected">O texto além de 50 perguntas ou 300 caracteres por pergunta não foi adicionado.</string>
 </resources>

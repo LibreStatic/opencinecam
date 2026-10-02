@@ -764,6 +764,7 @@ internal fun CaptureSurface(
         }
         Box(paneModifier(panes?.preview)) {
         if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
+        InterviewOperatorControl(settings.subjectDisplay, Modifier.align(Alignment.TopCenter))
         val cameraLoading = state.phase == CameraUiPhase.PREPARING || state.phase == CameraUiPhase.OPENING || state.phase == CameraUiPhase.READY
         val reducedMotion = LocalReducedMotion.current
         AnimatedVisibility(

@@ -3,4 +3,12 @@
     <string name="subject_interview_questions">Questions, one per line (50 × 300 characters)</string>
     <string name="subject_interview_help">Questions are stored only on this device and kept apart from the teleprompter script. The exterior screen uses the script text size.</string>
     <string name="subject_interview_empty">The operator has not loaded any questions.</string>
+    <string name="subject_interview_counter" translatable="false">%1$d / %2$d</string>
+    <string name="subject_interview_position">Question %1$d of %2$d</string>
+    <string name="subject_interview_operator_empty">No interview questions loaded</string>
+    <string name="subject_interview_previous">Previous question</string>
+    <string name="subject_interview_next">Next question</string>
+    <string name="subject_interview_count">Questions: %1$d / %2$d</string>
+    <string name="subject_interview_remaining">Characters left in this question: %1$d</string>
+    <string name="subject_interview_rejected">Text beyond 50 questions or 300 characters per question was not added.</string>
 </resources>

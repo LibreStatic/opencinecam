@@ -3,4 +3,11 @@
     <string name="subject_interview_questions">Fragen, eine pro Zeile (50 × 300 Zeichen)</string>
     <string name="subject_interview_help">Fragen werden nur auf diesem Gerät gespeichert und getrennt vom Teleprompter-Skript gehalten. Das Außendisplay nutzt die Textgröße des Skripts.</string>
     <string name="subject_interview_empty">Die Bedienperson hat keine Fragen geladen.</string>
+    <string name="subject_interview_position">Frage %1$d von %2$d</string>
+    <string name="subject_interview_operator_empty">Keine Interviewfragen geladen</string>
+    <string name="subject_interview_previous">Vorherige Frage</string>
+    <string name="subject_interview_next">Nächste Frage</string>
+    <string name="subject_interview_count">Fragen: %1$d / %2$d</string>
+    <string name="subject_interview_remaining">Verbleibende Zeichen in dieser Frage: %1$d</string>
+    <string name="subject_interview_rejected">Text über 50 Fragen oder 300 Zeichen pro Frage wurde nicht übernommen.</string>
 </resources>

@@ -217,6 +217,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
 
     private fun publish() {
         mutableState.value = machine.state
+        // The interview position belongs to one session: a new session starts at the first question.
+        if (machine.state.phase == DisplaySessionPhase.IDLE) cues.value = cues.value.copy(interviewIndex = 0)
         selfRoleObserver?.invoke(machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.TRANSFER)
     }
 

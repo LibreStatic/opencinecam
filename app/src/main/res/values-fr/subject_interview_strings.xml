@@ -3,4 +3,11 @@
     <string name="subject_interview_questions">Questions, une par ligne (50 × 300 caractères)</string>
     <string name="subject_interview_help">Les questions sont enregistrées uniquement sur cet appareil, séparément du script du téléprompteur. L\'écran extérieur utilise la taille du texte du script.</string>
     <string name="subject_interview_empty">L\'opérateur n\'a chargé aucune question.</string>
+    <string name="subject_interview_position">Question %1$d sur %2$d</string>
+    <string name="subject_interview_operator_empty">Aucune question d\'interview chargée</string>
+    <string name="subject_interview_previous">Question précédente</string>
+    <string name="subject_interview_next">Question suivante</string>
+    <string name="subject_interview_count">Questions : %1$d / %2$d</string>
+    <string name="subject_interview_remaining">Caractères restants pour cette question : %1$d</string>
+    <string name="subject_interview_rejected">Le texte au-delà de 50 questions ou de 300 caractères par question n\'a pas été ajouté.</string>
 </resources>

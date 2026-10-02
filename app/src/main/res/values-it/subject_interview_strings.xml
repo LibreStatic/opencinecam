@@ -3,4 +3,11 @@
     <string name="subject_interview_questions">Domande, una per riga (50 × 300 caratteri)</string>
     <string name="subject_interview_help">Le domande sono salvate solo su questo dispositivo e separate dal copione del gobbo. Lo schermo esterno usa la dimensione del testo del copione.</string>
     <string name="subject_interview_empty">L\'operatore non ha caricato domande.</string>
+    <string name="subject_interview_position">Domanda %1$d di %2$d</string>
+    <string name="subject_interview_operator_empty">Nessuna domanda dell\'intervista caricata</string>
+    <string name="subject_interview_previous">Domanda precedente</string>
+    <string name="subject_interview_next">Domanda successiva</string>
+    <string name="subject_interview_count">Domande: %1$d / %2$d</string>
+    <string name="subject_interview_remaining">Caratteri rimasti in questa domanda: %1$d</string>
+    <string name="subject_interview_rejected">Il testo oltre 50 domande o 300 caratteri per domanda non è stato aggiunto.</string>
 </resources>
