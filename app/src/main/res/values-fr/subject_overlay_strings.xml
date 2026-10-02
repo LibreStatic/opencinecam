@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally et compte à rebours</string>
     <string name="subject_tally_border">Bordure tally rouge pendant l\'enregistrement</string>
     <string name="subject_giant_countdown">Compte à rebours plein écran</string>
-    <string name="subject_tally_help">Le tally n\'est rouge que lorsque le service caméra confirme l\'enregistrement, et ambre pendant la préparation ou l\'enregistrement d\'une prise. Il suit la luminosité extérieure demandée.</string>
+    <string name="subject_tally_help">Le tally n\'est rouge que lorsque le service caméra confirme l\'enregistrement, et ambre pendant la préparation, la pause ou l\'enregistrement d\'une prise. Il suit la luminosité extérieure demandée.</string>
+    <string name="subject_audio_meter_label">Niveau du micro</string>
 </resources>

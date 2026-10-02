@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally y cuenta regresiva</string>
     <string name="subject_tally_border">Borde tally rojo mientras se graba</string>
     <string name="subject_giant_countdown">Cuenta regresiva a pantalla completa</string>
-    <string name="subject_tally_help">El tally es rojo solo mientras el servicio de cámara confirma la grabación y ámbar mientras una toma se prepara o se guarda. Sigue el brillo exterior solicitado.</string>
+    <string name="subject_tally_help">El tally es rojo solo mientras el servicio de cámara confirma la grabación y ámbar mientras una toma se prepara, está en pausa o se guarda. Sigue el brillo exterior solicitado.</string>
+    <string name="subject_audio_meter_label">Nivel del micrófono</string>
 </resources>

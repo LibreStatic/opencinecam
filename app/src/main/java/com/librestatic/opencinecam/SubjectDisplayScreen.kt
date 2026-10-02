@@ -62,7 +62,7 @@ internal fun SubjectDisplayScreen(
             Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds)
+            if (subjectShowsCountdownBadge(state, settings)) CountdownBadge(state.countdownSeconds)
             if (settings.showStatus || settings.mode == SubjectDisplayMode.STATUS) {
                 Text(stringResource(status), color = if (state.phase == CameraUiPhase.RECORDING) Color(0xFFFF6666) else Color.White,
                     fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("subject-capture-status"))
@@ -80,7 +80,7 @@ internal fun SubjectDisplayScreen(
                     lineHeight = (settings.prompterFontSp * 1.4f).sp,
                     modifier = content.verticalScroll(scroll, enabled = !settings.touchLocked).testTag("subject-script"),
                 )
-                SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, content)
+                SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, content, state, settings)
                 SubjectDisplayMode.REVIEW -> SubjectReviewContent(state, settings, cues, content)
                 SubjectDisplayMode.INTERVIEW -> SubjectInterviewContent(state, settings, cues, content)
                 SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, content)
