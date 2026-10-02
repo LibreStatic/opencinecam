@@ -107,7 +107,7 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             poly(.78f to .30f, .78f to .74f, .30f to .74f, close = false)
         }
         CineIcon.TORCH -> {
-            // Lightning bolt: the flash/torch control, independent of the torch operator button.
+            // Lightning bolt: the flash/torch control, shown only while no F-key carries the torch.
             poly(.58f to .08f, .24f to .56f, .48f to .56f, .40f to .92f, .76f to .42f, .52f to .42f, filled = true)
         }
         CineIcon.SETTINGS -> {

@@ -1827,7 +1827,10 @@ private fun CaptureTopBar(
         } else {
             TopAction(CineIcon.DISPLAYS, stringResource(R.string.fold_settings_title)) { showDisplays = true }
         }
-        TopAction(CineIcon.TORCH, stringResource(R.string.flash_torch)) { showLight = true }
+        // An F-key already mapped to the torch is the torch control; a second one up here was a duplicate.
+        if (OperatorAction.TORCH !in settings.operation.buttons) {
+            TopAction(CineIcon.TORCH, stringResource(R.string.flash_torch)) { showLight = true }
+        }
         TopAction(CineIcon.SETTINGS, stringResource(R.string.settings_tab), onOpenSettings)
     }
     if (vertical) {
