@@ -112,3 +112,4 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 - [OCC-PLAN-065: Professional control intent and operation](PLAN-065-professional-control-intent-and-operation.md) — H3 / InProgress
 
 - [OCC-PLAN-067: Opt-in WebDAV transfers and finalized capture bundles](PLAN-067-opt-in-webdav-transfers.md) — InProgress; transport exists, app wiring and full H5 acceptance remain open.
+- [OCC-PLAN-068: Exterior screen subject features and Razr Fold qualification](PLAN-068-exterior-screen-subject-features.md) — H2 / Ready; tally, self-monitor, fill light, review, interview, slate and out-of-frame modes via parallel Opus 5.5 subagents, then Razr Fold physical qualification last.

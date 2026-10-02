@@ -893,3 +893,17 @@ plans:
     risks: [RISK-020]
     conditional_gates: []
     intended_executor: Codex
+
+  - id: OCC-PLAN-068
+    title: "Exterior screen subject features and Razr Fold qualification"
+    status: Ready
+    revision: 2
+    milestone: H2
+    path: docs/plans/PLAN-068-exterior-screen-subject-features.md
+    depends_on: [OCC-PLAN-064]
+    blocks: []
+    requirements: [OCC-PRO-003, OCC-PRO-004, OCC-PRO-009]
+    adrs: [ADR-0031]
+    risks: [RISK-004]
+    conditional_gates: []
+    intended_executor: Claude Code (Opus 5.5 subagents, parallel waves)
