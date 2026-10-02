@@ -25,6 +25,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.material3.MaterialTheme
 import com.librestatic.opencinecam.ui.theme.CaptureTheme
@@ -612,6 +613,12 @@ internal fun CaptureSurface(
         // inset, so a filled (cropped) frame overflows the physical screen rather than relying on
         // Compose clipping, which a SurfaceView does not reliably honour.
         val overlayChrome = fullChrome && settings.translucentChrome
+        // The deck slides away during a take, and the stacked viewfinder grows into its space.
+        val viewfinderExpansion by animateFloatAsState(
+            if (stacked && !overlayChrome && state.phase == CameraUiPhase.RECORDING) 1f else 0f,
+            tween(RECORDING_VIEWFINDER_EXPANSION_MS, easing = FastOutSlowInEasing),
+            label = "recording-viewfinder-expansion",
+        )
         val previewPaneModifier = if (overlayChrome) {
             paneModifier(null)
         } else if (sideRails) {
@@ -636,6 +643,21 @@ internal fun CaptureSurface(
                     Modifier.wrapContentSize(unbounded = true).requiredSize(filled.width.toDp(), filled.height.toDp())
                 }
             } else Modifier.aspectRatio(displayRatio)
+            // The frame grows by a render transform, not by layout. LOG and the GPU viewfinder size
+            // their buffer from the layout, and a resized surface is reattached, which reconfigures
+            // a recorder session mid-take. The overlay has no surface, so it is laid out instead.
+            val paneWidth = constraints.maxWidth.toFloat()
+            val paneHeight = constraints.maxHeight.toFloat()
+            val deckSpace = if (stacked && !overlayChrome) stackedDeckHeightPx.toFloat() else 0f
+            val restingFrame = fittedPreviewViewport(paneWidth, paneHeight, displayRatio)
+            val recordingFrame = recordingPreviewViewport(paneWidth, paneHeight + deckSpace, 0f, deckSpace, displayRatio, viewfinderExpansion)
+            val frameGrown = recordingFrame != restingFrame && restingFrame.width > 0f
+            val frameScale = if (frameGrown) recordingFrame.width / restingFrame.width else 1f
+            val frameShift = (recordingFrame.top + recordingFrame.height / 2f) - (restingFrame.top + restingFrame.height / 2f)
+            val overlaySizeModifier = if (frameGrown) with(density) {
+                Modifier.offset { IntOffset(0, frameShift.roundToInt()) }
+                    .requiredSize(recordingFrame.width.toDp(), recordingFrame.height.toDp())
+            } else previewSizeModifier
             PreviewSurfaceView(
                 descriptor.cameraId,
                 streamSize.width,
@@ -646,13 +668,19 @@ internal fun CaptureSurface(
                 widthPx,
                 heightPx,
                 binder,
-                Modifier.align(Alignment.Center).then(previewSizeModifier),
+                Modifier.align(Alignment.Center)
+                    .graphicsLayer {
+                        scaleX = frameScale
+                        scaleY = frameScale
+                        translationY = frameShift
+                    }
+                    .then(previewSizeModifier),
             )
             // A frame narrower than its pane leaves a strip at each side (a tablet or an unfolded
             // screen in portrait). The scopes panel then sits in the end strip, clear of the zoom
             // rocker, instead of covering the picture. Floating chrome may occupy that strip.
             val framedWidthPx = if (overlayChrome && settings.viewfinderScale == ViewfinderScale.FILL) constraints.maxWidth.toFloat()
-                else minOf(constraints.maxWidth.toFloat(), constraints.maxHeight * displayRatio)
+                else minOf(constraints.maxWidth.toFloat(), recordingFrame.width)
             val sideStrip = with(density) { ((constraints.maxWidth - framedWidthPx) / 2f).toDp() }
             val scopesBeside = !overlayChrome && sideStrip - SCOPES_BESIDE_END_CLEARANCE - SCOPES_BESIDE_START_GAP >= SCOPES_BESIDE_MIN_WIDTH
             MonitoringOverlay(
@@ -671,7 +699,7 @@ internal fun CaptureSurface(
                 // The capture chrome stacks the histogram with the zoom and audio instruments;
                 // only the minimal self-recording chrome leaves it to the overlay.
                 drawHistogram = state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls,
-                modifier = Modifier.align(Alignment.Center).then(previewSizeModifier),
+                modifier = Modifier.align(Alignment.Center).then(overlaySizeModifier),
                 drawScopesPanel = !scopesBeside,
                 // 52 dp keys 8 dp from the window edge, plus a gap.
                 scopesPanelEndPadding = if (stacked && captureWindowProfile(safeWidthDp.value, safeHeightDp.value) == CaptureWindowProfile.COMPACT_PORTRAIT) 72.dp else 12.dp,
@@ -697,6 +725,7 @@ internal fun CaptureSurface(
             previewGesturesEnabled = panes == null,
             overlayViewfinderScale = settings.viewfinderScale.takeIf { overlayChrome },
             onStackedDeckHeight = { stackedDeckHeightPx = it },
+            viewfinderExpansion = viewfinderExpansion,
             zebra = zebra,
             peaking = peaking,
             histogram = histogram,
@@ -1273,6 +1302,8 @@ internal fun AdaptiveCaptureChrome(
     overlayViewfinderScale: ViewfinderScale? = null,
     // Reports the visible deck height of the compact portrait layout, which the viewfinder sits above.
     onStackedDeckHeight: (Int) -> Unit = {},
+    // 0 at rest, 1 once the stacked viewfinder has grown into the space of the hidden deck.
+    viewfinderExpansion: Float = 0f,
     zebra: Boolean,
     peaking: Boolean,
     histogram: Boolean,
@@ -1375,11 +1406,13 @@ internal fun AdaptiveCaptureChrome(
         // on chrome: a slim status bar, the F-keys over the viewfinder edge, a one-line deck.
         val slimChrome = compactPortrait && !sideRails
         val topBarHeight = if (slimChrome) SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
-        // The deck slides away while recording; the viewfinder keeps the size it had with the deck
-        // shown, so starting a take never reframes the preview.
+        // The deck slides away while recording. This height stays the deck's shown height, which
+        // is where the viewfinder rests; it then grows into the freed space (viewfinderExpansion).
+        // It is frozen during a take: the recording deck is taller (it adds Pause), and following it
+        // would resize the viewfinder surface, which reattaches the preview mid-take.
         var stableDeckHeightPx by remember { mutableIntStateOf(0) }
-        LaunchedEffect(controlDeckHeightPx) {
-            if (controlDeckHeightPx > 0) stableDeckHeightPx = controlDeckHeightPx
+        LaunchedEffect(controlDeckHeightPx, recording) {
+            if (controlDeckHeightPx > 0 && !recording) stableDeckHeightPx = controlDeckHeightPx
         }
         LaunchedEffect(sideRails, stableDeckHeightPx, overlayViewfinderScale) {
             onStackedDeckHeight(if (sideRails || overlayViewfinderScale != null) 0 else stableDeckHeightPx)
@@ -1410,7 +1443,7 @@ internal fun AdaptiveCaptureChrome(
                 rightToLeft = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl,
             )
         } else if (previewGesturesEnabled) {
-            stackedPreviewViewport(width, height, with(density) { topBarHeight.toPx() }, stableDeckHeightPx.toFloat(), ratio)
+            recordingPreviewViewport(width, height, with(density) { topBarHeight.toPx() }, stableDeckHeightPx.toFloat(), ratio, viewfinderExpansion)
         } else fittedPreviewViewport(width, height, ratio)
         val previewWidth = previewViewport.width
         val previewHeight = previewViewport.height

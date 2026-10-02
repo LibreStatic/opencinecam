@@ -104,4 +104,25 @@ class CaptureChromeLayoutTest {
         assertEquals(0f, viewport.height, 0.01f)
         assertEquals(200f, viewport.top, 0.01f)
     }
+
+    @Test fun recordingViewportGrowsIntoTheDeckSpace() {
+        // 9:16 is height-limited above the 500 px deck; without it, it fills the 1080 px width.
+        val rest = recordingPreviewViewport(1080f, 2400f, topInset = 126f, deckHeight = 500f, ratio = 9f / 16f, fraction = 0f)
+        assertEquals(stackedPreviewViewport(1080f, 2400f, topInset = 126f, bottomInset = 500f, ratio = 9f / 16f), rest)
+        val full = recordingPreviewViewport(1080f, 2400f, topInset = 126f, deckHeight = 500f, ratio = 9f / 16f, fraction = 1f)
+        assertEquals(1080f, full.width, 0.01f)
+        assertEquals(1920f, full.height, 0.01f)
+        assertEquals(0f, full.left, 0.01f)
+        assertEquals(126f + (2274f - 1920f) / 2f, full.top, 0.01f)
+        val half = recordingPreviewViewport(1080f, 2400f, topInset = 126f, deckHeight = 500f, ratio = 9f / 16f, fraction = 0.5f)
+        assertEquals((rest.width + full.width) / 2f, half.width, 0.01f)
+        assertEquals((rest.top + full.top) / 2f, half.top, 0.01f)
+        assertEquals(half.width / (9f / 16f), half.height, 0.5f)
+    }
+
+    @Test fun recordingViewportKeepsAFrameTheDeckDoesNotLimit() {
+        // 3:4 is already as wide as the window, so it must not slide down into the deck space.
+        val rest = stackedPreviewViewport(1080f, 2400f, topInset = 126f, bottomInset = 500f, ratio = 3f / 4f)
+        assertEquals(rest, recordingPreviewViewport(1080f, 2400f, topInset = 126f, deckHeight = 500f, ratio = 3f / 4f, fraction = 1f))
+    }
 }

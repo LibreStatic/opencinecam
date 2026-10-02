@@ -77,3 +77,32 @@ internal fun stackedPreviewViewport(
     val inner = fittedPreviewViewport(containerWidth, (containerHeight - topInset - bottomInset).coerceAtLeast(0f), ratio)
     return inner.copy(top = inner.top + topInset)
 }
+
+/** How long the stacked viewfinder takes to grow into the deck's space when a take starts. */
+internal const val RECORDING_VIEWFINDER_EXPANSION_MS = 280
+
+/**
+ * The stacked viewfinder while recording. The deck slides away during a take, so the frame grows
+ * into its space as [fraction] goes from 0 (fitted above the deck) to 1 (fitted down to the
+ * container's bottom edge). The aspect ratio is kept, so nothing is cropped; a frame whose size
+ * the deck does not limit stays where it is rather than sliding down for no gain.
+ */
+internal fun recordingPreviewViewport(
+    containerWidth: Float,
+    containerHeight: Float,
+    topInset: Float,
+    deckHeight: Float,
+    ratio: Float?,
+    fraction: Float,
+): PreviewViewport {
+    val resting = stackedPreviewViewport(containerWidth, containerHeight, topInset, deckHeight, ratio)
+    val expanded = stackedPreviewViewport(containerWidth, containerHeight, topInset, 0f, ratio)
+    if (expanded.width - resting.width < 1f) return resting
+    val t = fraction.coerceIn(0f, 1f)
+    return PreviewViewport(
+        left = resting.left + (expanded.left - resting.left) * t,
+        top = resting.top + (expanded.top - resting.top) * t,
+        width = resting.width + (expanded.width - resting.width) * t,
+        height = resting.height + (expanded.height - resting.height) * t,
+    )
+}
