@@ -30,6 +30,8 @@ import com.librestatic.opencinecam.CaptureCountdown
 
 import com.librestatic.opencinecam.SubjectPreviewPort
 import com.librestatic.opencinecam.SubjectSurfaceRegistry
+import com.librestatic.opencinecam.SubjectPreviewBlock
+import com.librestatic.opencinecam.subjectPreviewBlock
 import com.librestatic.opencinecam.SubjectDisplayMode
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
@@ -681,7 +683,9 @@ class CaptureService : Service() {
         // Off-speed conforms frames on the GPU only at regular rates: in a constrained high-speed
         // session Camera2 feeds any non-encoder surface 30 fps, so those takes go to the encoder
         // directly (see startVideo) and the viewfinder stays direct.
-        (mode == CaptureMode.VIDEO && (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW ||
+        // The subject preview follows the same rule (subjectPreviewBlock): never for a high-speed take.
+        (mode == CaptureMode.VIDEO && ((settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW &&
+                subjectPreviewBlock(mode, cameraState.value.activeVideoProfile?.constrainedHighSpeed == true) == null) ||
             (settings.videoOffSpeed && cameraState.value.activeVideoProfile?.constrainedHighSpeed != true) ||
             currentOperatorLut != null || currentRecordingLut != null || recordingLutIntent.get()?.lut != null)) ||
         (photoPreviewMode(mode) && currentOperatorLut != null)
@@ -701,9 +705,11 @@ class CaptureService : Service() {
         val epoch = subjectPreviewEpoch.incrementAndGet()
         if (subjectPortClosed) return
         val lease = subjectSurfaces.current ?: return
-        if (cameraState.value.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG) || settings.subjectDisplay.mode != SubjectDisplayMode.PREVIEW) {
+        val block = subjectPreviewBlock(cameraState.value.selectedMode, cameraState.value.activeVideoProfile?.constrainedHighSpeed == true)
+        if (block != null || settings.subjectDisplay.mode != SubjectDisplayMode.PREVIEW) {
             previewEngine.detachSubjectPreview(lease.token)
-            subjectStatus.value = SubjectPreviewStatus(failure = getString(R.string.subject_preview_mode_unavailable))
+            subjectStatus.value = SubjectPreviewStatus(failure = getString(
+                if (block == SubjectPreviewBlock.HIGH_SPEED) R.string.subject_preview_high_speed_unavailable else R.string.subject_preview_mode_unavailable))
             resetSubjectLutStatus()
             return
         }

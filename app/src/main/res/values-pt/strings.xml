@@ -260,6 +260,7 @@
     <string name="fold_preview_mirror">Espelhar pré-visualização externa</string>
     <string name="fold_preview_assist">Assistência de visualização LOG externa</string>
     <string name="subject_preview_mode_unavailable">A pré-visualização da câmera exige o modo Vídeo ou LOG.</string>
+    <string name="subject_preview_high_speed_unavailable">A pré-visualização da câmera não está disponível em alta velocidade: a tomada vai direto ao codificador.</string>
     <string name="subject_preview_waiting">Aguardando quadros da câmera</string>
     <string name="subject_preview_stale">Pré-visualização pausada — o último quadro está desatualizado</string>
     <string name="subject_preview_age">Pré-visualização · %1$d ms desde o recebimento do quadro</string>

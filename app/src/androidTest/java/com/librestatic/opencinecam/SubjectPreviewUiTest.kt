@@ -3,6 +3,9 @@ package com.librestatic.opencinecam
 
 import android.os.SystemClock
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
@@ -18,6 +21,18 @@ class SubjectPreviewUiTest {
             compose.onAllNodesWithText("Preview paused", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("subject-preview-age").assertIsDisplayed()
+    }
+    @Test fun statusSubmittedAfterTheLastTickReadsLiveNotPaused() {
+        // Razr U8: a 200 ms ticker sampled before each 66 ms status made every live frame read as paused.
+        compose.mainClock.autoAdvance = false
+        var status by mutableStateOf(SubjectPreviewStatus())
+        compose.setContent { MaterialTheme { SubjectFrameBadge(status) } }
+        compose.waitForIdle()
+        SystemClock.sleep(50)
+        val received = SystemClock.elapsedRealtime()
+        status = SubjectPreviewStatus(received, received)
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("since frame receipt", substring = true).assertIsDisplayed()
     }
     @Test fun previewRoleHasNoCaptureOrSettingsActionsEvenWhenTouchUnlocked() {
         compose.setContent {

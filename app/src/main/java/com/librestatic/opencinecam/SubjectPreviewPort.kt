@@ -11,6 +11,20 @@ interface SubjectPreviewPort {
     fun attach(surface: Surface, rotationDegrees: Int): AutoCloseable
 }
 
+/** Why the subject window cannot show the camera, or null when it can. */
+enum class SubjectPreviewBlock { MODE, HIGH_SPEED }
+
+/**
+ * The subject preview rides the GPU viewfinder. A constrained high-speed VIDEO take must reach the
+ * encoder directly (the GPU texture only gets the ~30 fps preview share), so the subject preview
+ * never switches that graph to the GPU: it reports HIGH_SPEED instead of degrading the file.
+ */
+fun subjectPreviewBlock(mode: CaptureMode, videoConstrainedHighSpeed: Boolean): SubjectPreviewBlock? = when {
+    mode != CaptureMode.VIDEO && mode != CaptureMode.LOG -> SubjectPreviewBlock.MODE
+    mode == CaptureMode.VIDEO && videoConstrainedHighSpeed -> SubjectPreviewBlock.HIGH_SPEED
+    else -> null
+}
+
 /** Main-thread identity/generation lease; a late destroy or callback cannot affect a newer surface. */
 class SubjectSurfaceRegistry<T> {
     data class Lease<T>(val token: Long, val surface: T, val rotationDegrees: Int)

@@ -260,6 +260,7 @@
     <string name="fold_preview_mirror">Externe Vorschau spiegeln</string>
     <string name="fold_preview_assist">Externer LOG View Assist</string>
     <string name="subject_preview_mode_unavailable">Die Kameravorschau erfordert den Modus Video oder LOG.</string>
+    <string name="subject_preview_high_speed_unavailable">Die Kameravorschau ist bei Hochgeschwindigkeit nicht verfügbar: Die Aufnahme geht direkt an den Encoder.</string>
     <string name="subject_preview_waiting">Warten auf Kamera-Frames</string>
     <string name="subject_preview_stale">Vorschau pausiert – der letzte Frame ist veraltet</string>
     <string name="subject_preview_age">Vorschau · %1$d ms seit Frame-Empfang</string>

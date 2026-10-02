@@ -29,4 +29,12 @@ class SubjectSurfaceRegistryTest {
     @Test(expected = IllegalArgumentException::class) fun invalidRotationNeverCreatesALease() {
         SubjectSurfaceRegistry<String>().attach("surface", 45)
     }
+
+    @Test fun highSpeedVideoNeverRoutesThroughTheSubjectPreview() {
+        // Razr U8: PREVIEW forced the GPU viewfinder on a 240 fps CHS take, which then recorded 30 fps.
+        assertEquals(SubjectPreviewBlock.HIGH_SPEED, subjectPreviewBlock(CaptureMode.VIDEO, videoConstrainedHighSpeed = true))
+        assertNull(subjectPreviewBlock(CaptureMode.VIDEO, videoConstrainedHighSpeed = false))
+        assertNull(subjectPreviewBlock(CaptureMode.LOG, videoConstrainedHighSpeed = true))
+        assertEquals(SubjectPreviewBlock.MODE, subjectPreviewBlock(CaptureMode.PHOTO, videoConstrainedHighSpeed = false))
+    }
 }

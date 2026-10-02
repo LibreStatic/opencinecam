@@ -94,8 +94,11 @@ internal fun SubjectCameraPreview(
 
 @Composable
 internal fun SubjectFrameBadge(status: SubjectPreviewStatus, modifier: Modifier = Modifier) {
-    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
-    LaunchedEffect(Unit) { while (true) { now = SystemClock.elapsedRealtime(); delay(200) } }
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(200); tick++ } }
+    // Sample the clock per status too: statuses arrive every ~66 ms stamped after the last tick,
+    // and isFresh rejects a submission newer than `now`, so a tick-only clock reads live as paused.
+    val now = remember(status, tick) { SystemClock.elapsedRealtime() }
     val failure = status.failure
     val receivedAt = status.sourceReceivedAtMs
     val message = when {

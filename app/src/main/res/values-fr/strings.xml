@@ -260,6 +260,7 @@
     <string name="fold_preview_mirror">Miroir de l\'aperçu extérieur</string>
     <string name="fold_preview_assist">Assistance de vue LOG extérieure</string>
     <string name="subject_preview_mode_unavailable">L\'aperçu caméra exige le mode Vidéo ou LOG.</string>
+    <string name="subject_preview_high_speed_unavailable">L\'aperçu caméra est indisponible en haute vitesse : la prise va directement à l\'encodeur.</string>
     <string name="subject_preview_waiting">En attente d\'images de la caméra</string>
     <string name="subject_preview_stale">Aperçu en pause — la dernière image est périmée</string>
     <string name="subject_preview_age">Aperçu · %1$d ms depuis la réception de l\'image</string>
