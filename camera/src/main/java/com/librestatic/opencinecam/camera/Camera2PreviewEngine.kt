@@ -120,6 +120,8 @@ data class Camera2CameraDescriptor(
     val heicSize: Size? = null,
     val aeCompensationStepNumerator: Int = 0,
     val aeCompensationStepDenominator: Int = 1,
+    /** OCC-PLAN-068 U7: advertised STATISTICS_FACE_DETECT_MODE values; empty when the request key is absent. */
+    val faceDetectModes: Set<Int> = emptySet(),
 ) {
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
@@ -278,6 +280,8 @@ interface Camera2PreviewListener {
     fun onFocusSelectionChanged(diopters: Float?) = Unit
     /** Emitted on the camera executor only when the analysis suspension state changes. */
     fun onAnalysisSuspended(reason: AnalysisSuspension) {}
+    /** OCC-PLAN-068 U7, camera thread: framing transitions only; never carries face geometry. */
+    fun onSubjectFramingChanged(status: SubjectFramingStatus) = Unit
 }
 
 /**
@@ -565,6 +569,11 @@ class Camera2PreviewEngine(
     @Volatile private var logGreyReference = OpenCineLogGreyReference.NATIVE
     private var imageProcessing = ImageProcessingSelection()
     private val processingDefaults = java.util.WeakHashMap<CaptureRequest.Builder, ImageProcessingDefaults>()
+    // OCC-PLAN-068 U7 (cameraExecutor-confined): optional face statistics for the out-of-frame warning.
+    @Volatile private var subjectFramingRequested = false
+    private val faceDetectGate = FaceDetectGraphGate()
+    private val subjectFramingTracker = SubjectFramingTracker()
+    private val faceDetectDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Int?>()
     private var professionalExposure: ExposureSelection? = null
     private var requestedTargetFps = DEFAULT_TARGET_FPS
     private var activeVideoProfile: Camera2VideoProfile? = null
@@ -3705,6 +3714,7 @@ class Camera2PreviewEngine(
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
+                    reportSubjectFraming(request, result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
                         lastMetadataAtMs = now
@@ -3760,6 +3770,8 @@ class Camera2PreviewEngine(
                     if (disposed.get() || callbackGeneration != generation || armedSession == null ||
                         armedSession !== this@Camera2PreviewEngine.session) return
                     runCatching { graphAuditor(armedSession).recordCaptureFailure() }
+                    if (request.get(CaptureRequest.STATISTICS_FACE_DETECT_MODE) == faceDetectModeFor(activeDescriptor) &&
+                        faceDetectModeFor(activeDescriptor) != null && faceDetectGate.onCaptureFailed()) reissueFaceDetect()
                 }
             }
     }
@@ -3950,6 +3962,7 @@ class Camera2PreviewEngine(
         applyImageProcessing(builder)
         applyTorch(builder)
         applyZoom(builder)
+        applyFaceDetect(builder)
     }
 
     private fun applyImageProcessing(builder: CaptureRequest.Builder) {
@@ -4048,6 +4061,111 @@ class Camera2PreviewEngine(
         }.onFailure {
             listener?.onFailure("lock-reapply-failed", it.message ?: "Lock update could not be applied.", true)
         }
+    }
+
+    /**
+     * OCC-PLAN-068 U7: requests HAL face statistics for the out-of-frame warning. Applied only where
+     * the active camera advertises SIMPLE/FULL and the graph is not constrained high-speed; a graph
+     * that ignores or fails with the key falls back without it. Off (the default) leaves every
+     * request exactly as before.
+     */
+    fun setSubjectFramingEnabled(enabled: Boolean) {
+        cameraExecutor.execute {
+            if (subjectFramingRequested == enabled) return@execute
+            subjectFramingRequested = enabled
+            reissueFaceDetect()
+        }
+    }
+
+    private fun faceDetectGraph(): FaceDetectGraph = when {
+        isHighSpeedSession() -> FaceDetectGraph.HIGH_SPEED
+        logPreviewEnabled || activeLogProfile != null -> FaceDetectGraph.LOG
+        recording || activeVideoProfile != null || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) -> FaceDetectGraph.VIDEO
+        else -> FaceDetectGraph.PREVIEW
+    }
+
+    /** Mode this camera/graph would carry if requested, ignoring the request flag; null when unavailable. */
+    private fun faceDetectModeFor(descriptor: Camera2CameraDescriptor?): Int? {
+        descriptor ?: return null
+        val graph = faceDetectGraph()
+        if (faceDetectGate.isRejected(descriptor.cameraId, graph)) return null
+        return FaceDetectCapability.select(descriptor.faceDetectModes, graph)
+    }
+
+    private fun applyFaceDetect(builder: CaptureRequest.Builder) {
+        val descriptor = activeDescriptor
+        val mode = faceDetectModeFor(descriptor)?.takeIf { subjectFramingRequested }
+        if (descriptor != null && mode != null) {
+            if (!faceDetectDefaults.containsKey(builder)) faceDetectDefaults[builder] = builder.get(CaptureRequest.STATISTICS_FACE_DETECT_MODE)
+            builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mode)
+            faceDetectGate.arm(descriptor.cameraId, faceDetectGraph())
+        } else {
+            // Restore the template value only on builders this hook changed; others stay untouched.
+            if (faceDetectDefaults.containsKey(builder)) builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, faceDetectDefaults.remove(builder))
+            faceDetectGate.disarm()
+        }
+    }
+
+    /** cameraExecutor: resubmits the repeating request with only the face-statistics key changed. */
+    private fun reissueFaceDetect() {
+        val builder = repeatingBuilder ?: return
+        val configured = session ?: return
+        if (isHighSpeedSession()) return
+        applyFaceDetect(builder)
+        runCatching {
+            configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
+        }.onFailure {
+            if (builder.get(CaptureRequest.STATISTICS_FACE_DETECT_MODE) == faceDetectModeFor(activeDescriptor) && subjectFramingRequested) {
+                // The graph refused the key synchronously: remember that and continue without it.
+                faceDetectGate.rejectActive()
+                applyFaceDetect(builder)
+                runCatching { configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
+            }
+            Log.w(TAG, "Face statistics request update failed; continuing without the out-of-frame warning.")
+        }
+    }
+
+    /**
+     * cameraExecutor, per frame: reduces this result's face boxes to "inside the recorded area?"
+     * plus a coarse exit edge. Boxes are read here and dropped; nothing is logged or retained.
+     */
+    private fun reportSubjectFraming(request: CaptureRequest, result: TotalCaptureResult) {
+        val descriptor = activeDescriptor ?: return
+        val now = SystemClock.elapsedRealtimeNanos()
+        val supportedMode = faceDetectModeFor(descriptor)
+        val requestedMode = request.get(CaptureRequest.STATISTICS_FACE_DETECT_MODE)
+        val detecting = subjectFramingRequested && supportedMode != null && requestedMode == supportedMode
+        subjectFramingTracker.configure(supportedMode != null, detecting, now)?.let { listener?.onSubjectFramingChanged(it) }
+        // detecting implies requestedMode == supportedMode != null (smart cast).
+        if (!detecting) return
+        if (faceDetectGate.onResult(requestedMode, result.get(android.hardware.camera2.CaptureResult.STATISTICS_FACE_DETECT_MODE))) {
+            subjectFramingTracker.configure(false, false, now)?.let { listener?.onSubjectFramingChanged(it) }
+            reissueFaceDetect()
+            return
+        }
+        val active = descriptor.sensorActiveArray ?: return
+        val crop = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
+            ?.let { SensorRect(it.left, it.top, it.right, it.bottom) }
+            ?: SensorRect(0, 0, active.width(), active.height())
+        val stream = activeLogProfile?.size ?: activeVideoProfile?.size ?: descriptor.previewSize
+        val recorded = SubjectFramingGeometry.recordedArea(crop, stream.width, stream.height)
+        var inFrame = false
+        var anyFace = false
+        var largest = -1L
+        var hint = FramingEdge.NONE
+        result.get(android.hardware.camera2.CaptureResult.STATISTICS_FACES)?.forEach { face ->
+            val bounds = face.bounds
+            val box = SensorRect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            anyFace = true
+            if (SubjectFramingGeometry.isInside(box, recorded)) inFrame = true
+            val area = box.width.toLong() * box.height
+            if (area > largest) {
+                largest = area
+                hint = SubjectFramingGeometry.sensorEdge(box, recorded)
+            }
+        }
+        val edge = SubjectFramingGeometry.toContentEdge(hint, jpegOrientation(descriptor))
+        subjectFramingTracker.onFrame(inFrame, edge, anyFace, now)?.let { listener?.onSubjectFramingChanged(it) }
     }
 
     private fun disableAfLock(notify: Boolean) {
@@ -4407,6 +4525,8 @@ class Camera2PreviewEngine(
                 awbLockSupported = characteristics.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true &&
                     CaptureRequest.CONTROL_AWB_LOCK in characteristics.availableCaptureRequestKeys,
                 availableAwbModes = characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toSet().orEmpty(),
+                faceDetectModes = if (CaptureRequest.STATISTICS_FACE_DETECT_MODE in characteristics.availableCaptureRequestKeys)
+                    characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES)?.toSet().orEmpty() else emptySet(),
                 imageProcessingCapabilities = ImageProcessingCapabilities(
                     opticalModes = if (CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.toSet().orEmpty() else emptySet(),

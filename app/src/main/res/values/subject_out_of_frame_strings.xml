@@ -4,4 +4,7 @@
     <string name="subject_out_of_frame">Warn when the face leaves the recorded area</string>
     <string name="subject_out_of_frame_delay">Warning delay: %1$d s</string>
     <string name="subject_out_of_frame_help">Uses the camera\'s own face detection when the active capture setup offers it. Face positions stay in memory and are never saved or written to metadata.</string>
+    <string name="subject_out_of_frame_banner">You\'re out of frame</string>
+    <string name="subject_out_of_frame_hud">OUT OF FRAME</string>
+    <string name="subject_out_of_frame_unavailable">Not available: the current camera or capture mode does not offer face detection. High-frame-rate (slow motion) recording never offers it.</string>
 </resources>

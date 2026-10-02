@@ -171,6 +171,8 @@ data class CameraUiState(
     val timelapseMissedIntervals: Long = 0,
     val timelapseEncoder: String? = null,
     val timelapseHardwareEncoder: Boolean? = null,
+    /** OCC-PLAN-068 U7: derived framing only (no face geometry); never persisted. */
+    val subjectFraming: com.librestatic.opencinecam.camera.SubjectFramingStatus = com.librestatic.opencinecam.camera.SubjectFramingStatus(),
 ) {
     val whiteBalancePreparing: Boolean
         get() = phase == CameraUiPhase.CAPTURING && recordingWhiteBalanceStatus in setOf(

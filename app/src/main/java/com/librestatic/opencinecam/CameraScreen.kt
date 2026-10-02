@@ -1839,6 +1839,7 @@ private fun CaptureTopBar(
             if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
             CaptureStatusLine(state, Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 3, textAlign = TextAlign.Center)
             ThermalHudChip()
+            OutOfFrameHudChip(state)
             androidx.compose.foundation.layout.FlowRow(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
@@ -1858,6 +1859,7 @@ private fun CaptureTopBar(
         else Spacer(Modifier.width(4.dp))
         CaptureStatusLine(state, Modifier.weight(1f))
         ThermalHudChip()
+        OutOfFrameHudChip(state)
         actions()
     }
 }
@@ -3088,6 +3090,7 @@ private fun RecordingOverlay(
             }
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
             ThermalHudChip()
+            OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
             if (!compact) TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {

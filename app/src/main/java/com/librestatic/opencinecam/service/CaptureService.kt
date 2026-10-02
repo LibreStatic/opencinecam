@@ -1417,6 +1417,10 @@ class CaptureService : Service() {
             cameraState.update { it.copy(zoomEffectiveRatio = ratio) }
         }
 
+        override fun onSubjectFramingChanged(status: com.librestatic.opencinecam.camera.SubjectFramingStatus) {
+            cameraState.update { it.copy(subjectFraming = status) }
+        }
+
         override fun onZoomRejected(requested: Float, accepted: Float) {
             cameraState.value = cameraState.value.copy(
                 zoomRatio = accepted,
@@ -2075,6 +2079,7 @@ class CaptureService : Service() {
                 previewEngine.setTorch(settings.flashEnabled, settings.torchStrengthLevel)
             }
             previewEngine.setMonitoringOptions(settings.monitoring)
+            previewEngine.setSubjectFramingEnabled(settings.subjectDisplay.outOfFrameWarning)
             if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.logViewAssistEnabled)
             if (previous.logGreyReference != settings.logGreyReference) previewEngine.setOpenCineLogGreyReference(settings.logGreyReference)
             if (previous.anamorphicSqueeze != settings.anamorphicSqueeze) previewEngine.setOpenCineLogSqueezeFactor(settings.anamorphicSqueeze.factor)

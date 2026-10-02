@@ -4,4 +4,7 @@
     <string name="subject_out_of_frame">Avertir quand le visage quitte la zone enregistrée</string>
     <string name="subject_out_of_frame_delay">Délai d\'alerte : %1$d s</string>
     <string name="subject_out_of_frame_help">Utilise la détection de visages de la caméra lorsque la configuration de capture active la propose. Les positions des visages restent en mémoire et ne sont jamais enregistrées ni écrites dans les métadonnées.</string>
+    <string name="subject_out_of_frame_banner">Vous êtes hors cadre</string>
+    <string name="subject_out_of_frame_hud">HORS CADRE</string>
+    <string name="subject_out_of_frame_unavailable">Indisponible : la caméra ou le mode de capture actuel ne propose pas la détection des visages. L\'enregistrement à haute fréquence d\'images (ralenti) ne la propose jamais.</string>
 </resources>

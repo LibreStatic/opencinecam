@@ -4,4 +4,7 @@
     <string name="subject_out_of_frame">Warnen, wenn das Gesicht den aufgezeichneten Bereich verlässt</string>
     <string name="subject_out_of_frame_delay">Warnverzögerung: %1$d s</string>
     <string name="subject_out_of_frame_help">Nutzt die Gesichtserkennung der Kamera, wenn die aktive Aufnahmekonfiguration sie anbietet. Gesichtspositionen bleiben im Speicher und werden nie gespeichert oder in Metadaten geschrieben.</string>
+    <string name="subject_out_of_frame_banner">Du bist nicht im Bild</string>
+    <string name="subject_out_of_frame_hud">NICHT IM BILD</string>
+    <string name="subject_out_of_frame_unavailable">Nicht verfügbar: Die aktuelle Kamera oder der Aufnahmemodus bietet keine Gesichtserkennung. Aufnahmen mit hoher Bildrate (Zeitlupe) bieten sie nie.</string>
 </resources>

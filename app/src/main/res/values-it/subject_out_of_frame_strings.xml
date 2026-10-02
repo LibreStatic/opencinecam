@@ -4,4 +4,7 @@
     <string name="subject_out_of_frame">Avvisa quando il volto esce dall\'area registrata</string>
     <string name="subject_out_of_frame_delay">Ritardo dell\'avviso: %1$d s</string>
     <string name="subject_out_of_frame_help">Usa il rilevamento dei volti della fotocamera quando la configurazione di acquisizione attiva lo offre. Le posizioni dei volti restano in memoria e non vengono mai salvate né scritte nei metadati.</string>
+    <string name="subject_out_of_frame_banner">Sei fuori inquadratura</string>
+    <string name="subject_out_of_frame_hud">FUORI INQUADRATURA</string>
+    <string name="subject_out_of_frame_unavailable">Non disponibile: la fotocamera o la modalità di acquisizione attuale non offre il rilevamento dei volti. La registrazione ad alta frequenza (slow motion) non lo offre mai.</string>
 </resources>
