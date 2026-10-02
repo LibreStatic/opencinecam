@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally e conto alla rovescia</string>
     <string name="subject_tally_border">Bordo tally rosso durante la registrazione</string>
     <string name="subject_giant_countdown">Conto alla rovescia a schermo intero</string>
-    <string name="subject_tally_help">Il tally è rosso solo mentre il servizio della fotocamera conferma la registrazione e ambra mentre una ripresa è in preparazione o in salvataggio. Segue la luminosità esterna richiesta.</string>
+    <string name="subject_tally_help">Il tally è rosso solo mentre il servizio della fotocamera conferma la registrazione e ambra mentre una ripresa è in preparazione, in pausa o in salvataggio. Segue la luminosità esterna richiesta.</string>
+    <string name="subject_audio_meter_label">Livello del microfono</string>
 </resources>

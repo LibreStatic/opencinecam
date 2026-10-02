@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally and countdown</string>
     <string name="subject_tally_border">Red tally border while recording</string>
     <string name="subject_giant_countdown">Full-screen countdown</string>
-    <string name="subject_tally_help">The tally is red only while the camera service confirms recording and amber while a take is preparing or saving. It follows the requested exterior brightness.</string>
+    <string name="subject_tally_help">The tally is red only while the camera service confirms recording and amber while a take is preparing, paused or saving. It follows the requested exterior brightness.</string>
+    <string name="subject_audio_meter_label">Microphone level</string>
 </resources>

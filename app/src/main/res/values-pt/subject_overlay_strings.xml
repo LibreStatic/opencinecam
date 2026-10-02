@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally e contagem regressiva</string>
     <string name="subject_tally_border">Borda tally vermelha durante a gravação</string>
     <string name="subject_giant_countdown">Contagem regressiva em tela cheia</string>
-    <string name="subject_tally_help">O tally fica vermelho só enquanto o serviço da câmera confirma a gravação e âmbar enquanto uma tomada é preparada ou salva. Segue o brilho externo solicitado.</string>
+    <string name="subject_tally_help">O tally fica vermelho só enquanto o serviço da câmera confirma a gravação e âmbar enquanto uma tomada é preparada, pausada ou salva. Segue o brilho externo solicitado.</string>
+    <string name="subject_audio_meter_label">Nível do microfone</string>
 </resources>

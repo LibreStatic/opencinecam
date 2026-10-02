@@ -11,5 +11,6 @@
     <string name="subject_tally_title">Tally und Countdown</string>
     <string name="subject_tally_border">Roter Tally-Rahmen während der Aufnahme</string>
     <string name="subject_giant_countdown">Vollbild-Countdown</string>
-    <string name="subject_tally_help">Der Tally ist nur rot, solange der Kameradienst die Aufnahme bestätigt, und gelb, während ein Take vorbereitet oder gespeichert wird. Er folgt der angeforderten Außenhelligkeit.</string>
+    <string name="subject_tally_help">Der Tally ist nur rot, solange der Kameradienst die Aufnahme bestätigt, und gelb, während ein Take vorbereitet wird, pausiert oder gespeichert wird. Er folgt der angeforderten Außenhelligkeit.</string>
+    <string name="subject_audio_meter_label">Mikrofonpegel</string>
 </resources>
