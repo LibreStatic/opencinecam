@@ -4,4 +4,7 @@
     <string name="subject_out_of_frame">Avisar cuando la cara salga del área grabada</string>
     <string name="subject_out_of_frame_delay">Demora del aviso: %1$d s</string>
     <string name="subject_out_of_frame_help">Usa la detección de caras de la propia cámara cuando la configuración de captura activa la ofrece. Las posiciones de las caras quedan en memoria y nunca se guardan ni se escriben en los metadatos.</string>
+    <string name="subject_out_of_frame_banner">Estás fuera de cuadro</string>
+    <string name="subject_out_of_frame_hud">FUERA DE CUADRO</string>
+    <string name="subject_out_of_frame_unavailable">No disponible: la cámara o el modo de captura actual no ofrece detección de caras. La grabación de alta velocidad (cámara lenta) nunca la ofrece.</string>
 </resources>
