@@ -137,7 +137,7 @@ private fun ProSlider(label: String, value: Float, range: ClosedFloatingPointRan
     var draft by remember(value, range) { mutableFloatStateOf(value.coerceIn(range)) }
     Column {
         Text("$label: ${format(draft)}", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-        Slider(value = draft, onValueChange = { draft = it }, onValueChangeFinished = { onChange(draft) }, enabled = enabled,
+        CineSlider(value = draft, onValueChange = { draft = it }, onValueChangeFinished = { onChange(draft) }, enabled = enabled,
             valueRange = range, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label })
     }
 }

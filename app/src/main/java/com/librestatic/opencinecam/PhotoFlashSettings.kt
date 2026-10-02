@@ -57,7 +57,7 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
             val label = stringResource(R.string.photo_flash_strength, level.roundToInt(), caps.singleMax)
             Text(if (selection.strength == null) stringResource(R.string.photo_flash_default_strength) else label, color = MaterialTheme.colorScheme.onSurface)
             val interaction = remember { MutableInteractionSource() }
-            Slider(value = level, interactionSource = interaction,
+            CineSlider(value = level, interactionSource = interaction,
                 thumb = { Box(Modifier.heightIn(min = 48.dp)) { SliderDefaults.Thumb(interactionSource = interaction) } }, onValueChange = { level = it },
                 onValueChangeFinished = { onChange(settings.copy(photoFlash = selection.copy(strength = level.roundToInt()))) },
                 enabled = selection.copy(strength = level.roundToInt()).resolve(caps, settings.exposure.mode) is PhotoFlashResolution.Plan,

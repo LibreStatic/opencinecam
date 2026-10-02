@@ -45,7 +45,7 @@ internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings
             tag = { "accumulation-edge-$it" })
         if (selection.mode == AccumulationMode.STARS) {
             Text(stringResource(R.string.accumulation_threshold, selection.starsThreshold), color = MaterialTheme.colorScheme.onSurface)
-            Slider(value = selection.starsThreshold.toFloat(), valueRange = 0f..255f, steps = 254,
+            CineSlider(value = selection.starsThreshold.toFloat(), valueRange = 0f..255f, steps = 254,
                 onValueChange = { onChange(settings.copy(accumulation = selection.copy(starsThreshold = it.toInt()))) },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("accumulation-threshold"))
         }

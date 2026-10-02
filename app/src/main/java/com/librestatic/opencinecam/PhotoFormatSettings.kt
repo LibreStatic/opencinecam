@@ -38,7 +38,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
         var quality by remember(settings.photoQuality) { mutableFloatStateOf(settings.photoQuality.toFloat()) }
         val label = stringResource(R.string.photo_quality, quality.roundToInt())
         Text(label, color = MaterialTheme.colorScheme.onSurface)
-        Slider(value = quality, onValueChange = { quality = it },
+        CineSlider(value = quality, onValueChange = { quality = it },
             onValueChangeFinished = { onChange(settings.copy(photoQuality = quality.roundToInt())) },
             valueRange = 1f..100f, steps = 98,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label }.testTag("photo-quality"))

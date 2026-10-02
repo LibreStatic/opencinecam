@@ -387,7 +387,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
         var dragging by remember { mutableStateOf(false) }
         val strip = remember(filmstrip) { filmstrip.map { it.asImageBitmap() } }
         val sliderValue = if (dragging) seek else (state.positionUs.toDouble() / maximum).toFloat().coerceIn(0f, 1f)
-        Slider(value = sliderValue,
+        CineSlider(value = sliderValue,
             onValueChange = { seek = it; dragging = true }, onValueChangeFinished = {
                 session?.seek((maximum * seek.toDouble()).toLong()); dragging = false
             }, enabled = ready && (video || state.canPlay), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)

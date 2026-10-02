@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Switch
@@ -68,7 +67,7 @@ internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onCha
             val strengthLabel = stringResource(R.string.settings_torch_strength_label)
             val sliderInteraction = remember { MutableInteractionSource() }
             Text(levelDescription, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().testTag("torch-level-label"))
-            Slider(
+            CineSlider(
                 value = level,
                 onValueChange = { level = it },
                 onValueChangeFinished = { onChange(settings.copy(torchStrengthLevel = level.roundToInt())) },

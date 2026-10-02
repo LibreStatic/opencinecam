@@ -126,7 +126,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
@@ -3291,7 +3290,7 @@ private fun ManualControlDial(
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(control.name, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Slider(
+        CineSlider(
             value = value,
             onValueChange = { position ->
                 when (control) {
@@ -3359,7 +3358,7 @@ private fun EvDial(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
-        Slider(
+        CineSlider(
             value = current.toFloat(),
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first - 1).coerceAtLeast(0),
@@ -3483,7 +3482,7 @@ private fun WbDial(
 
             // Kelvin slider - 100K steps within device range
             if (selection !is WhiteBalanceSelection.Auto) {
-                Slider(
+                CineSlider(
                     value = displayK.toFloat(),
                     valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
                     steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
@@ -3761,7 +3760,7 @@ internal fun SettingsContent(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,
                         )
-                        Slider(
+                        CineSlider(
                             value = settings.chromeOpacity,
                             onValueChange = { onSettingsChange(settings.copy(chromeOpacity = clampChromeOpacity((it * 20f).roundToInt() / 20f))) },
                             valueRange = MIN_CHROME_OPACITY..MAX_CHROME_OPACITY,
@@ -3808,7 +3807,7 @@ internal fun SettingsContent(
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 SettingsHelp(stringResource(R.string.burst_capture_help))
                 Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Slider(
+                CineSlider(
                     value = settings.burstCount.toFloat(),
                     onValueChange = { onSettingsChange(settings.copy(burstCount = it.roundToInt().coerceIn(3, 10))) },
                     valueRange = 3f..10f,
@@ -4316,7 +4315,7 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
         val referenceLabel = stringResource(R.string.audio_meter_reference, options.vuReferenceDbfs)
         Text(referenceLabel, Modifier.testTag("audio-meter-settings-reference-label"), color = MaterialTheme.colorScheme.onSurface)
         val referenceInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        Slider(options.vuReferenceDbfs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(vuReferenceDbfs = it.roundToInt()))) },
+        CineSlider(options.vuReferenceDbfs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(vuReferenceDbfs = it.roundToInt()))) },
             valueRange = -24f..-6f, steps = 17, interactionSource = referenceInteraction,
             thumb = { androidx.compose.material3.SliderDefaults.Thumb(referenceInteraction, thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
             track = { androidx.compose.material3.SliderDefaults.Track(it) },
@@ -4324,7 +4323,7 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
         val holdLabel = stringResource(R.string.audio_meter_hold, options.peakHoldMs)
         Text(holdLabel, Modifier.testTag("audio-meter-settings-hold-label"), color = MaterialTheme.colorScheme.onSurface)
         val holdInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        Slider(options.peakHoldMs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(peakHoldMs = it.roundToInt()))) },
+        CineSlider(options.peakHoldMs.toFloat(), { onSettingsChange(settings.copy(audioMeter = options.copy(peakHoldMs = it.roundToInt()))) },
             valueRange = 0f..3000f, interactionSource = holdInteraction,
             thumb = { androidx.compose.material3.SliderDefaults.Thumb(holdInteraction, thumbSize = androidx.compose.ui.unit.DpSize(4.dp, 52.dp)) },
             track = { androidx.compose.material3.SliderDefaults.Track(it) },
@@ -4418,7 +4417,7 @@ internal fun AudioListeningSettingsControls(
                 modifier = Modifier.heightIn(min = 48.dp).testTag("audio-listening-enable").semantics { contentDescription = enabledLabel })
         }
         Text(volumeLabel, Modifier.testTag("audio-listening-volume-label"), color = MaterialTheme.colorScheme.onSurface)
-        Slider(value = request.volumePercent.toFloat(), onValueChange = {
+        CineSlider(value = request.volumePercent.toFloat(), onValueChange = {
             onSettingsChange(settings.copy(audioListening = request.copy(volumePercent = it.roundToInt())))
         }, valueRange = 0f..100f, steps = 99, interactionSource = interaction,
             thumb = { androidx.compose.material3.SliderDefaults.Thumb(interactionSource = interaction,
@@ -4492,7 +4491,7 @@ internal fun AudioRecordingGainSettings(
             { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) }, tag = "audio-gain-manual")
         Text(requestedLabel,
             Modifier.testTag("audio-gain-value"), color = MaterialTheme.colorScheme.onSurface)
-        Slider(value = gain.decibels.toFloat(), valueRange = -24f..24f, steps = 47,
+        CineSlider(value = gain.decibels.toFloat(), valueRange = -24f..24f, steps = 47,
             enabled = gain.enabled,
             onValueChange = { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(decibels = it.roundToInt()))) },
             interactionSource = gainInteraction,
@@ -4662,7 +4661,7 @@ private fun FocusPullDial(
         )
 
         if (supportsManualFocus) {
-            Slider(
+            CineSlider(
                 value = focusSliderPos,
                 onValueChange = { pos ->
                     binder?.setManualFocus(pos * minDistance)
@@ -4743,7 +4742,7 @@ private fun FocusPullDial(
             Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
 
             Text(stringResource(R.string.focus_pull_duration, settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Slider(
+            CineSlider(
                 value = settings.focusPullDurationMs.toFloat(),
                 onValueChange = { v ->
                     onSettingsChanged(settings.copy(focusPullDurationMs = (v / 500).toInt() * 500L))

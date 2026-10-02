@@ -101,7 +101,7 @@ private fun readableFieldColors() = OutlinedTextFieldDefaults.colors(focusedText
 internal fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     var draft by remember(value) { mutableFloatStateOf(value) }
     Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-    Slider(draft, { draft = it }, valueRange = range, onValueChangeFinished = { onChange(draft) },
+    CineSlider(draft, { draft = it }, valueRange = range, onValueChangeFinished = { onChange(draft) },
         modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label })
 }
 
