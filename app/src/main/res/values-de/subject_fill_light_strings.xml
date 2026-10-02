@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Macht das Außendisplay zu einem weichen Licht. Die Helligkeit ist eine Anforderung an das System, kein gemessenes Licht. Sperre Belichtung und Weißabgleich vor einem Take, damit das Licht sie nicht verschiebt.</string>
     <string name="subject_fill_light_kelvin">Farbtemperatur: %1$d K</string>
-    <string name="subject_fill_light_tint">Tönung: %1$d</string>
-    <string name="subject_fill_light_timeout">Ausschalten nach</string>
+    <string name="subject_fill_light_tint">Tönung: %1$d (− grün, + magenta)</string>
+    <string name="subject_fill_light_timeout">Abdunkeln nach</string>
     <string name="subject_fill_light_timeout_off">Nie</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Außendisplay als Aufhelllicht verwenden</string>
+    <string name="subject_fill_light_lock_suggestion">Das Aufhelllicht ist an. Sperre Belichtung (AE) und Weißabgleich (AWB) vor dem Take: Ändert sich dieses Licht, verschieben sie sich. Die App sperrt sie nie selbst.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">Das Aufhelllicht ist an und die Belichtung gesperrt. Sperre auch den Weißabgleich (AWB), damit eine Änderung dieses Lichts die Farbe nicht verschiebt. Die App sperrt ihn nie selbst.</string>
+    <string name="subject_fill_light_notice_timeout">Die Zeit des Aufhelllichts ist abgelaufen, es ist abgedunkelt. Der Operator kann es wieder einschalten.</string>
+    <string name="subject_fill_light_notice_warm">Das Telefon ist warm: Das Licht ist abgedunkelt, um die Aufnahme zu schützen.</string>
+    <string name="subject_fill_light_notice_hot">Das Telefon ist heiß: Das Licht ist stark abgedunkelt, um die Aufnahme zu schützen.</string>
+    <string name="subject_fill_light_restart">Licht wieder einschalten</string>
+    <string name="subject_fill_light_swatch">Vorschau der Lichtfarbe, %1$d K, Tönung %2$d</string>
+    <string name="subject_fill_light_swatch_note">Ungefähre Farbe; das Außendisplay ist nicht kalibriert.</string>
+    <string name="subject_fill_light_brightness">Angeforderte Helligkeit: %1$d%% (eine Anforderung, kein gemessenes Licht)</string>
+    <string name="subject_fill_light_thermal_help">Wird das Telefon warm (mittlerer Thermalstatus oder höher), dunkelt das Licht selbst ab und beide Displays zeigen es an. Die Aufnahme ändert sich nie.</string>
 </resources>

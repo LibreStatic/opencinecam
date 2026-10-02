@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Transforma a tela externa numa luz suave. O brilho é um pedido ao sistema, não luz medida. Trave a exposição e o balanço de branco antes da tomada para que a luz não os faça variar.</string>
     <string name="subject_fill_light_kelvin">Temperatura de cor: %1$d K</string>
-    <string name="subject_fill_light_tint">Matiz: %1$d</string>
-    <string name="subject_fill_light_timeout">Desligar após</string>
+    <string name="subject_fill_light_tint">Matiz: %1$d (− verde, + magenta)</string>
+    <string name="subject_fill_light_timeout">Atenuar após</string>
     <string name="subject_fill_light_timeout_off">Nunca</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Usar a tela externa como luz de preenchimento</string>
+    <string name="subject_fill_light_lock_suggestion">A luz de preenchimento está ligada. Trave a exposição (AE) e o balanço de branco (AWB) antes da tomada: se esta luz mudar, eles variam. O app nunca os trava por você.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">A luz de preenchimento está ligada e a exposição travada. Trave também o balanço de branco (AWB) para que uma mudança desta luz não altere a cor. O app nunca o trava por você.</string>
+    <string name="subject_fill_light_notice_timeout">O tempo da luz de preenchimento acabou e ela foi atenuada. O operador pode religá-la.</string>
+    <string name="subject_fill_light_notice_warm">O telefone está quente: a luz foi atenuada para proteger a gravação.</string>
+    <string name="subject_fill_light_notice_hot">O telefone está muito quente: a luz foi bastante atenuada para proteger a gravação.</string>
+    <string name="subject_fill_light_restart">Religar a luz</string>
+    <string name="subject_fill_light_swatch">Prévia da cor da luz, %1$d K, matiz %2$d</string>
+    <string name="subject_fill_light_swatch_note">Cor aproximada; a tela externa não é calibrada.</string>
+    <string name="subject_fill_light_brightness">Brilho solicitado: %1$d%% (um pedido, não luz medida)</string>
+    <string name="subject_fill_light_thermal_help">Quando o telefone esquenta (estado térmico moderado ou acima) a luz se atenua sozinha e as duas telas avisam. A captura nunca muda.</string>
 </resources>

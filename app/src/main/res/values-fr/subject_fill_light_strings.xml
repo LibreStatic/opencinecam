@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Transforme l\'écran extérieur en lumière douce. La luminosité est une demande au système, pas une lumière mesurée. Verrouillez l\'exposition et la balance des blancs avant une prise pour que la lumière ne les fasse pas dériver.</string>
     <string name="subject_fill_light_kelvin">Température de couleur : %1$d K</string>
-    <string name="subject_fill_light_tint">Teinte : %1$d</string>
-    <string name="subject_fill_light_timeout">Éteindre après</string>
+    <string name="subject_fill_light_tint">Teinte : %1$d (− vert, + magenta)</string>
+    <string name="subject_fill_light_timeout">Atténuer après</string>
     <string name="subject_fill_light_timeout_off">Jamais</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Utiliser l\'écran extérieur comme lumière d\'appoint</string>
+    <string name="subject_fill_light_lock_suggestion">La lumière d\'appoint est allumée. Verrouillez l\'exposition (AE) et la balance des blancs (AWB) avant la prise : si cette lumière change, elles dérivent. L\'app ne les verrouille jamais à votre place.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">La lumière d\'appoint est allumée et l\'exposition verrouillée. Verrouillez aussi la balance des blancs (AWB) pour qu\'un changement de cette lumière ne modifie pas la couleur. L\'app ne la verrouille jamais à votre place.</string>
+    <string name="subject_fill_light_notice_timeout">La lumière d\'appoint a expiré et est atténuée. L\'opérateur peut la rallumer.</string>
+    <string name="subject_fill_light_notice_warm">Le téléphone chauffe : la lumière est atténuée pour protéger l\'enregistrement.</string>
+    <string name="subject_fill_light_notice_hot">Le téléphone est très chaud : la lumière est fortement atténuée pour protéger l\'enregistrement.</string>
+    <string name="subject_fill_light_restart">Rallumer la lumière</string>
+    <string name="subject_fill_light_swatch">Aperçu de la couleur de la lumière, %1$d K, teinte %2$d</string>
+    <string name="subject_fill_light_swatch_note">Couleur approximative ; l\'écran extérieur n\'est pas calibré.</string>
+    <string name="subject_fill_light_brightness">Luminosité demandée : %1$d %% (une demande, pas une lumière mesurée)</string>
+    <string name="subject_fill_light_thermal_help">Quand le téléphone chauffe (état thermique modéré ou plus), la lumière s\'atténue seule et les deux écrans l\'indiquent. La capture ne change jamais.</string>
 </resources>

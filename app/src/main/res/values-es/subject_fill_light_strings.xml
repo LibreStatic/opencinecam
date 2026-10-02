@@ -2,8 +2,19 @@
 <resources>
     <string name="subject_fill_light_help">Convierte la pantalla exterior en una luz suave. El brillo es una solicitud al sistema, no luz medida. Bloquea exposición y balance de blancos antes de una toma para que la luz no los haga variar.</string>
     <string name="subject_fill_light_kelvin">Temperatura de color: %1$d K</string>
-    <string name="subject_fill_light_tint">Tinte: %1$d</string>
-    <string name="subject_fill_light_timeout">Apagar después de</string>
+    <string name="subject_fill_light_tint">Tinte: %1$d (− verde, + magenta)</string>
+    <string name="subject_fill_light_timeout">Atenuar después de</string>
     <string name="subject_fill_light_timeout_off">Nunca</string>
     <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Usar la pantalla exterior como luz de relleno</string>
+    <string name="subject_fill_light_lock_suggestion">La luz de relleno está encendida. Bloquea exposición (AE) y balance de blancos (AWB) antes de la toma: si esta luz cambia, varían. La app nunca los bloquea por ti.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">La luz de relleno está encendida y la exposición bloqueada. Bloquea también el balance de blancos (AWB) para que un cambio de esta luz no altere el color. La app nunca lo bloquea por ti.</string>
+    <string name="subject_fill_light_notice_timeout">La luz de relleno se agotó y está atenuada. El operador puede volver a encenderla.</string>
+    <string name="subject_fill_light_notice_warm">El teléfono está caliente: la luz se atenúa para proteger la grabación.</string>
+    <string name="subject_fill_light_notice_hot">El teléfono está muy caliente: la luz se atenúa mucho para proteger la grabación.</string>
+    <string name="subject_fill_light_restart">Volver a encender la luz</string>
+    <string name="subject_fill_light_swatch">Vista previa del color de la luz, %1$d K, tinte %2$d</string>
+    <string name="subject_fill_light_swatch_note">Color aproximado; la pantalla exterior no está calibrada.</string>
+    <string name="subject_fill_light_brightness">Brillo solicitado: %1$d%% (una solicitud, no luz medida)</string>
+    <string name="subject_fill_light_thermal_help">Cuando el teléfono se calienta (estado térmico moderado o superior) la luz se atenúa sola y ambas pantallas lo avisan. La captura nunca cambia.</string>
 </resources>
