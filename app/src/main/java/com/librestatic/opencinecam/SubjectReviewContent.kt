@@ -62,7 +62,7 @@ internal fun SubjectReviewContent(state: CameraUiState, settings: SubjectDisplay
     val pick by (feed?.picks ?: fallback).collectAsState()
     val current = pick?.takeIf { it.uri == cues.reviewUri && !state.reviewBlockedByTake() }
     Box(modifier.background(Color.Black).testTag("subject-review")) {
-        if (current == null) Text(stringResource(R.string.subject_review_waiting), color = Color.LightGray, fontSize = 16.sp)
+        if (current == null) Text(stringResource(R.string.subject_review_waiting), color = Color.LightGray, fontSize = 22.sp)
         // A new pick is a new player: the old session and GL stage are released first.
         else key(current.uri) {
             SubjectReviewPlayer(current, if (settings.previewViewAssist) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG,

@@ -1,9 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -14,6 +21,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.TimecodeRate
+import java.util.Locale
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -43,6 +52,23 @@ class SubjectSlateUiTest {
         compose.onAllNodesWithTag("subject-slate-project").assertCountEquals(0)
         compose.onAllNodesWithTag("subject-slate-reel").assertCountEquals(0)
         compose.onAllNodes(hasClickAction()).assertCountEquals(0)
+    }
+
+    @Test fun longFieldLabelsShrinkToTheCellInsteadOfEllipsizing() {
+        // Razr U8: "CÓDIGO DE TIEMPO" ellipsized on the 1080 px cover. A narrow cell forces the same case in any locale.
+        compose.setContent {
+            MaterialTheme {
+                Box(Modifier.size(150.dp, 700.dp)) {
+                    SubjectDisplayScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING),
+                        SubjectDisplaySettings(mode = SubjectDisplayMode.SLATE, showStatus = false), productionSlate = slate)
+                }
+            }
+        }
+        val label = context.getString(R.string.subject_slate_field_timecode).uppercase(Locale.getDefault())
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(label).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        val layout = layouts.single()
+        assertFalse("label wrapped or ellipsized at ${layout.layoutInput.style.fontSize}", layout.hasVisualOverflow)
     }
 
     @Test fun idleSlateDoesNotInventATimecode() {

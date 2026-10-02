@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,9 +116,14 @@ private fun SlateCell(line: SubjectSlateLine, modifier: Modifier) {
         val family = if (timecode) FontFamily.Monospace else FontFamily.SansSerif
         // Monospace timecode is fitted once against its widest label, so the size never jumps while it ticks.
         val fitted = fittedFontSize(if (timecode) TIMECODE_TEMPLATE else line.value, family, valueWidth, valueHeight)
+        val label = stringResource(slateFieldLabel(line.field)).uppercase(LocalConfiguration.current.locales[0])
+        // Long translated labels ("CÓDIGO DE TIEMPO" on a 1080 px cover) shrink to the cell instead of
+        // ellipsizing; the real layout decides, so it holds whatever style the Text inherits.
+        var labelScale by remember(label, valueWidth) { mutableFloatStateOf(1f) }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(slateFieldLabel(line.field)).uppercase(LocalConfiguration.current.locales[0]), color = SlateLabel,
-                fontSize = with(density) { labelPx.toSp() }, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, color = SlateLabel,
+                fontSize = with(density) { (labelPx * labelScale).toSp() }, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
+                overflow = TextOverflow.Clip, onTextLayout = { if (it.didOverflowWidth && labelScale > 0.25f) labelScale *= 0.9f })
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = if (timecode) Alignment.Center else Alignment.CenterStart) {
                 Text(line.value, color = Color.White, fontSize = fitted, fontFamily = family, fontWeight = FontWeight.Bold,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
