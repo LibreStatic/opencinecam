@@ -56,7 +56,8 @@ internal fun SubjectFillLightContent(state: CameraUiState, settings: SubjectDisp
     val output = LocalSubjectFillLightOutput.current ?: fillLightOutput(settings, 0, PowerManager.THERMAL_STATUS_NONE)
     val color = remember(settings.fillLightKelvin, settings.fillLightTint) { fillLightColor(settings.fillLightKelvin, settings.fillLightTint) }
     Box(modifier.background(color.scaled(output.colorScale).toComposeColor()).testTag("subject-fill-light")) {
-        if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
+        // The giant numeral in the overlay layer replaces this badge when it is on, so the subject never sees two counts.
+        if (subjectShowsCountdownBadge(state, settings)) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
         output.notice?.let { notice ->
             val timedOut = notice == FillLightNotice.TIMED_OUT
             Text(fillLightNoticeText(notice), color = if (timedOut) Color(0xFFBDBDBD) else Color.White, fontSize = 20.sp,

@@ -86,6 +86,7 @@ internal class MediaPlaybackSession(
 
     init {
         check(Looper.myLooper() == Looper.getMainLooper())
+        openSessions++
         if (photo) read {
             val bitmap = if (artifact.mimeType.equals("image/x-adobe-dng", ignoreCase = true))
                 decodeDngPhotoPreview(this.context.contentResolver, artifact.uri.toUri())
@@ -370,6 +371,7 @@ internal class MediaPlaybackSession(
         if (closed) return
         check(Looper.myLooper() == Looper.getMainLooper())
         closed = true; ++generation; task?.cancel(true)
+        openSessions--; lastRetirement = retirement
         main.removeCallbacksAndMessages(null)
         player?.release(); player = null; releaseFocus()
         worker.execute {
@@ -377,5 +379,14 @@ internal class MediaPlaybackSession(
             catch (failure: Throwable) { retirement.completeExceptionally(failure) }
         }
         worker.shutdown()
+    }
+
+    internal companion object {
+        // Main thread only. OCC-PLAN-068 U4: lets the cover review wait for the inner viewer to release its decoder.
+        private var openSessions = 0
+        private var lastRetirement: java.util.concurrent.CompletableFuture<Unit> = java.util.concurrent.CompletableFuture.completedFuture(Unit)
+
+        /** True when no other session is open and the newest closed one has retired its exact reader. */
+        val peersRetired: Boolean get() = openSessions == 0 && lastRetirement.isDone
     }
 }

@@ -39,7 +39,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.librestatic.opencinecam.playback.LogPlaybackRenderer
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.PreciseLogView
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** Upper bound on waiting for another review session to retire; a viewer left open then overlaps as before. */
+private const val REVIEW_PEER_RETIRE_TIMEOUT_MS = 1_500L
 
 /** Provided by FoldDisplayCoordinator inside the subject window only. */
 internal val LocalSubjectReviewFeed = staticCompositionLocalOf<SubjectReviewFeed?> { null }
@@ -78,6 +83,12 @@ private fun SubjectReviewPlayer(pick: SubjectReviewPick, logView: PreciseLogView
     var renderer by remember { mutableStateOf<LogPlaybackRenderer?>(null) }
     var holderSurface by remember { mutableStateOf<Surface?>(null) }
     var running by remember { mutableStateOf(true) }
+    // The inner viewer closes when the operator sends a pick here; wait (bounded) for it to release its decoder.
+    var ready by remember(pick.uri) { mutableStateOf(MediaPlaybackSession.peersRetired) }
+    LaunchedEffect(pick.uri) {
+        withTimeoutOrNull(REVIEW_PEER_RETIRE_TIMEOUT_MS) { while (!MediaPlaybackSession.peersRetired) delay(16) }
+        ready = true
+    }
 
     /** OCLog2 decodes into the review GL stage, which draws the selected view to the cover Surface. */
     fun output(holder: Surface?): Surface? {
@@ -89,7 +100,8 @@ private fun SubjectReviewPlayer(pick: SubjectReviewPick, logView: PreciseLogView
     }
     fun retireStage() { renderer?.close(); renderer = null }
 
-    DisposableEffect(pick.uri) {
+    DisposableEffect(pick.uri, ready) {
+        if (!ready) return@DisposableEffect onDispose { }
         val artifact = LocalMediaArtifact(pick.uri, pick.name, pick.mimeType, 0, 0)
         // Native-surface frames keep one decoder at a time: the exact reader retires before MediaPlayer connects.
         val next = MediaPlaybackSession(context, artifact, playback, nativeSurfaceFrames = pick.video, log = pick.log?.signal) { observation = it }
