@@ -272,9 +272,11 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     DisposableEffect(foldDisplays, binder) {
         foldDisplays?.updatePreviewPort(binder?.subjectPreview)
         foldDisplays?.updateSelfRoleObserver { binder?.setSelfRecordingActive(it) }
+        foldDisplays?.updateSyncMarkerSink { report -> binder?.recordSubjectSyncMarker(report) == true }
         onDispose {
             foldDisplays?.updatePreviewPort(null)
             foldDisplays?.updateSelfRoleObserver(null)
+            foldDisplays?.updateSyncMarkerSink(null)
         }
     }
     LaunchedEffect(foldDisplays, settings.subjectDisplay.brightness) { foldDisplays?.applyBrightness() }

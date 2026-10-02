@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencinecam.org/schema/subject-sync-marker.schema.json",
+  "title": "Subject Sync Marker",
+  "description": "Optional `subjectSyncMarker` node of a video take sidecar (.timing.json or .oclog.json), OCC-PLAN-068 U6. Absent means the marker was not armed for the take (or the take predates it). Times are SystemClock.elapsedRealtimeNanos issue times on the operator side, not panel scan-out or speaker output; the decoded audio is authoritative for alignment.",
+  "type": "object",
+  "$defs": {
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "NOT_REQUESTED",
+        "FIRED",
+        "NOT_SHOWN",
+        "FAILED"
+      ]
+    },
+    "nanos": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "clock",
+    "takeStartReference",
+    "takeStartElapsedRealtimeNanos",
+    "triggerElapsedRealtimeNanos",
+    "offsetFromTakeStartUs",
+    "markerFired",
+    "flash",
+    "flashDurationMs",
+    "beep",
+    "beepStartElapsedRealtimeNanos",
+    "beepOffsetFromTakeStartUs",
+    "beepFrequencyHz",
+    "beepDurationMs",
+    "failure",
+    "outputTimeVerified"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "clock": {
+      "const": "ELAPSED_REALTIME_NANOS"
+    },
+    "takeStartReference": {
+      "const": "SERVICE_RECORDING_STARTED",
+      "description": "The capture service's recording-started callback, not the first encoded frame."
+    },
+    "takeStartElapsedRealtimeNanos": {
+      "$ref": "#/$defs/nanos"
+    },
+    "triggerElapsedRealtimeNanos": {
+      "$ref": "#/$defs/nanos",
+      "description": "When the operator side observed the confirmed REC start and issued the marker."
+    },
+    "offsetFromTakeStartUs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "markerFired": {
+      "type": "boolean",
+      "description": "True when the flash or the beep is FIRED."
+    },
+    "flash": {
+      "$ref": "#/$defs/outcome"
+    },
+    "flashDurationMs": {
+      "type": "integer"
+    },
+    "beep": {
+      "$ref": "#/$defs/outcome",
+      "description": "NOT_SHOWN never applies to the beep."
+    },
+    "beepStartElapsedRealtimeNanos": {
+      "description": "Immediately before AudioTrack.play(); null unless beep is FIRED.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nanos"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "beepOffsetFromTakeStartUs": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "beepFrequencyHz": {
+      "type": "integer"
+    },
+    "beepDurationMs": {
+      "type": "integer"
+    },
+    "failure": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "outputTimeVerified": {
+      "const": false
+    }
+  },
+  "additionalProperties": true
+}

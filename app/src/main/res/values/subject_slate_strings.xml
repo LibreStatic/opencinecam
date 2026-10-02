@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">White sync flash at REC start</string>
     <string name="subject_slate_sync_beep">Sync beep at REC start</string>
     <string name="subject_slate_sync_help">The beep plays through this phone\'s speaker, so it is also recorded in this take. It is off by default because it alters the recorded audio. Take numbering is not changed.</string>
+    <string name="subject_slate_sync_scope">The marker fires once per take, when this phone confirms REC, and only while the slate is presented on the cover. Its time is written to the take\'s metadata.</string>
 </resources>

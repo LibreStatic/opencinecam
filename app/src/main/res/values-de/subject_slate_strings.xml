@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">Weißer Sync-Blitz beim Aufnahmestart</string>
     <string name="subject_slate_sync_beep">Sync-Piepton beim Aufnahmestart</string>
     <string name="subject_slate_sync_help">Der Piepton kommt aus dem Lautsprecher dieses Telefons und wird daher auch in diesem Take aufgezeichnet. Er ist standardmäßig aus, weil er den aufgenommenen Ton verändert. Die Take-Nummerierung ändert sich nicht.</string>
+    <string name="subject_slate_sync_scope">Die Markierung wird einmal pro Take ausgelöst, wenn dieses Telefon REC bestätigt, und nur, solange die Klappe auf dem Außendisplay angezeigt wird. Ihr Zeitpunkt wird in die Metadaten des Takes geschrieben.</string>
 </resources>

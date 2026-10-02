@@ -65,6 +65,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         onOutput = { fillLightOutput.value = it; applyBrightness() },
     )
     private val fillLightObservation: Job
+    /** OCC-PLAN-068 U6: REC-start flash/beep, driven by observed service state only. */
+    private val syncMarker = SubjectSyncMarkerController(activity)
 
     init {
         // The fill light, its thermal listener and its timeout live only while FILL_LIGHT is on an active presentation.
@@ -123,7 +125,17 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         observer?.invoke(machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.TRANSFER)
     }
 
-    fun updateCameraState(state: CameraUiState) { subject.value = state; review.onCameraState(state) }
+    fun updateCameraState(state: CameraUiState) {
+        subject.value = state
+        review.onCameraState(state)
+        val subjectSettings = preferences.states.value.subjectDisplay
+        val presented = machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.PRESENT && subjectView != null
+        syncMarker.observe(state, SubjectSyncArming(subjectSettings.slateSyncFlash, subjectSettings.slateSyncBeep,
+            presented && subjectSettings.mode == SubjectDisplayMode.SLATE, presented && machine.state.visible))
+    }
+
+    /** Where sync-marker evidence goes: the bound service's optional take-sidecar field. */
+    fun updateSyncMarkerSink(sink: ((SubjectSyncMarkerReport) -> Boolean)?) { syncMarker.sink = sink }
 
     fun updateSubjectCues(transform: (SubjectSessionCues) -> SubjectSessionCues) { cues.value = transform(cues.value) }
 
@@ -151,13 +163,15 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val windowState by mutableState.collectAsState()
                                     val sessionCues by cues.collectAsState()
                                     val fill by fillLightOutput.collectAsState()
+                                    val syncFlash by syncMarker.flash.collectAsState()
                                     MaterialTheme {
                                         CompositionLocalProvider(
                                             LocalSubjectFillLightOutput provides fill,
                                             LocalSubjectReviewFeed provides review,
                                         ) {
                                             SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
-                                                cues = sessionCues, productionSlate = settings.productionSlate)
+                                                cues = sessionCues, productionSlate = settings.productionSlate,
+                                                timecodeRate = settings.slateTimecodeRate(), syncFlash = syncFlash)
                                         }
                                     }
                                 }
@@ -227,6 +241,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         observation.cancel()
         fillLightObservation.cancel()
         fillLightMonitor.stop()
+        syncMarker.close()
         closeSession()
     }
 }

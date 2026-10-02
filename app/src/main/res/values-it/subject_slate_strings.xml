@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">Flash bianco di sincronizzazione all\'avvio di REC</string>
     <string name="subject_slate_sync_beep">Bip di sincronizzazione all\'avvio di REC</string>
     <string name="subject_slate_sync_help">Il bip esce dall\'altoparlante di questo telefono, quindi viene registrato anche in questa ripresa. È disattivato per impostazione predefinita perché altera l\'audio registrato. La numerazione delle riprese non cambia.</string>
+    <string name="subject_slate_sync_scope">Il marcatore scatta una volta per ciak, quando questo telefono conferma REC, e solo mentre il ciak è presentato sullo schermo esterno. Il suo orario viene scritto nei metadati del ciak.</string>
 </resources>

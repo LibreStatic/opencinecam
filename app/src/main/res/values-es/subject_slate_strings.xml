@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">Destello blanco de sincronía al iniciar REC</string>
     <string name="subject_slate_sync_beep">Pitido de sincronía al iniciar REC</string>
     <string name="subject_slate_sync_help">El pitido suena por el altavoz de este teléfono, así que también queda grabado en esta toma. Está apagado por defecto porque altera el audio grabado. La numeración de tomas no cambia.</string>
+    <string name="subject_slate_sync_scope">El marcador se dispara una vez por toma, cuando este teléfono confirma REC, y solo mientras la claqueta se presenta en la pantalla exterior. Su hora se escribe en los metadatos de la toma.</string>
 </resources>

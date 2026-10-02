@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">Flash branco de sincronia ao iniciar REC</string>
     <string name="subject_slate_sync_beep">Bipe de sincronia ao iniciar REC</string>
     <string name="subject_slate_sync_help">O bipe toca pelo alto-falante deste telefone, então também fica gravado nesta tomada. Vem desligado por padrão porque altera o áudio gravado. A numeração de tomadas não muda.</string>
+    <string name="subject_slate_sync_scope">O marcador dispara uma vez por take, quando este telefone confirma o REC, e só enquanto a claquete é apresentada na tela externa. O horário é gravado nos metadados do take.</string>
 </resources>
