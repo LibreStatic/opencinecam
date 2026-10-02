@@ -50,6 +50,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     private var disposed = false
     private var selfRoleObserver: ((Boolean) -> Unit)? = null
     private val observation: Job
+    /** OCC-PLAN-068 U6: REC-start flash/beep, driven by observed service state only. */
+    private val syncMarker = SubjectSyncMarkerController(activity)
 
     init {
         observation = activity.lifecycleScope.launch {
@@ -99,7 +101,16 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
         observer?.invoke(machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.TRANSFER)
     }
 
-    fun updateCameraState(state: CameraUiState) { subject.value = state }
+    fun updateCameraState(state: CameraUiState) {
+        subject.value = state
+        val subjectSettings = preferences.states.value.subjectDisplay
+        val presented = machine.state.phase == DisplaySessionPhase.ACTIVE && machine.state.operation == DisplayOperation.PRESENT && subjectView != null
+        syncMarker.observe(state, SubjectSyncArming(subjectSettings.slateSyncFlash, subjectSettings.slateSyncBeep,
+            presented && subjectSettings.mode == SubjectDisplayMode.SLATE, presented && machine.state.visible))
+    }
+
+    /** Where sync-marker evidence goes: the bound service's optional take-sidecar field. */
+    fun updateSyncMarkerSink(sink: ((SubjectSyncMarkerReport) -> Boolean)?) { syncMarker.sink = sink }
 
     fun updateSubjectCues(transform: (SubjectSessionCues) -> SubjectSessionCues) { cues.value = transform(cues.value) }
 
@@ -126,9 +137,11 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val output by previewPort.collectAsState()
                                     val windowState by mutableState.collectAsState()
                                     val sessionCues by cues.collectAsState()
+                                    val syncFlash by syncMarker.flash.collectAsState()
                                     MaterialTheme {
                                         SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
-                                            cues = sessionCues, productionSlate = settings.productionSlate)
+                                            cues = sessionCues, productionSlate = settings.productionSlate,
+                                            timecodeRate = settings.slateTimecodeRate(), syncFlash = syncFlash)
                                     }
                                 }
                             }
@@ -189,6 +202,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     override fun close() {
         disposed = true
         observation.cancel()
+        syncMarker.close()
         closeSession()
     }
 }

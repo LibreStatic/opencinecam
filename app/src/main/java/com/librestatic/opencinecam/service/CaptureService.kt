@@ -313,6 +313,8 @@ class CaptureService : Service() {
     private var activeRecordingGain: DigitalRecordingGain? = null
     private val audioLevelEpoch = java.util.concurrent.atomic.AtomicLong()
     @Volatile private var recordingStartedAtMs = 0L
+    /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
+    private val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
     private var timelapseAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
     private var attachedPreviewRotationDegrees: Int = 0
@@ -1153,6 +1155,7 @@ class CaptureService : Service() {
             previewEngine.consumeTimelapsePauseStatus()
             previewEngine.consumeCaptureEpochReport()
             recordingStartedAtMs = android.os.SystemClock.elapsedRealtime()
+            subjectSyncMarkers.begin(android.os.SystemClock.elapsedRealtimeNanos())
             audioSidecarRecorder?.let { sidecar ->
                 try {
                     sidecar.start()
@@ -1233,6 +1236,7 @@ class CaptureService : Service() {
             val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
             val timecodeReport = timecodeTracker.recordingReport()
+            val subjectSyncMarker = subjectSyncMarkers.consume()
             try {
                 val requestedAudioFailure = take.audioStartFailure
                 val audioOutput = take.audio
@@ -1283,13 +1287,18 @@ class CaptureService : Service() {
                                 (withBaking?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-audio.v1"))
                                     .put("recordingGain", recordingGainJson(recordingGain)).toString(2)
                             } else withBaking
-                            if (timecodeReport?.config?.enabled == true) {
+                            val withTimecode = if (timecodeReport?.config?.enabled == true) {
                                 (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
                                     .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
                             } else withGain
+                            subjectSyncMarker?.let { marker ->
+                                (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
+                                    .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
+                                        JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
+                            } ?: withTimecode
                         },
                         expectedGeometry = geometry,
-                        timingSidecar = logEvidence == null && (bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true),
+                        timingSidecar = logEvidence == null && (bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null),
                     ) },
                     onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
@@ -1467,6 +1476,10 @@ class CaptureService : Service() {
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
         /** A/V clock drift of the last separate WAV/FLAC take, or null (no such take, or not measurable). Diagnostic only. */
         val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
+
+        /** OCC-PLAN-068 U6 evidence for the active take's sidecar. Not a capture command: it never starts, stops or delays a take. */
+        fun recordSubjectSyncMarker(report: com.librestatic.opencinecam.SubjectSyncMarkerReport): Boolean =
+            !serviceDestroyed && subjectSyncMarkers.offer(report, android.os.SystemClock.elapsedRealtimeNanos())
 
         /** Returns false when the bounded actor queue is full or the service is shutting down. */
         fun submit(command: CaptureCommand): Boolean = try {

@@ -10,4 +10,5 @@
     <string name="subject_slate_sync_flash">Flash blanc de synchro au début de REC</string>
     <string name="subject_slate_sync_beep">Bip de synchro au début de REC</string>
     <string name="subject_slate_sync_help">Le bip sort du haut-parleur de ce téléphone : il est donc aussi enregistré dans cette prise. Il est désactivé par défaut car il modifie le son enregistré. La numérotation des prises ne change pas.</string>
+    <string name="subject_slate_sync_scope">Le repère se déclenche une fois par prise, quand ce téléphone confirme REC, et seulement si le clap est présenté sur l\'écran extérieur. Son heure est écrite dans les métadonnées de la prise.</string>
 </resources>

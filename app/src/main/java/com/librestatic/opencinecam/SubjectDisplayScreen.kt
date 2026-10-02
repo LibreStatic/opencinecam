@@ -27,6 +27,8 @@ internal fun SubjectDisplayScreen(
     previewPort: SubjectPreviewPort? = null,
     cues: SubjectSessionCues = SubjectSessionCues(),
     productionSlate: ProductionSlateSettings = ProductionSlateSettings(),
+    timecodeRate: com.librestatic.opencinecam.camera.TimecodeRate? = null,
+    syncFlash: Boolean = false,
 ) {
     val status = when {
         state.recordingFinalizing -> R.string.subject_finalizing
@@ -83,12 +85,14 @@ internal fun SubjectDisplayScreen(
                 SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, content)
                 SubjectDisplayMode.REVIEW -> SubjectReviewContent(state, settings, cues, content)
                 SubjectDisplayMode.INTERVIEW -> SubjectInterviewContent(state, settings, cues, content)
-                SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, content)
+                SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, content, timecodeRate)
                 SubjectDisplayMode.STATUS, SubjectDisplayMode.FILL_LIGHT ->
                     Text(stringResource(R.string.subject_status_only), color = Color.LightGray, fontSize = 16.sp)
             }
         }
         // Tally, countdown and warnings layer above every mode, including the full-bleed fill light.
         SubjectOverlayLayer(state, settings, cues, Modifier.matchParentSize())
+        // The U6 sync flash is a full white frame, so it covers every layer for its ~100 ms.
+        if (syncFlash) SubjectSyncFlash(Modifier.matchParentSize())
     }
 }
