@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Campos visibles en la claqueta</string>
+    <string name="subject_slate_field_project">Proyecto</string>
+    <string name="subject_slate_field_scene">Escena</string>
+    <string name="subject_slate_field_take">Toma</string>
+    <string name="subject_slate_field_camera">Cámara</string>
+    <string name="subject_slate_field_reel">Rollo</string>
+    <string name="subject_slate_field_timecode">Código de tiempo</string>
+    <string name="subject_slate_sync_flash">Destello blanco de sincronía al iniciar REC</string>
+    <string name="subject_slate_sync_beep">Pitido de sincronía al iniciar REC</string>
+    <string name="subject_slate_sync_help">El pitido suena por el altavoz de este teléfono, así que también queda grabado en esta toma. Está apagado por defecto porque altera el audio grabado. La numeración de tomas no cambia.</string>
+</resources>

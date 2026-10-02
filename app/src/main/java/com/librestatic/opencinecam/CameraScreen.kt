@@ -3687,6 +3687,27 @@ internal fun SettingsContent(
         if ("fold-displays" in visibleIds) settingsCard("fold-displays", fullLine = true) {
             FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
         }
+        // OCC-PLAN-068 subject features: each card's controls live in that unit's own file.
+        val subject = settings.subjectDisplay
+        val updateSubject = { next: SubjectDisplaySettings -> onSettingsChange(settings.copy(subjectDisplay = next)) }
+        if ("subject-self-monitor" in visibleIds) settingsCard("subject-self-monitor") {
+            SettingsHeading(stringResource(R.string.subject_self_monitor_title)); SubjectSelfMonitorSettings(state, subject, updateSubject)
+        }
+        if ("subject-tally" in visibleIds) settingsCard("subject-tally") {
+            SettingsHeading(stringResource(R.string.subject_tally_title)); SubjectTallySettings(state, subject, updateSubject)
+        }
+        if ("subject-fill-light" in visibleIds) settingsCard("subject-fill-light") {
+            SettingsHeading(stringResource(R.string.fold_mode_fill_light)); SubjectFillLightSettings(state, subject, updateSubject)
+        }
+        if ("subject-interview" in visibleIds) settingsCard("subject-interview", fullLine = true) {
+            SettingsHeading(stringResource(R.string.fold_mode_interview)); SubjectInterviewSettings(state, subject, updateSubject)
+        }
+        if ("subject-slate" in visibleIds) settingsCard("subject-slate") {
+            SettingsHeading(stringResource(R.string.fold_mode_slate)); SubjectSlateSettings(state, subject, updateSubject)
+        }
+        if ("subject-out-of-frame" in visibleIds) settingsCard("subject-out-of-frame") {
+            SettingsHeading(stringResource(R.string.subject_out_of_frame_title)); SubjectOutOfFrameSettings(state, subject, updateSubject)
+        }
         if ("appearance" in visibleIds) settingsCard("appearance") { AppearanceSettings() }
         if ("layout" in visibleIds) settingsCard("layout") {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {

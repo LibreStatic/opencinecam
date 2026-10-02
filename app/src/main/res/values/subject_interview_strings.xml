@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_interview_questions">Questions, one per line (50 × 300 characters)</string>
+    <string name="subject_interview_help">Questions are stored only on this device and kept apart from the teleprompter script. The exterior screen uses the script text size.</string>
+    <string name="subject_interview_empty">The operator has not loaded any questions.</string>
+</resources>

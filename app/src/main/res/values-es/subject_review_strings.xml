@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_review_waiting">El operador no eligió una toma para revisar.</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_interview_questions">Preguntas, una por línea (50 × 300 caracteres)</string>
+    <string name="subject_interview_help">Las preguntas se guardan solo en este dispositivo y separadas del guion del teleprompter. La pantalla exterior usa el tamaño de texto del guion.</string>
+    <string name="subject_interview_empty">El operador no cargó preguntas.</string>
+</resources>

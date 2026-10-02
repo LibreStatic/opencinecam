@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Avviso fuori inquadratura</string>
+    <string name="subject_out_of_frame">Avvisa quando il volto esce dall\'area registrata</string>
+    <string name="subject_out_of_frame_delay">Ritardo dell\'avviso: %1$d s</string>
+    <string name="subject_out_of_frame_help">Usa il rilevamento dei volti della fotocamera quando la configurazione di acquisizione attiva lo offre. Le posizioni dei volti restano in memoria e non vengono mai salvate né scritte nei metadati.</string>
+</resources>

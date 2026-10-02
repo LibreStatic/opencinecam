@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Trasforma lo schermo esterno in una luce morbida. La luminosità è una richiesta al sistema, non luce misurata. Blocca esposizione e bilanciamento del bianco prima di una ripresa, così la luce non li fa variare.</string>
+    <string name="subject_fill_light_kelvin">Temperatura colore: %1$d K</string>
+    <string name="subject_fill_light_tint">Tinta: %1$d</string>
+    <string name="subject_fill_light_timeout">Spegni dopo</string>
+    <string name="subject_fill_light_timeout_off">Mai</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

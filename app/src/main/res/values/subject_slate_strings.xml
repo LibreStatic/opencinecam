@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Slate fields shown</string>
+    <string name="subject_slate_field_project">Project</string>
+    <string name="subject_slate_field_scene">Scene</string>
+    <string name="subject_slate_field_take">Take</string>
+    <string name="subject_slate_field_camera">Camera</string>
+    <string name="subject_slate_field_reel">Reel</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">White sync flash at REC start</string>
+    <string name="subject_slate_sync_beep">Sync beep at REC start</string>
+    <string name="subject_slate_sync_help">The beep plays through this phone\'s speaker, so it is also recorded in this take. It is off by default because it alters the recorded audio. Take numbering is not changed.</string>
+</resources>

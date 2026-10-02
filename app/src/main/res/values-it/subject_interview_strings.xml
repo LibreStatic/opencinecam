@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_interview_questions">Domande, una per riga (50 × 300 caratteri)</string>
+    <string name="subject_interview_help">Le domande sono salvate solo su questo dispositivo e separate dal copione del gobbo. Lo schermo esterno usa la dimensione del testo del copione.</string>
+    <string name="subject_interview_empty">L\'operatore non ha caricato domande.</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Convierte la pantalla exterior en una luz suave. El brillo es una solicitud al sistema, no luz medida. Bloquea exposición y balance de blancos antes de una toma para que la luz no los haga variar.</string>
+    <string name="subject_fill_light_kelvin">Temperatura de color: %1$d K</string>
+    <string name="subject_fill_light_tint">Tinte: %1$d</string>
+    <string name="subject_fill_light_timeout">Apagar después de</string>
+    <string name="subject_fill_light_timeout_off">Nunca</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

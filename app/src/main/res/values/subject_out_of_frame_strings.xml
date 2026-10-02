@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Out-of-frame warning</string>
+    <string name="subject_out_of_frame">Warn when the face leaves the recorded area</string>
+    <string name="subject_out_of_frame_delay">Warning delay: %1$d s</string>
+    <string name="subject_out_of_frame_help">Uses the camera\'s own face detection when the active capture setup offers it. Face positions stay in memory and are never saved or written to metadata.</string>
+</resources>

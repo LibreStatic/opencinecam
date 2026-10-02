@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Transforma a tela externa numa luz suave. O brilho é um pedido ao sistema, não luz medida. Trave a exposição e o balanço de branco antes da tomada para que a luz não os faça variar.</string>
+    <string name="subject_fill_light_kelvin">Temperatura de cor: %1$d K</string>
+    <string name="subject_fill_light_tint">Matiz: %1$d</string>
+    <string name="subject_fill_light_timeout">Desligar após</string>
+    <string name="subject_fill_light_timeout_off">Nunca</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

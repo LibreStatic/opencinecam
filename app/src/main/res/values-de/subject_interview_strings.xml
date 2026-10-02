@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_interview_questions">Fragen, eine pro Zeile (50 × 300 Zeichen)</string>
+    <string name="subject_interview_help">Fragen werden nur auf diesem Gerät gespeichert und getrennt vom Teleprompter-Skript gehalten. Das Außendisplay nutzt die Textgröße des Skripts.</string>
+    <string name="subject_interview_empty">Die Bedienperson hat keine Fragen geladen.</string>
+</resources>

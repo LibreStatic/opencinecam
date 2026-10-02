@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Warnung bei Verlassen des Bildes</string>
+    <string name="subject_out_of_frame">Warnen, wenn das Gesicht den aufgezeichneten Bereich verlässt</string>
+    <string name="subject_out_of_frame_delay">Warnverzögerung: %1$d s</string>
+    <string name="subject_out_of_frame_help">Nutzt die Gesichtserkennung der Kamera, wenn die aktive Aufnahmekonfiguration sie anbietet. Gesichtspositionen bleiben im Speicher und werden nie gespeichert oder in Metadaten geschrieben.</string>
+</resources>

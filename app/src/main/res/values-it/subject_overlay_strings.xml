@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Automonitor del soggetto</string>
+    <string name="subject_preview_bands">Segna l\'area registrata</string>
+    <string name="subject_preview_guide">Guida di inquadratura</string>
+    <string name="subject_preview_guide_none">Nessuna</string>
+    <string name="subject_preview_guide_thirds">Regola dei terzi</string>
+    <string name="subject_preview_guide_safe">Area di sicurezza</string>
+    <string name="subject_preview_audio_meter">Piccolo indicatore del livello audio</string>
+    <string name="subject_self_monitor_help">Queste guide compaiono solo sullo schermo esterno e mai nel file registrato. Specchiare l\'anteprima esterna non specchia il file.</string>
+    <string name="subject_tally_title">Tally e conto alla rovescia</string>
+    <string name="subject_tally_border">Bordo tally rosso durante la registrazione</string>
+    <string name="subject_giant_countdown">Conto alla rovescia a schermo intero</string>
+    <string name="subject_tally_help">Il tally è rosso solo mentre il servizio della fotocamera conferma la registrazione e ambra mentre una ripresa è in preparazione o in salvataggio. Segue la luminosità esterna richiesta.</string>
+</resources>

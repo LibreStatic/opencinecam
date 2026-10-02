@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Campi mostrati sul ciak</string>
+    <string name="subject_slate_field_project">Progetto</string>
+    <string name="subject_slate_field_scene">Scena</string>
+    <string name="subject_slate_field_take">Ripresa</string>
+    <string name="subject_slate_field_camera">Camera</string>
+    <string name="subject_slate_field_reel">Bobina</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">Flash bianco di sincronizzazione all\'avvio di REC</string>
+    <string name="subject_slate_sync_beep">Bip di sincronizzazione all\'avvio di REC</string>
+    <string name="subject_slate_sync_help">Il bip esce dall\'altoparlante di questo telefono, quindi viene registrato anche in questa ripresa. È disattivato per impostazione predefinita perché altera l\'audio registrato. La numerazione delle riprese non cambia.</string>
+</resources>

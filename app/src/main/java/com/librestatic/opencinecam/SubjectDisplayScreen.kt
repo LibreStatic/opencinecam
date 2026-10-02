@@ -21,7 +21,13 @@ import java.util.Locale
 
 /** Subject-only content: no camera/service actions and no route into operator settings. */
 @Composable
-internal fun SubjectDisplayScreen(state: CameraUiState, settings: SubjectDisplaySettings, previewPort: SubjectPreviewPort? = null) {
+internal fun SubjectDisplayScreen(
+    state: CameraUiState,
+    settings: SubjectDisplaySettings,
+    previewPort: SubjectPreviewPort? = null,
+    cues: SubjectSessionCues = SubjectSessionCues(),
+    productionSlate: ProductionSlateSettings = ProductionSlateSettings(),
+) {
     val status = when {
         state.recordingFinalizing -> R.string.subject_finalizing
         state.phase == CameraUiPhase.RECORDING && state.recordingPauseStatus?.paused == true -> R.string.recording_paused
@@ -48,32 +54,41 @@ internal fun SubjectDisplayScreen(state: CameraUiState, settings: SubjectDisplay
             if (delta > 0) scroll.scrollTo((scroll.value + delta).coerceAtMost(scroll.maxValue))
         }
     }
-    Column(
-        Modifier.fillMaxSize().background(Color.Black).windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(16.dp).testTag("subject-display"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds)
-        if (settings.showStatus || settings.mode == SubjectDisplayMode.STATUS) {
-            Text(stringResource(status), color = if (state.phase == CameraUiPhase.RECORDING) Color(0xFFFF6666) else Color.White,
-                fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("subject-capture-status"))
-            if (state.phase == CameraUiPhase.RECORDING || state.recordingFinalizing) {
-                val seconds = state.recordingElapsedMs.coerceAtLeast(0) / 1000
-                Text(String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60), color = Color.White, fontSize = 24.sp)
+    Box(Modifier.fillMaxSize().background(Color.Black).testTag("subject-display")) {
+        if (settings.mode == SubjectDisplayMode.FILL_LIGHT) {
+            // The light is full bleed, so it ignores the safe-drawing padding of the other modes.
+            SubjectFillLightContent(state, settings, Modifier.fillMaxSize())
+        } else Column(
+            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (state.countdownSeconds > 0) CountdownBadge(state.countdownSeconds)
+            if (settings.showStatus || settings.mode == SubjectDisplayMode.STATUS) {
+                Text(stringResource(status), color = if (state.phase == CameraUiPhase.RECORDING) Color(0xFFFF6666) else Color.White,
+                    fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("subject-capture-status"))
+                if (state.phase == CameraUiPhase.RECORDING || state.recordingFinalizing) {
+                    val seconds = state.recordingElapsedMs.coerceAtLeast(0) / 1000
+                    Text(String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60), color = Color.White, fontSize = 24.sp)
+                }
+            }
+            if (settings.operatorCue.isNotBlank()) Text(settings.operatorCue, color = Color(0xFFFFCF66), fontSize = 22.sp)
+            val content = Modifier.weight(1f).fillMaxWidth()
+            when (settings.mode) {
+                SubjectDisplayMode.TELEPROMPTER -> Text(
+                    settings.prompterText.ifBlank { stringResource(R.string.subject_empty_script) },
+                    color = Color.White, fontSize = settings.prompterFontSp.sp,
+                    lineHeight = (settings.prompterFontSp * 1.4f).sp,
+                    modifier = content.verticalScroll(scroll, enabled = !settings.touchLocked).testTag("subject-script"),
+                )
+                SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, content)
+                SubjectDisplayMode.REVIEW -> SubjectReviewContent(state, settings, cues, content)
+                SubjectDisplayMode.INTERVIEW -> SubjectInterviewContent(state, settings, cues, content)
+                SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, content)
+                SubjectDisplayMode.STATUS, SubjectDisplayMode.FILL_LIGHT ->
+                    Text(stringResource(R.string.subject_status_only), color = Color.LightGray, fontSize = 16.sp)
             }
         }
-        if (settings.operatorCue.isNotBlank()) Text(settings.operatorCue, color = Color(0xFFFFCF66), fontSize = 22.sp)
-        if (settings.mode == SubjectDisplayMode.TELEPROMPTER) {
-            Text(
-                settings.prompterText.ifBlank { stringResource(R.string.subject_empty_script) },
-                color = Color.White, fontSize = settings.prompterFontSp.sp,
-                lineHeight = (settings.prompterFontSp * 1.4f).sp,
-                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll, enabled = !settings.touchLocked).testTag("subject-script"),
-            )
-        } else if (settings.mode == SubjectDisplayMode.PREVIEW) {
-            SubjectCameraPreview(previewPort, Modifier.weight(1f).fillMaxWidth())
-        } else {
-            Text(stringResource(R.string.subject_status_only), color = Color.LightGray, fontSize = 16.sp)
-        }
+        // Tally, countdown and warnings layer above every mode, including the full-bleed fill light.
+        SubjectOverlayLayer(state, settings, cues, Modifier.matchParentSize())
     }
 }

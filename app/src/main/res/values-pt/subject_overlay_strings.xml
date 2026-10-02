@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Automonitor do sujeito</string>
+    <string name="subject_preview_bands">Marcar a área gravada</string>
+    <string name="subject_preview_guide">Guia de enquadramento</string>
+    <string name="subject_preview_guide_none">Nenhuma</string>
+    <string name="subject_preview_guide_thirds">Regra dos terços</string>
+    <string name="subject_preview_guide_safe">Área segura</string>
+    <string name="subject_preview_audio_meter">Medidor de nível de áudio pequeno</string>
+    <string name="subject_self_monitor_help">Estas guias aparecem só na tela externa e nunca no arquivo gravado. Espelhar a pré-visualização externa não espelha o arquivo.</string>
+    <string name="subject_tally_title">Tally e contagem regressiva</string>
+    <string name="subject_tally_border">Borda tally vermelha durante a gravação</string>
+    <string name="subject_giant_countdown">Contagem regressiva em tela cheia</string>
+    <string name="subject_tally_help">O tally fica vermelho só enquanto o serviço da câmera confirma a gravação e âmbar enquanto uma tomada é preparada ou salva. Segue o brilho externo solicitado.</string>
+</resources>

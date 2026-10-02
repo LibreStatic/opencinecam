@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Aviso de fuera de cuadro</string>
+    <string name="subject_out_of_frame">Avisar cuando la cara salga del área grabada</string>
+    <string name="subject_out_of_frame_delay">Demora del aviso: %1$d s</string>
+    <string name="subject_out_of_frame_help">Usa la detección de caras de la propia cámara cuando la configuración de captura activa la ofrece. Las posiciones de las caras quedan en memoria y nunca se guardan ni se escriben en los metadatos.</string>
+</resources>

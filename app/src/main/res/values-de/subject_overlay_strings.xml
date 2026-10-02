@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Selbstkontrolle für die Person vor der Kamera</string>
+    <string name="subject_preview_bands">Aufgezeichneten Bereich markieren</string>
+    <string name="subject_preview_guide">Bildaufbau-Hilfslinien</string>
+    <string name="subject_preview_guide_none">Keine</string>
+    <string name="subject_preview_guide_thirds">Drittelregel</string>
+    <string name="subject_preview_guide_safe">Sicherer Bereich</string>
+    <string name="subject_preview_audio_meter">Kleine Audiopegelanzeige</string>
+    <string name="subject_self_monitor_help">Diese Hilfen erscheinen nur auf dem Außendisplay und nie in der aufgezeichneten Datei. Das Spiegeln der externen Vorschau spiegelt die Datei nicht.</string>
+    <string name="subject_tally_title">Tally und Countdown</string>
+    <string name="subject_tally_border">Roter Tally-Rahmen während der Aufnahme</string>
+    <string name="subject_giant_countdown">Vollbild-Countdown</string>
+    <string name="subject_tally_help">Der Tally ist nur rot, solange der Kameradienst die Aufnahme bestätigt, und gelb, während ein Take vorbereitet oder gespeichert wird. Er folgt der angeforderten Außenhelligkeit.</string>
+</resources>

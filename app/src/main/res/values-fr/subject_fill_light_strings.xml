@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Transforme l\'écran extérieur en lumière douce. La luminosité est une demande au système, pas une lumière mesurée. Verrouillez l\'exposition et la balance des blancs avant une prise pour que la lumière ne les fasse pas dériver.</string>
+    <string name="subject_fill_light_kelvin">Température de couleur : %1$d K</string>
+    <string name="subject_fill_light_tint">Teinte : %1$d</string>
+    <string name="subject_fill_light_timeout">Éteindre après</string>
+    <string name="subject_fill_light_timeout_off">Jamais</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

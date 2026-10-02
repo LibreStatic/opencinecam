@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Subject self-monitor</string>
+    <string name="subject_preview_bands">Mark the recorded area</string>
+    <string name="subject_preview_guide">Framing guide</string>
+    <string name="subject_preview_guide_none">None</string>
+    <string name="subject_preview_guide_thirds">Rule of thirds</string>
+    <string name="subject_preview_guide_safe">Safe area</string>
+    <string name="subject_preview_audio_meter">Small audio level meter</string>
+    <string name="subject_self_monitor_help">These guides appear only on the exterior screen and never in the recorded file. Mirroring the exterior preview does not mirror the file.</string>
+    <string name="subject_tally_title">Tally and countdown</string>
+    <string name="subject_tally_border">Red tally border while recording</string>
+    <string name="subject_giant_countdown">Full-screen countdown</string>
+    <string name="subject_tally_help">The tally is red only while the camera service confirms recording and amber while a take is preparing or saving. It follows the requested exterior brightness.</string>
+</resources>

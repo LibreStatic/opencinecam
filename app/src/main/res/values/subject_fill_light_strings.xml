@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Turns the exterior screen into a soft light. Brightness is a request to the system, not measured light. Lock exposure and white balance before a take so the light does not make them drift.</string>
+    <string name="subject_fill_light_kelvin">Colour temperature: %1$d K</string>
+    <string name="subject_fill_light_tint">Tint: %1$d</string>
+    <string name="subject_fill_light_timeout">Turn off after</string>
+    <string name="subject_fill_light_timeout_off">Never</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

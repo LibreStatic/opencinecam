@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Angezeigte Klappenfelder</string>
+    <string name="subject_slate_field_project">Projekt</string>
+    <string name="subject_slate_field_scene">Szene</string>
+    <string name="subject_slate_field_take">Take</string>
+    <string name="subject_slate_field_camera">Kamera</string>
+    <string name="subject_slate_field_reel">Rolle</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">Weißer Sync-Blitz beim Aufnahmestart</string>
+    <string name="subject_slate_sync_beep">Sync-Piepton beim Aufnahmestart</string>
+    <string name="subject_slate_sync_help">Der Piepton kommt aus dem Lautsprecher dieses Telefons und wird daher auch in diesem Take aufgezeichnet. Er ist standardmäßig aus, weil er den aufgenommenen Ton verändert. Die Take-Nummerierung ändert sich nicht.</string>
+</resources>

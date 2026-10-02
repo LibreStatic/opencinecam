@@ -38,6 +38,9 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
     val states = mutableState.asStateFlow()
     private val subject = MutableStateFlow(CameraUiState())
     private val previewPort = MutableStateFlow<SubjectPreviewPort?>(null)
+    private val cues = MutableStateFlow(SubjectSessionCues())
+    /** Operator commands (review pick, interview position) reach the subject only through these cues. */
+    val subjectCues = cues.asStateFlow()
     private val preferences = SettingsRepositories.get(activity)
     private val executor = ContextCompat.getMainExecutor(activity)
     private val controller = runCatching { WindowAreaController.getOrCreate() }.getOrNull()
@@ -98,6 +101,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
 
     fun updateCameraState(state: CameraUiState) { subject.value = state }
 
+    fun updateSubjectCues(transform: (SubjectSessionCues) -> SubjectSessionCues) { cues.value = transform(cues.value) }
+
     fun start(operation: DisplayOperation) {
         if (disposed) return
         val backend = controller ?: return
@@ -120,7 +125,11 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val settings by preferences.states.collectAsState()
                                     val output by previewPort.collectAsState()
                                     val windowState by mutableState.collectAsState()
-                                    MaterialTheme { SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible }) }
+                                    val sessionCues by cues.collectAsState()
+                                    MaterialTheme {
+                                        SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
+                                            cues = sessionCues, productionSlate = settings.productionSlate)
+                                    }
                                 }
                             }
                             subjectView = view

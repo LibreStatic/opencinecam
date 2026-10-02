@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Campos exibidos na claquete</string>
+    <string name="subject_slate_field_project">Projeto</string>
+    <string name="subject_slate_field_scene">Cena</string>
+    <string name="subject_slate_field_take">Tomada</string>
+    <string name="subject_slate_field_camera">Câmera</string>
+    <string name="subject_slate_field_reel">Rolo</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">Flash branco de sincronia ao iniciar REC</string>
+    <string name="subject_slate_sync_beep">Bipe de sincronia ao iniciar REC</string>
+    <string name="subject_slate_sync_help">O bipe toca pelo alto-falante deste telefone, então também fica gravado nesta tomada. Vem desligado por padrão porque altera o áudio gravado. A numeração de tomadas não muda.</string>
+</resources>

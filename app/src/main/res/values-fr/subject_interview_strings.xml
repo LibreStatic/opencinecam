@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_interview_questions">Questions, une par ligne (50 × 300 caractères)</string>
+    <string name="subject_interview_help">Les questions sont enregistrées uniquement sur cet appareil, séparément du script du téléprompteur. L\'écran extérieur utilise la taille du texte du script.</string>
+    <string name="subject_interview_empty">L\'opérateur n\'a chargé aucune question.</string>
+</resources>

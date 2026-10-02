@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Macht das Außendisplay zu einem weichen Licht. Die Helligkeit ist eine Anforderung an das System, kein gemessenes Licht. Sperre Belichtung und Weißabgleich vor einem Take, damit das Licht sie nicht verschiebt.</string>
+    <string name="subject_fill_light_kelvin">Farbtemperatur: %1$d K</string>
+    <string name="subject_fill_light_tint">Tönung: %1$d</string>
+    <string name="subject_fill_light_timeout">Ausschalten nach</string>
+    <string name="subject_fill_light_timeout_off">Nie</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+</resources>

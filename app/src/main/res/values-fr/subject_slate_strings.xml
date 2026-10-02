@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Champs affichés sur le clap</string>
+    <string name="subject_slate_field_project">Projet</string>
+    <string name="subject_slate_field_scene">Scène</string>
+    <string name="subject_slate_field_take">Prise</string>
+    <string name="subject_slate_field_camera">Caméra</string>
+    <string name="subject_slate_field_reel">Bobine</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">Flash blanc de synchro au début de REC</string>
+    <string name="subject_slate_sync_beep">Bip de synchro au début de REC</string>
+    <string name="subject_slate_sync_help">Le bip sort du haut-parleur de ce téléphone : il est donc aussi enregistré dans cette prise. Il est désactivé par défaut car il modifie le son enregistré. La numérotation des prises ne change pas.</string>
+</resources>

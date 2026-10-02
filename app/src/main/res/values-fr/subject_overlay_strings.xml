@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Retour pour la personne filmée</string>
+    <string name="subject_preview_bands">Marquer la zone enregistrée</string>
+    <string name="subject_preview_guide">Guide de cadrage</string>
+    <string name="subject_preview_guide_none">Aucun</string>
+    <string name="subject_preview_guide_thirds">Règle des tiers</string>
+    <string name="subject_preview_guide_safe">Zone de sécurité</string>
+    <string name="subject_preview_audio_meter">Petit vumètre audio</string>
+    <string name="subject_self_monitor_help">Ces repères n\'apparaissent que sur l\'écran extérieur, jamais dans le fichier enregistré. Le miroir de l\'aperçu extérieur ne retourne pas le fichier.</string>
+    <string name="subject_tally_title">Tally et compte à rebours</string>
+    <string name="subject_tally_border">Bordure tally rouge pendant l\'enregistrement</string>
+    <string name="subject_giant_countdown">Compte à rebours plein écran</string>
+    <string name="subject_tally_help">Le tally n\'est rouge que lorsque le service caméra confirme l\'enregistrement, et ambre pendant la préparation ou l\'enregistrement d\'une prise. Il suit la luminosité extérieure demandée.</string>
+</resources>

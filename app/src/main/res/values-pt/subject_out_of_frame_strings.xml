@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Aviso de fora do quadro</string>
+    <string name="subject_out_of_frame">Avisar quando o rosto sair da área gravada</string>
+    <string name="subject_out_of_frame_delay">Atraso do aviso: %1$d s</string>
+    <string name="subject_out_of_frame_help">Usa a detecção de rostos da própria câmera quando a configuração de captura ativa a oferece. As posições dos rostos ficam na memória e nunca são salvas nem gravadas nos metadados.</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Alerte hors cadre</string>
+    <string name="subject_out_of_frame">Avertir quand le visage quitte la zone enregistrée</string>
+    <string name="subject_out_of_frame_delay">Délai d\'alerte : %1$d s</string>
+    <string name="subject_out_of_frame_help">Utilise la détection de visages de la caméra lorsque la configuration de capture active la propose. Les positions des visages restent en mémoire et ne sont jamais enregistrées ni écrites dans les métadonnées.</string>
+</resources>
