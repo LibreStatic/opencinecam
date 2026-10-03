@@ -72,6 +72,12 @@ internal fun LocalMediaKind.galleryKind(): GalleryMediaKind = when (this) {
     LocalMediaKind.AUDIO -> GalleryMediaKind.AUDIO
 }
 
+/** A photo opens to be looked at; only clips and recordings play. */
+internal fun LocalMediaKind.primaryActionLabel(): Int =
+    if (this == LocalMediaKind.PHOTO) R.string.media_action_view else R.string.media_action_play
+
+internal fun LocalMediaKind.primaryActionGlyph(): CineIcon = if (this == LocalMediaKind.PHOTO) CineIcon.MEDIA else CineIcon.PLAY
+
 internal fun LocalMediaKind.glyph(): CineIcon = when (this) {
     LocalMediaKind.PHOTO -> CineIcon.CAMERA
     LocalMediaKind.VIDEO -> CineIcon.VIDEO
@@ -237,7 +243,7 @@ private fun GalleryTakeMenu(take: LocalMediaTake, title: String, actions: Galler
         DropdownMenu(open, { open = false }, Modifier.testTag("gallery-menu-${take.id}-items")) {
             val close = { open = false }
             val plain = MaterialTheme.colorScheme.onSurface
-            GalleryMenuItem("gallery-primary-${take.id}", CineIcon.PLAY, R.string.media_action_play, plain, close, actions.play)
+            GalleryMenuItem("gallery-primary-${take.id}", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), plain, close, actions.play)
             GalleryMenuItem("gallery-info-${take.id}", CineIcon.INFO, R.string.media_action_details, plain, close, actions.details)
             actions.share?.let { GalleryMenuItem("gallery-share-${take.id}", CineIcon.SHARE, R.string.media_action_share, plain, close, it) }
             actions.rename?.let { GalleryMenuItem("gallery-rename-${take.id}", CineIcon.RENAME, R.string.media_action_rename, plain, close, it) }

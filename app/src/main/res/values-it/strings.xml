@@ -320,7 +320,7 @@
     <string name="pro_wb_continuous">WB continuo / live</string>
     <string name="pro_wb_lock_record">Mantieni WB per la ripresa</string>
     <string name="pro_wb_record_help">Continuo mantiene i controlli live. Mantieni attende la convergenza AUTO e un blocco della fotocamera confermato prima di creare la clip (fino a 3 secondi); preset e Kelvin mantengono l\'impostazione fissa. La finalizzazione ripristina il WB di anteprima selezionato. I frame GPU in buffer precedenti al blocco confermato sono esclusi.</string>
-    <string name="pro_wb_lock_unavailable">Il blocco AUTO non è dichiarato qui, oppure è un HFR vincolato. Mantieni non avvierà una ripresa non confermata; scegli esplicitamente Continuo o un WB fisso supportato in una sessione normale.</string>
+    <string name="pro_wb_lock_unavailable">Questa fotocamera non può bloccare qui il bilanciamento del bianco automatico. Scegli Continuo, oppure un bilanciamento fisso in una modalità normale (non ad alta velocità).</string>
     <string name="pro_wb_record_pending">Le modifiche alla politica valgono per la prossima ripresa. Le modifiche al WB durante una ripresa mantenuta restano in sospeso fino alla finalizzazione.</string>
     <string name="pro_wb_lock_reported">Blocco AWB segnalato dalla fotocamera: %1$s</string>
     <string name="pro_wb_locked">Bloccato</string>

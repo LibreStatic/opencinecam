@@ -6,6 +6,7 @@
     <string name="media_yesterday">Ayer</string>
     <string name="media_more_actions">Más acciones para %1$s</string>
     <string name="media_action_play">Reproducir</string>
+    <string name="media_action_view">Ver</string>
     <string name="media_action_details">Detalles</string>
     <string name="media_action_share">Compartir</string>
     <string name="media_action_rename">Renombrar</string>

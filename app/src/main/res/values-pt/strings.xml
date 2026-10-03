@@ -320,7 +320,7 @@
     <string name="pro_wb_continuous">WB contínuo / ao vivo</string>
     <string name="pro_wb_lock_record">Manter WB durante a tomada</string>
     <string name="pro_wb_record_help">Contínuo mantém os controles ao vivo. Manter aguarda a convergência do AUTO e um bloqueio da câmera confirmado antes de criar o clipe (até 3 segundos); presets e Kelvin mantêm sua configuração fixa. A finalização restaura o WB de pré-visualização selecionado. Quadros GPU em buffer anteriores ao bloqueio confirmado são excluídos.</string>
-    <string name="pro_wb_lock_unavailable">O bloqueio AUTO não é anunciado aqui, ou é um HFR restrito. Manter não iniciará uma tomada não confirmada; escolha Contínuo explicitamente ou um WB fixo compatível em uma sessão normal.</string>
+    <string name="pro_wb_lock_unavailable">Esta câmera não consegue travar o balanço de branco automático aqui. Escolha Contínuo, ou um balanço fixo em um modo normal (não de alta velocidade).</string>
     <string name="pro_wb_record_pending">As alterações de política valem para a próxima tomada. As alterações de WB durante uma tomada mantida ficam pendentes até a finalização.</string>
     <string name="pro_wb_lock_reported">Bloqueio de AWB informado pela câmera: %1$s</string>
     <string name="pro_wb_locked">Bloqueado</string>

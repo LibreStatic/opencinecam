@@ -320,7 +320,7 @@
     <string name="pro_wb_continuous">Continuous / live WB</string>
     <string name="pro_wb_lock_record">Hold WB for the take</string>
     <string name="pro_wb_record_help">Continuous keeps live controls. Hold waits for AUTO convergence and a confirmed camera lock before creating the clip (up to 3 seconds); presets and Kelvin keep their fixed setting. Finalization restores the selected preview WB. Buffered GPU frames older than the confirmed lock are excluded.</string>
-    <string name="pro_wb_lock_unavailable">AUTO lock is not advertised here, or this is constrained HFR. Hold will not start an unconfirmed take; choose Continuous explicitly or a supported fixed WB in a regular session.</string>
+    <string name="pro_wb_lock_unavailable">This camera can\'t lock auto white balance here. Choose Continuous, or a fixed white balance in a regular (not high-speed) mode.</string>
     <string name="pro_wb_record_pending">Policy changes apply to the next take. WB changes during a held take remain pending until finalization.</string>
     <string name="pro_wb_lock_reported">Camera-reported AWB lock: %1$s</string>
     <string name="pro_wb_locked">Locked</string>

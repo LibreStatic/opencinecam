@@ -6,6 +6,7 @@
     <string name="media_yesterday">Hier</string>
     <string name="media_more_actions">Plus d’actions pour %1$s</string>
     <string name="media_action_play">Lire</string>
+    <string name="media_action_view">Afficher</string>
     <string name="media_action_details">Détails</string>
     <string name="media_action_share">Partager</string>
     <string name="media_action_rename">Renommer</string>

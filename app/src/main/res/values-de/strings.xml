@@ -320,7 +320,7 @@
     <string name="pro_wb_continuous">Kontinuierlicher / Live-WB</string>
     <string name="pro_wb_lock_record">WB für den Take halten</string>
     <string name="pro_wb_record_help">Kontinuierlich behält die Live-Steuerung. Halten wartet auf die AUTO-Konvergenz und eine bestätigte Kamerasperre, bevor der Clip erstellt wird (bis zu 3 Sekunden); Presets und Kelvin behalten ihre feste Einstellung. Die Finalisierung stellt den gewählten Vorschau-WB wieder her. Gepufferte GPU-Frames, die älter als die bestätigte Sperre sind, werden ausgeschlossen.</string>
-    <string name="pro_wb_lock_unavailable">Die AUTO-Sperre wird hier nicht angeboten, oder es handelt sich um eingeschränktes HFR. Halten startet keinen unbestätigten Take; wähle ausdrücklich Kontinuierlich oder in einer regulären Sitzung einen unterstützten festen WB.</string>
+    <string name="pro_wb_lock_unavailable">Diese Kamera kann den automatischen Weißabgleich hier nicht sperren. Wähle Kontinuierlich oder einen festen Weißabgleich in einem normalen Modus (nicht Hochgeschwindigkeit).</string>
     <string name="pro_wb_record_pending">Richtlinienänderungen gelten für den nächsten Take. WB-Änderungen während eines gehaltenen Takes bleiben bis zur Finalisierung vorgemerkt.</string>
     <string name="pro_wb_lock_reported">Von der Kamera gemeldete AWB-Sperre: %1$s</string>
     <string name="pro_wb_locked">Gesperrt</string>

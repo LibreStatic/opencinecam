@@ -320,7 +320,7 @@
     <string name="pro_wb_continuous">WB continue / en direct</string>
     <string name="pro_wb_lock_record">Verrouiller la WB pour la prise</string>
     <string name="pro_wb_record_help">Continue conserve les commandes en direct. Verrouiller attend la convergence AUTO et un verrou caméra confirmé avant de créer le clip (jusqu\'à 3 secondes) ; les presets et les Kelvin conservent leur réglage fixe. La finalisation restaure la WB d\'aperçu sélectionnée. Les images GPU en tampon antérieures au verrou confirmé sont exclues.</string>
-    <string name="pro_wb_lock_unavailable">Le verrou AUTO n\'est pas annoncé ici, ou il s\'agit d\'un HFR contraint. Verrouiller ne démarrera pas de prise non confirmée ; choisissez explicitement Continue ou une WB fixe prise en charge dans une session normale.</string>
+    <string name="pro_wb_lock_unavailable">Cet appareil ne peut pas verrouiller la balance des blancs automatique ici. Choisissez Continue, ou une balance fixe dans un mode normal (pas haute vitesse).</string>
     <string name="pro_wb_record_pending">Les changements de politique s\'appliquent à la prochaine prise. Les changements de WB pendant une prise verrouillée restent en attente jusqu\'à la finalisation.</string>
     <string name="pro_wb_lock_reported">Verrou AWB signalé par la caméra : %1$s</string>
     <string name="pro_wb_locked">Verrouillé</string>

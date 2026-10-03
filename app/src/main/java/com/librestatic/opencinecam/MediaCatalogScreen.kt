@@ -327,7 +327,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         val card: @Composable (LocalMediaTake, Modifier) -> Unit = { take, modifier ->
             GalleryTakeCard(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts),
                 selected = side && take.id == selectedId,
-                clickLabel = stringResource(if (side) R.string.media_action_details else R.string.media_action_play),
+                clickLabel = stringResource(if (side) R.string.media_action_details else take.kind.primaryActionLabel()),
                 actions = actions(take), modifier = modifier) {
                 // Beside an inspector a tap shows the take; on its own the grid plays it.
                 if (side) selectedId = take.id else open(take.primary)

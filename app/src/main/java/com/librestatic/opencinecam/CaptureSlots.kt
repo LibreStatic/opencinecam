@@ -253,7 +253,8 @@ private fun SlotCell(
             if (active) Box(Modifier.width(3.dp).height(24.dp).background(colors.primary))
             Column(Modifier.weight(1f)) {
                 Text(model.name, color = colors.onSurface, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                SlotLabel(model.label, labelColor, TextAlign.Start)
+                // The strip's short code helps only where it differs from the name: "WB", not "SHUTTER".
+                if (!model.label.equals(model.name, ignoreCase = true)) SlotLabel(model.label, labelColor, TextAlign.Start)
             }
             Column(horizontalAlignment = Alignment.End) {
                 SlotValue(model.value, valueColor, TextAlign.End)

@@ -71,7 +71,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))) {
             val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
             GalleryThumbnailTile(take, poster, settings.autoThumbnails, facts, Modifier.matchParentSize(), tag = "gallery-poster")
-            if (poster.bitmap != null || settings.autoThumbnails) {
+            if (take.kind != LocalMediaKind.PHOTO && (poster.bitmap != null || settings.autoThumbnails)) {
                 val play = stringResource(R.string.media_action_play)
                 Box(
                     Modifier
@@ -105,7 +105,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             if (take.slate?.goodTake == true) DetailChip(stringResource(R.string.gallery_good_take), accent = true)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            InspectorAction("gallery-inspector-play", CineIcon.PLAY, R.string.media_action_play, SettingsAccent, actions.play)
+            InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, actions.play)
             actions.share?.let { InspectorAction("gallery-inspector-share", CineIcon.SHARE, R.string.media_action_share, action = it) }
             actions.rename?.let { InspectorAction("gallery-inspector-rename", CineIcon.RENAME, R.string.media_action_rename, action = it) }
             actions.proxy?.let { InspectorAction("gallery-inspector-proxy", CineIcon.PROXY, R.string.media_action_proxy, action = it) }
