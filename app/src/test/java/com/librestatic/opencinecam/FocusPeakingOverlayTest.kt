@@ -45,6 +45,18 @@ class FocusPeakingOverlayTest {
     }
 
     @Test
+    fun `photo mode in portrait on a 4 by 3 sensor registers the mask with the preview`() {
+        // Photo mode: 1920 x 1080 preview, 640 x 360 analysis (see FocusPeakingTest), active array
+        // 4:3, sensor at 90 degrees, back camera, phone portrait, overlay sized to the 9:16 preview.
+        val placement = focusPeakingPlacement(640, 360, isp, 1920, 1080, 4000, 3000, 90, 0, false, 1080f, 1920f, 1f, 1f)
+        assertPlacement(Offset(1078.5f, 1.5f), Offset(0f, 3f), Offset(-3f, 0f), placement)
+        // Mask rows fill the width edge to edge and columns the height, with no overhang.
+        assertEquals(1080f, placement.map(0f, -.5f).x, 1e-2f)
+        assertEquals(0f, placement.map(0f, 359.5f).x, 1e-2f)
+        assertEquals(1920f, placement.map(639.5f, 0f).y, 1e-2f)
+    }
+
+    @Test
     fun `the gpu letterbox shrinks the mask about the centre`() {
         assertPlacement(Offset(252.5f, 127.5f), Offset(5f, 0f), Offset(0f, 5f),
             focusPeakingPlacement(100, 50, gpu, 1920, 1080, 4000, 3000, 0, 0, false, 1000f, 500f, .5f, .5f))

@@ -112,6 +112,29 @@ class FocusPeakingTest {
     }
 
     @Test
+    fun `photo mode on a 4 by 3 sensor analyses a stream of the preview aspect`() {
+        // YUV sizes of a 4:3 sensor such as the emulator's back camera.
+        val sizes = listOf(1920 to 1440, 1920 to 1080, 1440 to 1080, 1280 to 960, 1280 to 720, 640 to 480,
+            640 to 360, 352 to 288, 320 to 240, 176 to 144)
+        val preview = sizes[previewSizeIndex(sizes)]
+        assertEquals(1920 to 1080, preview)
+        val analysis = sizes[analysisSizeIndex(sizes, preview.first, preview.second)]
+        assertEquals(640 to 360, analysis)
+        // The same crop as the preview, so the mask needs no fitting.
+        assertEquals(NormalizedFrame(0f, 0f, 1f, 1f), outputFrameInStream(analysis.first, analysis.second, 1920, 1080, 4000, 3000))
+        assertEquals(320 to 180, (sizes + (320 to 180)).let { it[analysisSizeIndex(it, 1920, 1080)] })
+        // No size of the preview aspect: the nearest to 320 x 240, fitted by the centred crop.
+        val square = listOf(1920 to 1440, 640 to 480, 320 to 240)
+        assertEquals(2, analysisSizeIndex(square, 1920, 1080))
+        assertEquals(-1, analysisSizeIndex(emptyList(), 1920, 1080))
+        // The reverse: a 4:3 preview (1280 x 960 video profile) gets a 4:3 analysis, and a 16:9 mask
+        // over it would be fitted inside, 1/8 short at the top and bottom.
+        assertEquals(320 to 240, sizes[analysisSizeIndex(sizes, 1280, 960)])
+        val inside = outputFrameInStream(320, 180, 1280, 960, 4000, 3000)
+        assertEquals(NormalizedFrame(0f, .125f, 1f, .75f), inside)
+    }
+
+    @Test
     fun `gpu readback keeps scope sampling and adds a full resolution mask`() {
         val width = 320
         val height = 180
