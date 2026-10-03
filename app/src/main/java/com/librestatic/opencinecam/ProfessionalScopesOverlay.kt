@@ -85,17 +85,24 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
     }
 }
 
+/**
+ * The waveform, vectorscope and false-colour scopes. [expanded] and [onExpandedChange] let the
+ * screen that hosts the panel give it more room; without a callback the panel tracks it alone.
+ */
 @Composable internal fun ProfessionalScopesPanel(state: CameraUiState, options: MonitoringOptions,
-    fresh: Boolean, modifier: Modifier = Modifier) {
+    fresh: Boolean, modifier: Modifier = Modifier, expanded: Boolean = false,
+    onExpandedChange: ((Boolean) -> Unit)? = null) {
     if (!options.waveformEnabled && !options.vectorscopeEnabled && !options.falseColorEnabled) return
-    var enlarged by remember { mutableStateOf(false) }
+    var ownEnlarged by remember { mutableStateOf(false) }
+    val enlarged = if (onExpandedChange != null) expanded else ownEnlarged
+    fun toggleEnlarged() { if (onExpandedChange != null) onExpandedChange(!expanded) else ownEnlarged = !ownEnlarged }
     val frame = state.monitoringScopes
     val current = state.scopeAnalysisLive(fresh) && frame != null && frame.options == options
     BoxWithConstraints(modifier) {
         Column(Modifier.width(minOf(maxWidth, if (enlarged) 280.dp else 152.dp))
             .heightIn(max = maxHeight * .65f).background(Color.Black.copy(alpha = .8f))
             .verticalScroll(rememberScrollState()).padding(6.dp).testTag("monitoring-panel")) {
-            TextButton(onClick = { enlarged = !enlarged }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            TextButton(onClick = { toggleEnlarged() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .testTag("monitoring-enlarge")) {
                 Text(stringResource(if (enlarged) R.string.scope_reduce else R.string.scope_enlarge))
             }
