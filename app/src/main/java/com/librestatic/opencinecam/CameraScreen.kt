@@ -457,6 +457,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                 onboardingStore.markCompleted()
                 onboardingDone = true
             },
+            hinge = foldState.hinge,
         )
     }
     }

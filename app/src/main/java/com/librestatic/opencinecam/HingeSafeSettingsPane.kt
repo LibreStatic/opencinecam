@@ -20,7 +20,7 @@ import kotlin.math.roundToInt
  * of an unfolded inner screen is a compact window, not the whole display.
  */
 @Composable
-internal fun HingeSafeSettingsPane(hinge: FoldHinge?, content: @Composable () -> Unit) {
+internal fun HingeSafeSettingsPane(hinge: FoldHinge?, tag: String = "hinge-safe-settings", content: @Composable () -> Unit) {
     val window = LocalAdaptiveWindow.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(
@@ -40,7 +40,7 @@ internal fun HingeSafeSettingsPane(hinge: FoldHinge?, content: @Composable () ->
         val paneWindow = remember(pane, window, density) {
             pane?.let { with(density) { AdaptiveWindow(it.width.toDp().value, it.height.toDp().value, window.hardwareKeyboard) } } ?: window
         }
-        Box(bounds.clipToBounds().testTag("hinge-safe-settings")) {
+        Box(bounds.clipToBounds().testTag(tag)) {
             CompositionLocalProvider(LocalAdaptiveWindow provides paneWindow) { content() }
         }
     }

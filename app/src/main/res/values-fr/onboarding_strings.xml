@@ -24,8 +24,8 @@
     <string name="onb_tour_body">Touchez un élément en surbrillance pour découvrir son rôle.</string>
     <string name="onb_tour_status">Timecode et stockage</string>
     <string name="onb_tour_status_body">Timecode en cours, format d\'enregistrement et espace restant sur votre appareil.</string>
-    <string name="onb_tour_rail">Barre rapide</string>
-    <string name="onb_tour_rail_body">Touchez ISO, obturation, balance des blancs ou mise au point et faites glisser pour changer sans ouvrir de menus.</string>
+    <string name="onb_tour_rail">Réglages de la caméra</string>
+    <string name="onb_tour_rail_body">Touchez obturation, ISO, balance des blancs ou mise au point pour régler la valeur. L\'image reste visible pendant ce temps.</string>
     <string name="onb_tour_record">Enregistrer</string>
     <string name="onb_tour_record_body">Démarre et arrête une prise. Il ne devient rouge que pendant un vrai enregistrement.</string>
     <string name="onb_permissions_label">Autorisations</string>
@@ -59,4 +59,6 @@
     <string name="onb_ready_title">Vous êtes prêt</string>
     <string name="onb_ready_body">Astuce : appuyez longuement sur une commande pour en savoir plus. Vous pouvez revoir cette visite dans Réglages › À propos.</string>
     <string name="onb_replay">Afficher la visite de bienvenue</string>
+    <string name="onb_licenses_back">Retour à la visite de bienvenue</string>
+    <string name="onb_more_below">Suite plus bas</string>
 </resources>
