@@ -63,6 +63,41 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+
+    // Robolectric host tests (the Compose Driver server) resolve strings, fonts and drawables.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// Compose Driver: tools/compose-driver.sh passes these as -P properties and the host test
+// ComposeDriverServer reads them as system properties. Without them that test is skipped.
+val composeDriverProperties = listOf(
+    "compose.driver.composable",
+    "composeDriver.port",
+    "composeDriver.qualifiers",
+    "composeDriver.theme",
+)
+tasks.withType<Test>().configureEach {
+    composeDriverProperties.forEach { key ->
+        providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+    if (providers.gradleProperty("compose.driver.composable").isPresent) {
+        maxHeapSize = "2g"
+    } else {
+        // Its SDK 36 sandbox needs Java 21 before the test can skip itself, so ordinary runs leave it out.
+        filter.excludeTestsMatching("com.librestatic.opencinecam.driver.ComposeDriverServer")
+    }
+    // Compose Driver is built for Java 21; the build itself stays on the JDK 17 that CI uses.
+    providers.gradleProperty("composeDriver.javaHome").orNull?.let {
+        executable = "$it/bin/java"
+        // Robolectric reaches into FileDescriptor internals and loads its native graphics runtime.
+        jvmArgs(
+            "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+    }
 }
 
 dependencyLocking {
@@ -112,6 +147,12 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    // Agent visual feedback (AGENTS.md): host-test classpath only, never packaged.
+    testImplementation(libs.compose.driver)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(project(":camera"))
