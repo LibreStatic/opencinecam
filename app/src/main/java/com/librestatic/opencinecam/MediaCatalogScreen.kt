@@ -55,7 +55,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -66,6 +71,8 @@ internal interface MediaCatalogSource {
     suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap?
     /** Duration, frame size and HDR transfer for the card badges; null when unknown. */
     suspend fun facts(artifact: LocalMediaArtifact): GalleryFacts? = null
+    /** Proxy state of the loaded takes, by take id; takes with no proxy are absent. */
+    fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = flowOf(emptyMap())
 }
 
 @Composable
@@ -86,11 +93,17 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     val source = remember(context.applicationContext) {
         val app = context.applicationContext
         val repository = LocalMediaRepository(app)
+        val queue by lazy { MediaProxyQueue.get(app) }
         object : MediaCatalogSource {
             override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int) =
                 withContext(Dispatchers.IO) { repository.page(settings, query, cursor, limit) }
             override suspend fun thumbnail(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryThumbnail(app, artifact) }
             override suspend fun facts(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryFacts(app, artifact) }
+            // The queue for work in flight, the receipts (listed once per page load) for proxies already made.
+            override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = if (ids.isEmpty()) flowOf(emptyMap())
+                else combine(queue.states, flow { emit(committedProxyTakes(app, ids)) }.flowOn(Dispatchers.IO)) { state, committed ->
+                    takeProxyStates(ids, state.jobs, committed)
+                }
         }
     }
     MediaCatalogContent(settings, onSettings, source, onShare = { sharingTake = it },
@@ -148,14 +161,16 @@ private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): Galler
 
 private data class GalleryRequest(val kind: GalleryMediaKind, val newestFirst: Boolean, val goodTakesOnly: Boolean, val query: String, val refresh: Int, val externalRefresh: Int)
 private data class GalleryLoad(val request: GalleryRequest? = null, val takes: List<LocalMediaTake> = emptyList(),
-    val next: LocalMediaCursor? = null, val loading: Boolean = true, val failed: Boolean = false)
+    val next: LocalMediaCursor? = null, val loading: Boolean = true, val failed: Boolean = false,
+    val encodings: Map<String, LocalMediaEncoding> = emptyMap())
 
 @Composable
 internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (GallerySettings) -> Unit,
     source: MediaCatalogSource, onShare: ((LocalMediaTake) -> Unit)? = null,
     onDelete: ((LocalMediaTake) -> Unit)? = null, refreshGeneration: Int = 0,
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
-    onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null, onOpen: (LocalMediaArtifact) -> Unit) {
+    onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null,
+    initialSelection: String? = null, onOpen: (LocalMediaArtifact) -> Unit) {
     val reducedMotion = LocalReducedMotion.current
     var query by rememberSaveable { mutableStateOf("") }
     // What the operator typed, which is not always what we search for. Keeping it lets the field
@@ -164,6 +179,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     // call would be cleared by that second one before anything could be drawn.
     var typedQuery by rememberSaveable { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(false) }
+    var help by rememberSaveable { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     var batch by remember { mutableIntStateOf(0) }
     var load by remember(source) { mutableStateOf(GalleryLoad()) }
@@ -190,7 +206,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             val merged = linkedMapOf<String, LocalMediaTake>()
             previous.takes.forEach { merged[it.id] = it }
             page.takes.forEach { merged[it.id] = it }
-            load = GalleryLoad(request, merged.values.toList(), cursor, loading = false)
+            load = GalleryLoad(request, merged.values.toList(), cursor, loading = false, encodings = previous.encodings + page.encodings)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
@@ -203,8 +219,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
 
     // The take the inspector shows. While a refresh reads again it keeps the last copy; once a read
     // has finished without it (deleted, renamed away by a filter) the selection goes.
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailsOpen by rememberSaveable { mutableStateOf(false) }
+    // [initialSelection] opens a take's details on arrival (the Compose Driver review uses it).
+    var selectedId by rememberSaveable { mutableStateOf(initialSelection) }
+    var detailsOpen by rememberSaveable { mutableStateOf(initialSelection != null) }
     var lastSelected by remember { mutableStateOf<LocalMediaTake?>(null) }
     val selectedTake = selectedId?.let { id -> visible.takes.firstOrNull { it.id == id } ?: lastSelected?.takeIf { it.id == id && visible.loading } }
     SideEffect { if (selectedTake != null) lastSelected = selectedTake }
@@ -214,6 +231,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         }
     }
     val facts = remember(source) { mutableMapOf<String, GalleryFacts>() }
+    val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
+        .collectAsState(emptyMap())
+    fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE)
     val thumbnails = remember(source) { GalleryThumbnailCache() }
     val groups = remember(visible.takes) { groupByTakeDay(visible.takes, ZoneId.systemDefault()) { it.primary.modifiedSeconds } }
     val gridState = rememberLazyGridState()
@@ -247,7 +267,10 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 onProxyCatalog?.let { action -> CineIconButton("gallery-proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
                 CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
                 CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
+                CineIconButton("gallery-help-toggle", CineIcon.INFO, if (help) R.string.settings_help_hide else R.string.settings_help_show,
+                    selected = help) { help = !help }
             }
+            if (help) SettingsHelpText(stringResource(R.string.gallery_help), "gallery-help")
             SubjectReviewOperatorBar()
             val queryInvalid = !validGalleryQuery(typedQuery)
             OutlinedTextField(typedQuery, { candidate ->
@@ -265,7 +288,6 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 }
             } }
             if (filters) SettingsCard { GallerySettingsControls(settings, onSettings, showKinds = false) }
-            SettingsHelp(stringResource(R.string.gallery_help), tag = "gallery-help")
             if (openFailed) Text(stringResource(R.string.gallery_open_failed), Modifier.fillMaxWidth().testTag("gallery-open-failed"),
                 color = GalleryWarning, fontSize = 13.sp)
         }
@@ -300,7 +322,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         }
     }
     val details: @Composable (LocalMediaTake, Modifier, () -> Unit, Boolean) -> Unit = { take, modifier, close, onDemand ->
-        MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts),
+        MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), badges(take),
             if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier)
     }
 
@@ -325,7 +347,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             if (action == ShortcutAction.DISMISS) { selectedId = null; true } else false
         }
         val card: @Composable (LocalMediaTake, Modifier) -> Unit = { take, modifier ->
-            GalleryTakeCard(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts),
+            GalleryTakeCard(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), badges(take),
                 selected = side && take.id == selectedId,
                 clickLabel = stringResource(if (side) R.string.media_action_details else take.kind.primaryActionLabel()),
                 actions = actions(take), modifier = modifier) {

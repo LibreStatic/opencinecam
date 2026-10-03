@@ -15,7 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -57,7 +58,7 @@ internal fun integrityExplanation(status: LocalMediaRelationStatus): Int = when 
  */
 @Composable
 internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
-    thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, actions: GalleryTakeActions,
+    thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, actions: GalleryTakeActions,
     onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val window = LocalAdaptiveWindow.current
@@ -99,10 +100,12 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             DetailChip(stringResource(galleryKindLabel(take.kind.galleryKind())))
             formatTakeDuration(facts?.durationMs)?.let { DetailChip(it) }
             resolutionBadge(facts?.width, facts?.height)?.let { DetailChip(it) }
+            badges.codec?.let { DetailChip(codecBadgeText(it), tag = "gallery-details-codec-${take.id}") }
             if (takeIsLog(take)) DetailChip("LOG", accent = true)
             if (facts?.hdr == true) DetailChip("HDR")
             DetailChip(remember(take.originals) { Formatter.formatShortFileSize(context, take.originals.sumOf { it.sizeBytes }) })
             if (take.slate?.goodTake == true) DetailChip(stringResource(R.string.gallery_good_take), accent = true)
+            badges.proxy.label()?.let { DetailChip(stringResource(it), color = badges.proxy.tint, tag = "gallery-details-proxy-${take.id}") }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, actions.play)
@@ -129,12 +132,15 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
     }
 }
 
+/** [color] tints a chip that reports a state (a proxy) in its own colour, border included. */
 @Composable
-private fun DetailChip(text: String, accent: Boolean = false) {
+private fun DetailChip(text: String, accent: Boolean = false, color: Color? = null, tag: String? = null) {
+    val tint = color ?: if (accent) SettingsAccent else null
     Text(text, Modifier
-        .border(1.dp, if (accent) SettingsAccent else SettingsBorder, RoundedCornerShape(8.dp))
-        .padding(horizontal = 10.dp, vertical = 5.dp),
-        color = if (accent) SettingsAccent else MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, maxLines = 1)
+        .border(1.dp, tint ?: SettingsBorder, RoundedCornerShape(8.dp))
+        .padding(horizontal = 10.dp, vertical = 5.dp)
+        .then(tag?.let { Modifier.testTag(it) } ?: Modifier),
+        color = tint ?: MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, maxLines = 1)
 }
 
 @Composable
@@ -289,7 +295,8 @@ internal fun MediaInspectorSheet(take: LocalMediaTake, bottom: Boolean, onDismis
         }
         return
     }
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Hidden or fully open, no half-height stop: what skipPartiallyExpanded used to say.
+    val state = rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { dismiss() } }

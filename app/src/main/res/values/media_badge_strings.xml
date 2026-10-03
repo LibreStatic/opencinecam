@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Codec and sample depth on a gallery badge, e.g. "HEVC 10-bit". %1$s is a codec name and is never translated. -->
+    <string name="media_badge_depth">%1$s %2$d-bit</string>
+    <!-- Floating-point audio samples, e.g. "WAV 32-bit float". -->
+    <string name="media_badge_depth_float">%1$s %2$d-bit float</string>
+    <!-- A take's proxy, on its card and in its details. -->
+    <string name="media_badge_proxy_ready">Proxy ready</string>
+    <string name="media_badge_proxy_queued">Proxy queued</string>
+    <string name="media_badge_proxy_making">Making proxy</string>
+    <string name="media_badge_proxy_failed">Proxy failed</string>
+</resources>

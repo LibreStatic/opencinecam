@@ -23,6 +23,7 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.CompositionGridMode
+import com.librestatic.opencinecam.GalleryFacts
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.MediaCatalogContent
@@ -31,8 +32,10 @@ import com.librestatic.opencinecam.OnboardingScreen
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.SettingsScreen
 import com.librestatic.opencinecam.SplashHandoff
+import com.librestatic.opencinecam.TakeProxyState
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaCursor
+import com.librestatic.opencinecam.storage.LocalMediaEncoding
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaPage
 import com.librestatic.opencinecam.storage.LocalMediaRelationStatus
@@ -42,6 +45,8 @@ import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import java.io.IOException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /*
  * Zero-argument Compose Driver entry points (AGENTS.md). Each one feeds fake state to the real
@@ -84,9 +89,13 @@ fun SettingsRecording() = DriverTheme {
         audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
 }
 
-/** The media catalog with a mix of video, photo and audio takes. */
+/** The media catalog with a mix of video, photo and audio takes; take 1's proxy is ready, take 2's is being made. */
 @Composable
 fun Gallery() = GalleryWith(FakeCatalog(SampleTakes))
+
+/** The media catalog with take 1's details open: beside the grid, or as a sheet where there is no room. */
+@Composable
+fun GalleryInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "1")
 
 /** The media catalog with no takes yet. */
 @Composable
@@ -164,18 +173,30 @@ private fun CaptureChrome(landscape: Boolean, state: CameraUiState) = DriverThem
 }
 
 @Composable
-private fun GalleryWith(source: MediaCatalogSource) = DriverTheme {
+private fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null) = DriverTheme {
     MediaCatalogContent(GallerySettings(), onSettings = {}, source = source, onShare = {}, onDelete = {},
-        onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, onOpen = {})
+        onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection, onOpen = {})
 }
 
-private class FakeCatalog(private val takes: List<LocalMediaTake>) : MediaCatalogSource {
-    override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int) =
-        LocalMediaPage(takes.filter { query.isBlank() || it.primary.name.contains(query, ignoreCase = true) }, next = null)
+private class FakeCatalog(private val takes: List<SampleTake>) : MediaCatalogSource {
+    override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage {
+        val shown = takes.filter { query.isBlank() || it.take.primary.name.contains(query, ignoreCase = true) }
+        return LocalMediaPage(shown.map { it.take }, next = null,
+            encodings = shown.mapNotNull { sample -> sample.encoding?.let { sample.take.id to it } }.toMap())
+    }
 
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? =
         if (artifact.mimeType.startsWith("audio/")) null else gradientThumbnail(artifact.name.hashCode())
+
+    override suspend fun facts(artifact: LocalMediaArtifact): GalleryFacts? = takes.firstOrNull { it.take.primary == artifact }?.facts
+
+    override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> =
+        flowOf(takes.filter { it.take.id in ids && it.proxy != TakeProxyState.NONE }.associate { it.take.id to it.proxy })
 }
+
+/** A take with what MediaStore, its sidecars and the proxy queue would say about it. */
+private class SampleTake(val take: LocalMediaTake, val facts: GalleryFacts? = null, val encoding: LocalMediaEncoding? = null,
+    val proxy: TakeProxyState = TakeProxyState.NONE)
 
 /** A stand-in frame: a two-colour gradient seeded by the file name, so takes are told apart. */
 private fun gradientThumbnail(seed: Int): Bitmap {
@@ -193,21 +214,28 @@ private fun gradientThumbnail(seed: Int): Bitmap {
 private fun artifact(id: Int, name: String, mime: String, sizeBytes: Long, modified: Long) =
     LocalMediaArtifact("content://media/external_primary/file/$id", name, mime, sizeBytes, modified)
 
+/** [log] names the sidecar like an OCLog recording's, which is what marks the take LOG. */
 private fun take(id: Int, name: String, mime: String, kind: LocalMediaKind, sizeBytes: Long, slate: ProductionSlateSettings?,
-    status: LocalMediaRelationStatus = LocalMediaRelationStatus.DECLARED): LocalMediaTake {
+    status: LocalMediaRelationStatus = LocalMediaRelationStatus.DECLARED, log: Boolean = false): LocalMediaTake {
     val primary = artifact(id, name, mime, sizeBytes, 1_790_000_000L - id * 3_600L)
-    val sidecar = artifact(id + 1_000, name.substringBeforeLast('.') + ".json", "application/json", 4_096L, primary.modifiedSeconds)
+    val sidecar = artifact(id + 1_000, name.substringBeforeLast('.') + if (log) ".oclog.json" else ".json", "application/json",
+        4_096L, primary.modifiedSeconds)
     return LocalMediaTake(id.toString(), primary, listOf(primary), listOf(sidecar), kind, slate, status)
 }
 
 private val SampleTakes = listOf(
-    take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
-        ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 3, goodTake = true)),
-    take(2, "OCC_TAKE_A001_S12_T02.mp4", "video/mp4", LocalMediaKind.VIDEO, 912_000_000L,
-        ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 2)),
-    take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null),
-    take(4, "OCC_20260930_181410.jpg", "image/jpeg", LocalMediaKind.PHOTO, 6_200_000L, slate = null,
-        status = LocalMediaRelationStatus.LEGACY),
-    take(5, "OCC_TAKE_A001_S11_T01_room-tone.m4a", "audio/mp4", LocalMediaKind.AUDIO, 3_100_000L,
-        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)),
+    SampleTake(take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
+        ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 3, goodTake = true), log = true),
+        GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY),
+    SampleTake(take(2, "OCC_TAKE_A001_S12_T02.mp4", "video/mp4", LocalMediaKind.VIDEO, 912_000_000L,
+        ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 2), log = true),
+        GalleryFacts(durationMs = 51_000L, width = 1920, height = 1080), LocalMediaEncoding("video/avc", "AVC_8"), TakeProxyState.MAKING),
+    SampleTake(take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null)),
+    SampleTake(take(4, "OCC_20260930_181410.jpg", "image/jpeg", LocalMediaKind.PHOTO, 6_200_000L, slate = null,
+        status = LocalMediaRelationStatus.LEGACY)),
+    SampleTake(take(5, "OCC_TAKE_A001_S11_T01_room-tone.m4a", "audio/mp4", LocalMediaKind.AUDIO, 3_100_000L,
+        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)), GalleryFacts(durationMs = 62_000L)),
+    SampleTake(take(6, "OCC_TAKE_A001_S11_T02_wild.wav", "audio/wav", LocalMediaKind.AUDIO, 21_800_000L,
+        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 2)), GalleryFacts(durationMs = 75_000L),
+        LocalMediaEncoding(audioContainer = "WAV", audioSamples = "PCM_24")),
 )

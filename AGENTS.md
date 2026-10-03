@@ -95,7 +95,8 @@ Outputs and logs:
 | `CaptureLandscape` | `AdaptiveCaptureChrome` | video, landscape layout (use `--device landscape`) |
 | `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes |
 | `SettingsRecording` | `SettingsScreen` | locked while recording |
-| `Gallery` | `MediaCatalogContent` | five takes (video, DNG, legacy JPEG, audio) with gradient thumbnails |
+| `Gallery` | `MediaCatalogContent` | six takes (two LOG videos, DNG, legacy JPEG, AAC and WAV audio) with gradient thumbnails, codec badges, one proxy ready and one being made |
+| `GalleryInspector` | `MediaCatalogContent` | the same takes with take 1's details open in a sheet: at the bottom on `phone` and `compact`, at the side on the others. Screenshot it with `tag=gallery-info-sheet`. The docked side pane needs a large or expanded landscape window, e.g. `--device w1280dp-h800dp-land-mdpi` |
 | `GalleryEmpty` / `GalleryLoading` / `GalleryError` | `MediaCatalogContent` | empty, first page pending, MediaStore failure |
 | `About` | `AboutScreen` | real license catalog from assets |
 | `Onboarding` | `OnboardingScreen` | first page, reduced motion |

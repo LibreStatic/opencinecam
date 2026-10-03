@@ -43,6 +43,7 @@ class LocalMediaRepository(context: Context) {
         val candidates = batches.values.flatten().sortedWith(catalogComparator(settings.newestFirst))
         val consumed = mutableMapOf<LocalMediaKind, Int>()
         val groups = mutableMapOf<MediaNamespace, LocalMediaTake?>()
+        val encodings = mutableMapOf<String, LocalMediaEncoding>()
         val result = mutableListOf<LocalMediaTake>()
         for (candidate in candidates.take(SCAN_BUDGET)) {
             val kind = requireNotNull(candidate.kind)
@@ -50,7 +51,7 @@ class LocalMediaRepository(context: Context) {
             consumed[kind] = (consumed[kind] ?: 0) + 1
             if (!candidate.eligible || candidate.namespace?.key in blocked) continue
             val take = candidate.namespace?.let { namespace ->
-                if (!groups.containsKey(namespace)) groups[namespace] = readTake(namespace, candidate)
+                if (!groups.containsKey(namespace)) groups[namespace] = readTake(namespace, candidate) { encodings[namespace.key] = it }
                 groups[namespace]
             } ?: if (candidate.namespace == null) LocalMediaTake(
                 "legacy:${candidate.artifact.uri}", candidate.artifact, listOf(candidate.artifact), emptyList(),
@@ -66,7 +67,8 @@ class LocalMediaRepository(context: Context) {
         }
         val next = if (exhausted.size == LocalMediaKind.entries.size) null
             else LocalMediaCursor(filter, positions.toMap(), exhausted.toSet())
-        return LocalMediaPage(result.toList(), next)
+        val ids = result.mapTo(HashSet()) { it.id }
+        return LocalMediaPage(result.toList(), next, encodings.filterKeys { it in ids })
     }
 
     fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = runCatching {
@@ -104,7 +106,7 @@ class LocalMediaRepository(context: Context) {
         var documents = emptyList<MetadataDocument>()
         val fresh = primary.namespace?.let { namespace ->
             check(candidates.all { it.namespace == namespace }) { "Selected media belongs to different takes" }
-            requireNotNull(readTake(namespace, primary) { documents = it })
+            requireNotNull(readTake(namespace, primary, captureDocuments = { documents = it }))
         } ?: run {
             check(candidates.size == 1) { "Legacy files have no declared grouping" }
             LocalMediaTake("legacy:${primary.artifact.uri}", primary.artifact, listOf(primary.artifact), emptyList(),
@@ -202,7 +204,8 @@ class LocalMediaRepository(context: Context) {
     }
 
     private fun readTake(namespace: MediaNamespace, candidate: CatalogRow,
-        captureDocuments: ((List<MetadataDocument>) -> Unit)? = null): LocalMediaTake? {
+        captureDocuments: ((List<MetadataDocument>) -> Unit)? = null,
+        onEncoding: ((LocalMediaEncoding) -> Unit)? = null): LocalMediaTake? {
         var incomplete = false
         val kinds = if (namespace.recording) listOf(LocalMediaKind.VIDEO, LocalMediaKind.AUDIO) else listOf(LocalMediaKind.PHOTO)
         val members = kinds.flatMap { kind ->
@@ -222,7 +225,7 @@ class LocalMediaRepository(context: Context) {
             if (row.artifact.mimeType == "application/json") readMetadata(row.artifact) else MetadataDocument(row.artifact, null)
         }
         captureDocuments?.invoke(documents)
-        return catalogTake(namespace, members, documents, incomplete)
+        return catalogTake(namespace, members, documents, incomplete, onEncoding)
     }
 
     private fun namespaceRows(namespace: MediaNamespace, root: String, uri: Uri,
