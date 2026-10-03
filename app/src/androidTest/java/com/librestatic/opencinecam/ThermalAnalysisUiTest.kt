@@ -64,8 +64,6 @@ class ThermalAnalysisUiTest {
             compose.onNodeWithTag("operator-button-$index").assertIsNotEnabled()
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,
                     context.getString(R.string.operator_state_thermal_description)))
-            compose.onNodeWithTag("operator-button-$index-state", useUnmergedTree = true)
-                .assertTextEquals(context.getString(R.string.operator_state_paused))
         }
 
         compose.runOnIdle { state.value = state.value.copy(analysisSuspension = AnalysisSuspension.NONE) }
@@ -73,8 +71,8 @@ class ThermalAnalysisUiTest {
         compose.onNodeWithTag("monitoring-waveform-graph").assertExists()
         for (index in 1..3) {
             compose.onNodeWithTag("operator-button-$index").assertIsEnabled()
-            compose.onNodeWithTag("operator-button-$index-state", useUnmergedTree = true)
-                .assertTextEquals(context.getString(R.string.operator_state_on))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,
+                    context.getString(R.string.operator_state_on_description)))
         }
     }
 

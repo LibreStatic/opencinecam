@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Short labels of the five capture slots; they sit over a 16 sp value in a 56 dp cell. -->
+    <string name="capture_slot_fps" translatable="false">FPS</string>
+    <string name="capture_slot_iso" translatable="false">ISO</string>
+    <string name="capture_slot_ev" translatable="false">EV</string>
+    <string name="capture_slot_shutter">SHUTTER</string>
+    <string name="capture_slot_wb">WB</string>
+    <string name="capture_slot_focus">FOCUS</string>
+    <string name="capture_slot_interval">INTERVAL</string>
+    <!-- Full names, read by screen readers and shown in tooltips. -->
+    <string name="capture_slot_fps_name">Frame rate</string>
+    <string name="capture_slot_shutter_name">Shutter</string>
+    <string name="capture_slot_iso_name">ISO sensitivity</string>
+    <string name="capture_slot_ev_name">Exposure compensation</string>
+    <string name="capture_slot_wb_name">White balance</string>
+    <string name="capture_slot_focus_name">Focus</string>
+    <string name="capture_slot_interval_name">Interval</string>
+    <!-- Why a slot is greyed out; shown when it is tapped. -->
+    <string name="capture_slot_reason_not_ready">Waiting for the camera.</string>
+    <string name="capture_slot_reason_high_speed">High frame rates set this automatically.</string>
+    <string name="capture_slot_reason_no_manual">This camera does not offer manual exposure.</string>
+    <string name="capture_slot_reason_no_ev">This camera does not offer exposure compensation.</string>
+    <string name="capture_mode_button">Mode: %1$s</string>
+    <string name="capture_scopes_short">Scopes</string>
+    <string name="capture_scopes_toggle">Show scopes</string>
+    <string name="capture_locked_banner">Controls locked</string>
+    <string name="capture_unlock">Unlock</string>
+</resources>

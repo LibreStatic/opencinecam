@@ -4,63 +4,109 @@
 package com.librestatic.opencinecam
 
 /**
- * How the capture chrome is arranged around the viewfinder.
+ * How the capture chrome is arranged around the viewfinder, chosen from the window classes.
  *
- * [STACKED] keeps the top bar and a control deck across the bottom. [SIDE_RAILS] is for short
- * landscape windows (a phone turned sideways, a foldable's cover screen): a stacked deck there
- * leaves the viewfinder a thin strip, so the controls move into vertical rails at both sides and
- * the viewfinder keeps the full height between them.
+ * - [COMPACT_PORTRAIT]: a phone in portrait or a foldable's cover screen. A slim status bar, the
+ *   F-keys as icons over the viewfinder edge, and a deck of five slots over the gallery, the mode
+ *   wheel and REC. Panels open as sheets docked above the deck.
+ * - [STACKED]: a tablet in portrait, a foldable's inner screen and mid-size desktop windows. A
+ *   top bar, a deck of slots over MODE ▾ and REC, and panels in a pane beside or under the frame,
+ *   whichever leaves the frame larger.
+ * - [SIDE_RAILS]: a short landscape window (a phone turned sideways). An icon rail at the start,
+ *   the viewfinder at full height, and a column at the end with MODE ▾, the slots and REC; an open
+ *   panel takes that column's place.
+ * - [INSPECTOR]: a tablet in landscape or a large desktop window. An icon rail at the start and an
+ *   inspector at the end that stays open, with the slots, the scopes and REC.
  */
-internal enum class CaptureChromeLayout { STACKED, SIDE_RAILS }
+internal enum class CaptureLayoutFamily { COMPACT_PORTRAIT, STACKED, SIDE_RAILS, INSPECTOR }
 
-/** Windows at least this tall have room for the stacked deck below the viewfinder. */
-internal const val SIDE_RAIL_MAX_HEIGHT_DP = 480f
+/** Icon rail at the start of the side-rail and inspector layouts: one 48 dp key plus margins. */
+internal const val CAPTURE_RAIL_WIDTH_DP = 72f
 
-/** Start rail: camera actions and the F-keys. Wide enough for two 52 dp F-keys side by side. */
-internal const val SIDE_RAIL_START_WIDTH_DP = 120f
+/** End column of the side-rail layout: MODE ▾, the five slots and REC. */
+internal const val SIDE_COLUMN_WIDTH_DP = 240f
 
-/** End rail: the exposure column beside a column with the mode selector and the shutter. */
-internal const val SIDE_RAIL_END_WIDTH_DP = 196f
+/** A panel replacing the side-rail column; the frame gives up the difference. */
+internal const val SIDE_PANE_WIDTH_DP = 320f
 
-/** Exposure column inside the end rail; the mode column takes what is left. */
-internal const val SIDE_RAIL_EXPOSURE_WIDTH_DP = 68f
+/** Always-open inspector of large windows. Fixed, so the viewfinder never reflows under it. */
+internal const val INSPECTOR_WIDTH_DP = 360f
 
-/**
- * Chooses the chrome arrangement from the safe window size in dp. Rails are only used when the
- * window is landscape, short, and still leaves a viewfinder at least as wide as it is tall once
- * both rails are taken out; otherwise the stacked deck is the better use of the space.
- */
-internal fun captureChromeLayout(widthDp: Float, heightDp: Float): CaptureChromeLayout = when {
-    !(widthDp > 0f) || !(heightDp > 0f) -> CaptureChromeLayout.STACKED
-    widthDp <= heightDp -> CaptureChromeLayout.STACKED
-    heightDp >= SIDE_RAIL_MAX_HEIGHT_DP -> CaptureChromeLayout.STACKED
-    widthDp - SIDE_RAIL_START_WIDTH_DP - SIDE_RAIL_END_WIDTH_DP < heightDp -> CaptureChromeLayout.STACKED
-    else -> CaptureChromeLayout.SIDE_RAILS
-}
+/** A side pane of the stacked layout: at most this wide, and never more than [SIDE_PANE_MAX_FRACTION]. */
+internal const val SIDE_PANE_MAX_WIDTH_DP = 380f
+internal const val SIDE_PANE_MAX_FRACTION = 0.45f
 
-/**
- * The viewfinder bounds between the two rails, in the container's pixel space. The start rail is
- * on the left in a left-to-right layout and on the right in a right-to-left one.
- */
-internal fun sideRailPreviewViewport(
-    containerWidth: Float,
-    containerHeight: Float,
-    startRail: Float,
-    endRail: Float,
-    ratio: Float?,
-    rightToLeft: Boolean = false,
-): PreviewViewport {
-    val leftInset = if (rightToLeft) endRail else startRail
-    val rightInset = if (rightToLeft) startRail else endRail
-    val inner = fittedPreviewViewport((containerWidth - leftInset - rightInset).coerceAtLeast(0f), containerHeight, ratio)
-    return inner.copy(left = inner.left + leftInset)
-}
+/** Scopes beside the side-rail column, between it and the frame. */
+internal const val SCOPE_STRIP_WIDTH_DP = 180f
+
+/** Scope tray between the viewfinder and the deck of the compact and stacked layouts. */
+internal const val SCOPE_TRAY_HEIGHT_DP = 200f
+
+/** A docked bottom sheet never covers more than this share of the window height. */
+internal const val DOCKED_SHEET_MAX_FRACTION = 0.55f
 
 /** Height of the top bar over the viewfinder in the stacked layout. */
 internal const val STACKED_TOP_BAR_HEIGHT_DP = 56f
 
 /** Height of the slim top bar that compact portrait windows use. */
 internal const val SLIM_TOP_BAR_HEIGHT_DP = 48f
+
+/**
+ * Chooses the chrome arrangement from the safe window size in dp.
+ *
+ * Tablet portrait (a MEDIUM width) takes [STACKED], not the inspector: a 360 dp column would leave
+ * a portrait frame narrower than the phone's, while the stacked deck costs height the window has.
+ * Short landscape windows take side rails only when the frame left between rail and column is at
+ * least as wide as it is tall; otherwise a deck is the better use of the space.
+ */
+internal fun captureLayoutFamily(widthDp: Float, heightDp: Float): CaptureLayoutFamily {
+    if (!(widthDp > 0f) || !(heightDp > 0f)) return CaptureLayoutFamily.COMPACT_PORTRAIT
+    val width = windowWidthClass(widthDp)
+    val height = windowHeightClass(heightDp)
+    return when {
+        width == WindowWidthClass.LARGE && height != WindowHeightClass.COMPACT -> CaptureLayoutFamily.INSPECTOR
+        widthDp > heightDp && height == WindowHeightClass.COMPACT &&
+            widthDp - CAPTURE_RAIL_WIDTH_DP - SIDE_COLUMN_WIDTH_DP >= heightDp -> CaptureLayoutFamily.SIDE_RAILS
+        width == WindowWidthClass.COMPACT -> CaptureLayoutFamily.COMPACT_PORTRAIT
+        else -> CaptureLayoutFamily.STACKED
+    }
+}
+
+/**
+ * The family of a hinge split's controls pane. The frame lives on the other side of the hinge, so
+ * neither rails nor an inspector apply: a narrow upright pane takes the compact deck, the rest the
+ * stacked one.
+ */
+internal fun hingePaneLayoutFamily(widthDp: Float, heightDp: Float): CaptureLayoutFamily =
+    if (windowWidthClass(widthDp) == WindowWidthClass.COMPACT && heightDp >= widthDp) CaptureLayoutFamily.COMPACT_PORTRAIT
+    else CaptureLayoutFamily.STACKED
+
+/** Where a stacked layout docks an open pane. */
+internal enum class PaneDock { END, BOTTOM }
+
+/**
+ * Docks a pane where it costs the frame least: beside it or under it, by which leaves the larger
+ * fitted frame. A landscape frame in a tall pane keeps its width with the pane under it; the same
+ * frame in a wide pane keeps its height with the pane beside it. Ties go to the side.
+ */
+internal fun stackedPaneDock(paneWidth: Float, paneHeight: Float, endWidth: Float, bottomHeight: Float, ratio: Float?): PaneDock {
+    val beside = fittedPreviewViewport((paneWidth - endWidth).coerceAtLeast(0f), paneHeight, ratio)
+    val under = fittedPreviewViewport(paneWidth, (paneHeight - bottomHeight).coerceAtLeast(0f), ratio)
+    return if (under.width * under.height > beside.width * beside.height) PaneDock.BOTTOM else PaneDock.END
+}
+
+/** Width of a stacked side pane in a window [windowWidth] wide. */
+internal fun stackedSidePaneWidth(windowWidth: Float): Float =
+    minOf(SIDE_PANE_MAX_WIDTH_DP, windowWidth * SIDE_PANE_MAX_FRACTION)
+
+/**
+ * Space a pane or tray takes from the frame, in pixels. The viewfinder pane keeps its layout size
+ * (a resized surface is reattached, which reconfigures a session mid-take), so the frame is moved
+ * and scaled into what is left instead.
+ */
+internal data class CaptureFrameReserve(val end: Float = 0f, val bottom: Float = 0f) {
+    companion object { val None = CaptureFrameReserve() }
+}
 
 /**
  * The viewfinder between the top bar and the control deck of the stacked layout, in the
@@ -80,6 +126,9 @@ internal fun stackedPreviewViewport(
 
 /** How long the stacked viewfinder takes to grow into the deck's space when a take starts. */
 internal const val RECORDING_VIEWFINDER_EXPANSION_MS = 280
+
+/** How long the frame takes to move out of the way of a pane or the scopes, and back. */
+internal const val FRAME_RESERVE_MS = 220
 
 /**
  * The stacked viewfinder while recording. The deck slides away during a take, so the frame grows
@@ -105,4 +154,28 @@ internal fun recordingPreviewViewport(
         width = resting.width + (expanded.width - resting.width) * t,
         height = resting.height + (expanded.height - resting.height) * t,
     )
+}
+
+/**
+ * The frame inside a viewfinder pane of [paneWidth] × [paneHeight] (its own pixel space), after a
+ * pane or tray took [reserve] from its end or bottom edge. [deckSpace] × [expansion] is the room a
+ * hidden deck gives back under the pane while recording. Without a reserve this is the recording
+ * viewport, so a frame the deck does not limit stays put.
+ */
+internal fun reservedPreviewViewport(
+    paneWidth: Float,
+    paneHeight: Float,
+    deckSpace: Float,
+    expansion: Float,
+    reserve: CaptureFrameReserve,
+    ratio: Float?,
+    rightToLeft: Boolean = false,
+): PreviewViewport {
+    if (reserve.end <= 0f && reserve.bottom <= 0f) {
+        return recordingPreviewViewport(paneWidth, paneHeight + deckSpace, 0f, deckSpace, ratio, expansion)
+    }
+    val width = (paneWidth - reserve.end.coerceAtLeast(0f)).coerceAtLeast(0f)
+    val height = (paneHeight + deckSpace * expansion.coerceIn(0f, 1f) - reserve.bottom.coerceAtLeast(0f)).coerceAtLeast(0f)
+    val inner = fittedPreviewViewport(width, height, ratio)
+    return if (rightToLeft) inner.copy(left = inner.left + reserve.end.coerceAtLeast(0f)) else inner
 }

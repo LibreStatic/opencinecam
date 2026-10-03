@@ -387,11 +387,8 @@
     <string name="operator_action_preset_c2">Review preset C2</string>
     <string name="operator_action_exterior">Subject screen session</string>
     <string name="operator_action_control_lock">Take control lock</string>
-    <string name="operator_state_on">ON</string>
-    <string name="operator_state_off">OFF</string>
     <string name="operator_state_on_description">on</string>
     <string name="operator_state_off_description">off</string>
-    <string name="operator_state_paused">PAUSED</string>
     <string name="operator_state_thermal_description">unavailable: scopes paused because the device is too hot</string>
     <string name="operator_action_thermal_help">Paused while the device is too hot. It comes back by itself once the device cools down; recording is not affected.</string>
     <string name="analysis_suspended_thermal">Scopes paused: device is too hot</string>

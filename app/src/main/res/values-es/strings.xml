@@ -387,11 +387,8 @@
     <string name="operator_action_preset_c2">Revisar preset C2</string>
     <string name="operator_action_exterior">Sesión de pantalla sujeto</string>
     <string name="operator_action_control_lock">Bloqueo de controles de toma</string>
-    <string name="operator_state_on">ON</string>
-    <string name="operator_state_off">OFF</string>
     <string name="operator_state_on_description">activado</string>
     <string name="operator_state_off_description">desactivado</string>
-    <string name="operator_state_paused">PAUSA</string>
     <string name="operator_state_thermal_description">no disponible: scopes en pausa porque el dispositivo está muy caliente</string>
     <string name="operator_action_thermal_help">En pausa mientras el dispositivo está muy caliente. Se reanuda automáticamente cuando el dispositivo se enfría; la grabación no se ve afectada.</string>
     <string name="analysis_suspended_thermal">Scopes en pausa: el dispositivo está muy caliente</string>

@@ -15,6 +15,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.ReadOnlyComposable
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -105,7 +106,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -114,8 +114,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedButton
@@ -218,6 +216,20 @@ import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.max
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.snap
+import androidx.compose.ui.unit.Dp
 
 private val Graphite: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
 private val Panel: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f).chromePanel()
@@ -583,24 +595,26 @@ internal fun CaptureSurface(
         val previewDisplayRatio = previewStreamSize?.let { size ->
             previewDisplayRatio(size.width, size.height, squeezeFactor, descriptor?.sensorOrientation ?: 90, displayRotationDegrees)
         }
-        // A short landscape window moves the capture controls into side rails (see
-        // AdaptiveCaptureChrome); the viewfinder is then fitted between them instead of under them.
-        // The decision uses the same safe-drawing size the chrome measures, so both always agree.
+        // The chrome picks its layout family from the safe drawing size, less the part of the
+        // status bar a cutout leaves inside it (see statusBarClearance). The viewfinder pane is
+        // decided from the same size here, so both always agree.
         val safeInsets = WindowInsets.safeDrawing
-        val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
+        val layoutDirection = LocalLayoutDirection.current
+        val rightToLeft = layoutDirection == LayoutDirection.Rtl
+        val extraTop = statusBarClearance()
         val safeWidthDp = with(density) {
             (fullWidthPx - safeInsets.getLeft(density, layoutDirection) - safeInsets.getRight(density, layoutDirection)).toDp()
         }
-        val safeHeightDp = with(density) { (fullHeightPx - safeInsets.getTop(density) - safeInsets.getBottom(density)).toDp() }
+        val safeHeightDp = with(density) { (fullHeightPx - safeInsets.getTop(density) - safeInsets.getBottom(density)).toDp() } - extraTop
         val fullChrome = panes == null && !(state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls)
-        val sideRails = fullChrome &&
-            captureChromeLayout(safeWidthDp.value, safeHeightDp.value) == CaptureChromeLayout.SIDE_RAILS
-        // The stacked layout fits the viewfinder between the top bar and the deck the chrome
+        val family = captureLayoutFamily(safeWidthDp.value, safeHeightDp.value)
+        // The stacked families fit the viewfinder between the top bar and the deck the chrome
         // measures, so no part of the frame hides behind the controls.
-        val stacked = fullChrome && !sideRails
-        val stackedTopBar = if (captureWindowProfile(safeWidthDp.value, safeHeightDp.value) == CaptureWindowProfile.COMPACT_PORTRAIT)
-            SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
+        val stacked = fullChrome && (family == CaptureLayoutFamily.COMPACT_PORTRAIT || family == CaptureLayoutFamily.STACKED)
+        val stackedTopBar = if (family == CaptureLayoutFamily.COMPACT_PORTRAIT) SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
         var stackedDeckHeightPx by remember { mutableIntStateOf(0) }
+        // What an open pane or the scopes take from the frame's end or bottom edge, reported by the chrome.
+        var frameReserve by remember { mutableStateOf(CaptureFrameReserve.None) }
         // Translucent chrome floats over a viewfinder that spans the whole window. The pane is not
         // inset, so a filled (cropped) frame overflows the physical screen rather than relying on
         // Compose clipping, which a SurfaceView does not reliably honour.
@@ -611,17 +625,22 @@ internal fun CaptureSurface(
             tween(RECORDING_VIEWFINDER_EXPANSION_MS, easing = FastOutSlowInEasing),
             label = "recording-viewfinder-expansion",
         )
-        val previewPaneModifier = if (overlayChrome) {
-            paneModifier(null)
-        } else if (sideRails) {
-            paneModifier(null)
+        val reserveSpec: AnimationSpec<Float> = if (LocalReducedMotion.current) snap() else tween(FRAME_RESERVE_MS, easing = FastOutSlowInEasing)
+        val reserveEnd by animateFloatAsState(frameReserve.end, reserveSpec, label = "frame-reserve-end")
+        val reserveBottom by animateFloatAsState(frameReserve.bottom, reserveSpec, label = "frame-reserve-bottom")
+        val previewPaneModifier = when {
+            overlayChrome -> paneModifier(null)
+            fullChrome && family == CaptureLayoutFamily.SIDE_RAILS -> paneModifier(null)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = SIDE_RAIL_START_WIDTH_DP.dp, end = SIDE_RAIL_END_WIDTH_DP.dp)
-        } else if (stacked) {
-            paneModifier(null)
+                .padding(top = extraTop, start = CAPTURE_RAIL_WIDTH_DP.dp, end = SIDE_COLUMN_WIDTH_DP.dp)
+            fullChrome && family == CaptureLayoutFamily.INSPECTOR -> paneModifier(null)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(top = stackedTopBar, bottom = with(density) { stackedDeckHeightPx.toDp() })
-        } else paneModifier(panes?.preview)
+                .padding(top = extraTop, start = CAPTURE_RAIL_WIDTH_DP.dp, end = INSPECTOR_WIDTH_DP.dp)
+            stacked -> paneModifier(null)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(top = stackedTopBar + extraTop, bottom = with(density) { stackedDeckHeightPx.toDp() })
+            else -> paneModifier(panes?.preview)
+        }
         BoxWithConstraints(previewPaneModifier.testTag("fold-preview-pane")) {
         if (descriptor != null && binder != null) {
             val streamSize = requireNotNull(previewStreamSize)
@@ -635,20 +654,24 @@ internal fun CaptureSurface(
                     Modifier.wrapContentSize(unbounded = true).requiredSize(filled.width.toDp(), filled.height.toDp())
                 }
             } else Modifier.aspectRatio(displayRatio)
-            // The frame grows by a render transform, not by layout. LOG and the GPU viewfinder size
-            // their buffer from the layout, and a resized surface is reattached, which reconfigures
-            // a recorder session mid-take. The overlay has no surface, so it is laid out instead.
+            // The frame moves and grows by a render transform, not by layout. LOG and the GPU
+            // viewfinder size their buffer from the layout, and a resized surface is reattached,
+            // which reconfigures a recorder session mid-take. The overlay has no surface, so it is
+            // laid out at the new place instead.
             val paneWidth = constraints.maxWidth.toFloat()
             val paneHeight = constraints.maxHeight.toFloat()
             val deckSpace = if (stacked && !overlayChrome) stackedDeckHeightPx.toFloat() else 0f
+            val reserve = if (fullChrome && !overlayChrome) CaptureFrameReserve(reserveEnd, reserveBottom) else CaptureFrameReserve.None
             val restingFrame = fittedPreviewViewport(paneWidth, paneHeight, displayRatio)
-            val recordingFrame = recordingPreviewViewport(paneWidth, paneHeight + deckSpace, 0f, deckSpace, displayRatio, viewfinderExpansion)
-            val frameGrown = recordingFrame != restingFrame && restingFrame.width > 0f
-            val frameScale = if (frameGrown) recordingFrame.width / restingFrame.width else 1f
-            val frameShift = (recordingFrame.top + recordingFrame.height / 2f) - (restingFrame.top + restingFrame.height / 2f)
-            val overlaySizeModifier = if (frameGrown) with(density) {
-                Modifier.offset { IntOffset(0, frameShift.roundToInt()) }
-                    .requiredSize(recordingFrame.width.toDp(), recordingFrame.height.toDp())
+            val targetFrame = reservedPreviewViewport(paneWidth, paneHeight, deckSpace, viewfinderExpansion, reserve, displayRatio, rightToLeft)
+            val frameMoved = targetFrame != restingFrame && restingFrame.width > 0f
+            val frameScale = if (frameMoved) targetFrame.width / restingFrame.width else 1f
+            val shiftX = if (frameMoved) (targetFrame.left + targetFrame.width / 2f) - (restingFrame.left + restingFrame.width / 2f) else 0f
+            val shiftY = if (frameMoved) (targetFrame.top + targetFrame.height / 2f) - (restingFrame.top + restingFrame.height / 2f) else 0f
+            // Absolute: a plain offset mirrors x in a right-to-left layout, the graphics layer does not.
+            val overlaySizeModifier = if (frameMoved) with(density) {
+                Modifier.absoluteOffset { IntOffset(shiftX.roundToInt(), shiftY.roundToInt()) }
+                    .requiredSize(targetFrame.width.toDp(), targetFrame.height.toDp())
             } else previewSizeModifier
             PreviewSurfaceView(
                 descriptor.cameraId,
@@ -664,17 +687,11 @@ internal fun CaptureSurface(
                     .graphicsLayer {
                         scaleX = frameScale
                         scaleY = frameScale
-                        translationY = frameShift
+                        translationX = shiftX
+                        translationY = shiftY
                     }
                     .then(previewSizeModifier),
             )
-            // A frame narrower than its pane leaves a strip at each side (a tablet or an unfolded
-            // screen in portrait). The scopes panel then sits in the end strip, clear of the zoom
-            // rocker, instead of covering the picture. Floating chrome may occupy that strip.
-            val framedWidthPx = if (overlayChrome && settings.viewfinderScale == ViewfinderScale.FILL) constraints.maxWidth.toFloat()
-                else minOf(constraints.maxWidth.toFloat(), recordingFrame.width)
-            val sideStrip = with(density) { ((constraints.maxWidth - framedWidthPx) / 2f).toDp() }
-            val scopesBeside = !overlayChrome && sideStrip - SCOPES_BESIDE_END_CLEARANCE - SCOPES_BESIDE_START_GAP >= SCOPES_BESIDE_MIN_WIDTH
             MonitoringOverlay(
                 state = state,
                 options = settings.monitoring,
@@ -692,14 +709,9 @@ internal fun CaptureSurface(
                 // only the minimal self-recording chrome leaves it to the overlay.
                 drawHistogram = state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls,
                 modifier = Modifier.align(Alignment.Center).then(overlaySizeModifier),
-                drawScopesPanel = !scopesBeside,
-                // 52 dp keys 8 dp from the window edge, plus a gap.
-                scopesPanelEndPadding = if (stacked && captureWindowProfile(safeWidthDp.value, safeHeightDp.value) == CaptureWindowProfile.COMPACT_PORTRAIT) 72.dp else 12.dp,
-            )
-            if (scopesBeside) ProfessionalScopesPanel(
-                state, settings.monitoring, rememberScopeAnalysisFresh(state, settings.monitoring),
-                Modifier.align(Alignment.CenterEnd).padding(end = SCOPES_BESIDE_END_CLEARANCE)
-                    .width(sideStrip - SCOPES_BESIDE_END_CLEARANCE - SCOPES_BESIDE_START_GAP).testTag("monitoring-panel-beside"),
+                // The full chrome hosts the scopes beside the frame (a tray, a strip or the
+                // inspector); a hinge split and the self-recording chrome leave them on it.
+                drawScopesPanel = !fullChrome,
             )
         }
 
@@ -717,6 +729,7 @@ internal fun CaptureSurface(
             previewGesturesEnabled = panes == null,
             overlayViewfinderScale = settings.viewfinderScale.takeIf { overlayChrome },
             onStackedDeckHeight = { stackedDeckHeightPx = it },
+            onFrameReserve = { frameReserve = it },
             viewfinderExpansion = viewfinderExpansion,
             zebra = zebra,
             peaking = peaking,
@@ -852,24 +865,27 @@ private fun MonitoringToggleGrid(
 ) {
     val histogramModeTitle = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma)
     val gridModeTitle = stringResource(compositionGridModeTitle(gridMode))
-    // Pairs share a row: each tool sits beside its mode, and the level closes the grid.
-    val cell = Modifier.width(148.dp)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = cell)
-            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = cell)
+    // Pairs share a row: each tool sits beside its mode, and the level closes the grid. The cells
+    // share the row's width, so the grid fits a 320 dp pane as well as a phone's sheet.
+    Column(Modifier.widthIn(max = 312.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = Modifier.weight(1f))
+            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = cell)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = Modifier.weight(1f))
             MonitorToggle(CineIcon.HISTOGRAM_MODE, histogramModeTitle, stringResource(R.string.monitor_histogram_mode), true, onCycleHistogramMode,
-                cycleState = histogramModeTitle, modifier = cell)
+                cycleState = histogramModeTitle, modifier = Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = cell)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = Modifier.weight(1f))
             MonitorToggle(CineIcon.GRID_MODE, gridModeTitle, stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
-                cycleState = gridModeTitle, modifier = cell)
+                cycleState = gridModeTitle, modifier = Modifier.weight(1f))
         }
-        MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = cell)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
+        }
     }
 }
 
@@ -1233,6 +1249,13 @@ private fun PreviewSurfaceView(
     )
 }
 
+/** What the context pane holds: one control's dial (opened from its slot), the modes, or the monitoring toggles. */
+private sealed interface CapturePane {
+    data class Control(val dial: ControlDial) : CapturePane
+    data object Modes : CapturePane
+    data object Monitor : CapturePane
+}
+
 @Composable
 internal fun AdaptiveCaptureChrome(
     state: CameraUiState,
@@ -1243,8 +1266,10 @@ internal fun AdaptiveCaptureChrome(
     previewGesturesEnabled: Boolean = true,
     // Non-null when the viewfinder spans the whole window under translucent chrome.
     overlayViewfinderScale: ViewfinderScale? = null,
-    // Reports the visible deck height of the compact portrait layout, which the viewfinder sits above.
+    // Reports the visible deck height of the stacked layouts, which the viewfinder sits above.
     onStackedDeckHeight: (Int) -> Unit = {},
+    // Reports what an open pane or the scopes take from the frame's edge; the frame moves out of their way.
+    onFrameReserve: (CaptureFrameReserve) -> Unit = {},
     // 0 at rest, 1 once the stacked viewfinder has grown into the space of the hidden deck.
     viewfinderExpansion: Float = 0f,
     zebra: Boolean,
@@ -1265,36 +1290,37 @@ internal fun AdaptiveCaptureChrome(
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    var manualControl by remember { mutableStateOf<ControlDial?>(null) }
-    var showModeGrid by remember { mutableStateOf(false) }
-    var showMonitoring by remember { mutableStateOf(false) }
+    // One pane at a time: a control's dial, the modes or the monitoring toggles.
+    var pane by remember { mutableStateOf<CapturePane?>(null) }
+    // Compact portrait shows the modes in a modal sheet rather than in the docked pane.
+    var modeSheet by remember { mutableStateOf(false) }
+    // The scopes stay switched on in Settings; H and the monitor pane only hide them here.
+    var scopesHidden by rememberSaveable { mutableStateOf(false) }
+    var scopesExpanded by rememberSaveable { mutableStateOf(false) }
     val operatorInput = LocalOperatorActions.current
-    DisposableEffect(manualControl, showModeGrid, showMonitoring) {
-        operatorInput?.setEditing?.invoke(manualControl != null || showModeGrid || showMonitoring)
-        onDispose { operatorInput?.setEditing?.invoke(false) }
-    }
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
     var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
     var controlDeckHeightPx by remember { mutableIntStateOf(0) }
+    var dockedPaneHeightPx by remember { mutableIntStateOf(0) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
-    // it again; it re-hides after a short idle period unless the user keeps interacting.
-    LaunchedEffect(recording, manualReveal) {
-        if (recording && manualReveal) {
+    // it again; it re-hides after a short idle period unless a pane is open in it.
+    LaunchedEffect(recording, manualReveal, pane) {
+        if (recording && manualReveal && pane == null) {
             delay(4_000)
             manualReveal = false
         }
     }
-    val chromeVisible = !recording || manualReveal
+    LaunchedEffect(recording) {
+        if (recording) modeSheet = false
+    }
     LaunchedEffect(state.tapFocusState) {
         if (state.tapFocusState == TapFocusState.IDLE) tapPoint = null
     }
-
-    BackHandler(enabled = manualControl != null || showModeGrid || showMonitoring) {
-        manualControl = null
-        showModeGrid = false
-        showMonitoring = false
+    fun togglePane(target: CapturePane) {
+        pane = if (pane == target) null else target
+        modeSheet = false
     }
 
     // The real-time rate Video had before slow motion raised it, restored when Video is chosen again.
@@ -1327,28 +1353,48 @@ internal fun AdaptiveCaptureChrome(
         else if (profile != null) binder?.selectTargetFps(profile.fps)
         else if (leavingSlowMotion) binder?.selectTargetFps(normalVideoFps)
     }
+    // A cutout can leave the safe area shorter than the status bar; the top bar starts below both.
+    val extraTop = statusBarClearance()
+    val reducedMotion = LocalReducedMotion.current
 
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(top = extraTop),
     ) {
         val density = LocalDensity.current
-        val windowProfile = captureWindowProfile(maxWidth.value, maxHeight.value)
-        val horizontalDeck = windowProfile != CaptureWindowProfile.COMPACT_PORTRAIT
-        val compactPortrait = windowProfile == CaptureWindowProfile.COMPACT_PORTRAIT
-        // Short landscape windows put the controls in side rails and keep the viewfinder at full
-        // height between them. A hinge split owns the preview elsewhere, so it keeps the deck.
-        val sideRails = previewGesturesEnabled &&
-            captureChromeLayout(maxWidth.value, maxHeight.value) == CaptureChromeLayout.SIDE_RAILS
-        val startRail = SIDE_RAIL_START_WIDTH_DP.dp
-        val endRail = SIDE_RAIL_END_WIDTH_DP.dp
-        val controlDeckHeight = if (sideRails) 0.dp else with(density) { controlDeckHeightPx.toDp() }
+        val layoutDirection = LocalLayoutDirection.current
+        val rightToLeft = layoutDirection == LayoutDirection.Rtl
+        fun Dp.px(): Float = with(density) { toPx() }
+        // A hinge split shows the picture on the other pane, so its controls pane keeps a deck and
+        // has no frame to make room for.
+        val hinge = !previewGesturesEnabled
+        val family = if (hinge) hingePaneLayoutFamily(maxWidth.value, maxHeight.value)
+            else captureLayoutFamily(maxWidth.value, maxHeight.value)
+        val compact = family == CaptureLayoutFamily.COMPACT_PORTRAIT
+        val stacked = family == CaptureLayoutFamily.STACKED
+        val stackedFamily = compact || stacked
+        val sideRails = family == CaptureLayoutFamily.SIDE_RAILS
+        val inspector = family == CaptureLayoutFamily.INSPECTOR
+        // The inspector has the width to stay up during a take; the other layouts hide their console.
+        val chromeVisible = !recording || manualReveal || inspector
+        val paneShown = pane != null && chromeVisible
+        val editing = paneShown || modeSheet
+        DisposableEffect(operatorInput, editing) {
+            operatorInput?.setEditing?.invoke(editing)
+            onDispose { operatorInput?.setEditing?.invoke(false) }
+        }
+        BackHandler(enabled = editing) {
+            pane = null
+            modeSheet = false
+        }
         // Compact portrait (phones, a foldable's cover screen) spends as little height as possible
-        // on chrome: a slim status bar, the F-keys over the viewfinder edge, a one-line deck.
-        val slimChrome = compactPortrait && !sideRails
-        val topBarHeight = if (slimChrome) SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
+        // on chrome: a slim status bar, the F-keys over the viewfinder edge.
+        val topBar = if (compact) SLIM_TOP_BAR_HEIGHT_DP.dp else STACKED_TOP_BAR_HEIGHT_DP.dp
+        val topBarPx = topBar.px()
+        val deckHeight = with(density) { controlDeckHeightPx.toDp() }
         // The deck slides away while recording. This height stays the deck's shown height, which
         // is where the viewfinder rests; it then grows into the freed space (viewfinderExpansion).
         // It is frozen during a take: the recording deck is taller (it adds Pause), and following it
@@ -1357,41 +1403,85 @@ internal fun AdaptiveCaptureChrome(
         LaunchedEffect(controlDeckHeightPx, recording) {
             if (controlDeckHeightPx > 0 && !recording) stableDeckHeightPx = controlDeckHeightPx
         }
-        LaunchedEffect(sideRails, stableDeckHeightPx, overlayViewfinderScale) {
-            onStackedDeckHeight(if (sideRails || overlayViewfinderScale != null) 0 else stableDeckHeightPx)
+        LaunchedEffect(stackedFamily, stableDeckHeightPx, overlayViewfinderScale) {
+            onStackedDeckHeight(if (stackedFamily && overlayViewfinderScale == null) stableDeckHeightPx else 0)
         }
-        // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
-        // This is the first child: controls composed later remain the winning hit targets.
         val width = constraints.maxWidth.toFloat()
         val height = constraints.maxHeight.toFloat()
         val ratio = previewAspectRatio
+        val overlay = overlayViewfinderScale != null && !hinge
+        val monitoring = settings.monitoring
+        val scopesEnabled = monitoring.waveformEnabled || monitoring.vectorscopeEnabled || monitoring.falseColorEnabled
+        // A hinge split leaves the scopes on its preview pane; everywhere else the chrome hosts them.
+        val scopesShown = scopesEnabled && !scopesHidden && !hinge
+        val stackedPaneHeight = (height - topBarPx - stableDeckHeightPx).coerceAtLeast(0f)
+        val sidePaneWidth = stackedSidePaneWidth(maxWidth.value).dp
+        val dockCap = minOf(
+            maxHeight * DOCKED_SHEET_MAX_FRACTION,
+            if (stacked) 400.dp else maxHeight,
+            maxHeight - deckHeight - topBar - 8.dp,
+        ).coerceAtLeast(160.dp)
+        // A stacked window docks a pane, and the scopes, beside the frame or under it, by which
+        // leaves the larger frame.
+        val paneDock = if (stacked && !hinge) stackedPaneDock(width, stackedPaneHeight, sidePaneWidth.px(), dockCap.px(), ratio)
+            else PaneDock.BOTTOM
+        val scopeDock = if (stacked && !hinge) {
+            stackedPaneDock(width, stackedPaneHeight, SCOPE_STRIP_WIDTH_DP.dp.px(), SCOPE_TRAY_HEIGHT_DP.dp.px(), ratio)
+        } else PaneDock.BOTTOM
+        val dockedBottomPane = paneShown && stackedFamily && paneDock == PaneDock.BOTTOM
+        val dockedEndPane = paneShown && stacked && paneDock == PaneDock.END
+        val scopeStrip = scopesShown && !paneShown && (sideRails || (stacked && scopeDock == PaneDock.END))
+        val scopeTray = scopesShown && !paneShown && stackedFamily && !scopeStrip
+        val targetReserve = when {
+            overlay || hinge || inspector -> CaptureFrameReserve.None
+            paneShown && sideRails -> CaptureFrameReserve(end = (SIDE_PANE_WIDTH_DP - SIDE_COLUMN_WIDTH_DP).dp.px())
+            dockedEndPane -> CaptureFrameReserve(end = sidePaneWidth.px())
+            dockedBottomPane -> CaptureFrameReserve(bottom = dockedPaneHeightPx.toFloat())
+            scopeStrip -> CaptureFrameReserve(end = SCOPE_STRIP_WIDTH_DP.dp.px())
+            scopeTray -> CaptureFrameReserve(bottom = SCOPE_TRAY_HEIGHT_DP.dp.px())
+            else -> CaptureFrameReserve.None
+        }
+        // The viewfinder animates the same reserve; both follow one target, so the frame and its
+        // gesture area stay in step.
+        val reserveSpec: AnimationSpec<Float> = if (reducedMotion) snap() else tween(FRAME_RESERVE_MS, easing = FastOutSlowInEasing)
+        val reserveEnd by animateFloatAsState(targetReserve.end, reserveSpec, label = "chrome-reserve-end")
+        val reserveBottom by animateFloatAsState(targetReserve.bottom, reserveSpec, label = "chrome-reserve-bottom")
+        LaunchedEffect(targetReserve) { onFrameReserve(targetReserve) }
+        val reserve = CaptureFrameReserve(reserveEnd, reserveBottom)
+        val startRailPx = CAPTURE_RAIL_WIDTH_DP.dp.px()
+        val endColumnPx = (if (inspector) INSPECTOR_WIDTH_DP else SIDE_COLUMN_WIDTH_DP).dp.px()
         val safeInsets = WindowInsets.safeDrawing
-        val chromeLayoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
-        val previewViewport = if (overlayViewfinderScale != null && previewGesturesEnabled) {
-            // The viewfinder spans the window around this inset box; map it into chrome coordinates.
-            val insetLeft = safeInsets.getLeft(density, chromeLayoutDirection).toFloat()
-            val insetTop = safeInsets.getTop(density).toFloat()
-            val window = overlayPreviewViewport(
-                width + insetLeft + safeInsets.getRight(density, chromeLayoutDirection),
-                height + insetTop + safeInsets.getBottom(density),
-                ratio,
-                overlayViewfinderScale,
-            )
-            window.copy(left = window.left - insetLeft, top = window.top - insetTop)
-        } else if (sideRails) {
-            sideRailPreviewViewport(
-                width, height,
-                with(density) { startRail.toPx() }, with(density) { endRail.toPx() },
-                ratio,
-                rightToLeft = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl,
-            )
-        } else if (previewGesturesEnabled) {
-            recordingPreviewViewport(width, height, with(density) { topBarHeight.toPx() }, stableDeckHeightPx.toFloat(), ratio, viewfinderExpansion)
-        } else fittedPreviewViewport(width, height, ratio)
+        val previewViewport = when {
+            overlayViewfinderScale != null && !hinge -> {
+                // The viewfinder spans the window around this inset box; map it into chrome coordinates.
+                val insetLeft = safeInsets.getLeft(density, layoutDirection).toFloat()
+                val insetTop = safeInsets.getTop(density) + extraTop.px()
+                val window = overlayPreviewViewport(
+                    width + insetLeft + safeInsets.getRight(density, layoutDirection),
+                    height + insetTop + safeInsets.getBottom(density),
+                    ratio,
+                    overlayViewfinderScale,
+                )
+                window.copy(left = window.left - insetLeft, top = window.top - insetTop)
+            }
+            // No picture here: the instruments get the band between the top bar and the deck.
+            hinge -> PreviewViewport(0f, topBarPx, width,
+                (height - topBarPx - if (chromeVisible) controlDeckHeightPx.toFloat() else 0f).coerceAtLeast(0f))
+            sideRails || inspector -> {
+                val inner = reservedPreviewViewport((width - startRailPx - endColumnPx).coerceAtLeast(0f), height, 0f, 0f, reserve, ratio, rightToLeft)
+                inner.copy(left = inner.left + if (rightToLeft) endColumnPx else startRailPx)
+            }
+            else -> {
+                val inner = reservedPreviewViewport(width, stackedPaneHeight, stableDeckHeightPx.toFloat(), viewfinderExpansion, reserve, ratio, rightToLeft)
+                inner.copy(top = inner.top + topBarPx)
+            }
+        }
         val previewWidth = previewViewport.width
         val previewHeight = previewViewport.height
         val previewLeft = previewViewport.left
         val previewTop = previewViewport.top
+        // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
+        // This is the first child: controls composed later remain the winning hit targets.
         Box(
             Modifier
                 .matchParentSize()
@@ -1431,7 +1521,8 @@ internal fun AdaptiveCaptureChrome(
                         pinchStartRatio = coerced
                     }
                 }
-                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, settings.tapExposureMeteringEnabled, state.phase) {
+                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, settings.tapExposureMeteringEnabled, state.phase,
+                    previewLeft, previewTop, previewWidth, previewHeight) {
                     detectTapGestures { position ->
                         if (recording) manualReveal = true
                         if (!previewGesturesEnabled || state.captureControlsLocked || ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
@@ -1485,6 +1576,16 @@ internal fun AdaptiveCaptureChrome(
             }
         }
 
+        // What the end edge carries beside the frame: the side column or pane, and the scope strip.
+        val endOccupied = when {
+            sideRails -> (if (paneShown) SIDE_PANE_WIDTH_DP else SIDE_COLUMN_WIDTH_DP).dp +
+                if (scopeStrip) SCOPE_STRIP_WIDTH_DP.dp else 0.dp
+            inspector -> INSPECTOR_WIDTH_DP.dp
+            dockedEndPane -> sidePaneWidth
+            scopeStrip -> SCOPE_STRIP_WIDTH_DP.dp
+            else -> 0.dp
+        }
+
         // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
         // visible during recording even when the rest of the chrome hides.
         if (state.zoomSupported) {
@@ -1513,58 +1614,88 @@ internal fun AdaptiveCaptureChrome(
                 onRelease = {},
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = if (sideRails) endRail + 8.dp else 8.dp)
+                    .padding(end = endOccupied + 8.dp)
                     .width(28.dp)
                     .height(120.dp),
             )
         }
 
         if (chromeVisible) {
-            if (slimChrome) Column(
-                Modifier.align(Alignment.TopEnd).padding(end = 8.dp, top = topBarHeight + 6.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior)
-                OperatorButtonColumn(state, settings)
+            if (stackedFamily) {
+                // The F-keys stand over the frame's end edge under the lock toggles. They stop above
+                // the zoom rocker at mid-height, and scroll rather than run into it.
+                val keyColumnMax = if (state.zoomSupported) maxHeight / 2 - 60.dp - topBar - 12.dp
+                    else maxHeight - topBar - deckHeight - 14.dp
+                Column(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
+                        .heightIn(max = keyColumnMax.coerceAtLeast(48.dp))
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior)
+                    // A hinge split has no picture under its chrome: its F-keys go in the deck.
+                    if (!hinge) OperatorButtonColumn(state, settings)
+                }
+                CaptureTopBar(
+                    state = state,
+                    binder = binder,
+                    onOpenMedia = onOpenMedia,
+                    onOpenSettings = onOpenSettings,
+                    settings = settings,
+                    onSettingsChanged = onSettingsChanged,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    showThumbnail = !compact,
+                    height = topBar,
+                )
             } else LockToggles(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
-                modifier = Modifier.align(Alignment.TopEnd)
-                    .padding(end = if (sideRails) endRail + 8.dp else 8.dp, top = if (sideRails) 8.dp else topBarHeight + 6.dp),
-            )
-            // In side-rail layout the top-bar actions live in the start rail instead.
-            if (!sideRails) CaptureTopBar(
-                state = state,
-                binder = binder,
-                onOpenMedia = onOpenMedia,
-                onOpenSettings = onOpenSettings,
-                settings = settings,
-                onSettingsChanged = onSettingsChanged,
-                modifier = Modifier.align(Alignment.TopCenter),
-                showThumbnail = !slimChrome,
-                height = topBarHeight,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp),
             )
         }
 
-        // Every viewfinder instrument lives in one measured stack, so the LOG badge, zoom,
-        // microphone meter and histogram can never land on top of each other. It starts below
-        // the top bar (or the recording HUD) and stops above the measured control deck.
+        // Every viewfinder instrument lives in one measured stack on the visible frame, so the LOG
+        // badge, zoom, microphone meter and histogram never land on each other, on the black bands
+        // around the picture, or under the chrome.
         val recordingHudTop = when {
-            !chromeVisible -> 0.dp
-            sideRails -> 0.dp
-            state.selectedMode == CaptureMode.LOG -> topBarHeight + 26.dp
-            else -> topBarHeight
+            !chromeVisible || sideRails || inspector -> 0.dp
+            state.selectedMode == CaptureMode.LOG -> topBar + 26.dp
+            else -> topBar
         }
-        // With side rails the instruments sit on the viewfinder between the rails, and there is no
-        // top bar above them; the end inset also clears the zoom rocker at the viewfinder edge.
-        val instrumentStart = if (sideRails) startRail + 12.dp else 12.dp
-        val instrumentEnd = if (sideRails) endRail + 44.dp else 64.dp
-        val instrumentTop = if (sideRails) 12.dp else topBarHeight + 6.dp
         // The recording HUD grows with its meter and monitor toggles; measure it instead of guessing.
         var recordingHudHeightPx by remember { mutableIntStateOf(0) }
-        val recordingHudHeight = with(LocalDensity.current) { recordingHudHeightPx.toDp() }
+        val recordingHudHeight = with(density) { recordingHudHeightPx.toDp() }
+        // The end inset clears the zoom rocker, and in the stacked layouts the F-key column too.
+        val instrumentStartInset = 12.dp.px()
+        val instrumentEndInset = when {
+            hinge -> 12.dp
+            stackedFamily -> 64.dp
+            else -> 44.dp
+        }.px()
+        val startChrome = if (sideRails || inspector) startRailPx else 0f
+        val endChrome = endOccupied.px()
+        val leftBound = maxOf(previewLeft, 0f, if (rightToLeft) endChrome else startChrome)
+        val rightBound = minOf(previewLeft + previewWidth, width, width - if (rightToLeft) startChrome else endChrome)
+        val topBound = maxOf(previewTop, 0f, if (stackedFamily && chromeVisible) topBarPx else 0f)
+        val bottomBound = minOf(
+            previewTop + previewHeight,
+            (if (stackedFamily && chromeVisible) height - controlDeckHeightPx else height) - when {
+                dockedBottomPane -> dockedPaneHeightPx.toFloat()
+                scopeTray -> SCOPE_TRAY_HEIGHT_DP.dp.px()
+                else -> 0f
+            },
+        )
+        val instrumentLeft = leftBound + if (rightToLeft) instrumentEndInset else instrumentStartInset
+        val instrumentRight = rightBound - if (rightToLeft) instrumentStartInset else instrumentEndInset
+        val instrumentTop = maxOf(
+            topBound + 8.dp.px(),
+            if (recording) (recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp).px() else 0f,
+        )
+        val instrumentBottom = bottomBound - 8.dp.px()
         InstrumentStack(
             state = state,
             binder = binder,
@@ -1573,87 +1704,362 @@ internal fun AdaptiveCaptureChrome(
             recording = recording,
             histogram = histogram,
             histogramMode = histogramMode,
-            horizontal = landscape,
+            horizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound,
             // A hinge split gives the chrome its own pane with no picture behind it: let the
             // histogram use the band between the instruments and the deck instead of a thumbnail.
-            dedicatedPane = !previewGesturesEnabled,
+            dedicatedPane = hinge,
+            // Absolute: the frame is measured left to right whatever the layout direction.
             modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = instrumentStart,
-                    end = instrumentEnd,
-                    top = if (recording) recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp else instrumentTop,
-                    bottom = if (chromeVisible) controlDeckHeight + 8.dp else 8.dp,
+                .align(AbsoluteAlignment.TopLeft)
+                .absoluteOffset { IntOffset(instrumentLeft.roundToInt(), instrumentTop.roundToInt()) }
+                .size(
+                    with(density) { (instrumentRight - instrumentLeft).coerceAtLeast(0f).toDp() },
+                    with(density) { (instrumentBottom - instrumentTop).coerceAtLeast(0f).toDp() },
                 ),
         )
 
-        if (sideRails) {
-            AnimatedVisibility(
-                visible = chromeVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight(),
-            ) {
-                CaptureStartRail(
-                    state = state,
-                    binder = binder,
-                    settings = settings,
-                    onSettingsChanged = onSettingsChanged,
-                    onOpenSettings = onOpenSettings,
-                    modifier = Modifier.width(startRail),
+        val displayedMode = modeSelection.displayed
+        val modeName = modeLabel(displayedMode)
+        val slots = captureSlotModels(state, displayedMode)
+        val activeSlot = (pane as? CapturePane.Control)?.dial?.slot()
+        val onSlot: (CaptureSlot) -> Unit = { slot -> togglePane(CapturePane.Control(slot.dial())) }
+        val openModeSheet: () -> Unit = {
+            modeSheet = true
+            pane = null
+        }
+        val unlock: () -> Unit = { binder?.performOperatorAction(OperatorAction.CONTROL_LOCK) }
+        val captureAction = operatorInput?.capture ?: rememberCaptureAction(state, binder, settings)
+        val performOperator: (OperatorAction) -> Unit = { action ->
+            operatorInput?.perform?.invoke(action) ?: binder?.performOperatorAction(action)
+        }
+        // R, F, Z, P, G, H, L and Esc with a hardware keyboard: the same actions as the controls.
+        ShortcutHandler { action ->
+            when (captureShortcutCommand(action, pane != null || modeSheet, operatorActionAvailable(OperatorAction.VIEW_ASSIST, state), scopesEnabled)) {
+                CaptureShortcutCommand.CAPTURE -> captureControlEnabled(state).also { if (it) captureAction() }
+                CaptureShortcutCommand.TOGGLE_FOCUS ->
+                    slots.any { it.slot == CaptureSlot.FOCUS && it.unavailableReason == null }.also { available ->
+                        if (available) {
+                            togglePane(CapturePane.Control(ControlDial.FOCUS))
+                            if (recording) manualReveal = true
+                        }
+                    }
+                CaptureShortcutCommand.ZEBRA -> { onToggleZebra(); true }
+                CaptureShortcutCommand.PEAKING -> { onTogglePeaking(); true }
+                CaptureShortcutCommand.GRID -> { onToggleGrid(); true }
+                CaptureShortcutCommand.TOGGLE_SCOPES -> { scopesHidden = !scopesHidden; true }
+                CaptureShortcutCommand.ENABLE_WAVEFORM -> {
+                    performOperator(OperatorAction.WAVEFORM)
+                    scopesHidden = false
+                    true
+                }
+                CaptureShortcutCommand.VIEW_ASSIST -> { performOperator(OperatorAction.VIEW_ASSIST); true }
+                CaptureShortcutCommand.CLOSE_PANE -> {
+                    pane = null
+                    modeSheet = false
+                    true
+                }
+                CaptureShortcutCommand.CONSUME -> true
+                null -> false
+            }
+        }
+        val presets: @Composable () -> Unit = {
+            PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
+        }
+        val progressRows: @Composable () -> Unit = {
+            BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
+            BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
+            AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
+        }
+        val scopeFresh = rememberScopeAnalysisFresh(state, monitoring)
+        val scopes: @Composable (Modifier) -> Unit = { modifier ->
+            // lead: pass histogramMode/onClose after merge
+            ProfessionalScopesPanel(state, monitoring, scopeFresh, modifier, expanded = scopesExpanded,
+                onExpandedChange = { scopesExpanded = it })
+        }
+        // The modes, with the selected mode's resolution under them (RES lives here, not in the slots).
+        val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
+            val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
+                val gate = state.modeGates.getValue(mode)
+                CaptureModeChoice(
+                    mode = mode,
+                    label = modeLabel(mode),
+                    gateLabel = if (gate != ModeGateState.AVAILABLE) gateLabel(gate) else null,
+                    gateColor = gateColor(gate),
+                    enabled = CameraUiState.isModeSelectable(gate),
+                    selected = mode == displayedMode,
                 )
             }
-            AnimatedVisibility(
-                visible = chromeVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            ) {
-                CaptureEndRail(
-                    state = state,
-                    binder = binder,
-                    selectorStyle = settings.modeSelectorStyle,
-                    settings = settings,
-                    onControl = { manualControl = it; showModeGrid = false; showMonitoring = false },
-                    onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
-                    onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
-                    onOpenMedia = onOpenMedia,
-                    modifier = Modifier.width(endRail),
-                )
+            CaptureModeContent(
+                choices = choices,
+                recording = recording,
+                onSelect = modeSelection.select,
+                onClose = onClose,
+                resolution = if (state.descriptor != null && state.selectedMode in CameraUiState.resolutionProfileModes) {
+                    {
+                        ManualControlDial(ControlDial.RESOLUTION, state, binder, settings, onSettingsChanged) {
+                            pane = null
+                            modeSheet = false
+                        }
+                    }
+                } else null,
+            )
+        }
+        val paneContent: @Composable ColumnScope.() -> Unit = {
+            when (val current = pane) {
+                is CapturePane.Control -> ManualControlDial(current.dial, state, binder, settings, onSettingsChanged) { pane = null }
+                CapturePane.Modes -> modesContent { pane = null }
+                CapturePane.Monitor -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CapturePaneHeader(stringResource(R.string.monitor_title), { pane = null })
+                    MonitoringToggleGrid(
+                        zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
+                        onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
+                        onToggleGrid, onCycleGridMode, onToggleHorizon,
+                    )
+                    if (scopesEnabled) MonitorToggle(
+                        CineIcon.MONITORING,
+                        stringResource(R.string.capture_scopes_short),
+                        stringResource(R.string.capture_scopes_toggle),
+                        !scopesHidden,
+                        { scopesHidden = !scopesHidden },
+                        modifier = Modifier.widthIn(max = 312.dp).fillMaxWidth(),
+                    )
+                }
+                null -> Unit
             }
-        } else AnimatedVisibility(
+        }
+
+        if (stackedFamily) AnimatedVisibility(
             visible = chromeVisible,
             enter = fadeIn() + slideInVertically { it / 3 },
             exit = fadeOut() + slideOutVertically { it / 3 },
             modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { controlDeckHeightPx = it.height },
         ) {
-            Column {
-            if (!slimChrome) OperatorButtonRow(state, settings)
-            PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
-            if (horizontalDeck) {
-                LandscapeControlDeck(
-                    state = state,
-                    binder = binder,
-                    selectorStyle = settings.modeSelectorStyle,
-                    settings = settings,
-                    onControl = { manualControl = it; showModeGrid = false; showMonitoring = false },
-                    onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
-                    onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
+            if (compact) Column(
+                Modifier.fillMaxWidth().background(Panel).padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+                if (hinge) OperatorButtonRow(state, settings)
+                presets()
+                CaptureSlotStrip(slots, activeSlot, onSlot, Modifier.padding(horizontal = 8.dp))
+                if (settings.modeSelectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, onOpenSheet = openModeSheet)
+                else CaptureModeButton(modeName, openModeSheet)
+                PortraitCaptureTransport(
+                    state, binder, settings, onOpenMedia = onOpenMedia, onShowMonitoring = { togglePane(CapturePane.Monitor) },
+                    // Stacked translucent panels would compound into a darker band under the shutter.
+                    panelBackground = LocalChromeOpacity.current == null,
                 )
-            } else {
-                PortraitControlDeck(
-                    state = state,
-                    binder = binder,
-                    selectorStyle = settings.modeSelectorStyle,
-                    settings = settings,
-                    onOpenMedia = onOpenMedia,
-                    onControl = { manualControl = it; showModeGrid = false; showMonitoring = false },
-                    onShowModes = { showModeGrid = !showModeGrid; manualControl = null; showMonitoring = false },
-                    onShowMonitoring = { showMonitoring = !showMonitoring; manualControl = null; showModeGrid = false },
-                )
-            }
+            } else Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Panel)
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 8.dp, bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
+                if (hinge) OperatorButtonRow(state, settings)
+                presets()
+                CaptureSlotStrip(slots, activeSlot, onSlot, Modifier.align(Alignment.CenterHorizontally).widthIn(max = 560.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, expanded = pane == CapturePane.Modes)
+                    TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { togglePane(CapturePane.Monitor) }
+                    Box(Modifier.weight(1f)) { StatusInfoBar(state, settings) }
+                    RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+                    CaptureButton(state, binder, settings, 64.dp, labelBeside = true)
+                }
+                progressRows()
             }
         }
+
+        if (sideRails || inspector) AnimatedVisibility(
+            visible = chromeVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight(),
+        ) {
+            // The start rail: the top-bar actions, then the F-keys as one column of icon keys.
+            Column(
+                Modifier
+                    .width(CAPTURE_RAIL_WIDTH_DP.dp)
+                    .fillMaxHeight()
+                    .background(Panel)
+                    .verticalScroll(rememberScrollState())
+                    .testTag("capture-start-rail"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+            ) {
+                CaptureTopBar(
+                    state = state,
+                    binder = binder,
+                    onOpenMedia = {},
+                    onOpenSettings = onOpenSettings,
+                    settings = settings,
+                    onSettingsChanged = onSettingsChanged,
+                    vertical = true,
+                    showThumbnail = false,
+                    showStatus = false,
+                )
+                OperatorButtonColumn(state, settings)
+            }
+        }
+
+        if (sideRails) AnimatedVisibility(
+            visible = chromeVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        ) {
+            if (paneShown) Column(Modifier.width(SIDE_PANE_WIDTH_DP.dp).fillMaxHeight().background(Panel)) {
+                CaptureContextPane(ContextPanePlacement.SIDE, Modifier.weight(1f).fillMaxWidth(), paneContent)
+                // The shutter stays under the thumb while a pane is open.
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+                    CaptureButton(state, binder, settings, 56.dp, labelBeside = true)
+                }
+            } else Column(
+                Modifier
+                    .width(SIDE_COLUMN_WIDTH_DP.dp)
+                    .fillMaxHeight()
+                    .background(Panel)
+                    .padding(6.dp)
+                    .testTag("capture-end-rail"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
+                // Two columns: the five slots, and beside them the mode, the status and the shutter,
+                // which is held at the bottom so it never scrolls away.
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CaptureSlotColumn(slots, activeSlot, onSlot, Modifier.width(96.dp).fillMaxHeight())
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                        Column(
+                            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 3, textAlign = TextAlign.Center)
+                            if (!recording) {
+                                ThermalHudChip()
+                                OutOfFrameHudChip(state)
+                            }
+                            CaptureStatus(state)
+                            presets()
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
+                            TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { togglePane(CapturePane.Monitor) }
+                        }
+                        RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+                        CaptureButton(state, binder, settings, 64.dp)
+                    }
+                }
+                StatusInfoBar(state, settings)
+                progressRows()
+            }
+        }
+
+        if (inspector) Column(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .width(INSPECTOR_WIDTH_DP.dp)
+                .fillMaxHeight()
+                .background(Panel)
+                .testTag("capture-inspector"),
+        ) {
+            if (paneShown) CaptureContextPane(ContextPanePlacement.SIDE, Modifier.weight(1f).fillMaxWidth(), paneContent)
+            else Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
+                if (!recording) {
+                    ThermalHudChip()
+                    OutOfFrameHudChip(state)
+                }
+                CaptureStatus(state)
+                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
+                CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                CaptureSlotRows(slots, activeSlot, onSlot)
+                // The panel scrolls its own scopes, so it needs a bounded height inside this column.
+                if (scopesShown) Box(Modifier.fillMaxWidth().heightIn(max = 320.dp), contentAlignment = Alignment.Center) { scopes(Modifier) }
+                presets()
+                StatusInfoBar(state, settings)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MediaThumbnailAction(state.lastSavedUri, onOpenMedia, size = 56.dp)
+                TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { togglePane(CapturePane.Monitor) }
+                Spacer(Modifier.weight(1f))
+                RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
+                CaptureButton(state, binder, settings, 72.dp, labelBeside = true)
+            }
+            Column(Modifier.padding(horizontal = 12.dp)) { progressRows() }
+        }
+
+        // The scopes beside the frame (a strip) or under it (a tray), never over the picture.
+        if (scopeStrip) Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    end = if (sideRails) SIDE_COLUMN_WIDTH_DP.dp else 0.dp,
+                    top = if (sideRails) 0.dp else topBar,
+                    bottom = if (stackedFamily && chromeVisible) deckHeight else 0.dp,
+                )
+                .width(SCOPE_STRIP_WIDTH_DP.dp)
+                .fillMaxHeight()
+                .background(Panel)
+                .testTag("capture-scope-strip"),
+            contentAlignment = Alignment.Center,
+        ) { scopes(Modifier) }
+        if (scopeTray) Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = if (chromeVisible) deckHeight else 0.dp)
+                .fillMaxWidth()
+                .height(SCOPE_TRAY_HEIGHT_DP.dp)
+                .background(Panel)
+                .testTag("capture-scope-tray"),
+            contentAlignment = Alignment.Center,
+        ) { scopes(Modifier) }
+
+        // A pane docks over the deck's top edge or beside the frame; the frame moves out of its way.
+        if (dockedBottomPane) CaptureContextPane(
+            ContextPanePlacement.BOTTOM_SHEET,
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = deckHeight)
+                .then(if (compact) Modifier.fillMaxWidth() else Modifier.widthIn(max = 640.dp).fillMaxWidth())
+                .heightIn(max = dockCap)
+                .onSizeChanged { dockedPaneHeightPx = it.height },
+            paneContent,
+        )
+        if (dockedEndPane) CaptureContextPane(
+            ContextPanePlacement.SIDE,
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = topBar, bottom = deckHeight)
+                .width(sidePaneWidth)
+                .fillMaxHeight(),
+            paneContent,
+        )
 
         if (recording) {
             RecordingOverlay(
@@ -1675,51 +2081,92 @@ internal fun AdaptiveCaptureChrome(
                 onCycleGridMode = onCycleGridMode,
                 onToggleHorizon = onToggleHorizon,
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop)
-                    .padding(start = if (sideRails) startRail else 0.dp, end = if (sideRails) endRail else 0.dp)
+                    .padding(start = if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp, end = endOccupied)
                     .onSizeChanged { recordingHudHeightPx = it.height },
             )
         }
 
-        // The slim deck keeps a fixed height, so the viewfinder above it never reframes: its
-        // notices float just above it instead of adding a line to it.
-        if (slimChrome && chromeVisible && !recording) CaptureStatus(
+        // The stacked decks keep a fixed height, so the viewfinder above them never reframes: their
+        // notices float just above the deck (and the scope tray) instead of adding a line to it.
+        if (stackedFamily && chromeVisible && !recording && !paneShown) CaptureStatus(
             state,
-            Modifier.align(Alignment.BottomCenter).padding(bottom = controlDeckHeight + 8.dp, start = 16.dp, end = 16.dp),
+            Modifier.align(Alignment.BottomCenter).padding(
+                bottom = deckHeight + (if (scopeTray) SCOPE_TRAY_HEIGHT_DP.dp else 0.dp) + 8.dp,
+                start = 16.dp,
+                end = 16.dp,
+            ),
             chip = true,
         )
 
-        if (state.captureControlsLocked) {
-            OutlinedButton({ binder?.performOperatorAction(OperatorAction.CONTROL_LOCK) },
-                Modifier.align(Alignment.BottomStart).padding(start = if (sideRails) startRail else 0.dp).padding(8.dp)
-                    .heightIn(min = 48.dp).testTag("operator-unlock")) {
-                Text(stringResource(R.string.operator_unlock), color = Color.White)
-            }
-        }
-
-        if (chromeVisible) manualControl?.let { control ->
-            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { manualControl = null }) {
-                ManualControlDial(control, state, binder, settings, onSettingsChanged) { manualControl = null }
-            }
-        }
-        if (chromeVisible && showModeGrid) {
-            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { showModeGrid = false }) {
-                ModeButtonGrid(state, binder) { showModeGrid = false }
-            }
-        }
-        if (chromeVisible && showMonitoring) {
-            ContextualPanel(horizontalDeck || sideRails, controlDeckHeight, maxHeight, endInset = if (sideRails) endRail else 0.dp, onDismiss = { showMonitoring = false }) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.monitor_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    MonitoringToggleGrid(
-                        zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
-                        onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
-                        onToggleGrid, onCycleGridMode, onToggleHorizon,
-                    )
-                }
-            }
-        }
+        if (modeSheet) CaptureModeBottomSheet(onDismiss = { modeSheet = false }) { modesContent { modeSheet = false } }
     }
 }
+}
+
+private fun CaptureSlot.dial(): ControlDial = when (this) {
+    CaptureSlot.FPS -> ControlDial.FPS
+    CaptureSlot.INTERVAL -> ControlDial.INT
+    CaptureSlot.SHUTTER -> ControlDial.SHUTTER
+    CaptureSlot.ISO -> ControlDial.ISO
+    CaptureSlot.EV -> ControlDial.EV
+    CaptureSlot.WB -> ControlDial.WB
+    CaptureSlot.FOCUS -> ControlDial.FOCUS
+}
+
+private fun ControlDial.slot(): CaptureSlot? = when (this) {
+    ControlDial.RESOLUTION -> null
+    ControlDial.FPS -> CaptureSlot.FPS
+    ControlDial.INT -> CaptureSlot.INTERVAL
+    ControlDial.SHUTTER -> CaptureSlot.SHUTTER
+    ControlDial.ISO -> CaptureSlot.ISO
+    ControlDial.EV -> CaptureSlot.EV
+    ControlDial.WB -> CaptureSlot.WB
+    ControlDial.FOCUS -> CaptureSlot.FOCUS
+}
+
+/** The five slots of [mode] with their current values, and why any of them cannot be driven now. */
+@Composable
+private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<CaptureSlotModel> {
+    val highSpeed = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
+    val exposureCaps = state.descriptor?.exposureCapabilities
+    val manualIso = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
+    val manualShutter = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
+    val auto = stringResource(R.string.auto_value)
+    return captureSlots(mode).map { slot ->
+        val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter, state.aeCompensationSupported)
+        // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
+        val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
+        val value = when {
+            autoHighSpeed -> auto
+            else -> when (slot) {
+                CaptureSlot.FPS -> state.targetFps.toString()
+                CaptureSlot.INTERVAL -> formatIntervalShort(state.timelapseIntervalMs)
+                CaptureSlot.SHUTTER -> state.effectiveSettings?.exposure?.takeIf {
+                    it.shutterUnit == ShutterUnit.ANGLE && it.mode in setOf(ExposureMode.MANUAL, ExposureMode.SHUTTER_PRIORITY) &&
+                        !state.exposureControlUnavailable
+                }?.let { "${it.angleTenths / 10.0}°${if (state.exposureClamped) "*" else ""}" }
+                    ?: state.exposureTimeNs?.let(::formatShutter) ?: auto
+                CaptureSlot.ISO -> state.sensitivityIso?.toString() ?: auto
+                CaptureSlot.EV -> if (highSpeed) "0" else formatEv(state.aeCompensationEv)
+                CaptureSlot.WB -> state.requestedWhiteBalance.label()
+                CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatFocusDiopters) ?: auto
+            }
+        }
+        val detail = when {
+            autoHighSpeed -> "HS"
+            slot == CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatFocusDistance)
+            else -> null
+        }
+        CaptureSlotModel(
+            slot = slot,
+            label = stringResource(slot.labelRes()),
+            name = stringResource(slot.nameRes()),
+            value = value,
+            detail = detail,
+            unavailableReason = reason?.let { stringResource(it.textRes()) },
+            shortcut = if (slot == CaptureSlot.FOCUS) ShortcutAction.FOCUS else null,
+        )
+    }
 }
 
 @Composable
@@ -1736,6 +2183,8 @@ private fun CaptureTopBar(
     // Compact portrait and the side rails keep the gallery thumbnail beside the shutter, under the thumb.
     showThumbnail: Boolean = true,
     height: androidx.compose.ui.unit.Dp = STACKED_TOP_BAR_HEIGHT_DP.dp,
+    // The side layouts show the status lines in their end column, not beside these actions.
+    showStatus: Boolean = true,
 ) {
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
@@ -1780,9 +2229,11 @@ private fun CaptureTopBar(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
-            CaptureStatusLine(state, Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 3, textAlign = TextAlign.Center)
-            ThermalHudChip()
-            OutOfFrameHudChip(state)
+            if (showStatus) {
+                CaptureStatusLine(state, Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 3, textAlign = TextAlign.Center)
+                ThermalHudChip()
+                OutOfFrameHudChip(state)
+            }
             androidx.compose.foundation.layout.FlowRow(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
@@ -1800,9 +2251,11 @@ private fun CaptureTopBar(
     ) {
         if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
         else Spacer(Modifier.width(4.dp))
-        CaptureStatusLine(state, Modifier.weight(1f))
-        ThermalHudChip()
-        OutOfFrameHudChip(state)
+        if (showStatus) {
+            CaptureStatusLine(state, Modifier.weight(1f))
+            ThermalHudChip()
+            OutOfFrameHudChip(state)
+        } else Spacer(Modifier.weight(1f))
         actions()
     }
 }
@@ -2011,32 +2464,6 @@ private fun ZoomReadout(state: CameraUiState, binder: CaptureService.LocalBinder
     }
 }
 
-@Composable
-private fun PortraitControlDeck(
-    state: CameraUiState,
-    binder: CaptureService.LocalBinder?,
-    selectorStyle: ModeSelectorStyle,
-    settings: CameraSettings,
-    onControl: (ControlDial) -> Unit,
-    onShowModes: () -> Unit,
-    onShowMonitoring: () -> Unit,
-    onOpenMedia: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier.fillMaxWidth().background(Panel).padding(top = 8.dp, bottom = 8.dp)) {
-        QuickControls(state, onControl, landscape = false)
-        Spacer(Modifier.height(6.dp))
-        if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder)
-        else Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { SelectedModeButton(state, onShowModes) }
-        Spacer(Modifier.height(4.dp))
-        PortraitCaptureTransport(
-            state, binder, settings, onOpenMedia = onOpenMedia, onShowMonitoring = onShowMonitoring,
-            // Stacked translucent panels would compound into a darker band under the shutter.
-            panelBackground = LocalChromeOpacity.current == null,
-        )
-    }
-}
-
 /** Pause uses its own row so it never overlaps Stop on narrow/large-font displays. */
 @Composable
 internal fun PortraitCaptureTransport(
@@ -2068,209 +2495,6 @@ internal fun PortraitCaptureTransport(
         BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
         BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
         AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
-    }
-}
-
-@Composable
-private fun LandscapeControlDeck(
-    state: CameraUiState,
-    binder: CaptureService.LocalBinder?,
-    selectorStyle: ModeSelectorStyle,
-    settings: CameraSettings,
-    onControl: (ControlDial) -> Unit,
-    onShowModes: () -> Unit,
-    onShowMonitoring: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(Panel)
-            .padding(horizontal = 12.dp)
-            .padding(top = 8.dp, bottom = 6.dp),
-    ) {
-        QuickControls(state, onControl, landscape = false)
-        Spacer(Modifier.height(8.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder)
-                else SelectedModeButton(state, onShowModes)
-            }
-            TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
-            RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
-            CaptureButton(state, binder, settings, 62.dp, labelBeside = true)
-        }
-        Spacer(Modifier.height(6.dp))
-        BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
-        BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
-        AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
-        StatusInfoBar(state, settings)
-    }
-}
-
-/**
- * Start rail of the side-rail layout: the top-bar actions, then the F-keys as a two-column grid
- * and the preset slots. It still scrolls rather than clipping if preset slots push it past the
- * window height.
- */
-@Composable
-private fun CaptureStartRail(
-    state: CameraUiState,
-    binder: CaptureService.LocalBinder?,
-    settings: CameraSettings,
-    onSettingsChanged: (CameraSettings) -> Unit,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier
-            .fillMaxHeight()
-            .background(Panel)
-            .verticalScroll(rememberScrollState())
-            .testTag("capture-start-rail"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
-    ) {
-        CaptureTopBar(
-            state = state,
-            binder = binder,
-            onOpenMedia = {},
-            onOpenSettings = onOpenSettings,
-            settings = settings,
-            onSettingsChanged = onSettingsChanged,
-            vertical = true,
-            showThumbnail = false,
-        )
-        OperatorButtonGrid(state, settings, Modifier.fillMaxWidth())
-        PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
-    }
-}
-
-/**
- * End rail of the side-rail layout, in two columns: the exposure controls as one vertical strip
- * that scrolls on its own, and beside it the mode selector over the shutter, which is held at the
- * bottom so it never scrolls away, with monitoring above it as the secondary action.
- */
-@Composable
-private fun CaptureEndRail(
-    state: CameraUiState,
-    binder: CaptureService.LocalBinder?,
-    selectorStyle: ModeSelectorStyle,
-    settings: CameraSettings,
-    onControl: (ControlDial) -> Unit,
-    onShowModes: () -> Unit,
-    onShowMonitoring: () -> Unit,
-    onOpenMedia: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier
-            .fillMaxHeight()
-            .background(Panel)
-            .padding(horizontal = 6.dp, vertical = 6.dp)
-            .testTag("capture-end-rail"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            QuickControls(state, onControl, landscape = true, modifier = Modifier.width(SIDE_RAIL_EXPOSURE_WIDTH_DP.dp).fillMaxHeight())
-            Column(
-                Modifier.weight(1f).fillMaxHeight(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    if (selectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, compact = true)
-                    else SelectedModeButton(state, onShowModes)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
-                    TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools), onShowMonitoring)
-                }
-                Spacer(Modifier.height(6.dp))
-                CaptureButton(state, binder, settings, 64.dp)
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        StatusInfoBar(state, settings)
-        RecordingPauseButton(state) { requestRecordingPause(state, binder, it) }
-        BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
-        BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
-        AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
-        CaptureStatus(state)
-    }
-}
-
-@Composable
-private fun QuickControls(state: CameraUiState, onControl: (ControlDial) -> Unit, landscape: Boolean, modifier: Modifier = Modifier) {
-    val controls = buildList {
-        if (state.selectedMode in CameraUiState.resolutionProfileModes) add(ControlDial.RESOLUTION)
-        if (state.selectedMode == CaptureMode.TIME_LAPSE) add(ControlDial.INT)
-        // A recording rate only exists where frames are recorded as motion; stills and the
-        // fixed-output time-lapse have none to choose.
-        if (state.selectedMode in CameraUiState.frameRateModes) add(ControlDial.FPS)
-        add(ControlDial.SHUTTER)
-        add(ControlDial.ISO)
-        add(ControlDial.WB)
-        if (state.aeCompensationSupported) add(ControlDial.EV)
-        add(ControlDial.FOCUS)
-    }
-    if (landscape) ExposureColumn(controls, state, onControl, modifier) else ExposureStrip(controls, state, onControl)
-}
-
-/** The exposure strip turned upright for the side rail: one column that scrolls when it does not fit. */
-@Composable
-private fun ExposureColumn(controls: List<ControlDial>, state: CameraUiState, onControl: (ControlDial) -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(10.dp)
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(Color(0xFF12171A).chromePanel())
-                .border(1.dp, Color(0xFF263036), shape)
-                .verticalScroll(rememberScrollState())
-                .testTag("exposure-column"),
-        ) {
-            controls.forEachIndexed { index, control ->
-                if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 10.dp).background(Color(0xFF2E383E)))
-                QuickControlButton(control, state, onControl, Modifier.fillMaxWidth(), inStrip = true, stripValueSize = 14.sp)
-            }
-        }
-    }
-}
-
-/**
- * Exposure as one strip of value-over-label cells split by hairlines, instead of rows of tiles:
- * one line of deck for every control. Cells never shrink below a readable width; when a mode has
- * more controls than fit, the strip scrolls sideways rather than truncating values.
- */
-@Composable
-private fun ExposureStrip(controls: List<ControlDial>, state: CameraUiState, onControl: (ControlDial) -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        val minimumCell = 52.dp
-        val cell = maxWidth / controls.size.coerceAtLeast(1)
-        val fits = cell >= minimumCell
-        // Seven video controls on a 400 dp phone leave ~56 dp a cell: a size smaller keeps 1/8000 whole.
-        val valueSize = if (cell < 62.dp) 14.sp else 15.sp
-        val shape = RoundedCornerShape(10.dp)
-        Row(
-            Modifier
-                .then(if (fits) Modifier.fillMaxWidth() else Modifier.horizontalScroll(rememberScrollState()))
-                .height(IntrinsicSize.Min)
-                .clip(shape)
-                .background(Color(0xFF12171A).chromePanel())
-                .border(1.dp, Color(0xFF263036), shape)
-                .testTag("exposure-strip"),
-        ) {
-            controls.forEachIndexed { index, control ->
-                if (index > 0) Box(Modifier.width(1.dp).fillMaxHeight().padding(vertical = 10.dp).background(Color(0xFF2E383E)))
-                QuickControlButton(control, state, onControl, if (fits) Modifier.weight(1f) else Modifier.width(minimumCell), inStrip = true,
-                    stripValueSize = valueSize)
-            }
-        }
     }
 }
 
@@ -2365,77 +2589,11 @@ private fun LockButton(
 }
 
 @Composable
-private fun QuickControlButton(
-    control: ControlDial,
-    state: CameraUiState,
-    onControl: (ControlDial) -> Unit,
-    modifier: Modifier = Modifier,
-    inStrip: Boolean = false,
-    stripValueSize: androidx.compose.ui.unit.TextUnit = 15.sp,
-) {
-    val constrained = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
-    val exposureCaps = state.descriptor?.exposureCapabilities
-    val enabled = (!constrained || control in setOf(ControlDial.RESOLUTION, ControlDial.FPS)) && when (control) {
-        ControlDial.ISO -> exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
-        ControlDial.SHUTTER -> exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
-        else -> true
-    }
-    // A high-speed session runs exposure automatically. The strip has no width for "AUTO·HS", so
-    // there the HS moves under the value, next to the control name.
-    val highSpeedAuto = constrained && control !in setOf(ControlDial.RESOLUTION, ControlDial.FPS, ControlDial.EV, ControlDial.INT)
-    val value = when {
-        control == ControlDial.RESOLUTION -> shortResolutionLabel(state.targetVideoWidth, state.targetVideoHeight)
-        inStrip && highSpeedAuto -> "AUTO"
-        else -> null
-    } ?: when (control) {
-        ControlDial.RESOLUTION -> "${state.targetVideoWidth}×${state.targetVideoHeight}"
-        ControlDial.FPS -> state.targetFps.toString()
-        ControlDial.SHUTTER -> if (constrained) "AUTO·HS" else state.effectiveSettings?.exposure?.takeIf {
-            it.shutterUnit == ShutterUnit.ANGLE && it.mode in setOf(ExposureMode.MANUAL, ExposureMode.SHUTTER_PRIORITY) && !state.exposureControlUnavailable
-        }?.let { "${it.angleTenths / 10.0}°${if (state.exposureClamped) "*" else ""}" } ?: state.exposureTimeNs?.let(::formatShutter) ?: "AUTO"
-        ControlDial.ISO -> if (constrained) "AUTO·HS" else state.sensitivityIso?.toString() ?: "AUTO"
-        ControlDial.WB -> if (constrained) "AUTO·HS" else state.requestedWhiteBalance.label()
-        ControlDial.FOCUS -> if (constrained) "AUTO·HS" else state.focusDistanceDiopters?.let { "%.1fD".format(it) } ?: "AUTO"
-        ControlDial.EV -> if (constrained) "0" else formatEv(state.aeCompensationEv)
-        ControlDial.INT -> formatIntervalShort(state.timelapseIntervalMs)
-    }
-    Column(
-        modifier
-            .then(
-                if (inStrip) Modifier.height(52.dp)
-                else Modifier
-                    .height(56.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF1B2023).chromePanel())
-                    .border(1.dp, Color(0xFF41494C), RoundedCornerShape(8.dp)),
-            )
-            .clickable(enabled = enabled) { onControl(control) }
-            .padding(horizontal = if (inStrip) 2.dp else 4.dp, vertical = 5.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        val label = when (control) {
-            ControlDial.RESOLUTION -> "RES"
-            ControlDial.SHUTTER -> "SHUTTER"
-            else -> control.name
-        }
-        if (inStrip) {
-            Text(label + if (highSpeedAuto) " · HS" else "", color = if (enabled) Muted else Color(0xFF626A6D), fontSize = 9.sp, lineHeight = 10.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp, maxLines = 1)
-            Text(value, color = if (enabled) Color.White else Muted, fontSize = stripValueSize, lineHeight = 17.sp, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-        } else {
-            Text(value, color = if (enabled) Color.White else Muted, fontSize = 13.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(label, color = if (enabled) Muted else Color(0xFF626A6D), fontSize = 8.sp, lineHeight = 9.sp, maxLines = 1)
-        }
-    }
-}
-
-@Composable
 private fun ModeDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
-    compact: Boolean = false,
+    // Tapping the centred mode opens the full mode sheet (with the resolution) when set.
+    onOpenSheet: (() -> Unit)? = null,
 ) {
     val selection = LocalModeSelection.current
     val displayedMode = selection?.displayed ?: state.selectedMode
@@ -2445,14 +2603,28 @@ private fun ModeDial(
     val haptics = LocalHapticFeedback.current
     val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(displayedMode))
     fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
+    val labels = modes.map { modeLabel(it) }
+    val measurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    val density = LocalDensity.current
+    // Every cell is as wide as the longest label, so no mode name is clipped ("Time-lapse",
+    // "Ralentí" and the like in every language); the wheel shows fewer neighbours instead.
+    val longestLabel = remember(labels, density) {
+        with(density) { labels.maxOfOrNull { measurer.measure(it, labelStyle, softWrap = false).size.width }?.toDp() ?: 0.dp }
+    }
 
-    // A mode wheel: a linear carousel whose centered mode is the active one, marked only by amber
-    // text and a dot (no frame, so it reads the same on phones, foldables and tablets). Several
-    // neighbors stay visible on both sides, drag settles on the nearest mode and tapping any
-    // visible mode selects it directly.
-    if (compact) {
-        // Vertical wheel for the right panel in landscape.
-        val itemHeight = 28.dp
+    // A mode wheel: a linear carousel whose centred mode is the active one, marked only by amber
+    // text and a dot (no frame, so it reads the same on phones, foldables and tablets). Neighbours
+    // stay visible on both sides and fade out at the edges; a drag settles on the nearest mode and
+    // tapping a visible mode selects it directly.
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = dialDescription },
+    ) {
+        val totalWidth = maxWidth
+        val itemWidth = maxOf((totalWidth / 4.2f).coerceIn(76.dp, 140.dp), longestLabel + 16.dp).coerceAtMost(totalWidth)
+        val rowHeight = 48.dp
         val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
         val fling = rememberSnapFlingBehavior(listState, SnapPosition.Center)
         val focusedIndex by remember(listState, selectedIndex) {
@@ -2467,7 +2639,7 @@ private fun ModeDial(
                     ?: selectedIndex
             }
         }
-        LaunchedEffect(selectedIndex) {
+        LaunchedEffect(selectedIndex, totalWidth) {
             if (!listState.isScrollInProgress && focusedIndex != selectedIndex) {
                 if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
                 listState.animateScrollToItem(selectedIndex)
@@ -2484,235 +2656,71 @@ private fun ModeDial(
                 }
             }
         }
-        Column(
+        Box(
             Modifier
                 .fillMaxWidth()
-                .height(itemHeight * 5)
-                .semantics { contentDescription = dialDescription },
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .height(rowHeight)
+                // The edge fade says "more this way" without cutting a label in half.
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    drawRect(
+                        Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            .12f to Color.Black,
+                            .88f to Color.Black,
+                            1f to Color.Transparent,
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                },
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
-                    state = listState,
-                    flingBehavior = fling,
-                    contentPadding = PaddingValues(vertical = itemHeight * 2),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(modes.size) { index ->
-                        val mode = modes[index]
-                        val isSelected = index == focusedIndex
-                        val enabled = selectable(mode)
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(itemHeight)
-                                .semantics { selected = isSelected }
-                                .clickable(enabled = enabled && !isSelected) { selectMode(mode) },
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (isSelected) Box(
-                                Modifier
-                                    .padding(end = 6.dp)
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(Amber),
-                            )
-                            Text(
-                                modeLabel(mode),
-                                color = when {
-                                    isSelected -> Amber
-                                    enabled -> Color.White
-                                    else -> Muted
-                                },
-                                fontSize = if (isSelected) 13.sp else 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        // Horizontal mode wheel, full width so several modes stay visible with room to breathe.
-        // Item width adapts to the measured container width; the selection cursor stays fixed
-        // at the exact center via SnapPosition.Center and symmetric content padding.
-        BoxWithConstraints(
-            Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = dialDescription },
-        ) {
-            val totalWidth = maxWidth
-            val itemWidth = (totalWidth / 4.2f).coerceIn(76.dp, 140.dp)
-            val rowHeight = 40.dp
-            val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
-            val fling = rememberSnapFlingBehavior(listState, SnapPosition.Center)
-            val focusedIndex by remember(listState, selectedIndex) {
-                derivedStateOf {
-                    listState.layoutInfo.visibleItemsInfo
-                        .minByOrNull { item ->
-                            val viewportCenter =
-                                (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
-                            abs(item.offset + item.size / 2 - viewportCenter)
-                        }
-                        ?.index
-                        ?: selectedIndex
-                }
-            }
-            LaunchedEffect(selectedIndex, totalWidth) {
-                if (!listState.isScrollInProgress && focusedIndex != selectedIndex) {
-                    if (listState.layoutInfo.totalItemsCount == 0) return@LaunchedEffect
-                    listState.animateScrollToItem(selectedIndex)
-                }
-            }
-            LaunchedEffect(listState.isScrollInProgress) {
-                if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
-                    val idx = focusedIndex.coerceIn(0, modes.lastIndex)
-                    if (idx != selectedIndex && modes[idx] != displayedMode && selectable(modes[idx])) {
-                        selectMode(modes[idx])
-                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    } else if (idx != selectedIndex && !selectable(modes[idx])) {
-                        listState.animateScrollToItem(selectedIndex)
-                    }
-                }
-            }
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.fillMaxWidth().height(rowHeight)) {
-                    LazyRow(
-                        state = listState,
-                        flingBehavior = fling,
-                        contentPadding = PaddingValues(horizontal = (totalWidth - itemWidth) / 2),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        items(modes.size) { index ->
-                            val mode = modes[index]
-                            val isSelected = index == focusedIndex
-                            val enabled = selectable(mode)
-                            Column(
-                                Modifier
-                                    .width(itemWidth)
-                                    .height(rowHeight)
-                                    .semantics { selected = isSelected }
-                                    .clickable(enabled = enabled && !isSelected) { selectMode(mode) },
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                            ) {
-                                Text(
-                                    modeLabel(mode),
-                                    color = when {
-                                        isSelected -> Amber
-                                        enabled -> Color.White
-                                        else -> Muted
-                                    },
-                                    fontSize = if (isSelected) 15.sp else 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Box(
-                                    Modifier
-                                        .padding(top = 3.dp)
-                                        .size(5.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) Amber else Color.Transparent),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SelectedModeButton(state: CameraUiState, onClick: () -> Unit) {
-    Column(
-        Modifier
-            .widthIn(min = 112.dp)
-            .height(52.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF202528).chromePanel())
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(stringResource(R.string.mode_title), color = Muted, fontSize = 8.sp)
-        Text(modeLabel(state.selectedMode), color = Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
-
-@Composable
-private fun ModeButtonGrid(state: CameraUiState, binder: CaptureService.LocalBinder?, onSelected: () -> Unit) {
-    val selection = LocalModeSelection.current
-    val displayedMode = selection?.displayed ?: state.selectedMode
-    val selectMode: (CaptureMode) -> Unit = selection?.select ?: { mode -> binder?.selectMode(mode) }
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(stringResource(R.string.modes_title), color = Amber, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        visibleCaptureModes(state.modeGates, displayedMode).chunked(2).forEach { rowModes ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rowModes.forEach { mode ->
-                    val gate = state.modeGates.getValue(mode)
-                    val enabled = CameraUiState.isModeSelectable(gate)
+            LazyRow(
+                state = listState,
+                flingBehavior = fling,
+                contentPadding = PaddingValues(horizontal = ((totalWidth - itemWidth) / 2).coerceAtLeast(0.dp)),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(modes.size) { index ->
+                    val mode = modes[index]
+                    val isSelected = index == focusedIndex
+                    val enabled = selectable(mode)
                     Column(
                         Modifier
-                            .weight(1f)
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(if (mode == displayedMode) Amber else Color(0xFF303638))
-                            .clickable(enabled = enabled) {
-                                selectMode(mode)
-                                onSelected()
-                            }
-                            .padding(6.dp),
+                            .width(itemWidth)
+                            .height(rowHeight)
+                            .semantics { selected = isSelected }
+                            .clickable(enabled = enabled && (!isSelected || onOpenSheet != null)) {
+                                if (isSelected) onOpenSheet?.invoke() else selectMode(mode)
+                            },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Text(modeLabel(mode), color = if (mode == displayedMode) Color.Black else if (enabled) Color.White else Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        if (gate != ModeGateState.AVAILABLE) Text(gateLabel(gate), color = if (mode == displayedMode) Color.Black else gateColor(gate), fontSize = 8.sp)
+                        Text(
+                            labels[index],
+                            color = when {
+                                isSelected -> Amber
+                                enabled -> Color.White
+                                else -> Muted
+                            },
+                            fontSize = if (isSelected) 15.sp else 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                        // The centred mode opens the sheet: ▾ says so, where a plain dot would not.
+                        if (isSelected && onOpenSheet != null) CineGlyph(CineIcon.EXPAND, Amber, Modifier.padding(top = 2.dp).size(12.dp))
+                        else Box(
+                            Modifier
+                                .padding(top = 3.dp)
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) Amber else Color.Transparent),
+                        )
                     }
                 }
-                if (rowModes.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-    }
-}
-
-@Composable
-private fun ContextualPanel(
-    horizontalDeck: Boolean,
-    controlDeckHeight: androidx.compose.ui.unit.Dp,
-    availableHeight: androidx.compose.ui.unit.Dp,
-    // Side rails occupy the end edge; the panel opens beside them, over the viewfinder.
-    endInset: androidx.compose.ui.unit.Dp = 0.dp,
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    val maximumHeight = (availableHeight - controlDeckHeight - 72.dp)
-        .coerceAtLeast(160.dp)
-        .coerceAtMost(if (horizontalDeck) 380.dp else 440.dp)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .clickable(onClick = onDismiss),
-    ) {
-        Column(
-            Modifier
-                .align(if (horizontalDeck) Alignment.BottomEnd else Alignment.BottomCenter)
-                .padding(
-                    end = endInset + if (horizontalDeck) 12.dp else 0.dp,
-                    bottom = controlDeckHeight + 12.dp,
-                )
-                .widthIn(min = 260.dp, max = 380.dp)
-                .heightIn(max = maximumHeight)
-                .background(Color(0xF21A1F21).chromePanel(), RoundedCornerShape(10.dp))
-                .border(1.dp, Color(0xFF4A5154), RoundedCornerShape(10.dp))
-                .clickable { }
-                .padding(12.dp),
-        ) { content() }
     }
 }
 
@@ -2776,6 +2784,12 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
     }
 }
 
+/** Whether REC (or R) does anything now: a take can start or stop, or a pending capture can be cancelled. */
+internal fun captureControlEnabled(state: CameraUiState): Boolean =
+    !state.recordingFinalizing && (state.capturePreparationCancelable ||
+        state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING))
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CaptureButton(
     state: CameraUiState,
@@ -2813,7 +2827,9 @@ internal fun CaptureButton(
             )
         }
     }
-    val button: @Composable () -> Unit = {
+    // R does the same with a keyboard attached; the tooltip (long press, or hover) says so.
+    val tooltip = keyHint(captureDescription, ShortcutAction.RECORD)
+    val button: @Composable () -> Unit = { CaptureTooltip(tooltip, null) {
         Box(
             Modifier
                 .size(size)
@@ -2823,8 +2839,7 @@ internal fun CaptureButton(
                 }
                 .border(3.dp, if (recordState == RecordButtonState.UNAVAILABLE) Muted else Color.White, CircleShape)
                 .clip(CircleShape)
-                .clickable(enabled = !state.recordingFinalizing && (state.capturePreparationCancelable || state.phase == CameraUiPhase.PREVIEWING ||
-                    state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING)) {
+                .clickable(enabled = captureControlEnabled(state)) {
                     onCapture()
                 },
             contentAlignment = Alignment.Center,
@@ -2867,7 +2882,7 @@ internal fun CaptureButton(
                 )
             }
         }
-    }
+    } }
     if (labelBeside) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { label(); button() }
     else Column(horizontalAlignment = Alignment.CenterHorizontally) { button(); label() }
 }
@@ -4401,20 +4416,13 @@ private fun formatBytes(bytes: Long?): String = when {
     else -> "${bytes / 1_000L} KB"
 }
 
-@Preview(name = "Capture chrome · landscape", widthDp = 800, heightDp = 360, showBackground = true, backgroundColor = 0xFF0B0D0E)
+@Preview(name = "Capture slots · stacked deck", widthDp = 600, heightDp = 160, showBackground = true, backgroundColor = 0xFF0B0D0E)
 @Composable
-private fun LandscapeChromePreview() {
-    Box(Modifier.fillMaxSize()) {
-        LandscapeControlDeck(
-            state = CameraUiState(selectedMode = CaptureMode.VIDEO, phase = CameraUiPhase.PREVIEWING),
-            binder = null,
-            selectorStyle = ModeSelectorStyle.DIAL,
-            settings = CameraSettings(),
-            onControl = {},
-            onShowModes = {},
-            onShowMonitoring = {},
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+private fun CaptureSlotsPreview() {
+    val state = CameraUiState(selectedMode = CaptureMode.VIDEO, phase = CameraUiPhase.PREVIEWING)
+    Column(Modifier.background(Panel).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CaptureSlotStrip(captureSlotModels(state, CaptureMode.VIDEO), CaptureSlot.ISO, {})
+        CaptureModeButton(modeLabel(CaptureMode.VIDEO), {})
     }
 }
 

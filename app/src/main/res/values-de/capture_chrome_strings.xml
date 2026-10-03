@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_slot_shutter">VERSCHL.</string>
+    <string name="capture_slot_wb">WA</string>
+    <string name="capture_slot_focus">FOKUS</string>
+    <string name="capture_slot_interval">INTERVALL</string>
+    <string name="capture_slot_fps_name">Bildrate</string>
+    <string name="capture_slot_shutter_name">Verschluss</string>
+    <string name="capture_slot_iso_name">ISO-Empfindlichkeit</string>
+    <string name="capture_slot_ev_name">Belichtungskorrektur</string>
+    <string name="capture_slot_wb_name">Weißabgleich</string>
+    <string name="capture_slot_focus_name">Fokus</string>
+    <string name="capture_slot_interval_name">Intervall</string>
+    <string name="capture_slot_reason_not_ready">Warte auf die Kamera.</string>
+    <string name="capture_slot_reason_high_speed">Hohe Bildraten stellen das automatisch ein.</string>
+    <string name="capture_slot_reason_no_manual">Diese Kamera bietet keine manuelle Belichtung.</string>
+    <string name="capture_slot_reason_no_ev">Diese Kamera bietet keine Belichtungskorrektur.</string>
+    <string name="capture_mode_button">Modus: %1$s</string>
+    <string name="capture_scopes_short">Scopes</string>
+    <string name="capture_scopes_toggle">Scopes anzeigen</string>
+    <string name="capture_locked_banner">Bedienung gesperrt</string>
+    <string name="capture_unlock">Entsperren</string>
+</resources>

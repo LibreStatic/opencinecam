@@ -44,13 +44,16 @@ class OperatorUiTest {
         assertEquals(listOf(OperatorAction.TORCH, OperatorAction.PEAKING, OperatorAction.VIEW_ASSIST), seen)
     }
     @Test fun scopeQuickTogglesFollowTheFKeysAndLatchTheirMonitoringState() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         val seen = mutableListOf<OperatorAction>()
         val settings = mutableStateOf(CameraSettings(monitoring = com.librestatic.opencinecam.camera.MonitoringOptions(waveformEnabled = true)))
         compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), settings.value, OperatorActions({}, { seen.add(it) }, { true })) } }
         compose.onNodeWithTag("operator-quick-waveform").assertHeightIsAtLeast(48.dp)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).performClick()
-        compose.onNodeWithTag("operator-quick-waveform-state", useUnmergedTree = true).assertTextEquals("ON")
-        compose.onNodeWithTag("operator-quick-vectorscope-state", useUnmergedTree = true).assertTextEquals("OFF")
+        compose.onNodeWithTag("operator-quick-waveform").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.operator_state_on_description)))
+        compose.onNodeWithTag("operator-quick-vectorscope").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.operator_state_off_description)))
         compose.onNodeWithTag("operator-quick-vectorscope").performClick()
         assertEquals(listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE), seen)
         // A scope already on an F-key is not repeated as a quick toggle.
@@ -106,11 +109,10 @@ class OperatorUiTest {
         val settings = CameraSettings(flashEnabled = false, peakingEnabled = true, logViewAssistEnabled = true)
         // View assist only exists in LOG, so that is where its latched state reads ON.
         compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(selectedMode = CaptureMode.LOG), settings, OperatorActions({}, {}, { true })) } }
-        // F1 torch off, F2 peaking on, F3 view assist on: readable before any press.
-        compose.onNodeWithTag("operator-button-1-state", useUnmergedTree = true).assertTextEquals(context.getString(R.string.operator_state_off))
-        compose.onNodeWithTag("operator-button-2-state", useUnmergedTree = true).assertTextEquals(context.getString(R.string.operator_state_on))
-        compose.onNodeWithTag("operator-button-3-state", useUnmergedTree = true).assertTextEquals(context.getString(R.string.operator_state_on))
-        // TalkBack must hear the same state the pill shows.
+        // F1 torch off, F2 peaking on, F3 view assist on: readable before any press, by the amber
+        // outline on screen and by the state TalkBack reads.
+        compose.onNodeWithTag("operator-button-3").assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, context.getString(R.string.operator_state_on_description)))
         compose.onNodeWithTag("operator-button-1").assert(SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, context.getString(R.string.operator_state_off_description)))
         compose.onNodeWithTag("operator-button-2").assert(SemanticsMatcher.expectValue(
@@ -122,9 +124,9 @@ class OperatorUiTest {
         val settings = CameraSettings(operation = OperatorPreferences(
             button1 = OperatorAction.FOCUS_A, button2 = OperatorAction.AUTO_FOCUS, button3 = OperatorAction.ZEBRA))
         compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), settings, OperatorActions({}, {}, { true })) } }
-        for (index in 1..2) compose.onNodeWithTag("operator-button-$index-state", useUnmergedTree = true).assertDoesNotExist()
+        for (index in 1..2) compose.onNodeWithTag("operator-button-$index").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
         for (index in 1..2) compose.onNodeWithTag("operator-button-$index").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
-        compose.onNodeWithTag("operator-button-3-state", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("operator-button-3").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription))
         // A button the operator cannot interpret is the bug being fixed; every action carries its own help.
         val help = OperatorAction.entries.map { context.getString(it.helpResource()) }
         assertEquals(help.size, help.distinct().size)

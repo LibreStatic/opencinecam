@@ -387,11 +387,8 @@
     <string name="operator_action_preset_c2">Examiner le preset C2</string>
     <string name="operator_action_exterior">Session écran sujet</string>
     <string name="operator_action_control_lock">Verrou des commandes de prise</string>
-    <string name="operator_state_on">ON</string>
-    <string name="operator_state_off">OFF</string>
     <string name="operator_state_on_description">activé</string>
     <string name="operator_state_off_description">désactivé</string>
-    <string name="operator_state_paused">EN PAUSE</string>
     <string name="operator_state_thermal_description">indisponible : scopes en pause car l\'appareil est trop chaud</string>
     <string name="operator_action_thermal_help">En pause tant que l\'appareil est trop chaud. Reprend seul dès que l\'appareil refroidit ; l\'enregistrement n\'est pas affecté.</string>
     <string name="analysis_suspended_thermal">Scopes en pause : appareil trop chaud</string>

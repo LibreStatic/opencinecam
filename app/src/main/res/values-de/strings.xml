@@ -387,11 +387,8 @@
     <string name="operator_action_preset_c2">Preset C2 prüfen</string>
     <string name="operator_action_exterior">Sitzung auf dem Motivbildschirm</string>
     <string name="operator_action_control_lock">Take-Steuerungssperre</string>
-    <string name="operator_state_on">EIN</string>
-    <string name="operator_state_off">AUS</string>
     <string name="operator_state_on_description">ein</string>
     <string name="operator_state_off_description">aus</string>
-    <string name="operator_state_paused">PAUSIERT</string>
     <string name="operator_state_thermal_description">nicht verfügbar: Scopes pausiert, weil das Gerät zu heiß ist</string>
     <string name="operator_action_thermal_help">Pausiert, solange das Gerät zu heiß ist. Sie läuft von selbst weiter, sobald das Gerät abgekühlt ist; die Aufnahme ist nicht betroffen.</string>
     <string name="analysis_suspended_thermal">Scopes pausiert: Gerät ist zu heiß</string>
