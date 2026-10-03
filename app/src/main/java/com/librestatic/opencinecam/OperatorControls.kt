@@ -3,6 +3,7 @@ package com.librestatic.opencinecam
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.ContextWrapper
@@ -41,7 +42,9 @@ import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 
 internal data class OperatorActions(val capture: () -> Unit, val perform: (OperatorAction) -> Unit, val available: (OperatorAction) -> Boolean,
     /** Latched state of a toggle action, or null when the action is momentary. */
-    val latched: (OperatorAction) -> Boolean? = { null }, val setEditing: (Boolean) -> Unit = {})
+    val latched: (OperatorAction) -> Boolean? = { null }, val setEditing: (Boolean) -> Unit = {},
+    /** Whether the capture chrome hides the scopes; scope keys light and act on what is in view. */
+    val scopes: CaptureScopeVisibility? = null)
 internal val LocalOperatorActions = staticCompositionLocalOf<OperatorActions?> { null }
 private tailrec fun Context.operatorActivity(): MainActivity? = when (this) {
     is MainActivity -> this
@@ -58,6 +61,8 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
     var review by remember { mutableStateOf<CameraPreset?>(null) }
     var editing by remember { mutableStateOf(false) }
     val capture = rememberCaptureAction(state, binder, settings, enabled)
+    // Lives here, not in the chrome, so the volume keys act on the same hidden scopes as the F-keys.
+    val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility() }
     fun preset(action: OperatorAction): CameraPreset? {
         val slot = if (action == OperatorAction.PRESET_C1) "C1" else "C2"
         return library.presets.firstOrNull { it.id == library.slots[slot] }
@@ -77,7 +82,8 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
             OperatorAction.CAPTURE -> capture()
             OperatorAction.PRESET_C1, OperatorAction.PRESET_C2 -> review = preset(action)
             OperatorAction.EXTERIOR -> if (fold.phase != DisplaySessionPhase.IDLE) coordinator?.closeSession() else coordinator?.start(DisplayOperation.PRESENT)
-            else -> binder?.performOperatorAction(action)
+            // A scope key never switches off a scope the operator cannot see; it shows the scopes.
+            else -> scopes.press(action, operatorActionToggleState(action, settings, state) == true) { binder?.performOperatorAction(action) }
         }
     }
     val currentPerform by rememberUpdatedState(perform)
@@ -101,9 +107,9 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
     // The display session lives in the UI layer, so only this scope can latch EXTERIOR.
     val latched: (OperatorAction) -> Boolean? = { action ->
         if (action == OperatorAction.EXTERIOR) fold.phase != DisplaySessionPhase.IDLE
-        else operatorActionToggleState(action, settings, state)
+        else scopes.latched(action, operatorActionToggleState(action, settings, state))
     }
-    return OperatorActions(capture, perform, available, latched) { editing = it }
+    return OperatorActions(capture, perform, available, latched, setEditing = { editing = it }, scopes = scopes)
 }
 
 @Composable

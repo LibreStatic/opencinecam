@@ -32,6 +32,9 @@ internal const val SIDE_PANE_WIDTH_DP = 320f
 /** Always-open inspector of large windows. Fixed, so the viewfinder never reflows under it. */
 internal const val INSPECTOR_WIDTH_DP = 360f
 
+/** The inspector's scopes shrink to fit its height down to this, then its column scrolls instead. */
+internal const val INSPECTOR_SCOPES_MIN_HEIGHT_DP = 200f
+
 /** A side pane of the stacked layout: at most this wide, and never more than [SIDE_PANE_MAX_FRACTION]. */
 internal const val SIDE_PANE_MAX_WIDTH_DP = 380f
 internal const val SIDE_PANE_MAX_FRACTION = 0.45f
@@ -44,6 +47,9 @@ internal const val SCOPE_TRAY_HEIGHT_DP = 200f
 
 /** A docked bottom sheet never covers more than this share of the window height. */
 internal const val DOCKED_SHEET_MAX_FRACTION = 0.55f
+
+/** A docked bottom sheet outside compact portrait is at most this wide, centred on the deck. */
+internal const val DOCKED_SHEET_MAX_WIDTH_DP = 640f
 
 /** Height of the top bar over the viewfinder in the stacked layout. */
 internal const val STACKED_TOP_BAR_HEIGHT_DP = 56f

@@ -106,15 +106,17 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
  * histogram. The panel fills the space the host gives it: one scope at a time behind tabs, or
  * every scope stacked when a side pane is tall enough. [expanded] belongs to the host; the ⤢ key
  * only asks for the change through [onExpandedChange] and is absent without it, and the close
- * key appears only with [onClose].
+ * key appears only with [onClose]. The panel remembers its tab itself unless the host owns it
+ * through [onTabChange], which lets a scope key bring its scope forward.
  */
 @Composable internal fun ProfessionalScopesPanel(state: CameraUiState, options: MonitoringOptions,
     fresh: Boolean, modifier: Modifier = Modifier, expanded: Boolean = false,
     onExpandedChange: ((Boolean) -> Unit)? = null, histogramMode: HistogramMode? = null,
-    onClose: (() -> Unit)? = null) {
+    onClose: (() -> Unit)? = null, tab: ScopeTab? = null, onTabChange: ((ScopeTab) -> Unit)? = null) {
     val tabs = enabledScopeTabs(options.waveformEnabled, options.vectorscopeEnabled, options.falseColorEnabled, histogramMode != null)
     var savedTab by rememberSaveable { mutableStateOf<ScopeTab?>(null) }
-    val selected = resolveScopeTab(savedTab, tabs) ?: return
+    val selected = resolveScopeTab(if (onTabChange != null) tab else savedTab, tabs) ?: return
+    val selectTab: (ScopeTab) -> Unit = onTabChange ?: { savedTab = it }
     val frame = state.monitoringScopes
     val live = state.scopeAnalysisLive(fresh)
     val current = live && frame != null && frame.options == options
@@ -159,7 +161,7 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
                 if (stacked) { chip(); Spacer(Modifier.weight(1f)) }
                 else {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        ScopeTabs(tabs, selected, labels, shortLabels, plan.tabStyle) { savedTab = it }
+                        ScopeTabs(tabs, selected, labels, shortLabels, plan.tabStyle, selectTab)
                     }
                     if (plan.chipInHeader) chip()
                 }

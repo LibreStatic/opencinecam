@@ -23,7 +23,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,23 +34,30 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CodecBadge
+import com.librestatic.opencinecam.CaptureInitialPane
 import com.librestatic.opencinecam.CaptureMode
+import com.librestatic.opencinecam.CaptureScopeVisibility
+import com.librestatic.opencinecam.CodecBadge
 import com.librestatic.opencinecam.CompositionGridMode
 import com.librestatic.opencinecam.GalleryFacts
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
+import com.librestatic.opencinecam.LocalAdaptiveWindow
+import com.librestatic.opencinecam.LocalOperatorActions
 import com.librestatic.opencinecam.MediaCatalogContent
 import com.librestatic.opencinecam.MediaCatalogSource
 import com.librestatic.opencinecam.MonitoringOverlay
 import com.librestatic.opencinecam.OnboardingScreen
 import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsScreen
 import com.librestatic.opencinecam.SplashHandoff
 import com.librestatic.opencinecam.TakeProxyState
@@ -73,9 +82,9 @@ import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import java.io.IOException
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.delay
 
 /*
  * Zero-argument Compose Driver entry points (AGENTS.md). Each one feeds fake state to the real
@@ -86,23 +95,67 @@ import kotlinx.coroutines.delay
  * The theme follows `--theme cine|you` (default cine); `--device` and `--night` set the viewport.
  */
 
-/** Portrait capture chrome over a black stand-in for the viewfinder, photo mode, previewing. */
-@Composable
-fun CapturePortrait() = CaptureChrome(landscape = false, state = CameraUiState(phase = CameraUiPhase.PREVIEWING))
+/*
+ * Capture chrome: every screen runs a fake camera (manual exposure, kelvin white balance, manual
+ * focus) over a black stand-in for the viewfinder, and picks its layout from the device it is
+ * started on: phone (compact portrait), landscape (side rails), inner or tablet (stacked) and a
+ * 1280 × 800 dp window (the inspector). The F-keys and scope keys act on the screen's own settings.
+ */
 
-/** Portrait capture chrome while a video take is recording. */
+/** Capture chrome, photo mode, previewing, with the histogram. */
+@Composable
+fun CapturePortrait() = CaptureChrome(driverCaptureState())
+
+/** Capture chrome while a video take is recording at 01:23. */
 @Composable
 fun CaptureRecording() = CaptureChrome(
-    landscape = false,
-    state = CameraUiState(phase = CameraUiPhase.RECORDING, selectedMode = CaptureMode.VIDEO, recordingElapsedMs = 83_000L),
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L),
 )
 
-/** Landscape capture chrome in video mode; start with `--device landscape`. */
+/** Capture chrome in video mode; start with `--device landscape` for the side rails. */
 @Composable
-fun CaptureLandscape() = CaptureChrome(
-    landscape = true,
-    state = CameraUiState(phase = CameraUiPhase.PREVIEWING, selectedMode = CaptureMode.VIDEO),
+fun CaptureLandscape() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO))
+
+/** The white balance dial open: a bottom sheet on a phone, a side pane where there is width. */
+@Composable
+fun CaptureSheetWb() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.WHITE_BALANCE)
+
+/** The focus panel open, with marks A and B. */
+@Composable
+fun CaptureSheetFocus() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.FOCUS)
+
+/** The modal mode sheet a phone opens from the mode dial. */
+@Composable
+fun CaptureModeSheet() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.MODE_SHEET)
+
+/** The modes in the docked pane, as the wider layouts open them. */
+@Composable
+fun CaptureModes() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.MODES)
+
+/** The monitoring toggles pane, with every scope switched on. */
+@Composable
+fun CaptureMonitor() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driverScopeSettings(), CaptureInitialPane.MONITOR)
+
+/** Waveform, vectorscope and false colour switched on, with live analysis, and the histogram. */
+@Composable
+fun CaptureScopes() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driverScopeSettings())
+
+/** The same scopes hidden with H: their keys read off, and pressing one shows them again. */
+@Composable
+fun CaptureScopesHidden() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driverScopeSettings(), scopesHidden = true)
+
+/** Controls locked while a photo is saved, with the saved notice: the state review item 21 covers. */
+@Composable
+fun CaptureLocked() = CaptureChrome(
+    driverCaptureState().copy(
+        stillCapturePending = true,
+        message = stringResource(R.string.photo_capture_saved, "OCC_20261003_101500.jpg"),
+    ),
 )
+
+/** A desktop-like window with a hardware keyboard: tooltips and labels carry the shortcuts. */
+@Composable
+fun CaptureDesktop() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driverScopeSettings(), hardwareKeyboard = true)
 
 /** The settings hub, home page. 840 dp or wider (`--device inner`) shows the two-pane layout. */
 @Composable
@@ -176,32 +229,56 @@ private fun DriverTheme(forceDark: Boolean = false, content: @Composable () -> U
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { content() }
     }
 
+/**
+ * The capture chrome as CaptureSurface hosts it, over its own copy of [settings] so the monitoring
+ * toggles, F-keys and scope keys work. The window and its keyboard are provided the way
+ * ProvideAdaptiveWindow measures them; [hardwareKeyboard] stands in for an attached keyboard.
+ */
 @Composable
-private fun CaptureChrome(landscape: Boolean, state: CameraUiState) = DriverTheme(forceDark = true) {
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AdaptiveCaptureChrome(
-            state = state,
-            binder = null,
-            settings = CameraSettings(),
-            landscape = landscape,
-            zebra = false,
-            peaking = false,
-            histogram = true,
-            histogramMode = HistogramMode.RGB,
-            showGrid = false,
-            gridMode = CompositionGridMode.THIRDS,
-            showHorizon = false,
-            onToggleZebra = {},
-            onTogglePeaking = {},
-            onToggleHistogram = {},
-            onCycleHistogramMode = {},
-            onToggleGrid = {},
-            onCycleGridMode = {},
-            onToggleHorizon = {},
-            onSettingsChanged = {},
-            onOpenMedia = {},
-            onOpenSettings = {},
-        )
+private fun CaptureChrome(
+    state: CameraUiState,
+    settings: CameraSettings = CameraSettings(histogramEnabled = true),
+    initialPane: CaptureInitialPane? = null,
+    scopesHidden: Boolean = false,
+    hardwareKeyboard: Boolean = false,
+) = DriverTheme(forceDark = true) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
+        var current by remember { mutableStateOf(settings) }
+        val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility(scopesHidden) }
+        val live = withDriverAnalysis(state, current.monitoring)
+        val actions = driverOperatorActions(live, current, scopes) { current = it }
+        CompositionLocalProvider(LocalAdaptiveWindow provides window, LocalOperatorActions provides actions) {
+            AdaptiveCaptureChrome(
+                state = live,
+                binder = null,
+                settings = current,
+                landscape = window.landscape,
+                zebra = current.zebraEnabled,
+                peaking = current.peakingEnabled,
+                histogram = current.histogramEnabled,
+                histogramMode = current.histogramMode,
+                showGrid = current.compositionGridEnabled,
+                gridMode = current.compositionGridMode,
+                showHorizon = current.horizonLevelEnabled,
+                onToggleZebra = { current = current.copy(zebraEnabled = !current.zebraEnabled) },
+                onTogglePeaking = { current = current.copy(peakingEnabled = !current.peakingEnabled) },
+                onToggleHistogram = { current = current.copy(histogramEnabled = !current.histogramEnabled) },
+                onCycleHistogramMode = {
+                    current = current.copy(histogramMode = if (current.histogramMode == HistogramMode.RGB) HistogramMode.LUMA else HistogramMode.RGB)
+                },
+                onToggleGrid = { current = current.copy(compositionGridEnabled = !current.compositionGridEnabled) },
+                onCycleGridMode = {
+                    val modes = CompositionGridMode.entries
+                    current = current.copy(compositionGridEnabled = true, compositionGridMode = modes[(current.compositionGridMode.ordinal + 1) % modes.size])
+                },
+                onToggleHorizon = { current = current.copy(horizonLevelEnabled = !current.horizonLevelEnabled) },
+                onSettingsChanged = { current = it },
+                onOpenMedia = {},
+                onOpenSettings = {},
+                initialPane = initialPane,
+            )
+        }
     }
 }
 

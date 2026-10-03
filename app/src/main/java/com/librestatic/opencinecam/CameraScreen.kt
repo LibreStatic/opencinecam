@@ -84,6 +84,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -819,7 +820,8 @@ internal fun CaptureSurface(
 private fun MonitorToggle(icon: CineIcon, label: String, description: String, enabled: Boolean, onClick: () -> Unit,
     cycleState: String? = null, modifier: Modifier = Modifier) {
     val on = enabled && cycleState == null
-    val content = if (on) Color.Black else Color.White
+    val colors = MaterialTheme.colorScheme
+    val content = if (on) colors.onPrimary else colors.onSurface
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -828,8 +830,8 @@ private fun MonitorToggle(icon: CineIcon, label: String, description: String, en
                 if (cycleState != null) stateDescription = cycleState
             }
             .clip(RoundedCornerShape(8.dp))
-            .background(if (on) Amber else Color(0xFF1B2226))
-            .border(1.dp, if (on) Amber else Color(0xFF344047), RoundedCornerShape(8.dp))
+            .background(if (on) colors.primary else colors.surfaceContainerHigh)
+            .border(1.dp, if (on) colors.primary else colors.outline, RoundedCornerShape(8.dp))
             .then(
                 if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = onClick)
                 else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { onClick() })
@@ -861,28 +863,29 @@ private fun MonitoringToggleGrid(
     onToggleGrid: () -> Unit,
     onCycleGridMode: () -> Unit,
     onToggleHorizon: () -> Unit,
+    modifier: Modifier = Modifier.widthIn(max = 312.dp),
 ) {
     val histogramModeTitle = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma)
     val gridModeTitle = stringResource(compositionGridModeTitle(gridMode))
     // Pairs share a row: each tool sits beside its mode, and the level closes the grid. The cells
-    // share the row's width, so the grid fits a 320 dp pane as well as a phone's sheet.
-    Column(Modifier.widthIn(max = 312.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = Modifier.weight(1f))
-            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = Modifier.weight(1f))
+    // share the row's width, so the grid fills a pane as well as the recording HUD's 312 dp popup.
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = Modifier.weight(1f).fillMaxHeight())
+            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = Modifier.weight(1f).fillMaxHeight())
             MonitorToggle(CineIcon.HISTOGRAM_MODE, histogramModeTitle, stringResource(R.string.monitor_histogram_mode), true, onCycleHistogramMode,
-                cycleState = histogramModeTitle, modifier = Modifier.weight(1f))
+                cycleState = histogramModeTitle, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = Modifier.weight(1f).fillMaxHeight())
             MonitorToggle(CineIcon.GRID_MODE, gridModeTitle, stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
-                cycleState = gridModeTitle, modifier = Modifier.weight(1f))
+                cycleState = gridModeTitle, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = Modifier.weight(1f).fillMaxHeight())
             Spacer(Modifier.weight(1f))
         }
     }
@@ -1247,6 +1250,17 @@ private sealed interface CapturePane {
     data object Monitor : CapturePane
 }
 
+/** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET }
+
+private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
+    CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
+    CaptureInitialPane.FOCUS -> CapturePane.Control(ControlDial.FOCUS)
+    CaptureInitialPane.MONITOR -> CapturePane.Monitor
+    CaptureInitialPane.MODES -> CapturePane.Modes
+    CaptureInitialPane.MODE_SHEET -> null
+}
+
 @Composable
 internal fun AdaptiveCaptureChrome(
     state: CameraUiState,
@@ -1280,21 +1294,26 @@ internal fun AdaptiveCaptureChrome(
     onSettingsChanged: (CameraSettings) -> Unit,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
+    initialPane: CaptureInitialPane? = null,
 ) {
     // One pane at a time: a control's dial, the modes or the monitoring toggles.
-    var pane by remember { mutableStateOf<CapturePane?>(null) }
+    var pane by remember { mutableStateOf(initialPane?.pane()) }
     // Compact portrait shows the modes in a modal sheet rather than in the docked pane.
-    var modeSheet by remember { mutableStateOf(false) }
-    // The scopes stay switched on in Settings; H and the monitor pane only hide them here.
-    var scopesHidden by rememberSaveable { mutableStateOf(false) }
+    var modeSheet by remember { mutableStateOf(initialPane == CaptureInitialPane.MODE_SHEET) }
     var scopesExpanded by rememberSaveable { mutableStateOf(false) }
     val operatorInput = LocalOperatorActions.current
+    // The scopes stay switched on in Settings; H and the panel's close key only hide them here.
+    // The operator actions own the state when present, so the F-keys and volume keys agree with it.
+    val localScopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility() }
+    val scopeVisibility = operatorInput?.scopes ?: localScopes
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
     var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
     var controlDeckHeightPx by remember { mutableIntStateOf(0) }
     var dockedPaneHeightPx by remember { mutableIntStateOf(0) }
+    // The lock toggles (and in the stacked layouts the F-keys under them) at the frame's top end.
+    var topEndClusterWidthPx by remember { mutableIntStateOf(0) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
     // it again; it re-hides after a short idle period unless a pane is open in it.
     LaunchedEffect(recording, manualReveal, pane) {
@@ -1402,9 +1421,21 @@ internal fun AdaptiveCaptureChrome(
         val ratio = previewAspectRatio
         val overlay = overlayViewfinderScale != null && !hinge
         val monitoring = settings.monitoring
-        val scopesEnabled = monitoring.waveformEnabled || monitoring.vectorscopeEnabled || monitoring.falseColorEnabled
-        // A hinge split leaves the scopes on its preview pane; everywhere else the chrome hosts them.
-        val scopesShown = scopesEnabled && !scopesHidden && !hinge
+        val panelScopesEnabled = monitoring.waveformEnabled || monitoring.vectorscopeEnabled || monitoring.falseColorEnabled
+        // H hides and shows every scope, the histogram among them.
+        val scopesEnabled = panelScopesEnabled || histogram
+        // A hinge split leaves the scopes panel on its preview pane, where it cannot be hidden.
+        DisposableEffect(scopeVisibility, hinge) {
+            scopeVisibility.hideable = !hinge
+            onDispose { scopeVisibility.hideable = false }
+        }
+        // With nothing switched on there is nothing to hide: the next scope switched on shows.
+        LaunchedEffect(scopesEnabled) { if (!scopesEnabled) scopeVisibility.show() }
+        val scopesHidden = scopeVisibility.concealed
+        val scopesShown = panelScopesEnabled && !scopesHidden && !hinge
+        // The histogram and its toggles follow H as well.
+        val histogramShown = histogram && !scopesHidden
+        val toggleHistogram: () -> Unit = { scopeVisibility.press(OperatorAction.HISTOGRAM, histogram, onToggleHistogram) }
         val stackedPaneHeight = (height - topBarPx - stableDeckHeightPx).coerceAtLeast(0f)
         val sidePaneWidth = stackedSidePaneWidth(maxWidth.value).dp
         val dockCap = minOf(
@@ -1614,14 +1645,26 @@ internal fun AdaptiveCaptureChrome(
         if (chromeVisible) {
             if (stackedFamily) {
                 // The F-keys stand over the frame's end edge under the lock toggles. They stop above
-                // the zoom rocker at mid-height, and scroll rather than run into it.
-                val keyColumnMax = if (state.zoomSupported) maxHeight / 2 - 60.dp - topBar - 12.dp
-                    else maxHeight - topBar - deckHeight - 14.dp
+                // the zoom rocker at mid-height and above whatever docks on the deck under them (a
+                // pane that reaches the end edge, or the scope tray), and scroll rather than run into it.
+                val paneEdgeGap = if (compact) 0.dp else ((maxWidth - DOCKED_SHEET_MAX_WIDTH_DP.dp) / 2).coerceAtLeast(0.dp)
+                val dockedUnderKeys = when {
+                    dockedBottomPane && paneEdgeGap < CAPTURE_RAIL_WIDTH_DP.dp -> with(density) { dockedPaneHeightPx.toDp() }
+                    scopeTray -> SCOPE_TRAY_HEIGHT_DP.dp
+                    else -> 0.dp
+                }
+                val keyColumnFloor = maxHeight - deckHeight - dockedUnderKeys - 14.dp
+                val keyColumnMax = (if (state.zoomSupported) minOf(maxHeight / 2 - 60.dp - 12.dp, keyColumnFloor) else keyColumnFloor) - topBar
+                // Whole 48 dp keys only (6 dp apart, under the 48 dp lock row): a key cut by the
+                // column's edge would read as one hidden under the pane.
+                val keyPitch = 48.dp + 6.dp
+                val wholeKeys = ((keyColumnMax - 48.dp) / keyPitch).toInt().coerceAtLeast(0)
                 Column(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
-                        .heightIn(max = keyColumnMax.coerceAtLeast(48.dp))
+                        .onSizeChanged { topEndClusterWidthPx = it.width }
+                        .heightIn(max = 48.dp + keyPitch * wholeKeys)
                         .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1645,7 +1688,8 @@ internal fun AdaptiveCaptureChrome(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp)
+                    .onSizeChanged { topEndClusterWidthPx = it.width },
             )
         }
 
@@ -1693,7 +1737,7 @@ internal fun AdaptiveCaptureChrome(
             settings = settings,
             chromeVisible = chromeVisible,
             recording = recording,
-            histogram = histogram,
+            histogram = histogramShown,
             histogramMode = histogramMode,
             horizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound,
             // A hinge split gives the chrome its own pane with no picture behind it: let the
@@ -1737,10 +1781,12 @@ internal fun AdaptiveCaptureChrome(
                 CaptureShortcutCommand.ZEBRA -> { onToggleZebra(); true }
                 CaptureShortcutCommand.PEAKING -> { onTogglePeaking(); true }
                 CaptureShortcutCommand.GRID -> { onToggleGrid(); true }
-                CaptureShortcutCommand.TOGGLE_SCOPES -> { scopesHidden = !scopesHidden; true }
+                // A hinge split shows the scopes on its preview pane, which H does not hide.
+                CaptureShortcutCommand.TOGGLE_SCOPES -> !hinge && run { scopeVisibility.toggle(); true }
                 CaptureShortcutCommand.ENABLE_WAVEFORM -> {
                     performOperator(OperatorAction.WAVEFORM)
-                    scopesHidden = false
+                    scopeVisibility.show()
+                    scopeVisibility.tab = ScopeTab.WAVEFORM
                     true
                 }
                 CaptureShortcutCommand.VIEW_ASSIST -> { performOperator(OperatorAction.VIEW_ASSIST); true }
@@ -1765,7 +1811,8 @@ internal fun AdaptiveCaptureChrome(
         val scopes: @Composable (Modifier) -> Unit = { modifier ->
             // No histogram tab: the histogram keeps its own place in the instrument stack.
             ProfessionalScopesPanel(state, monitoring, scopeFresh, modifier, expanded = scopesExpanded,
-                onExpandedChange = { scopesExpanded = it }, onClose = { scopesHidden = true })
+                onExpandedChange = { scopesExpanded = it }, onClose = { scopeVisibility.hide() },
+                tab = scopeVisibility.tab, onTabChange = { scopeVisibility.tab = it })
         }
         // The modes, with the selected mode's resolution under them (RES lives here, not in the slots).
         val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
@@ -1802,17 +1849,18 @@ internal fun AdaptiveCaptureChrome(
                 CapturePane.Monitor -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CapturePaneHeader(stringResource(R.string.monitor_title), { pane = null })
                     MonitoringToggleGrid(
-                        zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
-                        onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
+                        zebra, peaking, histogramShown, histogramMode, showGrid, gridMode, showHorizon,
+                        onToggleZebra, onTogglePeaking, toggleHistogram, onCycleHistogramMode,
                         onToggleGrid, onCycleGridMode, onToggleHorizon,
+                        Modifier.fillMaxWidth(),
                     )
-                    if (scopesEnabled) MonitorToggle(
+                    if (scopesEnabled && !hinge) MonitorToggle(
                         CineIcon.MONITORING,
                         stringResource(R.string.capture_scopes_short),
                         stringResource(R.string.capture_scopes_toggle),
                         !scopesHidden,
-                        { scopesHidden = !scopesHidden },
-                        modifier = Modifier.widthIn(max = 312.dp).fillMaxWidth(),
+                        { scopeVisibility.toggle() },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 null -> Unit
@@ -1973,23 +2021,40 @@ internal fun AdaptiveCaptureChrome(
                 .testTag("capture-inspector"),
         ) {
             if (paneShown) CaptureContextPane(ContextPanePlacement.SIDE, Modifier.weight(1f).fillMaxWidth(), paneContent)
-            else Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
-                if (!recording) {
-                    ThermalHudChip()
-                    OutOfFrameHudChip(state)
+            else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val viewport = maxHeight
+                var aboveScopesPx by remember { mutableIntStateOf(0) }
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // The recording format and time left stay above the scopes, never scrolled away under them.
+                    Column(
+                        Modifier.fillMaxWidth().onSizeChanged { aboveScopesPx = it.height },
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
+                        if (!recording) {
+                            ThermalHudChip()
+                            OutOfFrameHudChip(state)
+                        }
+                        CaptureStatus(state)
+                        if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
+                        CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                        CaptureSlotRows(slots, activeSlot, onSlot)
+                        presets()
+                        StatusInfoBar(state, settings)
+                    }
+                    // The panel scrolls its own scopes, so it needs a bounded height inside this column:
+                    // the room the rest leaves, but never so little a trace stops reading; then the column scrolls.
+                    if (scopesShown) {
+                        val room = viewport - 34.dp - with(density) { aboveScopesPx.toDp() }
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(max = room.coerceIn(INSPECTOR_SCOPES_MIN_HEIGHT_DP.dp, 320.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) { scopes(Modifier) }
+                    }
                 }
-                CaptureStatus(state)
-                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
-                CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
-                CaptureSlotRows(slots, activeSlot, onSlot)
-                // The panel scrolls its own scopes, so it needs a bounded height inside this column.
-                if (scopesShown) Box(Modifier.fillMaxWidth().heightIn(max = 320.dp), contentAlignment = Alignment.Center) { scopes(Modifier) }
-                presets()
-                StatusInfoBar(state, settings)
             }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2037,7 +2102,7 @@ internal fun AdaptiveCaptureChrome(
             Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = deckHeight)
-                .then(if (compact) Modifier.fillMaxWidth() else Modifier.widthIn(max = 640.dp).fillMaxWidth())
+                .then(if (compact) Modifier.fillMaxWidth() else Modifier.widthIn(max = DOCKED_SHEET_MAX_WIDTH_DP.dp).fillMaxWidth())
                 .heightIn(max = dockCap)
                 .onSizeChanged { dockedPaneHeightPx = it.height },
             paneContent,
@@ -2059,20 +2124,24 @@ internal fun AdaptiveCaptureChrome(
                 showStop = !chromeVisible,
                 zebra = zebra,
                 peaking = peaking,
-                histogram = histogram,
+                histogram = histogramShown,
                 histogramMode = histogramMode,
                 showGrid = showGrid,
                 gridMode = gridMode,
                 showHorizon = showHorizon,
                 onToggleZebra = onToggleZebra,
                 onTogglePeaking = onTogglePeaking,
-                onToggleHistogram = onToggleHistogram,
+                onToggleHistogram = toggleHistogram,
                 onCycleHistogramMode = onCycleHistogramMode,
                 onToggleGrid = onToggleGrid,
                 onCycleGridMode = onCycleGridMode,
                 onToggleHorizon = onToggleHorizon,
+                // While the chrome is up its lock toggles share the HUD's top band: stop short of them.
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop)
-                    .padding(start = if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp, end = endOccupied)
+                    .padding(
+                        start = if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp,
+                        end = endOccupied + if (chromeVisible) with(density) { topEndClusterWidthPx.toDp() } + 8.dp else 0.dp,
+                    )
                     .onSizeChanged { recordingHudHeightPx = it.height },
             )
         }
@@ -3043,7 +3112,8 @@ private fun RecordingOverlay(
                     Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
                 }
             }
-            AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
+            // Full width even on a phone: a narrower meter cut its "no signal" line short.
+            AudioMeterHud(state, binder)
             ThermalHudChip(recording = true)
             OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
