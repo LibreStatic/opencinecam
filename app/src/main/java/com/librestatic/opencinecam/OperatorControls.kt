@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.view.KeyEvent
 import android.widget.Toast
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,48 +108,30 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
 
 @Composable
 internal fun OperatorButtonRow(state: CameraUiState, settings: CameraSettings, actions: OperatorActions? = LocalOperatorActions.current) {
-    Column(Modifier.fillMaxWidth().background(Color(0xFF101417).chromePanel()).padding(horizontal = 8.dp, vertical = 4.dp)) {
-        if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 14.sp)
-        // Wrapped rows (and the one-per-row column in the side rail) keep a gap between chips.
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().background(colors.surfaceContainer.chromePanel()).padding(horizontal = 8.dp, vertical = 4.dp)) {
+        if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = colors.primary, fontSize = 14.sp)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            OperatorButtons(state, settings, actions, compact = false)
+            OperatorButtons(state, settings, actions)
         }
     }
 }
 
 /**
- * The F-keys as square icon keys two to a row, for the side rail: five keys take three rows
- * instead of five full-width chips, so the rail fits a phone's landscape height without scrolling.
- */
-@Composable
-internal fun OperatorButtonGrid(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier,
-    actions: OperatorActions? = LocalOperatorActions.current) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (state.captureControlsLocked) Text(stringResource(R.string.operator_locked), color = Color(0xFFFFCF66), fontSize = 11.sp)
-        FlowRow(
-            maxItemsInEachRow = 2,
-            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            OperatorButtons(state, settings, actions, compact = true)
-        }
-    }
-}
-
-/**
- * The same F-keys as a column of icon keys laid over the viewfinder edge, for portrait windows
- * where a full-width row would cost a line of viewfinder. Each key still states ON/OFF in text.
+ * The F-keys as a column of 48 dp icon keys: over the viewfinder edge in portrait, in the start
+ * rail elsewhere. A key states its latched state by its amber outline and fill; the name, the
+ * state and what the action does are in its tooltip and its accessibility label.
  */
 @Composable
 internal fun OperatorButtonColumn(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier,
     actions: OperatorActions? = LocalOperatorActions.current) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.End) {
-        OperatorButtons(state, settings, actions, compact = true)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        OperatorButtons(state, settings, actions)
     }
 }
 
 @Composable
-private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, actions: OperatorActions?, compact: Boolean) {
+private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, actions: OperatorActions?) {
     val buttons = settings.operation.buttons
     // F-keys first, then the scope toggles the F-keys do not already carry.
     val keys = buttons.mapIndexed { index, action -> "F${index + 1}" to action } +
@@ -163,90 +146,70 @@ private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, acti
             // A row rendered without the action bundle still reads the settings it was given.
             latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
             thermallyPaused = paused,
-            compact = compact,
             onClick = { actions?.perform?.invoke(action) },
         )
     }
 }
 
 /**
- * One assignable button. A toggle action carries its latched state in the container colour and in
- * an ON/OFF pill, so the operator never has to press one to find out where it stands; a long press
- * explains what the action does, including whether it only affects monitoring. An unavailable
- * button ignores taps but still answers the long press, because that help is what explains why.
- * A scope action paused by device heat reads PAUSED rather than its latched ON, because the engine
- * is not drawing it; TalkBack and the long press say why.
+ * One assignable key, icon only. A toggle action shows its latched state by an amber outline and
+ * fill, so the operator never has to press it to find out where it stands. A long press (or a
+ * hover with a mouse) shows its name, its shortcut and what it does, including whether it only
+ * affects monitoring; an unavailable key ignores taps but still answers, because that help is what
+ * explains why. A scope action paused by device heat is not drawn as on, since the engine is not
+ * drawing it; TalkBack and the tooltip say why.
  */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun OperatorButton(keyName: String?, tag: String, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
-    thermallyPaused: Boolean = false, compact: Boolean = false) {
-    val context = LocalContext.current
-    val on = latched == true
-    val content = when {
-        !available -> Color.Gray
+    thermallyPaused: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    val on = latched == true && available
+    val tint = when {
+        !available -> colors.onSurface.copy(alpha = 0.38f)
         on -> OperatorActiveAccent
-        else -> Color.White
+        else -> colors.onSurface
     }
-    val border = when {
-        !available -> Color(0xFF2A3034)
-        on -> OperatorActiveAccent
-        else -> Color(0xFF49535A)
-    }
+    val shape = RoundedCornerShape(12.dp)
     val actionName = stringResource(action.labelResource()).let { if (keyName != null) "$keyName · $it" else it }
     val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
     val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
         else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
-    val stateText: (@Composable (androidx.compose.ui.unit.TextUnit) -> Unit)? = latched?.let { isOn -> { size ->
-        Text(
-            stringResource(when { thermallyPaused -> R.string.operator_state_paused; isOn -> R.string.operator_state_on; else -> R.string.operator_state_off }),
-            color = if (available && isOn) Color(0xFF101417) else content,
-            fontSize = size,
-            lineHeight = size,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-            modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
-                .background(if (available && isOn) OperatorActiveAccent else Color.Transparent)
-                .border(BorderStroke(1.dp, if (available && isOn) OperatorActiveAccent else border), RoundedCornerShape(4.dp))
-                .padding(horizontal = if (compact) 3.dp else 5.dp, vertical = 1.dp)
-                .testTag("$tag-state"),
-        )
-    } }
-    val key = Modifier
-        .clip(RoundedCornerShape(if (compact) 14.dp else 10.dp))
-        // Over the viewfinder the key needs its own backing to stay readable on bright scenes.
-        .background(if (on && available) OperatorActiveContainer else if (compact) Color(0xCC101417).chromePanel() else Color.Transparent)
-        .border(BorderStroke(if (on && available) 2.dp else 1.dp, border), RoundedCornerShape(if (compact) 14.dp else 10.dp))
-        .combinedClickable(
-            role = if (latched != null) Role.Switch else Role.Button,
-            onClick = { if (available) onClick() },
-            onLongClick = { Toast.makeText(context, help, Toast.LENGTH_LONG).show() },
-        )
-        .semantics {
-            contentDescription = actionName
-            if (stateWord != null) stateDescription = stateWord
-            if (!available) disabled()
+    val tooltip = rememberTooltipState()
+    val scope = rememberCoroutineScope()
+    CaptureTooltip(keyHint(actionName, operatorShortcut(action)), help, Modifier.size(48.dp), tooltip) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(shape)
+                // Over the viewfinder the key needs its own backing to stay readable on bright scenes.
+                .background(if (on) OperatorActiveContainer else colors.surfaceContainerHigh.chromePanel())
+                .border(BorderStroke(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant), shape)
+                .combinedClickable(
+                    role = if (latched != null) Role.Switch else Role.Button,
+                    onClick = { if (available) onClick() },
+                    onLongClick = { scope.launch { tooltip.show() } },
+                )
+                .semantics {
+                    contentDescription = actionName
+                    if (stateWord != null) stateDescription = stateWord
+                    if (!available) disabled()
+                }
+                .testTag(tag),
+            contentAlignment = Alignment.Center,
+        ) {
+            OperatorActionIcon(action, tint = tint, modifier = Modifier.size(22.dp))
         }
-    if (compact) Column(
-        key.size(52.dp).testTag(tag),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        OperatorActionIcon(action, tint = content, modifier = Modifier.size(22.dp))
-        stateText?.let { Spacer(Modifier.height(3.dp)); it(9.sp) }
-    } else Row(
-        key
-            .heightIn(min = 48.dp)
-            .widthIn(min = 48.dp)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .testTag(tag),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Compact chip: symbol and state only, so the row costs one line of viewfinder. The name
-        // stays in the semantics and in the long-press help.
-        OperatorActionIcon(action, tint = content, modifier = Modifier.size(22.dp))
-        stateText?.let { Spacer(Modifier.width(8.dp)); it(11.sp) }
     }
+}
+
+/** The capture-screen key that does what [action] does, so a key's tooltip can name it. */
+internal fun operatorShortcut(action: OperatorAction): ShortcutAction? = when (action) {
+    OperatorAction.CAPTURE -> ShortcutAction.RECORD
+    OperatorAction.PEAKING -> ShortcutAction.PEAKING
+    OperatorAction.ZEBRA -> ShortcutAction.ZEBRA
+    OperatorAction.VIEW_ASSIST -> ShortcutAction.LOG_VIEW
+    else -> null
 }
 
 private val OperatorActiveAccent: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onPrimaryContainer

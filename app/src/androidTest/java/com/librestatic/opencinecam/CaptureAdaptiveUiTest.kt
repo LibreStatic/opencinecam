@@ -71,12 +71,12 @@ class CaptureAdaptiveUiTest {
     }
 
     @Test
-    fun landscapeDialRendersCenteredWheel() {
+    fun landscapeShowsModeButtonBesideTheFrame() {
         setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, selectedMode = CaptureMode.VIDEO)
 
-        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.VIDEO)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(modeButton(CaptureMode.VIDEO)).assertIsEnabled()
         composeRule.onNodeWithText("Mbps", substring = true).assertIsEnabled()
-        saveScreenshot("mode-wheel-landscape")
+        saveScreenshot("mode-button-landscape")
     }
 
     @Test
@@ -84,7 +84,7 @@ class CaptureAdaptiveUiTest {
         setChrome(landscape = true, selectorStyle = ModeSelectorStyle.DIAL, phase = CameraUiPhase.RECORDING)
 
         composeRule.onNodeWithContentDescription("Stop recording").assertIsEnabled()
-        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsNotDisplayed()
+        composeRule.onNodeWithContentDescription(modeButton(CaptureMode.PHOTO)).assertIsNotDisplayed()
         composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertIsEnabled()
     }
 
@@ -97,7 +97,7 @@ class CaptureAdaptiveUiTest {
 
         composeRule.onAllNodesWithContentDescription("Stop recording").assertCountEquals(1)
         composeRule.onNodeWithTag("recording-stop-glyph", useUnmergedTree = true).assertIsEnabled()
-        composeRule.onNodeWithContentDescription(modeDial(CaptureMode.PHOTO)).assertIsEnabled()
+        composeRule.onNodeWithContentDescription(modeButton(CaptureMode.PHOTO)).assertIsEnabled()
     }
 
     @Test
@@ -455,5 +455,16 @@ class CaptureAdaptiveUiTest {
             else -> error("Add the label mapping for $mode")
         })
         return context.getString(R.string.mode_dial_description, label)
+    }
+
+    /** The landscape layouts show the mode as a MODE ▾ button instead of the wheel. */
+    private fun modeButton(mode: CaptureMode): String {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val label = context.getString(when (mode) {
+            CaptureMode.PHOTO -> R.string.photo_mode
+            CaptureMode.VIDEO -> R.string.video_mode
+            else -> error("Add the label mapping for $mode")
+        })
+        return context.getString(R.string.capture_mode_button, label)
     }
 }

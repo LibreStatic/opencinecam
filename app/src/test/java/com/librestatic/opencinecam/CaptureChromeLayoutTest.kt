@@ -8,77 +8,107 @@ import org.junit.Test
 
 class CaptureChromeLayoutTest {
 
+    private fun family(width: Float, height: Float) = captureLayoutFamily(width, height)
+
     @Test fun pixelFoldCoverLandscapeUsesSideRails() {
         // 2424 x 1080 px at 390 dpi (2.4375 density), before the safe-drawing insets.
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(2424f / 2.4375f, 1080f / 2.4375f))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(2424f / 2.4375f, 1080f / 2.4375f))
         // And after typical landscape insets (cutout side and gesture bar).
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(950f, 420f))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(950f, 420f))
     }
 
-    @Test fun pixelFoldCoverPortraitKeepsStackedDeck() {
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(1080f / 2.4375f, 2424f / 2.4375f))
+    @Test fun phonePortraitAndCoverScreensUseCompactPortrait() {
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(1080f / 2.4375f, 2424f / 2.4375f))
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(411f, 914f))
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(360f, 380f))
     }
 
     @Test fun commonPhoneLandscapeUsesSideRails() {
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(800f, 360f))
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(2520f / 2.625f, 1080f / 2.625f))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(800f, 360f))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(2520f / 2.625f, 1080f / 2.625f))
     }
 
-    @Test fun nearSquareInnerFoldAndTabletsKeepStackedDeck() {
+    @Test fun innerFoldAndTabletPortraitUseTheStackedDeck() {
         // Pixel Fold inner screen, both orientations.
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(841f, 701f))
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(701f, 841f))
-        // Landscape tablet.
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(1280f, 800f))
+        assertEquals(CaptureLayoutFamily.STACKED, family(841f, 701f))
+        assertEquals(CaptureLayoutFamily.STACKED, family(701f, 841f))
+        // Tablet portrait (MEDIUM width) keeps the deck rather than a narrow frame beside an inspector.
+        assertEquals(CaptureLayoutFamily.STACKED, family(800f, 1280f))
+    }
+
+    @Test fun tabletLandscapeAndDesktopKeepTheInspectorOpen() {
+        assertEquals(CaptureLayoutFamily.INSPECTOR, family(1280f, 800f))
+        assertEquals(CaptureLayoutFamily.INSPECTOR, family(WINDOW_LARGE_MIN_WIDTH_DP, WINDOW_MEDIUM_MIN_HEIGHT_DP))
+        assertEquals(CaptureLayoutFamily.STACKED, family(WINDOW_LARGE_MIN_WIDTH_DP - 1f, 800f))
+        // A wide but short desktop window has no height for the inspector's slots and REC.
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(1400f, 420f))
     }
 
     @Test fun heightThresholdIsExclusive() {
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(1000f, SIDE_RAIL_MAX_HEIGHT_DP - 1f))
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(1000f, SIDE_RAIL_MAX_HEIGHT_DP))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(1000f, WINDOW_MEDIUM_MIN_HEIGHT_DP - 1f))
+        assertEquals(CaptureLayoutFamily.STACKED, family(1000f, WINDOW_MEDIUM_MIN_HEIGHT_DP))
     }
 
-    @Test fun landscapeTooNarrowForBothRailsKeepsStackedDeck() {
-        val rails = SIDE_RAIL_START_WIDTH_DP + SIDE_RAIL_END_WIDTH_DP
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(400f + rails - 1f, 400f))
-        assertEquals(CaptureChromeLayout.SIDE_RAILS, captureChromeLayout(400f + rails, 400f))
+    @Test fun landscapeTooNarrowForRailAndColumnKeepsADeck() {
+        val chrome = CAPTURE_RAIL_WIDTH_DP + SIDE_COLUMN_WIDTH_DP
+        assertEquals(CaptureLayoutFamily.STACKED, family(400f + chrome - 1f, 400f))
+        assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(400f + chrome, 400f))
     }
 
-    @Test fun squareAndDegenerateSizesKeepStackedDeck() {
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(400f, 400f))
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(0f, 0f))
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(Float.NaN, 300f))
-        assertEquals(CaptureChromeLayout.STACKED, captureChromeLayout(900f, -1f))
+    @Test fun degenerateSizesFallBackToCompactPortrait() {
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(400f, 400f))
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(0f, 0f))
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(Float.NaN, 300f))
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, family(900f, -1f))
     }
 
-    @Test fun sideRailViewportFitsBetweenRailsAtFullHeight() {
-        // 1000 x 400 container, rails 100 + 200: 700 x 400 left for a 16:9 image. At full height
-        // it would be 711 wide (> 700), so it is width-bound at 700 x 393.75.
-        val viewport = sideRailPreviewViewport(1000f, 400f, startRail = 100f, endRail = 200f, ratio = 16f / 9f)
-        assertEquals(100f, viewport.left, 0.01f)
-        assertEquals(700f, viewport.width, 0.01f)
-        assertEquals(393.75f, viewport.height, 0.01f)
-        assertEquals(3.125f, viewport.top, 0.01f)
+    @Test fun hingeControlsPaneNeverUsesRailsOrInspector() {
+        // Tabletop: the lower half of an unfolded screen.
+        assertEquals(CaptureLayoutFamily.STACKED, hingePaneLayoutFamily(841f, 330f))
+        assertEquals(CaptureLayoutFamily.STACKED, hingePaneLayoutFamily(1400f, 800f))
+        // Book posture: one narrow upright half.
+        assertEquals(CaptureLayoutFamily.COMPACT_PORTRAIT, hingePaneLayoutFamily(420f, 840f))
     }
 
-    @Test fun sideRailViewportCentersNarrowImagesBetweenRails() {
-        // 4:3 at 400 tall is 533.3 wide, centred in the 700 px gap after the 100 px start rail.
-        val viewport = sideRailPreviewViewport(1000f, 400f, startRail = 100f, endRail = 200f, ratio = 4f / 3f)
-        assertEquals(400f, viewport.height, 0.01f)
-        assertEquals(1600f / 3f, viewport.width, 0.01f)
-        assertEquals(100f + (700f - 1600f / 3f) / 2f, viewport.left, 0.01f)
+    @Test fun stackedPaneDocksWhereTheFrameStaysLarger() {
+        // Fold inner portrait: a 16:9 frame is width-bound, so the pane goes under it.
+        assertEquals(PaneDock.BOTTOM, stackedPaneDock(673f, 640f, 300f, 260f, 16f / 9f))
+        // Fold inner landscape: the frame is height-bound, so the pane goes beside it.
+        assertEquals(PaneDock.END, stackedPaneDock(841f, 470f, 360f, 260f, 16f / 9f))
+        // Without a ratio, or with equal areas, the side wins.
+        assertEquals(PaneDock.END, stackedPaneDock(800f, 800f, 200f, 200f, null))
+    }
+
+    @Test fun stackedSidePaneIsCapped() {
+        assertEquals(SIDE_PANE_MAX_WIDTH_DP, stackedSidePaneWidth(1100f), 0.01f)
+        assertEquals(700f * SIDE_PANE_MAX_FRACTION, stackedSidePaneWidth(700f), 0.01f)
+    }
+
+    @Test fun reservedViewportWithoutReserveMatchesTheRecordingViewport() {
+        val pane = reservedPreviewViewport(1080f, 1774f, deckSpace = 500f, expansion = 0.5f, CaptureFrameReserve.None, 9f / 16f)
+        assertEquals(recordingPreviewViewport(1080f, 2274f, 0f, 500f, 9f / 16f, 0.5f), pane)
+    }
+
+    @Test fun reservedViewportFitsTheFrameBesideAnEndPane() {
+        // 1000 x 600 pane, 400 px pane at the end: a 16:9 frame fits 600 x 337.5, centred in what is left.
+        val viewport = reservedPreviewViewport(1000f, 600f, 0f, 0f, CaptureFrameReserve(end = 400f), 16f / 9f)
+        assertEquals(0f, viewport.left, 0.01f)
+        assertEquals(600f, viewport.width, 0.01f)
+        assertEquals(337.5f, viewport.height, 0.01f)
+        assertEquals((600f - 337.5f) / 2f, viewport.top, 0.01f)
+        val mirrored = reservedPreviewViewport(1000f, 600f, 0f, 0f, CaptureFrameReserve(end = 400f), 16f / 9f, rightToLeft = true)
+        assertEquals(400f, mirrored.left, 0.01f)
+    }
+
+    @Test fun reservedViewportKeepsTheFrameAboveABottomTray() {
+        val viewport = reservedPreviewViewport(1080f, 1600f, 400f, 0f, CaptureFrameReserve(bottom = 500f), 3f / 4f)
+        // 1100 px left: a 3:4 frame is height-bound at 825 x 1100.
+        assertEquals(1100f, viewport.height, 0.01f)
+        assertEquals(825f, viewport.width, 0.01f)
         assertEquals(0f, viewport.top, 0.01f)
-    }
-
-    @Test fun sideRailViewportMirrorsRailsForRightToLeft() {
-        val viewport = sideRailPreviewViewport(1000f, 400f, startRail = 100f, endRail = 200f, ratio = 4f / 3f, rightToLeft = true)
-        assertEquals(200f + (700f - 1600f / 3f) / 2f, viewport.left, 0.01f)
-    }
-
-    @Test fun sideRailViewportWithoutRatioIsTheGapBetweenRails() {
-        val viewport = sideRailPreviewViewport(1000f, 400f, startRail = 100f, endRail = 200f, ratio = null)
-        assertEquals(100f, viewport.left, 0.01f)
-        assertEquals(700f, viewport.width, 0.01f)
-        assertEquals(400f, viewport.height, 0.01f)
+        // While recording the hidden deck gives its room back under the tray.
+        val recording = reservedPreviewViewport(1080f, 1600f, 400f, 1f, CaptureFrameReserve(bottom = 500f), 3f / 4f)
+        assertEquals(1080f, recording.width, 0.01f)
     }
 
     @Test fun stackedViewportFitsTallImagesBetweenBarAndDeck() {

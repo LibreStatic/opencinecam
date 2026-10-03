@@ -395,11 +395,8 @@
     <string name="operator_action_preset_c2">Revisar preset C2</string>
     <string name="operator_action_exterior">Sessão da tela do sujeito</string>
     <string name="operator_action_control_lock">Bloqueio de controles da tomada</string>
-    <string name="operator_state_on">ON</string>
-    <string name="operator_state_off">OFF</string>
     <string name="operator_state_on_description">ligado</string>
     <string name="operator_state_off_description">desligado</string>
-    <string name="operator_state_paused">PAUSADO</string>
     <string name="operator_state_thermal_description">indisponível: scopes pausados porque o aparelho está muito quente</string>
     <string name="operator_action_thermal_help">Pausado enquanto o aparelho está muito quente. Volta sozinho quando ele esfria; a gravação não é afetada.</string>
     <string name="analysis_suspended_thermal">Scopes pausados: aparelho muito quente</string>

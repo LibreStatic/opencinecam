@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_slot_shutter">OBTUR.</string>
+    <string name="capture_slot_wb">BB</string>
+    <string name="capture_slot_focus">ENFOQUE</string>
+    <string name="capture_slot_interval">INTERV.</string>
+    <string name="capture_slot_fps_name">Cadencia de imagen</string>
+    <string name="capture_slot_shutter_name">Obturador</string>
+    <string name="capture_slot_iso_name">Sensibilidad ISO</string>
+    <string name="capture_slot_ev_name">Compensación de exposición</string>
+    <string name="capture_slot_wb_name">Balance de blancos</string>
+    <string name="capture_slot_focus_name">Enfoque</string>
+    <string name="capture_slot_interval_name">Intervalo</string>
+    <string name="capture_slot_reason_not_ready">Esperando a la cámara.</string>
+    <string name="capture_slot_reason_high_speed">Las cadencias altas lo ajustan automáticamente.</string>
+    <string name="capture_slot_reason_no_manual">Esta cámara no ofrece exposición manual.</string>
+    <string name="capture_slot_reason_no_ev">Esta cámara no ofrece compensación de exposición.</string>
+    <string name="capture_mode_button">Modo: %1$s</string>
+    <string name="capture_scopes_short">Scopes</string>
+    <string name="capture_scopes_toggle">Mostrar scopes</string>
+    <string name="capture_locked_banner">Controles bloqueados</string>
+    <string name="capture_unlock">Desbloquear</string>
+</resources>
