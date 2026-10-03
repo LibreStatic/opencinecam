@@ -34,7 +34,7 @@ class CameraPresetTest {
         assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun subjectFeaturePreferencesAreNeitherExportedNorResetByAPreset() {

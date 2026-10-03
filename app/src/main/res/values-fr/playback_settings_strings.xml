@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Couper le son de la lecture</string>
     <string name="playback_settings_loop">Répéter à la fin de la lecture</string>
     <string name="playback_settings_frame_position">Afficher la position d\'image du lecteur</string>
+    <string name="playback_settings_direct_output">Envoyer les images en pause directement à l\'écran</string>
+    <string name="playback_settings_direct_output_help">Désactivé par défaut. Le lecteur convertit normalement lui-même chaque image en pause pour en vérifier la couleur. Activez cette option si c\'est lent sur cet appareil : les positions d\'image restent exactes, mais la couleur suit le système et le HDR s\'affiche comme l\'écran le permet. S\'applique à cet appareil uniquement.</string>
 </resources>

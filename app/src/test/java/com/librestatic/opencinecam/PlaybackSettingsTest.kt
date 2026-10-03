@@ -28,6 +28,19 @@ class PlaybackSettingsTest {
         assertEquals(com.librestatic.opencinecam.storage.PreciseLogView.REC709, CameraPresetCodec.mergeLocal(CameraSettings(), original).playback.logView)
         assertEquals(PlaybackSettings(), CameraSettingsStore(PresetPreferences(mapOf("review-log-view" to "SEPIA"))).load().playback)
     }
+    @Test fun directDisplayOutputPersistsLocallyButStaysOutOfPresets() {
+        assertFalse(PlaybackSettings().nativeSurfaceFrames)
+        val original = CameraSettings(playback = PlaybackSettings(muted = true, nativeSurfaceFrames = true))
+        val memory = PresetPreferences(); val store = CameraSettingsStore(memory); store.save(original)
+        assertEquals(original.playback, store.load().playback)
+        assertEquals(true, memory.all["review-native-surface"])
+        assertFalse("review-native-surface" in CameraPresetCodec.portableKeys)
+        assertFalse(CameraPresetCodec.encode(CameraPreset(name = "Direct", settings = original)).contains("review-native-surface"))
+        assertFalse(CameraPresetCodec.decode(document(original).toString()).settings.playback.nativeSurfaceFrames)
+        // Applying a preset keeps this device's choice either way.
+        assertTrue(CameraPresetCodec.mergeLocal(CameraSettings(), original).playback.nativeSurfaceFrames)
+        assertFalse(CameraPresetCodec.mergeLocal(original, CameraSettings()).playback.nativeSurfaceFrames)
+    }
     @Test fun versionEighteenHas160KeysAndSeventeenRetains157WithExactDefaults() {
         assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
         val original = CameraSettings(captureNaming = CaptureNamingSettings(true, "{scene}"))

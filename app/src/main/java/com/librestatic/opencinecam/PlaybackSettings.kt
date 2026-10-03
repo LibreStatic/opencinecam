@@ -10,4 +10,9 @@ data class PlaybackSettings(
     val showFramePosition: Boolean = true,
     /** OCLog2 clips review as the flat monitor unless the operator asks for the Rec.709 view assist. */
     val logView: PreciseLogView = PreciseLogView.FLAT_LOG,
+    /**
+     * Paused frames go straight to the display Surface instead of the verified CPU colour preview.
+     * A per-device choice: presets never carry it, and it starts off.
+     */
+    val nativeSurfaceFrames: Boolean = false,
 )
