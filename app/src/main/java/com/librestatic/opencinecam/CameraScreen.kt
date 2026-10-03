@@ -1249,6 +1249,17 @@ private sealed interface CapturePane {
     data object Monitor : CapturePane
 }
 
+/** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET }
+
+private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
+    CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
+    CaptureInitialPane.FOCUS -> CapturePane.Control(ControlDial.FOCUS)
+    CaptureInitialPane.MONITOR -> CapturePane.Monitor
+    CaptureInitialPane.MODES -> CapturePane.Modes
+    CaptureInitialPane.MODE_SHEET -> null
+}
+
 @Composable
 internal fun AdaptiveCaptureChrome(
     state: CameraUiState,
@@ -1282,11 +1293,12 @@ internal fun AdaptiveCaptureChrome(
     onSettingsChanged: (CameraSettings) -> Unit,
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
+    initialPane: CaptureInitialPane? = null,
 ) {
     // One pane at a time: a control's dial, the modes or the monitoring toggles.
-    var pane by remember { mutableStateOf<CapturePane?>(null) }
+    var pane by remember { mutableStateOf(initialPane?.pane()) }
     // Compact portrait shows the modes in a modal sheet rather than in the docked pane.
-    var modeSheet by remember { mutableStateOf(false) }
+    var modeSheet by remember { mutableStateOf(initialPane == CaptureInitialPane.MODE_SHEET) }
     var scopesExpanded by rememberSaveable { mutableStateOf(false) }
     val operatorInput = LocalOperatorActions.current
     // The scopes stay switched on in Settings; H and the panel's close key only hide them here.

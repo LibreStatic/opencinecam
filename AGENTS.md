@@ -63,6 +63,7 @@ tools/compose-driver.sh stop
   - `tablet`: 800x1280 dp.
   - `landscape`: 914x411 dp.
   - `compact`: 360x640 dp.
+  - `w1280dp-h800dp-land-mdpi` (raw qualifiers): a 1280x800 dp desktop window, the capture inspector layout.
 - `--night`: dark system mode. It only matters for the You theme; Cine is always dark.
 - `--theme cine|you`: the app theme (default `cine`).
 - `--port N`: the server port, default 8765. `COMPOSE_DRIVER_PORT` also sets it.
@@ -90,15 +91,23 @@ Outputs and logs:
 
 | Screen | Production composable | State |
 |---|---|---|
-| `CapturePortrait` | `AdaptiveCaptureChrome` | photo, previewing; black stand-in for the viewfinder |
-| `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23 |
-| `CaptureLandscape` | `AdaptiveCaptureChrome` | video, landscape layout (use `--device landscape`) |
+| `CapturePortrait` | `AdaptiveCaptureChrome` | photo, previewing, with the histogram |
+| `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23; `click tag=recording-reveal-surface` reveals the chrome |
+| `CaptureLandscape` | `AdaptiveCaptureChrome` | video, previewing (use `--device landscape` for the side rails) |
+| `CaptureSheetWb` / `CaptureSheetFocus` | `AdaptiveCaptureChrome` | the white balance or focus panel open (focus marks A and B) |
+| `CaptureModeSheet` | `AdaptiveCaptureChrome` | the phone's modal mode sheet open (a dialog: use `tree`) |
+| `CaptureModes` / `CaptureMonitor` | `AdaptiveCaptureChrome` | the modes or the monitoring toggles in the docked pane |
+| `CaptureScopes` / `CaptureScopesHidden` | `AdaptiveCaptureChrome` | waveform, vectorscope and false colour with live fake analysis; shown, or hidden as with H |
+| `CaptureLocked` | `AdaptiveCaptureChrome` | controls locked while a photo saves, with the saved notice |
+| `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |
 | `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes |
 | `SettingsRecording` | `SettingsScreen` | locked while recording |
 | `Gallery` | `MediaCatalogContent` | five takes (video, DNG, legacy JPEG, audio) with gradient thumbnails |
 | `GalleryEmpty` / `GalleryLoading` / `GalleryError` | `MediaCatalogContent` | empty, first page pending, MediaStore failure |
 | `About` | `AboutScreen` | real license catalog from assets |
 | `Onboarding` | `OnboardingScreen` | first page, reduced motion |
+
+The capture screens run the fake camera and analysis in `CaptureDriverFakes.kt`, keep their own copy of the settings so toggles, F-keys and scope keys work, and pick the layout from the device: `phone` gives compact portrait, `landscape` the side rails, `inner` and `tablet` the stacked deck, and the 1280x800 dp window the inspector. A panel opens through `AdaptiveCaptureChrome(initialPane = …)`, which production never sets.
 
 ### Adding a screen
 
@@ -115,7 +124,8 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 
 - The capture chrome renders, but the viewfinder does not. Camera2, `SurfaceView`/`TextureView`, the GPU viewfinder, codecs, playback and the LOG pipeline need the emulator or the Razr (see `docs/device-validation.md`).
 - Window insets, display cutouts, the fold hinge and posture, and real system bars are not modelled. Robolectric reports zero insets and no `FoldDisplayCoordinator`.
-- `LocalOperatorActions`, `LocalSubjectReviewFeed` and other hardware-backed locals are null.
+- `LocalSubjectReviewFeed` and other hardware-backed locals are null. The capture screens provide a fake `LocalOperatorActions`; other screens leave it null.
+- Screenshots do not capture dialogs, so a `ModalBottomSheet` such as the mode sheet is missing from the picture. Inspect it with `tree`, where it shows as `[IsDialog]`.
 - Runtime permissions read as not granted.
 - Endless frame loops (`while (true) withFrameNanos`) never let the test clock go idle, and requests fail after 60 s. Render those screens with `LocalReducedMotion provides true`, as `Onboarding` does.
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
