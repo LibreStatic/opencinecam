@@ -99,6 +99,7 @@ Outputs and logs:
 | `GalleryEmpty` / `GalleryLoading` / `GalleryError` | `MediaCatalogContent` | empty, first page pending, MediaStore failure |
 | `About` | `AboutScreen` | real license catalog from assets |
 | `Onboarding` | `OnboardingScreen` | first page, reduced motion |
+| `CapturePeaking` | `MonitoringOverlay` under `AdaptiveCaptureChrome` | video, focus peaking on a synthetic 320×240 analysis frame (sharp ring, disc and glyphs peak; the soft disc must not); the frame is centred in the window, and portrait or landscape follows `--device` |
 
 ### Adding a screen
 
