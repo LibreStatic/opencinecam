@@ -654,10 +654,10 @@ class CaptureService : Service() {
     @Volatile private var activePreviewKey: List<Any?>? = null
     private val subjectPreviewPort = object : SubjectPreviewPort {
         override val statuses = subjectStatus.asStateFlow()
-        override fun attach(surface: Surface, rotationDegrees: Int): AutoCloseable {
+        override fun attach(surface: Surface, rotationDegrees: Int, frameRate: Float): AutoCloseable {
             if (subjectPortClosed) return AutoCloseable { }
             subjectSurfaces.current?.let { previewEngine.detachSubjectPreview(it.token) }
-            val lease = subjectSurfaces.attach(surface, rotationDegrees)
+            val lease = subjectSurfaces.attach(surface, rotationDegrees, frameRate)
             subjectStatus.value = SubjectPreviewStatus()
             resetSubjectLutStatus()
             updateSubjectTarget()
@@ -713,7 +713,7 @@ class CaptureService : Service() {
         }
         val preferences = settings.subjectDisplay
         previewEngine.attachSubjectPreview(lease.token, lease.surface,
-            SubjectPreviewOptions(lease.rotationDegrees, preferences.previewMirror, preferences.previewViewAssist, settings.anamorphicSqueeze.factor)) { status ->
+            SubjectPreviewOptions(lease.rotationDegrees, preferences.previewMirror, preferences.previewViewAssist, settings.anamorphicSqueeze.factor, lease.frameRate)) { status ->
             mainHandler.post {
                 fun ownsTarget(state: CameraUiState): Boolean = !serviceDestroyed && !subjectPortClosed &&
                     subjectSurfaces.owns(lease.token) && subjectPreviewEpoch.get() == epoch &&

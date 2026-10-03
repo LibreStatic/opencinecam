@@ -45,7 +45,7 @@ internal class SubjectPreviewOutput private constructor(
     @Volatile private var failure: String? = null
     @Volatile private var status = SubjectPreviewStatus()
     private var allocated = false
-    private var lastSubmissionMs = Long.MIN_VALUE
+    private val pacer = SubjectFramePacer()
     private val dropped = AtomicLong()
     private var context = EGL14.EGL_NO_CONTEXT
     private var window = EGL14.EGL_NO_SURFACE
@@ -59,8 +59,7 @@ internal class SubjectPreviewOutput private constructor(
     /** The caller owns the current producer context. Never wait for a consumer or GPU fence here. */
     fun render(receivedAtMs: Long, draw: (Int, Int, SubjectPreviewOptions) -> OperatorLutStatus) {
         if (closing.get() || failure != null || width == 0) return
-        if (lastSubmissionMs != Long.MIN_VALUE && receivedAtMs - lastSubmissionMs < FRAME_PERIOD_MS) return
-        lastSubmissionMs = receivedAtMs
+        if (!pacer.admit(receivedAtMs, options.maxFrameRate)) return
         try {
             reclaimCompleted()
             val slot = exchange.acquire() ?: run { dropped.incrementAndGet(); return }
@@ -264,7 +263,6 @@ internal class SubjectPreviewOutput private constructor(
         // At most 3 × 720 × 720 × 4 = 6,220,800 bytes of app-owned color targets.
         // Native-window buffers and driver allocations are additional and device-dependent.
         private const val MAX_EDGE = 720
-        private const val FRAME_PERIOD_MS = 66L
         private const val CONSUMER_FENCE_BUDGET_NS = 5_000_000L
         private val workerLease = AtomicBoolean(false)
         fun create(display: EGLDisplay, context: EGLContext, config: EGLConfig, surface: Surface, options: SubjectPreviewOptions, onStatus: (SubjectPreviewStatus) -> Unit): SubjectPreviewOutput? {
@@ -288,5 +286,19 @@ internal class SubjectPreviewOutput private constructor(
             out vec4 color;
             void main() { color = texture(image, uv); }
         """
+    }
+}
+
+/**
+ * Paces subject submissions to the subject display's rate instead of a fixed cadence (Razr U8: a
+ * 66 ms floor plus camera jitter showed 10-15 fps on the cover). A quarter period of slack keeps
+ * a slightly early frame from being skipped, which would otherwise halve the cadence.
+ */
+internal class SubjectFramePacer {
+    private var lastAdmittedMs = Long.MIN_VALUE
+    fun admit(receivedAtMs: Long, maxFrameRate: Float): Boolean {
+        if (maxFrameRate > 0f && lastAdmittedMs != Long.MIN_VALUE && receivedAtMs - lastAdmittedMs < 750f / maxFrameRate) return false
+        lastAdmittedMs = receivedAtMs
+        return true
     }
 }

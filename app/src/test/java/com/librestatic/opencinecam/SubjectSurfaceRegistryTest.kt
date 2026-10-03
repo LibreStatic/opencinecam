@@ -38,4 +38,14 @@ class SubjectSurfaceRegistryTest {
         assertEquals(SubjectPreviewBlock.MODE, subjectPreviewBlock(CaptureMode.APV))
         assertEquals(SubjectPreviewBlock.MODE, subjectPreviewBlock(CaptureMode.RAW_VIDEO))
     }
+
+    @Test fun subjectDisplayFollowsTheOperatorRateOrItsOwnHighest() {
+        // Razr Fold: inner 120 Hz; cover 24-165 Hz, idling at 60.
+        val cover = listOf(60f, 165f, 120.00001f, 90f, 30f, 24f)
+        assertEquals(120.00001f, subjectPreviewFrameRate(120.00001f, cover))
+        assertEquals(165f, subjectPreviewFrameRate(144f, cover))
+        assertEquals(165f, subjectPreviewFrameRate(null, cover))
+        assertEquals(0f, subjectPreviewFrameRate(120f, emptyList()))
+        assertEquals(120f, SubjectSurfaceRegistry<String>().attach("s", 0, 120f).frameRate)
+    }
 }

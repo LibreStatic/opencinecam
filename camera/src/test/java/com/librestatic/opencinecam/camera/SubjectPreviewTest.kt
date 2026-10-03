@@ -84,4 +84,17 @@ class SubjectPreviewTest {
         }
         assertEquals(270, SubjectPreviewOptions(displayRotationDegrees = 270, mirror = true, squeezeFactor = 2f).displayRotationDegrees)
     }
+
+    @Test fun pacerFollowsTheDisplayRateWithoutLosingJitteredFrames() {
+        fun admitted(times: List<Long>, rate: Float): Int { val pacer = SubjectFramePacer(); return times.count { pacer.admit(it, rate) } }
+        // Razr U8: ~30 fps with ±1 ms jitter against a 30 Hz target must keep every frame.
+        val jittered = listOf(0L, 32, 67, 99, 134, 166, 200, 232, 267, 299)
+        assertEquals(10, admitted(jittered, 30f))
+        assertEquals(10, admitted(jittered, 120f))
+        // 240 fps input (LOG HFR) against a 120 Hz cover: every other frame.
+        assertEquals(120, admitted((0 until 240).map { it * 1000L / 240 }, 120f))
+        assertEquals(240, admitted((0 until 240).map { it * 1000L / 240 }, 0f))
+        assertTrue(runCatching { SubjectPreviewOptions(maxFrameRate = -1f) }.isFailure)
+        assertTrue(runCatching { SubjectPreviewOptions(maxFrameRate = Float.NaN) }.isFailure)
+    }
 }

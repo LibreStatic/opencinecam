@@ -2,9 +2,11 @@
 package com.librestatic.opencinecam
 
 import android.hardware.display.DisplayManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Display
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -80,7 +82,21 @@ internal fun SubjectCameraPreview(
                 Surface.ROTATION_270 -> 270
                 else -> 0
             }
-            lease = port?.attach(view.holder.surface, rotation)
+            // Operator panels drop to the content rate (30 Hz in dual), so match their peak mode.
+            fun Display.peakRates() = mode.let { physical ->
+                supportedModes.filter { it.physicalWidth == physical.physicalWidth && it.physicalHeight == physical.physicalHeight }.map { it.refreshRate }
+            }
+            val frameRate = view.display?.let { shown ->
+                subjectPreviewFrameRate(
+                    context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)?.peakRates()?.maxOrNull(),
+                    shown.peakRates(),
+                )
+            } ?: 0f
+            // Ask the subject display to run at that rate; it otherwise idles at its 60 Hz default.
+            if (frameRate > 0f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching { view.holder.surface.setFrameRate(frameRate, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE) }
+            }
+            lease = port?.attach(view.holder.surface, rotation, frameRate)
             attachedRotation = rotation
         }
     }

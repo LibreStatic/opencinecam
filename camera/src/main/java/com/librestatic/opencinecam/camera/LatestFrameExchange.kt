@@ -97,9 +97,12 @@ data class SubjectPreviewOptions(
     val mirror: Boolean = false,
     val viewAssist: Boolean = true,
     val squeezeFactor: Float = 1f,
+    /** Highest submission rate the subject display should receive; 0 forwards every camera frame. */
+    val maxFrameRate: Float = 0f,
 ) {
     init {
         require(displayRotationDegrees in setOf(0, 90, 180, 270))
         require(squeezeFactor.isFinite() && squeezeFactor in 1f..3f)
+        require(maxFrameRate.isFinite() && maxFrameRate >= 0f)
     }
 }
