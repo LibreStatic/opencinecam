@@ -243,6 +243,36 @@ All Gradle calls ran one at a time under `flock ~/.cache/claude-tmp/opencinecam/
 
 The single first-run failure was `SubjectReviewUiTest.operatorBarIsAbsentWithoutACoordinator`. It came from W1 C, not from the merge: the test expected the how-to text, but `SettingsHelp` starts collapsed. The test now opens the help before asserting. No physical device was used.
 
+### U8 progress record (2026-10-02, Razr Fold, partial)
+
+U8 ran in the main session with the user handling the phone; the plan stays InProgress. Installs used `adb -s <razr> install -r` only.
+
+Defects found on the device and fixed, each with a test:
+
+- `02fb2b1`: the cover frame badge read "Preview paused" on live frames (200 ms ticker vs ~66 ms statuses); and PREVIEW forced the GPU viewfinder on constrained high-speed VIDEO, so a 240 fps take recorded 30 fps. Interim fix: subject preview blocked during high speed (superseded by `37c7d44`).
+- `bd0002a`: the Spanish slate label ellipsized on the 1080 px cover; the review empty state is now 22 sp.
+- `b10e522`: the interview editor dropped characters while typing fast (late settings echo reset the draft).
+- `934e0eb`: the cover received operator state only for a key whitelist, so the out-of-frame banner never cleared and the subject audio meter froze. The user confirmed the warning in Video and Log afterwards.
+- `3d4aad6`: fill light gained six Kelvin/tint presets (candle 2700 K to neutral 6500 K); the subject brightness now also applies to the activity window during an active transfer and is restored afterwards.
+- `37c7d44` (user request): the subject preview works in every selectable mode (photo modes through the GPU photo preview with still readers kept, time-lapse, slow motion). Only APV and RAW video stay blocked. A constrained high-speed take keeps the MediaRecorder surface direct while the pipeline camera input is the high-speed preview output; stopping restores the GPU preview session.
+- `5aace24`: the cover preview showed 10–15 fps because the subject output admitted one frame per 66 ms and jitter skipped frames. It now paces to the inner panel's peak refresh (or the cover's highest) with a quarter-period slack, and the cover surface votes for that rate.
+- Related, outside PLAN-068 scope: `d54c131` (duplicate torch control) and `6615260` (slider thumb drags at the ends were taken by the back gesture).
+
+Device results:
+
+| Item | Result | Evidence |
+|---|---|---|
+| Face-detect modes | PASS | Every camera advertises OFF and SIMPLE (up to 10 faces); camera 0 returns faces in the preview graph. |
+| Out-of-frame warning, Video and Log | PASS after `934e0eb` | Confirmed by the user on the cover. |
+| Transfer timers 5 s and 10 s | PASS | Full countdown on the cover; REC at ~5.4 s and ~10.4 s; LOG takes saved. 0/3 s, lens switching and the microphone dialog not separately recorded. |
+| Fill light colour and timeout | PASS | Kelvin, tint and the timeout checked on the cover before `3d4aad6`; the presets and transfer brightness are covered by host and UI tests but not yet checked one by one on the device. |
+| Subject preview in Foto, Ráfaga, Bracketing, Time-lapse | PASS | Live on the cover (frame differences between captures); a Foto still saved normally (1.4 MB JPEG). |
+| Slow motion 240 with PREVIEW active | PASS | Direct recorder route at 160 Mbps; 16,692 frames in ~72 s ≈ 232 fps captured, 1920×1080 H.264, ~29 fps playback. Cover preview live; stop finalizes the file. |
+| Cover cadence | PASS after `5aace24` | `dumpsys SurfaceFlinger --latency` in Foto: inner 29.9 fps, cover 29.9 fps. The cover surface votes 120 Hz; in dual Motorola keeps the cover at 60 Hz and drops the inner panel to 30 Hz to follow content. |
+| Dual session drops | Platform | The concurrent state ended 5 ms after `com.motorola.dolbyvisionservice` died; one more unexplained drop while switching to slow motion. The take was unaffected. |
+
+Still open: fill-light presets and transfer brightness on the device, beep with media volume up, 3 m legibility, 20 fold cycles during a 10-minute take, second camera with the exterior active, 120 fps slow-motion measurement, thermal after 10 minutes of dual output, stop-on-close with the hinge sensor, and the design question of a giant countdown in dual mode (today it only shows in transfer).
+
 ## 22. U8 consolidated physical checklist
 
 Before anything else, ask the user to connect the Razr Fold. Assume it is disconnected, never reuse an earlier adb address, and re-detect it with `adb devices -l` after the user confirms. Install only with `adb -s <razr> install -r`; never `installDebug`. Record each item as PASS, FAIL (with the fix) or UNSUPPORTED (with evidence).
