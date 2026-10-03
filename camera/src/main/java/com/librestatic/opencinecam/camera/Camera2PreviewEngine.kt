@@ -923,9 +923,13 @@ class Camera2PreviewEngine(
     private fun configureGpuPreviewSession(device: CameraDevice, descriptor: Camera2CameraDescriptor, pipeline: OpenCineLogGpuPipeline, currentGeneration: Long) {
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
         val input = pipeline.cameraInputSurface
+        fun sessionException(failure: Throwable) {
+            listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
+        }
+        val output = sessionOutput(input, ::sessionException) ?: return
         val configuration = SessionConfiguration(
             if (constrained) SessionConfiguration.SESSION_HIGH_SPEED else SessionConfiguration.SESSION_REGULAR,
-            listOf(OutputConfiguration(input)), cameraExecutor,
+            listOf(output), cameraExecutor,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
                     if (currentGeneration != generation || logPipeline !== pipeline || !gpuPreviewEnabled) { configured.close(); return }
@@ -956,8 +960,12 @@ class Camera2PreviewEngine(
                 }
             },
         )
-        configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
-        device.createCaptureSession(configuration)
+        try {
+            configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
+            device.createCaptureSession(configuration)
+        } catch (failure: Exception) {
+            sessionException(failure)
+        }
     }
 
     /** Starting/stopping the encoder leaves the preview camera session and subject leases intact. */
@@ -3151,9 +3159,13 @@ class Camera2PreviewEngine(
         surface: Surface,
         currentGeneration: Long,
     ) {
+        fun sessionException(failure: Throwable) {
+            listener?.onFailure("high-speed-preview-session-exception", failure.message ?: "High-speed preview could not be created.", true)
+        }
+        val output = sessionOutput(surface, ::sessionException) ?: return
         val configuration = SessionConfiguration(
             SessionConfiguration.SESSION_HIGH_SPEED,
-            listOf(OutputConfiguration(surface)),
+            listOf(output),
             cameraExecutor,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
@@ -3188,14 +3200,15 @@ class Camera2PreviewEngine(
         // CONTROL_AE_TARGET_FPS_RANGE is advertised as a session key on Motorola devices.
         // Supplying it only after configuration lets the Qualcomm HAL choose the HFR graph
         // without knowing which fixed sensor cadence the first request will require.
-        configuration.setSessionParameters(
-            device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
-                addTarget(surface)
-                applyHighSpeedControls(this)
-            }.build(),
-        )
-        runCatching { device.createCaptureSession(configuration) }
-            .onFailure { listener?.onFailure("high-speed-preview-session-exception", it.message ?: "High-speed preview could not be created.", true) }
+        runCatching {
+            configuration.setSessionParameters(
+                device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                    addTarget(surface)
+                    applyHighSpeedControls(this)
+                }.build(),
+            )
+            device.createCaptureSession(configuration)
+        }.onFailure(::sessionException)
     }
 
     private fun configureHighSpeedRecordingSession(
@@ -3319,7 +3332,10 @@ class Camera2PreviewEngine(
             listener?.onFailure("log-input-surface-missing", "The OCLog camera input surface is unavailable.", false)
             return
         }
-        val output = OutputConfiguration(input)
+        fun sessionException(failure: Throwable) {
+            listener?.onFailure("log-session-exception", failure.message ?: "The HLG10 OCLog graph could not be created.", false)
+        }
+        val output = sessionOutput(input, ::sessionException) ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             output.setDynamicRangeProfile(DynamicRangeProfiles.HLG10)
         }
@@ -3367,7 +3383,7 @@ class Camera2PreviewEngine(
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
             device.createCaptureSession(configuration)
         } catch (failure: Throwable) {
-            listener?.onFailure("log-session-exception", failure.message ?: "The HLG10 OCLog graph could not be created.", false)
+            sessionException(failure)
         }
     }
 
@@ -3390,9 +3406,17 @@ class Camera2PreviewEngine(
             listener?.onFailure("log-input-surface-missing", "The OCLog camera input surface is unavailable.", false)
             return
         }
+        fun sessionException(failure: Throwable) {
+            listener?.onFailure(
+                "log-hfr-session-exception",
+                failure.message ?: "The ISP-derived OCLog high-speed graph could not be created.",
+                true,
+            )
+        }
+        val output = sessionOutput(input, ::sessionException) ?: return
         val configuration = SessionConfiguration(
             SessionConfiguration.SESSION_HIGH_SPEED,
-            listOf(OutputConfiguration(input)),
+            listOf(output),
             cameraExecutor,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
@@ -3436,20 +3460,15 @@ class Camera2PreviewEngine(
                 }
             },
         )
-        configuration.setSessionParameters(
-            device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
-                addTarget(input)
-                applyHighSpeedControls(this)
-            }.build(),
-        )
-        runCatching { device.createCaptureSession(configuration) }
-            .onFailure {
-                listener?.onFailure(
-                    "log-hfr-session-exception",
-                    it.message ?: "The ISP-derived OCLog high-speed graph could not be created.",
-                    true,
-                )
-            }
+        runCatching {
+            configuration.setSessionParameters(
+                device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                    addTarget(input)
+                    applyHighSpeedControls(this)
+                }.build(),
+            )
+            device.createCaptureSession(configuration)
+        }.onFailure(::sessionException)
     }
 
     private fun configureSession(
@@ -3460,12 +3479,9 @@ class Camera2PreviewEngine(
     ) {
         val photoPipeline = logPipeline.takeIf { gpuPhotoPreviewEnabled }
         if (gpuPhotoPreviewEnabled) check(photoPipeline != null && surface === photoPipeline.cameraInputSurface)
-        // A density or rotation change can abandon the preview surface while the camera opens;
-        // wrapping it then throws, and nothing may escape onOpened on the camera executor.
-        val previewOutput = try { OutputConfiguration(surface) } catch (failure: Exception) {
+        val previewOutput = sessionOutput(surface) { failure ->
             listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
-            return
-        }
+        } ?: return
         val outputs = mutableListOf(previewOutput)
         var stillOutput: OutputConfiguration? = null
         var rawOutput: OutputConfiguration? = null
@@ -3983,6 +3999,15 @@ class Camera2PreviewEngine(
         if (activeDescriptor?.imageProcessingCapabilities?.sessionControls.isNullOrEmpty()) return
         configuration.setSessionParameters(device.createCaptureRequest(template).apply { applyImageProcessing(this) }.build())
     }
+
+    /**
+     * Wraps a session output, or hands [onFailure] the reason. The UI can abandon the preview
+     * surface (a density or rotation change) and a retiring GPU pipeline its input surface while a
+     * session is being built; the constructor then throws on the camera executor, where an uncaught
+     * exception kills the process.
+     */
+    private inline fun sessionOutput(surface: Surface, onFailure: (Exception) -> Unit): OutputConfiguration? =
+        try { OutputConfiguration(surface) } catch (failure: Exception) { onFailure(failure); null }
 
     private fun reportTapFocusResult(request: CaptureRequest, result: TotalCaptureResult) {
         val token = activeTapFocusToken ?: return
