@@ -155,7 +155,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.ui.viewfinder.ZoomAnchorBar
@@ -1311,7 +1312,6 @@ internal fun AdaptiveCaptureChrome(
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
-    var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
     var controlDeckHeightPx by remember { mutableIntStateOf(0) }
     var dockedPaneHeightPx by remember { mutableIntStateOf(0) }
     // The lock toggles (and in the stacked layouts the F-keys under them) at the frame's top end.
@@ -1507,6 +1507,11 @@ internal fun AdaptiveCaptureChrome(
         val previewHeight = previewViewport.height
         val previewLeft = previewViewport.left
         val previewTop = previewViewport.top
+        val currentPinchState by rememberUpdatedState(state)
+        val currentPinchSettings by rememberUpdatedState(settings)
+        val currentPinchBinder by rememberUpdatedState(binder)
+        // The running ratio of the pinch under the fingers; not state, nothing draws it.
+        val pinchRatio = remember { mutableFloatStateOf(1f) }
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         Box(
@@ -1519,34 +1524,28 @@ internal fun AdaptiveCaptureChrome(
                         true
                     }
                 }
-                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, state.zoomSupported, state.zoomRatio) {
-                    // Pinch-to-zoom. Consumed by this detector so it never reaches tap-focus.
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        if (!previewGesturesEnabled || state.captureControlsLocked || !state.zoomSupported) return@detectTransformGestures
-                        if (zoom == 1f) {
-                            // Pan or idle: reset the accumulated base so the next pinch starts fresh.
-                            pinchStartRatio = -1f
-                            return@detectTransformGestures
-                        }
-                        if (pinchStartRatio <= 0f) pinchStartRatio = state.zoomRatio
-                        val candidate = pinchStartRatio * zoom
-                        val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
-                            state.opticalAnchors.size > 1) {
-                            ZoomMath.sectorBounds(
-                                state.zoomRatio,
-                                state.opticalAnchors,
-                                settings.zoomLensSwitchMode,
-                                state.zoomMinRatio,
-                                state.zoomMaxRatio,
-                                direction = candidate - state.zoomRatio,
-                            )
-                        } else {
-                            state.zoomMinRatio..state.zoomMaxRatio
-                        }
-                        val coerced = ZoomMath.coerce(candidate, range)
-                        binder?.setZoomRatio(coerced)
-                        pinchStartRatio = coerced
+                // Each pinch starts from the ratio shown at its first step and then follows the fingers
+                // from its own running value, never from the camera's lagging report.
+                .pinchToZoom(previewGesturesEnabled && !state.captureControlsLocked && state.zoomSupported) { first, zoom ->
+                    val shown = currentPinchState
+                    if (first) pinchRatio.floatValue = shown.zoomRatio
+                    val base = pinchRatio.floatValue
+                    val candidate = base * zoom
+                    val range = if (currentPinchSettings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
+                        shown.opticalAnchors.size > 1) {
+                        ZoomMath.sectorBounds(
+                            base,
+                            shown.opticalAnchors,
+                            currentPinchSettings.zoomLensSwitchMode,
+                            shown.zoomMinRatio,
+                            shown.zoomMaxRatio,
+                            direction = candidate - base,
+                        )
+                    } else {
+                        shown.zoomMinRatio..shown.zoomMaxRatio
                     }
+                    pinchRatio.floatValue = ZoomMath.coerce(candidate, range)
+                    currentPinchBinder?.setZoomRatio(pinchRatio.floatValue)
                 }
                 .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, settings.tapExposureMeteringEnabled, state.phase,
                     previewLeft, previewTop, previewWidth, previewHeight) {
@@ -2530,9 +2529,11 @@ private fun ZoomReadout(state: CameraUiState, binder: CaptureService.LocalBinder
         val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
         val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
         // On an anchor the highlighted anchor already states the ratio; the readout is for in-between.
-        if (state.opticalAnchors.size <= 1 || isDigital) Box(
+        // It keeps its place while hidden, so a zoom passing an anchor never shifts the instruments under it.
+        val readoutShown = state.opticalAnchors.size <= 1 || isDigital
+        Box(
             Modifier
-                .testTag("zoom-ratio")
+                .then(if (readoutShown) Modifier.testTag("zoom-ratio") else Modifier.alpha(0f).clearAndSetSemantics {})
                 .clip(RoundedCornerShape(6.dp))
                 .background(Panel)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
