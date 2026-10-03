@@ -2,17 +2,23 @@
 package com.librestatic.opencinecam
 
 import android.content.Intent
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.*
@@ -45,12 +51,10 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
         catch (failure: Exception) { error = failure.message ?: failure.javaClass.simpleName }
         finally { loading = false }
     }
-    Dialog(onDismissRequest = { if (!actionBusy) onDismiss() }) {
-        Surface(Modifier.fillMaxWidth().heightIn(max = 680.dp).testTag("media-proxy-dialog"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    MediaDialogFrame("media-proxy-dialog", { if (!actionBusy) onDismiss() }) {
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.proxy_title), style = MaterialTheme.typography.titleLarge)
-                    Text(take.primary.name, Modifier.fillMaxWidth().testTag("media-proxy-original"))
+                    MediaDialogTake(take, "media-proxy-original")
                     Text(stringResource(R.string.proxy_help), Modifier.fillMaxWidth())
                     if (!busy && result == null && request == null) ProxySettingsControls(settings, onSettings)
                     state.waiting[request?.id]?.let { reason ->
@@ -75,18 +79,33 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
                             ProxyJobStatus.CANCELLED -> R.string.proxy_cancelled
                         }
                         Text(stringResource(label), Modifier.fillMaxWidth().testTag("media-proxy-job-status"))
-                        Text("${it.id} · ${it.settings.maxLongEdge} px · ${it.settings.videoBitrateMbps} Mbps", Modifier.fillMaxWidth().testTag("media-proxy-job-id"))
+                        Text("${it.settings.maxLongEdge} px · ${it.settings.videoBitrateMbps} Mbps", Modifier.fillMaxWidth().testTag("media-proxy-job-settings"),
+                            color = SettingsMuted, fontSize = 13.sp)
                     }
                     if (loading || busy) Text(stringResource(R.string.proxy_busy), Modifier.fillMaxWidth().testTag("media-proxy-busy"))
-                    (renameFailure ?: error ?: state.error ?: request?.error)?.let { Text(it, Modifier.fillMaxWidth().testTag("media-proxy-error")) }
+                    // Provider and codec messages are for a bug report, not for the set: plain words first.
+                    val failure = renameFailure ?: error ?: state.error ?: request?.error
+                    if (failure != null) Text(stringResource(R.string.proxy_error), Modifier.fillMaxWidth().testTag("media-proxy-error"),
+                        color = MaterialTheme.colorScheme.error)
                     result?.let { proxy ->
                         if (renameFailure == null && error == null) Text(stringResource(R.string.proxy_complete), Modifier.fillMaxWidth().testTag("media-proxy-result"))
-                        Text("${proxy.width} × ${proxy.height} · ${proxy.frames} frames · ${proxy.durationUs} µs", Modifier.fillMaxWidth())
-                        Text(stringResource(R.string.proxy_sizes, proxy.originalBytes, proxy.proxyBytes), Modifier.fillMaxWidth())
-                        Text(proxy.proxyDisplayName, Modifier.fillMaxWidth().testTag("media-proxy-name"))
-                        Text(proxy.proxyUri, Modifier.fillMaxWidth().testTag("media-proxy-uri"))
-                        Text("SHA-256: ${proxy.proxySha256}", Modifier.fillMaxWidth())
-                        Text(proxy.metadataUri, Modifier.fillMaxWidth().testTag("media-proxy-relation"))
+                        Text(proxy.proxyDisplayName, Modifier.fillMaxWidth().testTag("media-proxy-name"), fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.proxy_sizes, Formatter.formatShortFileSize(context, proxy.originalBytes),
+                            Formatter.formatShortFileSize(context, proxy.proxyBytes)), Modifier.fillMaxWidth().testTag("media-proxy-sizes"),
+                            color = SettingsMuted, fontSize = 13.sp)
+                    }
+                    if (request != null || result != null || failure != null) MediaDetails("media-proxy-details") {
+                        request?.let { Text(it.id, Modifier.fillMaxWidth().testTag("media-proxy-job-id"), fontSize = 12.sp) }
+                        result?.let { proxy ->
+                            Text(stringResource(R.string.proxy_details_video, proxy.width, proxy.height, proxy.frames,
+                                formatTakeDuration(proxy.durationUs / 1000) ?: "—"), Modifier.fillMaxWidth(), fontSize = 12.sp)
+                            Text("SHA-256: ${proxy.proxySha256}", Modifier.fillMaxWidth(), fontSize = 12.sp)
+                            Text(proxy.proxyUri, Modifier.fillMaxWidth().testTag("media-proxy-uri"), fontSize = 12.sp)
+                            Text(proxy.metadataUri, Modifier.fillMaxWidth().testTag("media-proxy-relation"), fontSize = 12.sp)
+                        }
+                        failure?.let { Text(it, Modifier.fillMaxWidth().testTag("media-proxy-error-detail"), fontSize = 12.sp) }
+                    }
+                    result?.let { proxy ->
                         OutlinedButton(onClick = {
                             error = null
                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -139,11 +158,16 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("media-proxy-rename")) { Text(stringResource(R.string.proxy_rename)) }
                         if (confirmDelete) {
                             Text(stringResource(R.string.proxy_delete_help), Modifier.fillMaxWidth())
-                            Text(proxy.proxyUri, Modifier.fillMaxWidth())
-                            Text(proxy.metadataUri, Modifier.fillMaxWidth())
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !actionBusy,
-                                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("media-proxy-delete-ack"))
+                            Text(proxy.proxyDisplayName, Modifier.fillMaxWidth().testTag("media-proxy-delete-name"), fontWeight = FontWeight.SemiBold)
+                            MediaDetails("media-proxy-delete-details") {
+                                Text(proxy.proxyUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+                                Text(proxy.metadataUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+                            }
+                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.small)
+                                .toggleable(acknowledged, enabled = !actionBusy, role = Role.Checkbox) { acknowledged = it }
+                                .testTag("media-proxy-delete-ack"),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Checkbox(checked = acknowledged, onCheckedChange = null, enabled = !actionBusy)
                                 Text(stringResource(R.string.proxy_delete_ack), Modifier.weight(1f))
                             }
                             OutlinedButton(onClick = {
@@ -201,7 +225,5 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
                     }
                 }, enabled = request?.status != ProxyJobStatus.CANCELLING, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("media-proxy-cancel")) { Text(stringResource(R.string.proxy_cancel)) }
                 OutlinedButton(onClick = onDismiss, enabled = !actionBusy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("media-proxy-close")) { Text(stringResource(R.string.proxy_close)) }
-            }
-        }
     }
 }

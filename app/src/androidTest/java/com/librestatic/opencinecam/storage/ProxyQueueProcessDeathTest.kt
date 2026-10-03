@@ -152,7 +152,7 @@ class ProxyQueueProcessDeathTest {
             scenario.recreate()
             openProxy(interrupted.take)
             compose.waitUntil(20_000) { compose.onAllNodesWithTag("media-proxy-result", true).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag("media-proxy-job-id", true).assertTextContains(id, substring = true)
+            jobId().assertTextContains(id, substring = true)
             compose.onNodeWithTag("media-proxy-create", true).assertDoesNotExist()
             compose.onNodeWithTag("media-proxy-close", true).performClick()
             assertEquals(id, queue.enqueue(fixture.take, ProxySettings(1920, 8)))
@@ -230,11 +230,18 @@ class ProxyQueueProcessDeathTest {
             runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess
         }
         compose.galleryMenuAction(take.id, "proxy")
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-proxy-job-id", true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-proxy-details", true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    /** The job id is technical detail: open the dialog's Details once, then read it. */
+    private fun jobId(): SemanticsNodeInteraction {
+        if (compose.onAllNodesWithTag("media-proxy-job-id", true).fetchSemanticsNodes().isEmpty())
+            compose.onNodeWithTag("media-proxy-details", true).performScrollTo().performClick()
+        return compose.onNodeWithTag("media-proxy-job-id", true).performScrollTo()
     }
 
     private fun assertRunningDialog(id: String) {
-        compose.onNodeWithTag("media-proxy-job-id", true).assertTextContains(id, substring = true)
+        jobId().assertTextContains(id, substring = true)
         compose.onNodeWithTag("media-proxy-job-status", true).assertTextEquals(context.getString(R.string.proxy_running))
         compose.onNodeWithTag("media-proxy-cancel", true).assertIsEnabled()
         compose.onNodeWithTag("media-proxy-create", true).assertDoesNotExist()

@@ -2,13 +2,17 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.ProxyCatalogEntry
 import com.librestatic.opencinecam.storage.proxyFilename
 
@@ -42,11 +46,16 @@ internal fun ProxyCatalogEntryActions(entry: ProxyCatalogEntry, enabled: Boolean
     }
     if (deleting) {
         Text(stringResource(R.string.proxy_delete_help))
-        Text(entry.result.proxyUri)
-        Text(entry.result.metadataUri)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(acknowledged, { acknowledged = it }, enabled = enabled,
-                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).testTag("proxy-catalog-delete-ack-${entry.result.proxyId}"))
+        MediaDetails("proxy-catalog-delete-details-${entry.result.proxyId}") {
+            Text(entry.result.proxyUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+            Text(entry.result.metadataUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+        }
+        // The whole line toggles, so the box and its sentence read and act as one control.
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.small)
+            .toggleable(acknowledged, enabled = enabled, role = Role.Checkbox) { acknowledged = it }
+            .testTag("proxy-catalog-delete-ack-${entry.result.proxyId}"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Checkbox(acknowledged, onCheckedChange = null, enabled = enabled)
             Text(stringResource(R.string.proxy_delete_ack), Modifier.weight(1f))
         }
         OutlinedButton(onDelete, enabled = enabled && acknowledged, modifier = tag("delete-confirm")) {
