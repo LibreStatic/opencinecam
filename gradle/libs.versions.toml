@@ -19,6 +19,9 @@ coroutines = "1.9.0"
 # Expressive APIs (MaterialShapes, wavy/loading indicators, MotionScheme.expressive) are newer than the BOM's 1.4.0.
 material3 = "1.5.0-alpha26"
 coreSplashscreen = "1.2.0-alpha02"
+# Host-test-only agent tooling: Compose Driver renders composables under Robolectric (see AGENTS.md).
+composeDriver = "0.5.0"
+robolectric = "4.17"
 
 [libraries]
 androidx-media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "media3" }
@@ -37,6 +40,8 @@ androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-ru
 androidx-window = { module = "androidx.window:window", version.ref = "window" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-junit = { module = "androidx.test.ext:junit", version.ref = "androidxJunit" }
+compose-driver = { module = "io.github.jdemeulenaere:compose-driver", version.ref = "composeDriver" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
