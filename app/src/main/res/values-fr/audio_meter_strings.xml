@@ -10,7 +10,7 @@
     <string name="audio_meter_hold">Maintien de la crête affichée : %1$d ms (0 désactive)</string>
     <string name="audio_meter_numbers">Afficher les valeurs numériques</string>
     <string name="audio_meter_reset_clip">Réinitialiser l\'indicateur d\'écrêtage audio</string>
-    <string name="audio_meter_no_pcm">Aucun PCM actuel</string>
+    <string name="audio_meter_no_pcm">Aucun signal audio</string>
     <string name="audio_meter_peak_rms_values">Crête %1$s / RMS %2$s dBFS</string>
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>

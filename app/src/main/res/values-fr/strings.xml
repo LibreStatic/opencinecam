@@ -149,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Les clips SDR sont abaissés au gris HLG. Sans perte : rien n\'est écrêté.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Les clips HLG sont relevés au gris SDR. Les hautes lumières au-delà d\'environ 75 % du signal HLG sont écrêtées.</string>
     <string name="capture_status_free">%1$s libres</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s libres</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s libres</string>
     <string name="camera_switch_timeout">La caméra %1$s n\'a pas démarré ; caméra %2$s restaurée.</string>
     <string name="recording_channel">Enregistrement</string>
     <string name="recording_channel_summary">État d\'enregistrement visible et action d\'arrêt</string>

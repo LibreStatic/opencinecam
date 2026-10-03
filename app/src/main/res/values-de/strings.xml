@@ -149,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">SDR-Clips werden auf das HLG-Grau abgesenkt. Verlustfrei: nichts clippt.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG-Clips werden auf das SDR-Grau angehoben. Lichter über etwa 75 % HLG-Signal clippen.</string>
     <string name="capture_status_free">%1$s frei</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s frei</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s frei</string>
     <string name="camera_switch_timeout">Kamera %1$s wurde nicht gestartet; Kamera %2$s wiederhergestellt.</string>
     <string name="recording_channel">Aufnahme</string>
     <string name="recording_channel_summary">Sichtbarer Aufnahmestatus und Stopp-Aktion</string>

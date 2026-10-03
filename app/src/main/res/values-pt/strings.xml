@@ -149,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Clipes SDR são reduzidos ao cinza do HLG. Sem perdas: nada é cortado.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Clipes HLG são elevados ao cinza do SDR. Altas luzes acima de cerca de 75% do sinal HLG são cortadas.</string>
     <string name="capture_status_free">%1$s livres</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s livres</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s livres</string>
     <string name="camera_switch_timeout">A câmera %1$s não iniciou; câmera %2$s restaurada.</string>
     <string name="recording_channel">Gravação</string>
     <string name="recording_channel_summary">Status de gravação visível e ação de parar</string>

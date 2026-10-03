@@ -2864,11 +2864,13 @@ internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
 @Composable
 private fun rememberBatteryPercent(): Int? {
     val context = LocalContext.current
-    var batteryPercent by remember { mutableStateOf<Int?>(null) }
+    fun read() = (context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)
+        ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
+    // Read once up front so the first frame already carries the value.
+    var batteryPercent by remember { mutableStateOf(read()) }
     LaunchedEffect(Unit) {
         while (true) {
-            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-            batteryPercent = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
+            batteryPercent = read()
             delay(5_000)
         }
     }
@@ -2876,31 +2878,34 @@ private fun rememberBatteryPercent(): Int? {
 }
 
 /**
- * The top bar's one line of camera state: timecode when one runs, free space and battery. It
- * replaces the camera id and pipeline phase, which told the operator nothing they could act on.
+ * The top bar's one line of camera state: timecode when one runs, free space and battery. A value
+ * the device does not report is left out rather than shown as a dash.
  */
 @Composable
 private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifier, maxLines: Int = 1, textAlign: TextAlign? = null) {
     val battery = rememberBatteryPercent()
-    val low = battery != null && battery <= 15
+    val muted = Muted
+    // Low battery is a warning, not a failure: amber, never the recording red.
+    val batteryColor = if (battery != null && battery <= 15) LocalCineColors.current.pending else OkGreen
+    val free = state.availableStorageBytes?.let { stringResource(R.string.capture_status_free, formatBytes(it)) }
     val text = androidx.compose.ui.text.buildAnnotatedString {
+        fun separator() { if (length > 0) append("  ·  ") }
         state.timecodeDisplay?.let { tc ->
-            withStyle(androidx.compose.ui.text.SpanStyle(color = Muted)) { append("TC ") }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("TC ") }
             append(tc)
-            append("  ·  ")
         }
-        state.availableStorageBytes?.let { bytes ->
-            append(stringResource(R.string.capture_status_free, formatBytes(bytes)))
-            append("  ·  ")
+        free?.let { separator(); append(it) }
+        battery?.let {
+            separator()
+            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("BAT ") }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = batteryColor)) { append("$it%") }
         }
-        withStyle(androidx.compose.ui.text.SpanStyle(color = Muted)) { append("BAT ") }
-        withStyle(androidx.compose.ui.text.SpanStyle(color = if (low) RecordRed else OkGreen)) { append(battery?.let { "$it%" } ?: "—") }
     }
     Text(
         text,
-        color = Color.White,
-        fontSize = 11.sp,
-        lineHeight = 13.sp,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
         fontWeight = FontWeight.SemiBold,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -2909,47 +2914,45 @@ private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifie
     )
 }
 
+/**
+ * One line under the capture controls with what the next take records: codec, bitrate, sound, the
+ * time left on the storage and, when set, the anamorphic squeeze and the LOG view. Stills modes
+ * only list what applies to them; free space and battery live in the top bar's status line.
+ */
 @Composable
 private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
-    val batteryPercent = rememberBatteryPercent()
-    val isStill = state.selectedMode.isStillMode()
-    val codec = when {
-        state.selectedMode == CaptureMode.LOG -> "H.265 HEVC 10-bit LOG"
-        state.selectedMode == CaptureMode.RAW_VIDEO -> "RAW 10-bit"
-        isStill -> "--"
-        else -> "H.264 AVC"
-    }
-    val audio = if (settings.audioEnabled) audioOutputLabel(settings.audioOutputFormat) + " " + (settings.audioSampleRateHz / 1000) + " kHz" else "Audio OFF"
-    val bitrate = settings.videoBitrateMbps.toString() + " Mbps"
-    val time = if (state.phase == CameraUiPhase.RECORDING) formatDuration(state.recordingElapsedMs)
-        else state.availableStorageBytes?.takeIf { it > 0 }?.let { formatDuration(it * 8L * 1000L / (settings.videoBitrateMbps * 1_000_000L)) } ?: "--"
-    val free = formatBytes(state.availableStorageBytes) + " libre"
-    val battery = batteryPercent?.let { "$it%" } ?: "--"
-    val lut = if (state.selectedMode == CaptureMode.LOG) (if (settings.logViewAssistEnabled) "Rec.709" else "Flat") else "--"
-   val wb = state.requestedWhiteBalance.label()
-   val focus = if (state.requestedFocusDiopters != null) "MF" else "AF-C"
-    val ana = if (settings.anamorphicSqueeze.isActive) {
-        val squeezeLabel = when (settings.anamorphicSqueeze) {
-            AnamorphicSqueeze.SQUEEZE_1_33X -> "1.33x"
-            AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
-            AnamorphicSqueeze.SQUEEZE_2X -> "2x"
-            else -> ""
+    val video = !state.selectedMode.isStillMode()
+    // Off-speed takes are silent by design.
+    val silent = !settings.audioEnabled || (state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
+    val parts = buildList {
+        if (video) {
+            add(when (state.selectedMode) {
+                CaptureMode.LOG -> "HEVC 10-bit LOG"
+                CaptureMode.RAW_VIDEO -> "RAW 10-bit"
+                else -> "H.264"
+            })
+            add("${settings.videoBitrateMbps} Mbps")
+            add(if (silent) stringResource(R.string.status_audio_off)
+                else audioOutputLabel(settings.audioOutputFormat) + " " + formatAudioRate(settings.audioSampleRateHz))
+            recordTimeLeftMs(state.availableStorageBytes, settings.videoBitrateMbps)?.let {
+                add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it)))
+            }
         }
-        val modeLabel = if (settings.anamorphicOutputMode == AnamorphicOutputMode.DESQUEEZED) "DQ" else "SQ"
-        "ANA $squeezeLabel/$modeLabel"
-    } else null
-    val primary = buildList {
-        add(codec)
-        if (!isStill) { add(bitrate); add(audio) }
-           add(time)
-            if (ana != null) add(ana)
-            if (state.timecodeDisplay != null) add(state.timecodeDisplay!!)
-    }.joinToString(" \u00b7 ")
-    val secondary = listOf(free, battery, "LUT: $lut", "WB: $wb", "FOCUS: $focus").joinToString(" \u00b7 ")
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(primary, color = Color.White, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(secondary, color = Muted, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        anamorphicStatusLabel(settings.anamorphicSqueeze, settings.anamorphicOutputMode)?.let(::add)
+        if (state.selectedMode == CaptureMode.LOG) {
+            add(stringResource(R.string.status_view_assist, if (settings.logViewAssistEnabled) "Rec.709" else "LOG"))
+        }
     }
+    if (parts.isEmpty()) return
+    Text(
+        parts.joinToString(" · "),
+        color = Muted,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().testTag("status-info-bar"),
+    )
 }
 
 @Composable
@@ -2968,7 +2971,9 @@ private fun RecordingOverlay(
     var showMonitors by remember { mutableStateOf(false) }
     val stopRecordingDescription = stringResource(R.string.stop_recording)
     BoxWithConstraints(modifier.padding(top = 8.dp, start = 10.dp, end = 10.dp).fillMaxWidth()) {
-        val compact = maxWidth < 500.dp
+        // A phone-width strip drops the frame size and the monitoring shortcut to keep REC, the
+        // meter and stop on one row.
+        val compact = windowWidthClass(maxWidth.value) == WindowWidthClass.COMPACT
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -2980,19 +2985,20 @@ private fun RecordingOverlay(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(RecordRed))
-                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs), color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
+                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs),
+                    color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (!compact && state.recordingWidth != null && state.recordingHeight != null) {
-                    Text("${state.recordingWidth}\u00d7${state.recordingHeight}", color = Muted, fontSize = 10.sp)
+                    Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
                 }
             }
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
-            ThermalHudChip()
+            ThermalHudChip(recording = true)
             OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
             if (!compact) TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {
                 Box(
-                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, Color.White, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
+                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
             }
@@ -3032,9 +3038,12 @@ internal fun AudioMeterHud(
     val held = if (snapshot != null) holder.observe(snapshot.capturedAtElapsedRealtimeMs, now, displayed, meterSettings.peakHoldMs)
         else { holder.clear(); emptyList() }
     val resetLabel = stringResource(R.string.audio_meter_reset_clip)
+    // Every line is single and ellipsised, and the panel clips, so a narrow portrait slot never
+    // lets the meter spill over the instruments next to it.
     Column(
         modifier.width(meterWidth).heightIn(min = 48.dp).testTag("audio-meter-hud")
             .background(Panel, RoundedCornerShape(7.dp))
+            .clipToBounds()
             .clickable(enabled = state.audioClipLatched, onClickLabel = resetLabel, onClick = onResetClip)
             .semantics { if (state.audioClipLatched) contentDescription = resetLabel }
             .padding(horizontal = 7.dp, vertical = 5.dp),
@@ -3042,18 +3051,23 @@ internal fun AudioMeterHud(
     ) {
         Text(if (snapshot != null) "MIC" else stringResource(R.string.audio_meter_no_pcm),
             Modifier.testTag("audio-meter-current"), color = if (snapshot != null) VerifiedCyan else Muted,
-            fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted, fontSize = 10.sp)
-        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted,
+            fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 12.sp,
+            lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        val meterTrack = MaterialTheme.colorScheme.surfaceContainerHighest
+        val meterLine = MaterialTheme.colorScheme.onSurface
+        val meterGreen = OkGreen
         repeat(max(1, levels.size)) { index ->
             val level = levels.getOrNull(index)
             val value = displayed.getOrNull(index)
             val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(label, color = Muted, fontSize = 9.sp)
+                Text(label, color = Muted, fontSize = 12.sp, lineHeight = 12.sp, maxLines = 1)
                 val meterRed = RecordRed; val meterAmber = Amber
                 Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
-                    drawRect(Color(0xFF283033))
+                    drawRect(meterTrack)
                     if (value != null) {
                         val minimum = if (meterSettings.mode == AudioMeterMode.VU) -30f else -60f
                         val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
@@ -3061,11 +3075,11 @@ internal fun AudioMeterHud(
                         val signalColor = when {
                             (level?.peakDbfs ?: -120f) >= -3f -> meterRed
                             (level?.peakDbfs ?: -120f) >= -12f -> meterAmber
-                            else -> Color(0xFF46C36F)
+                            else -> meterGreen
                         }
                         drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
                         if (meterSettings.mode == AudioMeterMode.PEAK_RMS) level?.rmsDbfs?.takeIf { it.isFinite() }?.let { rms ->
-                            drawLine(Color.White, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
+                            drawLine(meterLine, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
                                 androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
                         }
                         held.getOrNull(index)?.let { peak ->
@@ -3082,9 +3096,11 @@ internal fun AudioMeterHud(
                     AudioMeterMode.VU -> stringResource(R.string.audio_meter_vu_value, number(value))
                     AudioMeterMode.PPM -> stringResource(R.string.audio_meter_ppm_value, number(value))
                 }
-                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = Color.White, fontSize = 10.sp)
+                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (value != null && meterSettings.peakHoldMs > 0) Text(stringResource(R.string.audio_meter_hold_value, number(held.getOrNull(index))),
-                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 10.sp)
+                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -3113,7 +3129,7 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
         stringResource(R.string.pro_capture_notice) else null
     val baseStatus = when {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
-            stringResource(R.string.recording_status, state.recordingWidth, state.recordingHeight, state.targetFps,
+            stringResource(R.string.recording_status, formatFrameSize(state.recordingWidth, state.recordingHeight), state.targetFps,
                 formatDuration(state.recordingElapsedMs), formatBytes(state.availableStorageBytes))
         // The error sheet already states a failure; repeating it here would show it twice.
         state.phase == CameraUiPhase.ERROR -> null
@@ -3128,8 +3144,9 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
     Text(
         status,
-        color = if (state.errorCode == null) Color.White else RecordRed,
-        fontSize = if (chip) 11.sp else 10.sp,
+        color = if (state.errorCode == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         textAlign = if (chip) TextAlign.Center else null,

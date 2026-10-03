@@ -29,4 +29,7 @@
     <string name="wb_tint_green">Vert</string>
     <string name="wb_tint_magenta">Magenta</string>
     <string name="fps_unavailable_at_size">Les cadences grisées ne sont pas disponibles en %1$s.</string>
+    <string name="status_audio_off">Sans son</string>
+    <string name="status_time_left">%1$s restantes</string>
+    <string name="status_view_assist">Vue %1$s</string>
 </resources>

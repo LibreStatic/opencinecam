@@ -32,4 +32,7 @@
     <string name="wb_tint_green">Green</string>
     <string name="wb_tint_magenta">Magenta</string>
     <string name="fps_unavailable_at_size">Greyed-out rates are not available at %1$s.</string>
+    <string name="status_audio_off">No audio</string>
+    <string name="status_time_left">%1$s left</string>
+    <string name="status_view_assist">%1$s view</string>
 </resources>

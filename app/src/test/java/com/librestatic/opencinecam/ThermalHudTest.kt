@@ -42,4 +42,18 @@ class ThermalHudTest {
         assertTrue(thermalHudReading(PowerManager.THERMAL_STATUS_SEVERE, 1.05f).showsPercent)
         assertFalse(thermalHudReading(PowerManager.THERMAL_STATUS_NONE, null).showsPercent)
     }
+
+    @Test fun theChipOnlyShowsWhenTheHeatMatters() {
+        fun visible(status: Int, headroom: Float?, recording: Boolean) =
+            thermalHudVisible(status, thermalHudReading(status, headroom), recording)
+        // A cool device shows nothing, recording or not.
+        assertFalse(visible(PowerManager.THERMAL_STATUS_NONE, 0.42f, recording = true))
+        assertFalse(visible(PowerManager.THERMAL_STATUS_LIGHT, null, recording = true))
+        // A rising forecast alone only matters while a take runs.
+        assertFalse(visible(PowerManager.THERMAL_STATUS_LIGHT, 0.9f, recording = false))
+        assertTrue(visible(PowerManager.THERMAL_STATUS_LIGHT, 0.9f, recording = true))
+        // Heat the platform itself reports is always shown.
+        assertTrue(visible(PowerManager.THERMAL_STATUS_MODERATE, null, recording = false))
+        assertTrue(visible(PowerManager.THERMAL_STATUS_CRITICAL, null, recording = false))
+    }
 }

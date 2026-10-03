@@ -10,7 +10,7 @@
     <string name="audio_meter_hold">Displayed peak hold: %1$d ms (0 disables)</string>
     <string name="audio_meter_numbers">Show numerical values</string>
     <string name="audio_meter_reset_clip">Reset latched audio clip indicator</string>
-    <string name="audio_meter_no_pcm">No current PCM</string>
+    <string name="audio_meter_no_pcm">No audio signal</string>
     <string name="audio_meter_peak_rms_values">Peak %1$s / RMS %2$s dBFS</string>
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>

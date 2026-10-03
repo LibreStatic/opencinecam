@@ -29,4 +29,7 @@
     <string name="wb_tint_green">Verde</string>
     <string name="wb_tint_magenta">Magenta</string>
     <string name="fps_unavailable_at_size">Las tasas en gris no están disponibles en %1$s.</string>
+    <string name="status_audio_off">Sin audio</string>
+    <string name="status_time_left">quedan %1$s</string>
+    <string name="status_view_assist">Vista %1$s</string>
 </resources>

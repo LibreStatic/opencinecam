@@ -149,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">SDR clips are scaled down to the HLG grey. Lossless: nothing clips.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG clips are scaled up to the SDR grey. Highlights above about 75% HLG signal clip.</string>
     <string name="capture_status_free">%1$s free</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s free</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s free</string>
     <string name="camera_switch_timeout">Camera %1$s did not start; restored camera %2$s.</string>
     <string name="recording_channel">Recording</string>
     <string name="recording_channel_summary">Visible recording status and stop action</string>

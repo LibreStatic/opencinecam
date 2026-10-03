@@ -29,4 +29,7 @@
     <string name="wb_tint_green">Verde</string>
     <string name="wb_tint_magenta">Magenta</string>
     <string name="fps_unavailable_at_size">As taxas em cinza não estão disponíveis em %1$s.</string>
+    <string name="status_audio_off">Sem áudio</string>
+    <string name="status_time_left">restam %1$s</string>
+    <string name="status_view_assist">Visualização %1$s</string>
 </resources>

@@ -29,4 +29,7 @@
     <string name="wb_tint_green">Grün</string>
     <string name="wb_tint_magenta">Magenta</string>
     <string name="fps_unavailable_at_size">Ausgegraute Bildraten gibt es bei %1$s nicht.</string>
+    <string name="status_audio_off">Kein Ton</string>
+    <string name="status_time_left">noch %1$s</string>
+    <string name="status_view_assist">Ansicht %1$s</string>
 </resources>
