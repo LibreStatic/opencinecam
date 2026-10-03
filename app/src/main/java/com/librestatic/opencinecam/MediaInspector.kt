@@ -15,7 +15,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -289,7 +290,8 @@ internal fun MediaInspectorSheet(take: LocalMediaTake, bottom: Boolean, onDismis
         }
         return
     }
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Hidden or fully open, no half-height stop: what skipPartiallyExpanded used to say.
+    val state = rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded))
     val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { dismiss() } }
