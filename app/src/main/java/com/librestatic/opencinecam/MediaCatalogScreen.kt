@@ -164,6 +164,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     // call would be cleared by that second one before anything could be drawn.
     var typedQuery by rememberSaveable { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(false) }
+    var help by rememberSaveable { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     var batch by remember { mutableIntStateOf(0) }
     var load by remember(source) { mutableStateOf(GalleryLoad()) }
@@ -247,7 +248,10 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 onProxyCatalog?.let { action -> CineIconButton("gallery-proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
                 CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
                 CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
+                CineIconButton("gallery-help-toggle", CineIcon.INFO, if (help) R.string.settings_help_hide else R.string.settings_help_show,
+                    selected = help) { help = !help }
             }
+            if (help) SettingsHelpText(stringResource(R.string.gallery_help), "gallery-help")
             SubjectReviewOperatorBar()
             val queryInvalid = !validGalleryQuery(typedQuery)
             OutlinedTextField(typedQuery, { candidate ->
@@ -265,7 +269,6 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 }
             } }
             if (filters) SettingsCard { GallerySettingsControls(settings, onSettings, showKinds = false) }
-            SettingsHelp(stringResource(R.string.gallery_help), tag = "gallery-help")
             if (openFailed) Text(stringResource(R.string.gallery_open_failed), Modifier.fillMaxWidth().testTag("gallery-open-failed"),
                 color = GalleryWarning, fontSize = 13.sp)
         }
