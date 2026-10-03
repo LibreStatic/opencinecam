@@ -169,7 +169,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     source: MediaCatalogSource, onShare: ((LocalMediaTake) -> Unit)? = null,
     onDelete: ((LocalMediaTake) -> Unit)? = null, refreshGeneration: Int = 0,
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
-    onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null, onOpen: (LocalMediaArtifact) -> Unit) {
+    onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null,
+    initialSelection: String? = null, onOpen: (LocalMediaArtifact) -> Unit) {
     val reducedMotion = LocalReducedMotion.current
     var query by rememberSaveable { mutableStateOf("") }
     // What the operator typed, which is not always what we search for. Keeping it lets the field
@@ -218,8 +219,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
 
     // The take the inspector shows. While a refresh reads again it keeps the last copy; once a read
     // has finished without it (deleted, renamed away by a filter) the selection goes.
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailsOpen by rememberSaveable { mutableStateOf(false) }
+    // [initialSelection] opens a take's details on arrival (the Compose Driver review uses it).
+    var selectedId by rememberSaveable { mutableStateOf(initialSelection) }
+    var detailsOpen by rememberSaveable { mutableStateOf(initialSelection != null) }
     var lastSelected by remember { mutableStateOf<LocalMediaTake?>(null) }
     val selectedTake = selectedId?.let { id -> visible.takes.firstOrNull { it.id == id } ?: lastSelected?.takeIf { it.id == id && visible.loading } }
     SideEffect { if (selectedTake != null) lastSelected = selectedTake }
