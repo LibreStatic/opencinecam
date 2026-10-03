@@ -802,8 +802,8 @@ class OperatorServiceTest {
         awaitFrames(20_000) {
             runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess
         }
-        compose.onNodeWithTag("gallery-name-${take.id}", useUnmergedTree = true).assertTextEquals(name)
-        compose.onNodeWithTag("gallery-primary-${take.id}", useUnmergedTree = true).performScrollTo().performClick()
+        compose.onNodeWithTag("gallery-name-${take.id}", useUnmergedTree = true).assertTextEquals(takeTitleText(context, take))
+        compose.galleryMenuAction(take.id, "primary")
         fun node(tag: String) = compose.onNodeWithTag("media-playback-$tag", useUnmergedTree = true)
         // Decoding notes live in the take details; close them again so the transport takes touches.
         fun assertInterpreted() {
@@ -851,7 +851,7 @@ class OperatorServiceTest {
                 awaitFrames(30_000) { firstReaders.none { it.isAlive } && (readers() - oldReaders).isEmpty() }
                 members.forEach { artifact -> assertArrayEquals("Interpretation changed owned bytes: ${artifact.uri}", originalBytes.getValue(artifact.uri), bytes(artifact)) }
                 assertEquals(playbackBeforeReview, SettingsRepositories.get(context).states.value.playback)
-                compose.onNodeWithTag("gallery-primary-${take.id}", useUnmergedTree = true).performScrollTo().performClick()
+                compose.galleryMenuAction(take.id, "primary")
                 // Closing a review discards its choice: reopening the same URI must reject strictly again.
                 requireExplicitInterpretation()
             }

@@ -135,7 +135,8 @@ class ProxyRenamingUiTest {
             compose.runOnIdle { assertFalse(visible.value); visible.value = true }
             awaitResult()
             node("name").assertTextEquals(requestedName)
-            node("uri").assertTextEquals(proxy.proxyUri)
+            node("details").performScrollTo().performClick()
+            node("uri").performScrollTo().assertTextEquals(proxy.proxyUri)
             node("share").performScrollTo().assertIsEnabled().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
             node("delete").performScrollTo().assertIsEnabled().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
             assertEquals(renamed, repository.existing(selected))

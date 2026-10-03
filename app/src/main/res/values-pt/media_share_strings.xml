@@ -12,11 +12,10 @@
     <string name="media_share_lut">Incluir os arquivos LUT referenciados exatos com os metadados técnicos</string>
     <string name="media_share_lut_help">Uma LUT referenciada ausente interrompe a preparação, a menos que você exclua explicitamente os arquivos LUT. Uma LUT de gravação já aplicada aos pixels não deve ser aplicada novamente.</string>
     <string name="media_share_temporary">Os arquivos gerados expiram após 24 horas e podem ser recuperados do cache antes disso. Mantenha uma cópia externa, se necessário. Abrir o seletor do Android não verifica a entrega.</string>
-    <string name="media_share_relation_required">Os metadados selecionados exigem uma relação declarada completa. Os metadados de produção também exigem uma claquete legível e consistente. Escolha outra seleção ou atualize o catálogo; nenhuma alternativa é aplicada automaticamente.</string>
     <string name="media_share_sources">Fontes disponíveis — Originais: %1$d; Metadados: %2$d</string>
     <string name="media_share_confirm">Preparar e abrir o seletor do Android</string>
     <string name="media_share_preparing">Preparando a exportação selecionada…</string>
-    <string name="media_share_cancel">Cancelar / fechar</string>
+    <string name="media_share_cancel">Cancelar</string>
     <string name="media_share_error">A exportação não foi entregue com sucesso. Tente novamente, altere a seleção, ou feche e atualize o catálogo. Os originais foram mantidos.</string>
     <string name="media_share_cleanup_error">A limpeza da exportação temporária falhou; os originais foram mantidos.</string>
     <string name="media_share_launched">Seletor do Android aberto — a entrega não é verificada.</string>

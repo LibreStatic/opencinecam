@@ -8,7 +8,7 @@
     <string name="media_delete_original">Original: %1$s</string>
     <string name="media_delete_metadata">Metadata: %1$s</string>
     <string name="media_delete_confirm">Permanently delete listed files</string>
-    <string name="media_delete_cancel">Cancel / close</string>
+    <string name="media_delete_cancel">Cancel</string>
     <string name="media_delete_busy">Deletion is in progress. Cancellation is no longer available; wait for the per-file result. Leaving this screen does not stop an operation already confirmed.</string>
     <string name="media_delete_complete">All selected files were deleted.</string>
     <string name="media_delete_partial">Deletion was partial. Review every file result; do not assume the take was fully deleted.</string>

@@ -5,7 +5,7 @@
     <string name="proxy_help">Generate after capture. Original media stays unchanged. Audio packets and timestamps are preserved. Requests survive closing this dialog and resume when the app reopens. Retrying keeps the admitted settings. Embedded audio is supported; sidecar composition and automatic policies are pending.</string>
     <string name="proxy_busy">Processing and verifying media…</string>
     <string name="proxy_complete">Proxy and relation verified. Original unchanged.</string>
-    <string name="proxy_sizes">Original: %1$d B · Proxy: %2$d B. Small clips may grow because of container overhead.</string>
+    <string name="proxy_sizes">Original: %1$s · Proxy: %2$s. Small clips may grow because of container overhead.</string>
     <string name="proxy_open">Open proxy</string>
     <string name="proxy_create">Generate proxy / retry</string>
     <string name="proxy_cancel">Cancel generation</string>
@@ -28,4 +28,6 @@
     <string name="proxy_wait_capture">Waiting for recording to finish</string>
     <string name="proxy_wait_transfer">Waiting for the WebDAV transfer to finish</string>
     <string name="proxy_wait_media_busy">Waiting for another media action to finish</string>
+    <string name="proxy_error">Something went wrong with the proxy.</string>
+    <string name="proxy_details_video">%1$d × %2$d · %3$d frames · %4$s</string>
 </resources>

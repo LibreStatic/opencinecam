@@ -8,7 +8,7 @@
     <string name="media_delete_original">Original : %1$s</string>
     <string name="media_delete_metadata">Métadonnées : %1$s</string>
     <string name="media_delete_confirm">Supprimer définitivement les fichiers listés</string>
-    <string name="media_delete_cancel">Annuler / fermer</string>
+    <string name="media_delete_cancel">Annuler</string>
     <string name="media_delete_busy">Suppression en cours. L\'annulation n\'est plus possible ; attendez le résultat par fichier. Quitter cet écran n\'arrête pas une opération déjà confirmée.</string>
     <string name="media_delete_complete">Tous les fichiers sélectionnés ont été supprimés.</string>
     <string name="media_delete_partial">Suppression partielle. Vérifiez le résultat de chaque fichier ; ne supposez pas que la prise a été entièrement supprimée.</string>

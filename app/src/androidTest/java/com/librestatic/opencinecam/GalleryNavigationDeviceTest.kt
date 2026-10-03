@@ -47,8 +47,12 @@ class GalleryNavigationDeviceTest {
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess
             }
-            compose.onNodeWithTag("gallery-name-${take.id}",useUnmergedTree = true).assertTextEquals(take.primary.name)
-            compose.onNodeWithTag("gallery-slate-${take.id}",useUnmergedTree = true).assertTextContains(token,substring = true)
+            compose.onNodeWithTag("gallery-name-${take.id}",useUnmergedTree = true).assertTextEquals(takeTitleText(context, take))
+            // Slate and file name are in the take's details; the card carries the take label.
+            compose.openGalleryDetails(take.id)
+            compose.onNodeWithTag("gallery-slate-${take.id}",useUnmergedTree = true).performScrollTo().assertTextContains(token,substring = true)
+            compose.onNodeWithTag("gallery-file-name-${take.id}",useUnmergedTree = true).assertTextEquals(take.primary.name)
+            compose.closeGalleryDetails()
             compose.onNodeWithTag("gallery-list").performScrollToKey("controls")
             compose.onNodeWithTag("gallery-filters").performClick()
             compose.onNodeWithTag("gallery-technical",useUnmergedTree = true).performScrollTo().performClick()
@@ -58,15 +62,17 @@ class GalleryNavigationDeviceTest {
                 assertEquals(before.audioRecordingGain,repository.states.value.audioRecordingGain)
             }
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
+            compose.openGalleryDetails(take.id)
             compose.onNodeWithTag("gallery-technical-primary-${take.id}",useUnmergedTree = true).assertExists()
-            compose.onNodeWithTag("gallery-primary-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.closeGalleryDetails()
+            compose.galleryMenuAction(take.id, "primary")
             compose.onNodeWithTag("media-playback-dialog",useUnmergedTree = true).assertExists()
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("media-playback-frame",useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("media-playback-close",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-playback-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-            compose.onNodeWithTag("gallery-share-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "share")
             compose.onNodeWithTag("media-share-dialog",useUnmergedTree = true).assertExists()
             compose.pickChoice("media-share-content-METADATA_ONLY")
             compose.pickChoice("media-share-metadata-PRODUCTION")
@@ -82,14 +88,14 @@ class GalleryNavigationDeviceTest {
             // Rename through the real activity, preserving URI identity, original bytes and slate.
             val originalMetadata = related.associateWith { uri -> context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() } }
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-            compose.onNodeWithTag("gallery-rename-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "rename")
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performTextReplacement("Vista previa")
             compose.onNodeWithTag("media-rename-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-rename-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertEquals(take, LocalMediaRepository(context).page(GallerySettings(),token).takes.single())
             for ((uri, content) in originalMetadata) assertArrayEquals(content, context.contentResolver.openInputStream(Uri.parse(uri))!!.use { it.readBytes() })
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-            compose.onNodeWithTag("gallery-rename-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "rename")
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performTextReplacement("Renamed café")
             compose.onNodeWithTag("media-rename-stem",useUnmergedTree = true).performImeAction()
             compose.onNodeWithTag("media-rename-confirm",useUnmergedTree = true).performClick()
@@ -103,19 +109,23 @@ class GalleryNavigationDeviceTest {
             assertEquals("Renamed café.jpg", renamed.primary.name)
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
             compose.onNodeWithTag("media-rename-cancel",useUnmergedTree = true).performClick()
+            // The take label comes from the slate and stays; the renamed file shows in the details.
+            compose.waitUntil(15_000) { runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess }
+            compose.onNodeWithTag("gallery-name-${take.id}",useUnmergedTree = true).assertTextEquals(takeTitleText(context, renamed))
+            compose.openGalleryDetails(take.id)
             compose.waitUntil(15_000) {
-                runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-                    compose.onNodeWithTag("gallery-name-${take.id}",useUnmergedTree = true).assertTextEquals(renamed.primary.name) }.isSuccess
+                runCatching { compose.onNodeWithTag("gallery-file-name-${take.id}",useUnmergedTree = true).assertTextEquals(renamed.primary.name) }.isSuccess
             }
+            compose.closeGalleryDetails()
             // Real activity confirmation drives production deleter and the subsequent catalog query.
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-            compose.onNodeWithTag("gallery-delete-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "delete")
             compose.onNodeWithTag("media-delete-confirm",useUnmergedTree = true).assertIsNotEnabled()
             compose.onNodeWithTag("media-delete-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-delete-dialog",useUnmergedTree = true).assertDoesNotExist()
             assertArrayEquals(bytes, context.contentResolver.openInputStream(original)!!.use { it.readBytes() })
             compose.onNodeWithTag("gallery-list").performScrollToKey(take.id)
-            compose.onNodeWithTag("gallery-delete-${take.id}",useUnmergedTree = true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "delete")
             compose.onNodeWithTag("media-delete-acknowledge",useUnmergedTree = true).performScrollTo().performClick()
             compose.onNodeWithTag("media-delete-confirm",useUnmergedTree = true).performClick()
             compose.waitUntil(15_000) { compose.onAllNodesWithTag("media-delete-result",useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }

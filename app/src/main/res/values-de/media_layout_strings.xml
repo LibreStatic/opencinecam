@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Szene %1$s · Take %2$d</string>
+    <string name="media_today">Heute</string>
+    <string name="media_yesterday">Gestern</string>
+    <string name="media_more_actions">Weitere Aktionen für %1$s</string>
+    <string name="media_action_play">Abspielen</string>
+    <string name="media_action_details">Details</string>
+    <string name="media_action_share">Teilen</string>
+    <string name="media_action_rename">Umbenennen</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Löschen</string>
+    <string name="media_details_title">Take-Details</string>
+    <string name="media_details_close">Details schließen</string>
+    <string name="media_details_empty">Wähle einen Take aus, um seine Details zu sehen.</string>
+    <string name="media_section_integrity">Integrität</string>
+    <string name="media_section_slate">Slate</string>
+    <string name="media_section_properties">Dateieigenschaften</string>
+    <string name="media_section_files">Dateien</string>
+    <string name="media_files_summary">Originale: %1$d · Metadaten: %2$d</string>
+    <string name="media_integrity_declared">Alle Dateien, die dieser Take aufführt, wurden gefunden. Die Dateiinhalte wurden nicht erneut geprüft.</string>
+    <string name="media_integrity_legacy">Einzelne Datei ohne Take-Eintrag. Sie lässt sich so abspielen und teilen.</string>
+    <string name="media_integrity_missing">Der Take-Eintrag fehlt, daher lassen sich zugehörige Dateien nicht bestätigen.</string>
+    <string name="media_integrity_invalid">Der Take-Eintrag ist nicht lesbar, daher lassen sich zugehörige Dateien nicht bestätigen.</string>
+    <string name="media_integrity_incomplete">Einige im Take-Eintrag aufgeführte Dateien fehlen.</string>
+    <string name="media_share_step_choose">Was gesendet wird</string>
+    <string name="media_share_step_check">Prüfen</string>
+    <string name="media_share_step_send">Senden</string>
+    <string name="media_share_ready">Bereit zum Senden.</string>
+    <string name="media_share_blocked_originals">Dieser Take hat keine Originaldateien zum Senden.</string>
+    <string name="media_share_blocked_group">Metadaten lassen sich nur senden, wenn alle Dateien dieses Takes vorhanden sind. Sende nur die Originale oder aktualisiere die Galerie.</string>
+    <string name="media_share_blocked_slate">Dieser Take hat keinen lesbaren Slate, daher lassen sich keine Produktionsdaten senden. Sende stattdessen die technischen Daten.</string>
+    <string name="media_share_fix_originals">Nur Originale senden</string>
+    <string name="media_share_fix_technical">Technische Daten senden</string>
+    <string name="media_details_show">Details</string>
+    <string name="media_details_hide">Details ausblenden</string>
+</resources>

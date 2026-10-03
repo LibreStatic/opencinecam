@@ -8,7 +8,7 @@
     <string name="media_delete_original">Original: %1$s</string>
     <string name="media_delete_metadata">Metadados: %1$s</string>
     <string name="media_delete_confirm">Excluir permanentemente os arquivos listados</string>
-    <string name="media_delete_cancel">Cancelar / fechar</string>
+    <string name="media_delete_cancel">Cancelar</string>
     <string name="media_delete_busy">A exclusão está em andamento. O cancelamento não está mais disponível; aguarde o resultado de cada arquivo. Sair desta tela não interrompe uma operação já confirmada.</string>
     <string name="media_delete_complete">Todos os arquivos selecionados foram excluídos.</string>
     <string name="media_delete_partial">A exclusão foi parcial. Revise o resultado de cada arquivo; não presuma que a tomada foi totalmente excluída.</string>

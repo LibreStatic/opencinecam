@@ -63,7 +63,7 @@ class PublishedAudioReviewDeviceTest {
         compose.waitUntil(20_000) {
             runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess
         }
-        compose.onNodeWithTag("gallery-primary-${take.id}", useUnmergedTree = true).performScrollTo().performClick()
+        compose.galleryMenuAction(take.id, "primary")
         fun node(tag: String) = compose.onNodeWithTag("media-playback-$tag", useUnmergedTree = true)
         fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
         // Navigate to the actual associated audio even when the video decoder reports an error.

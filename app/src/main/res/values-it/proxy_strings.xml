@@ -5,7 +5,7 @@
     <string name="proxy_help">Da generare dopo l\'acquisizione. Il media originale resta invariato. Pacchetti e timestamp audio sono preservati. Le richieste sopravvivono alla chiusura di questa finestra e riprendono alla riapertura dell\'app. Riprovare mantiene le impostazioni ammesse. L\'audio incorporato è supportato; la composizione con file separati e le politiche automatiche sono in sospeso.</string>
     <string name="proxy_busy">Elaborazione e verifica del media…</string>
     <string name="proxy_complete">Proxy e relazione verificati. Originale invariato.</string>
-    <string name="proxy_sizes">Originale: %1$d B · Proxy: %2$d B. Le clip piccole possono crescere per l\'overhead del contenitore.</string>
+    <string name="proxy_sizes">Originale: %1$s · Proxy: %2$s. Le clip piccole possono crescere per l’overhead del contenitore.</string>
     <string name="proxy_open">Apri proxy</string>
     <string name="proxy_create">Genera proxy / riprova</string>
     <string name="proxy_cancel">Annulla generazione</string>
@@ -28,4 +28,6 @@
     <string name="proxy_wait_capture">In attesa della fine della registrazione</string>
     <string name="proxy_wait_transfer">In attesa della fine del trasferimento WebDAV</string>
     <string name="proxy_wait_media_busy">In attesa della fine di un\'altra azione sui media</string>
+    <string name="proxy_error">Qualcosa è andato storto con il proxy.</string>
+    <string name="proxy_details_video">%1$d × %2$d · %3$d fotogrammi · %4$s</string>
 </resources>

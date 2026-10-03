@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Scene %1$s · Take %2$d</string>
+    <string name="media_today">Today</string>
+    <string name="media_yesterday">Yesterday</string>
+    <string name="media_more_actions">More actions for %1$s</string>
+    <string name="media_action_play">Play</string>
+    <string name="media_action_details">Details</string>
+    <string name="media_action_share">Share</string>
+    <string name="media_action_rename">Rename</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Delete</string>
+    <string name="media_details_title">Take details</string>
+    <string name="media_details_close">Close details</string>
+    <string name="media_details_empty">Select a take to see its details.</string>
+    <string name="media_section_integrity">Integrity</string>
+    <string name="media_section_slate">Slate</string>
+    <string name="media_section_properties">File properties</string>
+    <string name="media_section_files">Files</string>
+    <string name="media_files_summary">Originals: %1$d · Metadata: %2$d</string>
+    <string name="media_integrity_declared">Every file this take lists was found. File contents were not re-checked.</string>
+    <string name="media_integrity_legacy">A single file without a take record. It can be played and shared as it is.</string>
+    <string name="media_integrity_missing">The take record is missing, so related files cannot be confirmed.</string>
+    <string name="media_integrity_invalid">The take record cannot be read, so related files cannot be confirmed.</string>
+    <string name="media_integrity_incomplete">Some files listed in the take record are missing.</string>
+    <string name="media_share_step_choose">What to send</string>
+    <string name="media_share_step_check">Check</string>
+    <string name="media_share_step_send">Send</string>
+    <string name="media_share_ready">Ready to send.</string>
+    <string name="media_share_blocked_originals">This take has no original files to send.</string>
+    <string name="media_share_blocked_group">Metadata can be sent only when every file of this take is present. Send the originals only, or refresh the gallery.</string>
+    <string name="media_share_blocked_slate">This take has no readable slate, so production details cannot be sent. Send the technical details instead.</string>
+    <string name="media_share_fix_originals">Send originals only</string>
+    <string name="media_share_fix_technical">Send technical details</string>
+    <string name="media_details_show">Details</string>
+    <string name="media_details_hide">Hide details</string>
+</resources>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Cena %1$s · Tomada %2$d</string>
+    <string name="media_today">Hoje</string>
+    <string name="media_yesterday">Ontem</string>
+    <string name="media_more_actions">Mais ações para %1$s</string>
+    <string name="media_action_play">Reproduzir</string>
+    <string name="media_action_details">Detalhes</string>
+    <string name="media_action_share">Compartilhar</string>
+    <string name="media_action_rename">Renomear</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Excluir</string>
+    <string name="media_details_title">Detalhes da tomada</string>
+    <string name="media_details_close">Fechar detalhes</string>
+    <string name="media_details_empty">Selecione uma tomada para ver os detalhes.</string>
+    <string name="media_section_integrity">Integridade</string>
+    <string name="media_section_slate">Claquete</string>
+    <string name="media_section_properties">Propriedades do arquivo</string>
+    <string name="media_section_files">Arquivos</string>
+    <string name="media_files_summary">Originais: %1$d · Metadados: %2$d</string>
+    <string name="media_integrity_declared">Todos os arquivos listados por esta tomada foram encontrados. O conteúdo deles não foi verificado de novo.</string>
+    <string name="media_integrity_legacy">Arquivo avulso sem registro de tomada. Pode ser reproduzido e compartilhado como está.</string>
+    <string name="media_integrity_missing">O registro da tomada está ausente, então os arquivos relacionados não podem ser confirmados.</string>
+    <string name="media_integrity_invalid">O registro da tomada não pode ser lido, então os arquivos relacionados não podem ser confirmados.</string>
+    <string name="media_integrity_incomplete">Alguns arquivos listados no registro da tomada estão ausentes.</string>
+    <string name="media_share_step_choose">O que enviar</string>
+    <string name="media_share_step_check">Verificação</string>
+    <string name="media_share_step_send">Envio</string>
+    <string name="media_share_ready">Pronto para enviar.</string>
+    <string name="media_share_blocked_originals">Esta tomada não tem arquivos originais para enviar.</string>
+    <string name="media_share_blocked_group">Os metadados só podem ser enviados quando todos os arquivos desta tomada estão presentes. Envie só os originais ou atualize a galeria.</string>
+    <string name="media_share_blocked_slate">Esta tomada não tem claquete legível, então os dados de produção não podem ser enviados. Envie os dados técnicos.</string>
+    <string name="media_share_fix_originals">Enviar só os originais</string>
+    <string name="media_share_fix_technical">Enviar dados técnicos</string>
+    <string name="media_details_show">Detalhes</string>
+    <string name="media_details_hide">Ocultar detalhes</string>
+</resources>

@@ -11,7 +11,7 @@
     <string name="media_rename_current">Nom observé après l\'opération : %1$s</string>
     <string name="media_rename_unknown_name">Nom actuel inconnu ; actualisez et inspectez le fichier.</string>
     <string name="media_rename_confirm">Confirmer le renommage local</string>
-    <string name="media_rename_cancel">Annuler / fermer</string>
+    <string name="media_rename_cancel">Annuler</string>
     <string name="media_rename_busy">Renommage en cours. L\'annulation n\'est plus possible ; attendez le résultat vérifié. Quitter cet écran n\'arrête pas une opération déjà confirmée.</string>
     <string name="media_rename_complete">L\'ensemble des fichiers locaux a été renommé. Les copies distantes n\'ont pas été renommées.</string>
     <string name="media_rename_compensated">Le renommage a échoué ; les noms de fichiers précédents et les octets de métadonnées associés ont été restaurés. Vérifiez le résultat avant une nouvelle tentative.</string>

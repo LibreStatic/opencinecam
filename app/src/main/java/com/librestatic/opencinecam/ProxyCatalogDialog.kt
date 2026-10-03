@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import android.content.Intent
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,7 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -38,21 +39,31 @@ internal fun ProxyCatalogDialog(onDismiss: () -> Unit) {
         catch (failure: Exception) { error = failure.message ?: failure.javaClass.simpleName }
         finally { loading = false }
     }
-    Dialog(onDismissRequest = { if (!sharing) onDismiss() }) {
-        Surface(Modifier.fillMaxWidth().heightIn(max = 680.dp).testTag("proxy-catalog-dialog"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    MediaDialogFrame("proxy-catalog-dialog", { if (!sharing) onDismiss() }) {
                 Text(stringResource(R.string.proxy_catalog_title), style = MaterialTheme.typography.titleLarge)
                 LazyColumn(Modifier.weight(1f, fill = false).testTag("proxy-catalog-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { Text(stringResource(R.string.proxy_catalog_help)) }
                     if (loading) item { Text(stringResource(R.string.proxy_catalog_loading)) }
-                    error?.let { message -> item { Text(message, Modifier.testTag("proxy-catalog-error")) } }
+                    error?.let { message -> item {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(stringResource(R.string.proxy_error), Modifier.fillMaxWidth().testTag("proxy-catalog-error"),
+                                color = MaterialTheme.colorScheme.error)
+                            MediaDetails("proxy-catalog-error-details") {
+                                Text(message, Modifier.fillMaxWidth().testTag("proxy-catalog-error-detail"), fontSize = 12.sp)
+                            }
+                        }
+                    } }
                     if (!loading && error == null && entries.isEmpty()) item { Text(stringResource(R.string.proxy_catalog_empty)) }
                     items(entries, key = { it.takeId }) { entry ->
                         Column(Modifier.fillMaxWidth().testTag("proxy-catalog-entry-${entry.result.proxyId}"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(entry.result.proxyDisplayName, style = MaterialTheme.typography.titleMedium)
                             Text(stringResource(R.string.proxy_catalog_original, entry.originalDisplayName))
-                            Text("${entry.result.width} × ${entry.result.height} · ${entry.result.proxyBytes} bytes")
-                            Text(entry.result.proxyUri)
+                            Text("${entry.result.width} × ${entry.result.height} · ${Formatter.formatShortFileSize(context, entry.result.proxyBytes)}",
+                                color = SettingsMuted, fontSize = 13.sp)
+                            MediaDetails("proxy-catalog-details-${entry.result.proxyId}") {
+                                Text(entry.result.proxyUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+                                Text(entry.result.metadataUri, Modifier.fillMaxWidth(), fontSize = 12.sp)
+                            }
                             ProxyCatalogEntryActions(entry, !loading && !sharing, onOpen = {
                                 sharing = true; error = null
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -102,7 +113,5 @@ internal fun ProxyCatalogDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("proxy-catalog-close")) {
                     Text(stringResource(R.string.proxy_catalog_close))
                 }
-            }
-        }
     }
 }

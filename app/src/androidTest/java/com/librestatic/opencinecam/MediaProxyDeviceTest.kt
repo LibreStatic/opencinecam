@@ -46,8 +46,8 @@ class MediaProxyDeviceTest {
             compose.setContent { MaterialTheme { if (visible.value) MediaCatalogScreen(GallerySettings(),{},
                 proxySettings=settings.value,onProxySettings={settings.value=it}) } }
             compose.onNodeWithTag("gallery-search",true).performTextInput(token)
-            compose.waitUntil(20_000) { compose.onAllNodesWithTag("gallery-proxy-${take.id}",true).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag("gallery-proxy-${take.id}",true).performScrollTo().performClick()
+            compose.waitUntil(20_000) { compose.onAllNodesWithTag("gallery-menu-${take.id}",true).fetchSemanticsNodes().isNotEmpty() }
+            compose.galleryMenuAction(take.id, "proxy")
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-proxy-busy",true).fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithTag("media-proxy-create",true).performClick()
             compose.waitUntil(90_000) { listOf("media-proxy-result","media-proxy-error").any { compose.onAllNodesWithTag(it,true).fetchSemanticsNodes().isNotEmpty() } }
@@ -67,7 +67,7 @@ class MediaProxyDeviceTest {
                 verifyProxyCorrespondence(before,after,VideoDisplayGeometry(128,96))
             }
             compose.onNodeWithTag("media-proxy-close",true).performClick()
-            compose.onNodeWithTag("gallery-proxy-${take.id}",true).performScrollTo().performClick()
+            compose.galleryMenuAction(take.id, "proxy")
             compose.waitUntil(20_000) { compose.onAllNodesWithTag("media-proxy-result",true).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("media-proxy-create",true).assertDoesNotExist()
             assertEquals(proxy,runBlocking { MediaProxyRepository(context).existing(take) })

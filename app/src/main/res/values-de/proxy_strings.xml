@@ -5,7 +5,7 @@
     <string name="proxy_help">Nach der Aufnahme erzeugen. Die Originalmedien bleiben unverändert. Audiopakete und Zeitstempel bleiben erhalten. Anfragen überdauern das Schließen dieses Dialogs und werden beim erneuten Öffnen der App fortgesetzt. Ein neuer Versuch behält die übernommenen Einstellungen. Eingebettetes Audio wird unterstützt; Sidecar-Komposition und automatische Richtlinien stehen noch aus.</string>
     <string name="proxy_busy">Medien werden verarbeitet und verifiziert…</string>
     <string name="proxy_complete">Proxy und Beziehung verifiziert. Original unverändert.</string>
-    <string name="proxy_sizes">Original: %1$d B · Proxy: %2$d B. Kleine Clips können durch den Container-Overhead größer werden.</string>
+    <string name="proxy_sizes">Original: %1$s · Proxy: %2$s. Kleine Clips können durch den Container-Overhead größer werden.</string>
     <string name="proxy_open">Proxy öffnen</string>
     <string name="proxy_create">Proxy erzeugen / erneut versuchen</string>
     <string name="proxy_cancel">Erzeugung abbrechen</string>
@@ -28,4 +28,6 @@
     <string name="proxy_wait_capture">Warten, bis die Aufnahme beendet ist</string>
     <string name="proxy_wait_transfer">Warten, bis die WebDAV-Übertragung beendet ist</string>
     <string name="proxy_wait_media_busy">Warten, bis eine andere Medienaktion beendet ist</string>
+    <string name="proxy_error">Beim Proxy ist etwas schiefgelaufen.</string>
+    <string name="proxy_details_video">%1$d × %2$d · %3$d Frames · %4$s</string>
 </resources>
