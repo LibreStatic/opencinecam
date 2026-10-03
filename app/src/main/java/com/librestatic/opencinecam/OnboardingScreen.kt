@@ -4,6 +4,14 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -134,13 +142,10 @@ private val OnbAmber: Color @Composable @ReadOnlyComposable get() = MaterialThem
 private val OnbMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val OnbDot: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant
 
-/** Top and bottom bars never stretch wider than this on tablets and unfolded screens. */
-private val ControlsMaxWidth = 720.dp
-
 /** MainActivity's splash fade: a one-frame delay plus 200 ms. */
 private const val SplashHandoverMillis = 240L
 
-/** Page content width on large screens; the wide landscape layout gets more room. */
+/** The single-column wizard's text width on tablets: longer lines get hard to follow. */
 private val PageMaxWidth = 560.dp
 
 /** Bump when the tour gains content worth showing again to people who already finished it. */
@@ -195,11 +200,42 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
+/** How the wizard arranges a step. */
+internal enum class OnboardingLayout {
+    /** Header, the step and the buttons stacked in one column. */
+    SINGLE_COLUMN,
+
+    /** The words and buttons in a column beside the step's cards or picture. */
+    TWO_PANE,
+}
+
+/** Below this the words beside the content would leave either side a sliver. */
+private const val TWO_PANE_MIN_WIDTH_DP = 520f
+
+/**
+ * Two panes when stacking would squeeze the step between the header and the buttons (a phone in
+ * landscape) or leave half the screen empty (a foldable's inner screen, a tablet in landscape, a
+ * desktop window). A tall window keeps one column, however wide.
+ */
+internal fun onboardingLayout(window: AdaptiveWindow): OnboardingLayout {
+    val short = window.landscape && window.heightClass == WindowHeightClass.COMPACT
+    val broad = window.widthClass != WindowWidthClass.COMPACT && window.heightDp < window.widthDp * 1.15f
+    return if (window.widthDp >= TWO_PANE_MIN_WIDTH_DP && (short || broad)) OnboardingLayout.TWO_PANE else OnboardingLayout.SINGLE_COLUMN
+}
+
+/** Cards go side by side once the pane holding them is no longer a compact width. */
+internal fun onboardingCardColumns(paneWidthDp: Float): Int =
+    if (windowWidthClass(paneWidthDp) == WindowWidthClass.COMPACT) 1 else 2
+
+/** The two-pane layout never stretches wider than this on a desktop or a large tablet. */
+private val TwoPaneMaxWidth = 1120.dp
+
 @Composable
 internal fun OnboardingScreen(
     splash: SplashHandoff,
     onPermissionsChanged: () -> Unit,
     onFinished: () -> Unit,
+    hinge: FoldHinge? = null,
 ) {
     val context = LocalContext.current
     val reducedMotion = LocalReducedMotion.current
@@ -207,6 +243,7 @@ internal fun OnboardingScreen(
     val pagerState = rememberPagerState { pages.size }
     val scope = rememberCoroutineScope()
     var showLicenses by rememberSaveable { mutableStateOf(false) }
+    var tourSpot by rememberSaveable { mutableStateOf(TourSpot.RAIL) }
 
     // Re-read grants on resume: the user may have flipped one in the system settings.
     var grantEpoch by remember { mutableStateOf(0) }
@@ -305,13 +342,78 @@ internal fun OnboardingScreen(
 
     if (showLicenses) {
         BackHandler { showLicenses = false }
-        AboutScreen(onBack = { showLicenses = false })
+        // Opened from the tour, so the way back names the tour rather than Settings.
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            HingeSafeSettingsPane(hinge, tag = "onboarding-pane") {
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    AboutScreen(onBack = { showLicenses = false }, backLabel = stringResource(R.string.onb_licenses_back))
+                }
+            }
+        }
         return
     }
     BackHandler(enabled = pagerState.currentPage > 0 && !finishing) { goTo(pages[pagerState.currentPage - 1]) }
 
     val page = pages[pagerState.currentPage]
+    val doneActive = pagerState.targetPage == OnboardingPage.DONE.ordinal
     val arrivalShift = with(LocalDensity.current) { 24.dp.toPx() }
+    val header: @Composable (Modifier) -> Unit = { modifier ->
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            SharedAxis(page, reducedMotion, Modifier.weight(1f)) { shown ->
+                Text(
+                    stringResource(R.string.onb_page_counter, shown.ordinal + 1, pages.size) +
+                        pageLabel(shown)?.let { " · " + stringResource(it) }.orEmpty(),
+                    color = OnbMuted,
+                    fontSize = 13.sp,
+                )
+            }
+            if (page != OnboardingPage.DONE) {
+                FilledTonalButton(
+                    onClick = ::leave,
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = OnbSurfaceHigh, contentColor = OnbText),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("onboarding-skip"),
+                ) { Text(stringResource(R.string.onb_skip), fontWeight = FontWeight.SemiBold) }
+            } else {
+                Spacer(Modifier.height(48.dp))
+            }
+        }
+    }
+    val footer: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            PageDots(pages.size, pagerState.currentPage)
+            SharedAxis(page, reducedMotion, Modifier.fillMaxWidth()) { shown ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    when (shown) {
+                        OnboardingPage.PERMISSIONS -> {
+                            val allGranted = kinds.all { granted[it] == true }
+                            if (!allGranted) {
+                                PrimaryButton(stringResource(R.string.onb_allow_all), arrow = false) { request(kinds) }
+                            }
+                            if (cameraGranted) {
+                                if (allGranted) {
+                                    PrimaryButton(stringResource(R.string.onb_continue)) { goTo(OnboardingPage.OPEN_SOURCE) }
+                                } else {
+                                    TextButton(onClick = { goTo(OnboardingPage.OPEN_SOURCE) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                        Text(stringResource(R.string.onb_continue), color = OnbText, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            } else {
+                                Text(stringResource(R.string.onb_camera_needed), color = OnbMuted, fontSize = 13.sp, modifier = Modifier.heightIn(min = 48.dp).padding(top = 14.dp))
+                            }
+                        }
+                        OnboardingPage.DONE -> PrimaryButton(stringResource(R.string.onb_start_shooting), testTag = "onboarding-finish", onClick = ::leave)
+                        OnboardingPage.WELCOME -> PrimaryButton(stringResource(R.string.onb_get_started)) { goTo(OnboardingPage.FEATURES) }
+                        else -> PrimaryButton(stringResource(R.string.onb_next)) { goTo(pages[shown.ordinal + 1]) }
+                    }
+                }
+            }
+        }
+    }
+    // Neighbours are composed ahead, so a page never pays its first composition mid-slide.
+    val pager: @Composable (Modifier, @Composable (OnboardingPage) -> Unit) -> Unit = { modifier, content ->
+        HorizontalPager(state = pagerState, userScrollEnabled = !finishing, beyondViewportPageCount = 1, modifier = modifier) { content(pages[it]) }
+    }
+
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("onboarding")) {
         OnboardingBackdrop(
             progress = railProgress,
@@ -322,93 +424,171 @@ internal fun OnboardingScreen(
             onDispersed = { if (finishingState.value) currentFinished() },
             modifier = Modifier.fillMaxSize(),
         )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // The content arrives once the logo has scattered.
-                    val arrival = FastOutSlowInEasing.transform(((intro.value - 0.65f) / 0.35f).coerceIn(0f, 1f))
-                    alpha = contentAlpha.value * arrival
-                    translationY = (1f - arrival) * arrivalShift
-                }
-                .windowInsetsPadding(WindowInsets.safeDrawing),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Row(
-                modifier = Modifier.widthIn(max = ControlsMaxWidth).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SharedAxis(page, reducedMotion, Modifier.weight(1f)) { shown ->
-                    Text(
-                        stringResource(R.string.onb_page_counter, shown.ordinal + 1, pages.size) +
-                            pageLabel(shown)?.let { " · " + stringResource(it) }.orEmpty(),
-                        color = OnbMuted,
-                        fontSize = 13.sp,
-                    )
-                }
-                if (page != OnboardingPage.DONE) {
-                    FilledTonalButton(
-                        onClick = ::leave,
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = OnbSurfaceHigh, contentColor = OnbText),
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("onboarding-skip"),
-                    ) { Text(stringResource(R.string.onb_skip), fontWeight = FontWeight.SemiBold) }
-                } else {
-                    Spacer(Modifier.height(48.dp))
-                }
-            }
-            // Neighbours are composed ahead, so a page never pays its first composition mid-slide.
-            HorizontalPager(state = pagerState, userScrollEnabled = !finishing, beyondViewportPageCount = 1, modifier = Modifier.weight(1f).fillMaxWidth()) { index ->
-                BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(top = 4.dp), contentAlignment = Alignment.TopCenter) {
-                    val wide = maxWidth > maxHeight && maxHeight < 520.dp
-                    Box(Modifier.widthIn(max = if (wide) ControlsMaxWidth else PageMaxWidth).fillMaxSize()) {
-                        when (pages[index]) {
-                            OnboardingPage.WELCOME -> WelcomePage()
-                            OnboardingPage.FEATURES -> FeaturesPage(wide)
-                            OnboardingPage.TOUR -> TourPage(wide)
-                            OnboardingPage.PERMISSIONS -> PermissionsPage(wide, kinds, granted, blocked, ::request)
-                            OnboardingPage.OPEN_SOURCE -> OpenSourcePage(wide) { showLicenses = true }
-                            OnboardingPage.DONE -> HeroPage(
-                                wide,
-                                { DoneShape(active = pagerState.targetPage == OnboardingPage.DONE.ordinal, modifier = it) },
-                                R.string.onb_ready_title, R.string.onb_ready_body, large = true,
-                            )
-                        }
+        HingeSafeSettingsPane(hinge, tag = "onboarding-pane") {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        // The content arrives once the logo has scattered.
+                        val arrival = FastOutSlowInEasing.transform(((intro.value - 0.65f) / 0.35f).coerceIn(0f, 1f))
+                        alpha = contentAlpha.value * arrival
+                        translationY = (1f - arrival) * arrivalShift
                     }
-                }
-            }
-            Column(
-                modifier = Modifier.widthIn(max = ControlsMaxWidth).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                PageDots(pages.size, pagerState.currentPage)
-                SharedAxis(page, reducedMotion, Modifier.fillMaxWidth()) { shown ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        when (shown) {
-                            OnboardingPage.PERMISSIONS -> {
-                                val allGranted = kinds.all { granted[it] == true }
-                                if (!allGranted) {
-                                    PrimaryButton(stringResource(R.string.onb_allow_all), arrow = false) { request(kinds) }
-                                }
-                                if (cameraGranted) {
-                                    if (allGranted) {
-                                        PrimaryButton(stringResource(R.string.onb_continue)) { goTo(OnboardingPage.OPEN_SOURCE) }
-                                    } else {
-                                        TextButton(onClick = { goTo(OnboardingPage.OPEN_SOURCE) }, modifier = Modifier.heightIn(min = 48.dp)) {
-                                            Text(stringResource(R.string.onb_continue), color = OnbText, fontWeight = FontWeight.SemiBold)
-                                        }
+                val window = AdaptiveWindow(maxWidth.value, maxHeight.value)
+                if (onboardingLayout(window) == OnboardingLayout.TWO_PANE) {
+                    // The words and the buttons stay put beside the step, so Allow and Next are
+                    // always on screen however short the window is.
+                    Row(
+                        Modifier.widthIn(max = TwoPaneMaxWidth).fillMaxSize().padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    ) {
+                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                            header(Modifier.fillMaxWidth().padding(top = 8.dp))
+                            SharedAxis(page, reducedMotion, Modifier.weight(1f).fillMaxWidth()) { shown ->
+                                FadingScroll(Modifier.fillMaxSize(), Arrangement.Center) { PageHeading(shown, tourSpot) }
+                            }
+                            footer(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp))
+                        }
+                        pager(Modifier.weight(0.58f).fillMaxHeight()) { shown ->
+                            BoxWithConstraints(Modifier.fillMaxSize().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                val columns = onboardingCardColumns(maxWidth.value)
+                                when (shown) {
+                                    OnboardingPage.WELCOME -> Unit
+                                    OnboardingPage.FEATURES -> FadingScroll(Modifier.fillMaxSize(), Arrangement.Center) { FeatureCards(columns) }
+                                    OnboardingPage.TOUR -> MiniViewfinder(tourSpot, { tourSpot = it }, portrait = false, Modifier.aspectRatio(4f / 3f))
+                                    OnboardingPage.PERMISSIONS -> FadingScroll(Modifier.fillMaxSize(), Arrangement.Center) {
+                                        PermissionCards(columns, kinds, granted, blocked, ::request)
                                     }
-                                } else {
-                                    Text(stringResource(R.string.onb_camera_needed), color = OnbMuted, fontSize = 13.sp, modifier = Modifier.heightIn(min = 48.dp).padding(top = 14.dp))
+                                    OnboardingPage.OPEN_SOURCE -> FadingScroll(Modifier.fillMaxSize(), Arrangement.Center) {
+                                        OpenSourceCards(columns) { showLicenses = true }
+                                    }
+                                    OnboardingPage.DONE -> DoneShape(doneActive, Modifier.fillMaxSize())
                                 }
                             }
-                            OnboardingPage.DONE -> PrimaryButton(stringResource(R.string.onb_start_shooting), testTag = "onboarding-finish", onClick = ::leave)
-                            OnboardingPage.WELCOME -> PrimaryButton(stringResource(R.string.onb_get_started)) { goTo(OnboardingPage.FEATURES) }
-                            else -> PrimaryButton(stringResource(R.string.onb_next)) { goTo(pages[shown.ordinal + 1]) }
                         }
+                    }
+                } else {
+                    // Header, step and buttons share one width, so their edges line up on a tablet.
+                    val column = Modifier.widthIn(max = PageMaxWidth + 48.dp).fillMaxWidth().padding(horizontal = 24.dp)
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        header(column.padding(top = 8.dp, bottom = 12.dp))
+                        pager(Modifier.weight(1f).fillMaxWidth()) { shown ->
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                                FadingScroll(column.fillMaxHeight().padding(top = 4.dp), if (shown == OnboardingPage.WELCOME) Arrangement.Center else Arrangement.Top) {
+                                    when (shown) {
+                                        OnboardingPage.WELCOME -> WelcomeText()
+                                        OnboardingPage.FEATURES -> { PageTitle(R.string.onb_features_title); FeatureCards(1) }
+                                        OnboardingPage.TOUR -> {
+                                            PageTitle(R.string.onb_tour_title, R.string.onb_tour_body)
+                                            MiniViewfinder(tourSpot, { tourSpot = it }, portrait = !window.landscape, Modifier.fillMaxWidth().aspectRatio(4f / 3f))
+                                            Spacer(Modifier.height(6.dp))
+                                            TourSpotCard(tourSpot)
+                                        }
+                                        OnboardingPage.PERMISSIONS -> {
+                                            PageTitle(R.string.onb_permissions_title, R.string.onb_permissions_body)
+                                            PermissionCards(1, kinds, granted, blocked, ::request)
+                                        }
+                                        OnboardingPage.OPEN_SOURCE -> {
+                                            PageTitle(R.string.onb_open_source_title, R.string.onb_open_source_body)
+                                            OpenSourceCards(1) { showLicenses = true }
+                                        }
+                                        OnboardingPage.DONE -> {
+                                            DoneShape(doneActive, Modifier.fillMaxWidth().aspectRatio(1.25f))
+                                            HeroText(R.string.onb_ready_title, R.string.onb_ready_body)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        footer(column.padding(top = 12.dp, bottom = 16.dp))
                     }
                 }
             }
+        }
+    }
+}
+
+/** The words of a step, shown beside its content in the two-pane layout. */
+@Composable
+private fun PageHeading(page: OnboardingPage, spot: TourSpot) {
+    when (page) {
+        OnboardingPage.WELCOME -> WelcomeText()
+        OnboardingPage.FEATURES -> PageTitle(R.string.onb_features_title)
+        OnboardingPage.TOUR -> {
+            PageTitle(R.string.onb_tour_title, R.string.onb_tour_body)
+            TourSpotCard(spot)
+        }
+        OnboardingPage.PERMISSIONS -> PageTitle(R.string.onb_permissions_title, R.string.onb_permissions_body)
+        OnboardingPage.OPEN_SOURCE -> PageTitle(R.string.onb_open_source_title, R.string.onb_open_source_body)
+        OnboardingPage.DONE -> HeroText(R.string.onb_ready_title, R.string.onb_ready_body)
+    }
+}
+
+/** Fades over the last stretch of an edge where more content waits beyond it. */
+private val FadeEdge = 28.dp
+
+/**
+ * A scrolling column for a step. An edge fades while there is more past it, and a "More below"
+ * cue shows until the operator scrolls, so a card under the fold is never a secret.
+ */
+@Composable
+private fun FadingScroll(
+    modifier: Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val state = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val cueThreshold = with(LocalDensity.current) { 48.dp.toPx() }
+    // maxValue reads Int.MAX_VALUE until the first layout, which would flash the cue on every page.
+    val cue by remember(state, cueThreshold) {
+        derivedStateOf { state.value == 0 && state.maxValue != Int.MAX_VALUE && state.maxValue > cueThreshold }
+    }
+    Box(modifier) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    val edge = FadeEdge.toPx().coerceAtMost(size.height / 2f)
+                    if (state.canScrollBackward) {
+                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black), 0f, edge), size = Size(size.width, edge), blendMode = BlendMode.DstIn)
+                    }
+                    if (state.canScrollForward) {
+                        val top = size.height - edge
+                        drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), top, size.height), Offset(0f, top), Size(size.width, edge), blendMode = BlendMode.DstIn)
+                    }
+                }
+                .verticalScroll(state),
+            verticalArrangement = verticalArrangement,
+            content = content,
+        )
+        AnimatedVisibility(cue, Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp), enter = fadeIn(), exit = fadeOut()) {
+            MoreBelow { scope.launch { state.animateScrollTo(state.maxValue) } }
+        }
+    }
+}
+
+@Composable
+private fun MoreBelow(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = OnbSurfaceHigh,
+        contentColor = OnbText,
+        modifier = Modifier.testTag("onboarding-more-below"),
+    ) {
+        Row(
+            Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(stringResource(R.string.onb_more_below), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            CineGlyph(CineIcon.EXPAND, OnbText, Modifier.size(16.dp))
         }
     }
 }
@@ -474,28 +654,10 @@ private fun PageDots(count: Int, current: Int) {
     }
 }
 
-/** Portrait stacks the hero above the text; short landscape windows put them side by side. */
 @Composable
-private fun SplitPage(wide: Boolean, hero: (@Composable (Modifier) -> Unit)?, content: @Composable () -> Unit) {
-    if (wide && hero != null) {
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            hero(Modifier.weight(1f).fillMaxHeight().padding(vertical = 8.dp))
-            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) { content() }
-        }
-    } else {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            hero?.invoke(Modifier.fillMaxWidth().aspectRatio(1.25f))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun HeroPage(wide: Boolean, hero: @Composable (Modifier) -> Unit, @StringRes title: Int, @StringRes body: Int, large: Boolean = false) {
-    SplitPage(wide, hero) {
-        Text(stringResource(title), color = OnbText, fontSize = if (large) 34.sp else 26.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(top = 28.dp, bottom = 10.dp))
-        Text(stringResource(body), color = OnbMuted, fontSize = 15.sp, lineHeight = 22.sp)
-    }
+private fun HeroText(@StringRes title: Int, @StringRes body: Int) {
+    Text(stringResource(title), color = OnbText, fontSize = 34.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(top = 28.dp, bottom = 10.dp))
+    Text(stringResource(body), color = OnbMuted, fontSize = 15.sp, lineHeight = 22.sp)
 }
 
 @Composable
@@ -504,17 +666,33 @@ private fun PageTitle(@StringRes title: Int, @StringRes body: Int? = null) {
     if (body != null) Text(stringResource(body), color = OnbMuted, fontSize = 14.sp, lineHeight = 20.sp, modifier = Modifier.padding(bottom = 10.dp))
 }
 
+/** Lays cards out in [columns], each row as tall as its tallest card so the edges line up. */
+@Composable
+private fun <T> CardGrid(items: List<T>, columns: Int, card: @Composable (T, Modifier) -> Unit) {
+    if (columns <= 1) {
+        items.forEach { card(it, Modifier) }
+        return
+    }
+    items.chunked(columns).forEach { row ->
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { Box(Modifier.weight(1f).fillMaxHeight()) { card(it, Modifier.fillMaxHeight()) } }
+            repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+}
+
 @Composable
 private fun InfoCard(
     @DrawableRes icon: Int,
     title: String,
     body: String,
+    modifier: Modifier = Modifier,
     iconTint: Color = OnbAmber,
     onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp)
             .clip(RoundedCornerShape(24.dp))
@@ -536,32 +714,20 @@ private fun InfoCard(
     }
 }
 
+private val Features = listOf(
+    Triple(R.drawable.ic_onb_tune, R.string.onb_feature_manual, R.string.onb_feature_manual_body),
+    Triple(R.drawable.ic_onb_movie, R.string.onb_feature_log, R.string.onb_feature_log_body),
+    Triple(R.drawable.ic_onb_scopes, R.string.onb_feature_scopes, R.string.onb_feature_scopes_body),
+    Triple(R.drawable.ic_onb_mic, R.string.onb_feature_audio, R.string.onb_feature_audio_body),
+    Triple(R.drawable.ic_onb_timer, R.string.onb_feature_timecode, R.string.onb_feature_timecode_body),
+)
+
 @Composable
-private fun FeaturesPage(wide: Boolean) {
-    val features = listOf(
-        Triple(R.drawable.ic_onb_tune, R.string.onb_feature_manual, R.string.onb_feature_manual_body),
-        Triple(R.drawable.ic_onb_movie, R.string.onb_feature_log, R.string.onb_feature_log_body),
-        Triple(R.drawable.ic_onb_scopes, R.string.onb_feature_scopes, R.string.onb_feature_scopes_body),
-        Triple(R.drawable.ic_onb_mic, R.string.onb_feature_audio, R.string.onb_feature_audio_body),
-        Triple(R.drawable.ic_onb_timer, R.string.onb_feature_timecode, R.string.onb_feature_timecode_body),
-    )
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        PageTitle(R.string.onb_features_title)
-        if (wide) {
-            features.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { (icon, title, body) ->
-                        Box(Modifier.weight(1f)) { InfoCard(icon, stringResource(title), stringResource(body)) }
-                    }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-        } else {
-            features.forEach { (icon, title, body) -> InfoCard(icon, stringResource(title), stringResource(body)) }
-        }
-    }
+private fun FeatureCards(columns: Int) {
+    CardGrid(Features, columns) { (icon, title, body), modifier -> InfoCard(icon, stringResource(title), stringResource(body), modifier) }
 }
 
+/** The tour's hotspots; [RAIL] is the camera settings, kept under its old name for the test tag. */
 private enum class TourSpot(@param:StringRes val title: Int, @param:StringRes val body: Int) {
     STATUS(R.string.onb_tour_status, R.string.onb_tour_status_body),
     RAIL(R.string.onb_tour_rail, R.string.onb_tour_rail_body),
@@ -569,18 +735,22 @@ private enum class TourSpot(@param:StringRes val title: Int, @param:StringRes va
 }
 
 @Composable
-private fun TourPage(wide: Boolean) {
-    var spot by rememberSaveable { mutableStateOf(TourSpot.RAIL) }
-    SplitPage(wide, hero = if (wide) { m -> MiniViewfinder(spot, { spot = it }, m) } else null) {
-        PageTitle(R.string.onb_tour_title, R.string.onb_tour_body)
-        if (!wide) MiniViewfinder(spot, { spot = it }, Modifier.fillMaxWidth().aspectRatio(4f / 3f))
-        Spacer(Modifier.height(6.dp))
-        InfoCard(R.drawable.ic_onb_touch, stringResource(spot.title), stringResource(spot.body))
-    }
+private fun TourSpotCard(spot: TourSpot) {
+    InfoCard(R.drawable.ic_onb_touch, stringResource(spot.title), stringResource(spot.body))
 }
 
+/**
+ * A drawn stand-in for the capture screen. Like the real one, a [portrait] window puts the camera
+ * settings in a strip along the bottom and a landscape window in a column at the end, next to REC.
+ */
 @Composable
-private fun MiniViewfinder(selected: TourSpot, onSelect: (TourSpot) -> Unit, modifier: Modifier) {
+private fun MiniViewfinder(selected: TourSpot, onSelect: (TourSpot) -> Unit, portrait: Boolean, modifier: Modifier) {
+    val settings = listOf("180°", "ISO 400", "5600K", "AF")
+    val record: @Composable (Modifier) -> Unit = { m ->
+        TourHotspot(TourSpot.RECORD, selected, onSelect, m, shape = CircleShape) {
+            Box(Modifier.padding(5.dp).size(38.dp).clip(CircleShape).background(LocalCineColors.current.record))
+        }
+    }
     Box(modifier.clip(RoundedCornerShape(24.dp)).border(1.dp, OnbSurfaceHigh, RoundedCornerShape(24.dp))) {
         Canvas(Modifier.fillMaxSize()) {
             drawRect(Brush.verticalGradient(listOf(Color(0xFF1C2A3A), Color(0xFF6B3E1A), Color(0xFF1A1410))))
@@ -606,13 +776,32 @@ private fun MiniViewfinder(selected: TourSpot, onSelect: (TourSpot) -> Unit, mod
         TourHotspot(TourSpot.STATUS, selected, onSelect, Modifier.align(Alignment.TopStart).padding(10.dp)) {
             Text("00:12:45:08 · 4K 24 · 256 GB", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
         }
-        TourHotspot(TourSpot.RAIL, selected, onSelect, Modifier.align(Alignment.CenterEnd).padding(10.dp)) {
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                listOf("ISO", "180°", "5600K", "AF").forEach { Text(it, color = Color.White, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
+        if (portrait) {
+            Row(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TourHotspot(TourSpot.RAIL, selected, onSelect, Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        settings.forEach { Text(it, color = Color.White, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1) }
+                    }
+                }
+                record(Modifier)
             }
-        }
-        TourHotspot(TourSpot.RECORD, selected, onSelect, Modifier.align(Alignment.BottomCenter).padding(10.dp), shape = CircleShape) {
-            Box(Modifier.padding(5.dp).size(38.dp).clip(CircleShape).background(LocalCineColors.current.record))
+        } else {
+            Row(
+                Modifier.align(Alignment.CenterEnd).padding(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TourHotspot(TourSpot.RAIL, selected, onSelect, Modifier) {
+                    Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        settings.forEach { Text(it, color = Color.White, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1) }
+                    }
+                }
+                record(Modifier)
+            }
         }
     }
 }
@@ -639,37 +828,25 @@ private fun TourHotspot(
 }
 
 @Composable
-private fun PermissionsPage(
-    wide: Boolean,
+private fun PermissionCards(
+    columns: Int,
     kinds: List<PermissionKind>,
     granted: Map<PermissionKind, Boolean>,
     blocked: Set<PermissionKind>,
     onRequest: (List<PermissionKind>) -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        PageTitle(R.string.onb_permissions_title, R.string.onb_permissions_body)
-        val cards: @Composable (PermissionKind) -> Unit = { kind -> PermissionCard(kind, granted[kind] == true, kind in blocked) { onRequest(listOf(kind)) } }
-        if (wide) {
-            kinds.chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    row.forEach { Box(Modifier.weight(1f)) { cards(it) } }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
-        } else {
-            kinds.forEach { cards(it) }
-        }
-    }
+    CardGrid(kinds, columns) { kind, modifier -> PermissionCard(kind, granted[kind] == true, kind in blocked, modifier) { onRequest(listOf(kind)) } }
 }
 
 @Composable
-private fun PermissionCard(kind: PermissionKind, granted: Boolean, blocked: Boolean, onAllow: () -> Unit) {
+private fun PermissionCard(kind: PermissionKind, granted: Boolean, blocked: Boolean, modifier: Modifier, onAllow: () -> Unit) {
     val success = LocalCineColors.current.success
+    // SpaceBetween keeps Allow on the bottom edge when a neighbouring card makes the row taller.
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(24.dp)).background(OnbSurface).padding(14.dp).testTag("perm-${kind.name.lowercase()}"),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(24.dp)).background(OnbSurface).padding(14.dp).testTag("perm-${kind.name.lowercase()}"),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(
                 Modifier.size(44.dp).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 6.dp))
                     .background(if (granted) success.container else OnbSurfaceHigh),
@@ -705,7 +882,7 @@ private fun PermissionCard(kind: PermissionKind, granted: Boolean, blocked: Bool
                         containerColor = if (kind.required) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = if (kind.required) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
                     ),
-                    modifier = Modifier.heightIn(min = 40.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 ) { Text(stringResource(if (blocked) R.string.onb_open_settings else R.string.onb_allow), fontWeight = FontWeight.SemiBold) }
             }
         }
@@ -713,52 +890,46 @@ private fun PermissionCard(kind: PermissionKind, granted: Boolean, blocked: Bool
 }
 
 @Composable
-private fun OpenSourcePage(wide: Boolean, onViewLicenses: () -> Unit) {
+private fun OpenSourceCards(columns: Int, onViewLicenses: () -> Unit) {
     val context = LocalContext.current
     val componentCount = remember(context) { runCatching { loadThirdPartyComponents(context).size }.getOrDefault(0) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        PageTitle(R.string.onb_open_source_title, R.string.onb_open_source_body)
-        val license: @Composable () -> Unit = {
-            Column(
-                Modifier.fillMaxWidth().padding(vertical = 5.dp)
-                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 28.dp, bottomStart = 8.dp))
-                    .background(OnbSurface).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(painterResource(R.drawable.ic_onb_license), contentDescription = null, tint = OnbAmber, modifier = Modifier.size(22.dp))
-                    Text(stringResource(R.string.onb_license_title), color = OnbText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                }
-                Text(stringResource(R.string.onb_license_body), color = OnbMuted, fontSize = 13.sp, lineHeight = 18.sp)
-                if (componentCount > 0) Text(stringResource(R.string.onb_components, componentCount), color = OnbMuted, fontSize = 13.sp, lineHeight = 18.sp)
+    val license: @Composable (Modifier) -> Unit = { modifier ->
+        Column(
+            modifier.fillMaxWidth().padding(vertical = 5.dp)
+                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomEnd = 28.dp, bottomStart = 8.dp))
+                .background(OnbSurface).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(painterResource(R.drawable.ic_onb_license), contentDescription = null, tint = OnbAmber, modifier = Modifier.size(22.dp))
+                Text(stringResource(R.string.onb_license_title), color = OnbText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
+            Text(stringResource(R.string.onb_license_body), color = OnbMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            if (componentCount > 0) Text(stringResource(R.string.onb_components, componentCount), color = OnbMuted, fontSize = 13.sp, lineHeight = 18.sp)
         }
-        val authors: @Composable () -> Unit = {
-            InfoCard(R.drawable.ic_onb_group, stringResource(R.string.onb_authors), stringResource(R.string.about_developed_by))
+    }
+    val others: @Composable () -> Unit = {
+        InfoCard(R.drawable.ic_onb_group, stringResource(R.string.onb_authors), stringResource(R.string.about_developed_by))
+        InfoCard(R.drawable.ic_onb_license, stringResource(R.string.onb_view_licenses), stringResource(R.string.onb_view_licenses_body), onClick = onViewLicenses) {
+            Icon(painterResource(R.drawable.ic_onb_arrow), contentDescription = null, tint = OnbMuted, modifier = Modifier.size(20.dp))
         }
-        val all: @Composable () -> Unit = {
-            InfoCard(R.drawable.ic_onb_license, stringResource(R.string.onb_view_licenses), stringResource(R.string.onb_view_licenses_body), onClick = onViewLicenses) {
-                Icon(painterResource(R.drawable.ic_onb_arrow), contentDescription = null, tint = OnbMuted, modifier = Modifier.size(20.dp))
-            }
+    }
+    if (columns > 1) {
+        Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            license(Modifier.weight(1f).fillMaxHeight())
+            Column(Modifier.weight(1f)) { others() }
         }
-        if (wide) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f)) { license() }
-                Column(Modifier.weight(1f)) { authors(); all() }
-            }
-        } else {
-            license(); authors(); all()
-        }
+    } else {
+        license(Modifier)
+        others()
     }
 }
 
 /** The first page: the logo intro has just scattered over the backdrop, so only the words come in. */
 @Composable
-private fun WelcomePage() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
-        Text(stringResource(R.string.onb_welcome_title), color = OnbText, fontSize = 34.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(bottom = 10.dp))
-        Text(stringResource(R.string.onb_welcome_body), color = OnbMuted, fontSize = 15.sp, lineHeight = 22.sp)
-    }
+private fun WelcomeText() {
+    Text(stringResource(R.string.onb_welcome_title), color = OnbText, fontSize = 34.sp, fontWeight = FontWeight.Bold, lineHeight = 38.sp, modifier = Modifier.padding(bottom = 10.dp))
+    Text(stringResource(R.string.onb_welcome_body), color = OnbMuted, fontSize = 15.sp, lineHeight = 22.sp)
 }
 
 /**

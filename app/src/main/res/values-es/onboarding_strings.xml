@@ -24,8 +24,8 @@
     <string name="onb_tour_body">Tocá un recuadro para saber qué hace.</string>
     <string name="onb_tour_status">Timecode y almacenamiento</string>
     <string name="onb_tour_status_body">Timecode en curso, formato de grabación y el espacio libre del dispositivo.</string>
-    <string name="onb_tour_rail">Barra rápida</string>
-    <string name="onb_tour_rail_body">Tocá ISO, obturador, balance de blancos o foco y deslizá para cambiarlo sin abrir menús.</string>
+    <string name="onb_tour_rail">Ajustes de cámara</string>
+    <string name="onb_tour_rail_body">Tocá obturador, ISO, balance de blancos o foco para ajustarlo. La imagen sigue a la vista mientras tanto.</string>
     <string name="onb_tour_record">Grabar</string>
     <string name="onb_tour_record_body">Inicia y detiene una toma. Solo se pone rojo mientras realmente estás grabando.</string>
     <string name="onb_permissions_label">Permisos</string>
@@ -59,4 +59,6 @@
     <string name="onb_ready_title">Todo listo</string>
     <string name="onb_ready_body">Tip: mantené presionado un control para saber más. Podés repetir este recorrido desde Ajustes › Acerca de.</string>
     <string name="onb_replay">Ver recorrido de bienvenida</string>
+    <string name="onb_licenses_back">Volver al recorrido de bienvenida</string>
+    <string name="onb_more_below">Hay más abajo</string>
 </resources>

@@ -24,8 +24,8 @@
     <string name="onb_tour_body">Tippe auf eine Markierung, um zu erfahren, was sie bewirkt.</string>
     <string name="onb_tour_status">Timecode und Speicher</string>
     <string name="onb_tour_status_body">Laufender Timecode, Aufnahmeformat und freier Speicherplatz auf deinem Gerät.</string>
-    <string name="onb_tour_rail">Schnellleiste</string>
-    <string name="onb_tour_rail_body">Tippe auf ISO, Verschlusszeit, Weißabgleich oder Fokus und wische, um den Wert zu ändern, ohne Menüs zu öffnen.</string>
+    <string name="onb_tour_rail">Kameraeinstellungen</string>
+    <string name="onb_tour_rail_body">Tippe auf Verschlusszeit, ISO, Weißabgleich oder Fokus, um den Wert anzupassen. Das Bild bleibt dabei sichtbar.</string>
     <string name="onb_tour_record">Aufnahme</string>
     <string name="onb_tour_record_body">Startet und beendet einen Take. Sie wird nur rot, solange wirklich aufgenommen wird.</string>
     <string name="onb_permissions_label">Berechtigungen</string>
@@ -59,4 +59,6 @@
     <string name="onb_ready_title">Du bist bereit</string>
     <string name="onb_ready_body">Tipp: Halte ein Bedienelement gedrückt, um mehr darüber zu erfahren. Du kannst diese Tour unter Einstellungen › Info erneut abspielen.</string>
     <string name="onb_replay">Willkommenstour anzeigen</string>
+    <string name="onb_licenses_back">Zurück zur Willkommenstour</string>
+    <string name="onb_more_below">Weiter unten mehr</string>
 </resources>

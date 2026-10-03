@@ -24,8 +24,8 @@
     <string name="onb_tour_body">Tocca un elemento evidenziato per scoprire cosa fa.</string>
     <string name="onb_tour_status">Timecode e archiviazione</string>
     <string name="onb_tour_status_body">Timecode in corso, formato di registrazione e spazio rimasto sul dispositivo.</string>
-    <string name="onb_tour_rail">Barra rapida</string>
-    <string name="onb_tour_rail_body">Tocca ISO, otturatore, bilanciamento del bianco o fuoco e scorri per modificarli senza aprire menu.</string>
+    <string name="onb_tour_rail">Impostazioni fotocamera</string>
+    <string name="onb_tour_rail_body">Tocca otturatore, ISO, bilanciamento del bianco o fuoco per regolarlo. L\'immagine resta visibile mentre lo fai.</string>
     <string name="onb_tour_record">Registra</string>
     <string name="onb_tour_record_body">Avvia e ferma una ripresa. Diventa rosso solo mentre stai davvero registrando.</string>
     <string name="onb_permissions_label">Permessi</string>
@@ -59,4 +59,6 @@
     <string name="onb_ready_title">Tutto pronto</string>
     <string name="onb_ready_body">Suggerimento: tieni premuto un controllo per saperne di più. Puoi rivedere questo tour da Impostazioni › Info.</string>
     <string name="onb_replay">Mostra il tour di benvenuto</string>
+    <string name="onb_licenses_back">Torna al tour di benvenuto</string>
+    <string name="onb_more_below">Altro più in basso</string>
 </resources>

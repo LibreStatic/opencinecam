@@ -24,8 +24,8 @@
     <string name="onb_tour_body">Tap a highlight to learn what it does.</string>
     <string name="onb_tour_status">Timecode and storage</string>
     <string name="onb_tour_status_body">Running timecode, recording format and the space left on your device.</string>
-    <string name="onb_tour_rail">Quick rail</string>
-    <string name="onb_tour_rail_body">Tap ISO, shutter, white balance or focus and swipe to change it without opening menus.</string>
+    <string name="onb_tour_rail">Camera settings</string>
+    <string name="onb_tour_rail_body">Tap shutter, ISO, white balance or focus to adjust it. The picture stays in view while you do.</string>
     <string name="onb_tour_record">Record</string>
     <string name="onb_tour_record_body">Starts and stops a take. It only turns red while you are really recording.</string>
     <string name="onb_permissions_label">Permissions</string>
@@ -59,4 +59,6 @@
     <string name="onb_ready_title">You are ready</string>
     <string name="onb_ready_body">Tip: long-press a control to learn more about it. You can replay this tour from Settings › About.</string>
     <string name="onb_replay">Show welcome tour</string>
+    <string name="onb_licenses_back">Back to the welcome tour</string>
+    <string name="onb_more_below">More below</string>
 </resources>

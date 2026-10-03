@@ -172,10 +172,10 @@ internal fun OnboardingBackdrop(
     }
 
     BoxWithConstraints(modifier.clearAndSetSemantics {}.onGloballyPositioned { origin.value = it.positionInWindow() }) {
-        val count = when {
-            maxWidth >= 840.dp -> 16
-            maxWidth >= 600.dp -> 12
-            else -> 6
+        val count = when (windowWidthClass(maxWidth.value)) {
+            WindowWidthClass.COMPACT -> 6
+            WindowWidthClass.MEDIUM -> 12
+            else -> 16
         }
         // toShape is composable (it remembers its own conversion); the outlines are built from these once.
         val catalogue = BackdropShapes.map { it.toShape() }

@@ -103,6 +103,7 @@ internal fun AboutScreen(
     onBack: () -> Unit,
     onOpenUri: ((String) -> Unit)? = null,
     onReplayTour: (() -> Unit)? = null,
+    backLabel: String? = null,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -113,7 +114,7 @@ internal fun AboutScreen(
     var expandedLicenseText by remember { mutableStateOf<String?>(null) }
     var appLicenseExpanded by remember { mutableStateOf(false) }
     val appLicenseText = remember(context) { runCatching { readAsset(context, APP_LICENSE_ASSET) }.getOrDefault("") }
-    val backDescription = stringResource(R.string.about_back)
+    val backDescription = backLabel ?: stringResource(R.string.about_back)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(AboutGraphite).testTag("about-list"),
