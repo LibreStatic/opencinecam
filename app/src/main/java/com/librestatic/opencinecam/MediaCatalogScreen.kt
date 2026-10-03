@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import java.time.LocalDate
@@ -73,6 +74,8 @@ internal interface MediaCatalogSource {
     suspend fun facts(artifact: LocalMediaArtifact): GalleryFacts? = null
     /** Proxy state of the loaded takes, by take id; takes with no proxy are absent. */
     fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = flowOf(emptyMap())
+    /** The codec of a video whose sidecar declares none, read from the file itself; null when unknown. */
+    suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = null
 }
 
 @Composable
@@ -99,6 +102,9 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
                 withContext(Dispatchers.IO) { repository.page(settings, query, cursor, limit) }
             override suspend fun thumbnail(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryThumbnail(app, artifact) }
             override suspend fun facts(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryFacts(app, artifact) }
+            override suspend fun probedCodec(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) {
+                probeClipMetadata(app, artifact.uri, log = null)?.let { probedCodecBadge(it.codec, it.bitDepth) }
+            }
             // The queue for work in flight, the receipts (listed once per page load) for proxies already made.
             override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = if (ids.isEmpty()) flowOf(emptyMap())
                 else combine(queue.states, flow { emit(committedProxyTakes(app, ids)) }.flowOn(Dispatchers.IO)) { state, committed ->
@@ -231,6 +237,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         }
     }
     val facts = remember(source) { mutableMapOf<String, GalleryFacts>() }
+    val probedCodecs = remember(source) { mutableMapOf<String, CodecBadge?>() }
     val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
         .collectAsState(emptyMap())
     fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE)
@@ -322,7 +329,11 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         }
     }
     val details: @Composable (LocalMediaTake, Modifier, () -> Unit, Boolean) -> Unit = { take, modifier, close, onDemand ->
-        MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), badges(take),
+        // A plain recording declares no codec; only the take in the inspector is probed for one, never the cards.
+        val shown = badges(take).let {
+            if (it.codec == null && take.kind == LocalMediaKind.VIDEO) it.copy(codec = rememberProbedCodec(take, source, probedCodecs)) else it
+        }
+        MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), shown,
             if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier)
     }
 

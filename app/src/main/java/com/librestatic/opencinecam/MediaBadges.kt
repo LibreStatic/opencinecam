@@ -4,7 +4,12 @@ package com.librestatic.opencinecam
 import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.playback.profileBitDepth
@@ -17,6 +22,9 @@ import com.librestatic.opencinecam.storage.proxyReceiptName
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** A codec name and, when the take declares it, the sample depth ("HEVC" 10, "WAV" 32 float). */
 internal data class CodecBadge(val name: String, val bits: Int? = null, val float: Boolean = false)
@@ -50,6 +58,32 @@ internal fun videoCodecBadge(mime: String?, profile: String?): CodecBadge? {
         else -> null
     }
     return CodecBadge(name, bits)
+}
+
+/**
+ * A plain recording's codec as [com.librestatic.opencinecam.playback.probeClipMetadata] reads it from the
+ * file: its label ("AVC 8-bit") names the codec and [bits] is the depth its profile fixes, if any.
+ * HEVC, H.264 and AV1 are named; anything else shows nothing.
+ */
+internal fun probedCodecBadge(label: String?, bits: Int?): CodecBadge? {
+    val name = when (label?.substringBefore(' ')) { "HEVC" -> "HEVC"; "AVC" -> "H.264"; "AV1" -> "AV1"; else -> return null }
+    return CodecBadge(name, bits)
+}
+
+/**
+ * The probed codec of the take open in the inspector. Probed once per take while the gallery lives
+ * ([cache] keeps failures too, as null), so reopening a take or scrolling the grid reads nothing again.
+ */
+@Composable
+internal fun rememberProbedCodec(take: LocalMediaTake, source: MediaCatalogSource, cache: MutableMap<String, CodecBadge?>): CodecBadge? {
+    var codec by remember(take.id) { mutableStateOf(cache[take.id]) }
+    LaunchedEffect(source, take.id) {
+        if (take.id in cache) return@LaunchedEffect
+        val probed = try { source.probedCodec(take.primary) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+        currentCoroutineContext().ensureActive()
+        cache[take.id] = probed; codec = probed
+    }
+    return codec
 }
 
 internal fun photoCodecBadge(mime: String, name: String): CodecBadge? {

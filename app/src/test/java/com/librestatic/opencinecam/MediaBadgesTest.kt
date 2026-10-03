@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.playback.codecLabel
+import com.librestatic.opencinecam.playback.profileBitDepth
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaEncoding
 import com.librestatic.opencinecam.storage.LocalMediaKind
@@ -25,6 +27,20 @@ class MediaBadgesTest {
         assertNull(videoCodecBadge("video/av01", "Main10"))
         // A plain recording has only its MP4 container type: no guess.
         assertNull(codecBadge(LocalMediaKind.VIDEO, "video/mp4", "a.mp4", null))
+    }
+
+    @Test fun probedBadgeRenamesTheProbeLabelAndKeepsOnlyTheDepthItKnows() {
+        assertEquals(CodecBadge("H.264", 8), probedCodecBadge("AVC 8-bit", 8))
+        assertEquals(CodecBadge("HEVC", 10), probedCodecBadge("HEVC 10-bit", 10))
+        assertEquals(CodecBadge("AV1", 10), probedCodecBadge("AV1 10-bit", 10))
+        assertEquals(CodecBadge("HEVC"), probedCodecBadge("HEVC", null))
+        assertNull(probedCodecBadge("VP9 8-bit", 8))
+        assertNull(probedCodecBadge("MPEG-4", null))
+        assertNull(probedCodecBadge(null, null))
+        // What the probe builds from a MediaRecorder track: AVC High (8) and HEVC Main (1), then an unknown profile.
+        assertEquals(CodecBadge("H.264", 8), probedCodecBadge(codecLabel("video/avc", 8, null), profileBitDepth("video/avc", 8)))
+        assertEquals(CodecBadge("HEVC", 8), probedCodecBadge(codecLabel("video/hevc", 1, null), profileBitDepth("video/hevc", 1)))
+        assertEquals(CodecBadge("HEVC"), probedCodecBadge(codecLabel("video/hevc", null, null), profileBitDepth("video/hevc", null)))
     }
 
     @Test fun photoBadgeComesFromMimeThenExtension() {
