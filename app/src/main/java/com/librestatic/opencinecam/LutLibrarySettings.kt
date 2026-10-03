@@ -152,8 +152,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
     val available = !busy && library.error == null
     val validName = runCatching { LutLibrary.requireName(name) }.isSuccess
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.lut_library_title), color = MaterialTheme.colorScheme.onSurface)
-        SettingsHelp(stringResource(R.string.lut_library_help) + "\n\n" + stringResource(R.string.lut_preview_help), tag = "lut-preview-help")
+        SettingsSectionTitle(stringResource(R.string.lut_library_title), help = stringResource(R.string.lut_library_help) + "\n\n" + stringResource(R.string.lut_preview_help), helpTag = "lut-preview-help")
         val statusLabel = when (state.operatorLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_status_disabled
             OperatorLutState.WAITING_FOR_GPU -> R.string.lut_status_waiting

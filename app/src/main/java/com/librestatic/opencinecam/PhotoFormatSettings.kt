@@ -28,8 +28,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
         StillPhotoFormat.DNG -> false // The existing RAW capture mode owns DNG-only.
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.photo_format_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.photo_format_help))
+        SettingsSectionTitle(stringResource(R.string.photo_format_title), help = stringResource(R.string.photo_format_help))
         SettingsChips(stringResource(R.string.photo_format_label), listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC),
             settings.photoFormat, label = { if (it == StillPhotoFormat.RAW_JPEG) "RAW + JPEG" else it.name },
             onSelect = { onChange(settings.copy(photoFormat = it)) }, tag = { "photo-format-${it.name}" }, enabled = ::supported)

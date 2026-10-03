@@ -17,8 +17,7 @@ import androidx.compose.ui.unit.dp
 internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSettings: (MediaSharingSettings) -> Unit,
     enabled: Boolean = true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.media_sharing_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        SettingsHelp(stringResource(R.string.media_share_help), tag = "media-share-help")
+        SettingsSectionTitle(stringResource(R.string.media_sharing_title), help = stringResource(R.string.media_share_help), helpTag = "media-share-help")
         SettingsChips(stringResource(R.string.media_share_content_title), MediaShareContent.entries, settings.content,
             label = { stringResource(when (it) {
                 MediaShareContent.ORIGINALS_AND_METADATA -> R.string.media_share_content_both

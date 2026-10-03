@@ -31,8 +31,7 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
         try { policies.update(transform); error = null } catch (failure: Exception) { error = failure.message }
     } }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.proxy_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        SettingsHelp(stringResource(R.string.proxy_settings_help), tag = "proxy-settings-help")
+        SettingsSectionTitle(stringResource(R.string.proxy_settings_title), help = stringResource(R.string.proxy_settings_help), helpTag = "proxy-settings-help")
         SettingsChips(stringResource(R.string.proxy_settings_edge), listOf(640, 1280, 1920), settings.maxLongEdge,
             label = { stringResource(R.string.proxy_settings_edge_value, it) },
             onSelect = { if (settings.maxLongEdge != it) onSettings(settings.copy(maxLongEdge = it)) },

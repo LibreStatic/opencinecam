@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="settings_category_matches">
+        <item quantity="one">%d risultato</item>
+        <item quantity="many">%d risultati</item>
+        <item quantity="other">%d risultati</item>
+    </plurals>
+    <string name="settings_camera_reports">La fotocamera riporta: %1$s</string>
+    <string name="readback_antibanding">antisfarfallio: %1$s</string>
+    <string name="readback_optical">stabilizzazione ottica: %1$s</string>
+    <string name="readback_video">stabilizzazione elettronica: %1$s</string>
+    <string name="readback_noise">riduzione del rumore: %1$s</string>
+    <string name="readback_edge">nitidezza dei bordi: %1$s</string>
+    <string name="readback_on">Attivo</string>
+    <string name="readback_preview_only">Solo anteprima</string>
+    <string name="pro_auto">Automatico</string>
+    <string name="pro_auto_reported">Automatico (fotocamera: %1$s)</string>
+    <string name="pro_exposure_auto_only">Questa fotocamera offre solo l\'esposizione automatica.</string>
+    <string name="pro_wb_temperature">Temperatura colore</string>
+    <string name="caps_section_readback">Richiesto e riportato</string>
+    <string name="caps_section_readback_summary">Ciò che OpenCineCam ha chiesto alla fotocamera in uso, accanto a ciò che la fotocamera ha riportato nell\'ultimo fotogramma.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">tutti i formati verificati</string>
+    <string name="hardware_log_hdr">Da video HDR a 10 bit: fino a %1$d×%2$d, fino a %3$d fps</string>
+    <string name="hardware_log_high_speed">Alta velocità da video a 8 bit: fino a %1$d fps</string>
+    <string name="anamorphic_off">Disattivato</string>
+    <string name="anamorphic_output_squeezed">Mantieni compresso</string>
+    <string name="anamorphic_output_desqueezed">Decomprimi</string>
+    <string name="anamorphic_output_summary">Mantieni compresso salva l\'immagine dell\'obiettivo così com\'è e indica ai lettori di allungarla. Decomprimi la allunga nel file.</string>
+    <string name="audio_pcm_rate">Sorgente non compressa: %1$d kbps</string>
+</resources>

@@ -373,8 +373,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOperatorGlyph(a
 internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val operation = settings.operation
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.operator_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.operator_help) + "\n\n" + stringResource(R.string.operator_help_hint))
+        SettingsSectionTitle(stringResource(R.string.operator_title), help = stringResource(R.string.operator_help) + "\n\n" + stringResource(R.string.operator_help_hint))
         operation.buttons.forEachIndexed { index, action ->
             OperatorChoice(stringResource(R.string.operator_button, index + 1), action, OperatorAction.entries.filter { it != OperatorAction.SYSTEM_VOLUME }, "operator-map-${index + 1}") { selected ->
                 onChange(settings.copy(operation = when (index) { 0 -> operation.copy(button1 = selected); 1 -> operation.copy(button2 = selected); else -> operation.copy(button3 = selected) }))

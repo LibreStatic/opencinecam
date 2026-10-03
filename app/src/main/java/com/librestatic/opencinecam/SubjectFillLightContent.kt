@@ -89,7 +89,6 @@ internal fun SubjectFillLightSettings(state: CameraUiState, subject: SubjectDisp
     val live by (coordinator?.fillLight ?: fallback).collectAsState()
     val active = subject.mode == SubjectDisplayMode.FILL_LIGHT
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingsHelp(stringResource(R.string.subject_fill_light_help))
         FoldToggle(stringResource(R.string.subject_fill_light_enable), active) {
             onChange(subject.copy(mode = if (it) SubjectDisplayMode.FILL_LIGHT else SubjectDisplayMode.STATUS))
         }

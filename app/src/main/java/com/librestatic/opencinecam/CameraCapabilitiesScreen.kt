@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -40,15 +41,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +83,7 @@ internal fun CameraCapabilitiesScreen(
     activeCameraId: String?,
     onBack: () -> Unit,
     loadInventory: ((Context) -> List<CameraInventory>)? = null,
+    liveState: CameraUiState? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -102,30 +101,24 @@ internal fun CameraCapabilitiesScreen(
     val selected = loaded?.firstOrNull { it.cameraId == selectedId } ?: loaded?.firstOrNull()
     val descriptor = selected?.let { inv -> cameras.firstOrNull { it.cameraId == inv.cameraId } }
     val findings = remember(descriptor) { descriptor?.let(::auditCameraCapabilities).orEmpty() }
-    val backDescription = stringResource(R.string.about_back)
     val copied = stringResource(R.string.caps_copied)
     val copyFailed = stringResource(R.string.caps_copy_failed)
     val clipLabel = stringResource(R.string.caps_title)
 
+    // Same width rules as the settings list: capped and centred on tablets and desktops.
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val gutter = settingsSideGutterDp(maxWidth.value)
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("capabilities-list"),
-        contentPadding = PaddingValues(16.dp),
+        modifier = Modifier.fillMaxSize().testTag("capabilities-list"),
+        contentPadding = PaddingValues(horizontal = gutter.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "header") {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onBack)
-                        .semantics { contentDescription = backDescription }.testTag("capabilities-back"),
-                    contentAlignment = Alignment.Center,
-                ) { CineGlyph(CineIcon.BACK, MaterialTheme.colorScheme.onSurface, Modifier.size(22.dp)) }
-                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(stringResource(R.string.caps_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Text(deviceLine(), color = SettingsMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (!loaded.isNullOrEmpty()) TextButton(
+            val report = loaded?.takeIf { it.isNotEmpty() }
+            SettingsTopBar(stringResource(R.string.caps_title), onBack, backTag = "capabilities-back", subtitle = deviceLine(), action = report?.let { list -> {
+                TextButton(
                     onClick = {
-                        val text = capabilityReportText(deviceLine(), loaded, cameras, context::getString)
+                        val text = capabilityReportText(deviceLine(), list, cameras, context::getString, liveState)
                         val ok = runCatching {
                             context.getSystemService(ClipboardManager::class.java)
                                 .setPrimaryClip(ClipData.newPlainText(clipLabel, text))
@@ -134,7 +127,7 @@ internal fun CameraCapabilitiesScreen(
                     },
                     modifier = Modifier.heightIn(min = 48.dp).testTag("capabilities-copy"),
                 ) { Text(stringResource(R.string.caps_copy), color = SettingsAccent) }
-            }
+            } })
         }
         when {
             loaded == null -> item(key = "loading") { Text(stringResource(R.string.caps_loading), color = SettingsMuted) }
@@ -153,6 +146,9 @@ internal fun CameraCapabilitiesScreen(
                 }
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
+                // Live values only belong to the camera in use; Settings shows a one-line summary of them.
+                val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
+                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live)) }
                 item(key = "raw-header-${selected.cameraId}") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         SettingsHeading(stringResource(R.string.caps_section_raw, selected.entries.size), stringResource(R.string.caps_section_raw_summary))
@@ -184,6 +180,7 @@ internal fun CameraCapabilitiesScreen(
                 }
             }
         }
+    }
     }
 }
 
@@ -225,6 +222,19 @@ private fun AppUsageCard(camera: CameraInventory, findings: List<AppFeatureFindi
             CineIcon.CHECK,
         )
         findings.forEach { finding -> FeatureRow(finding) }
+    }
+}
+
+@Composable
+private fun ReadbackCard(lines: List<Pair<String, String>>) {
+    SettingsCard(Modifier.testTag("capabilities-readback")) {
+        SettingsHeading(stringResource(R.string.caps_section_readback), stringResource(R.string.caps_section_readback_summary), CineIcon.INFO)
+        lines.forEach { (key, value) ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(key, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                SelectionContainer { Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
+            }
+        }
     }
 }
 
@@ -327,6 +337,7 @@ internal fun capabilityReportText(
     inventory: List<CameraInventory>,
     cameras: List<Camera2CameraDescriptor>,
     label: (Int) -> String,
+    live: CameraUiState? = null,
 ): String = buildString {
     appendLine("OpenCineCam · ${label(R.string.caps_title)}")
     appendLine(device)
@@ -340,6 +351,10 @@ internal fun capabilityReportText(
             append("[${label(statusLabel(finding.status))}] ${label(finding.feature.title)}")
             if (finding.detail.isNotEmpty()) append(": ${finding.detail}")
             appendLine()
+        }
+        live?.takeIf { it.selectedCameraId == camera.cameraId }?.let { state ->
+            appendLine("-- ${label(R.string.caps_section_readback)} --")
+            requestedReportedLines(state).forEach { (key, value) -> appendLine("$key: $value") }
         }
         camera.entries.forEach { entry ->
             appendLine("${entry.key} = ${entry.value.replace("\n", "\n    ")}")

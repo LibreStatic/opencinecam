@@ -6,7 +6,6 @@ package com.librestatic.opencinecam
 import android.hardware.camera2.CaptureRequest
 import com.librestatic.opencinecam.camera.Antibanding
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
-import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -74,24 +73,20 @@ fun auditCameraCapabilities(d: Camera2CameraDescriptor): List<AppFeatureFinding>
             }
         }
         AppFeature.MANUAL_EXPOSURE -> {
-            val caps = d.exposureCapabilities
-            val iso = caps.isoRange?.takeIf { it.first > 0 && it.last >= it.first }
-            val time = caps.timeRangeNs?.takeIf { it.first > 0 && it.last >= it.first }
+            // The same answer Settings uses, so the two pages never disagree about manual exposure.
+            val available = exposureAvailability(d.exposureCapabilities)
+            val iso = available.isoRange
+            val time = available.timeRangeNs
             when {
-                caps.manual && iso != null && time != null ->
+                available.manual && iso != null && time != null ->
                     feature.active("ISO ${iso.first}–${iso.last} · ${shutter(time.first)}–${shutter(time.last)}")
-                caps.manual -> feature.partial("MANUAL_SENSOR")
+                d.exposureCapabilities.manual -> feature.unavailable("MANUAL_SENSOR")
                 else -> feature.unavailable()
             }
         }
         AppFeature.EXPOSURE_PRIORITY -> {
-            val names = d.exposureCapabilities.priorities.sorted().map {
-                when (it) {
-                    ExposureMode.ISO_PRIORITY -> "ISO"
-                    ExposureMode.SHUTTER_PRIORITY -> "Shutter"
-                    else -> it.name
-                }
-            }
+            val available = exposureAvailability(d.exposureCapabilities)
+            val names = listOfNotNull("ISO".takeIf { available.isoPriority }, "Shutter".takeIf { available.shutterPriority })
             if (names.isEmpty()) feature.unavailable() else feature.active(names.joinToString(" · "))
         }
         AppFeature.EXPOSURE_COMPENSATION -> {

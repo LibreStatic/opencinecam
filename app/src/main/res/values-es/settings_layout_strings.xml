@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="settings_category_matches">
+        <item quantity="one">%d resultado</item>
+        <item quantity="many">%d resultados</item>
+        <item quantity="other">%d resultados</item>
+    </plurals>
+    <string name="settings_camera_reports">La cámara informa: %1$s</string>
+    <string name="readback_antibanding">antiparpadeo: %1$s</string>
+    <string name="readback_optical">estabilización óptica: %1$s</string>
+    <string name="readback_video">estabilización electrónica: %1$s</string>
+    <string name="readback_noise">reducción de ruido: %1$s</string>
+    <string name="readback_edge">realce de bordes: %1$s</string>
+    <string name="readback_on">Activado</string>
+    <string name="readback_preview_only">Solo vista previa</string>
+    <string name="pro_auto">Automático</string>
+    <string name="pro_auto_reported">Automático (cámara: %1$s)</string>
+    <string name="pro_exposure_auto_only">Esta cámara solo ofrece exposición automática.</string>
+    <string name="pro_wb_temperature">Temperatura de color</string>
+    <string name="caps_section_readback">Solicitado e informado</string>
+    <string name="caps_section_readback_summary">Lo que OpenCineCam pidió a la cámara en uso, junto a lo que la cámara informó en su último fotograma.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">todos los formatos verificados</string>
+    <string name="hardware_log_hdr">Desde video HDR de 10 bits: hasta %1$d×%2$d, hasta %3$d fps</string>
+    <string name="hardware_log_high_speed">Alta velocidad desde video de 8 bits: hasta %1$d fps</string>
+    <string name="anamorphic_off">Desactivado</string>
+    <string name="anamorphic_output_squeezed">Mantener comprimida</string>
+    <string name="anamorphic_output_desqueezed">Descomprimir</string>
+    <string name="anamorphic_output_summary">Mantener comprimida guarda la imagen de la lente tal cual e indica a los reproductores que la estiren. Descomprimir la estira en el archivo.</string>
+    <string name="audio_pcm_rate">Fuente sin comprimir: %1$d kbps</string>
+</resources>

@@ -22,8 +22,7 @@ internal fun BracketSettings(state: CameraUiState, settings: CameraSettings, onC
         descriptor?.aeCompensationStepNumerator ?: 0, descriptor?.aeCompensationStepDenominator ?: 1,
         settings.exposure.mode == ExposureMode.AUTO && descriptor?.photoFlashCapabilities?.aeModes?.contains(1) == true)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.bracket_settings_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.bracket_settings_help))
+        SettingsSectionTitle(stringResource(R.string.bracket_settings_title), help = stringResource(R.string.bracket_settings_help))
         // Preferences remain editable even when this lens rejects the current combination:
         // lowering count and then step must not leave both controls mutually disabled.
         SettingsChips(stringResource(R.string.bracket_count_title), listOf(3, 5, 7, 9), settings.bracket.count,

@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
+import kotlin.math.max
 
 private val AboutGraphite: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
 private val AboutCard: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -58,6 +60,7 @@ private const val PROJECT_WEBSITE = "https://librestatic.com/opencinecam"
 private const val PROJECT_SOURCE = "https://github.com/librestatic/opencinecam"
 private const val LICENSE_CATALOG_ASSET = "third_party_licenses.json"
 private const val APP_LICENSE_ASSET = "licenses/Apache-2.0.txt"
+private const val ABOUT_MAX_WIDTH_DP = 720f
 
 internal data class ThirdPartyComponent(
     val group: String,
@@ -114,26 +117,15 @@ internal fun AboutScreen(
     var expandedLicenseText by remember { mutableStateOf<String?>(null) }
     var appLicenseExpanded by remember { mutableStateOf(false) }
     val appLicenseText = remember(context) { runCatching { readAsset(context, APP_LICENSE_ASSET) }.getOrDefault("") }
-    val backDescription = backLabel ?: stringResource(R.string.about_back)
-
+    // A reading column: on a tablet or desktop it stays centred at a comfortable line length.
+    BoxWithConstraints(Modifier.fillMaxSize().background(AboutGraphite)) {
+    val gutter = max(24f, (maxWidth.value - ABOUT_MAX_WIDTH_DP) / 2f)
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(AboutGraphite).testTag("about-list"),
-        contentPadding = PaddingValues(24.dp),
+        modifier = Modifier.fillMaxSize().testTag("about-list"),
+        contentPadding = PaddingValues(horizontal = gutter.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = backDescription },
-                ) { Text("←", color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp) }
-                Text(stringResource(R.string.about_title), color = AboutAmber, fontWeight = FontWeight.Bold)
-            }
-        }
+        item { SettingsTopBar(stringResource(R.string.about_title), onBack, backTag = "about-back", backLabel = backLabel) }
         item {
             Column(
                 modifier = Modifier.fillMaxWidth().background(AboutCard, RoundedCornerShape(12.dp)).padding(18.dp),
@@ -215,6 +207,7 @@ internal fun AboutScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -240,8 +233,9 @@ private fun LicenseCard(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        // The expander sits right after its label, not across the card from it.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
             Text(if (expanded) "−" else "+", color = AboutAmber, fontSize = 18.sp)
         }
         Text(subtitle, color = AboutMuted, fontSize = 10.sp)

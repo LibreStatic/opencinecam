@@ -30,8 +30,7 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
             automatic.copy(strength = caps.singleDefault) else automatic
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.photo_flash_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.photo_flash_help))
+        SettingsSectionTitle(stringResource(R.string.photo_flash_title), help = stringResource(R.string.photo_flash_help))
         SettingsChips(stringResource(R.string.settings_mode), PhotoFlashMode.entries, selection.mode,
             label = { mode -> stringResource(when (mode) {
                 PhotoFlashMode.OFF -> R.string.settings_off

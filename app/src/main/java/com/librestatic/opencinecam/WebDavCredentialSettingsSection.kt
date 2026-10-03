@@ -75,8 +75,7 @@ import kotlinx.coroutines.withContext
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.webdav_credentials_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
-        SettingsHelp(stringResource(R.string.webdav_credentials_help), tag = "webdav-credentials-help")
+        SettingsSectionTitle(stringResource(R.string.webdav_credentials_title), help = stringResource(R.string.webdav_credentials_help), helpTag = "webdav-credentials-help")
         Text(stringResource(when (status) {
             WebDavCredentialStatus.AVAILABLE -> R.string.webdav_credentials_available
             WebDavCredentialStatus.MISSING -> R.string.webdav_credentials_missing

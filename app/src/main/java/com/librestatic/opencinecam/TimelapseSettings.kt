@@ -16,8 +16,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun TimelapseSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.timelapse_settings_title), fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.timelapse_settings_help) + "\n\n" + stringResource(R.string.timelapse_pause_help), tag = "timelapse-pause-help")
+        SettingsSectionTitle(stringResource(R.string.timelapse_settings_title), help = stringResource(R.string.timelapse_settings_help) + "\n\n" + stringResource(R.string.timelapse_pause_help), helpTag = "timelapse-pause-help")
         if (state.structuralSettingsFrozen) Text(stringResource(R.string.timelapse_settings_pending), fontSize = 16.sp,
             modifier = Modifier.testTag("timelapse-pending"))
         IntervalNumber("timelapse-interval", stringResource(R.string.timelapse_interval_ms), settings.timelapseIntervalMs, 100L..3_600_000L) {

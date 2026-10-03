@@ -18,8 +18,7 @@ internal fun GallerySettingsControls(settings: GallerySettings, onSettings: (Gal
     // The media screen shows the type pills above its list, so its filter panel leaves them out.
     showKinds: Boolean = true) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.gallery_settings_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-        SettingsHelp(stringResource(R.string.gallery_settings_help), tag = "gallery-settings-help")
+        SettingsSectionTitle(stringResource(R.string.gallery_settings_title), help = stringResource(R.string.gallery_settings_help), helpTag = "gallery-settings-help")
         if (showKinds) SettingsChips(stringResource(R.string.gallery_kind_title), GalleryMediaKind.entries, settings.kind,
             label = { stringResource(galleryKindLabel(it)) }, onSelect = { onSettings(settings.copy(kind = it)) },
             tag = { "gallery-kind-$it" })
