@@ -15,6 +15,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.ReadOnlyComposable
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -1784,6 +1785,40 @@ internal fun AdaptiveCaptureChrome(
             pane = null
         }
         val unlock: () -> Unit = { binder?.performOperatorAction(OperatorAction.CONTROL_LOCK) }
+        val captureAction = operatorInput?.capture ?: rememberCaptureAction(state, binder, settings)
+        val performOperator: (OperatorAction) -> Unit = { action ->
+            operatorInput?.perform?.invoke(action) ?: binder?.performOperatorAction(action)
+        }
+        // R, F, Z, P, G, H, L and Esc with a hardware keyboard: the same actions as the controls.
+        ShortcutHandler { action ->
+            when (captureShortcutCommand(action, pane != null || modeSheet, operatorActionAvailable(OperatorAction.VIEW_ASSIST, state), scopesEnabled)) {
+                CaptureShortcutCommand.CAPTURE -> captureControlEnabled(state).also { if (it) captureAction() }
+                CaptureShortcutCommand.TOGGLE_FOCUS ->
+                    slots.any { it.slot == CaptureSlot.FOCUS && it.unavailableReason == null }.also { available ->
+                        if (available) {
+                            togglePane(CapturePane.Control(ControlDial.FOCUS))
+                            if (recording) manualReveal = true
+                        }
+                    }
+                CaptureShortcutCommand.ZEBRA -> { onToggleZebra(); true }
+                CaptureShortcutCommand.PEAKING -> { onTogglePeaking(); true }
+                CaptureShortcutCommand.GRID -> { onToggleGrid(); true }
+                CaptureShortcutCommand.TOGGLE_SCOPES -> { scopesHidden = !scopesHidden; true }
+                CaptureShortcutCommand.ENABLE_WAVEFORM -> {
+                    performOperator(OperatorAction.WAVEFORM)
+                    scopesHidden = false
+                    true
+                }
+                CaptureShortcutCommand.VIEW_ASSIST -> { performOperator(OperatorAction.VIEW_ASSIST); true }
+                CaptureShortcutCommand.CLOSE_PANE -> {
+                    pane = null
+                    modeSheet = false
+                    true
+                }
+                CaptureShortcutCommand.CONSUME -> true
+                null -> false
+            }
+        }
         val presets: @Composable () -> Unit = {
             PresetQuickAccess(state, settings, binder?.let { owner -> { preset -> owner.applyPreset(preset) } })
         }
@@ -2806,6 +2841,12 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
     }
 }
 
+/** Whether REC (or R) does anything now: a take can start or stop, or a pending capture can be cancelled. */
+internal fun captureControlEnabled(state: CameraUiState): Boolean =
+    !state.recordingFinalizing && (state.capturePreparationCancelable ||
+        state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING))
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CaptureButton(
     state: CameraUiState,
@@ -2843,7 +2884,9 @@ internal fun CaptureButton(
             )
         }
     }
-    val button: @Composable () -> Unit = {
+    // R does the same with a keyboard attached; the tooltip (long press, or hover) says so.
+    val tooltip = keyHint(captureDescription, ShortcutAction.RECORD)
+    val button: @Composable () -> Unit = { CaptureTooltip(tooltip, null) {
         Box(
             Modifier
                 .size(size)
@@ -2853,8 +2896,7 @@ internal fun CaptureButton(
                 }
                 .border(3.dp, if (recordState == RecordButtonState.UNAVAILABLE) Muted else Color.White, CircleShape)
                 .clip(CircleShape)
-                .clickable(enabled = !state.recordingFinalizing && (state.capturePreparationCancelable || state.phase == CameraUiPhase.PREVIEWING ||
-                    state.phase == CameraUiPhase.SAVED || state.phase == CameraUiPhase.RECORDING)) {
+                .clickable(enabled = captureControlEnabled(state)) {
                     onCapture()
                 },
             contentAlignment = Alignment.Center,
@@ -2897,7 +2939,7 @@ internal fun CaptureButton(
                 )
             }
         }
-    }
+    } }
     if (labelBeside) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { label(); button() }
     else Column(horizontalAlignment = Alignment.CenterHorizontally) { button(); label() }
 }
