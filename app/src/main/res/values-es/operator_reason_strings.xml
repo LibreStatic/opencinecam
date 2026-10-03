@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Solo disponible en modo LOG.</string>
+    <string name="operator_reason_locked">Los controles están bloqueados. Desbloquealos para usar esto.</string>
+    <string name="operator_reason_not_ready">Esperando a la cámara.</string>
+    <string name="operator_reason_high_speed">No disponible con cuadros por segundo de alta velocidad.</string>
+    <string name="operator_reason_no_torch">Esta cámara no tiene linterna.</string>
+    <string name="operator_reason_no_torch_level">La linterna de esta cámara tiene un solo nivel de brillo.</string>
+    <string name="operator_reason_no_autofocus">Esta cámara tiene foco fijo.</string>
+    <string name="operator_reason_no_focus_mark">Primero marcá el foco %1$s en el panel de foco.</string>
+    <string name="operator_reason_self_minimal">Desactivado mientras te grabás con controles mínimos.</string>
+    <string name="operator_reason_no_exterior">Necesita la pantalla exterior de un plegable.</string>
+    <string name="operator_reason_no_preset">No hay un preset en esta ranura. Asigná uno en Ajustes.</string>
+</resources>

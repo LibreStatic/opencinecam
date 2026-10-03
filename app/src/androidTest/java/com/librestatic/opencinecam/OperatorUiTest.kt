@@ -61,16 +61,19 @@ class OperatorUiTest {
         compose.onNodeWithTag("operator-quick-vectorscope").assertDoesNotExist()
         compose.onNodeWithTag("operator-quick-waveform").assertExists()
     }
-    @Test fun unsupportedActionIsDisabledRatherThanPretendingToExecute() {
-        var invoked = false
-        compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), CameraSettings(), OperatorActions({}, { invoked = true }, { it == OperatorAction.PEAKING })) } }
-        compose.onNodeWithTag("operator-button-1").assertIsNotEnabled().performClick()
-        compose.onNodeWithTag("operator-button-2").assertIsEnabled()
-        assertFalse(invoked)
-        // The long-press help explains why the action is unavailable, so it stays reachable.
+    @Test fun unsupportedActionStaysTappableAndExplainsWhy() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val seen = mutableListOf<OperatorAction>()
+        val settings = CameraSettings(operation = OperatorPreferences(button1 = OperatorAction.VIEW_ASSIST))
+        compose.setContent { MaterialTheme { OperatorButtonRow(CameraUiState(), settings,
+            OperatorActions({}, { seen.add(it) }, { it != OperatorAction.VIEW_ASSIST },
+                reason = { if (it == OperatorAction.VIEW_ASSIST) OperatorUnavailableReason.LOG_ONLY else null })) } }
+        // The key is not a dead control: the tap reaches perform, which toasts the reason instead of acting.
+        compose.onNodeWithTag("operator-button-1")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, context.getString(R.string.operator_reason_log_only)))
+            .performClick()
+        assertEquals(listOf(OperatorAction.VIEW_ASSIST), seen)
         compose.onNodeWithTag("operator-button-1").assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
-        compose.onNodeWithTag("operator-button-1").performTouchInput { longClick() }
-        assertFalse(invoked)
     }
     @Test fun mappingDialogAtDoubleFontUpdatesOnlyTheSelectedButton() {
         var actual = CameraSettings()

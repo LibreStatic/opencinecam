@@ -109,6 +109,25 @@ class OperatorPreferencesTest {
             assertFalse(mode.name, operatorActionAvailable(OperatorAction.VIEW_ASSIST, CameraUiState(selectedMode = mode)))
         }
     }
+    @Test fun unavailableKeysNameTheModeOrStateThatBlocksThem() {
+        // A LOG-only key seen in another mode says so rather than failing silently.
+        for (mode in listOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE, CaptureMode.PHOTO))
+            assertEquals(mode.name, OperatorUnavailableReason.LOG_ONLY, operatorActionUnavailableReason(OperatorAction.VIEW_ASSIST, CameraUiState(selectedMode = mode)))
+        assertNull(operatorActionUnavailableReason(OperatorAction.VIEW_ASSIST, CameraUiState(selectedMode = CaptureMode.LOG)))
+        val video = torchCamera(CaptureMode.VIDEO)
+        assertNull(operatorActionUnavailableReason(OperatorAction.TORCH, video))
+        assertEquals(OperatorUnavailableReason.NO_TORCH, operatorActionUnavailableReason(OperatorAction.TORCH, torchCamera(CaptureMode.VIDEO, torch = false)))
+        assertEquals(OperatorUnavailableReason.LOCKED, operatorActionUnavailableReason(OperatorAction.TORCH, video.copy(stillCapturePending = true)))
+        assertEquals(OperatorUnavailableReason.NOT_READY, operatorActionUnavailableReason(OperatorAction.TORCH, video.copy(phase = CameraUiPhase.OPENING)))
+        assertEquals(OperatorUnavailableReason.NO_FOCUS_MARK, operatorActionUnavailableReason(OperatorAction.FOCUS_A, video))
+        assertNull(operatorActionUnavailableReason(OperatorAction.FOCUS_A, video.copy(focusMarks = mapOf("A" to 1f))))
+        assertEquals(OperatorUnavailableReason.NOT_ASSIGNABLE, operatorActionUnavailableReason(OperatorAction.NONE, video))
+        assertEquals(OperatorUnavailableReason.THERMAL, operatorActionUnavailableReason(OperatorAction.WAVEFORM,
+            video.copy(analysisSuspension = com.librestatic.opencinecam.camera.AnalysisSuspension.THERMAL)))
+        // Availability is exactly "no reason", for every action.
+        for (action in OperatorAction.entries) for (state in listOf(video, CameraUiState(), video.copy(stillCapturePending = true)))
+            assertEquals(action.name, operatorActionUnavailableReason(action, state) == null, operatorActionAvailable(action, state))
+    }
     @Test fun everyToggleActionReportsItsLatchedStateAndMomentaryActionsReportNone() {
         val toggles = setOf(OperatorAction.TORCH, OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM,
             OperatorAction.VIEW_ASSIST, OperatorAction.CONTROL_LOCK, OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE)

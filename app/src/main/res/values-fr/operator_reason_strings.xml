@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Disponible uniquement en mode LOG.</string>
+    <string name="operator_reason_locked">Les commandes sont verrouillées. Déverrouillez-les pour utiliser ceci.</string>
+    <string name="operator_reason_not_ready">En attente de la caméra.</string>
+    <string name="operator_reason_high_speed">Indisponible aux cadences haute vitesse.</string>
+    <string name="operator_reason_no_torch">Cette caméra n\'a pas de lampe.</string>
+    <string name="operator_reason_no_torch_level">La lampe de cette caméra n\'a qu\'un seul niveau de luminosité.</string>
+    <string name="operator_reason_no_autofocus">Cette caméra a une mise au point fixe.</string>
+    <string name="operator_reason_no_focus_mark">Définissez d\'abord le repère de mise au point %1$s dans le panneau de mise au point.</string>
+    <string name="operator_reason_self_minimal">Désactivé pendant que vous vous filmez avec les commandes minimales.</string>
+    <string name="operator_reason_no_exterior">Nécessite l\'écran extérieur d\'un appareil pliable.</string>
+    <string name="operator_reason_no_preset">Aucun préréglage dans cet emplacement. Attribuez-en un dans les Réglages.</string>
+</resources>

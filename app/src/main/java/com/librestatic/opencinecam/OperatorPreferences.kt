@@ -98,26 +98,56 @@ fun operatorActionThermallyPaused(action: OperatorAction, state: CameraUiState):
     state.analysisSuspension == com.librestatic.opencinecam.camera.AnalysisSuspension.THERMAL &&
         action in ScopeActions
 
-fun operatorActionAvailable(action: OperatorAction, state: CameraUiState): Boolean {
-    if (action == OperatorAction.NONE || action == OperatorAction.SYSTEM_VOLUME) return false
-    if (operatorActionThermallyPaused(action, state)) return false
-    if (action == OperatorAction.CONTROL_LOCK) return true
-    if (action == OperatorAction.CAPTURE) return state.whiteBalancePreparing || state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)
+/**
+ * Why an operator key cannot act right now, so a tap can say so instead of doing nothing. The keys
+ * stay on screen in every mode: a LOG-only key seen in PHOTO teaches the operator it exists.
+ */
+enum class OperatorUnavailableReason {
+    /** NONE, SYSTEM_VOLUME or an action this check does not drive. */
+    NOT_ASSIGNABLE,
+    THERMAL,
+    LOG_ONLY,
+    LOCKED,
+    NOT_READY,
+    HIGH_SPEED,
+    NO_TORCH,
+    NO_TORCH_LEVEL,
+    NO_AUTOFOCUS,
+    NO_FOCUS_MARK,
+    /** Self-recording with minimal controls leaves only capture and the lock. */
+    SELF_MINIMAL,
+    NO_EXTERIOR,
+    NO_PRESET,
+}
+
+fun operatorActionAvailable(action: OperatorAction, state: CameraUiState): Boolean =
+    operatorActionUnavailableReason(action, state) == null
+
+/** The reason [action] is unavailable in [state], or null when it can act. */
+fun operatorActionUnavailableReason(action: OperatorAction, state: CameraUiState): OperatorUnavailableReason? {
+    if (action == OperatorAction.NONE || action == OperatorAction.SYSTEM_VOLUME) return OperatorUnavailableReason.NOT_ASSIGNABLE
+    if (operatorActionThermallyPaused(action, state)) return OperatorUnavailableReason.THERMAL
+    if (action == OperatorAction.CONTROL_LOCK) return null
+    if (action == OperatorAction.CAPTURE) return if (state.whiteBalancePreparing ||
+        state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING)) null else OperatorUnavailableReason.NOT_READY
     // Color view assist is applied only by the OCLog2 shader. Every other GPU viewfinder (time-lapse,
     // VIDEO with a LUT or subject preview, PHOTO with an operator LUT) is SDR passthrough and ignores
     // it, so offering it there would be a silent no-op.
-    if (action == OperatorAction.VIEW_ASSIST) return state.selectedMode == CaptureMode.LOG
-    if (action in ScopeActions || action == OperatorAction.EXTERIOR) return true
-    if (state.captureControlsLocked) return false
-    if (action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2)) return state.descriptor != null
-    if (state.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING) || state.whiteBalancePreparing || state.recordingFinalizing) return false
+    if (action == OperatorAction.VIEW_ASSIST) return if (state.selectedMode == CaptureMode.LOG) null else OperatorUnavailableReason.LOG_ONLY
+    if (action in ScopeActions || action == OperatorAction.EXTERIOR) return null
+    if (state.captureControlsLocked) return OperatorUnavailableReason.LOCKED
+    if (action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2)) return if (state.descriptor != null) null else OperatorUnavailableReason.NOT_READY
+    if (state.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED, CameraUiPhase.RECORDING) || state.whiteBalancePreparing || state.recordingFinalizing) return OperatorUnavailableReason.NOT_READY
     val highSpeed = state.operatorHighSpeed()
+    fun unless(ok: Boolean, reason: OperatorUnavailableReason) = if (ok) null else reason
     return when (action) {
-        OperatorAction.TORCH -> !highSpeed && state.descriptor?.torchCapabilities?.available == true
-        OperatorAction.TORCH_LEVEL -> !highSpeed && state.descriptor?.torchCapabilities?.adjustable == true
-        OperatorAction.AUTO_FOCUS -> state.descriptor?.availableAfModes?.any { it != 0 } == true
-        OperatorAction.FOCUS_A -> !highSpeed && "A" in state.focusMarks
-        OperatorAction.FOCUS_B -> !highSpeed && "B" in state.focusMarks
-        else -> false
+        OperatorAction.TORCH -> if (highSpeed) OperatorUnavailableReason.HIGH_SPEED
+            else unless(state.descriptor?.torchCapabilities?.available == true, OperatorUnavailableReason.NO_TORCH)
+        OperatorAction.TORCH_LEVEL -> if (highSpeed) OperatorUnavailableReason.HIGH_SPEED
+            else unless(state.descriptor?.torchCapabilities?.adjustable == true, OperatorUnavailableReason.NO_TORCH_LEVEL)
+        OperatorAction.AUTO_FOCUS -> unless(state.descriptor?.availableAfModes?.any { it != 0 } == true, OperatorUnavailableReason.NO_AUTOFOCUS)
+        OperatorAction.FOCUS_A -> if (highSpeed) OperatorUnavailableReason.HIGH_SPEED else unless("A" in state.focusMarks, OperatorUnavailableReason.NO_FOCUS_MARK)
+        OperatorAction.FOCUS_B -> if (highSpeed) OperatorUnavailableReason.HIGH_SPEED else unless("B" in state.focusMarks, OperatorUnavailableReason.NO_FOCUS_MARK)
+        else -> OperatorUnavailableReason.NOT_ASSIGNABLE
     }
 }

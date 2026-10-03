@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Disponível apenas no modo LOG.</string>
+    <string name="operator_reason_locked">Os controles estão bloqueados. Desbloqueie-os para usar isto.</string>
+    <string name="operator_reason_not_ready">Aguardando a câmera.</string>
+    <string name="operator_reason_high_speed">Indisponível em taxas de quadros de alta velocidade.</string>
+    <string name="operator_reason_no_torch">Esta câmera não tem lanterna.</string>
+    <string name="operator_reason_no_torch_level">A lanterna desta câmera tem um único nível de brilho.</string>
+    <string name="operator_reason_no_autofocus">Esta câmera tem foco fixo.</string>
+    <string name="operator_reason_no_focus_mark">Defina primeiro a marca de foco %1$s no painel de foco.</string>
+    <string name="operator_reason_self_minimal">Desativado enquanto você se grava com controles mínimos.</string>
+    <string name="operator_reason_no_exterior">Precisa da tela externa de um dobrável.</string>
+    <string name="operator_reason_no_preset">Nenhum preset neste slot. Atribua um nas Configurações.</string>
+</resources>

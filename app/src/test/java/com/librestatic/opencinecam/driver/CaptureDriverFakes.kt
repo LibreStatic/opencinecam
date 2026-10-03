@@ -20,7 +20,8 @@ import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.CaptureScopeVisibility
 import com.librestatic.opencinecam.OperatorAction
 import com.librestatic.opencinecam.OperatorActions
-import com.librestatic.opencinecam.operatorActionAvailable
+import com.librestatic.opencinecam.OperatorUnavailableReason
+import com.librestatic.opencinecam.operatorActionUnavailableReason
 import com.librestatic.opencinecam.operatorActionToggleState
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2VideoProfile
@@ -94,10 +95,19 @@ internal fun driverOperatorActions(
             toggled(action, settings)?.let(onSettings)
         }
     },
-    available = { operatorActionAvailable(it, state) && it !in setOf(OperatorAction.EXTERIOR, OperatorAction.PRESET_C1, OperatorAction.PRESET_C2) },
+    available = { driverReason(it, state) == null },
     latched = { scopes.latched(it, operatorActionToggleState(it, settings, state)) },
     scopes = scopes,
+    reason = { driverReason(it, state) },
 )
+
+/** No fold coordinator and no presets in the driver, so those keys read as unavailable. */
+private fun driverReason(action: OperatorAction, state: CameraUiState): OperatorUnavailableReason? =
+    operatorActionUnavailableReason(action, state) ?: when (action) {
+        OperatorAction.EXTERIOR -> OperatorUnavailableReason.NO_EXTERIOR
+        OperatorAction.PRESET_C1, OperatorAction.PRESET_C2 -> OperatorUnavailableReason.NO_PRESET
+        else -> null
+    }
 
 /** What the capture service writes to the settings for a toggle action. */
 private fun toggled(action: OperatorAction, s: CameraSettings): CameraSettings? = when (action) {

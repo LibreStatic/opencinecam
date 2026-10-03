@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Disponibile solo in modalità LOG.</string>
+    <string name="operator_reason_locked">I controlli sono bloccati. Sbloccali per usare questa funzione.</string>
+    <string name="operator_reason_not_ready">In attesa della fotocamera.</string>
+    <string name="operator_reason_high_speed">Non disponibile con frame rate ad alta velocità.</string>
+    <string name="operator_reason_no_torch">Questa fotocamera non ha la torcia.</string>
+    <string name="operator_reason_no_torch_level">La torcia di questa fotocamera ha un solo livello di luminosità.</string>
+    <string name="operator_reason_no_autofocus">Questa fotocamera ha la messa a fuoco fissa.</string>
+    <string name="operator_reason_no_focus_mark">Imposta prima il segno di fuoco %1$s nel pannello della messa a fuoco.</string>
+    <string name="operator_reason_self_minimal">Disattivato mentre ti riprendi con i controlli minimi.</string>
+    <string name="operator_reason_no_exterior">Richiede il display esterno di un pieghevole.</string>
+    <string name="operator_reason_no_preset">Nessun preset in questo slot. Assegnane uno nelle Impostazioni.</string>
+</resources>

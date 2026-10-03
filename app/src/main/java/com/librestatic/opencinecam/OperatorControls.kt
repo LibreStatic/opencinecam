@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -44,7 +43,9 @@ internal data class OperatorActions(val capture: () -> Unit, val perform: (Opera
     /** Latched state of a toggle action, or null when the action is momentary. */
     val latched: (OperatorAction) -> Boolean? = { null }, val setEditing: (Boolean) -> Unit = {},
     /** Whether the capture chrome hides the scopes; scope keys light and act on what is in view. */
-    val scopes: CaptureScopeVisibility? = null)
+    val scopes: CaptureScopeVisibility? = null,
+    /** Why an action cannot act, null when it can; a tap on an unavailable key shows this. */
+    val reason: (OperatorAction) -> OperatorUnavailableReason? = { null })
 internal val LocalOperatorActions = staticCompositionLocalOf<OperatorActions?> { null }
 private tailrec fun Context.operatorActivity(): MainActivity? = when (this) {
     is MainActivity -> this
@@ -67,17 +68,23 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
         val slot = if (action == OperatorAction.PRESET_C1) "C1" else "C2"
         return library.presets.firstOrNull { it.id == library.slots[slot] }
     }
-    val available: (OperatorAction) -> Boolean = { action ->
-        enabled && binder != null && operatorActionAvailable(action, state) && when {
-            state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls -> action in setOf(OperatorAction.CAPTURE, OperatorAction.CONTROL_LOCK)
-            action == OperatorAction.EXTERIOR -> coordinator != null && (fold.phase != DisplaySessionPhase.IDLE || fold.presentation == DisplayCapability.AVAILABLE)
-            action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2) -> preset(action) != null
-            else -> true
+    val reason: (OperatorAction) -> OperatorUnavailableReason? = { action ->
+        when {
+            !enabled || binder == null -> OperatorUnavailableReason.NOT_READY
+            else -> operatorActionUnavailableReason(action, state) ?: when {
+                state.selfRecordingActive && settings.subjectDisplay.selfMinimalControls &&
+                    action !in setOf(OperatorAction.CAPTURE, OperatorAction.CONTROL_LOCK) -> OperatorUnavailableReason.SELF_MINIMAL
+                action == OperatorAction.EXTERIOR && (coordinator == null ||
+                    (fold.phase == DisplaySessionPhase.IDLE && fold.presentation != DisplayCapability.AVAILABLE)) -> OperatorUnavailableReason.NO_EXTERIOR
+                action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2) && preset(action) == null -> OperatorUnavailableReason.NO_PRESET
+                else -> null
+            }
         }
     }
+    val available: (OperatorAction) -> Boolean = { reason(it) == null }
     val perform: (OperatorAction) -> Unit = { action ->
-        if (!available(action)) Toast.makeText(context,
-            if (operatorActionThermallyPaused(action, state)) R.string.operator_action_thermal_help else R.string.operator_unavailable, Toast.LENGTH_SHORT).show()
+        val why = reason(action)
+        if (why != null) Toast.makeText(context, operatorUnavailableText(context, action, why), Toast.LENGTH_SHORT).show()
         else when (action) {
             OperatorAction.CAPTURE -> capture()
             OperatorAction.PRESET_C1, OperatorAction.PRESET_C2 -> review = preset(action)
@@ -109,7 +116,24 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
         if (action == OperatorAction.EXTERIOR) fold.phase != DisplaySessionPhase.IDLE
         else scopes.latched(action, operatorActionToggleState(action, settings, state))
     }
-    return OperatorActions(capture, perform, available, latched, setEditing = { editing = it }, scopes = scopes)
+    return OperatorActions(capture, perform, available, latched, setEditing = { editing = it }, scopes = scopes, reason = reason)
+}
+
+/** What a tap on an unavailable key says: the specific reason, so the operator knows what to change. */
+internal fun operatorUnavailableText(context: Context, action: OperatorAction, reason: OperatorUnavailableReason): String = when (reason) {
+    OperatorUnavailableReason.NOT_ASSIGNABLE -> context.getString(R.string.operator_unavailable)
+    OperatorUnavailableReason.THERMAL -> context.getString(R.string.operator_action_thermal_help)
+    OperatorUnavailableReason.LOG_ONLY -> context.getString(R.string.operator_reason_log_only)
+    OperatorUnavailableReason.LOCKED -> context.getString(R.string.operator_reason_locked)
+    OperatorUnavailableReason.NOT_READY -> context.getString(R.string.operator_reason_not_ready)
+    OperatorUnavailableReason.HIGH_SPEED -> context.getString(R.string.operator_reason_high_speed)
+    OperatorUnavailableReason.NO_TORCH -> context.getString(R.string.operator_reason_no_torch)
+    OperatorUnavailableReason.NO_TORCH_LEVEL -> context.getString(R.string.operator_reason_no_torch_level)
+    OperatorUnavailableReason.NO_AUTOFOCUS -> context.getString(R.string.operator_reason_no_autofocus)
+    OperatorUnavailableReason.NO_FOCUS_MARK -> context.getString(R.string.operator_reason_no_focus_mark, if (action == OperatorAction.FOCUS_B) "B" else "A")
+    OperatorUnavailableReason.SELF_MINIMAL -> context.getString(R.string.operator_reason_self_minimal)
+    OperatorUnavailableReason.NO_EXTERIOR -> context.getString(R.string.operator_reason_no_exterior)
+    OperatorUnavailableReason.NO_PRESET -> context.getString(R.string.operator_reason_no_preset)
 }
 
 @Composable
@@ -144,6 +168,7 @@ private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, acti
         OperatorQuickToggles.filter { it !in buttons }.map { null to it }
     keys.forEachIndexed { index, (fKey, action) ->
         val paused = operatorActionThermallyPaused(action, state)
+        val why = actions?.reason?.invoke(action)
         OperatorButton(
             keyName = fKey,
             tag = if (fKey != null) "operator-button-${index + 1}" else "operator-quick-${action.name.lowercase()}",
@@ -152,6 +177,8 @@ private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, acti
             // A row rendered without the action bundle still reads the settings it was given.
             latched = actions?.latched?.invoke(action) ?: operatorActionToggleState(action, settings, state),
             thermallyPaused = paused,
+            // Thermal help is already part of the tooltip text.
+            unavailableText = why?.takeIf { it != OperatorUnavailableReason.THERMAL }?.let { operatorUnavailableText(LocalContext.current, action, it) },
             onClick = { actions?.perform?.invoke(action) },
         )
     }
@@ -161,14 +188,14 @@ private fun OperatorButtons(state: CameraUiState, settings: CameraSettings, acti
  * One assignable key, icon only. A toggle action shows its latched state by an amber outline and
  * fill, so the operator never has to press it to find out where it stands. A long press (or a
  * hover with a mouse) shows its name, its shortcut and what it does, including whether it only
- * affects monitoring; an unavailable key ignores taps but still answers, because that help is what
- * explains why. A scope action paused by device heat is not drawn as on, since the engine is not
+ * affects monitoring. An unavailable key stays visible and dimmed; a tap answers with why it cannot
+ * act (for example LOG only), and its tooltip carries the same reason. A scope action paused by device heat is not drawn as on, since the engine is not
  * drawing it; TalkBack and the tooltip say why.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun OperatorButton(keyName: String?, tag: String, action: OperatorAction, available: Boolean, latched: Boolean?, onClick: () -> Unit,
-    thermallyPaused: Boolean = false) {
+    thermallyPaused: Boolean = false, unavailableText: String? = null) {
     val colors = MaterialTheme.colorScheme
     val on = latched == true && available
     val tint = when {
@@ -179,7 +206,9 @@ private fun OperatorButton(keyName: String?, tag: String, action: OperatorAction
     val shape = RoundedCornerShape(12.dp)
     val actionName = stringResource(action.labelResource()).let { if (keyName != null) "$keyName · $it" else it }
     val help = stringResource(action.helpResource()).let { if (thermallyPaused) it + " " + stringResource(R.string.operator_action_thermal_help) else it }
+        .let { if (unavailableText != null) "$it $unavailableText" else it }
     val stateWord = if (thermallyPaused) stringResource(R.string.operator_state_thermal_description)
+        else if (unavailableText != null) unavailableText
         else latched?.let { stringResource(if (it) R.string.operator_state_on_description else R.string.operator_state_off_description) }
     val tooltip = rememberTooltipState()
     val scope = rememberCoroutineScope()
@@ -193,13 +222,13 @@ private fun OperatorButton(keyName: String?, tag: String, action: OperatorAction
                 .border(BorderStroke(if (on) 2.dp else 1.dp, if (on) colors.primary else colors.outlineVariant), shape)
                 .combinedClickable(
                     role = if (latched != null) Role.Switch else Role.Button,
-                    onClick = { if (available) onClick() },
+                    // An unavailable key still forwards the tap, so perform can toast the reason.
+                    onClick = onClick,
                     onLongClick = { scope.launch { tooltip.show() } },
                 )
                 .semantics {
                     contentDescription = actionName
                     if (stateWord != null) stateDescription = stateWord
-                    if (!available) disabled()
                 }
                 .testTag(tag),
             contentAlignment = Alignment.Center,

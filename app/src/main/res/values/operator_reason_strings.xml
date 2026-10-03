@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- What a tap on an unavailable operator key says. -->
+    <string name="operator_reason_log_only">Only available in LOG mode.</string>
+    <string name="operator_reason_locked">Controls are locked. Unlock them to use this.</string>
+    <string name="operator_reason_not_ready">Waiting for the camera.</string>
+    <string name="operator_reason_high_speed">Not available at high-speed frame rates.</string>
+    <string name="operator_reason_no_torch">This camera has no torch.</string>
+    <string name="operator_reason_no_torch_level">This camera\'s torch has a single brightness.</string>
+    <string name="operator_reason_no_autofocus">This camera has fixed focus.</string>
+    <string name="operator_reason_no_focus_mark">Set focus mark %1$s first, in the focus panel.</string>
+    <string name="operator_reason_self_minimal">Off while you record yourself with minimal controls.</string>
+    <string name="operator_reason_no_exterior">Needs the outer display of a foldable.</string>
+    <string name="operator_reason_no_preset">No preset in this slot. Assign one in Settings.</string>
+</resources>

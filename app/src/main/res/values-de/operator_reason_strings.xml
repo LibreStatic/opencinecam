@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Nur im LOG-Modus verfügbar.</string>
+    <string name="operator_reason_locked">Die Bedienelemente sind gesperrt. Entsperre sie, um dies zu nutzen.</string>
+    <string name="operator_reason_not_ready">Warte auf die Kamera.</string>
+    <string name="operator_reason_high_speed">Bei Hochgeschwindigkeits-Bildraten nicht verfügbar.</string>
+    <string name="operator_reason_no_torch">Diese Kamera hat keine Taschenlampe.</string>
+    <string name="operator_reason_no_torch_level">Die Taschenlampe dieser Kamera hat nur eine Helligkeitsstufe.</string>
+    <string name="operator_reason_no_autofocus">Diese Kamera hat einen Fixfokus.</string>
+    <string name="operator_reason_no_focus_mark">Setze zuerst Fokusmarke %1$s im Fokus-Panel.</string>
+    <string name="operator_reason_self_minimal">Aus, während du dich mit minimalen Bedienelementen selbst aufnimmst.</string>
+    <string name="operator_reason_no_exterior">Benötigt das Außendisplay eines Foldables.</string>
+    <string name="operator_reason_no_preset">Kein Preset in diesem Platz. Weise in den Einstellungen eines zu.</string>
+</resources>
