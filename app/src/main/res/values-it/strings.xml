@@ -280,7 +280,7 @@
     <string name="pro_exposure_title">Esposizione e bilanciamento del bianco</string>
     <string name="pro_exposure_help">Manuale imposta ISO e otturatore insieme. Le priorità native mantengono l\'altro parametro automatico solo se dichiarate. L\'angolo segue gli FPS di acquisizione, non quelli del progetto.</string>
     <string name="pro_hfr_unavailable">I controlli professionali non sono disponibili su questo percorso HFR vincolato in attesa di qualificazione.</string>
-    <string name="pro_exposure_unavailable">Modalità richiesta non disponibile su questa fotocamera/profilo. La richiesta attuale usa AUTO; la preferenza viene mantenuta.</string>
+    <string name="pro_exposure_unavailable">Questa modalità non è disponibile con questa fotocamera o profilo. L\'esposizione resta automatica; la tua scelta viene mantenuta.</string>
     <string name="pro_unknown">sconosciuto</string>
     <string name="pro_iso">ISO</string>
     <string name="pro_time">Tempo di otturazione</string>
@@ -289,17 +289,14 @@
     <string name="pro_mode_manual">Esposizione manuale</string>
     <string name="pro_mode_iso_priority">Priorità ISO</string>
     <string name="pro_mode_shutter_priority">Priorità otturatore</string>
-    <string name="pro_exposure_values">Tempo richiesto: %1$s ns · pianificato: %2$s ns · segnalato: %3$s ns · ISO segnalato: %4$s</string>
     <string name="pro_clamped">La richiesta è limitata dall\'intervallo del sensore o dalla durata del frame di acquisizione. Controlla i valori segnalati.</string>
-    <string name="pro_antibanding">Antibanding HAL</string>
-    <string name="pro_flicker_help">L\'antibanding HAL influisce sull\'AE. I suggerimenti separati di otturatore a 50/60 Hz scelgono 1/100 o 1/120 s; non garantiscono la rimozione dello sfarfallio PWM.</string>
+    <string name="pro_antibanding">Antisfarfallio</string>
+    <string name="pro_flicker_help">L\'antisfarfallio permette all\'esposizione automatica di compensare lo sfarfallio della rete elettrica. I suggerimenti di otturazione a 50/60 Hz impostano 1/100 o 1/120 s; non garantiscono la rimozione dello sfarfallio dei LED.</string>
     <string name="pro_shutter_suggestion">Suggerimento otturatore %1$d Hz</string>
-    <string name="pro_reported_modes">Modalità di esposizione segnalata: %1$s · antibanding HAL segnalato: %2$s</string>
     <string name="pro_white_balance">Bilanciamento del bianco</string>
     <string name="pro_wb_auto">WB automatico</string>
-    <string name="pro_tint">Tinta CCT</string>
-    <string name="pro_wb_unavailable">Questa richiesta WB è adattata alla fotocamera attuale: CCT/preset non supportati usano AUTO; tinta non supportata usa 0.</string>
-    <string name="pro_wb_reported">Temperatura segnalata: %1$s K · tinta segnalata: %2$s</string>
+    <string name="pro_tint">Tinta</string>
+    <string name="pro_wb_unavailable">Questo bilanciamento del bianco non è disponibile su questa fotocamera: una temperatura o un preset non supportati usano l\'automatico, una tinta non supportata usa 0.</string>
     <string name="pro_restore_auto">Riporta esposizione e WB su AUTO</string>
     <string name="pro_controls_rejected">Aggiornamento dei controlli professionali rifiutato; richiesta precedente mantenuta: %1$s</string>
     <string name="pro_capture_notice">Alcuni controlli richiesti non sono disponibili qui; controlla le impostazioni di Esposizione.</string>
@@ -318,12 +315,8 @@
     <string name="image_mode_fast">Veloce</string>
     <string name="image_mode_hq">Alta qualità</string>
     <string name="image_processing_unavailable">Una modalità richiesta non è dichiarata qui. Il valore corrispondente del modello viene mantenuto; la preferenza è preservata.</string>
-    <string name="image_session_keys">Questa fotocamera dichiara parametri di sessione per l\'elaborazione. Le modifiche tra una ripresa e l\'altra possono causare un ritardo di riconfigurazione dell\'HAL; le nuove sessioni ricevono subito i parametri richiesti.</string>
-    <string name="image_reported_stabilization">OIS segnalato: %1$s · EIS segnalato: %2$s</string>
-    <string name="image_reported_isp">Modalità rumore immagine segnalata: %1$s · modalità bordi segnalata: %2$s</string>
-    <string name="image_crop_region">Ritaglio del sensore segnalato [sinistra, alto, destra, basso]: %1$s. Non misura ogni ritaglio EIS.</string>
+    <string name="image_session_keys">Questa fotocamera applica alcune scelte di elaborazione all\'avvio. Cambiarle tra una ripresa e l\'altra può aggiungere una breve pausa prima della ripresa successiva.</string>
     <string name="image_reset">Ripristina modello della fotocamera</string>
-    <string name="image_submitted">Richiesta inviata: OIS=%1$s, EIS=%2$s · rumore=%3$s · bordi=%4$s. Non è il risultato dell\'hardware.</string>
     <string name="pro_wb_record_policy">Bilanciamento del bianco all\'avvio della registrazione</string>
     <string name="pro_wb_continuous">WB continuo / live</string>
     <string name="pro_wb_lock_record">Mantieni WB per la ripresa</string>

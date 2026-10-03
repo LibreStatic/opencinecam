@@ -280,7 +280,7 @@
     <string name="pro_exposure_title">Belichtung und Weißabgleich</string>
     <string name="pro_exposure_help">Manuell legt ISO und Verschlusszeit gemeinsam fest. Native Prioritäten halten den anderen Parameter nur dann automatisch, wenn dies angeboten wird. Der Winkel folgt den Aufnahme-FPS, nicht den Projekt-FPS.</string>
     <string name="pro_hfr_unavailable">Die Profi-Steuerung ist auf dieser eingeschränkten HFR-Route bis zur Qualifizierung nicht verfügbar.</string>
-    <string name="pro_exposure_unavailable">Der angeforderte Modus ist bei dieser Kamera/diesem Profil nicht verfügbar. Die aktuelle Anforderung verwendet AUTO; die Einstellung bleibt erhalten.</string>
+    <string name="pro_exposure_unavailable">Dieser Modus ist mit dieser Kamera oder diesem Profil nicht verfügbar. Die Belichtung bleibt automatisch; deine Auswahl bleibt gespeichert.</string>
     <string name="pro_unknown">unbekannt</string>
     <string name="pro_iso">ISO</string>
     <string name="pro_time">Verschlusszeit</string>
@@ -289,17 +289,14 @@
     <string name="pro_mode_manual">Manuelle Belichtung</string>
     <string name="pro_mode_iso_priority">ISO-Priorität</string>
     <string name="pro_mode_shutter_priority">Zeitvorwahl</string>
-    <string name="pro_exposure_values">Angeforderte Zeit: %1$s ns · geplant: %2$s ns · gemeldet: %3$s ns · gemeldeter ISO: %4$s</string>
     <string name="pro_clamped">Die Anforderung wird durch den Sensorbereich oder die Frame-Dauer der Aufnahme begrenzt. Prüfe die gemeldeten Werte.</string>
-    <string name="pro_antibanding">HAL-Antibanding</string>
-    <string name="pro_flicker_help">HAL-Antibanding beeinflusst AE. Die separaten Verschlusszeit-Vorschläge für 50/60 Hz wählen 1/100 oder 1/120 s; sie garantieren nicht, dass PWM-Flimmern entfernt wird.</string>
+    <string name="pro_antibanding">Antiflimmern</string>
+    <string name="pro_flicker_help">Antiflimmern lässt die automatische Belichtung Netzflimmern ausgleichen. Die Verschlusszeit-Vorschläge für 50/60 Hz stellen 1/100 oder 1/120 s ein; sie garantieren nicht, dass LED-Flimmern verschwindet.</string>
     <string name="pro_shutter_suggestion">Verschlusszeit-Vorschlag für %1$d Hz</string>
-    <string name="pro_reported_modes">Gemeldeter Belichtungsmodus: %1$s · gemeldetes HAL-Antibanding: %2$s</string>
     <string name="pro_white_balance">Weißabgleich</string>
     <string name="pro_wb_auto">Automatischer WB</string>
-    <string name="pro_tint">CCT-Tönung</string>
-    <string name="pro_wb_unavailable">Diese WB-Anforderung wird an die aktuelle Kamera angepasst: nicht unterstützte CCT/Presets verwenden AUTO; eine nicht unterstützte Tönung verwendet 0.</string>
-    <string name="pro_wb_reported">Gemeldete Temperatur: %1$s K · gemeldete Tönung: %2$s</string>
+    <string name="pro_tint">Tönung</string>
+    <string name="pro_wb_unavailable">Dieser Weißabgleich ist bei dieser Kamera nicht verfügbar: Eine nicht unterstützte Temperatur oder Voreinstellung nutzt den automatischen Abgleich, eine nicht unterstützte Tönung nutzt 0.</string>
     <string name="pro_restore_auto">Belichtung und WB auf AUTO zurücksetzen</string>
     <string name="pro_controls_rejected">Aktualisierung der Profi-Steuerung abgelehnt; vorherige Anforderung beibehalten: %1$s</string>
     <string name="pro_capture_notice">Einige angeforderte Steuerungen sind hier nicht verfügbar; prüfe die Belichtungseinstellungen.</string>
@@ -318,12 +315,8 @@
     <string name="image_mode_fast">Schnell</string>
     <string name="image_mode_hq">Hohe Qualität</string>
     <string name="image_processing_unavailable">Ein angeforderter Modus wird hier nicht angeboten. Der entsprechende Vorlagenwert bleibt erhalten; die Einstellung bleibt bewahrt.</string>
-    <string name="image_session_keys">Diese Kamera bietet Sitzungsparameter für die Verarbeitung an. Änderungen zwischen Takes können eine Verzögerung durch die HAL-Neukonfiguration verursachen; neue Sitzungen erhalten die angeforderten Parameter von Anfang an.</string>
-    <string name="image_reported_stabilization">Gemeldetes OIS: %1$s · gemeldetes EIS: %2$s</string>
-    <string name="image_reported_isp">Gemeldeter Bildrauschmodus: %1$s · gemeldeter Kantenmodus: %2$s</string>
-    <string name="image_crop_region">Gemeldeter Sensorausschnitt [links, oben, rechts, unten]: %1$s. Dies misst nicht jeden EIS-Beschnitt.</string>
+    <string name="image_session_keys">Diese Kamera übernimmt manche Verarbeitungsoptionen beim Start. Änderungen zwischen Takes können eine kurze Pause vor dem nächsten Take verursachen.</string>
     <string name="image_reset">Kameravorlage wiederherstellen</string>
-    <string name="image_submitted">Gesendete Anforderung: OIS=%1$s, EIS=%2$s · Rauschen=%3$s · Kanten=%4$s. Dies ist nicht das Hardware-Ergebnis.</string>
     <string name="pro_wb_record_policy">Weißabgleich bei Aufnahmestart</string>
     <string name="pro_wb_continuous">Kontinuierlicher / Live-WB</string>
     <string name="pro_wb_lock_record">WB für den Take halten</string>

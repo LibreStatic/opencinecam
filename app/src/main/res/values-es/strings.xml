@@ -280,7 +280,7 @@
     <string name="pro_exposure_title">Exposición y balance de blancos</string>
     <string name="pro_exposure_help">Manual aplica ISO y obturación juntos. Las prioridades nativas automatizan el otro parámetro sólo cuando están anunciadas. El ángulo sigue los FPS de captura, no los del proyecto.</string>
     <string name="pro_hfr_unavailable">Los controles profesionales quedan pendientes de validación en esta ruta HFR restringida.</string>
-    <string name="pro_exposure_unavailable">Modo solicitado no disponible en esta cámara/perfil. El request actual usa AUTO; se conserva la preferencia.</string>
+    <string name="pro_exposure_unavailable">Este modo no está disponible con esta cámara o perfil. La exposición sigue en automático; tu elección se conserva.</string>
     <string name="pro_unknown">desconocido</string>
     <string name="pro_iso">ISO</string>
     <string name="pro_time">Tiempo de obturación</string>
@@ -289,17 +289,14 @@
     <string name="pro_mode_manual">Exposición manual</string>
     <string name="pro_mode_iso_priority">Prioridad de ISO</string>
     <string name="pro_mode_shutter_priority">Prioridad de obturación</string>
-    <string name="pro_exposure_values">Tiempo solicitado: %1$s ns · previsto: %2$s ns · reportado: %3$s ns · ISO reportado: %4$s</string>
     <string name="pro_clamped">El request se limita al rango del sensor o la duración del cuadro de captura. Revisá los valores reportados.</string>
-    <string name="pro_antibanding">Antiparpadeo del HAL</string>
-    <string name="pro_flicker_help">El antiparpadeo del HAL actúa sobre AE. Las sugerencias de obturación de 50/60 Hz seleccionan 1/100 o 1/120 s por separado; no garantizan eliminar parpadeo PWM.</string>
+    <string name="pro_antibanding">Antiparpadeo</string>
+    <string name="pro_flicker_help">El antiparpadeo permite que la exposición automática compense el parpadeo de la red eléctrica. Las sugerencias de obturación de 50/60 Hz fijan 1/100 o 1/120 s; no garantizan eliminar el parpadeo de los LED.</string>
     <string name="pro_shutter_suggestion">Obturación sugerida para %1$d Hz</string>
-    <string name="pro_reported_modes">Modo de exposición reportado: %1$s · antiparpadeo HAL reportado: %2$s</string>
     <string name="pro_white_balance">Balance de blancos</string>
     <string name="pro_wb_auto">WB automático</string>
-    <string name="pro_tint">Tinte CCT</string>
-    <string name="pro_wb_unavailable">Este WB se adapta a la cámara: CCT/preset no compatible usa AUTO; tinte no compatible usa 0.</string>
-    <string name="pro_wb_reported">Temperatura reportada: %1$s K · tinte reportado: %2$s</string>
+    <string name="pro_tint">Tinte</string>
+    <string name="pro_wb_unavailable">Este balance de blancos no está disponible en esta cámara: una temperatura o un preajuste no compatible usa el automático, y un tinte no compatible usa 0.</string>
     <string name="pro_restore_auto">Volver exposición y WB a AUTO</string>
     <string name="pro_controls_rejected">Se rechazó el cambio de control profesional; se conservó el request anterior: %1$s</string>
     <string name="pro_capture_notice">Hay controles solicitados no disponibles en esta cámara/perfil; revisá Ajustes de exposición.</string>
@@ -318,12 +315,8 @@
     <string name="image_mode_fast">Rápido</string>
     <string name="image_mode_hq">Alta calidad</string>
     <string name="image_processing_unavailable">Un modo solicitado no está anunciado aquí. Se conserva el valor de la plantilla y la preferencia solicitada.</string>
-    <string name="image_session_keys">La cámara anuncia parámetros de procesamiento de sesión. Cambiarlos entre tomas puede demorar la reconfiguración del HAL; las sesiones nuevas reciben los parámetros solicitados al inicio.</string>
-    <string name="image_reported_stabilization">OIS reportado: %1$s · EIS reportado: %2$s</string>
-    <string name="image_reported_isp">Ruido de imagen reportado: %1$s · nitidez reportada: %2$s</string>
-    <string name="image_crop_region">Recorte de sensor reportado [izquierda, arriba, derecha, abajo]: %1$s. Este dato no mide todo el recorte de EIS.</string>
+    <string name="image_session_keys">Esta cámara aplica algunas opciones de procesamiento al iniciarse. Cambiarlas entre tomas puede añadir una breve pausa antes de la siguiente toma.</string>
     <string name="image_reset">Restaurar plantilla de la cámara</string>
-    <string name="image_submitted">Request enviado: OIS=%1$s, EIS=%2$s · ruido=%3$s · nitidez=%4$s. No es el resultado del hardware.</string>
     <string name="pro_wb_record_policy">Balance de blancos al iniciar la toma</string>
     <string name="pro_wb_continuous">WB continuo / en vivo</string>
     <string name="pro_wb_lock_record">Mantener WB durante la toma</string>

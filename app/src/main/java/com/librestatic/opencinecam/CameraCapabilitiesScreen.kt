@@ -85,6 +85,7 @@ internal fun CameraCapabilitiesScreen(
     activeCameraId: String?,
     onBack: () -> Unit,
     loadInventory: ((Context) -> List<CameraInventory>)? = null,
+    liveState: CameraUiState? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -125,7 +126,7 @@ internal fun CameraCapabilitiesScreen(
                 }
                 if (!loaded.isNullOrEmpty()) TextButton(
                     onClick = {
-                        val text = capabilityReportText(deviceLine(), loaded, cameras, context::getString)
+                        val text = capabilityReportText(deviceLine(), loaded, cameras, context::getString, liveState)
                         val ok = runCatching {
                             context.getSystemService(ClipboardManager::class.java)
                                 .setPrimaryClip(ClipData.newPlainText(clipLabel, text))
@@ -153,6 +154,9 @@ internal fun CameraCapabilitiesScreen(
                 }
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
+                // Live values only belong to the camera in use; Settings shows a one-line summary of them.
+                val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
+                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live)) }
                 item(key = "raw-header-${selected.cameraId}") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         SettingsHeading(stringResource(R.string.caps_section_raw, selected.entries.size), stringResource(R.string.caps_section_raw_summary))
@@ -225,6 +229,19 @@ private fun AppUsageCard(camera: CameraInventory, findings: List<AppFeatureFindi
             CineIcon.CHECK,
         )
         findings.forEach { finding -> FeatureRow(finding) }
+    }
+}
+
+@Composable
+private fun ReadbackCard(lines: List<Pair<String, String>>) {
+    SettingsCard(Modifier.testTag("capabilities-readback")) {
+        SettingsHeading(stringResource(R.string.caps_section_readback), stringResource(R.string.caps_section_readback_summary), CineIcon.INFO)
+        lines.forEach { (key, value) ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(key, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                SelectionContainer { Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
+            }
+        }
     }
 }
 
@@ -327,6 +344,7 @@ internal fun capabilityReportText(
     inventory: List<CameraInventory>,
     cameras: List<Camera2CameraDescriptor>,
     label: (Int) -> String,
+    live: CameraUiState? = null,
 ): String = buildString {
     appendLine("OpenCineCam · ${label(R.string.caps_title)}")
     appendLine(device)
@@ -340,6 +358,10 @@ internal fun capabilityReportText(
             append("[${label(statusLabel(finding.status))}] ${label(finding.feature.title)}")
             if (finding.detail.isNotEmpty()) append(": ${finding.detail}")
             appendLine()
+        }
+        live?.takeIf { it.selectedCameraId == camera.cameraId }?.let { state ->
+            appendLine("-- ${label(R.string.caps_section_readback)} --")
+            requestedReportedLines(state).forEach { (key, value) -> appendLine("$key: $value") }
         }
         camera.entries.forEach { entry ->
             appendLine("${entry.key} = ${entry.value.replace("\n", "\n    ")}")

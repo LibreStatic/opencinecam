@@ -4,4 +4,18 @@
         <item quantity="one">%d result</item>
         <item quantity="other">%d results</item>
     </plurals>
+    <string name="settings_camera_reports">Camera reports: %1$s</string>
+    <string name="readback_antibanding">anti-banding: %1$s</string>
+    <string name="readback_optical">optical stabilization: %1$s</string>
+    <string name="readback_video">electronic stabilization: %1$s</string>
+    <string name="readback_noise">noise reduction: %1$s</string>
+    <string name="readback_edge">edge enhancement: %1$s</string>
+    <string name="readback_on">On</string>
+    <string name="readback_preview_only">Preview only</string>
+    <string name="pro_auto">Auto</string>
+    <string name="pro_auto_reported">Auto (camera: %1$s)</string>
+    <string name="pro_exposure_auto_only">This camera offers automatic exposure only.</string>
+    <string name="pro_wb_temperature">Color temperature</string>
+    <string name="caps_section_readback">Requested and reported</string>
+    <string name="caps_section_readback_summary">What OpenCineCam asked the camera in use for, next to what the camera reported in its latest frame.</string>
 </resources>

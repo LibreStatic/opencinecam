@@ -26,69 +26,73 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
     val descriptor = state.descriptor
     val hfr = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
     val caps = if (hfr) ExposureCapabilities() else descriptor?.exposureCapabilities ?: ExposureCapabilities()
+    // One answer for Settings and the capabilities page: controls the camera cannot apply are not shown.
+    val available = exposureAvailability(caps)
     val exposure = settings.exposure
-    val resolved = exposure.resolve(caps, CaptureFrameRate(state.targetFps))
-    val supportsTime = caps.supports(ExposureMode.MANUAL) || caps.supports(ExposureMode.SHUTTER_PRIORITY)
+    val rate = CaptureFrameRate(state.targetFps)
+    val resolved = exposure.resolve(caps, rate)
     fun updateExposure(value: ExposureSelection) = onChange(settings.copy(exposure = value))
     fun timed(value: ExposureSelection): ExposureSelection = value.copy(mode = when {
-        value.mode in setOf(ExposureMode.MANUAL, ExposureMode.SHUTTER_PRIORITY) -> value.mode
-        caps.supports(ExposureMode.MANUAL) -> ExposureMode.MANUAL
+        available.appliesTime(value.mode) -> value.mode
+        available.manual -> ExposureMode.MANUAL
         else -> ExposureMode.SHUTTER_PRIORITY
     })
-    val unknown = stringResource(R.string.pro_unknown)
+    val pending = LocalCineColors.current.pending
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsSectionTitle(stringResource(R.string.pro_exposure_title), help = stringResource(R.string.pro_exposure_help))
-        if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
+        if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = pending, fontSize = 16.sp)
         SettingsChips(stringResource(R.string.settings_mode), ExposureMode.entries, exposure.mode,
             label = { stringResource(it.titleResource()) }, onSelect = { updateExposure(exposure.copy(mode = it)) },
-            tag = { "pro-mode-${it.name}" }, enabled = { caps.supports(it) })
-        if (resolved.unavailable) Text(stringResource(R.string.pro_exposure_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
-        caps.isoRange?.takeIf { it.first < it.last }?.let { range ->
-            ProSlider(stringResource(R.string.pro_iso), exposure.iso.toFloat(), range.first.toFloat()..range.last.toFloat(),
-                enabled = caps.supports(exposure.mode) && exposure.mode in setOf(ExposureMode.MANUAL, ExposureMode.ISO_PRIORITY),
-                format = { it.roundToInt().toString() }, onChange = { updateExposure(exposure.copy(iso = it.roundToInt())) })
+            tag = { "pro-mode-${it.name}" }, enabled = { available.supports(it) })
+        when {
+            resolved.unavailable -> Text(stringResource(R.string.pro_exposure_unavailable), color = pending, fontSize = 16.sp)
+            !available.any && !hfr -> Text(stringResource(R.string.pro_exposure_auto_only), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         }
-        SettingsChips(stringResource(R.string.pro_shutter_unit), ShutterUnit.entries, exposure.shutterUnit,
-            label = { stringResource(if (it == ShutterUnit.TIME) R.string.pro_time else R.string.pro_angle) },
-            onSelect = { updateExposure(exposure.copy(shutterUnit = it)) }, tag = { "pro-shutter-unit-${it.name}" })
-        if (exposure.shutterUnit == ShutterUnit.ANGLE) {
-            ProSlider(stringResource(R.string.pro_angle), exposure.angleTenths.toFloat(), 1f..3600f, supportsTime,
-                format = { String.format(Locale.ROOT, "%.1f°", it / 10) }, onChange = { updateExposure(timed(exposure.copy(angleTenths = it.roundToInt()))) })
-            SettingsChips(stringResource(R.string.pro_angle_presets), listOf(900, 1440, 1728, 1800, 2160, 2700, 3600), exposure.angleTenths,
-                label = { "${it / 10.0}°" }, onSelect = { updateExposure(timed(exposure.copy(angleTenths = it))) },
-                tag = { "pro-angle-$it" }, rowEnabled = supportsTime)
-        } else {
-            caps.timeRangeNs?.let { range ->
-                val upper = range.last.coerceAtMost(CaptureFrameRate(state.targetFps).frameDurationNs - 100_000L)
-                if (range.first > 0 && upper > range.first) ProSlider(stringResource(R.string.pro_time), log10(exposure.timeNs.toDouble()).toFloat(),
-                    log10(range.first.toDouble()).toFloat()..log10(upper.toDouble()).toFloat(), supportsTime,
-                    format = { String.format(Locale.ROOT, "%.3f ms", 10.0.pow(it.toDouble()) / 1_000_000) },
-                    onChange = { updateExposure(timed(exposure.copy(timeNs = 10.0.pow(it.toDouble()).toLong().coerceIn(range.first, upper)))) })
+        available.isoRange?.takeIf { it.first < it.last }?.let { range ->
+            val reading = isoReading(available, exposure.mode, exposure.iso, state.sensitivityIso)
+            ProSlider(stringResource(R.string.pro_iso), (reading.value ?: exposure.iso).toFloat(), range.first.toFloat()..range.last.toFloat(),
+                enabled = !reading.automatic, format = { it.roundToInt().toString() },
+                automatic = automaticText(reading) { it.toString() }, onChange = { updateExposure(exposure.copy(iso = it.roundToInt())) })
+        }
+        if (available.timeAdjustable) {
+            val reading = timeReading(available, exposure.mode, exposure.requestedTimeNs(rate), state.exposureTimeNs)
+            SettingsChips(stringResource(R.string.pro_shutter_unit), ShutterUnit.entries, exposure.shutterUnit,
+                label = { stringResource(if (it == ShutterUnit.TIME) R.string.pro_time else R.string.pro_angle) },
+                onSelect = { updateExposure(exposure.copy(shutterUnit = it)) }, tag = { "pro-shutter-unit-${it.name}" })
+            if (exposure.shutterUnit == ShutterUnit.ANGLE) {
+                fun angleTenths(ns: Long) = (3600.0 * ns / rate.frameDurationNs).roundToInt().coerceIn(1, 3600)
+                ProSlider(stringResource(R.string.pro_angle), (reading.value?.takeIf { reading.automatic }?.let(::angleTenths) ?: exposure.angleTenths).toFloat(), 1f..3600f,
+                    format = { String.format(Locale.ROOT, "%.1f°", it / 10) },
+                    automatic = automaticText(reading) { String.format(Locale.ROOT, "%.1f°", angleTenths(it) / 10.0) },
+                    onChange = { updateExposure(timed(exposure.copy(angleTenths = it.roundToInt()))) })
+                SettingsChips(stringResource(R.string.pro_angle_presets), listOf(900, 1440, 1728, 1800, 2160, 2700, 3600), exposure.angleTenths,
+                    label = { "${it / 10.0}°" }, onSelect = { updateExposure(timed(exposure.copy(angleTenths = it))) }, tag = { "pro-angle-$it" })
+            } else {
+                available.timeRangeNs?.let { range ->
+                    val upper = range.last.coerceAtMost(rate.frameDurationNs - 100_000L)
+                    if (range.first > 0 && upper > range.first) ProSlider(stringResource(R.string.pro_time),
+                        log10((reading.value ?: exposure.timeNs).toDouble()).toFloat(),
+                        log10(range.first.toDouble()).toFloat()..log10(upper.toDouble()).toFloat(),
+                        format = { exposureTimeText(10.0.pow(it.toDouble()).toLong()) }, automatic = automaticText(reading) { shutter(it) },
+                        onChange = { updateExposure(timed(exposure.copy(timeNs = 10.0.pow(it.toDouble()).toLong().coerceIn(range.first, upper)))) })
+                }
             }
+            var flickerActions by remember { mutableStateOf(false) }
+            val flickerTitle = stringResource(R.string.pro_flicker_suggestions)
+            SettingsValueRow(flickerTitle, null, Modifier.testTag("pro-flicker-row")) { flickerActions = true }
+            val flickerSuggestions = listOf(50 to 10_000_000L, 60 to 8_333_333L).map { (hz, time) ->
+                SettingsAction(stringResource(R.string.pro_shutter_suggestion, hz), "pro-flicker-$hz") {
+                    updateExposure(timed(exposure.copy(shutterUnit = ShutterUnit.TIME, timeNs = time)))
+                }
+            }
+            if (flickerActions) SettingsActionsDialog(flickerTitle, flickerSuggestions) { flickerActions = false }
         }
-        Text(stringResource(R.string.pro_exposure_values, exposure.requestedTimeNs(CaptureFrameRate(state.targetFps)).toString(),
-            resolved.timeNs?.toString() ?: unknown, state.exposureTimeNs?.toString() ?: unknown, state.sensitivityIso?.toString() ?: unknown), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-        if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = LocalCineColors.current.pending, fontSize = 14.sp)
+        if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = pending, fontSize = 14.sp)
+        CameraReportsLine(exposureReadbackDifferences(resolved, state.reportedExposureMode, state.sensitivityIso, state.exposureTimeNs, state.reportedAntibanding))
         SettingsChips(stringResource(R.string.pro_antibanding), Antibanding.entries, exposure.antibanding,
             label = { it.displayLabel() }, onSelect = { updateExposure(exposure.copy(antibanding = it)) },
             tag = { "pro-antibanding-${it.name}" }, enabled = { it in caps.antibanding })
         SettingsHelp(stringResource(R.string.pro_flicker_help))
-        var flickerActions by remember { mutableStateOf(false) }
-        val flickerTitle = stringResource(R.string.pro_flicker_suggestions)
-        SettingsValueRow(flickerTitle, null, Modifier.testTag("pro-flicker-row"), enabled = supportsTime) { flickerActions = true }
-        val flickerSuggestions = listOf(50 to 10_000_000L, 60 to 8_333_333L).map { (hz, time) ->
-            SettingsAction(stringResource(R.string.pro_shutter_suggestion, hz), "pro-flicker-$hz") {
-                updateExposure(timed(exposure.copy(shutterUnit = ShutterUnit.TIME, timeNs = time)))
-            }
-        }
-        if (flickerActions) SettingsActionsDialog(flickerTitle, flickerSuggestions) { flickerActions = false }
-        Text(stringResource(R.string.pro_reported_modes, state.reportedExposureMode?.let { stringResource(it.titleResource()) } ?: unknown, when (state.reportedAntibanding) {
-            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> "AUTO"
-            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_OFF -> "OFF"
-            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_50HZ -> "50 Hz"
-            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ -> "60 Hz"
-            else -> unknown
-        }), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         RecordingWhiteBalanceSettings(state, settings, onChange)
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
         val kelvinRange = descriptor?.kelvinRange.takeUnless { hfr }
@@ -101,20 +105,21 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
                 CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT, CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT).map { WhiteBalanceSelection.Preset(it) } +
             kelvinChoice
         val wbAuto = stringResource(R.string.pro_wb_auto)
+        val temperature = stringResource(R.string.pro_wb_temperature)
         SettingsChips(stringResource(R.string.pro_white_balance), wbChoices, wb,
-            label = { when (it) { WhiteBalanceSelection.Auto -> wbAuto; is WhiteBalanceSelection.Preset -> it.label(); is WhiteBalanceSelection.Kelvin -> "Kelvin / CCT" } },
+            label = { when (it) { WhiteBalanceSelection.Auto -> wbAuto; is WhiteBalanceSelection.Preset -> it.label(); is WhiteBalanceSelection.Kelvin -> temperature } },
             onSelect = { onChange(settings.copy(whiteBalance = it)) },
             tag = { when (it) { WhiteBalanceSelection.Auto -> "pro-wb-auto"; is WhiteBalanceSelection.Preset -> "pro-wb-preset${it.awbMode}"; is WhiteBalanceSelection.Kelvin -> "pro-wb-kelvin" } },
             enabled = { when (it) { WhiteBalanceSelection.Auto -> true; is WhiteBalanceSelection.Preset -> it.awbMode in presets; is WhiteBalanceSelection.Kelvin -> kelvinRange != null } })
         val adapted = wb.adaptTo(kelvinRange, descriptor?.tintSupported == true, presets)
-        if (adapted != wb) Text(stringResource(R.string.pro_wb_unavailable), color = LocalCineColors.current.pending, fontSize = 14.sp)
+        if (adapted != wb) Text(stringResource(R.string.pro_wb_unavailable), color = pending, fontSize = 14.sp)
         if (wb is WhiteBalanceSelection.Kelvin && kelvinRange != null) {
-            ProSlider("Kelvin", wb.kelvin.toFloat(), kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
+            ProSlider(temperature, wb.kelvin.toFloat(), kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
                 format = { "${it.roundToInt()} K" }, onChange = { onChange(settings.copy(whiteBalance = wb.copy(kelvin = snapKelvinTo100(it.roundToInt(), kelvinRange) ?: wb.kelvin))) })
-            ProSlider(stringResource(R.string.pro_tint), wb.tint.toFloat(), -50f..50f, descriptor?.tintSupported == true,
+            if (descriptor?.tintSupported == true) ProSlider(stringResource(R.string.pro_tint), wb.tint.toFloat(), -50f..50f,
                 format = { it.roundToInt().toString() }, onChange = { onChange(settings.copy(whiteBalance = wb.copy(tint = it.roundToInt()))) })
         }
-        Text(stringResource(R.string.pro_wb_reported, state.reportedColorTemperatureK?.toString() ?: unknown, state.reportedColorTint?.toString() ?: unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        CameraReportsLine(whiteBalanceReadbackDifferences(adapted, state.reportedColorTemperatureK))
         OutlinedButton({ onChange(settings.copy(exposure = exposure.copy(mode = ExposureMode.AUTO), whiteBalance = WhiteBalanceSelection.Auto)) }, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.pro_restore_auto))
         }
@@ -127,18 +132,37 @@ internal fun ExposureMode.titleResource(): Int = when (this) {
     ExposureMode.ISO_PRIORITY -> R.string.pro_mode_iso_priority
     ExposureMode.SHUTTER_PRIORITY -> R.string.pro_mode_shutter_priority
 }
-internal fun Antibanding.displayLabel(): String = when (this) { Antibanding.AUTO -> "AUTO"; Antibanding.OFF -> "OFF"; Antibanding.HZ50 -> "50 Hz"; Antibanding.HZ60 -> "60 Hz" }
 
-/** Commit on release rather than enqueueing an unbounded stream of Camera2 updates while dragging. */
+@Composable
+internal fun Antibanding.displayLabel(): String = when (this) {
+    Antibanding.AUTO -> stringResource(R.string.pro_auto)
+    Antibanding.OFF -> stringResource(R.string.image_mode_off)
+    Antibanding.HZ50 -> "50 Hz"
+    Antibanding.HZ60 -> "60 Hz"
+}
+
+/** "1/60 · 16.667 ms": the fraction operators read, with the exact time beside it. */
+internal fun exposureTimeText(ns: Long): String = "${shutter(ns)} · ${String.format(Locale.ROOT, "%.3f ms", ns / 1_000_000.0)}"
+
+/** The label an automatic reading shows instead of the stored request; null when the mode applies the request. */
+@Composable
+private fun <T> automaticText(reading: ExposureReading<T>, format: (T) -> String): String? = when {
+    !reading.automatic -> null
+    reading.value == null -> stringResource(R.string.pro_auto)
+    else -> stringResource(R.string.pro_auto_reported, format(reading.value))
+}
+
+/**
+ * Commits on release rather than enqueueing an unbounded stream of Camera2 updates while dragging.
+ * [automatic] replaces the value text until the operator moves the slider.
+ */
 @Composable
 private fun ProSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, enabled: Boolean = true,
-    format: (Float) -> String, onChange: (Float) -> Unit) {
+    format: (Float) -> String, automatic: String? = null, onChange: (Float) -> Unit) {
     var draft by remember(value, range) { mutableFloatStateOf(value.coerceIn(range)) }
-    Column {
-        Text("$label: ${format(draft)}", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-        CineSlider(value = draft, onValueChange = { draft = it }, onValueChangeFinished = { onChange(draft) }, enabled = enabled,
-            valueRange = range, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label })
-    }
+    var moved by remember(value, range) { mutableStateOf(false) }
+    val text = if (automatic != null && !moved) automatic else format(draft)
+    SettingsSliderRow("$label: $text", draft, { draft = it; moved = true }, range, enabled = enabled, onValueChangeFinished = { onChange(draft) })
 }
 
 @Composable

@@ -5,4 +5,18 @@
         <item quantity="many">%d résultats</item>
         <item quantity="other">%d résultats</item>
     </plurals>
+    <string name="settings_camera_reports">La caméra indique : %1$s</string>
+    <string name="readback_antibanding">anti-scintillement : %1$s</string>
+    <string name="readback_optical">stabilisation optique : %1$s</string>
+    <string name="readback_video">stabilisation électronique : %1$s</string>
+    <string name="readback_noise">réduction du bruit : %1$s</string>
+    <string name="readback_edge">renforcement des contours : %1$s</string>
+    <string name="readback_on">Activé</string>
+    <string name="readback_preview_only">Aperçu seulement</string>
+    <string name="pro_auto">Automatique</string>
+    <string name="pro_auto_reported">Automatique (caméra : %1$s)</string>
+    <string name="pro_exposure_auto_only">Cette caméra ne propose que l\'exposition automatique.</string>
+    <string name="pro_wb_temperature">Température de couleur</string>
+    <string name="caps_section_readback">Demandé et indiqué</string>
+    <string name="caps_section_readback_summary">Ce que OpenCineCam a demandé à la caméra utilisée, à côté de ce que la caméra a indiqué dans sa dernière image.</string>
 </resources>

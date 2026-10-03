@@ -22,7 +22,6 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
     val reported = ImageProcessingDefaults(state.reportedOpticalStabilization, state.reportedVideoStabilization,
         state.reportedNoiseReduction, state.reportedEdgeEnhancement)
     val unavailable = selected.resolve(caps, reported, hfr).unavailable
-    val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SettingsSectionTitle(stringResource(R.string.image_processing_title), help = stringResource(R.string.image_processing_help))
         if (state.structuralSettingsFrozen && state.effectiveSettings?.imageProcessing != selected) {
@@ -46,15 +45,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
             { onChange(settings.copy(imageProcessing = selected.copy(edge = it))) })
         if (unavailable.isNotEmpty()) Text(stringResource(R.string.image_processing_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         if (caps.sessionControls.isNotEmpty()) Text(stringResource(R.string.image_session_keys), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-        state.submittedImageProcessing?.let { sent ->
-            Text(stringResource(R.string.image_submitted, sent.optical?.toString() ?: unknown, sent.video?.toString() ?: unknown,
-                reportedIspLabel(sent.noise), reportedIspLabel(sent.edge)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-        }
-        Text(stringResource(R.string.image_reported_stabilization,
-            state.reportedOpticalStabilization?.let { if (it == 0) "OFF" else if (it == 1) "ON" else "#$it" } ?: unknown,
-            state.reportedVideoStabilization?.let { if (it == 0) "OFF" else if (it == 1) "ON" else if (it == 2) "PREVIEW" else "#$it" } ?: unknown), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-        Text(stringResource(R.string.image_reported_isp, reportedIspLabel(state.reportedNoiseReduction), reportedIspLabel(state.reportedEdgeEnhancement)), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
-        Text(stringResource(R.string.image_crop_region, state.reportedCropRegion?.joinToString(", ") ?: unknown), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        CameraReportsLine(imageProcessingReadbackDifferences(state.submittedImageProcessing, reported))
         OutlinedButton({ onChange(settings.copy(imageProcessing = ImageProcessingSelection())) }, modifier = Modifier.heightIn(min = 48.dp).testTag("image-reset")) {
             Text(stringResource(R.string.image_reset), fontSize = 16.sp)
         }
@@ -72,12 +63,4 @@ internal fun IspMode.titleResource(): Int = when (this) {
     IspMode.OFF -> R.string.image_mode_off
     IspMode.FAST -> R.string.image_mode_fast
     IspMode.HIGH_QUALITY -> R.string.image_mode_hq
-}
-@Composable
-private fun reportedIspLabel(code: Int?): String = when (code) {
-    null -> stringResource(R.string.pro_unknown)
-    0 -> stringResource(R.string.image_mode_off)
-    1 -> stringResource(R.string.image_mode_fast)
-    2 -> stringResource(R.string.image_mode_hq)
-    else -> "#$code"
 }
