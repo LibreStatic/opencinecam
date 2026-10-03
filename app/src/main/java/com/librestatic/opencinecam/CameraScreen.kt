@@ -1311,6 +1311,8 @@ internal fun AdaptiveCaptureChrome(
     var pinchStartRatio by remember { mutableFloatStateOf(-1f) }
     var controlDeckHeightPx by remember { mutableIntStateOf(0) }
     var dockedPaneHeightPx by remember { mutableIntStateOf(0) }
+    // The lock toggles (and in the stacked layouts the F-keys under them) at the frame's top end.
+    var topEndClusterWidthPx by remember { mutableIntStateOf(0) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
     // it again; it re-hides after a short idle period unless a pane is open in it.
     LaunchedEffect(recording, manualReveal, pane) {
@@ -1660,6 +1662,7 @@ internal fun AdaptiveCaptureChrome(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
+                        .onSizeChanged { topEndClusterWidthPx = it.width }
                         .heightIn(max = 48.dp + keyPitch * wholeKeys)
                         .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.End,
@@ -1684,7 +1687,8 @@ internal fun AdaptiveCaptureChrome(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
-                modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp)
+                    .onSizeChanged { topEndClusterWidthPx = it.width },
             )
         }
 
@@ -2113,8 +2117,12 @@ internal fun AdaptiveCaptureChrome(
                 onToggleGrid = onToggleGrid,
                 onCycleGridMode = onCycleGridMode,
                 onToggleHorizon = onToggleHorizon,
+                // While the chrome is up its lock toggles share the HUD's top band: stop short of them.
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = recordingHudTop)
-                    .padding(start = if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp, end = endOccupied)
+                    .padding(
+                        start = if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp,
+                        end = endOccupied + if (chromeVisible) with(density) { topEndClusterWidthPx.toDp() } + 8.dp else 0.dp,
+                    )
                     .onSizeChanged { recordingHudHeightPx = it.height },
             )
         }
@@ -3085,7 +3093,8 @@ private fun RecordingOverlay(
                     Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
                 }
             }
-            AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
+            // Full width even on a phone: a narrower meter cut its "no signal" line short.
+            AudioMeterHud(state, binder)
             ThermalHudChip(recording = true)
             OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
