@@ -97,6 +97,83 @@ class PreviewGraphFallbackTest {
         assertFalse(skipBySessionPreCheck(sessionConfigurationSupport { throw IllegalArgumentException("bad") }, hasFallback = true))
     }
 
+    @Test
+    fun abandonedSurfaceOnARetryIsReportedInsteadOfEscaping() {
+        // The emulator crash: createCaptureSession rejects the first graph because the preview
+        // surface was abandoned, and every retry then throws while re-wrapping that surface.
+        val walk = Walk(graphCount = 3) { throw IllegalArgumentException("Surface was abandoned") }
+        walk.fallback.start()
+        assertEquals(listOf(0, 1, 2), walk.attempts)
+        assertEquals(listOf(0 to "Surface was abandoned", 1 to "Surface was abandoned"), walk.retries)
+        assertEquals(listOf("preview-session-exception" to "Surface was abandoned"), walk.failures)
+    }
+
+    @Test
+    fun aThrowingAttemptFallsBackToTheNextGraph() {
+        val walk = Walk(graphCount = 3) { index ->
+            if (index == 0) throw IllegalStateException()
+            true
+        }
+        walk.fallback.start()
+        assertEquals(listOf(0, 1), walk.attempts)
+        // A message-less exception still names its type in the retry log.
+        assertEquals(listOf(0 to "IllegalStateException"), walk.retries)
+        assertTrue(walk.failures.isEmpty())
+    }
+
+    @Test
+    fun preCheckSkipsToTheNextGraph() {
+        val walk = Walk(graphCount = 2) { index -> index == 1 }
+        walk.fallback.start()
+        assertEquals(listOf(0, 1), walk.attempts)
+        assertEquals(listOf(0 to "isSessionConfigurationSupported=false"), walk.retries)
+        assertTrue(walk.failures.isEmpty())
+    }
+
+    @Test
+    fun configureFailedRetriesWithoutThrowingAndReportsOnTheLastGraph() {
+        val walk = Walk(graphCount = 3) { index ->
+            if (index > 0) throw IllegalArgumentException("Surface was abandoned")
+            true
+        }
+        walk.fallback.start()
+        // onConfigureFailed of graph 0 arrives later on the camera executor; the retries throw.
+        walk.fallback.configureFailed(0)
+        assertEquals(listOf(0, 1, 2), walk.attempts)
+        assertEquals(listOf(0 to "configure failed", 1 to "Surface was abandoned"), walk.retries)
+        assertEquals(listOf("preview-session-exception" to "Surface was abandoned"), walk.failures)
+
+        val last = Walk(graphCount = 1) { true }
+        last.fallback.start()
+        last.fallback.configureFailed(0)
+        assertEquals(listOf("preview-session-failed" to "Camera preview configuration failed."), last.failures)
+    }
+
+    @Test
+    fun aRetiredGraphNeitherRetriesNorReports() {
+        val walk = Walk(graphCount = 3, owns = false) { throw IllegalArgumentException("Surface was abandoned") }
+        walk.fallback.start()
+        walk.fallback.configureFailed(0)
+        assertEquals(listOf(0), walk.attempts)
+        assertTrue(walk.retries.isEmpty() && walk.failures.isEmpty())
+    }
+
+    /** Records what [PreviewGraphFallback] does with an engine-shaped [attempt]. */
+    private class Walk(graphCount: Int, owns: Boolean = true, attempt: (Int) -> Boolean) {
+        val attempts = mutableListOf<Int>()
+        val retries = mutableListOf<Pair<Int, String>>()
+        val failures = mutableListOf<Pair<String, String>>()
+        val fallback = PreviewGraphFallback(
+            graphCount = graphCount,
+            ownsGraph = { owns },
+            onRetry = { rejected, reason -> retries += rejected to reason },
+            onFailure = { code, message -> failures += code to message },
+        ) { index ->
+            attempts += index
+            attempt(index)
+        }
+    }
+
     private fun probe(
         cameraId: String = "0",
         yuvSizes: List<StreamSize>? = listOf(yuv, preview),

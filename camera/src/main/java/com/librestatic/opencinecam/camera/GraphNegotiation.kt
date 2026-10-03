@@ -204,6 +204,51 @@ const val PREVIEW_GRAPH_STILL = "still"
 const val PREVIEW_GRAPH_RAW = "raw"
 const val PREVIEW_GRAPH_ANALYSIS = "analysis"
 
+/**
+ * Walks the fallback graphs of Camera2PreviewEngine.configureSession. [attempt] configures graph
+ * `index` and submits its session, returning false when the session pre-check ruled it out
+ * ([skipBySessionPreCheck]). Everything it does may throw: CameraService rejects the graph, or a
+ * retry re-wraps a preview surface the UI abandoned meanwhile (a density or rotation change racing
+ * the camera open). A throw moves on to the next graph and, after the last one, is reported.
+ * Nothing escapes [start] or [configureFailed]: both run on the camera executor (onOpened,
+ * onConfigureFailed), where an uncaught exception kills the process.
+ */
+class PreviewGraphFallback(
+    private val graphCount: Int,
+    private val ownsGraph: () -> Boolean,
+    private val onRetry: (rejected: Int, reason: String) -> Unit,
+    private val onFailure: (code: String, message: String) -> Unit,
+    private val attempt: PreviewGraphFallback.(index: Int) -> Boolean,
+) {
+    fun start() = run(0)
+
+    fun hasFallback(index: Int): Boolean = index + 1 < graphCount
+
+    /** CameraCaptureSession.StateCallback.onConfigureFailed for graph [index]. */
+    fun configureFailed(index: Int) {
+        if (!ownsGraph()) return
+        if (hasFallback(index)) retry(index, "configure failed")
+        else onFailure("preview-session-failed", "Camera preview configuration failed.")
+    }
+
+    private fun run(index: Int) {
+        val submitted = try {
+            attempt(index)
+        } catch (failure: Exception) {
+            if (!ownsGraph()) return
+            if (hasFallback(index)) retry(index, failure.message ?: failure.javaClass.simpleName)
+            else onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.")
+            return
+        }
+        if (!submitted) retry(index, "isSessionConfigurationSupported=false")
+    }
+
+    private fun retry(rejected: Int, reason: String) {
+        onRetry(rejected, reason)
+        run(rejected + 1)
+    }
+}
+
 enum class GraphNegotiationPolicy { STRICT, ADAPTIVE }
 
 fun interface GraphCancellation {
