@@ -10,6 +10,24 @@ class CaptureChromeLayoutTest {
 
     private fun family(width: Float, height: Float) = captureLayoutFamily(width, height)
 
+    @Test fun enlargingTheScopesGrowsTheirDockInPlace() {
+        // Resting sizes do not depend on the room.
+        assertEquals(SCOPE_TRAY_HEIGHT_DP, scopeTrayHeightDp(false, 650f))
+        assertEquals(SCOPE_STRIP_WIDTH_DP, scopeStripWidthDp(false, 914f))
+        // Phone portrait: most of the room between the top bar and the deck, a band of frame left.
+        val tray = scopeTrayHeightDp(true, 650f)
+        assertEquals(403f, tray, .5f)
+        assert(tray < 650f)
+        // Never smaller than at rest, never over 520 dp on a tall window.
+        assertEquals(SCOPE_TRAY_HEIGHT_DP, scopeTrayHeightDp(true, 200f))
+        assertEquals(520f, scopeTrayHeightDp(true, 2000f))
+        assertEquals(365.6f, scopeStripWidthDp(true, 914f), .5f)
+        assertEquals(400f, scopeStripWidthDp(true, 2000f))
+        // The inspector may outgrow its room and scroll when enlarged.
+        assertEquals(320f, inspectorScopesMaxHeightDp(false, 600f))
+        assertEquals(480f, inspectorScopesMaxHeightDp(true, 300f))
+    }
+
     @Test fun pixelFoldCoverLandscapeUsesSideRails() {
         // 2424 x 1080 px at 390 dpi (2.4375 density), before the safe-drawing insets.
         assertEquals(CaptureLayoutFamily.SIDE_RAILS, family(2424f / 2.4375f, 1080f / 2.4375f))

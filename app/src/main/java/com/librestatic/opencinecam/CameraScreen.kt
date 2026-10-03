@@ -1454,13 +1454,16 @@ internal fun AdaptiveCaptureChrome(
         val dockedEndPane = paneShown && stacked && paneDock == PaneDock.END
         val scopeStrip = scopesShown && !paneShown && (sideRails || (stacked && scopeDock == PaneDock.END))
         val scopeTray = scopesShown && !paneShown && stackedFamily && !scopeStrip
+        // ⤢ grows the scopes in place; the dock above is chosen at the resting size, so it never flips.
+        val scopeStripWidth = scopeStripWidthDp(scopesExpanded, maxWidth.value).dp
+        val scopeTrayHeight = scopeTrayHeightDp(scopesExpanded, with(density) { stackedPaneHeight.toDp() }.value).dp
         val targetReserve = when {
             overlay || hinge || inspector -> CaptureFrameReserve.None
             paneShown && sideRails -> CaptureFrameReserve(end = (SIDE_PANE_WIDTH_DP - SIDE_COLUMN_WIDTH_DP).dp.px())
             dockedEndPane -> CaptureFrameReserve(end = sidePaneWidth.px())
             dockedBottomPane -> CaptureFrameReserve(bottom = dockedPaneHeightPx.toFloat())
-            scopeStrip -> CaptureFrameReserve(end = SCOPE_STRIP_WIDTH_DP.dp.px())
-            scopeTray -> CaptureFrameReserve(bottom = SCOPE_TRAY_HEIGHT_DP.dp.px())
+            scopeStrip -> CaptureFrameReserve(end = scopeStripWidth.px())
+            scopeTray -> CaptureFrameReserve(bottom = scopeTrayHeight.px())
             else -> CaptureFrameReserve.None
         }
         // The viewfinder animates the same reserve; both follow one target, so the frame and its
@@ -1601,10 +1604,10 @@ internal fun AdaptiveCaptureChrome(
         // What the end edge carries beside the frame: the side column or pane, and the scope strip.
         val endOccupied = when {
             sideRails -> (if (paneShown) SIDE_PANE_WIDTH_DP else SIDE_COLUMN_WIDTH_DP).dp +
-                if (scopeStrip) SCOPE_STRIP_WIDTH_DP.dp else 0.dp
+                if (scopeStrip) scopeStripWidth else 0.dp
             inspector -> INSPECTOR_WIDTH_DP.dp
             dockedEndPane -> sidePaneWidth
-            scopeStrip -> SCOPE_STRIP_WIDTH_DP.dp
+            scopeStrip -> scopeStripWidth
             else -> 0.dp
         }
 
@@ -1650,7 +1653,7 @@ internal fun AdaptiveCaptureChrome(
                 val paneEdgeGap = if (compact) 0.dp else ((maxWidth - DOCKED_SHEET_MAX_WIDTH_DP.dp) / 2).coerceAtLeast(0.dp)
                 val dockedUnderKeys = when {
                     dockedBottomPane && paneEdgeGap < CAPTURE_RAIL_WIDTH_DP.dp -> with(density) { dockedPaneHeightPx.toDp() }
-                    scopeTray -> SCOPE_TRAY_HEIGHT_DP.dp
+                    scopeTray -> scopeTrayHeight
                     else -> 0.dp
                 }
                 val keyColumnFloor = maxHeight - deckHeight - dockedUnderKeys - 14.dp
@@ -1720,7 +1723,7 @@ internal fun AdaptiveCaptureChrome(
             previewTop + previewHeight,
             (if (stackedFamily && chromeVisible) height - controlDeckHeightPx else height) - when {
                 dockedBottomPane -> dockedPaneHeightPx.toFloat()
-                scopeTray -> SCOPE_TRAY_HEIGHT_DP.dp.px()
+                scopeTray -> scopeTrayHeight.px()
                 else -> 0f
             },
         )
@@ -2050,7 +2053,7 @@ internal fun AdaptiveCaptureChrome(
                     if (scopesShown) {
                         val room = viewport - 34.dp - with(density) { aboveScopesPx.toDp() }
                         Box(
-                            Modifier.fillMaxWidth().heightIn(max = room.coerceIn(INSPECTOR_SCOPES_MIN_HEIGHT_DP.dp, 320.dp)),
+                            Modifier.fillMaxWidth().heightIn(max = inspectorScopesMaxHeightDp(scopesExpanded, room.value).dp),
                             contentAlignment = Alignment.Center,
                         ) { scopes(Modifier) }
                     }
@@ -2079,7 +2082,7 @@ internal fun AdaptiveCaptureChrome(
                     top = if (sideRails) 0.dp else topBar,
                     bottom = if (stackedFamily && chromeVisible) deckHeight else 0.dp,
                 )
-                .width(SCOPE_STRIP_WIDTH_DP.dp)
+                .width(scopeStripWidth)
                 .fillMaxHeight()
                 .background(Panel)
                 .testTag("capture-scope-strip"),
@@ -2090,7 +2093,7 @@ internal fun AdaptiveCaptureChrome(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = if (chromeVisible) deckHeight else 0.dp)
                 .fillMaxWidth()
-                .height(SCOPE_TRAY_HEIGHT_DP.dp)
+                .height(scopeTrayHeight)
                 .background(Panel)
                 .testTag("capture-scope-tray"),
             contentAlignment = Alignment.Center,
@@ -2151,7 +2154,7 @@ internal fun AdaptiveCaptureChrome(
         if (stackedFamily && chromeVisible && !recording && !paneShown) CaptureStatus(
             state,
             Modifier.align(Alignment.BottomCenter).padding(
-                bottom = deckHeight + (if (scopeTray) SCOPE_TRAY_HEIGHT_DP.dp else 0.dp) + 8.dp,
+                bottom = deckHeight + (if (scopeTray) scopeTrayHeight else 0.dp) + 8.dp,
                 start = 16.dp,
                 end = 16.dp,
             ),

@@ -45,6 +45,21 @@ internal const val SCOPE_STRIP_WIDTH_DP = 180f
 /** Scope tray between the viewfinder and the deck of the compact and stacked layouts. */
 internal const val SCOPE_TRAY_HEIGHT_DP = 200f
 
+/**
+ * The scope tray's height. Enlarged it takes most of [roomDp], the height between the top bar and
+ * the deck, and leaves a band of frame to aim by.
+ */
+internal fun scopeTrayHeightDp(expanded: Boolean, roomDp: Float): Float =
+    if (!expanded) SCOPE_TRAY_HEIGHT_DP else (roomDp * .62f).coerceIn(SCOPE_TRAY_HEIGHT_DP, 520f)
+
+/** The scope strip's width; enlarged it takes up to 40 % of a window [windowWidthDp] wide. */
+internal fun scopeStripWidthDp(expanded: Boolean, windowWidthDp: Float): Float =
+    if (!expanded) SCOPE_STRIP_WIDTH_DP else (windowWidthDp * .4f).coerceIn(SCOPE_STRIP_WIDTH_DP, 400f)
+
+/** The inspector's scopes fit the [roomDp] left in its column; enlarged they may make the column scroll. */
+internal fun inspectorScopesMaxHeightDp(expanded: Boolean, roomDp: Float): Float =
+    if (!expanded) roomDp.coerceIn(INSPECTOR_SCOPES_MIN_HEIGHT_DP, 320f) else roomDp.coerceIn(480f, 640f)
+
 /** A docked bottom sheet never covers more than this share of the window height. */
 internal const val DOCKED_SHEET_MAX_FRACTION = 0.55f
 
