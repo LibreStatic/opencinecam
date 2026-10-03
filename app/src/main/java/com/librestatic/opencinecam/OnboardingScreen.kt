@@ -44,6 +44,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import kotlinx.coroutines.delay
@@ -441,11 +442,22 @@ internal fun OnboardingScreen(
                 if (onboardingLayout(window) == OnboardingLayout.TWO_PANE) {
                     // The words and the buttons stay put beside the step, so Allow and Next are
                     // always on screen however short the window is.
+                    val paneSpacing = 32.dp
+                    val rowWidth = minOf(maxWidth, TwoPaneMaxWidth) - 48.dp
+                    // The welcome step has nothing beside it, so its pane sits centred and slides
+                    // into place with the pager, tracking a swipe or Back as closely as Get started.
+                    val centreShift = with(LocalDensity.current) { ((rowWidth - (rowWidth - paneSpacing) * 0.42f) / 2).toPx() }
                     Row(
                         Modifier.widthIn(max = TwoPaneMaxWidth).fillMaxSize().padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                        horizontalArrangement = Arrangement.spacedBy(paneSpacing),
                     ) {
-                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                        // Above the pager, which the centred pane overlaps and would take its touches.
+                        Column(
+                            Modifier.weight(0.42f).fillMaxHeight().zIndex(1f).graphicsLayer {
+                                val welcome = 1f - (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
+                                translationX = FastOutSlowInEasing.transform(welcome) * centreShift
+                            },
+                        ) {
                             header(Modifier.fillMaxWidth().padding(top = 8.dp))
                             SharedAxis(page, reducedMotion, Modifier.weight(1f).fillMaxWidth()) { shown ->
                                 FadingScroll(Modifier.fillMaxSize(), Arrangement.Center) { PageHeading(shown, tourSpot) }
