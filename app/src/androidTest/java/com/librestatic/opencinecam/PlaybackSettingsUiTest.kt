@@ -28,13 +28,18 @@ class PlaybackSettingsUiTest {
         node("muted").performScrollTo().assertIsOff().performClick().assertIsOn()
         node("loop").performScrollTo().assertIsOff().performClick().assertIsOn()
         node("frame-position").performScrollTo().assertIsOn().performClick().assertIsOff()
-        compose.runOnIdle { assertEquals(initial.copy(playback = PlaybackSettings(true, true, false)), settings.value); assertEquals(3, changes) }
+        node("native-surface").performScrollTo().assertIsOff().performClick().assertIsOn()
+        compose.runOnIdle {
+            assertEquals(initial.copy(playback = PlaybackSettings(true, true, false, nativeSurfaceFrames = true)), settings.value)
+            assertEquals(4, changes)
+        }
     }
     @Test fun doubleFontFullLabelsAreUnclippedAndTargetsAtLeastFortyEightDp() {
         show(doubleFont = true)
-        for (tag in listOf("muted", "loop", "frame-position")) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp)
+        for (tag in listOf("muted", "loop", "frame-position", "native-surface")) node(tag).performScrollTo().assertHeightIsAtLeast(48.dp)
         node("help-toggle").performScrollTo().performClick()
-        for (tag in listOf("help", "muted-label", "loop-label", "frame-position-label")) {
+        node("native-surface-help-toggle").performScrollTo().performClick()
+        for (tag in listOf("help", "muted-label", "loop-label", "frame-position-label", "native-surface-label", "native-surface-help")) {
             val layouts = mutableListOf<TextLayoutResult>()
             node(tag).performScrollTo().performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
             assertEquals(1, layouts.size)

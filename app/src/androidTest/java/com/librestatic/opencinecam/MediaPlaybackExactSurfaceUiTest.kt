@@ -54,8 +54,8 @@ class MediaPlaybackExactSurfaceUiTest {
             exact(0)
             node("frame").assertExists()
             node("native-frame-mode").assertDoesNotExist()
-            // Explicit per-review choice, never an automatic fallback or settings mutation.
-            click("native-frames")
+            // Direct output is the operator's Settings › Playback choice, never an automatic fallback.
+            compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = true) }
             compose.waitUntil(30_000) { (present("native-frame-mode") && !present("frame") && present("exact")) || present("error-detail") }
             nativeExact(0, rotation)
             node("previous-frame").performScrollTo().assertIsNotEnabled()
@@ -86,14 +86,14 @@ class MediaPlaybackExactSurfaceUiTest {
             compose.waitUntil(30_000) { present("exact") || present("error-detail") }
             node("error-detail").assertDoesNotExist()
             val pausedIndex = pts.indices.singleOrNull { index ->
-                runCatching { node("exact").assertTextEquals(exactText(index)) }.isSuccess
+                runCatching { node("exact").assertExactFrame(context, index + 1, pts.size, pts[index]) }.isSuccess
             }
             assertNotNull("Paused native output must identify one actual indexed PTS", pausedIndex)
             nativeExact(requireNotNull(pausedIndex), rotation)
             click("end"); nativeExact(3, rotation)
             click("start"); nativeExact(0, rotation)
 
-            click("native-frames")
+            compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = false) }
             compose.waitUntil(30_000) { (!present("native-frame-mode") && present("frame") && present("exact")) || present("error-detail") }
             exact(0)
             node("frame").assertExists()
@@ -102,7 +102,7 @@ class MediaPlaybackExactSurfaceUiTest {
             node("frame").assertExists()
             compose.runOnIdle {
                 assertEquals(initialSettings, settings.value)
-                assertEquals("Decoder choice and navigation must not persist preferences", 0, settingsWrites)
+                assertEquals("Review navigation must not write preferences", 0, settingsWrites)
             }
             node("close").performClick()
             node("dialog").assertDoesNotExist()
@@ -116,13 +116,12 @@ class MediaPlaybackExactSurfaceUiTest {
         }
     }
 
-    private fun exactText(index: Int) = context.getString(R.string.media_playback_exact, index + 1, pts.size, pts[index])
     private fun exact(index: Int) {
         compose.waitUntil(30_000) {
-            runCatching { node("exact").assertTextEquals(exactText(index)) }.isSuccess || present("error-detail")
+            runCatching { node("exact").assertExactFrame(context, index + 1, pts.size, pts[index]) }.isSuccess || present("error-detail")
         }
         node("error-detail").assertDoesNotExist()
-        node("exact").performScrollTo().assertTextEquals(exactText(index))
+        node("exact").performScrollTo().assertExactFrame(context, index + 1, pts.size, pts[index])
         node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
     }
 
@@ -132,7 +131,7 @@ class MediaPlaybackExactSurfaceUiTest {
         node("frame").assertDoesNotExist()
         rendered(rotation, index)
         // A stale compositor frame or a running player must not satisfy an exact-frame assertion.
-        node("exact").assertTextEquals(exactText(index))
+        node("exact").assertExactFrame(context, index + 1, pts.size, pts[index])
         node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
         node("frame").assertDoesNotExist()
     }

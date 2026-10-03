@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Silenciar o áudio da reprodução</string>
     <string name="playback_settings_loop">Repetir ao chegar ao fim da reprodução</string>
     <string name="playback_settings_frame_position">Mostrar a posição do quadro no visualizador</string>
+    <string name="playback_settings_direct_output">Enviar quadros pausados direto para a tela</string>
+    <string name="playback_settings_direct_output_help">Desativado por padrão. O visualizador normalmente converte cada quadro pausado para verificar a cor. Ative se isso for lento neste dispositivo: as posições continuam exatas, mas a cor segue o sistema e o HDR aparece como a tela permitir. Vale só para este dispositivo.</string>
 </resources>

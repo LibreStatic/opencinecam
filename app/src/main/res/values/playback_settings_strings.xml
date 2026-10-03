@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Mute playback audio</string>
     <string name="playback_settings_loop">Repeat after playback reaches the end</string>
     <string name="playback_settings_frame_position">Show the viewer frame position</string>
+    <string name="playback_settings_direct_output">Send paused frames straight to the display</string>
+    <string name="playback_settings_direct_output_help">Off by default. The viewer normally converts each paused frame itself so that its colour can be checked. Turn this on if that is slow on this device: frame positions stay exact, but colour follows the system and HDR shows as the display allows. Applies to this device only.</string>
 </resources>

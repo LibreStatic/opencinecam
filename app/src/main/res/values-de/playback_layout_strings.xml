@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="playback_layout_photo_title">Foto</string>
+    <string name="playback_layout_share_photo">Foto teilen</string>
+    <string name="playback_layout_delete_photo">Foto löschen</string>
+    <string name="playback_layout_photo_info">Fotodetails</string>
+    <string name="playback_layout_close_info">Details schließen</string>
+    <string name="playback_layout_file_name">Dateiname</string>
+    <string name="playback_layout_review_position">In dieser Durchsicht</string>
+    <string name="playback_layout_size">Größe</string>
+    <string name="playback_layout_photo_size">%1$d × %2$d Pixel</string>
+    <string name="playback_layout_section_format">Format</string>
+    <string name="playback_layout_section_accuracy">Bildgenauigkeit</string>
+    <string name="playback_layout_frame_estimate">Etwa Bild %1$d/%2$d</string>
+    <string name="playback_layout_estimated_detail">Während der Wiedergabe ist die Bildnummer eine Schätzung des Players. Pausieren Sie, um ein exaktes Bild zu sehen.</string>
+    <string name="playback_layout_direct_output">Direktausgabe</string>
+    <string name="playback_layout_show_controls">Steuerung einblenden</string>
+    <string name="playback_layout_hide_controls">Steuerung ausblenden</string>
+</resources>

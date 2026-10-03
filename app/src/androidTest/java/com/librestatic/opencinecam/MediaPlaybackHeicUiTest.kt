@@ -120,7 +120,8 @@ class MediaPlaybackHeicUiTest {
     private fun readyPhoto() {
         compose.waitUntil(30_000) { present("frame") || present("error-detail") }
         node("error-detail").assertDoesNotExist()
-        node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
+        // A shown photo has no playback state to report; the status only speaks while it loads or fails.
+        node("status").assertDoesNotExist()
         node("frame").performScrollTo().assertIsDisplayed()
         noVideoControls()
     }

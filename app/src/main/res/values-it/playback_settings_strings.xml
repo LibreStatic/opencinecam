@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Disattiva audio della riproduzione</string>
     <string name="playback_settings_loop">Ripeti al termine della riproduzione</string>
     <string name="playback_settings_frame_position">Mostra la posizione del frame nel visualizzatore</string>
+    <string name="playback_settings_direct_output">Invia i fotogrammi in pausa direttamente allo schermo</string>
+    <string name="playback_settings_direct_output_help">Disattivato per impostazione predefinita. Il visualizzatore converte di norma ogni fotogramma in pausa per verificarne il colore. Attivalo se su questo dispositivo è lento: le posizioni restano esatte, ma il colore segue il sistema e l\'HDR appare come lo consente lo schermo. Vale solo per questo dispositivo.</string>
 </resources>

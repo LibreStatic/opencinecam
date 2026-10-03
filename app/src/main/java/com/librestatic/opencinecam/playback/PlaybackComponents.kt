@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.CineGlyph
@@ -197,10 +198,13 @@ internal fun CollapsibleErrorCard(title: String, message: String, detail: String
     }
 }
 
-/** A round transport key; the [primary] one (play/pause) is larger and filled with the accent. */
+/**
+ * A round transport key; the [primary] one (play/pause) is larger and filled with the accent. [primarySize]
+ * lets compact layouts keep play at 56 dp while large windows use 64 dp.
+ */
 @Composable
 internal fun TransportButton(tag: String, icon: CineIcon, label: String, enabled: Boolean, primary: Boolean = false,
-    modifier: Modifier = Modifier, onClick: () -> Unit) {
+    modifier: Modifier = Modifier, primarySize: Dp = 64.dp, onClick: () -> Unit) {
     val glyph = when {
         !enabled -> if (primary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else Disabled
         primary -> MaterialTheme.colorScheme.onPrimary
@@ -208,7 +212,7 @@ internal fun TransportButton(tag: String, icon: CineIcon, label: String, enabled
     }
     Box(
         modifier
-            .size(if (primary) 64.dp else 48.dp)
+            .size(if (primary) primarySize.coerceAtLeast(56.dp) else 48.dp)
             .clip(CircleShape)
             .background(when {
                 primary && enabled -> SettingsAccent

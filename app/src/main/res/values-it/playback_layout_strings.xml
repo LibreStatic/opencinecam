@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="playback_layout_photo_title">Foto</string>
+    <string name="playback_layout_share_photo">Condividi foto</string>
+    <string name="playback_layout_delete_photo">Elimina foto</string>
+    <string name="playback_layout_photo_info">Dettagli della foto</string>
+    <string name="playback_layout_close_info">Chiudi dettagli</string>
+    <string name="playback_layout_file_name">Nome del file</string>
+    <string name="playback_layout_review_position">In questa revisione</string>
+    <string name="playback_layout_size">Dimensioni</string>
+    <string name="playback_layout_photo_size">%1$d × %2$d pixel</string>
+    <string name="playback_layout_section_format">Formato</string>
+    <string name="playback_layout_section_accuracy">Precisione dei fotogrammi</string>
+    <string name="playback_layout_frame_estimate">Circa fotogramma %1$d/%2$d</string>
+    <string name="playback_layout_estimated_detail">Durante la riproduzione il numero del fotogramma è una stima del player. Metti in pausa per vedere un fotogramma esatto.</string>
+    <string name="playback_layout_direct_output">Uscita diretta</string>
+    <string name="playback_layout_show_controls">Mostra controlli</string>
+    <string name="playback_layout_hide_controls">Nascondi controlli</string>
+</resources>

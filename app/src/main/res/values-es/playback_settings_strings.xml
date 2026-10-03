@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Silenciar el audio de reproducción</string>
     <string name="playback_settings_loop">Repetir cuando la reproducción llegue al final</string>
     <string name="playback_settings_frame_position">Mostrar la posición del fotograma en el visor</string>
+    <string name="playback_settings_direct_output">Enviar los fotogramas en pausa directo a la pantalla</string>
+    <string name="playback_settings_direct_output_help">Desactivado de forma predeterminada. El visor convierte normalmente cada fotograma en pausa para poder verificar su color. Actívalo si eso es lento en este dispositivo: las posiciones siguen siendo exactas, pero el color sigue al sistema y el HDR se ve como la pantalla lo permita. Solo se aplica a este dispositivo.</string>
 </resources>

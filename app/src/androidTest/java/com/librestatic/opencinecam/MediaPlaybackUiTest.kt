@@ -49,32 +49,37 @@ class MediaPlaybackUiTest {
                     assertSame(cursor,requested);pages++;LocalMediaPage(listOf(later),null)
                 }) } }
             compose.waitUntil(20_000) { compose.onAllNodesWithTag("media-playback-exact",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
-            node("exact").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_exact,1,4,0L))
+            node("exact").performScrollTo().assertExactFrame(context,1,4,0L)
             node("previous-frame").performScrollTo().assertIsNotEnabled()
             click("next-frame")
-            compose.waitUntil(20_000) { runCatching { node("exact").assertTextEquals(context.getString(R.string.media_playback_exact,2,4,400_000L)) }.isSuccess }
+            compose.waitUntil(20_000) { runCatching { node("exact").assertExactFrame(context,2,4,400_000L) }.isSuccess }
             click("end")
-            compose.waitUntil(20_000) { runCatching { node("exact").assertTextEquals(context.getString(R.string.media_playback_exact,4,4,1_700_000L)) }.isSuccess }
+            compose.waitUntil(20_000) { runCatching { node("exact").assertExactFrame(context,4,4,1_700_000L) }.isSuccess }
             node("next-frame").performScrollTo().assertIsNotEnabled()
             click("start")
-            compose.waitUntil(20_000) { runCatching { node("exact").assertTextEquals(context.getString(R.string.media_playback_exact,1,4,0L)) }.isSuccess }
+            compose.waitUntil(20_000) { runCatching { node("exact").assertExactFrame(context,1,4,0L) }.isSuccess }
+            // Playback settings and the take facts are in the details, not on the player.
+            compose.openPlaybackDetails()
             click("settings-toggle")
             compose.onNodeWithTag("playback-frame-position",useUnmergedTree=true).performScrollTo().performClick()
             compose.runOnIdle { assertEquals(PlaybackSettings(muted=true,showFramePosition=false),settings.value) }
             node("exact").assertDoesNotExist()
-            click("next-take")
+            // The details sheet leaves the top bar free, and stays open while the review moves on.
+            node("next-take").performClick()
             compose.waitUntil(10_000) { runCatching { node("take").assertTextEquals(later.primary.name) }.isSuccess }
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-playback-frame",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1,pages)
+            compose.closePlaybackDetails()
             node("previous-member").performScrollTo().assertIsNotEnabled()
             click("next-member")
             node("member").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_member,2,2,secondPhoto.name))
             node("next-member").performScrollTo().assertIsNotEnabled()
             click("previous-member")
             node("member").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_member,1,2,photo.name))
-            node("next-take").performScrollTo().assertIsNotEnabled()
+            node("next-take").assertIsNotEnabled()
             node("play-pause").assertDoesNotExist()
-            click("previous-take")
+            node("previous-take").performClick()
+            compose.openPlaybackDetails()
             compose.waitUntil(20_000) { runCatching { node("take").assertTextEquals(initial.primary.name) }.isSuccess }
             node("close").performClick()
             node("dialog").assertDoesNotExist()

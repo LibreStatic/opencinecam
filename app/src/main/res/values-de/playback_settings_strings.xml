@@ -5,4 +5,6 @@
     <string name="playback_settings_muted">Wiedergabe-Audio stummschalten</string>
     <string name="playback_settings_loop">Nach Erreichen des Endes wiederholen</string>
     <string name="playback_settings_frame_position">Frame-Position des Viewers anzeigen</string>
+    <string name="playback_settings_direct_output">Pausierte Bilder direkt an den Bildschirm senden</string>
+    <string name="playback_settings_direct_output_help">Standardmäßig aus. Der Viewer wandelt jedes pausierte Bild normalerweise selbst um, damit seine Farbe geprüft werden kann. Schalten Sie dies ein, wenn das auf diesem Gerät langsam ist: Bildpositionen bleiben exakt, aber die Farbe folgt dem System, und HDR erscheint so, wie der Bildschirm es erlaubt. Gilt nur für dieses Gerät.</string>
 </resources>

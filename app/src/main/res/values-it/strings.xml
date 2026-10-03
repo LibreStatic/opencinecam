@@ -619,12 +619,7 @@
     <string name="still_recovery_notice">Gruppi di foto interrotti scartati: %1$d; recupero in sospeso: %2$d</string>
     <string name="recording_recovery_notice">Riprese interrotte scartate: %1$d; recupero in sospeso: %2$d</string>
     <string name="webdav_transfer_waiting_media">I trasferimenti attendono mentre i file media locali vengono modificati.</string>
-    <string name="media_playback_native_frames">Usa Surface nativa per frame esatti</string>
-    <string name="media_playback_cpu_frames">Usa anteprima frame CPU (SDR)</string>
-    <string name="media_playback_log_view_rec709">Mostra assistenza Rec.709</string>
-    <string name="media_playback_log_view_flat">Mostra OCLog2 piatto</string>
-    <string name="media_playback_log_stage_error">Vista OCLog2 non disponibile; mostro i codici grezzi: %1$s</string>
-    <string name="media_playback_native_frame_mode">Frame su Surface nativa: le posizioni esatte richiedono un callback di rendering. Il colore segue la pipeline del sistema; cambiare uscita riavvia la revisione senza riproduzione automatica.</string>
+    <string name="media_playback_native_frame_mode">L\'uscita diretta sullo schermo è attiva: i fotogrammi vanno direttamente allo schermo e il colore segue il sistema, non l\'anteprima verificata. Puoi disattivarla nelle impostazioni di riproduzione.</string>
     <string name="media_playback_native_hdr_available">%1$s: questo display dichiara il tipo HDR corrispondente. La fedeltà HDR fisica non è verificata.</string>
     <string name="media_playback_native_hdr_unavailable">%1$s: questo display non dichiara il tipo HDR corrispondente. Il sistema può applicare il tone mapping a SDR.</string>
     <string name="proxy_share">Condividi solo il proxy</string>

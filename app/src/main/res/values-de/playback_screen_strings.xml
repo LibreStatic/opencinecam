@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="playback_screen_title">OpenCineCam · Clip-Wiedergabe</string>
+    <string name="playback_screen_title">Clip-Wiedergabe</string>
     <string name="playback_screen_share">Clip teilen</string>
     <string name="playback_screen_delete">Clip löschen</string>
     <string name="playback_screen_take_position">%1$d von %2$d</string>
@@ -11,8 +11,8 @@
     <string name="playback_screen_monitoring">Monitoring-LUT</string>
     <string name="playback_screen_histogram">Luma-Histogramm</string>
     <string name="playback_screen_settings">Wiedergabeeinstellungen</string>
-    <string name="playback_screen_native_surface">Native Surface verwenden</string>
-    <string name="playback_screen_cpu_frames">CPU-Bilder verwenden</string>
+    <string name="playback_screen_native_surface">Direkte Bildschirmausgabe verwenden</string>
+    <string name="playback_screen_cpu_frames">Farbgeprüfte Bilder verwenden</string>
     <string name="playback_screen_retry">Erneut versuchen</string>
     <string name="playback_screen_interpret_track">Spur interpretieren</string>
     <string name="playback_screen_exact_error_title">Exakte Einzelbilder ließen sich auf diesem Gerät nicht aktivieren.</string>
@@ -23,4 +23,5 @@
     <string name="playback_screen_color_error_message">Du kannst ihn mit den SDR-Tags der Spur interpretieren; die Farbgenauigkeit wird nicht geprüft.</string>
     <string name="playback_screen_stage_error_title">OCLog2-Monitoransicht nicht verfügbar</string>
     <string name="playback_screen_stage_error_message">Der Clip wird ohne die LOG-Ansichtsstufe gezeigt.</string>
+    <string name="playback_screen_info">Clipdetails</string>
 </resources>

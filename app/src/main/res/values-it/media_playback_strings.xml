@@ -2,9 +2,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <resources>
     <string name="media_playback_close">Chiudi revisione</string>
-    <string name="media_playback_member">Elemento %1$d di %2$d: %3$s</string>
-    <string name="media_playback_previous_member">Elemento precedente</string>
-    <string name="media_playback_next_member">Elemento successivo</string>
+    <string name="media_playback_member">File %1$d di %2$d: %3$s</string>
+    <string name="media_playback_previous_member">File precedente</string>
+    <string name="media_playback_next_member">File successivo</string>
     <string name="media_playback_previous_take">Ripresa precedente</string>
     <string name="media_playback_next_take">Ripresa successiva</string>
     <string name="media_playback_loading">Lettura del media…</string>
@@ -14,9 +14,8 @@
     <string name="media_playback_ended">Fine del media</string>
     <string name="media_playback_error">Lettura del media non riuscita; nessun frame approssimato è stato sostituito.</string>
     <string name="media_playback_closed">Lettore chiuso</string>
-    <string name="media_playback_retry">Riprova la lettura</string>
-    <string name="media_playback_exact">Frame verificato %1$d / %2$d · PTS %3$d µs</string>
-    <string name="media_playback_estimated">Posizione del player: %1$d ms (non è un frame verificato)</string>
+    <string name="media_playback_exact">Il fotogramma %1$d di %2$d è mostrato esattamente come è salvato nel file, a %3$s s.</string>
+    <string name="media_playback_estimated">Posizione del player: %1$d ms</string>
     <string name="media_playback_pause">Pausa</string>
     <string name="media_playback_play">Riproduci</string>
     <string name="media_playback_start">Vai all\'inizio</string>
@@ -27,8 +26,6 @@
     <string name="media_playback_color_interpreted">Colore interpretato dai tag della traccia, non verificato. Il PTS esatto non cambia. La riproduzione continua usa l\'interpretazione del colore propria del player. Questa scelta viene reimpostata quando esci da questo elemento.</string>
     <string name="media_playback_color_tags">Interpretazione della traccia: standard %1$d, intervallo %2$d. Decoder: standard %3$d, intervallo %4$d.</string>
     <string name="media_playback_color_strict">Torna alla lettura colore rigorosa</string>
-    <string name="media_playback_color_choice">Il colore del decoder non è supportato. Puoi interpretare esplicitamente questa revisione con i tag SDR della traccia senza modificare il file; l\'accuratezza del colore non è verificata.</string>
-    <string name="media_playback_interpret_track">Interpreta questa revisione con il colore SDR della traccia</string>
     <string name="media_playback_hdr_preview">Campioni %1$s decodificati a 10 bit · i frame in pausa precisi usano un\'anteprima SDR con tone mapping (riferimento 203 nit; display HLG 1000 nit). La riproduzione continua usa la pipeline colore del sistema. Ciò non verifica la fedeltà di visualizzazione HDR nativa; gli originali non cambiano.</string>
     <string name="media_playback_dng_preview">DNG — anteprima decodificata dalla piattaforma (%1$d × %2$d px). Il file RAW originale non cambia.</string>
 </resources>

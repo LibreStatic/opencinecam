@@ -619,12 +619,7 @@
     <string name="still_recovery_notice">Interrupted photo groups discarded: %1$d; recovery pending: %2$d</string>
     <string name="recording_recovery_notice">Interrupted takes discarded: %1$d; recovery pending: %2$d</string>
     <string name="webdav_transfer_waiting_media">Transfers wait while local media files are being changed.</string>
-    <string name="media_playback_native_frames">Use native Surface for exact frames</string>
-    <string name="media_playback_cpu_frames">Use CPU frame preview (SDR)</string>
-    <string name="media_playback_log_view_rec709">Show Rec.709 view assist</string>
-    <string name="media_playback_log_view_flat">Show flat OCLog2</string>
-    <string name="media_playback_log_stage_error">OCLog2 view stage unavailable; showing raw codes: %1$s</string>
-    <string name="media_playback_native_frame_mode">Native Surface frames: exact positions require a render callback. Color follows the system pipeline; changing output restarts review without autoplay.</string>
+    <string name="media_playback_native_frame_mode">Direct display output is on: frames go straight to the screen, and colour follows the system rather than the verified preview. You can turn it off in the playback settings.</string>
     <string name="media_playback_native_hdr_available">%1$s: this display advertises the matching HDR type. Physical HDR fidelity is not verified.</string>
     <string name="media_playback_native_hdr_unavailable">%1$s: this display does not advertise the matching HDR type. The system may tone map to SDR.</string>
     <string name="proxy_share">Share proxy only</string>
