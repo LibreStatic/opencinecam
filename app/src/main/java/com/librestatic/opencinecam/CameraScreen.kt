@@ -692,9 +692,11 @@ internal fun CaptureSurface(
                     }
                     .then(previewSizeModifier),
             )
+            // H hides the false-colour paint with the scopes; the setting stays on for when they return.
+            val scopesConcealed = LocalOperatorActions.current?.scopes?.concealed == true
             MonitoringOverlay(
                 state = state,
-                options = settings.monitoring,
+                options = if (scopesConcealed) settings.monitoring.copy(falseColorEnabled = false) else settings.monitoring,
                 sourceWidth = streamSize.width,
                 sourceHeight = streamSize.height,
                 squeezeFactor = squeezeFactor,

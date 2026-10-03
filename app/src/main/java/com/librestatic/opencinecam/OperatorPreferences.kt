@@ -7,18 +7,18 @@ import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 enum class OperatorAction {
     NONE, SYSTEM_VOLUME, CAPTURE, TORCH, TORCH_LEVEL, PEAKING, ZEBRA, HISTOGRAM,
     VIEW_ASSIST, AUTO_FOCUS, FOCUS_A, FOCUS_B, PRESET_C1, PRESET_C2, EXTERIOR, CONTROL_LOCK,
-    WAVEFORM, VECTORSCOPE,
+    WAVEFORM, VECTORSCOPE, FALSE_COLOR,
 }
 
 /**
  * Scope toggles the capture row always offers after the three F-keys, so a scope never hides in
  * Settings; one already assigned to an F-key is not repeated.
  */
-val OperatorQuickToggles: List<OperatorAction> = listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE)
+val OperatorQuickToggles: List<OperatorAction> = listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR)
 
 /** Actions that only drive scope analysis, which device heat can suspend. */
 private val ScopeActions = setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM,
-    OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE)
+    OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR)
 enum class StartupMode { PHOTO, VIDEO, LAST }
 
 data class OperatorPreferences(
@@ -80,6 +80,7 @@ fun operatorActionToggleState(action: OperatorAction, settings: CameraSettings, 
         OperatorAction.HISTOGRAM -> effective.histogramEnabled
         OperatorAction.WAVEFORM -> effective.monitoring.waveformEnabled
         OperatorAction.VECTORSCOPE -> effective.monitoring.vectorscopeEnabled
+        OperatorAction.FALSE_COLOR -> effective.monitoring.falseColorEnabled
         OperatorAction.VIEW_ASSIST -> effective.logViewAssistEnabled && state.selectedMode == CaptureMode.LOG
         OperatorAction.CONTROL_LOCK -> effective.operation.lockDuringTake
         else -> null

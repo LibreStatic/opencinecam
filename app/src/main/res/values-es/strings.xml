@@ -408,6 +408,7 @@
     <string name="operator_action_histogram_help">Muestra la distribución tonal del cuadro. Sólo monitoreo: nunca llega al archivo grabado.</string>
     <string name="operator_action_waveform_help">Dibuja los niveles de luma a lo ancho del cuadro, de izquierda a derecha, para ver de un vistazo altas luces quemadas y sombras empastadas. Sólo monitoreo: nunca llega al archivo grabado.</string>
     <string name="operator_action_vectorscope_help">Dibuja el color del cuadro sobre un círculo de tonos, para controlar saturación y tonos de piel. Sólo monitoreo: nunca llega al archivo grabado.</string>
+    <string name="operator_action_false_color_help">Pinta la imagen por zonas de exposición, del negro aplastado a las luces recortadas, y muestra cuánto del cuadro cae en cada una. Solo monitoreo: nunca llega al archivo grabado.</string>
     <string name="operator_action_view_assist_help">Monitorea LOG como Rec.709 en vez de la imagen plana OCLog2. Sólo monitoreo: el archivo grabado sigue siendo OCLog2. Apagado, el visor se ve lavado porque eso es LOG. Sólo disponible en modo LOG.</string>
     <string name="operator_action_auto_focus_help">Descarta la marca de foco manual y devuelve el foco a la cámara.</string>
     <string name="operator_action_focus_a_help">Hace la transición de foco hacia la marca A con la duración y curva configuradas.</string>

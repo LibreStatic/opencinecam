@@ -2168,6 +2168,7 @@ class CaptureService : Service() {
                 OperatorAction.HISTOGRAM -> repository.update { it.copy(histogramEnabled = !it.histogramEnabled) }
                 OperatorAction.WAVEFORM -> repository.update { it.copy(monitoring = it.monitoring.copy(waveformEnabled = !it.monitoring.waveformEnabled)) }
                 OperatorAction.VECTORSCOPE -> repository.update { it.copy(monitoring = it.monitoring.copy(vectorscopeEnabled = !it.monitoring.vectorscopeEnabled)) }
+                OperatorAction.FALSE_COLOR -> repository.update { it.copy(monitoring = it.monitoring.copy(falseColorEnabled = !it.monitoring.falseColorEnabled)) }
                 OperatorAction.VIEW_ASSIST -> repository.update { it.copy(logViewAssistEnabled = !it.logViewAssistEnabled) }
                 OperatorAction.CONTROL_LOCK -> repository.update { it.copy(operation = it.operation.copy(lockDuringTake = !it.operation.lockDuringTake)) }
                 OperatorAction.AUTO_FOCUS -> setManualFocus(null)

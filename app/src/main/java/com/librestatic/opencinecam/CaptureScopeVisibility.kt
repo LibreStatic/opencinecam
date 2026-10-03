@@ -11,7 +11,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 
 /** The scope actions H hides along with the scopes panel; their toggles follow what is on screen. */
-internal val HideableScopeActions: Set<OperatorAction> = setOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.HISTOGRAM)
+internal val HideableScopeActions: Set<OperatorAction> = setOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR, OperatorAction.HISTOGRAM)
 
 /** What a press on a scope toggle does, given the setting and whether the scopes are hidden. */
 internal enum class ScopeTogglePress {
@@ -39,6 +39,7 @@ internal fun scopeTogglePress(on: Boolean, hidden: Boolean): ScopeTogglePress = 
 internal fun OperatorAction.scopeTab(): ScopeTab? = when (this) {
     OperatorAction.WAVEFORM -> ScopeTab.WAVEFORM
     OperatorAction.VECTORSCOPE -> ScopeTab.VECTORSCOPE
+    OperatorAction.FALSE_COLOR -> ScopeTab.FALSE_COLOR
     else -> null
 }
 

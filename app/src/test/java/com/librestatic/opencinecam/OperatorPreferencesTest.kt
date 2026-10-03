@@ -130,13 +130,13 @@ class OperatorPreferencesTest {
     }
     @Test fun everyToggleActionReportsItsLatchedStateAndMomentaryActionsReportNone() {
         val toggles = setOf(OperatorAction.TORCH, OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM,
-            OperatorAction.VIEW_ASSIST, OperatorAction.CONTROL_LOCK, OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE)
+            OperatorAction.VIEW_ASSIST, OperatorAction.CONTROL_LOCK, OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR)
         val on = CameraSettings(flashEnabled = true, peakingEnabled = true, zebraEnabled = true, histogramEnabled = true,
             logViewAssistEnabled = true, operation = OperatorPreferences(lockDuringTake = true),
-            monitoring = MonitoringOptions(waveformEnabled = true, vectorscopeEnabled = true))
+            monitoring = MonitoringOptions(waveformEnabled = true, vectorscopeEnabled = true, falseColorEnabled = true))
         val off = CameraSettings(flashEnabled = false, peakingEnabled = false, zebraEnabled = false, histogramEnabled = false,
             logViewAssistEnabled = false, operation = OperatorPreferences(lockDuringTake = false),
-            monitoring = MonitoringOptions(waveformEnabled = false, vectorscopeEnabled = false))
+            monitoring = MonitoringOptions(waveformEnabled = false, vectorscopeEnabled = false, falseColorEnabled = false))
         val state = torchCamera(CaptureMode.LOG)
         for (action in OperatorAction.entries) {
             if (action in toggles) {
@@ -168,7 +168,7 @@ class OperatorPreferencesTest {
     }
     @Test fun thermallySuspendedAnalysisMakesOnlyTheScopeActionsUnavailable() {
         val scopes = setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM,
-            OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE)
+            OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR)
         val cool = torchCamera(CaptureMode.LOG)
         val hot = cool.copy(analysisSuspension = AnalysisSuspension.THERMAL)
         for (action in OperatorAction.entries) {
@@ -184,12 +184,12 @@ class OperatorPreferencesTest {
         }
         // The operator's setting is kept, so the scopes come back as they were when analysis resumes.
         val on = CameraSettings(peakingEnabled = true, zebraEnabled = true, histogramEnabled = true,
-            monitoring = MonitoringOptions(waveformEnabled = true, vectorscopeEnabled = true))
+            monitoring = MonitoringOptions(waveformEnabled = true, vectorscopeEnabled = true, falseColorEnabled = true))
         for (action in scopes) assertEquals(action.name, true, operatorActionToggleState(action, on, hot))
         assertTrue(operatorActionAvailable(OperatorAction.PEAKING, hot.copy(analysisSuspension = AnalysisSuspension.NONE)))
     }
     @Test fun scopeQuickTogglesAreAlwaysOfferedAndAssignable() {
-        assertEquals(listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE), OperatorQuickToggles)
+        assertEquals(listOf(OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR), OperatorQuickToggles)
         val idle = CameraUiState()
         for (action in OperatorQuickToggles) assertTrue(action.name, operatorActionAvailable(action, idle))
         // An F-key may carry one of them; the persisted name round-trips like every other action.

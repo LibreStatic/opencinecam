@@ -117,6 +117,7 @@ private fun toggled(action: OperatorAction, s: CameraSettings): CameraSettings? 
     OperatorAction.HISTOGRAM -> s.copy(histogramEnabled = !s.histogramEnabled)
     OperatorAction.WAVEFORM -> s.copy(monitoring = s.monitoring.copy(waveformEnabled = !s.monitoring.waveformEnabled))
     OperatorAction.VECTORSCOPE -> s.copy(monitoring = s.monitoring.copy(vectorscopeEnabled = !s.monitoring.vectorscopeEnabled))
+    OperatorAction.FALSE_COLOR -> s.copy(monitoring = s.monitoring.copy(falseColorEnabled = !s.monitoring.falseColorEnabled))
     OperatorAction.VIEW_ASSIST -> s.copy(logViewAssistEnabled = !s.logViewAssistEnabled)
     else -> null
 }

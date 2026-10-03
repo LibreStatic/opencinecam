@@ -351,6 +351,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOperatorGlyph(a
             drawLine(color, Offset(cx, h / 2f), Offset(w * .70f, h * .26f), strokeWidth = w * .09f)
             drawCircle(color, radius = w * .08f, center = Offset(w * .70f, h * .26f))
         }
+        OperatorAction.FALSE_COLOR -> {
+            // A frame painted in exposure zones: solid, striped and empty bands.
+            rect(w * .08f, h * .14f, w * .84f, h * .72f)
+            rect(w * .08f, h * .14f, w * .28f, h * .72f, filled = true)
+            drawLine(color, Offset(w * .40f, h * .38f), Offset(w * .62f, h * .38f), strokeWidth = w * .09f)
+            drawLine(color, Offset(w * .40f, h * .62f), Offset(w * .62f, h * .62f), strokeWidth = w * .09f)
+        }
         OperatorAction.NONE -> {
             drawCircle(color, radius = w * .40f, style = stroke)
             drawLine(color, Offset(w * .16f, h * .84f), Offset(w * .84f, h * .16f), strokeWidth = w * .09f)
@@ -430,6 +437,7 @@ internal fun OperatorAction.labelResource(): Int = when (this) {
     OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock
     OperatorAction.WAVEFORM -> R.string.monitoring_waveform
     OperatorAction.VECTORSCOPE -> R.string.monitoring_vectorscope
+    OperatorAction.FALSE_COLOR -> R.string.monitoring_false_color
 }
 /** What the action actually does, including whether it only affects monitoring. */
 internal fun OperatorAction.helpResource(): Int = when (this) {
@@ -451,4 +459,5 @@ internal fun OperatorAction.helpResource(): Int = when (this) {
     OperatorAction.CONTROL_LOCK -> R.string.operator_action_control_lock_help
     OperatorAction.WAVEFORM -> R.string.operator_action_waveform_help
     OperatorAction.VECTORSCOPE -> R.string.operator_action_vectorscope_help
+    OperatorAction.FALSE_COLOR -> R.string.operator_action_false_color_help
 }

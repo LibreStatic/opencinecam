@@ -408,6 +408,7 @@
     <string name="operator_action_histogram_help">Shows the tonal distribution of the frame. Monitoring only: it never reaches the recorded file.</string>
     <string name="operator_action_waveform_help">Draws the luma levels across the frame, left to right, so clipped highlights and crushed shadows show at a glance. Monitoring only: it never reaches the recorded file.</string>
     <string name="operator_action_vectorscope_help">Draws the colour of the frame around a hue circle, to check saturation and skin tones. Monitoring only: it never reaches the recorded file.</string>
+    <string name="operator_action_false_color_help">Paints the picture in exposure zones, from crushed black to clipped highlights, and shows how much of the frame falls in each. Monitoring only: it never reaches the recorded file.</string>
     <string name="operator_action_view_assist_help">Monitors LOG as Rec.709 instead of the flat OCLog2 image. Monitoring only: the recorded file stays OCLog2. Off, the viewfinder looks washed out because that is what LOG is. Available only in LOG mode.</string>
     <string name="operator_action_auto_focus_help">Drops the manual focus mark and hands focus back to the camera.</string>
     <string name="operator_action_focus_a_help">Pulls focus to mark A over the configured duration and easing.</string>
