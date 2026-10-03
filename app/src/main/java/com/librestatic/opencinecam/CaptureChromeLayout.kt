@@ -45,6 +45,9 @@ internal const val SCOPE_TRAY_HEIGHT_DP = 200f
 /** A docked bottom sheet never covers more than this share of the window height. */
 internal const val DOCKED_SHEET_MAX_FRACTION = 0.55f
 
+/** A docked bottom sheet outside compact portrait is at most this wide, centred on the deck. */
+internal const val DOCKED_SHEET_MAX_WIDTH_DP = 640f
+
 /** Height of the top bar over the viewfinder in the stacked layout. */
 internal const val STACKED_TOP_BAR_HEIGHT_DP = 56f
 

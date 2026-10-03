@@ -1642,14 +1642,25 @@ internal fun AdaptiveCaptureChrome(
         if (chromeVisible) {
             if (stackedFamily) {
                 // The F-keys stand over the frame's end edge under the lock toggles. They stop above
-                // the zoom rocker at mid-height, and scroll rather than run into it.
-                val keyColumnMax = if (state.zoomSupported) maxHeight / 2 - 60.dp - topBar - 12.dp
-                    else maxHeight - topBar - deckHeight - 14.dp
+                // the zoom rocker at mid-height and above whatever docks on the deck under them (a
+                // pane that reaches the end edge, or the scope tray), and scroll rather than run into it.
+                val paneEdgeGap = if (compact) 0.dp else ((maxWidth - DOCKED_SHEET_MAX_WIDTH_DP.dp) / 2).coerceAtLeast(0.dp)
+                val dockedUnderKeys = when {
+                    dockedBottomPane && paneEdgeGap < CAPTURE_RAIL_WIDTH_DP.dp -> with(density) { dockedPaneHeightPx.toDp() }
+                    scopeTray -> SCOPE_TRAY_HEIGHT_DP.dp
+                    else -> 0.dp
+                }
+                val keyColumnFloor = maxHeight - deckHeight - dockedUnderKeys - 14.dp
+                val keyColumnMax = (if (state.zoomSupported) minOf(maxHeight / 2 - 60.dp - 12.dp, keyColumnFloor) else keyColumnFloor) - topBar
+                // Whole 48 dp keys only (6 dp apart, under the 48 dp lock row): a key cut by the
+                // column's edge would read as one hidden under the pane.
+                val keyPitch = 48.dp + 6.dp
+                val wholeKeys = ((keyColumnMax - 48.dp) / keyPitch).toInt().coerceAtLeast(0)
                 Column(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
-                        .heightIn(max = keyColumnMax.coerceAtLeast(48.dp))
+                        .heightIn(max = 48.dp + keyPitch * wholeKeys)
                         .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -2068,7 +2079,7 @@ internal fun AdaptiveCaptureChrome(
             Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = deckHeight)
-                .then(if (compact) Modifier.fillMaxWidth() else Modifier.widthIn(max = 640.dp).fillMaxWidth())
+                .then(if (compact) Modifier.fillMaxWidth() else Modifier.widthIn(max = DOCKED_SHEET_MAX_WIDTH_DP.dp).fillMaxWidth())
                 .heightIn(max = dockCap)
                 .onSizeChanged { dockedPaneHeightPx = it.height },
             paneContent,
