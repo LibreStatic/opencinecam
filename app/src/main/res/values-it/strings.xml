@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">BILANCIAMENTO DEL BIANCO</string>
     <string name="panel_title_focus">FUOCO</string>
     <string name="panel_title_focus_pull">SPOSTAMENTO FUOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (obiettivo fisso)</string>
+    <string name="focus_auto_fixed_lens">Questo obiettivo ha il fuoco fisso; non c\'è nulla da regolare.</string>
     <string name="focus_marks_title">SEGNI</string>
     <string name="focus_mark_empty">IMPOSTA</string>
-    <string name="focus_marks_hint">Tocco: sposta · Pressione lunga: salva/cancella</string>
-    <string name="focus_pull_duration">DURATA %1$.1f s</string>
+    <string name="focus_marks_hint">Tocca un segno vuoto per salvare il fuoco attuale, uno salvato per spostarvi il fuoco. Tieni premuto per cancellarlo.</string>
+    <string name="focus_pull_duration">DURATA SPOSTAMENTO</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">ANNULLA SPOSTAMENTO</string>
     <string name="histogram_mode_rgb">RGB</string>

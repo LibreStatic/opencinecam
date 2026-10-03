@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">BALANÇO DE BRANCO</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">PUXAR FOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (lente fixa)</string>
+    <string name="focus_auto_fixed_lens">Esta lente tem foco fixo; não há nada para ajustar.</string>
     <string name="focus_marks_title">MARCAS</string>
     <string name="focus_mark_empty">DEFINIR</string>
-    <string name="focus_marks_hint">Toque: puxar · Pressão longa: salvar/limpar</string>
-    <string name="focus_pull_duration">DURAÇÃO %1$.1f s</string>
+    <string name="focus_marks_hint">Toque numa marca vazia para salvar o foco atual, ou numa salva para puxar o foco até ela. Mantenha pressionado para limpá-la.</string>
+    <string name="focus_pull_duration">DURAÇÃO DA PUXADA</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">CANCELAR PUXADA</string>
     <string name="histogram_mode_rgb">RGB</string>

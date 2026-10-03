@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">Objektiv meldet %1$s</string>
+    <string name="focus_advanced">Erweitert</string>
+    <string name="focus_mark_pull_action">Fokus zu Marke %1$s ziehen</string>
+    <string name="focus_mark_save_action">Aktuellen Fokus als Marke %1$s speichern</string>
+    <string name="focus_mark_clear_action">Marke %1$s löschen</string>
+    <string name="focus_curve_linear">Linear</string>
+    <string name="focus_curve_ease_in">Sanfter Start</string>
+    <string name="focus_curve_ease_out">Sanftes Ende</string>
+    <string name="focus_curve_s">S-Kurve</string>
+</resources>

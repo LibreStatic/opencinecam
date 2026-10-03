@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">L\'objectif indique %1$s</string>
+    <string name="focus_advanced">Avancé</string>
+    <string name="focus_mark_pull_action">Amener la mise au point au repère %1$s</string>
+    <string name="focus_mark_save_action">Enregistrer la mise au point actuelle comme repère %1$s</string>
+    <string name="focus_mark_clear_action">Effacer le repère %1$s</string>
+    <string name="focus_curve_linear">Linéaire</string>
+    <string name="focus_curve_ease_in">Départ doux</string>
+    <string name="focus_curve_ease_out">Arrivée douce</string>
+    <string name="focus_curve_s">Courbe en S</string>
+</resources>

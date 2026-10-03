@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_mode_af" translatable="false">AF</string>
+    <string name="focus_mode_mf" translatable="false">MF</string>
+    <string name="focus_lens_reports">Lens reports %1$s</string>
+    <string name="focus_advanced">Advanced</string>
+    <string name="focus_mark_pull_action">Pull focus to mark %1$s</string>
+    <string name="focus_mark_save_action">Save the current focus as mark %1$s</string>
+    <string name="focus_mark_clear_action">Clear mark %1$s</string>
+    <string name="focus_curve_linear">Linear</string>
+    <string name="focus_curve_ease_in">Slow start</string>
+    <string name="focus_curve_ease_out">Slow end</string>
+    <string name="focus_curve_s">S-curve</string>
+</resources>

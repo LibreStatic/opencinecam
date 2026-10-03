@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">BALANCE DE BLANCOS</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">CAMBIO DE FOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (lente fija)</string>
+    <string name="focus_auto_fixed_lens">Este objetivo tiene foco fijo; no hay nada que ajustar.</string>
     <string name="focus_marks_title">MARCAS</string>
     <string name="focus_mark_empty">FIJAR</string>
-    <string name="focus_marks_hint">Tocar: pull · Mantener: guardar/borrar</string>
-    <string name="focus_pull_duration">DURACIÓN %1$.1fs</string>
+    <string name="focus_marks_hint">Tocá una marca vacía para guardar el foco actual, o una guardada para llevar el foco hasta ella. Mantené presionado para borrarla.</string>
+    <string name="focus_pull_duration">DURACIÓN DEL CAMBIO</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">CANCELAR PULL</string>
     <string name="histogram_mode_rgb">RGB</string>

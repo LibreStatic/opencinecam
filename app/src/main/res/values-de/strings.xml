@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">WEISSABGLEICH</string>
     <string name="panel_title_focus">FOKUS</string>
     <string name="panel_title_focus_pull">FOKUSZUG</string>
-    <string name="focus_auto_fixed_lens">AUTO (Festbrennweite)</string>
+    <string name="focus_auto_fixed_lens">Dieses Objektiv hat einen Fixfokus; es gibt nichts einzustellen.</string>
     <string name="focus_marks_title">MARKEN</string>
     <string name="focus_mark_empty">SETZEN</string>
-    <string name="focus_marks_hint">Tippen: ziehen · Lange drücken: speichern/löschen</string>
-    <string name="focus_pull_duration">DAUER %1$.1f s</string>
+    <string name="focus_marks_hint">Tippe auf eine leere Marke, um den aktuellen Fokus zu speichern, auf eine gespeicherte, um dorthin zu ziehen. Halten zum Löschen.</string>
+    <string name="focus_pull_duration">ZUGDAUER</string>
     <string name="focus_pull_curve">KURVE</string>
     <string name="focus_pull_cancel">ZUG ABBRECHEN</string>
     <string name="histogram_mode_rgb">RGB</string>

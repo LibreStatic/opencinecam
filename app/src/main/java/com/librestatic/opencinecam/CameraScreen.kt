@@ -208,7 +208,6 @@ import com.librestatic.opencinecam.camera.label
 import com.librestatic.opencinecam.camera.snapKelvinTo100
 import com.librestatic.opencinecam.camera.KELVIN_PRESETS
 import com.librestatic.opencinecam.camera.adaptTo
-import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
 import com.librestatic.opencinecam.camera.TimecodeMode
@@ -3574,43 +3573,6 @@ private fun formatIntervalShort(intervalMs: Long): String {
 
 
 @Composable
-private fun PanelHeader(title: String, onClose: () -> Unit) {
-    val closeDescription = stringResource(R.string.close_panel, title)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Box(
-            Modifier
-                .size(48.dp)
-                .semantics { contentDescription = closeDescription }
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) { Text("×", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp) }
-    }
-}
-
-@Composable
-internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        modifier
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                when {
-                    selected -> Amber
-                    !enabled -> MaterialTheme.colorScheme.surfaceContainerLow
-                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                },
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
 private fun NavigationBar(selected: AppSection, onSelect: (AppSection) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().height(54.dp).background(MaterialTheme.colorScheme.surfaceContainer)) {
         AppSection.entries.forEach { section ->
@@ -4626,165 +4588,7 @@ private fun FocusPullDial(
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
     onClose: () -> Unit,
-) {
-    val descriptor = state.descriptor ?: return
-    val minDistance = descriptor.minimumFocusDistance ?: 0f
-    val supportsManualFocus = minDistance > 0f
-    val currentDiopters = state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f
-    val focusSliderPos = if (supportsManualFocus) (currentDiopters / minDistance).coerceIn(0f, 1f) else 0f
-    val marks = state.focusMarks
-    val markLabels = listOf("A", "B", "C", "D")
-    val pullActive = state.focusPullActive
-
-    Column(
-        Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        PanelHeader(stringResource(if (pullActive) R.string.panel_title_focus_pull else R.string.panel_title_focus), onClose)
-
-        Text(
-            if (supportsManualFocus) {
-                val effective = state.focusDistanceDiopters
-                val requested = state.requestedFocusDiopters
-                if (pullActive) {
-                    "-> %.1fD".format(state.focusPullTargetDiopters ?: 0f)
-                } else if (requested != null) {
-                    "%.1fD".format(requested) + (effective?.let { " (%.1fD)".format(it) } ?: "")
-                } else if (effective != null) {
-                    "%.1fD".format(effective)
-                } else "AUTO"
-            } else stringResource(R.string.focus_auto_fixed_lens),
-            color = if (pullActive) RecordRed else Amber,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-
-        if (supportsManualFocus) {
-            CineSlider(
-                value = focusSliderPos,
-                onValueChange = { pos ->
-                    binder?.setManualFocus(pos * minDistance)
-                },
-                modifier = Modifier.fillMaxWidth().height(28.dp),
-                enabled = !pullActive,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("0D", color = Muted, fontSize = 9.sp)
-                TextButton(
-                    onClick = { binder?.setManualFocus(null) },
-                    contentPadding = PaddingValues(0.dp),
-                ) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
-                Text("%.1fD".format(minDistance), color = Muted, fontSize = 9.sp)
-            }
-        }
-
-        if (supportsManualFocus && !pullActive) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
-
-            Text(stringResource(R.string.focus_marks_title), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                markLabels.forEach { label ->
-                    val savedDiopters = marks[label]
-                    val hasMark = savedDiopters != null
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(36.dp)
-                            .background(
-                                if (hasMark) Color(0xFF1A3A1A) else Color(0xFF1A1F21),
-                                RoundedCornerShape(6.dp),
-                            )
-                            .pointerInput(label, hasMark, currentDiopters) {
-                                detectTapGestures(
-                                    onTap = {
-                                        if (hasMark) {
-                                            binder?.startFocusPull(
-                                                savedDiopters!!,
-                                                settings.focusPullDurationMs,
-                                                settings.focusPullEasing,
-                                            )
-                                        }
-                                    },
-                                    onLongPress = {
-                                        if (hasMark) {
-                                            binder?.clearFocusMark(label)
-                                        } else {
-                                            binder?.setFocusMark(label, currentDiopters)
-                                        }
-                                    },
-                                )
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                label,
-                                color = if (hasMark) VerifiedCyan else Muted,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            if (hasMark) {
-                                Text("%.1fD".format(savedDiopters), color = Muted, fontSize = 7.sp)
-                            } else {
-                                Text(stringResource(R.string.focus_mark_empty), color = Color(0xFF444444), fontSize = 7.sp)
-                            }
-                        }
-                    }
-                }
-            }
-            Text(
-                stringResource(R.string.focus_marks_hint),
-                color = Color(0xFF555555),
-                fontSize = 8.sp,
-            )
-
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
-
-            Text(stringResource(R.string.focus_pull_duration, settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            CineSlider(
-                value = settings.focusPullDurationMs.toFloat(),
-                onValueChange = { v ->
-                    onSettingsChanged(settings.copy(focusPullDurationMs = (v / 500).toInt() * 500L))
-                },
-                valueRange = 500f..10_000f,
-                steps = 18,
-                modifier = Modifier.fillMaxWidth().height(28.dp),
-            )
-
-            Text(stringResource(R.string.focus_pull_curve), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FocusPullEasing.entries.forEach { easing ->
-                    TextButton(
-                        onClick = { onSettingsChanged(settings.copy(focusPullEasing = easing)) },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(0.dp),
-                    ) {
-                        Text(
-                            when (easing) {
-                                FocusPullEasing.LINEAR -> "LIN"
-                                FocusPullEasing.EASE_IN -> "IN"
-                                FocusPullEasing.EASE_OUT -> "OUT"
-                                FocusPullEasing.EASE_IN_OUT -> "S-CURVE"
-                            },
-                            color = if (settings.focusPullEasing == easing) Amber else Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = if (settings.focusPullEasing == easing) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        }
-
-        if (pullActive) {
-            Button(
-                onClick = { binder?.cancelFocusPull() },
-                colors = ButtonDefaults.buttonColors(containerColor = RecordRed, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.focus_pull_cancel), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-        }
-    }
-}
+) = FocusPanel(state, binder, settings, onSettingsChanged, onClose)
 
 private fun logPosition(value: Double, minimum: Double, maximum: Double): Float {
     if (minimum <= 0.0 || maximum <= minimum) return 0f

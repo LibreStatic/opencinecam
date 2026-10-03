@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">L\'obiettivo indica %1$s</string>
+    <string name="focus_advanced">Avanzate</string>
+    <string name="focus_mark_pull_action">Sposta il fuoco al segno %1$s</string>
+    <string name="focus_mark_save_action">Salva il fuoco attuale come segno %1$s</string>
+    <string name="focus_mark_clear_action">Cancella il segno %1$s</string>
+    <string name="focus_curve_linear">Lineare</string>
+    <string name="focus_curve_ease_in">Avvio dolce</string>
+    <string name="focus_curve_ease_out">Arrivo dolce</string>
+    <string name="focus_curve_s">Curva a S</string>
+</resources>

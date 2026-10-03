@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">BALANCE DES BLANCS</string>
     <string name="panel_title_focus">MISE AU POINT</string>
     <string name="panel_title_focus_pull">TIRAGE DE POINT</string>
-    <string name="focus_auto_fixed_lens">AUTO (objectif fixe)</string>
+    <string name="focus_auto_fixed_lens">Cet objectif a une mise au point fixe ; il n\'y a rien à régler.</string>
     <string name="focus_marks_title">REPÈRES</string>
     <string name="focus_mark_empty">DÉFINIR</string>
-    <string name="focus_marks_hint">Toucher : tirer · Appui long : enregistrer/effacer</string>
-    <string name="focus_pull_duration">DURÉE %1$.1f s</string>
+    <string name="focus_marks_hint">Touchez un repère vide pour enregistrer la mise au point actuelle, un repère enregistré pour y aller. Appui long pour l\'effacer.</string>
+    <string name="focus_pull_duration">DURÉE DU TIRAGE</string>
     <string name="focus_pull_curve">COURBE</string>
     <string name="focus_pull_cancel">ANNULER LE TIRAGE</string>
     <string name="histogram_mode_rgb">RGB</string>

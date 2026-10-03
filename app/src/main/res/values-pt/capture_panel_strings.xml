@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">A lente indica %1$s</string>
+    <string name="focus_advanced">Avançado</string>
+    <string name="focus_mark_pull_action">Puxar o foco até a marca %1$s</string>
+    <string name="focus_mark_save_action">Salvar o foco atual como marca %1$s</string>
+    <string name="focus_mark_clear_action">Limpar a marca %1$s</string>
+    <string name="focus_curve_linear">Linear</string>
+    <string name="focus_curve_ease_in">Início suave</string>
+    <string name="focus_curve_ease_out">Final suave</string>
+    <string name="focus_curve_s">Curva em S</string>
+</resources>

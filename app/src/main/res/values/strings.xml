@@ -662,11 +662,11 @@
     <string name="panel_title_white_balance">WHITE BALANCE</string>
     <string name="panel_title_focus">FOCUS</string>
     <string name="panel_title_focus_pull">FOCUS PULL</string>
-    <string name="focus_auto_fixed_lens">AUTO (fixed lens)</string>
+    <string name="focus_auto_fixed_lens">This lens has fixed focus, so there is nothing to adjust.</string>
     <string name="focus_marks_title">MARKS</string>
     <string name="focus_mark_empty">SET</string>
-    <string name="focus_marks_hint">Tap: pull · Long press: save/clear</string>
-    <string name="focus_pull_duration">DURATION %1$.1fs</string>
+    <string name="focus_marks_hint">Tap an empty mark to save the current focus, a saved one to pull to it. Hold to clear.</string>
+    <string name="focus_pull_duration">PULL DURATION</string>
     <string name="focus_pull_curve">CURVE</string>
     <string name="focus_pull_cancel">CANCEL PULL</string>
     <string name="histogram_mode_rgb">RGB</string>
