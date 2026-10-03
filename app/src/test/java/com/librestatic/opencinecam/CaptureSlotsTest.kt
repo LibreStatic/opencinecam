@@ -72,19 +72,6 @@ class CaptureSlotsTest {
         assertNull(reason(CaptureSlot.FOCUS, manualIso = false, manualShutter = false, ev = false))
     }
 
-    @Test fun focusReadsDioptresThenDistance() {
-        assertEquals("2.0 D", formatFocusDiopters(2f))
-        assertEquals("0.50 m", formatFocusDistance(2f))
-        assertEquals("2.0 D · 0.50 m", formatFocus(2f))
-        assertEquals("10.0 D · 0.10 m", formatFocus(10f))
-    }
-
-    @Test fun focusAtInfinityIsOnlyTheSymbol() {
-        assertEquals("∞", formatFocusDiopters(0f))
-        assertNull(formatFocusDistance(0f))
-        assertEquals("∞", formatFocus(0f))
-    }
-
     @Test fun captureControlFollowsThePhase() {
         assertTrue(captureControlEnabled(CameraUiState(phase = CameraUiPhase.PREVIEWING)))
         assertTrue(captureControlEnabled(CameraUiState(phase = CameraUiPhase.SAVED)))

@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * The five exposure slots under the viewfinder. Each mode has the same five places, so the
@@ -85,20 +84,6 @@ internal fun captureSlotUnavailableReason(
     slot == CaptureSlot.EV && !evSupported -> SlotUnavailableReason.NO_EV
     else -> null
 }
-
-/** "2.0 D", or "∞" at infinity. A focus puller reads dioptres; the distance follows it. */
-internal fun formatFocusDiopters(diopters: Float): String =
-    if (diopters <= FOCUS_INFINITY_DIOPTERS) "∞" else String.format(Locale.ROOT, "%.1f D", diopters)
-
-/** "0.50 m" for the same focus, or null at infinity, where a distance says nothing more. */
-internal fun formatFocusDistance(diopters: Float): String? =
-    if (diopters <= FOCUS_INFINITY_DIOPTERS) null else String.format(Locale.ROOT, "%.2f m", 1f / diopters)
-
-/** "2.0 D · 0.50 m", or "∞". */
-internal fun formatFocus(diopters: Float): String =
-    formatFocusDistance(diopters)?.let { "${formatFocusDiopters(diopters)} · $it" } ?: formatFocusDiopters(diopters)
-
-private const val FOCUS_INFINITY_DIOPTERS = 0.01f
 
 /** The short cell title. */
 internal fun CaptureSlot.labelRes(): Int = when (this) {

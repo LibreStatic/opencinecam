@@ -1058,13 +1058,6 @@ private fun MonitoringOverlay(
     }
 }
 
-/** The zoom rocker: 28 dp wide, 8 dp from the pane end, plus a gap before the panel. */
-private val SCOPES_BESIDE_END_CLEARANCE = 44.dp
-/** Gap between the frame edge and a panel laid out beside it. */
-private val SCOPES_BESIDE_START_GAP = 12.dp
-/** Narrowest strip worth moving the panel into; below it the panel stays over the frame. */
-private val SCOPES_BESIDE_MIN_WIDTH = 140.dp
-
 /** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
 @Composable
 internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
@@ -1772,9 +1765,9 @@ internal fun AdaptiveCaptureChrome(
         }
         val scopeFresh = rememberScopeAnalysisFresh(state, monitoring)
         val scopes: @Composable (Modifier) -> Unit = { modifier ->
-            // lead: pass histogramMode/onClose after merge
+            // No histogram tab: the histogram keeps its own place in the instrument stack.
             ProfessionalScopesPanel(state, monitoring, scopeFresh, modifier, expanded = scopesExpanded,
-                onExpandedChange = { scopesExpanded = it })
+                onExpandedChange = { scopesExpanded = it }, onClose = { scopesHidden = true })
         }
         // The modes, with the selected mode's resolution under them (RES lives here, not in the slots).
         val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
@@ -1796,7 +1789,7 @@ internal fun AdaptiveCaptureChrome(
                 onClose = onClose,
                 resolution = if (state.descriptor != null && state.selectedMode in CameraUiState.resolutionProfileModes) {
                     {
-                        ManualControlDial(ControlDial.RESOLUTION, state, binder, settings, onSettingsChanged) {
+                        ManualControlDial(ControlDial.RESOLUTION, state, binder, settings, onSettingsChanged, showHeader = false) {
                             pane = null
                             modeSheet = false
                         }
@@ -2149,12 +2142,12 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<Cap
                 CaptureSlot.ISO -> state.sensitivityIso?.toString() ?: auto
                 CaptureSlot.EV -> if (highSpeed) "0" else formatEv(state.aeCompensationEv)
                 CaptureSlot.WB -> state.requestedWhiteBalance.label()
-                CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatFocusDiopters) ?: auto
+                CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatDiopters) ?: auto
             }
         }
         val detail = when {
             autoHighSpeed -> "HS"
-            slot == CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatFocusDistance)
+            slot == CaptureSlot.FOCUS -> state.focusDistanceDiopters?.let(::formatFocusMetres)
             else -> null
         }
         CaptureSlotModel(
