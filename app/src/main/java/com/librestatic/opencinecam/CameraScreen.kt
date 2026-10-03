@@ -3141,6 +3141,11 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     )
 }
 
+/**
+ * A capture panel's content. It fills the width its host gives it and scrolls inside, so the host
+ * only bounds its height. [showHeader] false leaves the title row and close button to a host that
+ * draws its own (the capture context pane); the content then starts with the controls.
+ */
 @Composable
 private fun ManualControlDial(
     control: ControlDial,
@@ -3148,90 +3153,128 @@ private fun ManualControlDial(
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
+    showHeader: Boolean = true,
+    onClose: () -> Unit,
+) {
+    if (state.descriptor == null) return
+    CompositionLocalProvider(LocalPanelHeaderVisible provides (showHeader && LocalPanelHeaderVisible.current)) {
+        when (control) {
+            ControlDial.RESOLUTION -> ResolutionDial(state, binder, onClose)
+            ControlDial.FPS -> FpsDial(state, binder, onClose)
+            ControlDial.WB -> WbDial(state, binder, onClose)
+            ControlDial.EV -> EvDial(state, binder, onClose)
+            ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
+            ControlDial.INT -> IntervalometerDial(state, settings, onSettingsChanged, onClose)
+            ControlDial.ISO -> ExposureDial(iso = true, state, binder, settings, onSettingsChanged, onClose)
+            ControlDial.SHUTTER -> ExposureDial(iso = false, state, binder, settings, onSettingsChanged, onClose)
+        }
+    }
+}
+
+/** High-speed sessions leave exposure and white balance to the camera. */
+private fun CameraUiState.highSpeedSession(): Boolean =
+    activeVideoProfile?.constrainedHighSpeed == true || activeLogProfile?.constrainedHighSpeed == true
+
+/** The one large value a panel is about, centred over its controls. */
+@Composable
+private fun PanelReadout(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(text, color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center, modifier = modifier.fillMaxWidth().testTag("panel-readout"))
+}
+
+/** Range ends under a slider, with an AUTO reset between them when [onAuto] is set. */
+@Composable
+private fun PanelRangeRow(start: String, end: String, onAuto: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(start, color = Muted, fontSize = 12.sp)
+        if (onAuto != null) TextButton(onClick = onAuto, modifier = Modifier.heightIn(min = 48.dp).testTag("panel-auto")) {
+            Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(end, color = Muted, fontSize = 12.sp)
+    }
+}
+
+/** ISO or shutter. Where the camera cannot take either value by hand the panel says so instead. */
+@Composable
+private fun ExposureDial(
+    iso: Boolean,
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
     onClose: () -> Unit,
 ) {
     val descriptor = state.descriptor ?: return
-    if (control == ControlDial.RESOLUTION) {
-        ResolutionDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.FPS) {
-        FpsDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.WB) {
-        WbDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.EV) {
-        EvDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.FOCUS) {
-        FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
-        return
-    }
-    if (control == ControlDial.INT) {
-        IntervalometerDial(state, settings, onSettingsChanged, onClose)
-        return
-    }
-    val value = when (control) {
-        ControlDial.RESOLUTION -> 0f
-        ControlDial.FPS -> 0f
-        ControlDial.ISO -> logPosition((state.requestedIso ?: state.sensitivityIso ?: descriptor.sensitivityRange?.lower ?: 100).toDouble(), descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0)
-        ControlDial.SHUTTER -> if (settings.exposure.shutterUnit == ShutterUnit.ANGLE) ((settings.exposure.angleTenths - 1) / 3599f) else logPosition((state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L).toDouble(), descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0)
-        ControlDial.FOCUS -> ((state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f) / (descriptor.minimumFocusDistance ?: 1f)).coerceIn(0f, 1f)
-        ControlDial.WB -> 0f
-        ControlDial.EV -> 0f
-        ControlDial.INT -> 0f
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(control.name, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    val caps = descriptor.exposureCapabilities
+    val manual = caps.supports(ExposureMode.MANUAL)
+    val priority = if (iso) ExposureMode.ISO_PRIORITY else ExposureMode.SHUTTER_PRIORITY
+    PanelColumn(Modifier.testTag(if (iso) "iso-panel" else "shutter-panel")) {
+        PanelHeader(stringResource(if (iso) R.string.panel_title_iso else R.string.panel_title_shutter), onClose)
+        if (state.highSpeedSession()) {
+            PanelNote(stringResource(R.string.panel_high_speed_auto), Modifier.testTag("exposure-unavailable"))
+            return@PanelColumn
+        }
+        if (!manual && !caps.supports(priority)) {
+            PanelNote(stringResource(if (iso) R.string.exposure_manual_unavailable_iso else R.string.exposure_manual_unavailable_shutter),
+                Modifier.testTag("exposure-unavailable"))
+            return@PanelColumn
+        }
+        val isoMin = descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0
+        val isoMax = descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0
+        val timeMin = descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0
+        val timeMax = descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0
+        val mode = settings.exposure.mode
+        // The camera picks this value itself in full auto and in the other value's priority mode.
+        val autoHere = mode == ExposureMode.AUTO || mode == (if (iso) ExposureMode.SHUTTER_PRIORITY else ExposureMode.ISO_PRIORITY)
+        val angle = !iso && settings.exposure.shutterUnit == ShutterUnit.ANGLE
+        val isoValue = if (autoHere) state.sensitivityIso ?: state.requestedIso else state.requestedIso ?: state.sensitivityIso
+        val timeValue = if (autoHere) state.exposureTimeNs ?: state.requestedExposureTimeNs else state.requestedExposureTimeNs ?: state.exposureTimeNs
+        val value = when {
+            iso -> isoValue?.let { "ISO $it" }
+            angle && !autoHere -> String.format(java.util.Locale.ROOT, "%.1f°", settings.exposure.angleTenths / 10f)
+            else -> timeValue?.let(::formatShutter)
+        }
+        val autoLabel = stringResource(R.string.auto_value)
+        PanelReadout(
+            when {
+                value == null -> autoLabel
+                autoHere -> "$value · $autoLabel"
+                else -> value
+            },
+            color = if (autoHere) VerifiedCyan else Amber,
+        )
         CineSlider(
-            value = value,
+            value = when {
+                iso -> logPosition((isoValue ?: isoMin.toInt()).toDouble(), isoMin, isoMax)
+                angle -> (settings.exposure.angleTenths - 1) / 3599f
+                else -> logPosition((timeValue ?: 16_666_667L).toDouble(), timeMin, timeMax)
+            },
             onValueChange = { position ->
-                when (control) {
-                    ControlDial.RESOLUTION -> Unit
-                    ControlDial.FPS -> Unit
-                    ControlDial.ISO -> {
-                        val iso = logValue(position, descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0).toInt()
-                        onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
-                            mode = if (settings.exposure.mode == ExposureMode.ISO_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
-                            iso = iso,
-                            timeNs = if (settings.exposure.mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
-                        )))
-                    }
-                    ControlDial.SHUTTER -> {
-                        val intent = settings.exposure.copy(
-                            mode = if (settings.exposure.mode == ExposureMode.SHUTTER_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
-                            iso = if (settings.exposure.mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
-                        )
-                        onSettingsChanged(settings.copy(exposure = if (intent.shutterUnit == ShutterUnit.ANGLE) {
-                            intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
-                        } else intent.copy(timeNs = logValue(position, descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0,
-                            descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0).toLong())))
-                    }
-                    ControlDial.FOCUS -> binder?.setManualFocus(position * (descriptor.minimumFocusDistance ?: 1f))
-                    ControlDial.WB -> Unit
-                    ControlDial.EV -> Unit
-                    ControlDial.INT -> Unit
+                if (iso) {
+                    onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
+                        mode = if (mode == ExposureMode.ISO_PRIORITY || !manual) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
+                        iso = logValue(position, isoMin, isoMax).toInt(),
+                        timeNs = if (mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
+                    )))
+                } else {
+                    val intent = settings.exposure.copy(
+                        mode = if (mode == ExposureMode.SHUTTER_PRIORITY || !manual) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
+                        iso = if (mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
+                    )
+                    onSettingsChanged(settings.copy(exposure = if (angle) {
+                        intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
+                    } else intent.copy(timeNs = logValue(position, timeMin, timeMax).toLong())))
                 }
             },
-            modifier = Modifier.weight(1f).height(28.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag(if (iso) "iso-slider" else "shutter-slider"),
         )
-        TextButton(onClick = {
-            when (control) {
-                ControlDial.RESOLUTION -> Unit
-                ControlDial.FPS -> Unit
-                ControlDial.ISO, ControlDial.SHUTTER -> binder?.setManualExposure(null, null)
-                ControlDial.FOCUS -> binder?.setManualFocus(null)
-                ControlDial.WB -> binder?.setWhiteBalance(com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto)
-                ControlDial.EV -> binder?.setExposureCompensation(0)
-                ControlDial.INT -> Unit
-            }
-            onClose()
-        }) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
-        TextButton(onClick = onClose) { Text("×", color = Color.White, fontSize = 14.sp) }
+        PanelRangeRow(
+            start = when { iso -> isoMin.toInt().toString(); angle -> "0.1°"; else -> formatShutter(timeMin.toLong()) },
+            end = when { iso -> isoMax.toInt().toString(); angle -> "360°"; else -> formatShutter(timeMax.toLong()) },
+            // AUTO hands the value back to the camera and keeps the panel open on the live reading.
+            onAuto = { binder?.setManualExposure(null, null) },
+        )
     }
 }
 
@@ -3241,37 +3284,24 @@ private fun EvDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    PanelColumn(Modifier.testTag("ev-panel")) {
         PanelHeader(stringResource(R.string.panel_title_ev), onClose)
-        val range = state.aeCompensationIndexRange ?: return@Column
+        val range = state.aeCompensationIndexRange
+        if (range == null || range.last <= range.first) {
+            PanelNote(stringResource(R.string.ev_unavailable), Modifier.testTag("ev-unavailable"))
+            return@PanelColumn
+        }
         val step = state.descriptor?.aeCompensationStep?.takeIf { it > 0f } ?: 1f
-        val minEv = range.first * step
-        val maxEv = range.last * step
         val current = state.requestedAeCompensationIndex.coerceIn(range.first, range.last)
-        Text(
-            formatEv(current * step),
-            color = Amber,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
+        PanelReadout(formatEv(current * step), color = if (current == 0) VerifiedCyan else Amber)
         CineSlider(
             value = current.toFloat(),
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first - 1).coerceAtLeast(0),
             onValueChange = { index -> binder?.setExposureCompensation(index.roundToInt()) },
-            modifier = Modifier.fillMaxWidth().height(28.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("ev-slider"),
         )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(formatEv(minEv), color = Muted, fontSize = 10.sp)
-            TextButton(onClick = { binder?.setExposureCompensation(0); onClose() }) {
-                Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
-            }
-            Text(formatEv(maxEv), color = Muted, fontSize = 10.sp)
-        }
+        PanelRangeRow(formatEv(range.first * step), formatEv(range.last * step)) { binder?.setExposureCompensation(0) }
     }
 }
 
@@ -3281,18 +3311,13 @@ private fun ResolutionDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    PanelColumn(Modifier.testTag("resolution-panel")) {
         PanelHeader(stringResource(R.string.panel_title_resolution), onClose)
-        state.availableVideoSizes.chunked(2).forEach { sizes ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                sizes.forEach { (width, height) ->
-                    val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
-                    ChoiceTile("${width}×$height", selected, Modifier.weight(1f)) {
-                        binder?.selectVideoResolution(width, height)
-                        onClose()
-                    }
-                }
-                if (sizes.size == 1) Spacer(Modifier.weight(1f))
+        ChoiceGrid(state.availableVideoSizes, minTileWidth = 104.dp, maxColumns = 3) { (width, height), modifier ->
+            val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
+            ChoiceTile(formatFrameSize(width, height), selected, modifier) {
+                binder?.selectVideoResolution(width, height)
+                onClose()
             }
         }
     }
@@ -3304,46 +3329,53 @@ private fun FpsDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader(stringResource(R.string.panel_title_fixed_fps), onClose)
-        val modeRates = if (state.selectedMode == CaptureMode.LOG) {
-            VideoGeometryPolicy.unionLogFps(state.availableLogProfiles.map { it.toSpec() })
-        } else if (state.selectedMode in CameraUiState.videoProfileModes) {
-            VideoGeometryPolicy.unionFps(state.availableVideoProfiles.map { it.toSpec() })
-        } else {
-            state.availableTargetFps
+    val log = state.selectedMode == CaptureMode.LOG
+    val logSpecs = state.availableLogProfiles.map { it.toSpec() }
+    val videoSpecs = state.availableVideoProfiles.map { it.toSpec() }
+    val modeRates = when {
+        log -> VideoGeometryPolicy.unionLogFps(logSpecs)
+        state.selectedMode in CameraUiState.videoProfileModes -> VideoGeometryPolicy.unionFps(videoSpecs)
+        else -> state.availableTargetFps
+    }
+    val offeredAtSize = if (log) VideoGeometryPolicy.supportedLogFps(logSpecs, state.targetVideoWidth, state.targetVideoHeight)
+        else VideoGeometryPolicy.supportedFps(videoSpecs, state.targetVideoWidth, state.targetVideoHeight)
+    val options = modeRates.map { fps ->
+        val logProfile = state.availableLogProfiles.firstOrNull {
+            log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps
         }
-        modeRates.chunked(4).forEach { rates ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rates.forEach { fps ->
-                    val logProfile = state.availableLogProfiles.firstOrNull {
-                        state.selectedMode == CaptureMode.LOG && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps
-                    }
-                    val highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
-                        state.selectedMode != CaptureMode.LOG && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
-                    }
-                    val label = when {
-                        logProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP -> "$fps HFR"
-                        highSpeed -> "$fps HS"
-                        else -> fps.toString()
-                    }
-                    val supported = if (state.selectedMode == CaptureMode.LOG) {
-                        VideoGeometryPolicy.supportedLogFps(state.availableLogProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
-                    } else {
-                        VideoGeometryPolicy.supportedFps(state.availableVideoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
-                    }
-                    ChoiceTile(label, fps == state.targetFps, Modifier.weight(1f), enabled = supported) {
-                        binder?.selectTargetFps(fps)
-                        onClose()
-                    }
-                }
-                repeat(4 - rates.size) { Spacer(Modifier.weight(1f)) }
+        FpsOption(
+            fps = fps,
+            offered = fps in offeredAtSize,
+            highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
+                !log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
+            },
+            ispHighRate = logProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP,
+        )
+    }
+    PanelColumn(Modifier.testTag("fps-panel")) {
+        PanelHeader(stringResource(R.string.panel_title_fixed_fps), onClose)
+        ChoiceGrid(options, minTileWidth = 72.dp, maxColumns = 6) { option, modifier ->
+            val label = when {
+                option.ispHighRate -> "${option.fps} HFR"
+                option.highSpeed -> "${option.fps} HS"
+                else -> option.fps.toString()
+            }
+            ChoiceTile(label, option.fps == state.targetFps, modifier, enabled = option.offered) {
+                binder?.selectTargetFps(option.fps)
+                onClose()
             }
         }
-        // Camera2 feeds the preview one frame per high-speed batch, so the viewfinder of a 120 or
-        // 240 fps session runs at 30 fps while the file keeps every frame. Say so here.
-        Text(stringResource(R.string.fps_high_speed_preview_note), color = Muted, fontSize = 12.sp,
-            modifier = Modifier.testTag("fps-high-speed-note"))
+        // Notes only describe what this grid offers: the viewfinder rate when a high-speed rate
+        // can be picked here, and greyed-out rates only when some are.
+        if (fpsHighSpeedNoteApplies(options)) {
+            // Camera2 feeds the preview one frame per high-speed batch, so the viewfinder of a 120 or
+            // 240 fps session runs at 30 fps while the file keeps every frame.
+            PanelNote(stringResource(R.string.fps_high_speed_preview_note), Modifier.testTag("fps-high-speed-note"))
+        }
+        if (options.any { !it.offered }) {
+            PanelNote(stringResource(R.string.fps_unavailable_at_size, formatFrameSize(state.targetVideoWidth, state.targetVideoHeight)),
+                Modifier.testTag("fps-unavailable-note"))
+        }
     }
 }
 
@@ -3358,85 +3390,65 @@ private fun WbDial(
     val selection = state.requestedWhiteBalance
     val retainedTint = (state.effectiveSettings?.whiteBalance as? WhiteBalanceSelection.Kelvin)?.tint
         ?: (selection as? WhiteBalanceSelection.Kelvin)?.tint ?: 0
-
-    if (kelvinRange != null) {
-        // Direct Kelvin (CCT) path - slider + presets
-        val currentK = (selection as? WhiteBalanceSelection.Kelvin)?.kelvin
-            ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange }
-            ?: kelvinRange.first
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
-
-            // Live Kelvin readout
-            val displayK = if (selection is WhiteBalanceSelection.Kelvin) selection.kelvin else currentK
-            Text(
-                if (selection is WhiteBalanceSelection.Auto) "AUTO" else "${displayK}K",
-                color = if (selection is WhiteBalanceSelection.Auto) VerifiedCyan else Amber,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-
-            // Kelvin slider - 100K steps within device range
-            if (selection !is WhiteBalanceSelection.Auto) {
-                CineSlider(
-                    value = displayK.toFloat(),
-                    valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
-                    steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
-                    onValueChange = { raw ->
-                        val snapped = snapKelvinTo100(raw.toInt(), kelvinRange)
-                        if (snapped != null) binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(snapped, retainedTint))
-                    },
-                    modifier = Modifier.fillMaxWidth().height(28.dp),
-                )
-            }
-
-            // Preset Kelvin chips
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                KELVIN_PRESETS.forEach { preset ->
-                    val inRange = preset in kelvinRange
-                    val presetSel = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
-                    ChoiceTile("${preset}K", presetSel, Modifier.weight(1f), enabled = inRange) {
-                        binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset, retainedTint))
-                    }
-                }
-            }
-
-            // AUTO + range labels row
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text("${kelvinRange.first}K", color = Muted, fontSize = 10.sp)
-                TextButton(onClick = { binder?.setWhiteBalance(WhiteBalanceSelection.Auto) }) {
-                    Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
-                }
-                Text("${kelvinRange.last}K", color = Muted, fontSize = 10.sp)
-            }
+    PanelColumn(Modifier.testTag("wb-panel")) {
+        PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
+        if (state.highSpeedSession()) {
+            PanelNote(stringResource(R.string.panel_high_speed_auto), Modifier.testTag("wb-unavailable"))
+            return@PanelColumn
         }
-    } else {
-        // Legacy AWB preset path - devices without CCT support
-        val choices = listOf(
-            null to "AUTO",
-            CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to "DAY",
-            CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to "CLOUD",
-            CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to "TUNG",
-            CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to "FLUO",
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
-            choices.chunked(3).forEach { rowChoices ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    rowChoices.forEach { (mode, label) ->
-                        val isSelected = if (mode == null) selection is WhiteBalanceSelection.Auto
-                            else selection is WhiteBalanceSelection.Preset && selection.awbMode == mode
-                        ChoiceTile(label, isSelected, Modifier.weight(1f)) {
-                            binder?.setWhiteBalance(
-                                if (mode != null) WhiteBalanceSelection.Preset(mode) else WhiteBalanceSelection.Auto,
-                            )
-                        }
-                    }
-                    repeat(3 - rowChoices.size) { Spacer(Modifier.weight(1f)) }
+        if (kelvinRange != null) {
+            val auto = selection is WhiteBalanceSelection.Auto
+            val displayK = (selection as? WhiteBalanceSelection.Kelvin)?.kelvin
+                ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange } ?: kelvinRange.first
+            PanelReadout(if (auto) stringResource(R.string.auto_value) else "${displayK}K", color = if (auto) VerifiedCyan else Amber)
+            // Kelvin slider in 100 K steps within the device range.
+            if (!auto) CineSlider(
+                value = displayK.toFloat(),
+                valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
+                steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
+                onValueChange = { raw ->
+                    snapKelvinTo100(raw.toInt(), kelvinRange)?.let { binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(it, retainedTint)) }
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("wb-kelvin-slider"),
+            )
+            ChoiceGrid(KELVIN_PRESETS, minTileWidth = 72.dp, maxColumns = 4, balanced = true) { preset, modifier ->
+                val selected = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
+                ChoiceTile("${preset}K", selected, modifier, enabled = preset in kelvinRange) {
+                    binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset, retainedTint))
+                }
+            }
+            PanelRangeRow("${kelvinRange.first}K", "${kelvinRange.last}K") { binder?.setWhiteBalance(WhiteBalanceSelection.Auto) }
+            // Tint shifts a Kelvin value between green and magenta, where the camera offers it.
+            if (descriptor.tintSupported && selection is WhiteBalanceSelection.Kelvin) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    PanelSectionLabel(stringResource(R.string.wb_tint), Modifier.weight(1f))
+                    Text(if (selection.tint > 0) "+${selection.tint}" else selection.tint.toString(), color = Amber,
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("wb-tint-value"))
+                }
+                CineSlider(
+                    value = selection.tint.toFloat(),
+                    valueRange = -50f..50f,
+                    steps = 99,
+                    onValueChange = { binder?.setWhiteBalance(selection.copy(tint = it.roundToInt().coerceIn(-50, 50))) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("wb-tint-slider"),
+                )
+                PanelRangeRow(stringResource(R.string.wb_tint_green), stringResource(R.string.wb_tint_magenta))
+            }
+        } else {
+            // Cameras without colour-temperature control offer the classic presets only.
+            val offered = descriptor?.availableAwbModes.orEmpty()
+            val choices = listOf(
+                null to R.string.auto_value,
+                CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to R.string.wb_preset_daylight,
+                CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to R.string.wb_preset_cloudy,
+                CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to R.string.wb_preset_tungsten,
+                CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to R.string.wb_preset_fluorescent,
+            ).filter { (mode, _) -> mode == null || offered.isEmpty() || mode in offered }
+            ChoiceGrid(choices, minTileWidth = 96.dp, maxColumns = 3) { (mode, label), modifier ->
+                val selected = if (mode == null) selection is WhiteBalanceSelection.Auto
+                    else selection is WhiteBalanceSelection.Preset && selection.awbMode == mode
+                ChoiceTile(stringResource(label), selected, modifier) {
+                    binder?.setWhiteBalance(if (mode != null) WhiteBalanceSelection.Preset(mode) else WhiteBalanceSelection.Auto)
                 }
             }
         }
@@ -3445,7 +3457,7 @@ private fun WbDial(
 
 @Composable
 private fun IntervalometerDial(state: CameraUiState, settings: CameraSettings, onSettingsChanged: (CameraSettings) -> Unit, onClose: () -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    PanelColumn(Modifier.testTag("interval-panel")) {
         PanelHeader(stringResource(R.string.timelapse_interval), onClose)
         TimelapseSettings(state, settings, onSettingsChanged)
     }

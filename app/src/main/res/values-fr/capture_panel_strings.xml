@@ -16,4 +16,17 @@
     <string name="error_headline_preview">Aperçu interrompu</string>
     <string name="error_headline_permission">Autorisation requise</string>
     <string name="error_headline_disconnected">Caméra déconnectée</string>
+    <string name="panel_title_shutter">OBTURATEUR</string>
+    <string name="exposure_manual_unavailable_iso">Cette caméra ne permet pas de régler l\'ISO à la main ; elle le choisit elle-même.</string>
+    <string name="exposure_manual_unavailable_shutter">Cette caméra ne permet pas de régler la vitesse d\'obturation à la main ; elle la choisit elle-même.</string>
+    <string name="panel_high_speed_auto">Aux cadences haute vitesse, la caméra règle cela elle-même.</string>
+    <string name="ev_unavailable">Cette caméra ne propose pas de correction d\'exposition.</string>
+    <string name="wb_preset_daylight">Lumière du jour</string>
+    <string name="wb_preset_cloudy">Nuageux</string>
+    <string name="wb_preset_tungsten">Tungstène</string>
+    <string name="wb_preset_fluorescent">Fluorescent</string>
+    <string name="wb_tint">TEINTE</string>
+    <string name="wb_tint_green">Vert</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Les cadences grisées ne sont pas disponibles en %1$s.</string>
 </resources>

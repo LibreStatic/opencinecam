@@ -16,4 +16,17 @@
     <string name="error_headline_preview">La vista previa se detuvo</string>
     <string name="error_headline_permission">Se necesita un permiso</string>
     <string name="error_headline_disconnected">Cámara desconectada</string>
+    <string name="panel_title_shutter">OBTURACIÓN</string>
+    <string name="exposure_manual_unavailable_iso">Esta cámara no permite fijar el ISO a mano; lo elige ella misma.</string>
+    <string name="exposure_manual_unavailable_shutter">Esta cámara no permite fijar la velocidad de obturación a mano; la elige ella misma.</string>
+    <string name="panel_high_speed_auto">Con cuadros por segundo de alta velocidad, la cámara ajusta esto sola.</string>
+    <string name="ev_unavailable">Esta cámara no ofrece compensación de exposición.</string>
+    <string name="wb_preset_daylight">Luz de día</string>
+    <string name="wb_preset_cloudy">Nublado</string>
+    <string name="wb_preset_tungsten">Tungsteno</string>
+    <string name="wb_preset_fluorescent">Fluorescente</string>
+    <string name="wb_tint">MATIZ</string>
+    <string name="wb_tint_green">Verde</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Las tasas en gris no están disponibles en %1$s.</string>
 </resources>

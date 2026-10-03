@@ -16,4 +16,17 @@
     <string name="error_headline_preview">Anteprima interrotta</string>
     <string name="error_headline_permission">Autorizzazione necessaria</string>
     <string name="error_headline_disconnected">Fotocamera scollegata</string>
+    <string name="panel_title_shutter">OTTURATORE</string>
+    <string name="exposure_manual_unavailable_iso">Questa fotocamera non permette di impostare l\'ISO a mano; lo sceglie da sola.</string>
+    <string name="exposure_manual_unavailable_shutter">Questa fotocamera non permette di impostare il tempo di posa a mano; lo sceglie da sola.</string>
+    <string name="panel_high_speed_auto">Con le frequenze ad alta velocità la fotocamera lo regola da sola.</string>
+    <string name="ev_unavailable">Questa fotocamera non offre la compensazione dell\'esposizione.</string>
+    <string name="wb_preset_daylight">Luce diurna</string>
+    <string name="wb_preset_cloudy">Nuvoloso</string>
+    <string name="wb_preset_tungsten">Tungsteno</string>
+    <string name="wb_preset_fluorescent">Fluorescente</string>
+    <string name="wb_tint">TINTA</string>
+    <string name="wb_tint_green">Verde</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Le frequenze in grigio non sono disponibili a %1$s.</string>
 </resources>

@@ -2,6 +2,7 @@
 <resources>
     <string name="focus_mode_af" translatable="false">AF</string>
     <string name="focus_mode_mf" translatable="false">MF</string>
+    <string name="panel_title_iso" translatable="false">ISO</string>
     <string name="focus_lens_reports">Lens reports %1$s</string>
     <string name="focus_advanced">Advanced</string>
     <string name="focus_mark_pull_action">Pull focus to mark %1$s</string>
@@ -18,4 +19,17 @@
     <string name="error_headline_preview">Preview stopped</string>
     <string name="error_headline_permission">Permission needed</string>
     <string name="error_headline_disconnected">Camera disconnected</string>
+    <string name="panel_title_shutter">SHUTTER</string>
+    <string name="exposure_manual_unavailable_iso">This camera does not let you set ISO by hand; it picks ISO itself.</string>
+    <string name="exposure_manual_unavailable_shutter">This camera does not let you set the shutter speed by hand; it picks it itself.</string>
+    <string name="panel_high_speed_auto">At high-speed frame rates the camera sets this itself.</string>
+    <string name="ev_unavailable">This camera does not offer exposure compensation.</string>
+    <string name="wb_preset_daylight">Daylight</string>
+    <string name="wb_preset_cloudy">Cloudy</string>
+    <string name="wb_preset_tungsten">Tungsten</string>
+    <string name="wb_preset_fluorescent">Fluorescent</string>
+    <string name="wb_tint">TINT</string>
+    <string name="wb_tint_green">Green</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Greyed-out rates are not available at %1$s.</string>
 </resources>

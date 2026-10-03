@@ -164,3 +164,9 @@ internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = M
         )
     }
 }
+
+/** A frame rate in the FPS panel: [offered] at the current size, [highSpeed] a constrained high-speed session. */
+data class FpsOption(val fps: Int, val offered: Boolean, val highSpeed: Boolean, val ispHighRate: Boolean = false)
+
+/** The 30 fps viewfinder note only matters when a high-speed rate can be picked at this size. */
+fun fpsHighSpeedNoteApplies(options: List<FpsOption>): Boolean = options.any { it.offered && it.highSpeed }

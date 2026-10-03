@@ -4,6 +4,8 @@
 package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CapturePanelPartsTest {
@@ -26,5 +28,13 @@ class CapturePanelPartsTest {
         // Nothing divides seven evenly: keep the width that fits.
         assertEquals(4, balancedGridColumns(4, 7))
         assertEquals(1, balancedGridColumns(0, 3))
+    }
+
+    @Test fun theHighSpeedNoteOnlyDescribesRatesOnOffer() {
+        assertFalse(fpsHighSpeedNoteApplies(emptyList()))
+        assertFalse(fpsHighSpeedNoteApplies(listOf(FpsOption(30, offered = true, highSpeed = false))))
+        // A high-speed rate greyed out at this size is not on offer.
+        assertFalse(fpsHighSpeedNoteApplies(listOf(FpsOption(30, true, false), FpsOption(120, offered = false, highSpeed = true))))
+        assertTrue(fpsHighSpeedNoteApplies(listOf(FpsOption(30, true, false), FpsOption(120, offered = true, highSpeed = true))))
     }
 }
