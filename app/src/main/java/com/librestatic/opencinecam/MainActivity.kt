@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.key.Key
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -34,6 +35,7 @@ import com.librestatic.opencinecam.ui.theme.rememberAppTheme
 
 class MainActivity : ComponentActivity() {
     private val operatorKeys = OperatorKeyLatch()
+    private val shortcuts = ShortcutDispatcher()
     private val locationOwner = Any()
     private var operatorKeyOwner: Any? = null
     private var operatorKeyMapping: ((Int) -> OperatorAction?)? = null
@@ -52,7 +54,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); CaptureLocations.get(this).setForeground(locationOwner, true) }
     override fun onPause() { CaptureLocations.get(this).setForeground(locationOwner, false); operatorKeys.clear(); super.onPause() }
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
-        handleOperatorKey(keyCode, event, down = true) || super.onKeyDown(keyCode, event)
+        handleOperatorKey(keyCode, event, down = true) || handleShortcut(keyCode, event) || super.onKeyDown(keyCode, event)
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean =
         handleOperatorKey(keyCode, event, down = false) || super.onKeyUp(keyCode, event)
@@ -64,6 +66,12 @@ class MainActivity : ComponentActivity() {
         val eligible = !imeVisible && hasWindowFocus() && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && mapping != null
         return operatorKeys.dispatch(keyCode, down, event.repeatCount, event.isCanceled,
             eligible, mapping ?: OperatorAction.SYSTEM_VOLUME) { operatorAction?.invoke(it) }
+    }
+    /** Keyboard shortcuts get only the presses the window's views did not use (a focused text field keeps its letters). */
+    private fun handleShortcut(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        val action = shortcutActionFor(Key(keyCode), event.isShiftPressed, event.isCtrlPressed, event.isAltPressed,
+            event.isMetaPressed, event.repeatCount > 0) ?: return false
+        return shortcuts.dispatch(action)
     }
     private lateinit var foldDisplays: FoldDisplayCoordinator
     private val splashHandoff = mutableStateOf(SplashHandoff(onScreen = true))
@@ -118,7 +126,7 @@ class MainActivity : ComponentActivity() {
                 .withEndAction(provider::remove).start()
         }
         setContent {
-            CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays) {
+            CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays, LocalShortcutDispatcher provides shortcuts) {
                 OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true })
             }
         }
@@ -161,7 +169,7 @@ fun OpenCineCamApp(splash: SplashHandoff = SplashHandoff(onScreen = false), onRe
         SyncWindowBackground()
         // An opaque themed floor: crossfades and frames that draw nothing never reveal the window.
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            CameraRootScreen(splash = splash, onReady = onReady)
+            ProvideAdaptiveWindow { CameraRootScreen(splash = splash, onReady = onReady) }
         }
     }
 }
