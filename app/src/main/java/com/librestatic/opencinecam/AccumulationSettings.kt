@@ -19,8 +19,7 @@ import com.librestatic.opencinecam.camera.AccumulationMode
 internal fun AccumulationSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val selection = settings.accumulation
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.accumulation_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.accumulation_help))
+        SettingsSectionTitle(stringResource(R.string.accumulation_title), help = stringResource(R.string.accumulation_help))
         SettingsChips(stringResource(R.string.settings_mode), AccumulationMode.entries, selection.mode,
             label = { it.name }, onSelect = { onChange(settings.copy(accumulation = selection.copy(mode = it))) },
             tag = { "accumulation-mode-$it" })

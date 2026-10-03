@@ -24,8 +24,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
     val unavailable = selected.resolve(caps, reported, hfr).unavailable
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth().testTag("image-processing-settings"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.image_processing_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.image_processing_help))
+        SettingsSectionTitle(stringResource(R.string.image_processing_title), help = stringResource(R.string.image_processing_help))
         if (state.structuralSettingsFrozen && state.effectiveSettings?.imageProcessing != selected) {
             Text(stringResource(R.string.image_processing_deferred), color = LocalCineColors.current.pending, fontSize = 16.sp)
         }

@@ -37,8 +37,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
     })
     val unknown = stringResource(R.string.pro_unknown)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.pro_exposure_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.pro_exposure_help))
+        SettingsSectionTitle(stringResource(R.string.pro_exposure_title), help = stringResource(R.string.pro_exposure_help))
         if (hfr) Text(stringResource(R.string.pro_hfr_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         SettingsChips(stringResource(R.string.settings_mode), ExposureMode.entries, exposure.mode,
             label = { stringResource(it.titleResource()) }, onSelect = { updateExposure(exposure.copy(mode = it)) },

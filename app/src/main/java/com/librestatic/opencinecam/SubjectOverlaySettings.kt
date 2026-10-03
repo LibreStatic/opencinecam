@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun SubjectSelfMonitorSettings(state: CameraUiState, subject: SubjectDisplaySettings, onChange: (SubjectDisplaySettings) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingsHelp(stringResource(R.string.subject_self_monitor_help))
         FoldToggle(stringResource(R.string.fold_preview_mirror), subject.previewMirror) { onChange(subject.copy(previewMirror = it)) }
         FoldToggle(stringResource(R.string.subject_preview_bands), subject.previewRecordedAreaBands) { onChange(subject.copy(previewRecordedAreaBands = it)) }
         SettingsChips(stringResource(R.string.subject_preview_guide), SubjectPreviewGuide.entries, subject.previewGuide,
@@ -31,7 +30,6 @@ internal fun SubjectSelfMonitorSettings(state: CameraUiState, subject: SubjectDi
 @Composable
 internal fun SubjectTallySettings(state: CameraUiState, subject: SubjectDisplaySettings, onChange: (SubjectDisplaySettings) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingsHelp(stringResource(R.string.subject_tally_help))
         FoldToggle(stringResource(R.string.subject_tally_border), subject.tallyBorder) { onChange(subject.copy(tallyBorder = it)) }
         FoldToggle(stringResource(R.string.subject_giant_countdown), subject.giantCountdown) { onChange(subject.copy(giantCountdown = it)) }
     }

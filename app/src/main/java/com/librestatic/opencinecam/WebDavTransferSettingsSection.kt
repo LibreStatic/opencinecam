@@ -36,8 +36,7 @@ import com.librestatic.opencinecam.transfers.*
     val canRequest = !state.busy && state.message !in setOf(WebDavTransferMessage.WAITING_RECORDING, WebDavTransferMessage.WAITING_MEDIA)
     Column(Modifier.fillMaxWidth().testTag("webdav-transfer-section"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider()
-        Text(stringResource(R.string.webdav_transfer_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-        SettingsHelp(stringResource(R.string.webdav_transfer_help))
+        SettingsSectionTitle(stringResource(R.string.webdav_transfer_title), help = stringResource(R.string.webdav_transfer_help))
         Text(stringResource(transferMessage(state.message)), color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag("webdav-transfer-message").semantics { liveRegion = LiveRegionMode.Polite })
         OutlinedButton(onClick = onRefresh, enabled = canRequest,

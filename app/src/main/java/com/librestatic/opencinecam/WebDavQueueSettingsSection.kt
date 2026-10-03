@@ -45,9 +45,8 @@ import kotlinx.coroutines.withContext
             finally { busy = false }
         }
     }
-    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.webdav_queue_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-        SettingsHelp(stringResource(R.string.webdav_queue_help))
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingsSectionTitle(stringResource(R.string.webdav_queue_title), help = stringResource(R.string.webdav_queue_help))
         OutlinedTextField(draft, { draft = it }, label = { Text(stringResource(R.string.webdav_queue_endpoint)) },
             supportingText = { Text(stringResource(R.string.webdav_queue_https)) }, singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface,

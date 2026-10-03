@@ -224,7 +224,6 @@ internal fun SubjectInterviewSettings(state: CameraUiState, subject: SubjectDisp
     }
     val count = parseInterviewQuestions(draft.text).size
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingsHelp(stringResource(R.string.subject_interview_help))
         OutlinedTextField(draft, { edited ->
             val limited = limitInterviewDraft(edited.text)
             rejected = limited != edited.text

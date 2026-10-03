@@ -162,7 +162,6 @@ internal fun OutOfFrameHudChip(state: CameraUiState, modifier: Modifier = Modifi
 internal fun SubjectOutOfFrameSettings(state: CameraUiState, subject: SubjectDisplaySettings, onChange: (SubjectDisplaySettings) -> Unit) {
     val capable = outOfFrameCapable(state)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingsHelp(stringResource(R.string.subject_out_of_frame_help))
         if (capable) {
             FoldToggle(stringResource(R.string.subject_out_of_frame), subject.outOfFrameWarning) { onChange(subject.copy(outOfFrameWarning = it)) }
             if (subject.outOfFrameWarning) {

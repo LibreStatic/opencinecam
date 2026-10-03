@@ -33,8 +33,7 @@ internal fun ProjectRateEditor(rate: CaptureFrameRate, tag: String, onChange: (C
 @Composable
 internal fun ProjectTimingSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.project_timing_title), fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.project_timing_help) + "\n\n" + stringResource(R.string.shared_capture_pause_help), tag = "shared-capture-pause-help")
+        SettingsSectionTitle(stringResource(R.string.project_timing_title), help = stringResource(R.string.project_timing_help) + "\n\n" + stringResource(R.string.shared_capture_pause_help), helpTag = "shared-capture-pause-help")
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("video-off-speed")
             .toggleable(settings.videoOffSpeed, role = Role.Switch) { onChange(settings.copy(videoOffSpeed = it)) },
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {

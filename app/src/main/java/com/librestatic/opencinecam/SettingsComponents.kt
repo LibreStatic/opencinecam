@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -51,11 +52,11 @@ internal val SettingsAccent: Color @Composable @ReadOnlyComposable get() = Mater
 internal val SettingsMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 
 /**
- * One settings card in the adaptive grid. Small sections share a row with a neighbour on wide
- * panes; [fullLine] sections (long forms, libraries, lists) always take the whole row.
+ * One settings card in the list. Every card takes the full width of the capped column, so cards
+ * share their edges and the switches and value fields inside them line up.
  */
-internal fun LazyStaggeredGridScope.settingsCard(key: String, fullLine: Boolean = false, content: @Composable () -> Unit) {
-    item(key = key, span = if (fullLine) StaggeredGridItemSpan.FullLine else StaggeredGridItemSpan.SingleLane) {
+internal fun LazyStaggeredGridScope.settingsCard(key: String, content: @Composable () -> Unit) {
+    item(key = key, span = StaggeredGridItemSpan.FullLine) {
         SettingsCard(content = content)
     }
 }
@@ -73,15 +74,40 @@ internal fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ()
     ) { content() }
 }
 
-/** A card or group heading: optional symbol, title and a one-line description. */
+/**
+ * A card or group heading: optional symbol, title and a one-line description. A [help] text puts
+ * one info button at the end of the heading instead of a "Show help" line under every control;
+ * with a [helpTag] the button carries "[helpTag]-toggle" and the opened text carries [helpTag].
+ */
 @Composable
-internal fun SettingsHeading(title: String, description: String? = null, icon: CineIcon? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        icon?.let { CineGlyph(it, SettingsAccent, Modifier.padding(end = 10.dp).size(20.dp)) }
-        Column {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            description?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
+internal fun SettingsHeading(title: String, description: String? = null, icon: CineIcon? = null, help: String? = null, helpTag: String? = null) {
+    var open by rememberSaveable(help) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = if (help != null) 48.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+            icon?.let { CineGlyph(it, SettingsAccent, Modifier.padding(end = 10.dp).size(20.dp)) }
+            Column(Modifier.weight(1f)) {
+                Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                description?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
+            }
+            if (help != null) SettingsHelpButton(open, helpTag) { open = !open }
         }
+        if (open && help != null) SettingsHelpText(help, helpTag)
+    }
+}
+
+/**
+ * The title of a settings section, one style everywhere, with its explanation behind an info
+ * button at the end of the line. Tags follow [SettingsHeading].
+ */
+@Composable
+internal fun SettingsSectionTitle(title: String, help: String? = null, helpTag: String? = null, modifier: Modifier = Modifier) {
+    var open by rememberSaveable(help) { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (help != null) SettingsHelpButton(open, helpTag) { open = !open }
+        }
+        if (open && help != null) SettingsHelpText(help, helpTag)
     }
 }
 
@@ -140,6 +166,28 @@ internal fun SettingsValueRow(
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val layout = LocalSettingsRowLayout.current
+    if (layout.sideBySide) {
+        // Wide rows: the title on the left and the value as a field in the control column, the
+        // whole row still one touch target.
+        Row(
+            modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.medium)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SETTINGS_ROW_GAP_DP.dp),
+        ) {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f))
+            Row(Modifier.width(layout.controlWidthDp.dp).heightIn(min = 48.dp)
+                .border(1.dp, SettingsBorder, MaterialTheme.shapes.small).padding(start = 14.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(value.orEmpty(), Modifier.weight(1f).padding(vertical = 8.dp), style = MaterialTheme.typography.bodyLarge,
+                    color = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
+                CineGlyph(CineIcon.CHEVRON, if (enabled) colors.onSurfaceVariant else colors.onSurface.copy(alpha = 0.38f), Modifier.size(20.dp))
+            }
+        }
+        return
+    }
     Row(
         modifier
             .fillMaxWidth()
@@ -239,7 +287,8 @@ internal fun SettingsPillRow(modifier: Modifier = Modifier, content: @Composable
 
 /**
  * A labelled on/off setting: the label takes the row and the switch sits at its end, instead of
- * a switch stacked under its label. The switch carries [tag]; the label carries [labelTag].
+ * a switch stacked under its label. Every card is the same width, so the switches of a page line
+ * up. The switch carries [tag]; the label carries [labelTag].
  */
 @Composable
 internal fun SettingsSwitchRow(
@@ -251,7 +300,7 @@ internal fun SettingsSwitchRow(
     enabled: Boolean = true,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f).padding(end = 12.dp).then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
+        Text(label, Modifier.weight(1f).padding(end = 16.dp).then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
             color = if (enabled) MaterialTheme.colorScheme.onSurface else SettingsMuted)
         androidx.compose.material3.Switch(checked, onCheckedChange, enabled = enabled,
             modifier = Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = label })
@@ -292,22 +341,39 @@ internal fun <T> SettingsSwatches(
 }
 
 /**
- * Long explanations stay one tap away instead of pushing the controls down the page. With a
- * [tag], the toggle carries "[tag]-toggle" and the expanded explanation carries [tag].
+ * Help for one control that has no heading of its own: a small info button rather than a
+ * repeated "Show help" line, the explanation under it once opened. With a [tag], the button
+ * carries "[tag]-toggle" and the expanded explanation carries [tag]. Section-wide help belongs on
+ * [SettingsSectionTitle] or [SettingsHeading].
  */
 @Composable
 internal fun SettingsHelp(text: String, modifier: Modifier = Modifier, tag: String? = null) {
     var open by rememberSaveable(text) { mutableStateOf(false) }
     Column(modifier) {
-        Text(
-            stringResource(if (open) R.string.settings_help_hide else R.string.settings_help_show),
-            color = LocalCineColors.current.verified,
-            fontSize = 13.sp,
-            modifier = Modifier.heightIn(min = 40.dp).clickable { open = !open }.padding(vertical = 10.dp)
-                .then(tag?.let { Modifier.testTag("$it-toggle") } ?: Modifier),
-        )
-        if (open) Text(text, color = SettingsMuted, fontSize = 13.sp, modifier = tag?.let { Modifier.testTag(it) } ?: Modifier)
+        // The glyph lines up with the text edge; the touch target spills into the card padding.
+        SettingsHelpButton(open, tag, Modifier.offset(x = (-14).dp)) { open = !open }
+        if (open) SettingsHelpText(text, tag)
     }
+}
+
+/** The info button that opens or closes a help text; named for what a tap does next. */
+@Composable
+internal fun SettingsHelpButton(open: Boolean, tag: String?, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    val label = stringResource(if (open) R.string.settings_help_hide else R.string.settings_help_show)
+    androidx.compose.foundation.layout.Box(
+        modifier.size(48.dp).clip(CircleShape)
+            .clickable(onClickLabel = label, role = Role.Button, onClick = onToggle)
+            .semantics { contentDescription = label }
+            .then(tag?.let { Modifier.testTag("$it-toggle") } ?: Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        CineGlyph(CineIcon.INFO, if (open) LocalCineColors.current.verified else SettingsMuted, Modifier.size(20.dp))
+    }
+}
+
+@Composable
+internal fun SettingsHelpText(text: String, tag: String?) {
+    Text(text, color = SettingsMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp).then(tag?.let { Modifier.testTag(it) } ?: Modifier))
 }
 
 /** One entry of a [SettingsActionsDialog]. */
@@ -351,4 +417,30 @@ internal fun SettingsActionsDialog(title: String, actions: List<SettingsAction>,
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
         },
     )
+}
+
+/**
+ * A labelled slider: the label on the left and the slider in the control column on wide rows,
+ * the slider under its label (never wider than 480 dp) on narrow ones. The slider is described
+ * by [label], which carries the current value.
+ */
+@Composable
+internal fun SettingsSliderRow(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+    steps: Int = 0,
+    enabled: Boolean = true,
+    onValueChangeFinished: (() -> Unit)? = null,
+    sliderModifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    SettingsRow(modifier,
+        label = { Text(label, color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f), fontSize = 14.sp) },
+        control = {
+            CineSlider(value, onValueChange, enabled = enabled, onValueChangeFinished = onValueChangeFinished, steps = steps, valueRange = valueRange,
+                modifier = sliderModifier.widthIn(max = SETTINGS_SLIDER_MAX_DP.dp).fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label })
+        })
 }

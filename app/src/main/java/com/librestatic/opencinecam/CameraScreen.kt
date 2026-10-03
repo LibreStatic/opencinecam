@@ -3654,69 +3654,69 @@ internal fun SettingsContent(
         contentPadding = PaddingValues(horizontal = gutter.dp, vertical = 16.dp),
         verticalItemSpacing = 12.dp,
     ) {
-        if ("media-sharing" in visibleIds) settingsCard("media-sharing", fullLine = true) {
+        if ("media-sharing" in visibleIds) settingsCard("media-sharing") {
             MediaSharingSettingsControls(settings.mediaSharing, onSettings = { onSettingsChange(settings.copy(mediaSharing = it)) })
         }
         if ("media-gallery" in visibleIds) settingsCard("media-gallery") {
             GallerySettingsControls(settings.gallery, onSettings = { onSettingsChange(settings.copy(gallery = it)) })
         }
-        if ("proxy" in visibleIds) settingsCard("proxy", fullLine = true) {
+        if ("proxy" in visibleIds) settingsCard("proxy") {
             ProxySettingsControls(settings.proxy) { onSettingsChange(settings.copy(proxy = it)) }
         }
         if ("playback" in visibleIds) settingsCard("playback") {
             PlaybackSettingsControls(settings.playback) { onSettingsChange(settings.copy(playback = it)) }
         }
-        if ("capture-naming" in visibleIds) settingsCard("capture-naming", fullLine = true) {
+        if ("capture-naming" in visibleIds) settingsCard("capture-naming") {
             CaptureNamingSettingsControls(settings, onSettingsChange)
         }
         if ("geotagging" in visibleIds) settingsCard("geotagging") {
             GeotaggingSettingsControls(settings, onSettingsChange)
         }
-        if ("production-slate" in visibleIds) settingsCard("production-slate", fullLine = true) {
+        if ("production-slate" in visibleIds) settingsCard("production-slate") {
             ProductionSlateSettingsControls(state, settings, onSettingsChange)
         }
-        if ("project-timing" in visibleIds) settingsCard("project-timing", fullLine = true) {
+        if ("project-timing" in visibleIds) settingsCard("project-timing") {
             ProjectTimingSettings(state, settings, onSettingsChange)
         }
-        if ("timelapse" in visibleIds) settingsCard("timelapse", fullLine = true) {
+        if ("timelapse" in visibleIds) settingsCard("timelapse") {
             TimelapseSettings(state, settings, onSettingsChange)
         }
-        if ("operator-controls" in visibleIds) settingsCard("operator-controls", fullLine = true) {
+        if ("operator-controls" in visibleIds) settingsCard("operator-controls") {
             OperatorSettings(state, settings, onSettingsChange)
         }
-        if ("webdav-queue" in visibleIds) settingsCard("webdav-queue", fullLine = true) { WebDavQueueSettingsSection() }
-        if ("presets" in visibleIds) settingsCard("presets", fullLine = true) {
+        if ("webdav-queue" in visibleIds) settingsCard("webdav-queue") { WebDavQueueSettingsSection() }
+        if ("presets" in visibleIds) settingsCard("presets") {
             PresetSettings(state, settings, onApplyPreset)
         }
-        if ("image-processing" in visibleIds) settingsCard("image-processing", fullLine = true) {
+        if ("image-processing" in visibleIds) settingsCard("image-processing") {
             ImageProcessingSettings(state, settings, onSettingsChange)
         }
-        if ("professional-exposure" in visibleIds) settingsCard("professional-exposure", fullLine = true) {
+        if ("professional-exposure" in visibleIds) settingsCard("professional-exposure") {
             ProfessionalExposureSettings(state, settings, onSettingsChange)
         }
-        if ("fold-displays" in visibleIds) settingsCard("fold-displays", fullLine = true) {
+        if ("fold-displays" in visibleIds) settingsCard("fold-displays") {
             FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
         }
         // OCC-PLAN-068 subject features: each card's controls live in that unit's own file.
         val subject = settings.subjectDisplay
         val updateSubject = { next: SubjectDisplaySettings -> onSettingsChange(settings.copy(subjectDisplay = next)) }
         if ("subject-self-monitor" in visibleIds) settingsCard("subject-self-monitor") {
-            SettingsHeading(stringResource(R.string.subject_self_monitor_title)); SubjectSelfMonitorSettings(state, subject, updateSubject)
+            SettingsSectionTitle(stringResource(R.string.subject_self_monitor_title), help = stringResource(R.string.subject_self_monitor_help)); SubjectSelfMonitorSettings(state, subject, updateSubject)
         }
         if ("subject-tally" in visibleIds) settingsCard("subject-tally") {
-            SettingsHeading(stringResource(R.string.subject_tally_title)); SubjectTallySettings(state, subject, updateSubject)
+            SettingsSectionTitle(stringResource(R.string.subject_tally_title), help = stringResource(R.string.subject_tally_help)); SubjectTallySettings(state, subject, updateSubject)
         }
         if ("subject-fill-light" in visibleIds) settingsCard("subject-fill-light") {
-            SettingsHeading(stringResource(R.string.fold_mode_fill_light)); SubjectFillLightSettings(state, subject, updateSubject)
+            SettingsSectionTitle(stringResource(R.string.fold_mode_fill_light), help = stringResource(R.string.subject_fill_light_help)); SubjectFillLightSettings(state, subject, updateSubject)
         }
-        if ("subject-interview" in visibleIds) settingsCard("subject-interview", fullLine = true) {
-            SettingsHeading(stringResource(R.string.fold_mode_interview)); SubjectInterviewSettings(state, subject, updateSubject)
+        if ("subject-interview" in visibleIds) settingsCard("subject-interview") {
+            SettingsSectionTitle(stringResource(R.string.fold_mode_interview), help = stringResource(R.string.subject_interview_help)); SubjectInterviewSettings(state, subject, updateSubject)
         }
         if ("subject-slate" in visibleIds) settingsCard("subject-slate") {
-            SettingsHeading(stringResource(R.string.fold_mode_slate)); SubjectSlateSettings(state, subject, updateSubject)
+            SettingsSectionTitle(stringResource(R.string.fold_mode_slate)); SubjectSlateSettings(state, subject, updateSubject)
         }
         if ("subject-out-of-frame" in visibleIds) settingsCard("subject-out-of-frame") {
-            SettingsHeading(stringResource(R.string.subject_out_of_frame_title)); SubjectOutOfFrameSettings(state, subject, updateSubject)
+            SettingsSectionTitle(stringResource(R.string.subject_out_of_frame_title), help = stringResource(R.string.subject_out_of_frame_help)); SubjectOutOfFrameSettings(state, subject, updateSubject)
         }
         if ("appearance" in visibleIds) settingsCard("appearance") { AppearanceSettings() }
         if ("layout" in visibleIds) settingsCard("layout") {
@@ -3795,7 +3795,7 @@ internal fun SettingsContent(
                 ) { Text(stringResource(R.string.grant_microphone)) }
             }
         }
-        if ("audio-format" in visibleIds) settingsCard("audio-format", fullLine = true) {
+        if ("audio-format" in visibleIds) settingsCard("audio-format") {
             if (!audioPermissionGranted) {
                 Text(stringResource(R.string.audio_permission_summary), color = Muted, fontSize = 14.sp)
                 Button(onClick = onRequestAudioPermission) { Text(stringResource(R.string.grant_microphone)) }
@@ -3905,28 +3905,28 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("accumulation" in visibleIds) settingsCard("accumulation", fullLine = true) {
+        if ("accumulation" in visibleIds) settingsCard("accumulation") {
             AccumulationSettings(state, settings, onSettingsChange)
         }
-        if ("bracket" in visibleIds) settingsCard("bracket", fullLine = true) {
+        if ("bracket" in visibleIds) settingsCard("bracket") {
             BracketSettings(state, settings, onSettingsChange)
         }
-        if ("lut-library" in visibleIds) settingsCard("lut-library", fullLine = true) {
+        if ("lut-library" in visibleIds) settingsCard("lut-library") {
             LutLibrarySettings(state)
         }
-        if ("monitoring-scopes" in visibleIds) settingsCard("monitoring-scopes", fullLine = true) {
+        if ("monitoring-scopes" in visibleIds) settingsCard("monitoring-scopes") {
             MonitoringSettings(settings, onSettingsChange)
         }
-        if ("photo-aspect" in visibleIds) settingsCard("photo-aspect", fullLine = true) {
+        if ("photo-aspect" in visibleIds) settingsCard("photo-aspect") {
             PhotoAspectSettings(state, settings, onSettingsChange)
         }
-        if ("photo-format" in visibleIds) settingsCard("photo-format", fullLine = true) {
+        if ("photo-format" in visibleIds) settingsCard("photo-format") {
             PhotoFormatSettings(state, settings, onSettingsChange)
         }
-        if ("photo-flash" in visibleIds) settingsCard("photo-flash", fullLine = true) {
+        if ("photo-flash" in visibleIds) settingsCard("photo-flash") {
             PhotoFlashSettings(state, settings, onSettingsChange)
         }
-        if ("torch" in visibleIds) settingsCard("torch", fullLine = true) {
+        if ("torch" in visibleIds) settingsCard("torch") {
             TorchSettings(state, settings, onSettingsChange)
         }
         if ("zebra" in visibleIds) settingsCard("zebra") {
@@ -4015,7 +4015,7 @@ internal fun SettingsContent(
                 }
             }
         }
-        if ("zoom-lens" in visibleIds) settingsCard("zoom-lens", fullLine = true) {
+        if ("zoom-lens" in visibleIds) settingsCard("zoom-lens") {
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.zoom_lens_switch_mode), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
@@ -4037,11 +4037,11 @@ internal fun SettingsContent(
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
         }
-        if ("camera-capabilities" in visibleIds && onOpenCapabilities != null) settingsCard("camera-capabilities", fullLine = true) {
+        if ("camera-capabilities" in visibleIds && onOpenCapabilities != null) settingsCard("camera-capabilities") {
             SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
                 Modifier.testTag("settings-open-capabilities"))
         }
-        if ("hardware" in visibleIds) settingsCard("hardware", fullLine = true) {
+        if ("hardware" in visibleIds) settingsCard("hardware") {
             val descriptor = state.descriptor
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
                 Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
@@ -4252,8 +4252,7 @@ private fun ProfessionalAudioSettings(
 internal fun ProductionSlateSettingsControls(state: CameraUiState, settings: CameraSettings, onSettingsChange: (CameraSettings) -> Unit) {
     val slate = settings.productionSlate
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.production_slate_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        SettingsHelp(stringResource(R.string.production_slate_help), tag = "slate-help")
+        SettingsSectionTitle(stringResource(R.string.production_slate_title), help = stringResource(R.string.production_slate_help), helpTag = "slate-help")
         if (state.structuralSettingsFrozen && state.effectiveSettings?.productionSlate?.let { it != slate } == true) {
             Text(stringResource(R.string.production_slate_pending), Modifier.testTag("slate-pending"), color = Amber, fontSize = 14.sp)
         }
@@ -4311,8 +4310,7 @@ private fun ProductionSlateTextField(tag: String, label: Int, value: String, onC
 internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChange: (CameraSettings) -> Unit) {
     val options = settings.audioMeter
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.audio_meter_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        SettingsHelp(stringResource(R.string.audio_meter_help), tag = "audio-meter-settings-help")
+        SettingsSectionTitle(stringResource(R.string.audio_meter_title), help = stringResource(R.string.audio_meter_help), helpTag = "audio-meter-settings-help")
         SettingsSwitchRow(stringResource(R.string.audio_meter_visible), options.visible,
             { onSettingsChange(settings.copy(audioMeter = options.copy(visible = it))) }, tag = "audio-meter-settings-visible")
         SettingsChips(stringResource(R.string.settings_mode), AudioMeterMode.entries, options.mode,
@@ -4346,8 +4344,7 @@ internal fun AudioEffectsSettingsStatus(state: CameraUiState, settings: CameraSe
     val receipt = state.audioLevels?.effects.takeIf { state.audioMonitoringActive }
     val effective = state.effectiveSettings
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.audio_effect_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        SettingsHelp(stringResource(R.string.audio_effect_help), tag = "audio-effects-help")
+        SettingsSectionTitle(stringResource(R.string.audio_effect_title), help = stringResource(R.string.audio_effect_help), helpTag = "audio-effects-help")
         if (settings.audioRecordingGain.enabled) {
             Text(stringResource(R.string.audio_effect_manual), Modifier.testTag("audio-effects-manual"), color = Amber, fontSize = 14.sp)
         }
@@ -4414,8 +4411,7 @@ internal fun AudioListeningSettingsControls(
     val volumeLabel = stringResource(R.string.audio_listening_volume, request.volumePercent)
     val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.audio_listening_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        SettingsHelp(stringResource(R.string.audio_listening_help), tag = "audio-listening-help")
+        SettingsSectionTitle(stringResource(R.string.audio_listening_title), help = stringResource(R.string.audio_listening_help), helpTag = "audio-listening-help")
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(enabledLabel, Modifier.weight(1f).padding(end = 12.dp), color = MaterialTheme.colorScheme.onSurface)
             Switch(checked = request.enabled,
@@ -4491,8 +4487,7 @@ internal fun AudioRecordingGainSettings(
     val requestedLabel = stringResource(R.string.audio_gain_requested, gain.decibels)
     val gainInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.audio_gain_title), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-        SettingsHelp(stringResource(R.string.audio_gain_help), tag = "audio-gain-help")
+        SettingsSectionTitle(stringResource(R.string.audio_gain_title), help = stringResource(R.string.audio_gain_help), helpTag = "audio-gain-help")
         SettingsSwitchRow(manualLabel, gain.enabled,
             { onSettingsChange(settings.copy(audioRecordingGain = gain.copy(enabled = it))) }, tag = "audio-gain-manual")
         Text(requestedLabel,
@@ -4564,13 +4559,15 @@ private fun SettingsToggleRow(
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    // The card is the surface; the row adds no second box, and the gap keeps the switch off the text.
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
+            .toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else Muted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else Muted, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             summary?.let { Text(it, color = Muted, fontSize = 14.sp) }
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = null)

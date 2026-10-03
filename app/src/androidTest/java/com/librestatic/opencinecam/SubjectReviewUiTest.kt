@@ -77,7 +77,7 @@ class SubjectReviewUiTest {
         compose.setContent { MaterialTheme { SubjectReviewOperatorBar(help = true) } }
         compose.onNodeWithTag("subject-review-operator-bar").assertDoesNotExist()
         // Settings help starts collapsed; open it before checking the how-to line.
-        compose.onNodeWithText(context.getString(R.string.settings_help_show)).performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.settings_help_show)).performClick()
         compose.onNodeWithText(context.getString(R.string.subject_review_help)).assertIsDisplayed()
     }
 }

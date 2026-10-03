@@ -29,8 +29,10 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
     val display by (coordinator?.states ?: fallback).collectAsState()
     val subject = settings.subjectDisplay
     fun update(next: SubjectDisplaySettings) = onChange(settings.copy(subjectDisplay = next))
-    Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (showTitle) Text(stringResource(R.string.fold_settings_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
+    // Only the capture-screen dialog scrolls on its own; in the settings list the page scrolls.
+    val scroll = if (showTitle) Modifier.heightIn(max = 600.dp).verticalScroll(rememberScrollState()) else Modifier
+    Column(Modifier.fillMaxWidth().then(scroll), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (showTitle) SettingsSectionTitle(stringResource(R.string.fold_settings_title))
         Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_dual), capabilityLabel(display.presentation)), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         Text(stringResource(R.string.fold_capability, stringResource(R.string.fold_transfer), capabilityLabel(display.transfer)), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
         Text(stringResource(R.string.fold_posture, postureLabel(display.posture)), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
@@ -38,15 +40,15 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
         if (display.phase != DisplaySessionPhase.IDLE) {
             Text(stringResource(if (display.phase == DisplaySessionPhase.STARTING) R.string.fold_starting else if (display.visible) R.string.fold_visible else R.string.fold_hidden), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
             Button(onClick = { coordinator?.closeSession() }, modifier = Modifier.heightIn(min = 48.dp).testTag("fold-close")) { Text(stringResource(R.string.fold_close)) }
-        } else Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        } else FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Buttons sized to their labels: two actions, not two bars across the page.
             Button(onClick = { coordinator?.start(DisplayOperation.PRESENT) }, enabled = display.presentation == DisplayCapability.AVAILABLE,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("fold-present")) { Text(stringResource(R.string.fold_start_subject)) }
-            Button(onClick = { coordinator?.start(DisplayOperation.TRANSFER) }, enabled = display.transfer == DisplayCapability.AVAILABLE && camera.phase != CameraUiPhase.RECORDING,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
+                modifier = Modifier.heightIn(min = 48.dp).testTag("fold-present")) { Text(stringResource(R.string.fold_start_subject)) }
+            OutlinedButton(onClick = { coordinator?.start(DisplayOperation.TRANSFER) }, enabled = display.transfer == DisplayCapability.AVAILABLE && camera.phase != CameraUiPhase.RECORDING,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("fold-transfer")) { Text(stringResource(R.string.fold_start_self)) }
         }
         SettingsHelp(stringResource(R.string.fold_transfer_help))
-        Text(stringResource(R.string.self_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp)
-        SettingsHelp(stringResource(R.string.self_timer_help))
+        SettingsSectionTitle(stringResource(R.string.self_title), help = stringResource(R.string.self_timer_help))
         SettingsChips(stringResource(R.string.self_timer_label), listOf(0, 3, 5, 10), subject.selfTimerSeconds,
             label = { stringResource(R.string.self_timer_short, it) },
             onSelect = { update(subject.copy(selfTimerSeconds = it)) }, tag = { "self-timer-$it" })
@@ -97,18 +99,18 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
 @Composable
 private fun readableFieldColors() = OutlinedTextFieldDefaults.colors(focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface)
 
+/** A slider that commits once the drag ends, so the exterior screen is not re-laid out per frame. */
 @Composable
 internal fun FoldSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     var draft by remember(value) { mutableFloatStateOf(value) }
-    Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-    CineSlider(draft, { draft = it }, valueRange = range, onValueChangeFinished = { onChange(draft) },
-        modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label })
+    SettingsSliderRow(label, draft, { draft = it }, range, onValueChangeFinished = { onChange(draft) })
 }
 
+/** A whole-row switch; the gap keeps a long label from running into the switch. */
 @Composable
 internal fun FoldToggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value, role = Role.Switch, onValueChange = onChange), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(end = 16.dp))
         Switch(value, onCheckedChange = null)
     }
 }

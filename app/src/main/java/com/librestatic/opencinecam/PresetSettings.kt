@@ -79,8 +79,7 @@ internal fun PresetSettings(state: CameraUiState, settings: CameraSettings, onAp
         }
     }
     Column(Modifier.fillMaxWidth().testTag("preset-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.presets_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.presets_help))
+        SettingsSectionTitle(stringResource(R.string.presets_title), help = stringResource(R.string.presets_help))
         if (state.structuralSettingsFrozen) Text(stringResource(R.string.presets_pending), color = LocalCineColors.current.pending, fontSize = 16.sp)
         state.pendingPresetName?.let { Text(stringResource(R.string.presets_pending_name, it), color = LocalCineColors.current.pending, fontSize = 16.sp) }
         library.error?.let {

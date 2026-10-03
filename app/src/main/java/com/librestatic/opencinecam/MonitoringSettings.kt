@@ -30,11 +30,11 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
     fun update(value: MonitoringOptions) = onChange(settings.copy(monitoring = value))
     // One group per tool. Wide panes lay the groups out in two columns instead of one long list.
     val instruments: @Composable () -> Unit = {
-        MonitorGroup(R.string.monitoring_group_instruments, CineIcon.MONITORING) {
+        MonitorGroup(R.string.monitoring_group_instruments, CineIcon.MONITORING,
+            stringResource(R.string.monitoring_signal_help) + "\n\n" + stringResource(R.string.monitoring_source_help)) {
             MonitorSwitch(R.string.monitoring_waveform, "waveform", options.waveformEnabled) { update(options.copy(waveformEnabled = it)) }
             MonitorSwitch(R.string.monitoring_vectorscope, "vectorscope", options.vectorscopeEnabled) { update(options.copy(vectorscopeEnabled = it)) }
             MonitorSwitch(R.string.monitoring_false_color, "false-color", options.falseColorEnabled) { update(options.copy(falseColorEnabled = it)) }
-            SettingsHelp(stringResource(R.string.monitoring_signal_help) + "\n\n" + stringResource(R.string.monitoring_source_help))
         }
     }
     val zebra: @Composable () -> Unit = {
@@ -72,7 +72,7 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
         }
     }
     val guides: @Composable () -> Unit = {
-        MonitorGroup(R.string.monitoring_group_guides, CineIcon.GRID) {
+        MonitorGroup(R.string.monitoring_group_guides, CineIcon.GRID, stringResource(R.string.monitoring_guides_help)) {
             SettingsChips(stringResource(R.string.monitoring_aspect), MonitorAspectGuide.entries, options.aspectGuide,
                 label = { guide -> stringResource(when (guide) {
                     MonitorAspectGuide.NONE -> R.string.monitoring_aspect_none
@@ -87,13 +87,11 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
             MonitorInteger(R.string.monitoring_safe_percent, "safe-percent", options.safeAreaPercent, 50..100) {
                 update(options.copy(safeAreaPercent = it))
             }
-            SettingsHelp(stringResource(R.string.monitoring_guides_help))
         }
     }
     val analysis: @Composable () -> Unit = {
-        MonitorGroup(R.string.monitoring_group_analysis, CineIcon.MONITORING) {
+        MonitorGroup(R.string.monitoring_group_analysis, CineIcon.MONITORING, stringResource(R.string.monitoring_frequency_help)) {
             MonitorInteger(R.string.monitoring_refresh, "refresh-hz", options.refreshHz, 1..10) { update(options.copy(refreshHz = it)) }
-            SettingsHelp(stringResource(R.string.monitoring_frequency_help))
         }
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -107,14 +105,14 @@ internal fun MonitoringSettings(settings: CameraSettings, onChange: (CameraSetti
 }
 
 @Composable
-private fun MonitorGroup(titleId: Int, icon: CineIcon, content: @Composable ColumnScope.() -> Unit) {
+private fun MonitorGroup(titleId: Int, icon: CineIcon, help: String? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .background(SettingsSurfaceRaised, RoundedCornerShape(10.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SettingsHeading(stringResource(titleId), icon = icon)
+        SettingsHeading(stringResource(titleId), icon = icon, help = help)
         content()
     }
 }
@@ -122,7 +120,7 @@ private fun MonitorGroup(titleId: Int, icon: CineIcon, content: @Composable Colu
 @Composable
 private fun MonitorSwitch(labelId: Int, tag: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val label = stringResource(labelId)
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(label, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange,
             modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label }.testTag("monitoring-$tag"))

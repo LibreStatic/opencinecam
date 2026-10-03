@@ -32,8 +32,7 @@ internal fun PhotoAspectSettings(state: CameraUiState, settings: CameraSettings,
         PhotoAspectSelection.normalized(selection.enabled, requireNotNull(width.toIntOrNull()), requireNotNull(height.toIntOrNull()))
     }.getOrNull()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(R.string.photo_aspect_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp)
-        SettingsHelp(stringResource(R.string.photo_aspect_help))
+        SettingsSectionTitle(stringResource(R.string.photo_aspect_title), help = stringResource(R.string.photo_aspect_help))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(toggleLabel, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
             Switch(checked = selection.enabled, onCheckedChange = { onChange(settings.copy(photoAspect = selection.copy(enabled = it))) },
