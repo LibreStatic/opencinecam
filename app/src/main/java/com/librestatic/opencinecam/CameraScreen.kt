@@ -1287,10 +1287,12 @@ internal fun AdaptiveCaptureChrome(
     var pane by remember { mutableStateOf<CapturePane?>(null) }
     // Compact portrait shows the modes in a modal sheet rather than in the docked pane.
     var modeSheet by remember { mutableStateOf(false) }
-    // The scopes stay switched on in Settings; H and the monitor pane only hide them here.
-    var scopesHidden by rememberSaveable { mutableStateOf(false) }
     var scopesExpanded by rememberSaveable { mutableStateOf(false) }
     val operatorInput = LocalOperatorActions.current
+    // The scopes stay switched on in Settings; H and the panel's close key only hide them here.
+    // The operator actions own the state when present, so the F-keys and volume keys agree with it.
+    val localScopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility() }
+    val scopeVisibility = operatorInput?.scopes ?: localScopes
     val recording = state.phase == CameraUiPhase.RECORDING
     var manualReveal by remember { mutableStateOf(false) }
     var tapPoint by remember { mutableStateOf<Offset?>(null) }
@@ -1404,9 +1406,21 @@ internal fun AdaptiveCaptureChrome(
         val ratio = previewAspectRatio
         val overlay = overlayViewfinderScale != null && !hinge
         val monitoring = settings.monitoring
-        val scopesEnabled = monitoring.waveformEnabled || monitoring.vectorscopeEnabled || monitoring.falseColorEnabled
-        // A hinge split leaves the scopes on its preview pane; everywhere else the chrome hosts them.
-        val scopesShown = scopesEnabled && !scopesHidden && !hinge
+        val panelScopesEnabled = monitoring.waveformEnabled || monitoring.vectorscopeEnabled || monitoring.falseColorEnabled
+        // H hides and shows every scope, the histogram among them.
+        val scopesEnabled = panelScopesEnabled || histogram
+        // A hinge split leaves the scopes panel on its preview pane, where it cannot be hidden.
+        DisposableEffect(scopeVisibility, hinge) {
+            scopeVisibility.hideable = !hinge
+            onDispose { scopeVisibility.hideable = false }
+        }
+        // With nothing switched on there is nothing to hide: the next scope switched on shows.
+        LaunchedEffect(scopesEnabled) { if (!scopesEnabled) scopeVisibility.show() }
+        val scopesHidden = scopeVisibility.concealed
+        val scopesShown = panelScopesEnabled && !scopesHidden && !hinge
+        // The histogram and its toggles follow H as well.
+        val histogramShown = histogram && !scopesHidden
+        val toggleHistogram: () -> Unit = { scopeVisibility.press(OperatorAction.HISTOGRAM, histogram, onToggleHistogram) }
         val stackedPaneHeight = (height - topBarPx - stableDeckHeightPx).coerceAtLeast(0f)
         val sidePaneWidth = stackedSidePaneWidth(maxWidth.value).dp
         val dockCap = minOf(
@@ -1695,7 +1709,7 @@ internal fun AdaptiveCaptureChrome(
             settings = settings,
             chromeVisible = chromeVisible,
             recording = recording,
-            histogram = histogram,
+            histogram = histogramShown,
             histogramMode = histogramMode,
             horizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound,
             // A hinge split gives the chrome its own pane with no picture behind it: let the
@@ -1739,10 +1753,12 @@ internal fun AdaptiveCaptureChrome(
                 CaptureShortcutCommand.ZEBRA -> { onToggleZebra(); true }
                 CaptureShortcutCommand.PEAKING -> { onTogglePeaking(); true }
                 CaptureShortcutCommand.GRID -> { onToggleGrid(); true }
-                CaptureShortcutCommand.TOGGLE_SCOPES -> { scopesHidden = !scopesHidden; true }
+                // A hinge split shows the scopes on its preview pane, which H does not hide.
+                CaptureShortcutCommand.TOGGLE_SCOPES -> !hinge && run { scopeVisibility.toggle(); true }
                 CaptureShortcutCommand.ENABLE_WAVEFORM -> {
                     performOperator(OperatorAction.WAVEFORM)
-                    scopesHidden = false
+                    scopeVisibility.show()
+                    scopeVisibility.tab = ScopeTab.WAVEFORM
                     true
                 }
                 CaptureShortcutCommand.VIEW_ASSIST -> { performOperator(OperatorAction.VIEW_ASSIST); true }
@@ -1767,7 +1783,8 @@ internal fun AdaptiveCaptureChrome(
         val scopes: @Composable (Modifier) -> Unit = { modifier ->
             // No histogram tab: the histogram keeps its own place in the instrument stack.
             ProfessionalScopesPanel(state, monitoring, scopeFresh, modifier, expanded = scopesExpanded,
-                onExpandedChange = { scopesExpanded = it }, onClose = { scopesHidden = true })
+                onExpandedChange = { scopesExpanded = it }, onClose = { scopeVisibility.hide() },
+                tab = scopeVisibility.tab, onTabChange = { scopeVisibility.tab = it })
         }
         // The modes, with the selected mode's resolution under them (RES lives here, not in the slots).
         val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
@@ -1804,16 +1821,16 @@ internal fun AdaptiveCaptureChrome(
                 CapturePane.Monitor -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     CapturePaneHeader(stringResource(R.string.monitor_title), { pane = null })
                     MonitoringToggleGrid(
-                        zebra, peaking, histogram, histogramMode, showGrid, gridMode, showHorizon,
-                        onToggleZebra, onTogglePeaking, onToggleHistogram, onCycleHistogramMode,
+                        zebra, peaking, histogramShown, histogramMode, showGrid, gridMode, showHorizon,
+                        onToggleZebra, onTogglePeaking, toggleHistogram, onCycleHistogramMode,
                         onToggleGrid, onCycleGridMode, onToggleHorizon,
                     )
-                    if (scopesEnabled) MonitorToggle(
+                    if (scopesEnabled && !hinge) MonitorToggle(
                         CineIcon.MONITORING,
                         stringResource(R.string.capture_scopes_short),
                         stringResource(R.string.capture_scopes_toggle),
                         !scopesHidden,
-                        { scopesHidden = !scopesHidden },
+                        { scopeVisibility.toggle() },
                         modifier = Modifier.widthIn(max = 312.dp).fillMaxWidth(),
                     )
                 }
@@ -2061,14 +2078,14 @@ internal fun AdaptiveCaptureChrome(
                 showStop = !chromeVisible,
                 zebra = zebra,
                 peaking = peaking,
-                histogram = histogram,
+                histogram = histogramShown,
                 histogramMode = histogramMode,
                 showGrid = showGrid,
                 gridMode = gridMode,
                 showHorizon = showHorizon,
                 onToggleZebra = onToggleZebra,
                 onTogglePeaking = onTogglePeaking,
-                onToggleHistogram = onToggleHistogram,
+                onToggleHistogram = toggleHistogram,
                 onCycleHistogramMode = onCycleHistogramMode,
                 onToggleGrid = onToggleGrid,
                 onCycleGridMode = onCycleGridMode,
