@@ -91,8 +91,11 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             Text(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("gallery-title-${take.id}"),
                 color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2,
                 overflow = TextOverflow.Ellipsis)
-            Text(remember(take.primary.modifiedSeconds) { takeTimeText(context, take.primary.modifiedSeconds) },
-                Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            // Without a slate the title already is the capture time.
+            if (takeTitle(take.slate) != TakeTitle.CaptureTime) {
+                Text(remember(take.primary.modifiedSeconds) { takeTimeText(context, take.primary.modifiedSeconds) },
+                    Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            }
             Text(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-file-name-${take.id}"), color = SettingsMuted,
                 fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
