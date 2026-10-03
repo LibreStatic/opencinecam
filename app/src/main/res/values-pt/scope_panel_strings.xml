@@ -4,10 +4,17 @@
     <string name="scope_tab_vectorscope">Vetorscópio</string>
     <string name="scope_tab_false_color">Falsa cor</string>
     <string name="scope_tab_histogram">Histograma</string>
-    <string name="scope_tab_waveform_short">FO</string>
-    <string name="scope_tab_vectorscope_short">VET</string>
-    <string name="scope_tab_false_color_short">FC</string>
-    <string name="scope_tab_histogram_short">HISTO</string>
+    <string name="scope_tab_waveform_short">Onda</string>
+    <string name="scope_tab_vectorscope_short">Vetor</string>
+    <string name="scope_tab_false_color_short">F.Cor</string>
+    <string name="scope_tab_histogram_short">Histo</string>
     <string name="scope_next">Próximo scope</string>
     <string name="scope_hide">Ocultar scopes</string>
+    <string name="scope_tab_waveform_help">Brilho ao longo do quadro, da esquerda para a direita. A linha de cima, 100, é o branco estourado; a de baixo é o preto.</string>
+    <string name="scope_tab_vectorscope_help">Cor do quadro: o ângulo é o matiz e a distância ao centro, a saturação. A linha diagonal marca os tons de pele.</string>
+    <string name="scope_tab_false_color_help">Quanto do quadro está agora em cada zona de exposição, do preto esmagado aos realces estourados, e os limites que definem as zonas.</string>
+    <string name="scope_tab_histogram_help">Quantos pixels há em cada nível de brilho, do preto à esquerda ao branco à direita.</string>
+    <string name="scope_domain_help">O sinal que os scopes leem. SDR est.: uma estimativa SDR da prévia da câmera, próxima mas não igual ao arquivo gravado. SDR: a imagem Rec.709. OC-Log2: o sinal LOG gravado.</string>
+    <string name="scope_fc_in_frame">No quadro</string>
+    <string name="scope_fc_thresholds">Limites</string>
 </resources>

@@ -5,10 +5,18 @@
     <string name="scope_tab_vectorscope">Vectorscope</string>
     <string name="scope_tab_false_color">False color</string>
     <string name="scope_tab_histogram">Histogram</string>
-    <string name="scope_tab_waveform_short">WFM</string>
-    <string name="scope_tab_vectorscope_short">VEC</string>
-    <string name="scope_tab_false_color_short">FC</string>
-    <string name="scope_tab_histogram_short">HIST</string>
+    <string name="scope_tab_waveform_short">Wave</string>
+    <string name="scope_tab_vectorscope_short">Vector</string>
+    <string name="scope_tab_false_color_short">F.Color</string>
+    <string name="scope_tab_histogram_short">Histo</string>
     <string name="scope_next">Next scope</string>
     <string name="scope_hide">Hide scopes</string>
+    <!-- Long-press help for the scope tabs and the signal chip; captions of the false-colour tab. -->
+    <string name="scope_tab_waveform_help">Brightness across the frame, left to right. The top line, 100, is clipped white; the bottom is black.</string>
+    <string name="scope_tab_vectorscope_help">Colour in the frame: the angle is the hue and the distance from the centre the saturation. The diagonal line marks skin tones.</string>
+    <string name="scope_tab_false_color_help">How much of the frame falls in each exposure zone right now, from crushed black to clipped highlights, and the thresholds that set the zones.</string>
+    <string name="scope_tab_histogram_help">How many pixels sit at each brightness, from black on the left to white on the right.</string>
+    <string name="scope_domain_help">The signal the scopes read. SDR est.: an SDR estimate from the camera preview, close to but not the recorded file. SDR: the Rec.709 picture. OC-Log2: the LOG signal being recorded.</string>
+    <string name="scope_fc_in_frame">In frame</string>
+    <string name="scope_fc_thresholds">Thresholds</string>
 </resources>

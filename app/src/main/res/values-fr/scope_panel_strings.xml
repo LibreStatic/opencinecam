@@ -4,10 +4,17 @@
     <string name="scope_tab_vectorscope">Vecteurscope</string>
     <string name="scope_tab_false_color">Fausses couleurs</string>
     <string name="scope_tab_histogram">Histogramme</string>
-    <string name="scope_tab_waveform_short">FO</string>
-    <string name="scope_tab_vectorscope_short">VECT</string>
-    <string name="scope_tab_false_color_short">FC</string>
-    <string name="scope_tab_histogram_short">HISTO</string>
+    <string name="scope_tab_waveform_short">Onde</string>
+    <string name="scope_tab_vectorscope_short">Vecteur</string>
+    <string name="scope_tab_false_color_short">F.Coul.</string>
+    <string name="scope_tab_histogram_short">Histo</string>
     <string name="scope_next">Scope suivant</string>
     <string name="scope_hide">Masquer les scopes</string>
+    <string name="scope_tab_waveform_help">Luminosité sur la largeur de l\'image, de gauche à droite. La ligne du haut, 100, est le blanc écrêté ; celle du bas, le noir.</string>
+    <string name="scope_tab_vectorscope_help">Couleur de l\'image : l\'angle donne la teinte et la distance au centre la saturation. La diagonale marque les tons chair.</string>
+    <string name="scope_tab_false_color_help">Quelle part de l\'image tombe maintenant dans chaque zone d\'exposition, du noir bouché aux hautes lumières écrêtées, et les seuils qui définissent les zones.</string>
+    <string name="scope_tab_histogram_help">Combien de pixels se trouvent à chaque luminosité, du noir à gauche au blanc à droite.</string>
+    <string name="scope_domain_help">Le signal lu par les scopes. SDR est. : une estimation SDR issue de l\'aperçu de la caméra, proche du fichier enregistré sans lui être identique. SDR : l\'image Rec.709. OC-Log2 : le signal LOG enregistré.</string>
+    <string name="scope_fc_in_frame">Dans l\'image</string>
+    <string name="scope_fc_thresholds">Seuils</string>
 </resources>

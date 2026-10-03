@@ -39,6 +39,8 @@ class ScopePanelLayoutTest {
         val short = listOf(30f, 26f, 18f)
         // Wide inspector: names and chip side by side with the enlarge key.
         assertEquals(ScopeHeaderPlan(ScopeTabStyle.FULL, true), scopeHeaderPlan(412f, full, short, 70f, 1))
+        // Full names win over the chip: it moves to its own line before the names shorten.
+        assertEquals(ScopeHeaderPlan(ScopeTabStyle.FULL, false), scopeHeaderPlan(340f, full, short, 70f, 1))
         // Phone tray: short codes keep the chip on the row.
         assertEquals(ScopeHeaderPlan(ScopeTabStyle.SHORT, true), scopeHeaderPlan(280f, full, short, 70f, 1))
         // Narrow: short codes, the chip moves to its own line.
@@ -46,6 +48,20 @@ class ScopePanelLayoutTest {
         // Narrowest: one key steps through the scopes.
         assertEquals(ScopeHeaderPlan(ScopeTabStyle.CYCLE, true), scopeHeaderPlan(190f, full, short, 70f, 1))
         assertEquals(ScopeHeaderPlan(ScopeTabStyle.CYCLE, false), scopeHeaderPlan(100f, full, short, 70f, 1))
+    }
+
+    @Test fun falseColorSharesFollowTheFrame() {
+        assertNull(falseColorShares(emptyList()))
+        val frame = List(6) { com.librestatic.opencinecam.camera.FalseColorBand.MID } +
+            List(3) { com.librestatic.opencinecam.camera.FalseColorBand.CLIP } + com.librestatic.opencinecam.camera.FalseColorBand.BLACK
+        val shares = falseColorShares(frame)!!
+        assertEquals(.6f, shares[com.librestatic.opencinecam.camera.FalseColorBand.MID.ordinal], 1e-6f)
+        assertEquals(.3f, shares[com.librestatic.opencinecam.camera.FalseColorBand.CLIP.ordinal], 1e-6f)
+        assertEquals(0f, shares[com.librestatic.opencinecam.camera.FalseColorBand.SHADOW.ordinal], 0f)
+        assertEquals(1f, shares.sum(), 1e-6f)
+        assertEquals("30 %", falseColorShareText(.3f))
+        assertEquals("<1 %", falseColorShareText(.001f))
+        assertEquals("0 %", falseColorShareText(0f))
     }
 
     @Test fun everyTabKeepsATouchTargetWidth() {

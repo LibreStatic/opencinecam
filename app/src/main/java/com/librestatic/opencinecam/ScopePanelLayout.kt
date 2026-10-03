@@ -58,10 +58,11 @@ internal fun scopeHeaderPlan(availableDp: Float, fullLabelsDp: List<Float>, shor
     val short = tabs(shortLabelsDp)
     // One scope needs no cycle key; its short title is the last resort.
     val last = if (fullLabelsDp.size <= 1) short else cycle
-    // Full and short tabs with the chip, then without it, before collapsing to one key.
+    // Full names first, giving up the chip's place on the row before falling back to short names:
+    // the names say what each scope is, the chip only qualifies the signal.
     val candidates = listOf(
-        Triple(ScopeTabStyle.FULL, full, true), Triple(ScopeTabStyle.SHORT, short, true),
-        Triple(ScopeTabStyle.FULL, full, false), Triple(ScopeTabStyle.SHORT, short, false),
+        Triple(ScopeTabStyle.FULL, full, true), Triple(ScopeTabStyle.FULL, full, false),
+        Triple(ScopeTabStyle.SHORT, short, true), Triple(ScopeTabStyle.SHORT, short, false),
         Triple(ScopeTabStyle.CYCLE, last, true),
     )
     for ((style, width, chip) in candidates) {
@@ -74,7 +75,7 @@ internal fun scopeHeaderPlan(availableDp: Float, fullLabelsDp: List<Float>, shor
 internal fun stackedScopeHeightDp(tab: ScopeTab, widthDp: Float): Float = when (tab) {
     ScopeTab.WAVEFORM -> (widthDp * .45f).coerceIn(120f, 220f)
     ScopeTab.VECTORSCOPE -> minOf(widthDp, 260f).coerceAtLeast(140f)
-    ScopeTab.FALSE_COLOR -> 112f
+    ScopeTab.FALSE_COLOR -> 136f
     ScopeTab.HISTOGRAM -> (widthDp * .3f).coerceIn(80f, 140f)
 }
 
@@ -167,4 +168,18 @@ internal fun overlayScopesPanelSizeDp(imageWidthDp: Float, imageHeightDp: Float,
     val width = (imageWidthDp * .36f).coerceIn(160f, 320f).coerceAtMost((imageWidthDp - endPaddingDp - 12f).coerceAtLeast(0f))
     val height = (imageHeightDp * .62f).coerceIn(160f, 440f).coerceAtMost((imageHeightDp - 24f).coerceAtLeast(0f))
     return width to height
+}
+
+/** Share of the frame in each [com.librestatic.opencinecam.camera.FalseColorBand], by ordinal, or null without samples. */
+internal fun falseColorShares(bands: List<com.librestatic.opencinecam.camera.FalseColorBand>): FloatArray? {
+    if (bands.isEmpty()) return null
+    val counts = IntArray(com.librestatic.opencinecam.camera.FalseColorBand.entries.size)
+    bands.forEach { counts[it.ordinal]++ }
+    return FloatArray(counts.size) { counts[it].toFloat() / bands.size }
+}
+
+/** A share as a whole percentage; a zone that is present but rounds to nothing reads "<1 %". */
+internal fun falseColorShareText(share: Float): String {
+    val percent = kotlin.math.round(share * 100f).toInt()
+    return if (percent == 0 && share > 0f) "<1 %" else "$percent %"
 }

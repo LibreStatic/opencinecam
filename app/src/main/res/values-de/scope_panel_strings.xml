@@ -4,10 +4,17 @@
     <string name="scope_tab_vectorscope">Vektorskop</string>
     <string name="scope_tab_false_color">Falschfarben</string>
     <string name="scope_tab_histogram">Histogramm</string>
-    <string name="scope_tab_waveform_short">WFM</string>
-    <string name="scope_tab_vectorscope_short">VEK</string>
-    <string name="scope_tab_false_color_short">FF</string>
-    <string name="scope_tab_histogram_short">HIST</string>
+    <string name="scope_tab_waveform_short">Welle</string>
+    <string name="scope_tab_vectorscope_short">Vektor</string>
+    <string name="scope_tab_false_color_short">F.Farbe</string>
+    <string name="scope_tab_histogram_short">Histo</string>
     <string name="scope_next">Nächster Scope</string>
     <string name="scope_hide">Scopes ausblenden</string>
+    <string name="scope_tab_waveform_help">Helligkeit über das Bild, von links nach rechts. Die oberste Linie, 100, ist abgeschnittenes Weiß; unten ist Schwarz.</string>
+    <string name="scope_tab_vectorscope_help">Farbe im Bild: Der Winkel ist der Farbton, der Abstand zur Mitte die Sättigung. Die diagonale Linie markiert Hauttöne.</string>
+    <string name="scope_tab_false_color_help">Wie viel des Bildes gerade in jeder Belichtungszone liegt, von abgesoffenem Schwarz bis zu ausgefressenen Lichtern, und die Schwellen der Zonen.</string>
+    <string name="scope_tab_histogram_help">Wie viele Pixel auf jeder Helligkeit liegen, von Schwarz links bis Weiß rechts.</string>
+    <string name="scope_domain_help">Das Signal, das die Scopes lesen. SDR gesch.: eine SDR-Schätzung aus der Kameravorschau, nah an, aber nicht gleich der Aufnahmedatei. SDR: das Rec.709-Bild. OC-Log2: das aufgenommene LOG-Signal.</string>
+    <string name="scope_fc_in_frame">Im Bild</string>
+    <string name="scope_fc_thresholds">Schwellen</string>
 </resources>

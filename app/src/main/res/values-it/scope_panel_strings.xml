@@ -4,10 +4,17 @@
     <string name="scope_tab_vectorscope">Vettorscopio</string>
     <string name="scope_tab_false_color">Falsi colori</string>
     <string name="scope_tab_histogram">Istogramma</string>
-    <string name="scope_tab_waveform_short">FO</string>
-    <string name="scope_tab_vectorscope_short">VETT</string>
-    <string name="scope_tab_false_color_short">FC</string>
-    <string name="scope_tab_histogram_short">ISTO</string>
+    <string name="scope_tab_waveform_short">Onda</string>
+    <string name="scope_tab_vectorscope_short">Vett.</string>
+    <string name="scope_tab_false_color_short">F.Col.</string>
+    <string name="scope_tab_histogram_short">Isto</string>
     <string name="scope_next">Scope successivo</string>
     <string name="scope_hide">Nascondi scope</string>
+    <string name="scope_tab_waveform_help">Luminosità lungo l\'inquadratura, da sinistra a destra. La linea in alto, 100, è il bianco bruciato; quella in basso è il nero.</string>
+    <string name="scope_tab_vectorscope_help">Colore dell\'inquadratura: l\'angolo è la tinta e la distanza dal centro la saturazione. La linea diagonale indica i toni della pelle.</string>
+    <string name="scope_tab_false_color_help">Quanta parte dell\'inquadratura cade ora in ogni zona di esposizione, dal nero chiuso alle alte luci bruciate, e le soglie che definiscono le zone.</string>
+    <string name="scope_tab_histogram_help">Quanti pixel ci sono a ogni luminosità, dal nero a sinistra al bianco a destra.</string>
+    <string name="scope_domain_help">Il segnale letto dagli scope. SDR stim.: una stima SDR dall\'anteprima della fotocamera, vicina ma non uguale al file registrato. SDR: l\'immagine Rec.709. OC-Log2: il segnale LOG registrato.</string>
+    <string name="scope_fc_in_frame">Nell\'inquadratura</string>
+    <string name="scope_fc_thresholds">Soglie</string>
 </resources>

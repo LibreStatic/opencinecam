@@ -109,6 +109,7 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
  * key appears only with [onClose]. The panel remembers its tab itself unless the host owns it
  * through [onTabChange], which lets a scope key bring its scope forward.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun ProfessionalScopesPanel(state: CameraUiState, options: MonitoringOptions,
     fresh: Boolean, modifier: Modifier = Modifier, expanded: Boolean = false,
     onExpandedChange: ((Boolean) -> Unit)? = null, histogramMode: HistogramMode? = null,
@@ -149,11 +150,15 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
         }
         val contentHeight = height - PANEL_PADDING * 2 - SCOPE_TOUCH_DP.dp
         val stacked = scopePanelStacks((width - PANEL_PADDING * 2).value, contentHeight.value, tabs)
+        val chipHelp = stringResource(R.string.scope_domain_help)
         val chip = @Composable {
-            Text(stringResource(chipRes), style = chipStyle, maxLines = 1,
-                color = if (frame != null && !current) LocalCineColors.current.pending else colors.onSurfaceVariant,
-                modifier = Modifier.padding(start = CHIP_GAP).background(colors.surfaceContainerHigh, RoundedCornerShape(50))
-                    .padding(horizontal = CHIP_PADDING, vertical = 3.dp).testTag("monitoring-freshness"))
+            // The chip names the signal the scopes read; a long press says what that means.
+            CaptureTooltip(stringResource(chipRes), chipHelp, Modifier.padding(start = CHIP_GAP)) {
+                Text(stringResource(chipRes), style = chipStyle, maxLines = 1,
+                    color = if (frame != null && !current) LocalCineColors.current.pending else colors.onSurfaceVariant,
+                    modifier = Modifier.background(colors.surfaceContainerHigh, RoundedCornerShape(50))
+                        .padding(horizontal = CHIP_PADDING, vertical = 3.dp).testTag("monitoring-freshness"))
+            }
         }
         Column(Modifier.size(width, height).clip(RoundedCornerShape(12.dp))
             .background(colors.surfaceContainerLowest.copy(alpha = .88f)).padding(PANEL_PADDING)) {
@@ -202,6 +207,14 @@ private fun scopeTabLabel(tab: ScopeTab, short: Boolean): Int = when (tab) {
     ScopeTab.HISTOGRAM -> if (short) R.string.scope_tab_histogram_short else R.string.scope_tab_histogram
 }
 
+/** What each scope shows, for the tab's long-press help. */
+private fun scopeTabHelp(tab: ScopeTab): Int = when (tab) {
+    ScopeTab.WAVEFORM -> R.string.scope_tab_waveform_help
+    ScopeTab.VECTORSCOPE -> R.string.scope_tab_vectorscope_help
+    ScopeTab.FALSE_COLOR -> R.string.scope_tab_false_color_help
+    ScopeTab.HISTOGRAM -> R.string.scope_tab_histogram_help
+}
+
 private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
     ScopeTab.WAVEFORM -> "monitoring-tab-waveform"
     ScopeTab.VECTORSCOPE -> "monitoring-tab-vectorscope"
@@ -210,6 +223,7 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
 }
 
 /** Tabs, a lone title for a single scope, or one key that steps through them in the narrowest panel. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun ScopeTabs(tabs: List<ScopeTab>, selected: ScopeTab, labels: List<String>, shortLabels: List<String>,
     style: ScopeTabStyle, onSelect: (ScopeTab) -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -237,7 +251,8 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
         tabs.forEachIndexed { i, tab ->
             val on = tab == selected
             val accent = colors.primary
-            Box(Modifier.heightIn(min = SCOPE_TOUCH_DP.dp).widthIn(min = SCOPE_TOUCH_DP.dp).clip(RoundedCornerShape(8.dp))
+            // A long press names the scope in full and says what it shows.
+            CaptureTooltip(labels[i], stringResource(scopeTabHelp(tab))) { Box(Modifier.heightIn(min = SCOPE_TOUCH_DP.dp).widthIn(min = SCOPE_TOUCH_DP.dp).clip(RoundedCornerShape(8.dp))
                 .selectable(on, role = Role.Tab) { onSelect(tab) }
                 .then(if (style == ScopeTabStyle.SHORT) Modifier.semantics { contentDescription = labels[i] } else Modifier)
                 .drawBehind {
@@ -248,7 +263,7 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
                 contentAlignment = Alignment.Center) {
                 Text(if (style == ScopeTabStyle.FULL) labels[i] else shortLabels[i], style = MaterialTheme.typography.labelLarge,
                     color = if (on) accent else colors.onSurfaceVariant, maxLines = 1)
-            }
+            } }
         }
     }
 }
@@ -273,7 +288,7 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
     when (tab) {
         ScopeTab.WAVEFORM -> WaveformScope(frame?.waveformDensity?.takeIf { current && it.isNotEmpty() }, options, modifier)
         ScopeTab.VECTORSCOPE -> Vectorscope(frame?.vectorscopeCounts?.takeIf { current && it.isNotEmpty() }, options, modifier)
-        ScopeTab.FALSE_COLOR -> FalseColorLegend(options, modifier)
+        ScopeTab.FALSE_COLOR -> FalseColorLegend(options, frame?.falseColorBands?.takeIf { current && it.isNotEmpty() }, modifier)
         ScopeTab.HISTOGRAM -> if (histogramMode != null && live && (state.histogram.isNotEmpty() || state.redHistogram.isNotEmpty()))
             HistogramGraph(state, options, histogramMode, modifier.clip(RoundedCornerShape(6.dp)), tag = "monitoring-histogram-graph")
             else Box(modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).testTag("monitoring-scope-idle"))
@@ -335,27 +350,59 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
 }
 
 /** The false-colour bands as a 0–100 % ramp and a legend with each band's range. */
-@Composable private fun FalseColorLegend(options: MonitoringOptions, modifier: Modifier) {
+/**
+ * False colour: how much of the frame sits in each exposure zone right now ([frameBands], null
+ * while there is no current analysis), above the zone thresholds the overlay paints with.
+ */
+@Composable private fun FalseColorLegend(options: MonitoringOptions, frameBands: List<FalseColorBand>?, modifier: Modifier) {
     val bands = listOf(FalseColorBand.BLACK, FalseColorBand.SHADOW, FalseColorBand.MID, FalseColorBand.HIGHLIGHT, FalseColorBand.CLIP)
     val names = listOf(R.string.scope_black, R.string.scope_shadow, R.string.scope_mid, R.string.scope_highlight, R.string.scope_clip)
     val cuts = listOf("≤${options.falseColorBlackPercent}", "≤${options.falseColorShadowPercent}", "<${options.falseColorHighlightPercent}",
         "<${options.falseColorClipPercent}", "≥${options.falseColorClipPercent}")
     val stops = falseColorRampStops(options.falseColorBlackPercent, options.falseColorShadowPercent,
         options.falseColorHighlightPercent, options.falseColorClipPercent)
+    val shares = remember(frameBands) { frameBands?.let(::falseColorShares) }
+    val colors = MaterialTheme.colorScheme
+    val caption = MaterialTheme.typography.labelSmall
+    val idle = colors.surfaceContainerHigh
     Column(modifier.padding(horizontal = 4.dp).testTag("monitoring-false-color-legend"),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
-        Canvas(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(3.dp))) {
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        // The live bar takes the height the panel spares (an enlarged tray gives it more), up to 72 dp,
+        // and keeps its caption just above it.
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+        val barHeight = (maxHeight - 20.dp).coerceIn(12.dp, 72.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.scope_fc_in_frame), style = caption, color = colors.onSurfaceVariant, maxLines = 1)
+        Canvas(Modifier.fillMaxWidth().height(barHeight).clip(RoundedCornerShape(3.dp))
+            .testTag(if (shares != null) "monitoring-false-color-live" else "monitoring-scope-idle")) {
+            if (shares == null) drawRect(idle)
+            else {
+                var x = 0f
+                bands.forEach { band ->
+                    val w = shares[band.ordinal] * size.width
+                    drawRect(band.composeColor(options.falseColorPalette), Offset(x, 0f), Size(w, size.height))
+                    x += w
+                }
+            }
+        }
+        }
+        }
+        Text(stringResource(R.string.scope_fc_thresholds), style = caption, color = colors.onSurfaceVariant, maxLines = 1,
+            modifier = Modifier.padding(top = 2.dp))
+        Canvas(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
             stops.forEachIndexed { i, range ->
                 drawRect(bands[i].composeColor(options.falseColorPalette), Offset(range.start * size.width, 0f),
                     Size((range.endInclusive - range.start) * size.width, size.height))
             }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             bands.forEachIndexed { i, band ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).background(band.composeColor(options.falseColorPalette), RoundedCornerShape(2.dp)))
-                    Text(" ${stringResource(names[i])} ${cuts[i]}%", color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Text(" ${stringResource(names[i])}", color = colors.onSurface, style = caption, maxLines = 1)
+                    shares?.let { Text(" ${falseColorShareText(it[band.ordinal])}", color = colors.onSurface, maxLines = 1,
+                        style = caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)) }
+                    Text(" ${cuts[i]}", color = colors.onSurfaceVariant, style = caption, maxLines = 1)
                 }
             }
         }
