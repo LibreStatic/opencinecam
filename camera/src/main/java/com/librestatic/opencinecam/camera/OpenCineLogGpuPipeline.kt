@@ -194,7 +194,11 @@ internal class MuxTimestampNormalizer(private val captureEpoch: CaptureEpochCloc
 internal fun scopeAnalysisDue(suspended: Boolean, nowMs: Long, lastAnalysisAtMs: Long, periodMs: Long): Boolean =
     !suspended && nowMs - lastAnalysisAtMs >= periodMs
 
-/** Converts a small recorded-signal RGBA readback into the same bounded scope model as YUV preview. */
+/**
+ * Converts a small recorded-signal RGBA readback (bottom-up rows) into the same bounded scope
+ * model as YUV preview. Scopes use every [scopeStep]-th pixel, so a finer readback taken for
+ * [focusPeaking] still yields the scope sample count of the plain one; the edge mask uses all of it.
+ */
 internal fun analyzeRgbaFrame(
     width: Int,
     height: Int,
@@ -202,50 +206,58 @@ internal fun analyzeRgbaFrame(
     capturedAtElapsedRealtimeMs: Long,
     options: MonitoringOptions = MonitoringOptions(),
     domain: MonitoringSignalDomain = MonitoringSignalDomain.SDR_BT709_CODE,
+    scopeStep: Int = 1,
+    focusPeaking: Boolean = false,
 ): Camera2Analysis {
-    require(width > 0 && height > 0 && width.toLong() * height in 1..MonitoringScopeFrame.MAX_PIXELS.toLong() &&
+    require(width > 0 && height > 0 && scopeStep > 0 && width.toLong() * height <= FocusPeakingMask.MAX_PIXELS &&
         rgba.size.toLong() == width.toLong() * height * 4)
-    val rgbSamples = ByteArray(width * height * 3)
+    val scopeWidth = (width + scopeStep - 1) / scopeStep
+    val scopeHeight = (height + scopeStep - 1) / scopeStep
+    require(scopeWidth.toLong() * scopeHeight <= MonitoringScopeFrame.MAX_PIXELS)
+    val rgbSamples = ByteArray(scopeWidth * scopeHeight * 3)
+    val luma = if (focusPeaking) ByteArray(width * height) else null
     val bins = Camera2PreviewEngine.SCOPE_HISTOGRAM_BINS
     val lumaHistogram = IntArray(bins)
     val redHistogram = IntArray(bins)
     val greenHistogram = IntArray(bins)
     val blueHistogram = IntArray(bins)
     val zebraHits = IntArray(16 * 9)
-    val focusHits = IntArray(16 * 9)
     val counts = IntArray(16 * 9)
     for (displayY in 0 until height) {
         val sourceY = height - 1 - displayY
-        var previous = -1
+        val scopeRow = displayY % scopeStep == 0
+        if (!scopeRow && luma == null) continue
         for (x in 0 until width) {
+            val scopeSample = scopeRow && x % scopeStep == 0
+            if (!scopeSample && luma == null) continue
             val offset = (sourceY * width + x) * 4
             val red = rgba[offset].toInt() and 0xff
             val green = rgba[offset + 1].toInt() and 0xff
             val blue = rgba[offset + 2].toInt() and 0xff
-            val sample = (displayY * width + x) * 3
+            val y = ((54 * red + 183 * green + 19 * blue + 128) shr 8).coerceIn(0, 255)
+            luma?.set(displayY * width + x, y.toByte())
+            if (!scopeSample) continue
+            val sample = ((displayY / scopeStep) * scopeWidth + x / scopeStep) * 3
             rgbSamples[sample] = red.toByte(); rgbSamples[sample + 1] = green.toByte(); rgbSamples[sample + 2] = blue.toByte()
-            val luma = ((54 * red + 183 * green + 19 * blue + 128) shr 8).coerceIn(0, 255)
-            lumaHistogram[luma * bins / 256]++
+            lumaHistogram[y * bins / 256]++
             redHistogram[red * bins / 256]++
             greenHistogram[green * bins / 256]++
             blueHistogram[blue * bins / 256]++
             val cell = (displayY * 9 / height).coerceIn(0, 8) * 16 + (x * 16 / width).coerceIn(0, 15)
             counts[cell]++
-            if (luma * 100 >= options.zebraHighPercent * 255 || options.zebraShadowEnabled && luma * 100 <= options.zebraLowPercent * 255) zebraHits[cell]++
-            if (previous >= 0 && kotlin.math.abs(luma - previous) >= options.peakingThreshold) focusHits[cell]++
-            previous = luma
+            if (y * 100 >= options.zebraHighPercent * 255 || options.zebraShadowEnabled && y * 100 <= options.zebraLowPercent * 255) zebraHits[cell]++
         }
     }
-    val total = (width * height).toFloat().coerceAtLeast(1f)
+    val total = (scopeWidth * scopeHeight).toFloat()
     return Camera2Analysis(
         histogram = lumaHistogram.map { it / total },
         redHistogram = redHistogram.map { it / total },
         greenHistogram = greenHistogram.map { it / total },
         blueHistogram = blueHistogram.map { it / total },
         zebraCells = counts.indices.map { counts[it] > 0 && zebraHits[it].toFloat() / counts[it] >= .20f },
-        focusCells = counts.indices.map { counts[it] > 0 && focusHits[it].toFloat() / counts[it] >= .12f },
         capturedAtElapsedRealtimeMs = capturedAtElapsedRealtimeMs,
-        scopes = analyzeMonitoringRgb(width, height, rgbSamples, options, domain),
+        scopes = analyzeMonitoringRgb(scopeWidth, scopeHeight, rgbSamples, options, domain),
+        focusPeaking = luma?.let { detectFocusEdges(it, width, height, options.peakingThreshold, domain) },
     )
 }
 
@@ -422,6 +434,9 @@ class OpenCineLogGpuPipeline(
     private var lastAnalysisAtMs = 0L
     @Volatile private var monitoringOptions = MonitoringOptions()
     fun setMonitoringOptions(options: MonitoringOptions) { monitoringOptions = options }
+    @Volatile private var focusPeakingEnabled = false
+    /** While on, the analysis readback doubles its resolution for the edge mask; scopes keep theirs. */
+    fun setFocusPeakingEnabled(enabled: Boolean) { focusPeakingEnabled = enabled }
     @Volatile private var analysisSuspended = false
     /** Thermal governor seam: skips the scope readback and [onAnalysis]; preview and recording are unaffected. */
     fun setAnalysisSuspended(suspended: Boolean) { analysisSuspended = suspended }
@@ -820,7 +835,8 @@ class OpenCineLogGpuPipeline(
         pbuffer = EGL14.eglCreatePbufferSurface(
             display,
             renderConfig,
-            intArrayOf(EGL14.EGL_WIDTH, ANALYSIS_WIDTH, EGL14.EGL_HEIGHT, ANALYSIS_HEIGHT, EGL14.EGL_NONE),
+            intArrayOf(EGL14.EGL_WIDTH, ANALYSIS_WIDTH * PEAKING_ANALYSIS_SCALE,
+                EGL14.EGL_HEIGHT, ANALYSIS_HEIGHT * PEAKING_ANALYSIS_SCALE, EGL14.EGL_NONE),
             0,
         )
         check(pbuffer != EGL14.EGL_NO_SURFACE && makeCurrent(pbuffer)) { "EGL pbuffer creation failed." }
@@ -984,31 +1000,28 @@ class OpenCineLogGpuPipeline(
         val options = monitoringOptions
         if (!scopeAnalysisDue(analysisSuspended, now, lastAnalysisAtMs, options.periodMs)) return
         lastAnalysisAtMs = now
+        val peaking = focusPeakingEnabled
+        val scale = if (peaking) PEAKING_ANALYSIS_SCALE else 1
+        val width = ANALYSIS_WIDTH * scale
+        val height = ANALYSIS_HEIGHT * scale
         check(makeCurrent(pbuffer)) { "Scope analysis pbuffer is unavailable." }
         draw(
             outputMode = OUTPUT_OCLOG,
-            width = ANALYSIS_WIDTH,
-            height = ANALYSIS_HEIGHT,
+            width = width,
+            height = height,
             previewOutput = false,
             recordingGeometry = null,
         )
-        val rgba = ByteBuffer.allocateDirect(ANALYSIS_WIDTH * ANALYSIS_HEIGHT * 4)
-        GLES30.glReadPixels(
-            0,
-            0,
-            ANALYSIS_WIDTH,
-            ANALYSIS_HEIGHT,
-            GLES30.GL_RGBA,
-            GLES30.GL_UNSIGNED_BYTE,
-            rgba,
-        )
+        val rgba = ByteBuffer.allocateDirect(width * height * 4)
+        GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, rgba)
         val error = GLES30.glGetError()
         check(error == GLES30.GL_NO_ERROR) { "Scope readback failed with GL error 0x${error.toString(16)}." }
         val bytes = ByteArray(rgba.capacity())
         rgba.position(0)
         rgba.get(bytes)
-        callback(analyzeRgbaFrame(ANALYSIS_WIDTH, ANALYSIS_HEIGHT, bytes, now, options,
-            if (passthroughSdr) MonitoringSignalDomain.SDR_BT709_CODE else MonitoringSignalDomain.OCLOG2_CODE))
+        callback(analyzeRgbaFrame(width, height, bytes, now, options,
+            if (passthroughSdr) MonitoringSignalDomain.SDR_BT709_CODE else MonitoringSignalDomain.OCLOG2_CODE,
+            scopeStep = scale, focusPeaking = peaking))
     }
 
     // This boundary returns the encoded 16-bit payload, not an integer conversion of its value.
@@ -2019,6 +2032,8 @@ class OpenCineLogGpuPipeline(
         private const val OUTPUT_FLAT_MONITOR = 2
         private const val ANALYSIS_WIDTH = 160
         private const val ANALYSIS_HEIGHT = 90
+        /** 320 × 180 edge mask: the readback grows with it, but stays a fraction of one preview frame. */
+        private const val PEAKING_ANALYSIS_SCALE = 2
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
         private const val EGL_GL_COLORSPACE_BT2020_LINEAR_EXT = 0x333F
 

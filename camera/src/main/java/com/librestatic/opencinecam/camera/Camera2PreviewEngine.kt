@@ -208,11 +208,12 @@ data class Camera2Analysis(
     val greenHistogram: List<Float>,
     val blueHistogram: List<Float>,
     val zebraCells: List<Boolean>,
-    val focusCells: List<Boolean>,
     val capturedAtElapsedRealtimeMs: Long,
     val columns: Int = 16,
     val rows: Int = 9,
     val scopes: MonitoringScopeFrame? = null,
+    /** In-focus edges; null while focus peaking is off, so the cost is only paid when shown. */
+    val focusPeaking: FocusPeakingMask? = null,
 )
 
 data class Camera2EmbeddedAudioConfig(
@@ -486,10 +487,12 @@ class Camera2PreviewEngine(
     @Volatile private var operatorLutSelection: MonitorLut? = null
     @Volatile private var subjectLutSelection: MonitorLut? = null
     @Volatile private var monitoringOptions = MonitoringOptions()
+    @Volatile private var focusPeakingEnabled = false
     private var logPipeline: OpenCineLogGpuPipeline? = null
         set(value) {
             field = value
             value?.setMonitoringOptions(monitoringOptions)
+            value?.setFocusPeakingEnabled(focusPeakingEnabled)
             value?.setOperatorLut(operatorLutSelection)
             value?.setSubjectLut(subjectLutSelection)
             value?.setAnalysisSuspended(analysisSuspended)
@@ -526,6 +529,16 @@ class Camera2PreviewEngine(
     fun setMonitoringOptions(options: MonitoringOptions) {
         monitoringOptions = options
         logPipeline?.setMonitoringOptions(options)
+    }
+
+    /**
+     * Whether analysis also builds the focus-peaking edge mask. It is kept apart from
+     * [MonitoringOptions] because the UI matches a scope frame's options against the live ones to
+     * decide freshness, and toggling peaking must not make the scopes look stale.
+     */
+    fun setFocusPeakingEnabled(enabled: Boolean) {
+        focusPeakingEnabled = enabled
+        logPipeline?.setFocusPeakingEnabled(enabled)
     }
     private var passthroughVideoPipeline = false
     private var gpuPreviewEnabled = false
@@ -4882,6 +4895,9 @@ class Camera2PreviewEngine(
         pendingRawFrames.clear()
     }
 
+    /** Image thread only: the luma raster [analyzeImage] reuses between frames. */
+    private var peakingLuma = ByteArray(0)
+
     private fun analyzeImage(image: Image): Camera2Analysis {
         val options = monitoringOptions
         val step = maxOf(4, (image.width + 319) / 320, (image.height + 179) / 180)
@@ -4897,10 +4913,8 @@ class Camera2PreviewEngine(
         val greenHistogram = IntArray(SCOPE_HISTOGRAM_BINS)
         val blueHistogram = IntArray(SCOPE_HISTOGRAM_BINS)
         val zebraHits = IntArray(16 * 9)
-        val focusHits = IntArray(16 * 9)
         val counts = IntArray(16 * 9)
         for (y in 0 until image.height step step) {
-            var previous = -1
             for (x in 0 until image.width step step) {
                 val yIndex = y * yPlane.rowStride + x * yPlane.pixelStride
                 if (yIndex >= yBuffer.limit()) continue
@@ -4931,8 +4945,6 @@ class Camera2PreviewEngine(
                 val cell = (y * 9 / image.height).coerceIn(0, 8) * 16 + (x * 16 / image.width).coerceIn(0, 15)
                 counts[cell]++
                 if (luma * 100 >= options.zebraHighPercent * 255 || options.zebraShadowEnabled && luma * 100 <= options.zebraLowPercent * 255) zebraHits[cell]++
-                if (previous >= 0 && kotlin.math.abs(luma - previous) >= options.peakingThreshold) focusHits[cell]++
-                previous = luma
             }
         }
         val total = lumaHistogram.sum().coerceAtLeast(1).toFloat()
@@ -4942,10 +4954,21 @@ class Camera2PreviewEngine(
             greenHistogram = greenHistogram.map { it / total },
             blueHistogram = blueHistogram.map { it / total },
             zebraCells = counts.indices.map { counts[it] > 0 && zebraHits[it].toFloat() / counts[it] >= .20f },
-            focusCells = counts.indices.map { counts[it] > 0 && focusHits[it].toFloat() / counts[it] >= .12f },
             capturedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
             scopes = analyzeMonitoringRgb(sampledWidth, sampledHeight, rgbSamples, options, MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR),
+            focusPeaking = if (focusPeakingEnabled) focusPeakingMask(image, options.peakingThreshold) else null,
         )
+    }
+
+    /** Edges of the Y plane at full analysis resolution, or the finest step the mask budget allows. */
+    private fun focusPeakingMask(image: Image, threshold: Int): FocusPeakingMask {
+        val plane = image.planes[0]
+        val step = focusPeakingStep(image.width, image.height)
+        val width = (image.width + step - 1) / step
+        val height = (image.height + step - 1) / step
+        if (peakingLuma.size < width * height) peakingLuma = ByteArray(width * height)
+        copyLumaPlane(plane.buffer, plane.rowStride, plane.pixelStride, image.width, image.height, step, peakingLuma)
+        return detectFocusEdges(peakingLuma, width, height, threshold, MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR)
     }
 
     /**

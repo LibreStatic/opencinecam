@@ -168,22 +168,3 @@ internal fun overlayScopesPanelSizeDp(imageWidthDp: Float, imageHeightDp: Float,
     val height = (imageHeightDp * .62f).coerceIn(160f, 440f).coerceAtMost((imageHeightDp - 24f).coerceAtLeast(0f))
     return width to height
 }
-
-/**
- * Outline of the union of the active cells in a [columns] × [rows] grid, as unit-square segments
- * in grid coordinates (0..columns, 0..rows). Shared edges between two active cells are dropped,
- * so neighbouring cells read as one region instead of a mesh of boxes.
- */
-internal fun cellRegionBoundary(active: List<Boolean>, columns: Int, rows: Int): List<Pair<Offset, Offset>> {
-    fun on(column: Int, row: Int) = column in 0 until columns && row in 0 until rows && active.getOrElse(row * columns + column) { false }
-    val edges = ArrayList<Pair<Offset, Offset>>()
-    for (row in 0 until rows) for (column in 0 until columns) {
-        if (!on(column, row)) continue
-        val l = column.toFloat(); val t = row.toFloat(); val r = l + 1f; val b = t + 1f
-        if (!on(column, row - 1)) edges += Offset(l, t) to Offset(r, t)
-        if (!on(column, row + 1)) edges += Offset(l, b) to Offset(r, b)
-        if (!on(column - 1, row)) edges += Offset(l, t) to Offset(l, b)
-        if (!on(column + 1, row)) edges += Offset(r, t) to Offset(r, b)
-    }
-    return edges
-}

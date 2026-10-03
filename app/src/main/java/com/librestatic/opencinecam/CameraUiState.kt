@@ -145,7 +145,8 @@ data class CameraUiState(
     val audioListeningStatus: AudioListeningStatus = AudioListeningStatus(),
     val audioListeningOutputs: List<AudioListeningDevice> = emptyList(),
     val zebraCells: List<Boolean> = emptyList(),
-    val focusCells: List<Boolean> = emptyList(),
+    /** In-focus edges of the latest analysis frame; null while focus peaking is off. */
+    val focusPeakingMask: com.librestatic.opencinecam.camera.FocusPeakingMask? = null,
     val stillCapturePending: Boolean = false,
     val lastStillPublication: com.librestatic.opencinecam.storage.StillPublication? = null,
     val lastSavedUri: String? = null,
