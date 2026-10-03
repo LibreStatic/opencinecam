@@ -25,4 +25,5 @@
     <string name="playback_screen_color_error_message">You can interpret it using the track\'s SDR tags; colour accuracy won\'t be verified.</string>
     <string name="playback_screen_stage_error_title">OCLog2 monitoring view unavailable</string>
     <string name="playback_screen_stage_error_message">The clip shows without the LOG view stage.</string>
+    <string name="playback_screen_info">Clip details</string>
 </resources>

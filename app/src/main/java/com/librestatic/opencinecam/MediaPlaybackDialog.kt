@@ -10,10 +10,16 @@ import android.view.Display
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,20 +30,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -74,6 +86,13 @@ internal fun playbackTimecode(positionUs: Long, frame: Long?, fps: Double?): Str
 }
 
 private const val FILMSTRIP_FRAMES = 10
+
+/** Below this the fixed player would squeeze the stage; it keeps this height and the area under the top bar scrolls instead. */
+private val PLAYER_MIN_HEIGHT = 470.dp
+
+/** Dialog-owned pieces the player places: navigation above the stage, take facts in the details below it. */
+private class PlaybackChrome(val topBar: @Composable () -> Unit, val members: @Composable () -> Unit,
+    val info: @Composable () -> Unit)
 
 /**
  * Review snapshots and pages retain URI identities; catalog mutations stay outside this dialog. Share and
@@ -128,32 +147,31 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
             else remaining.indexOfFirst { it.id == current.id }
         takes = remaining; takeIndex = index
     }
+    // Edge to edge: with the platform fitting the decor, the window starts below the status bar but the
+    // content is still measured for the full display height, which pushed the bottom controls off screen.
     Dialog(onDismissRequest = { if (fullscreen) fullscreen = false else onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize().testTag("media-playback-dialog"), color = MaterialTheme.colorScheme.background) {
-            BoxWithConstraints(Modifier.fillMaxSize()) {
-                val viewport = maxHeight
-                val scroll = rememberScrollState()
-                LaunchedEffect(fullscreen) { if (fullscreen) scroll.scrollTo(0) }
-                Column(Modifier.fillMaxSize()) {
-                    if (!fullscreen) PlaybackTopBar(take, onDismiss, onShare, onDelete) { SubjectReviewShowAction(take, members[memberIndex], onDismiss) }
-                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).testTag("media-playback-scroll")
-                        .padding(horizontal = if (fullscreen) 0.dp else 16.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally) {
-                        Column((if (fullscreen) Modifier else Modifier.widthIn(max = 840.dp)).fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (!fullscreen) PlaybackHeader(take, members, memberIndex,
-                                stringResource(if (cursor != null) R.string.playback_screen_take_position_more else R.string.playback_screen_take_position,
-                                    takeIndex + 1, takes.size),
-                                previousTake = takeIndex > 0 && !pageBusy, nextTake = !pageBusy && (takeIndex < takes.lastIndex || cursor != null),
-                                pageBusy = pageBusy, pageError = pageError, onPreviousTake = { takeIndex-- }, onNextTake = ::nextTake,
-                                onPreviousMember = { memberIndex-- }, onNextMember = { memberIndex++ })
-                            key(members[memberIndex].uri) {
-                                MediaPlaybackView(take, members[memberIndex], settings, onSettings, fullscreen, { fullscreen = it }, viewport,
-                                    settingsOpen) { settingsOpen = it }
-                            }
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val title = stringResource(R.string.playback_screen_title)
+        Surface(Modifier.fillMaxSize().semantics { paneTitle = title }.testTag("media-playback-dialog"),
+            color = MaterialTheme.colorScheme.background) {
+            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                val chrome = PlaybackChrome(
+                    topBar = {
+                        PlaybackTopBar(take, stringResource(if (cursor != null) R.string.playback_screen_take_position_more
+                            else R.string.playback_screen_take_position, takeIndex + 1, takes.size),
+                            previousTake = takeIndex > 0 && !pageBusy, nextTake = !pageBusy && (takeIndex < takes.lastIndex || cursor != null),
+                            pageBusy = pageBusy, pageError = pageError, onPreviousTake = { takeIndex-- }, onNextTake = ::nextTake,
+                            onClose = onDismiss, onShare = onShare, onDelete = onDelete) {
+                            SubjectReviewShowAction(take, members[memberIndex], onDismiss)
                         }
-                    }
+                    },
+                    members = {
+                        if (members.size > 1) MemberSwitcher(members, memberIndex, pageBusy, { memberIndex-- }, { memberIndex++ })
+                    },
+                    info = { PlaybackInfo(take, members, memberIndex) })
+                key(members[memberIndex].uri) {
+                    MediaPlaybackView(take, members[memberIndex], settings, onSettings, fullscreen, { fullscreen = it },
+                        chrome, settingsOpen) { settingsOpen = it }
                 }
             }
         }
@@ -161,56 +179,64 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
 }
 
 @Composable
-private fun PlaybackTopBar(take: LocalMediaTake, onClose: () -> Unit, onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?,
-    subjectAction: @Composable () -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun PlaybackTopBar(take: LocalMediaTake, position: String, previousTake: Boolean, nextTake: Boolean, pageBusy: Boolean,
+    pageError: Boolean, onPreviousTake: () -> Unit, onNextTake: () -> Unit, onClose: () -> Unit,
+    onShare: ((LocalMediaTake) -> Unit)?, onDelete: ((LocalMediaTake) -> Unit)?, subjectAction: @Composable () -> Unit = {}) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         CineIconButton("media-playback-close", CineIcon.BACK, R.string.media_playback_close, onClick = onClose)
-        Text(stringResource(R.string.playback_screen_title), Modifier.weight(1f).padding(horizontal = 8.dp), color = SettingsMuted,
-            fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        CineIconButton("media-playback-previous-take", CineIcon.CHEVRON_LEFT, R.string.media_playback_previous_take,
+            enabled = previousTake, onClick = onPreviousTake)
+        Text(position, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
+        CineIconButton("media-playback-next-take", CineIcon.CHEVRON_RIGHT, R.string.media_playback_next_take,
+            enabled = nextTake, onClick = onNextTake)
+        Box(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+            if (pageBusy) Text(stringResource(R.string.media_playback_loading), color = SettingsMuted, fontSize = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         subjectAction()
         onShare?.let { share -> CineIconButton("media-playback-share", CineIcon.SHARE, R.string.playback_screen_share) { share(take) } }
         onDelete?.let { delete -> CineIconButton("media-playback-delete", CineIcon.DELETE, R.string.playback_screen_delete) { delete(take) } }
     }
+    if (pageError) Text(stringResource(R.string.media_playback_page_error), Modifier.padding(horizontal = 12.dp)
+        .testTag("media-playback-page-error"), color = LocalCineColors.current.pending, fontSize = 13.sp)
 }
 
+/** Only multi-member takes get the switcher on the player; a single member is named in the details. */
 @Composable
-private fun PlaybackHeader(take: LocalMediaTake, members: List<LocalMediaArtifact>, memberIndex: Int, position: String,
-    previousTake: Boolean, nextTake: Boolean, pageBusy: Boolean, pageError: Boolean, onPreviousTake: () -> Unit,
-    onNextTake: () -> Unit, onPreviousMember: () -> Unit, onNextMember: () -> Unit) {
-    val (title, subtitle) = rememberClipTitle(take)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(take.primary.name, Modifier.fillMaxWidth().testTag("media-playback-take"), color = SettingsMuted, fontSize = 11.sp)
-        subtitle?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        CineIconButton("media-playback-previous-take", CineIcon.CHEVRON_LEFT, R.string.media_playback_previous_take,
-            enabled = previousTake, onClick = onPreviousTake)
-        Text(position, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-        CineIconButton("media-playback-next-take", CineIcon.CHEVRON_RIGHT, R.string.media_playback_next_take,
-            enabled = nextTake, onClick = onNextTake)
-        Spacer(Modifier.weight(1f))
-        if (pageBusy) Text(stringResource(R.string.media_playback_loading), color = SettingsMuted, fontSize = 12.sp)
-    }
-    val member = stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name)
-    if (members.size > 1) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsSurface),
+private fun MemberSwitcher(members: List<LocalMediaArtifact>, memberIndex: Int, pageBusy: Boolean, onPrevious: () -> Unit, onNext: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(12.dp)).background(SettingsSurface),
         verticalAlignment = Alignment.CenterVertically) {
         CineIconButton("media-playback-previous-member", CineIcon.CHEVRON_LEFT, R.string.media_playback_previous_member,
-            enabled = memberIndex > 0 && !pageBusy, onClick = onPreviousMember)
-        Text(member, Modifier.weight(1f).testTag("media-playback-member"), color = SettingsMuted, fontSize = 12.sp,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+            enabled = memberIndex > 0 && !pageBusy, onClick = onPrevious)
+        Text(stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name),
+            Modifier.weight(1f).testTag("media-playback-member"), color = SettingsMuted, fontSize = 12.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
         CineIconButton("media-playback-next-member", CineIcon.CHEVRON_RIGHT, R.string.media_playback_next_member,
-            enabled = memberIndex < members.lastIndex && !pageBusy, onClick = onNextMember)
-    } else Text(member, Modifier.fillMaxWidth().testTag("media-playback-member"), color = SettingsMuted, fontSize = 11.sp)
-    if (pageError) Text(stringResource(R.string.media_playback_page_error), Modifier.testTag("media-playback-page-error"),
-        color = LocalCineColors.current.pending, fontSize = 13.sp)
+            enabled = memberIndex < members.lastIndex && !pageBusy, onClick = onNext)
+    }
 }
 
 @Composable
+private fun PlaybackInfo(take: LocalMediaTake, members: List<LocalMediaArtifact>, memberIndex: Int) {
+    val (title, subtitle) = rememberClipTitle(take)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        subtitle?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
+        Text(take.primary.name, Modifier.fillMaxWidth().testTag("media-playback-take"), color = SettingsMuted, fontSize = 11.sp)
+        if (members.size == 1) Text(stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name),
+            Modifier.fillMaxWidth().testTag("media-playback-member"), color = SettingsMuted, fontSize = 11.sp)
+    }
+}
+
+/**
+ * A fixed player (navigation, stage, position, seek, transport, view toggles) fills the viewport and never
+ * scrolls; the details (clip info, decoding notes, playback settings) sit below it, reached by Info/Settings.
+ */
+@Composable
 private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact, settings: PlaybackSettings,
-    onSettings: (PlaybackSettings) -> Unit, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit, viewport: Dp,
-    settingsOpen: Boolean, onSettingsOpen: (Boolean) -> Unit) {
+    onSettings: (PlaybackSettings) -> Unit, fullscreen: Boolean, onFullscreen: (Boolean) -> Unit,
+    chrome: PlaybackChrome, settingsOpen: Boolean, onSettingsOpen: (Boolean) -> Unit) {
     val context = LocalContext.current
     val video = artifact.mimeType.startsWith("video/")
     val photo = artifact.mimeType.startsWith("image/")
@@ -306,7 +332,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     var started by remember(artifact) { mutableStateOf(false) }
     LaunchedEffect(ready) { if (ready) started = true }
     var filmstrip by remember(artifact) { mutableStateOf(emptyList<Bitmap>()) }
-    val stripHeight = with(LocalDensity.current) { 40.dp.roundToPx() }
+    val stripHeight = with(LocalDensity.current) { SEEK_HEIGHT.roundToPx() }
     LaunchedEffect(artifact, started, logClip, settings.logView, durationUs > 0) {
         // A strip rendered in the other LOG view would misrepresent the clip while the new one decodes.
         if (logClip != null) filmstrip = emptyList()
@@ -325,117 +351,189 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     if (fullscreen && !(video || photo)) LaunchedEffect(Unit) { onFullscreen(false) }
     LaunchedEffect(state.phase == PlaybackPhase.ERROR) { if (state.phase == PlaybackPhase.ERROR) onFullscreen(false) }
 
-    if (!fullscreen) metadata?.let { ClipChips(it, logClip != null) }
-    if (video || photo) {
-        val known = when {
-            state.videoWidth > 0 && state.videoHeight > 0 -> state.videoWidth.toFloat() / state.videoHeight
-            photo && state.bitmap != null -> state.bitmap!!.width.toFloat() / state.bitmap!!.height.coerceAtLeast(1)
-            metadata != null -> metadata!!.width.toFloat() / metadata!!.height.coerceAtLeast(1)
-            else -> 16f / 9f
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val cap = if (fullscreen) (viewport - if (photo) 76.dp else 212.dp).coerceAtLeast(160.dp) else (viewport * 0.62f).coerceAtLeast(160.dp)
-            val stageWidth = maxWidth
-            val stageHeight = if (fullscreen) cap else (stageWidth / known.coerceAtLeast(0.01f)).coerceIn(160.dp, cap)
-            Box(Modifier.fillMaxWidth().height(stageHeight).background(Color.Black)) {
-                val density = LocalDensity.current
-                val scale = playbackFitScale(state.videoWidth, state.videoHeight,
-                    with(density) { stageWidth.roundToPx() }, with(density) { stageHeight.roundToPx() })
-                // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
-                // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
-                if (video) AndroidView(factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        tag = "media-playback-native-surface"
-                        surfaceView = this
-                        holder.addCallback(object : SurfaceHolder.Callback {
-                            override fun surfaceCreated(holder: SurfaceHolder) {
-                                surface = holder.surface; updateDisplay(); session?.setSurface(output(holder.surface))
-                            }
-                            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val infoRequester = remember { BringIntoViewRequester() }
+    val settingsRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(fullscreen) { if (fullscreen) scroll.scrollTo(0) }
+    // Back from the details returns to the player before it closes the review.
+    BackHandler(enabled = !fullscreen && scroll.value > 0) { scope.launch { scroll.animateScrollTo(0) } }
+    val onNativeFrames = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT; nativeFrames = !nativeFrames }
+    val timestamps = state.timeline?.timestampsUs
+    // The top bar stays put so close and take navigation are reachable from the details too.
+    Column(Modifier.fillMaxSize()) {
+        if (!fullscreen) chrome.topBar()
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val viewport = maxHeight
+            Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = !fullscreen).testTag("media-playback-scroll"),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.fillMaxWidth().height(if (fullscreen) viewport else viewport.coerceAtLeast(PLAYER_MIN_HEIGHT)),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (!fullscreen) {
+                        ClipLine(take, metadata, logClip != null)
+                        chrome.members()
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth().padding(top = if (fullscreen) 0.dp else 4.dp)
+                        .background(if (video || photo) Color.Black else SettingsSurface)) {
+                        if (video || photo) PlaybackStage(artifact, video, state, onSurfaceView = { surfaceView = it },
+                            onSurfaceCreated = { holder -> surface = holder.surface; updateDisplay(); session?.setSurface(output(holder.surface)) },
+                            onSurfaceChanged = { holder, width, height ->
                                 surface = holder.surface; updateDisplay(); renderer?.resize(width, height)
                                 session?.setSurface(output(holder.surface))
-                            }
-                            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                            },
+                            onSurfaceDestroyed = {
                                 // Producers first, then the GL stage's window, before the holder destroys its Surface.
                                 session?.setSurface(null); retireStage(); surface = null; displayHdrTypes = emptySet()
-                            }
-                        })
+                            })
+                        else Text(artifact.name, Modifier.align(Alignment.Center).padding(16.dp), color = SettingsMuted, fontSize = 13.sp,
+                            textAlign = TextAlign.Center)
+                        // A failure takes the stage itself, where the missing picture is, rather than a card below the fold.
+                        if (state.phase == PlaybackPhase.ERROR) Box(Modifier.matchParentSize()
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)).verticalScroll(rememberScrollState())
+                            .padding(12.dp), contentAlignment = Alignment.Center) {
+                            PlaybackErrorCard(state, video, nativeFrames, colorPolicy, onRetry = { state = PlaybackObservation(); retry++ },
+                                onNativeFrames = onNativeFrames,
+                                onInterpret = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.INTERPRET_TRACK_SDR })
+                        }
                     }
-                }, modifier = Modifier.align(Alignment.Center).size(stageWidth * scale.first, stageHeight * scale.second)
-                    .testTag("media-playback-surface"))
-                state.bitmap?.let {
-                    // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
-                    // so non-square pixels stretch exactly once; photos retain their original fit.
-                    val frameModifier = if (video) Modifier.align(Alignment.Center).size(stageWidth * scale.first, stageHeight * scale.second)
-                        else Modifier.fillMaxSize()
-                    Image(it.asImageBitmap(), artifact.name, frameModifier.testTag("media-playback-frame"),
-                        contentScale = if (video) ContentScale.FillBounds else ContentScale.Fit)
+                    Column((if (fullscreen) Modifier else Modifier.widthIn(max = 840.dp)).fillMaxWidth().padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val fps = metadata?.frameRate ?: timestamps?.let { frameRateFromSampleTimes(it.take(120)) }
+                        val totalFrames = timestamps?.size?.toLong() ?: fps?.let { (durationUs * it / 1_000_000).roundToLong() }?.takeIf { it > 0 }
+                        val frame = state.frameIndex?.toLong() ?: fps?.let { (state.positionUs * it / 1_000_000).toLong() }
+                        TimecodeRow(if (photo) null else playbackTimecode(state.positionUs, frame, fps),
+                            if (photo) null else playbackTimecode(durationUs, totalFrames, fps),
+                            if (video && frame != null && totalFrames != null)
+                                stringResource(R.string.playback_screen_frame_counter, (frame + 1).coerceAtMost(totalFrames), totalFrames) else null,
+                            fullscreen, video || photo, onFullscreen)
+                        StatusLine(state, photo, settings)
+                        if (!photo) {
+                            val exact = state.frameIndex
+                            val seekLabel = stringResource(R.string.media_playback_seek_label)
+                            var seek by remember { mutableFloatStateOf(0f) }
+                            var dragging by remember { mutableStateOf(false) }
+                            val strip = remember(filmstrip) { filmstrip.map { it.asImageBitmap() } }
+                            val seekable = ready && (video || state.canPlay)
+                            FilmstripSeek(if (dragging) seek else (state.positionUs.toDouble() / maximum).toFloat().coerceIn(0f, 1f),
+                                strip, seekable, seekLabel, onChange = { seek = it; dragging = true }, onFinished = {
+                                    session?.seek((maximum * seek.toDouble()).toLong()); dragging = false
+                                }, modifier = Modifier.padding(top = 6.dp).testTag("media-playback-seek"))
+                            val pauseIntent = state.phase == PlaybackPhase.PLAYING
+                            val toggleSession = session
+                            val stepping = state.phase in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED) && exact != null
+                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                TransportButton("media-playback-start", CineIcon.SKIP_START, stringResource(R.string.media_playback_start), seekable) { session?.seek(0) }
+                                if (video) TransportButton("media-playback-previous-frame", CineIcon.FRAME_BACK, stringResource(R.string.media_playback_previous_frame),
+                                    stepping && exact!! > 0) { session?.step(-1) }
+                                TransportButton("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
+                                    stringResource(if (pauseIntent) R.string.media_playback_pause else R.string.media_playback_play),
+                                    ready && (pauseIntent || state.canPlay), primary = true,
+                                    onClick = playbackToggleAction(pauseIntent, { toggleSession?.play() }, { toggleSession?.pause() }))
+                                if (video) TransportButton("media-playback-next-frame", CineIcon.FRAME_FORWARD, stringResource(R.string.media_playback_next_frame),
+                                    stepping && exact!! < state.timeline!!.timestampsUs.lastIndex) { session?.step(1) }
+                                TransportButton("media-playback-end", CineIcon.SKIP_END, stringResource(R.string.media_playback_end), seekable) { session?.seek(maximum) }
+                            }
+                        }
+                        if (!fullscreen) Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (logClip != null) {
+                                val monitoring = stringResource(R.string.playback_screen_monitoring)
+                                SegmentedToggle(listOf(PreciseLogView.FLAT_LOG to stringResource(R.string.playback_screen_log),
+                                    PreciseLogView.REC709 to stringResource(R.string.playback_screen_rec709)), settings.logView,
+                                    { onSettings(settings.copy(logView = it)) }, "media-playback-log-view",
+                                    Modifier.semantics { contentDescription = monitoring })
+                                val label = stringResource(R.string.playback_screen_histogram)
+                                HistogramThumb(histogram, Modifier.size(72.dp, 40.dp).semantics { contentDescription = label })
+                            }
+                            Spacer(Modifier.weight(1f))
+                            if (stageError != null) CineIconButton("media-playback-stage-warning", CineIcon.WARNING, R.string.playback_screen_stage_error_title,
+                                tint = LocalCineColors.current.pending) { scope.launch { infoRequester.bringIntoView() } }
+                            CineIconButton("media-playback-info-jump", CineIcon.INFO, R.string.playback_screen_info) {
+                                scope.launch { infoRequester.bringIntoView() }
+                            }
+                            CineIconButton("media-playback-settings-jump", CineIcon.SETTINGS, R.string.playback_screen_settings) {
+                                onSettingsOpen(true)
+                                // Two frames: the opened section has to be composed and measured before it can be brought into view.
+                                scope.launch { withFrameNanos { }; withFrameNanos { }; settingsRequester.bringIntoView() }
+                            }
+                        }
+                    }
+                }
+                if (!fullscreen) Column(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingsCard(Modifier.bringIntoViewRequester(infoRequester)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            chrome.info()
+                            metadata?.let { ClipChips(it, logClip != null) }
+                            stageError?.let {
+                                CollapsibleErrorCard(stringResource(R.string.playback_screen_stage_error_title),
+                                    stringResource(R.string.playback_screen_stage_error_message), it, "media-playback-log-stage-error")
+                            }
+                            SignalNotes(artifact, video, state, nativeFrames, displayHdrTypes, colorPolicy, onNativeFrames = onNativeFrames,
+                                onStrict = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT })
+                        }
+                    }
+                    PlaybackSettingsSection(settingsOpen, onSettingsOpen, settings, onSettings, Modifier.bringIntoViewRequester(settingsRequester))
                 }
             }
         }
     }
-    val timestamps = state.timeline?.timestampsUs
-    val fps = metadata?.frameRate ?: timestamps?.let { frameRateFromSampleTimes(it.take(120)) }
-    val totalFrames = timestamps?.size?.toLong() ?: fps?.let { (durationUs * it / 1_000_000).roundToLong() }?.takeIf { it > 0 }
-    val frame = state.frameIndex?.toLong() ?: fps?.let { (state.positionUs * it / 1_000_000).toLong() }
-    TimecodeRow(if (photo) null else playbackTimecode(state.positionUs, frame, fps),
-        if (photo) null else playbackTimecode(durationUs, totalFrames, fps), fullscreen, video || photo, onFullscreen)
-    if (!photo) {
-        val exact = state.frameIndex
-        val seekLabel = stringResource(R.string.media_playback_seek_label)
-        var seek by remember { mutableFloatStateOf(0f) }
-        var dragging by remember { mutableStateOf(false) }
-        val strip = remember(filmstrip) { filmstrip.map { it.asImageBitmap() } }
-        val sliderValue = if (dragging) seek else (state.positionUs.toDouble() / maximum).toFloat().coerceIn(0f, 1f)
-        CineSlider(value = sliderValue,
-            onValueChange = { seek = it; dragging = true }, onValueChangeFinished = {
-                session?.seek((maximum * seek.toDouble()).toLong()); dragging = false
-            }, enabled = ready && (video || state.canPlay), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                .testTag("media-playback-seek").semantics { contentDescription = seekLabel })
-        // The strip sits under the slider rather than behind it: the Material track is opaque and would hide it.
-        if (strip.isNotEmpty()) BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 8.dp).height(40.dp).clip(RoundedCornerShape(6.dp))) {
-            Row(Modifier.fillMaxSize()) {
-                strip.forEach { Image(it, null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop, alpha = 0.85f) }
+}
+
+private val SEEK_HEIGHT = 40.dp
+
+/** Video fitted inside the black stage; photos fill it with their own fit. */
+@Composable
+private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean, state: PlaybackObservation,
+    onSurfaceView: (SurfaceView) -> Unit, onSurfaceCreated: (SurfaceHolder) -> Unit,
+    onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit, onSurfaceDestroyed: () -> Unit) {
+    val created by rememberUpdatedState(onSurfaceCreated)
+    val changed by rememberUpdatedState(onSurfaceChanged)
+    val destroyed by rememberUpdatedState(onSurfaceDestroyed)
+    BoxWithConstraints(Modifier.matchParentSize()) {
+        val density = LocalDensity.current
+        val scale = playbackFitScale(state.videoWidth, state.videoHeight,
+            with(density) { maxWidth.roundToPx() }, with(density) { maxHeight.roundToPx() })
+        val fitted = Modifier.align(Alignment.Center).size(maxWidth * scale.first, maxHeight * scale.second)
+        // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
+        // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
+        if (video) AndroidView(factory = { ctx ->
+            SurfaceView(ctx).apply {
+                tag = "media-playback-native-surface"
+                onSurfaceView(this)
+                holder.addCallback(object : SurfaceHolder.Callback {
+                    override fun surfaceCreated(holder: SurfaceHolder) = created(holder)
+                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(holder, width, height)
+                    override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
+                })
             }
-            Box(Modifier.offset(x = (maxWidth - 2.dp) * sliderValue).width(2.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
+        }, modifier = fitted.testTag("media-playback-surface"))
+        state.bitmap?.let {
+            // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
+            // so non-square pixels stretch exactly once; photos retain their original fit.
+            Image(it.asImageBitmap(), artifact.name, (if (video) fitted else Modifier.fillMaxSize()).testTag("media-playback-frame"),
+                contentScale = if (video) ContentScale.FillBounds else ContentScale.Fit)
         }
-        val pauseIntent = state.phase == PlaybackPhase.PLAYING
-        val toggleSession = session
-        val stepping = state.phase in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED) && exact != null
-        val seekable = ready && (video || state.canPlay)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically) {
-            TransportButton("media-playback-start", CineIcon.SKIP_START, stringResource(R.string.media_playback_start), seekable) { session?.seek(0) }
-            if (video) TransportButton("media-playback-previous-frame", CineIcon.FRAME_BACK, stringResource(R.string.media_playback_previous_frame),
-                stepping && exact!! > 0) { session?.step(-1) }
-            TransportButton("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
-                stringResource(if (pauseIntent) R.string.media_playback_pause else R.string.media_playback_play),
-                ready && (pauseIntent || state.canPlay), primary = true,
-                onClick = playbackToggleAction(pauseIntent, { toggleSession?.play() }, { toggleSession?.pause() }))
-            if (video) TransportButton("media-playback-next-frame", CineIcon.FRAME_FORWARD, stringResource(R.string.media_playback_next_frame),
-                stepping && exact!! < state.timeline!!.timestampsUs.lastIndex) { session?.step(1) }
-            TransportButton("media-playback-end", CineIcon.SKIP_END, stringResource(R.string.media_playback_end), seekable) { session?.seek(maximum) }
+    }
+}
+
+/** One line: the clip's name and its format facts, scrolling sideways rather than wrapping onto the stage. */
+@Composable
+private fun ClipLine(take: LocalMediaTake, metadata: ClipMetadata?, log: Boolean) {
+    val (title) = rememberClipTitle(take)
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        metadata?.let {
+            MetadataChip(resolutionLabel(it.width, it.height))
+            it.frameRate?.let { rate -> MetadataChip(frameRateLabel(rate)) }
+            it.color?.let { color -> MetadataChip(color, emphasized = log) }
+            it.codec?.let { codec -> MetadataChip(codec) }
+            it.durationUs?.let { duration -> MetadataChip(durationLabel(duration)) }
         }
-        if (video && !fullscreen && frame != null && totalFrames != null) Text(
-            stringResource(R.string.playback_screen_frame_counter, (frame + 1).coerceAtMost(totalFrames), totalFrames),
-            Modifier.fillMaxWidth(), color = SettingsMuted, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
-            textAlign = TextAlign.Center)
     }
-    if (!fullscreen) StatusLine(state, photo, settings)
-    if (fullscreen) return
-    if (logClip != null) MonitoringSection(settings, onSettings, histogram)
-    if (state.phase == PlaybackPhase.ERROR) PlaybackErrorCard(state, video, nativeFrames, colorPolicy,
-        onRetry = { state = PlaybackObservation(); retry++ },
-        onNativeFrames = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT; nativeFrames = !nativeFrames },
-        onInterpret = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.INTERPRET_TRACK_SDR })
-    stageError?.let {
-        CollapsibleErrorCard(stringResource(R.string.playback_screen_stage_error_title), stringResource(R.string.playback_screen_stage_error_message),
-            it, "media-playback-log-stage-error")
-    }
-    SignalNotes(artifact, video, state, nativeFrames, displayHdrTypes, colorPolicy,
-        onNativeFrames = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT; nativeFrames = !nativeFrames },
-        onStrict = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT })
-    PlaybackSettingsSection(settingsOpen, onSettingsOpen, settings, onSettings)
 }
 
 @Composable
@@ -450,22 +548,24 @@ private fun ClipChips(metadata: ClipMetadata, log: Boolean) {
 }
 
 @Composable
-private fun TimecodeRow(current: String?, total: String?, fullscreen: Boolean, canExpand: Boolean, onFullscreen: (Boolean) -> Unit) {
+private fun TimecodeRow(current: String?, total: String?, counter: String?, fullscreen: Boolean, canExpand: Boolean,
+    onFullscreen: (Boolean) -> Unit) {
     if (current == null && !canExpand) return
-    Row(Modifier.fillMaxWidth().padding(horizontal = if (fullscreen) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
-        current?.let { Text(it, color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontFamily = FontFamily.Monospace) }
-        Spacer(Modifier.weight(1f))
-        total?.let { Text(it, color = SettingsMuted, fontSize = 13.sp, fontFamily = FontFamily.Monospace) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        current?.let { Text(it, color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontFamily = FontFamily.Monospace, maxLines = 1) }
+        Text(counter.orEmpty(), Modifier.weight(1f).padding(horizontal = 6.dp), color = SettingsMuted, fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        total?.let { Text(it, color = SettingsMuted, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1) }
         if (canExpand) CineIconButton("media-playback-fullscreen", if (fullscreen) CineIcon.FULLSCREEN_EXIT else CineIcon.FULLSCREEN,
             if (fullscreen) R.string.playback_screen_fullscreen_exit else R.string.playback_screen_fullscreen,
             selected = fullscreen) { onFullscreen(!fullscreen) }
     }
 }
 
-/** The reader's own words: phase, and whether the shown position is a verified frame or the player's estimate. */
+/** The reader's own words on one line: phase, and whether the shown position is a verified frame or the player's estimate. */
 @Composable
 private fun StatusLine(state: PlaybackObservation, photo: Boolean, settings: PlaybackSettings) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(when (state.phase) {
             PlaybackPhase.LOADING, PlaybackPhase.SEEKING -> R.string.media_playback_loading
             PlaybackPhase.PAUSED -> R.string.media_playback_paused
@@ -473,32 +573,62 @@ private fun StatusLine(state: PlaybackObservation, photo: Boolean, settings: Pla
             PlaybackPhase.ENDED -> R.string.media_playback_ended
             PlaybackPhase.ERROR -> R.string.media_playback_error
             PlaybackPhase.CLOSED -> R.string.media_playback_closed
-        }), Modifier.fillMaxWidth().testTag("media-playback-status"), color = SettingsMuted, fontSize = 12.sp)
+        }), Modifier.weight(0.4f, fill = false).testTag("media-playback-status"), color = SettingsMuted, fontSize = 11.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (!photo) {
             val exact = state.frameIndex
             if (settings.showFramePosition && exact != null && state.phase in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED)) {
                 Text(stringResource(R.string.media_playback_exact, exact + 1, state.timeline!!.timestampsUs.size, state.positionUs),
-                    Modifier.fillMaxWidth().testTag("media-playback-exact"), color = SettingsMuted, fontSize = 11.sp)
+                    Modifier.weight(0.6f, fill = false).testTag("media-playback-exact"), color = SettingsMuted, fontSize = 11.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             } else Text(stringResource(R.string.media_playback_estimated, state.positionUs / 1000),
-                Modifier.fillMaxWidth().testTag("media-playback-estimated"), color = SettingsMuted, fontSize = 11.sp)
+                Modifier.weight(0.6f, fill = false).testTag("media-playback-estimated"), color = SettingsMuted, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
+/**
+ * The filmstrip is the seek bar: drag or tap anywhere on it, and the seek lands on release. Without
+ * thumbnails it falls back to a plain track. Accessibility services get the same progress and SetProgress.
+ */
 @Composable
-private fun MonitoringSection(settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit, histogram: FloatArray?) {
-    SettingsCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.playback_screen_monitoring), color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                SegmentedToggle(listOf(PreciseLogView.FLAT_LOG to stringResource(R.string.playback_screen_log),
-                    PreciseLogView.REC709 to stringResource(R.string.playback_screen_rec709)), settings.logView,
-                    { onSettings(settings.copy(logView = it)) }, "media-playback-log-view")
-            }
-            val label = stringResource(R.string.playback_screen_histogram)
-            HistogramThumb(histogram, Modifier.size(96.dp, 48.dp).semantics { contentDescription = label })
+private fun FilmstripSeek(value: Float, strip: List<ImageBitmap>, enabled: Boolean, label: String,
+    onChange: (Float) -> Unit, onFinished: () -> Unit, modifier: Modifier = Modifier) {
+    val change by rememberUpdatedState(onChange)
+    val finished by rememberUpdatedState(onFinished)
+    val accent = MaterialTheme.colorScheme.primary
+    BoxWithConstraints(modifier.fillMaxWidth().height(SEEK_HEIGHT)
+        .semantics {
+            contentDescription = label
+            progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..1f)
+            if (!enabled) disabled()
+            setProgress { target -> if (enabled) { change(target.coerceIn(0f, 1f)); finished() }; enabled }
         }
+        .pointerInput(enabled) {
+            if (!enabled) return@pointerInput
+            fun at(x: Float) = (x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+            awaitEachGesture {
+                val down = awaitFirstDown()
+                down.consume(); change(at(down.position.x))
+                while (true) {
+                    val move = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                    move.consume()
+                    if (!move.pressed) break
+                    change(at(move.position.x))
+                }
+                finished()
+            }
+        }) {
+        val shape = RoundedCornerShape(6.dp)
+        if (strip.isNotEmpty()) Row(Modifier.fillMaxSize().clip(shape)) {
+            strip.forEach { Image(it, null, Modifier.weight(1f).fillMaxHeight(), contentScale = ContentScale.Crop,
+                alpha = if (enabled) 0.85f else 0.4f) }
+        } else Box(Modifier.align(Alignment.Center).fillMaxWidth().height(6.dp).clip(shape).background(SettingsBorder)) {
+            Box(Modifier.fillMaxWidth(value).fillMaxHeight().background(if (enabled) accent else SettingsMuted))
+        }
+        Box(Modifier.offset(x = (maxWidth - 3.dp) * value).width(3.dp).fillMaxHeight().clip(RoundedCornerShape(2.dp))
+            .background(if (enabled) accent else SettingsMuted))
     }
 }
 
@@ -551,8 +681,9 @@ private fun SignalNotes(artifact: LocalMediaArtifact, video: Boolean, state: Pla
 }
 
 @Composable
-private fun PlaybackSettingsSection(open: Boolean, onOpen: (Boolean) -> Unit, settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit) {
-    SettingsCard {
+private fun PlaybackSettingsSection(open: Boolean, onOpen: (Boolean) -> Unit, settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit,
+    modifier: Modifier = Modifier) {
+    SettingsCard(modifier) {
         val title = stringResource(R.string.playback_screen_settings)
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
             .clickable(onClickLabel = title, role = Role.Button) { onOpen(!open) }.testTag("media-playback-settings-toggle"),

@@ -23,4 +23,5 @@
     <string name="playback_screen_color_error_message">Podés interpretarlo con las etiquetas SDR de la pista; la precisión del color no se verifica.</string>
     <string name="playback_screen_stage_error_title">Vista de monitoreo OCLog2 no disponible</string>
     <string name="playback_screen_stage_error_message">El clip se muestra sin la etapa de vista LOG.</string>
+    <string name="playback_screen_info">Detalles del clip</string>
 </resources>

@@ -62,7 +62,7 @@ class MediaPlaybackUiTest {
             compose.onNodeWithTag("playback-frame-position",useUnmergedTree=true).performScrollTo().performClick()
             compose.runOnIdle { assertEquals(PlaybackSettings(muted=true,showFramePosition=false),settings.value) }
             node("exact").assertDoesNotExist()
-            click("next-take")
+            node("next-take").performClick()
             compose.waitUntil(10_000) { runCatching { node("take").assertTextEquals(later.primary.name) }.isSuccess }
             compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-playback-frame",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1,pages)
@@ -72,9 +72,9 @@ class MediaPlaybackUiTest {
             node("next-member").performScrollTo().assertIsNotEnabled()
             click("previous-member")
             node("member").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_member,1,2,photo.name))
-            node("next-take").performScrollTo().assertIsNotEnabled()
+            node("next-take").assertIsNotEnabled()
             node("play-pause").assertDoesNotExist()
-            click("previous-take")
+            node("previous-take").performClick()
             compose.waitUntil(20_000) { runCatching { node("take").assertTextEquals(initial.primary.name) }.isSuccess }
             node("close").performClick()
             node("dialog").assertDoesNotExist()

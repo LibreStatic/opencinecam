@@ -23,4 +23,5 @@
     <string name="playback_screen_color_error_message">Você pode interpretá-lo com as tags SDR da faixa; a precisão da cor não é verificada.</string>
     <string name="playback_screen_stage_error_title">Visualização de monitoramento OCLog2 indisponível</string>
     <string name="playback_screen_stage_error_message">O clipe é exibido sem a etapa de visualização LOG.</string>
+    <string name="playback_screen_info">Detalhes do clipe</string>
 </resources>
