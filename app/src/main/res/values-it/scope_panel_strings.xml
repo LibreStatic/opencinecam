@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_tab_waveform">Forma d\'onda</string>
+    <string name="scope_tab_vectorscope">Vettorscopio</string>
+    <string name="scope_tab_false_color">Falsi colori</string>
+    <string name="scope_tab_histogram">Istogramma</string>
+    <string name="scope_tab_waveform_short">FO</string>
+    <string name="scope_tab_vectorscope_short">VETT</string>
+    <string name="scope_tab_false_color_short">FC</string>
+    <string name="scope_tab_histogram_short">ISTO</string>
+    <string name="scope_next">Scope successivo</string>
+    <string name="scope_hide">Nascondi scope</string>
+</resources>

@@ -2,16 +2,11 @@
 <resources>
     <string name="scope_reduce">Reducir scopes</string>
     <string name="scope_enlarge">Ampliar scopes</string>
-    <string name="scope_live">Muestra vigente</string>
-    <string name="scope_suspended">Suspendido · esperando muestra vigente</string>
-    <string name="scope_domain_isp">ISP YUV → RGB8 SDR estimado</string>
-    <string name="scope_domain_sdr">Código SDR BT.709 RGB8</string>
-    <string name="scope_domain_log">Código OC-Log2 RGB8</string>
-    <string name="scope_domain_waiting">Señal no recibida</string>
-    <string name="scope_rate">Solicitada ≤%1$d Hz · último intervalo %2$.1f Hz</string>
-    <string name="scope_pre_assist">Antes de asistencia · sólo operador · no se graba. Valores de código, no IRE/HDR. Edad desde entrega del análisis.</string>
-    <string name="scope_waveform_axes" formatted="false">Waveform · código 100% ↑ 0% ↓ · X de muestra →</string>
-    <string name="scope_vector_axes">Vectorscopio · +Cb → · +Cr ↑ · coeficientes BT.709</string>
+    <string name="scope_suspended">En pausa</string>
+    <string name="scope_domain_isp">SDR est.</string>
+    <string name="scope_domain_sdr">SDR</string>
+    <string name="scope_domain_log">OC-Log2</string>
+    <string name="scope_domain_waiting">Sin señal</string>
     <string name="scope_black">Negro</string>
     <string name="scope_shadow">Sombra</string>
     <string name="scope_mid">Medio</string>

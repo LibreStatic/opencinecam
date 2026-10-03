@@ -155,6 +155,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -1009,47 +1010,81 @@ private fun MonitoringOverlay(
         onDispose { horizonSensorAvailable?.close() }
     }
     val analysisFresh = rememberScopeAnalysisFresh(state, options)
-    BoxWithConstraints(modifier) {
-        ProfessionalScopeImage(state, options, analysisFresh, displayRotationProvider() * 90, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
+    // The part of the overlay the window shows; a FILL viewfinder overflows its pane.
+    var visibleBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    BoxWithConstraints(modifier.onGloballyPositioned { coordinates ->
+        val parent = coordinates.parentLayoutCoordinates ?: return@onGloballyPositioned
+        val origin = parent.localPositionOf(coordinates, Offset.Zero)
+        visibleBounds = overlayVisibleRect(origin.x, origin.y, coordinates.size.width.toFloat(), coordinates.size.height.toFloat(),
+            parent.size.width.toFloat(), parent.size.height.toFloat())
+    }) {
+        val displayDegrees = HorizonRollMath.surfaceRotationDegrees(displayRotationProvider())
+        val sensorOrientation = state.descriptor?.sensorOrientation ?: 0
+        val frontFacing = state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT
+        val overlayWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.coerceAtLeast(1) else 1
+        val overlayHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.coerceAtLeast(1) else 1
+        val gpuScale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
+            monitoringPreviewScale(sourceWidth, sourceHeight, overlayWidth, overlayHeight, sensorOrientation, displayDegrees, frontFacing, squeezeFactor)
+            else 1f to 1f
+        // Guides belong to the recorded picture; anything placed by a corner uses the shown part of it.
+        val imageRect = monitoringImageRect(overlayWidth.toFloat(), overlayHeight.toFloat(), gpuScale.first, gpuScale.second)
+        val shownRect = visibleImageRect(imageRect, visibleBounds)
+        ProfessionalScopeImage(state, options, analysisFresh, displayDegrees, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
         val levelColor = VerifiedCyan; val tiltColor = Amber
+        val levelMarkColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
         Canvas(Modifier.matchParentSize()) {
-            val gpuScale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
-                monitoringPreviewScale(sourceWidth, sourceHeight, size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1),
-                    state.descriptor?.sensorOrientation ?: 0, displayRotationProvider() * 90,
-                    state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT, squeezeFactor)
-                else 1f to 1f
+            val domain = state.monitoringScopes?.domain ?: MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR
+            /** A point of the 16 × 9 analysis grid, normalised, on screen. */
+            fun gridPoint(x: Float, y: Float): Offset {
+                val p = monitoringDisplayPoint(x, y, domain, sensorOrientation, displayDegrees, frontFacing)
+                return Offset((.5f + (p.first - .5f) * gpuScale.first) * size.width, (.5f + (p.second - .5f) * gpuScale.second) * size.height)
+            }
             fun cellRect(index: Int): androidx.compose.ui.geometry.Rect {
-                val domain = state.monitoringScopes?.domain ?: MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR
-                fun point(x: Float, y: Float): Offset {
-                    val p = monitoringDisplayPoint(x, y, domain, state.descriptor?.sensorOrientation ?: 0,
-                        displayRotationProvider() * 90, state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT)
-                    return Offset((.5f + (p.first - .5f) * gpuScale.first) * size.width, (.5f + (p.second - .5f) * gpuScale.second) * size.height)
-                }
-                val a = point((index % 16) / 16f, (index / 16) / 9f)
-                val b = point((index % 16 + 1) / 16f, (index / 16 + 1) / 9f)
+                val a = gridPoint((index % 16) / 16f, (index / 16) / 9f)
+                val b = gridPoint((index % 16 + 1) / 16f, (index / 16 + 1) / 9f)
                 return androidx.compose.ui.geometry.Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
             }
-            if (showZebra && analysisFresh) state.zebraCells.forEachIndexed { index, active ->
-                if (active) cellRect(index).let { drawRect(options.zebraColor.composeColor().copy(alpha = options.opacityPercent / 100f), it.topLeft, it.size) }
+            fun cellsPath(cells: List<Boolean>) = Path().apply { cells.forEachIndexed { index, on -> if (on) addRect(cellRect(index)) } }
+            val alpha = options.opacityPercent / 100f
+            if (showZebra && analysisFresh && state.zebraCells.any { it }) {
+                // Diagonal stripes over the flagged cells read as zebra, not as solid blocks over the picture.
+                val path = cellsPath(state.zebraCells)
+                val bounds = path.getBounds()
+                val color = options.zebraColor.composeColor().copy(alpha = alpha)
+                clipPath(path) {
+                    val spacing = 7.dp.toPx()
+                    var x = bounds.left - bounds.height
+                    while (x < bounds.right) {
+                        drawLine(color, Offset(x, bounds.bottom), Offset(x + bounds.height, bounds.top), strokeWidth = 1.5.dp.toPx())
+                        x += spacing
+                    }
+                }
             }
-            if (showPeaking && analysisFresh) state.focusCells.forEachIndexed { index, active ->
-                if (active) cellRect(index).let { drawRect(options.peakingColor.composeColor().copy(alpha = options.opacityPercent / 100f), it.topLeft, it.size, style = Stroke(width = 2.dp.toPx())) }
+            if (showPeaking && analysisFresh && state.focusCells.any { it }) {
+                // The analysis only says which of 16 × 9 cells hold detail, so mark those regions
+                // lightly: a faint wash and one hairline around each merged region, never boxes.
+                val color = options.peakingColor.composeColor()
+                drawPath(cellsPath(state.focusCells), color.copy(alpha = alpha * .2f))
+                cellRegionBoundary(state.focusCells, 16, 9).forEach { (a, b) ->
+                    drawLine(color.copy(alpha = alpha), gridPoint(a.x / 16f, a.y / 9f), gridPoint(b.x / 16f, b.y / 9f), strokeWidth = 1.dp.toPx())
+                }
             }
             if (showGrid) {
                 val gridColor = Color.White.copy(alpha = .45f)
-                val gridStroke = Stroke(width = 1.dp.toPx())
+                val stroke = 1.dp.toPx()
+                val gridSize = imageRect.size
                 if (CompositionGridGeometry.isDiagonal(gridMode)) {
-                    CompositionGridGeometry.diagonals(size).forEach { (a, b) ->
-                        drawLine(gridColor, a, b, strokeWidth = 1.dp.toPx())
+                    CompositionGridGeometry.diagonals(gridSize).forEach { (a, b) ->
+                        drawLine(gridColor, a + imageRect.topLeft, b + imageRect.topLeft, strokeWidth = stroke)
                     }
                 } else {
                     CompositionGridGeometry.verticalDivisions(gridMode).forEach { ratio ->
-                        val x = size.width * ratio
-                        drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+                        val x = imageRect.left + gridSize.width * ratio
+                        drawLine(gridColor, Offset(x, imageRect.top), Offset(x, imageRect.bottom), strokeWidth = stroke)
                     }
                     CompositionGridGeometry.horizontalDivisions(gridMode).forEach { ratio ->
-                        val y = size.height * ratio
-                        drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                        val y = imageRect.top + gridSize.height * ratio
+                        drawLine(gridColor, Offset(imageRect.left, y), Offset(imageRect.right, y), strokeWidth = stroke)
                     }
                 }
             }
@@ -1062,34 +1097,47 @@ private fun MonitoringOverlay(
                         kotlin.math.abs(degrees) <= HorizonRollColors.WARNING_BAND -> tiltColor
                         else -> Color.White
                     }
-                    val centerY = size.height / 2f
-                    val halfLen = size.width * 0.35f
-                    val angleRad = Math.toRadians(degrees.toDouble())
-                    val cos = kotlin.math.cos(angleRad).toFloat()
-                    val sin = kotlin.math.sin(angleRad).toFloat()
-                    val cx = size.width / 2f
-                    val cy = centerY
-                    val a = Offset(cx - halfLen * cos, cy - halfLen * sin)
-                    val b = Offset(cx + halfLen * cos, cy + halfLen * sin)
+                    val center = shownRect.center
+                    val halfLength = shownRect.width * .3f
+                    // Fixed marks show where the line sits when the camera is level.
+                    val gap = 6.dp.toPx(); val mark = 14.dp.toPx()
+                    drawLine(levelMarkColor, Offset(center.x - halfLength - gap - mark, center.y), Offset(center.x - halfLength - gap, center.y), strokeWidth = 2.dp.toPx())
+                    drawLine(levelMarkColor, Offset(center.x + halfLength + gap, center.y), Offset(center.x + halfLength + gap + mark, center.y), strokeWidth = 2.dp.toPx())
+                    val (a, b) = HorizonRollMath.horizonLineEnds(center, halfLength, degrees)
                     drawLine(color, a, b, strokeWidth = 2.dp.toPx())
-                    drawCircle(color, radius = 4.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 1.dp.toPx()))
+                    drawCircle(color, radius = 4.dp.toPx(), center = center, style = Stroke(width = 1.dp.toPx()))
                 }
             }
         }
+        val density = LocalDensity.current
         if (showHorizon && horizonSensorAvailable?.available == false) {
             // No gravity or accelerometer sensor: say so where the level line would be drawn.
             Text(
                 stringResource(R.string.horizon_level_unavailable),
                 color = Color.White,
                 fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.Center).background(Panel, RoundedCornerShape(6.dp))
+                modifier = Modifier.offset { IntOffset(shownRect.left.roundToInt(), shownRect.top.roundToInt()) }
+                    .size(with(density) { shownRect.width.toDp() }, with(density) { shownRect.height.toDp() })
+                    .wrapContentSize().background(Panel, RoundedCornerShape(6.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp).testTag("horizon-level-unavailable"),
             )
         }
         if (drawHistogram && showHistogram && analysisFresh && state.histogram.isNotEmpty()) {
-            HistogramGraph(state, options, histogramMode, Modifier.padding(start = 12.dp, top = 12.dp).width(maxWidth * .28f).height(maxHeight * .09f))
+            val rect = overlayHistogramRect(shownRect, density.density)
+            HistogramGraph(state, options, histogramMode, Modifier.offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                .size(with(density) { rect.width.toDp() }, with(density) { rect.height.toDp() }))
         }
-        if (drawScopesPanel) ProfessionalScopesPanel(state, options, analysisFresh, Modifier.align(Alignment.CenterEnd).padding(end = scopesPanelEndPadding))
+        if (drawScopesPanel) {
+            // Fallback when the host has no tray or pane for the panel: float it at the end of the
+            // shown picture, sized from it so the vectorscope stays whole in landscape.
+            val (panelWidth, panelHeight) = with(density) {
+                overlayScopesPanelSizeDp(shownRect.width.toDp().value, shownRect.height.toDp().value, scopesPanelEndPadding.value)
+            }
+            ProfessionalScopesPanel(state, options, analysisFresh, Modifier.offset {
+                IntOffset((shownRect.right - scopesPanelEndPadding.toPx() - panelWidth.dp.toPx()).roundToInt(),
+                    (shownRect.center.y - panelHeight.dp.toPx() / 2f).roundToInt())
+            }.size(panelWidth.dp, panelHeight.dp))
+        }
         // The overlay spans the whole screen: clear the top bar and the AE/AF lock toggles
         // (top end, from 62 dp) and keep right of the zoom column (top start).
         AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 116.dp, start = 88.dp, end = 12.dp))
@@ -1105,7 +1153,7 @@ private val SCOPES_BESIDE_MIN_WIDTH = 140.dp
 
 /** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
 @Composable
-private fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
+internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
     var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -1117,9 +1165,11 @@ private fun rememberScopeAnalysisFresh(state: CameraUiState, options: Monitoring
         (state.monitoringScopes == null || state.monitoringScopes.options == options)
 }
 
+/** [tag] lets a second histogram (the scopes panel's) coexist with the capture instruments' one. */
 @Composable
-private fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier) {
-    Canvas(modifier.testTag("histogram-graph")) {
+internal fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier,
+    tag: String = "histogram-graph") {
+    Canvas(modifier.testTag(tag)) {
         drawRect(Color.Black.copy(alpha = .55f))
         if (histogramMode == HistogramMode.LUMA) {
             val peak = state.histogram.maxOrNull()?.coerceAtLeast(.001f) ?: 1f

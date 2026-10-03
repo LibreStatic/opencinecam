@@ -4,23 +4,39 @@ package com.librestatic.opencinecam
 import android.hardware.camera2.CameraCharacteristics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 internal fun MonitorColor.composeColor(): Color = when (this) {
     MonitorColor.CYAN -> Color.Cyan; MonitorColor.YELLOW -> Color.Yellow
@@ -86,79 +102,270 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
 }
 
 /**
- * The waveform, vectorscope and false-colour scopes. [expanded] and [onExpandedChange] let the
- * screen that hosts the panel give it more room; without a callback the panel tracks it alone.
+ * The waveform, vectorscope, false-colour legend and, when the host passes [histogramMode], the
+ * histogram. The panel fills the space the host gives it: one scope at a time behind tabs, or
+ * every scope stacked when a side pane is tall enough. [expanded] belongs to the host; the ⤢ key
+ * only asks for the change through [onExpandedChange] and is absent without it, and the close
+ * key appears only with [onClose].
  */
 @Composable internal fun ProfessionalScopesPanel(state: CameraUiState, options: MonitoringOptions,
     fresh: Boolean, modifier: Modifier = Modifier, expanded: Boolean = false,
-    onExpandedChange: ((Boolean) -> Unit)? = null) {
-    if (!options.waveformEnabled && !options.vectorscopeEnabled && !options.falseColorEnabled) return
-    var ownEnlarged by remember { mutableStateOf(false) }
-    val enlarged = if (onExpandedChange != null) expanded else ownEnlarged
-    fun toggleEnlarged() { if (onExpandedChange != null) onExpandedChange(!expanded) else ownEnlarged = !ownEnlarged }
+    onExpandedChange: ((Boolean) -> Unit)? = null, histogramMode: HistogramMode? = null,
+    onClose: (() -> Unit)? = null) {
+    val tabs = enabledScopeTabs(options.waveformEnabled, options.vectorscopeEnabled, options.falseColorEnabled, histogramMode != null)
+    var savedTab by rememberSaveable { mutableStateOf<ScopeTab?>(null) }
+    val selected = resolveScopeTab(savedTab, tabs) ?: return
     val frame = state.monitoringScopes
-    val current = state.scopeAnalysisLive(fresh) && frame != null && frame.options == options
-    BoxWithConstraints(modifier) {
-        Column(Modifier.width(minOf(maxWidth, if (enlarged) 280.dp else 152.dp))
-            .heightIn(max = maxHeight * .65f).background(Color.Black.copy(alpha = .8f))
-            .verticalScroll(rememberScrollState()).padding(6.dp).testTag("monitoring-panel")) {
-            TextButton(onClick = { toggleEnlarged() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                .testTag("monitoring-enlarge")) {
-                Text(stringResource(if (enlarged) R.string.scope_reduce else R.string.scope_enlarge))
-            }
-            Text(stringResource(if (current) R.string.scope_live else R.string.scope_suspended),
-                color = if (current) Color.Green else Color.Yellow,
-                style = MaterialTheme.typography.labelSmall, modifier = Modifier.testTag("monitoring-freshness"))
-            val domain = when (frame?.domain) {
-                MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR -> R.string.scope_domain_isp
-                MonitoringSignalDomain.SDR_BT709_CODE -> R.string.scope_domain_sdr
-                MonitoringSignalDomain.OCLOG2_CODE -> R.string.scope_domain_log
-                null -> R.string.scope_domain_waiting
-            }
-            Text(stringResource(domain), color = Color.White, style = MaterialTheme.typography.labelSmall)
-            Text(stringResource(R.string.scope_rate, options.refreshHz,
-                if (current && state.analysisIntervalMs > 0) (1000f / state.analysisIntervalMs).coerceAtMost(1000f) else 0f),
-                color = Color.White, style = MaterialTheme.typography.labelSmall)
-            Text(stringResource(R.string.scope_pre_assist), color = Color.White, style = MaterialTheme.typography.labelSmall)
-            if (current && frame != null) {
-                if (options.waveformEnabled && frame.waveformDensity.isNotEmpty()) {
-                    Text(stringResource(R.string.scope_waveform_axes), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                    ScopeDensity(frame.waveformDensity, options, false, enlarged)
-                }
-                if (options.vectorscopeEnabled && frame.vectorscopeCounts.isNotEmpty()) {
-                    Text(stringResource(R.string.scope_vector_axes), color = Color.White, style = MaterialTheme.typography.labelSmall)
-                    ScopeDensity(frame.vectorscopeCounts, options, true, enlarged)
-                }
-                if (options.falseColorEnabled) {
-                    val bandNames = listOf(R.string.scope_black, R.string.scope_shadow, R.string.scope_mid, R.string.scope_highlight, R.string.scope_clip)
-                    val bands = listOf(FalseColorBand.BLACK, FalseColorBand.SHADOW, FalseColorBand.MID, FalseColorBand.HIGHLIGHT, FalseColorBand.CLIP)
-                    val cuts = listOf("≤${options.falseColorBlackPercent}", "≤${options.falseColorShadowPercent}", "<${options.falseColorHighlightPercent}", "<${options.falseColorClipPercent}", "≥${options.falseColorClipPercent}")
-                    bands.forEachIndexed { index, band ->
-                        Row { Box(Modifier.size(12.dp).background(band.composeColor(options.falseColorPalette)))
-                            Text(" ${stringResource(bandNames[index])} ${cuts[index]}%", color = Color.White, style = MaterialTheme.typography.labelSmall) }
+    val live = state.scopeAnalysisLive(fresh)
+    val current = live && frame != null && frame.options == options
+    val chipRes = when {
+        frame == null -> R.string.scope_domain_waiting
+        !current -> R.string.scope_suspended
+        else -> scopeDomainLabel(frame.domain)
+    }
+    val labels = tabs.map { stringResource(scopeTabLabel(it, short = false)) }
+    val shortLabels = tabs.map { stringResource(scopeTabLabel(it, short = true)) }
+    // Plan with the widest chip text so the header does not reflow when the status changes.
+    val chipTexts = listOf(R.string.scope_domain_waiting, R.string.scope_suspended, R.string.scope_domain_isp,
+        R.string.scope_domain_sdr, R.string.scope_domain_log).map { stringResource(it) }
+    val keyboard = LocalAdaptiveWindow.current.hardwareKeyboard
+    val hideLabel = stringResource(R.string.scope_hide).let { if (keyboard) withShortcut(it, ShortcutAction.SCOPES) else it }
+    val colors = MaterialTheme.colorScheme
+    val tabStyle = MaterialTheme.typography.labelLarge
+    val chipStyle = MaterialTheme.typography.labelMedium
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier.testTag("monitoring-panel")) {
+        // A host that leaves a dimension open (a scrolling column) still gets a readable panel.
+        val width = if (constraints.hasBoundedWidth) maxWidth else 280.dp
+        val height = if (constraints.hasBoundedHeight) maxHeight else 280.dp
+        val actionKeys = (if (onExpandedChange != null) 1 else 0) + (if (onClose != null) 1 else 0)
+        val plan = remember(width, labels, shortLabels, chipTexts, actionKeys, density) {
+            fun dp(text: String, style: TextStyle) = with(density) { measurer.measure(text, style, maxLines = 1).size.width.toDp().value }
+            scopeHeaderPlan((width - PANEL_PADDING * 2).value, labels.map { dp(it, tabStyle) }, shortLabels.map { dp(it, tabStyle) },
+                chipTexts.maxOf { dp(it, chipStyle) } + CHIP_PADDING.value * 2 + CHIP_GAP.value, actionKeys)
+        }
+        val contentHeight = height - PANEL_PADDING * 2 - SCOPE_TOUCH_DP.dp
+        val stacked = scopePanelStacks((width - PANEL_PADDING * 2).value, contentHeight.value, tabs)
+        val chip = @Composable {
+            Text(stringResource(chipRes), style = chipStyle, maxLines = 1,
+                color = if (frame != null && !current) LocalCineColors.current.pending else colors.onSurfaceVariant,
+                modifier = Modifier.padding(start = CHIP_GAP).background(colors.surfaceContainerHigh, RoundedCornerShape(50))
+                    .padding(horizontal = CHIP_PADDING, vertical = 3.dp).testTag("monitoring-freshness"))
+        }
+        Column(Modifier.size(width, height).clip(RoundedCornerShape(12.dp))
+            .background(colors.surfaceContainerLowest.copy(alpha = .88f)).padding(PANEL_PADDING)) {
+            Row(Modifier.fillMaxWidth().height(SCOPE_TOUCH_DP.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (stacked) { chip(); Spacer(Modifier.weight(1f)) }
+                else {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        ScopeTabs(tabs, selected, labels, shortLabels, plan.tabStyle) { savedTab = it }
                     }
+                    if (plan.chipInHeader) chip()
+                }
+                if (onExpandedChange != null) CineIconButton("monitoring-enlarge",
+                    if (expanded) CineIcon.FULLSCREEN_EXIT else CineIcon.FULLSCREEN,
+                    if (expanded) R.string.scope_reduce else R.string.scope_enlarge) { onExpandedChange(!expanded) }
+                if (onClose != null) ScopeCloseKey(hideLabel, onClose)
+            }
+            if (!stacked && !plan.chipInHeader) Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.CenterEnd) { chip() }
+            val scopeWidth = (width - PANEL_PADDING * 2).value
+            if (stacked) Column(Modifier.fillMaxWidth().weight(1f)) {
+                tabs.forEachIndexed { index, tab ->
+                    Column(Modifier.fillMaxWidth().weight(stackedScopeHeightDp(tab, scopeWidth) + SCOPE_SECTION_LABEL_DP)) {
+                        Text(labels[index], style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1,
+                            modifier = Modifier.height(SCOPE_SECTION_LABEL_DP.dp).padding(start = 4.dp))
+                        ScopeView(tab, state, options, current, live, histogramMode, Modifier.fillMaxWidth().weight(1f))
+                    }
+                }
+            } else ScopeView(selected, state, options, current, live, histogramMode, Modifier.fillMaxWidth().weight(1f))
+        }
+    }
+}
+
+private val PANEL_PADDING = 4.dp
+private val CHIP_PADDING = 8.dp
+private val CHIP_GAP = 6.dp
+
+private fun scopeDomainLabel(domain: MonitoringSignalDomain): Int = when (domain) {
+    MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR -> R.string.scope_domain_isp
+    MonitoringSignalDomain.SDR_BT709_CODE -> R.string.scope_domain_sdr
+    MonitoringSignalDomain.OCLOG2_CODE -> R.string.scope_domain_log
+}
+
+private fun scopeTabLabel(tab: ScopeTab, short: Boolean): Int = when (tab) {
+    ScopeTab.WAVEFORM -> if (short) R.string.scope_tab_waveform_short else R.string.scope_tab_waveform
+    ScopeTab.VECTORSCOPE -> if (short) R.string.scope_tab_vectorscope_short else R.string.scope_tab_vectorscope
+    ScopeTab.FALSE_COLOR -> if (short) R.string.scope_tab_false_color_short else R.string.scope_tab_false_color
+    ScopeTab.HISTOGRAM -> if (short) R.string.scope_tab_histogram_short else R.string.scope_tab_histogram
+}
+
+private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
+    ScopeTab.WAVEFORM -> "monitoring-tab-waveform"
+    ScopeTab.VECTORSCOPE -> "monitoring-tab-vectorscope"
+    ScopeTab.FALSE_COLOR -> "monitoring-tab-false-color"
+    ScopeTab.HISTOGRAM -> "monitoring-tab-histogram"
+}
+
+/** Tabs, a lone title for a single scope, or one key that steps through them in the narrowest panel. */
+@Composable private fun ScopeTabs(tabs: List<ScopeTab>, selected: ScopeTab, labels: List<String>, shortLabels: List<String>,
+    style: ScopeTabStyle, onSelect: (ScopeTab) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val index = tabs.indexOf(selected)
+    if (tabs.size == 1) {
+        Text(if (style == ScopeTabStyle.FULL) labels[0] else shortLabels[0], style = MaterialTheme.typography.labelLarge,
+            color = colors.onSurface, maxLines = 1, modifier = Modifier.padding(horizontal = (SCOPE_TAB_PADDING_DP / 2).dp)
+                .semantics { contentDescription = labels[0] })
+        return
+    }
+    if (style == ScopeTabStyle.CYCLE) {
+        val next = nextScopeTab(selected, tabs) ?: selected
+        Row(Modifier.heightIn(min = SCOPE_TOUCH_DP.dp).widthIn(min = SCOPE_TOUCH_DP.dp).clip(RoundedCornerShape(8.dp))
+            .clickable(onClickLabel = stringResource(R.string.scope_next), role = Role.Button) { onSelect(next) }
+            .semantics { contentDescription = labels[index] }
+            .padding(horizontal = (SCOPE_TAB_PADDING_DP / 2).dp).testTag("monitoring-tab-cycle"),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(shortLabels[index], style = MaterialTheme.typography.labelLarge, color = colors.primary, maxLines = 1)
+            Spacer(Modifier.width(4.dp))
+            CineGlyph(CineIcon.CHEVRON_RIGHT, colors.onSurfaceVariant, Modifier.size(14.dp))
+        }
+        return
+    }
+    Row(Modifier.selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+        tabs.forEachIndexed { i, tab ->
+            val on = tab == selected
+            val accent = colors.primary
+            Box(Modifier.heightIn(min = SCOPE_TOUCH_DP.dp).widthIn(min = SCOPE_TOUCH_DP.dp).clip(RoundedCornerShape(8.dp))
+                .selectable(on, role = Role.Tab) { onSelect(tab) }
+                .then(if (style == ScopeTabStyle.SHORT) Modifier.semantics { contentDescription = labels[i] } else Modifier)
+                .drawBehind {
+                    if (on) drawLine(accent, Offset(6.dp.toPx(), size.height - 6.dp.toPx()),
+                        Offset(size.width - 6.dp.toPx(), size.height - 6.dp.toPx()), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+                }
+                .padding(horizontal = (SCOPE_TAB_PADDING_DP / 2).dp).testTag(scopeTabTag(tab)),
+                contentAlignment = Alignment.Center) {
+                Text(if (style == ScopeTabStyle.FULL) labels[i] else shortLabels[i], style = MaterialTheme.typography.labelLarge,
+                    color = if (on) accent else colors.onSurfaceVariant, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** A 48 dp close key; the icon set has no close glyph, so the cross is drawn here. */
+@Composable private fun ScopeCloseKey(label: String, onClick: () -> Unit) {
+    val tint = MaterialTheme.colorScheme.onSurface
+    Box(Modifier.size(SCOPE_TOUCH_DP.dp).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+        .semantics { contentDescription = label }.testTag("monitoring-close"), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(16.dp)) {
+            val stroke = 1.8.dp.toPx()
+            drawLine(tint, Offset.Zero, Offset(size.width, size.height), stroke, StrokeCap.Round)
+            drawLine(tint, Offset(size.width, 0f), Offset(0f, size.height), stroke, StrokeCap.Round)
+        }
+    }
+}
+
+/** One scope filling [modifier]; stale data leaves the graticule up so the panel keeps its shape. */
+@Composable private fun ScopeView(tab: ScopeTab, state: CameraUiState, options: MonitoringOptions, current: Boolean, live: Boolean,
+    histogramMode: HistogramMode?, modifier: Modifier) {
+    val frame = state.monitoringScopes
+    when (tab) {
+        ScopeTab.WAVEFORM -> WaveformScope(frame?.waveformDensity?.takeIf { current && it.isNotEmpty() }, options, modifier)
+        ScopeTab.VECTORSCOPE -> Vectorscope(frame?.vectorscopeCounts?.takeIf { current && it.isNotEmpty() }, options, modifier)
+        ScopeTab.FALSE_COLOR -> FalseColorLegend(options, modifier)
+        ScopeTab.HISTOGRAM -> if (histogramMode != null && live && (state.histogram.isNotEmpty() || state.redHistogram.isNotEmpty()))
+            HistogramGraph(state, options, histogramMode, modifier.clip(RoundedCornerShape(6.dp)), tag = "monitoring-histogram-graph")
+            else Box(modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).testTag("monitoring-scope-idle"))
+    }
+}
+
+/** Luma waveform: 100 % at the top, graticule every quarter and numbers at 0 / 50 / 100. */
+@Composable private fun WaveformScope(counts: List<Int>?, options: MonitoringOptions, modifier: Modifier) {
+    val measurer = rememberTextMeasurer()
+    val colors = MaterialTheme.colorScheme
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurfaceVariant)
+    val grid = colors.onSurfaceVariant.copy(alpha = .3f)
+    val background = colors.surfaceContainerLowest
+    val trace = options.lumaColor.composeColor()
+    Canvas(modifier.testTag(if (counts != null) "monitoring-waveform-graph" else "monitoring-scope-idle")) {
+        val levels = waveformScaleLabels(size.height / density)
+        val texts = levels.map { measurer.measure(it.toString(), labelStyle) }
+        val gutter = texts.maxOf { it.size.width } + 6.dp.toPx()
+        val half = texts[0].size.height / 2f
+        val area = Rect(gutter, half, size.width, (size.height - half).coerceAtLeast(half + 1f))
+        drawRect(background, area.topLeft, area.size)
+        WAVEFORM_SCALE_LINES.forEach { level ->
+            val y = waveformLevelY(level, area.top, area.height)
+            drawLine(grid, Offset(area.left, y), Offset(area.right, y), strokeWidth = if (level % 50 == 0) 1.dp.toPx() else Stroke.HairlineWidth)
+        }
+        levels.forEachIndexed { i, level ->
+            val text = texts[i]
+            drawText(text, topLeft = Offset(gutter - 4.dp.toPx() - text.size.width, waveformLevelY(level, area.top, area.height) - text.size.height / 2f))
+        }
+        if (counts != null) drawDensity(counts, area, trace, options.opacityPercent / 100f)
+    }
+}
+
+/** Square vectorscope with the 75 % colour-bar targets and the skin-tone line; never stretched. */
+@Composable private fun Vectorscope(counts: List<Int>?, options: MonitoringOptions, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val grid = colors.onSurfaceVariant.copy(alpha = .35f)
+    val target = colors.onSurfaceVariant.copy(alpha = .7f)
+    val background = colors.surfaceContainerLowest
+    val trace = options.lumaColor.composeColor()
+    Canvas(modifier.testTag(if (counts != null) "monitoring-vector-graph" else "monitoring-scope-idle")) {
+        val square = scopeSquareFit(size.width, size.height)
+        val radius = square.width / 2f
+        val center = square.center
+        drawCircle(background, radius, center)
+        drawCircle(grid, radius, center, style = Stroke(1.dp.toPx()))
+        drawLine(grid, Offset(center.x - radius, center.y), Offset(center.x + radius, center.y), Stroke.HairlineWidth)
+        drawLine(grid, Offset(center.x, center.y - radius), Offset(center.x, center.y + radius), Stroke.HairlineWidth)
+        val skin = Math.toRadians(VECTORSCOPE_SKIN_LINE_DEGREES.toDouble())
+        drawLine(grid, center, Offset(center.x + radius * kotlin.math.cos(skin).toFloat(), center.y - radius * kotlin.math.sin(skin).toFloat()),
+            strokeWidth = 1.dp.toPx())
+        val box = (square.width * .045f).coerceAtLeast(4.dp.toPx())
+        VECTORSCOPE_BARS.forEach { (cb, cr) ->
+            val p = vectorscopePoint(cb * VECTORSCOPE_TARGET_LEVEL, cr * VECTORSCOPE_TARGET_LEVEL, square)
+            drawRect(target, Offset(p.x - box / 2, p.y - box / 2), Size(box, box), style = Stroke(1.dp.toPx()))
+        }
+        if (counts != null) drawDensity(counts, square, trace, options.opacityPercent / 100f)
+    }
+}
+
+/** The false-colour bands as a 0–100 % ramp and a legend with each band's range. */
+@Composable private fun FalseColorLegend(options: MonitoringOptions, modifier: Modifier) {
+    val bands = listOf(FalseColorBand.BLACK, FalseColorBand.SHADOW, FalseColorBand.MID, FalseColorBand.HIGHLIGHT, FalseColorBand.CLIP)
+    val names = listOf(R.string.scope_black, R.string.scope_shadow, R.string.scope_mid, R.string.scope_highlight, R.string.scope_clip)
+    val cuts = listOf("≤${options.falseColorBlackPercent}", "≤${options.falseColorShadowPercent}", "<${options.falseColorHighlightPercent}",
+        "<${options.falseColorClipPercent}", "≥${options.falseColorClipPercent}")
+    val stops = falseColorRampStops(options.falseColorBlackPercent, options.falseColorShadowPercent,
+        options.falseColorHighlightPercent, options.falseColorClipPercent)
+    Column(modifier.padding(horizontal = 4.dp).testTag("monitoring-false-color-legend"),
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
+        Canvas(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(3.dp))) {
+            stops.forEachIndexed { i, range ->
+                drawRect(bands[i].composeColor(options.falseColorPalette), Offset(range.start * size.width, 0f),
+                    Size((range.endInclusive - range.start) * size.width, size.height))
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            bands.forEachIndexed { i, band ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(band.composeColor(options.falseColorPalette), RoundedCornerShape(2.dp)))
+                    Text(" ${stringResource(names[i])} ${cuts[i]}%", color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 }
             }
         }
     }
 }
 
-@Composable private fun ScopeDensity(counts: List<Int>, options: MonitoringOptions, vector: Boolean, enlarged: Boolean) {
-    Canvas(Modifier.fillMaxWidth().height(if (enlarged) 150.dp else 80.dp)
-        .testTag(if (vector) "monitoring-vector-graph" else "monitoring-waveform-graph")) {
-        drawRect(Color.Black)
-        for (fraction in listOf(0f, .25f, .5f, .75f, 1f)) {
-            drawLine(Color.DarkGray, Offset(0f, size.height * fraction), Offset(size.width, size.height * fraction))
-        }
-        if (vector) {
-            drawLine(Color.DarkGray, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height))
-            drawOval(Color.DarkGray, style = Stroke(1.dp.toPx()))
-        }
-        val peak = (counts.maxOrNull() ?: 1).coerceAtLeast(1)
-        counts.forEachIndexed { index, count ->
-            if (count > 0) drawRect(options.lumaColor.composeColor().copy(alpha =
-                (kotlin.math.sqrt(count.toFloat() / peak) * options.opacityPercent / 100f).coerceIn(0f, 1f)),
-                Offset((index % 64) * size.width / 64, (index / 64) * size.height / 64), Size(size.width / 64, size.height / 64))
-        }
+/** A 64 × 64 density grid; square-root weighting with a floor keeps sparse traces visible. */
+private fun DrawScope.drawDensity(counts: List<Int>, area: Rect, color: Color, opacity: Float) {
+    val peak = (counts.maxOrNull() ?: 1).coerceAtLeast(1)
+    val cell = Size(area.width / 64f, area.height / 64f)
+    counts.forEachIndexed { index, count ->
+        if (count > 0) drawRect(color.copy(alpha = ((.2f + .8f * kotlin.math.sqrt(count.toFloat() / peak)) * opacity).coerceIn(0f, 1f)),
+            Offset(area.left + (index % 64) * cell.width, area.top + (index / 64) * cell.height), cell)
     }
 }

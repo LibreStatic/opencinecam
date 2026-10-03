@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Scope panel tabs; the short forms label tabs in narrow panels. -->
+    <string name="scope_tab_waveform">Waveform</string>
+    <string name="scope_tab_vectorscope">Vectorscope</string>
+    <string name="scope_tab_false_color">False color</string>
+    <string name="scope_tab_histogram">Histogram</string>
+    <string name="scope_tab_waveform_short">WFM</string>
+    <string name="scope_tab_vectorscope_short">VEC</string>
+    <string name="scope_tab_false_color_short">FC</string>
+    <string name="scope_tab_histogram_short">HIST</string>
+    <string name="scope_next">Next scope</string>
+    <string name="scope_hide">Hide scopes</string>
+</resources>

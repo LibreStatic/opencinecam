@@ -67,26 +67,55 @@ object HorizonRollColors {
  */
 object HorizonRollMath {
     /**
+     * `Display.getRotation()` returns a `Surface.ROTATION_*` constant (0..3), not degrees. Passing
+     * the constant straight to [rollDegrees] made every landscape rotation use the portrait axes,
+     * so a level phone in landscape drew the line vertical.
+     */
+    fun surfaceRotationDegrees(surfaceRotation: Int): Int = (surfaceRotation and 3) * 90
+
+    /**
+     * Gravity in screen axes (x right, y up) for a display turned [displayRotationDegrees]
+     * counter-clockwise from the device's natural orientation, as `Display.getRotation()` reports.
+     */
+    fun screenGravity(x: Float, y: Float, displayRotationDegrees: Int): Pair<Float, Float> =
+        when ((displayRotationDegrees % 360 + 360) % 360) {
+            90 -> -y to x
+            180 -> -x to -y
+            270 -> y to -x
+            else -> x to y
+        }
+
+    /**
      * @param x sensor gravity X axis.
      * @param y sensor gravity Y axis.
      * @param z sensor gravity Z axis.
-     * @param displayRotation One of Surface.ROTATION_0/90/180/270.
-     * @return Signed roll in degrees in the range [-90, 90], or NaN when not measurable.
+     * @param displayRotationDegrees 0, 90, 180 or 270; see [surfaceRotationDegrees].
+     * @return Signed roll in degrees in the range [-90, 90], positive when the screen's right edge
+     *   is lower, or NaN when not measurable.
      */
-    fun rollDegrees(x: Float, y: Float, z: Float, displayRotation: Int): Float {
+    fun rollDegrees(x: Float, y: Float, z: Float, displayRotationDegrees: Int): Float {
         if (z * z > 6f && x * x + y * y < 3f) return Float.NaN
-        val rollRad = when (displayRotation) {
-            90 -> Math.atan2(-y.toDouble(), -x.toDouble())
-            180 -> Math.atan2(x.toDouble(), -y.toDouble())
-            270 -> Math.atan2(y.toDouble(), x.toDouble())
-            else -> Math.atan2(-x.toDouble(), y.toDouble())
-        }.toFloat()
-        var roll = Math.toDegrees(rollRad.toDouble()).toFloat()
-        // Normalize to [-90, 90] — atan2 can return angles outside this range when the
-        // gravity vector points into the third/fourth quadrant after display rotation.
+        val (screenX, screenY) = screenGravity(x, y, displayRotationDegrees)
+        var roll = Math.toDegrees(Math.atan2(-screenX.toDouble(), screenY.toDouble())).toFloat()
+        // A device held upside down relative to the display reads past ±90; fold it back.
         while (roll > 90f) roll -= 180f
         while (roll < -90f) roll += 180f
         return roll
+    }
+
+    /**
+     * Screen angle of the level line, clockwise positive as Compose draws it. The line stays
+     * parallel to the real horizon, so it turns against the device: it meets the fixed level
+     * marks exactly when the camera is level.
+     */
+    fun horizonLineDegrees(rollDegrees: Float): Float = -rollDegrees.coerceIn(-90f, 90f)
+
+    /** End points of a level line of [halfLength] centred on [center] for a roll reading. */
+    fun horizonLineEnds(center: Offset, halfLength: Float, rollDegrees: Float): Pair<Offset, Offset> {
+        val radians = Math.toRadians(horizonLineDegrees(rollDegrees).toDouble())
+        val dx = (halfLength * Math.cos(radians)).toFloat()
+        val dy = (halfLength * Math.sin(radians)).toFloat()
+        return Offset(center.x - dx, center.y - dy) to Offset(center.x + dx, center.y + dy)
     }
 
     /** Exponential smoothing toward the latest sample; null previous keeps the previous value. */

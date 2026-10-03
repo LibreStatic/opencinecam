@@ -8,7 +8,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.view.Surface
 import android.os.SystemClock
 
 /**
@@ -18,6 +17,7 @@ import android.os.SystemClock
  */
 class HorizonRollSensor(
     context: Context,
+    /** The current `Surface.ROTATION_*` constant, as `Display.getRotation()` returns it. */
     private val displayRotationProvider: () -> Int,
     private val onSnapshot: (HorizonRollSnapshot) -> Unit,
 ) : AutoCloseable {
@@ -29,7 +29,7 @@ class HorizonRollSensor(
     @Volatile private var lastEmitMs: Long = 0L
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent) {
-            val rotation = displayRotationProvider()
+            val rotation = HorizonRollMath.surfaceRotationDegrees(displayRotationProvider())
             val raw = HorizonRollMath.rollDegrees(event.values[0], event.values[1], event.values[2], rotation)
             smoothed = HorizonRollMath.smooth(smoothed, raw, smoothingAlpha)
             val now = SystemClock.elapsedRealtime()
