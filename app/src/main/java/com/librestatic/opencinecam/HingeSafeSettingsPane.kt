@@ -14,9 +14,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-/** Settings use a contiguous pane rather than putting editable text across a physical hinge. */
+/**
+ * Settings use a contiguous pane rather than putting editable text across a physical hinge. The
+ * screens inside lay out for that pane, so [LocalAdaptiveWindow] is re-measured to its size: half
+ * of an unfolded inner screen is a compact window, not the whole display.
+ */
 @Composable
 internal fun HingeSafeSettingsPane(hinge: FoldHinge?, content: @Composable () -> Unit) {
+    val window = LocalAdaptiveWindow.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     BoxWithConstraints(
         Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInWindow() },
@@ -32,7 +37,12 @@ internal fun HingeSafeSettingsPane(hinge: FoldHinge?, content: @Composable () ->
         val bounds = if (pane == null) Modifier.fillMaxSize() else with(density) {
             Modifier.absoluteOffset(pane.left.toDp(), pane.top.toDp()).size(pane.width.toDp(), pane.height.toDp())
         }
-        Box(bounds.clipToBounds().testTag("hinge-safe-settings")) { content() }
+        val paneWindow = remember(pane, window, density) {
+            pane?.let { with(density) { AdaptiveWindow(it.width.toDp().value, it.height.toDp().value, window.hardwareKeyboard) } } ?: window
+        }
+        Box(bounds.clipToBounds().testTag("hinge-safe-settings")) {
+            CompositionLocalProvider(LocalAdaptiveWindow provides paneWindow) { content() }
+        }
     }
 }
 

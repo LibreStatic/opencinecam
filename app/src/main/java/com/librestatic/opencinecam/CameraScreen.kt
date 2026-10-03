@@ -230,8 +230,6 @@ private val RecordRed: Color @Composable @ReadOnlyComposable get() = LocalCineCo
 private val Muted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val OkGreen: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.ok
 
-private enum class AppSection { CAPTURE, MEDIA, SETTINGS }
-private enum class SettingsPage { MAIN, ABOUT, CAPABILITIES }
 private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
@@ -353,55 +351,50 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             )
             }
         } else {
-            HingeSafeSettingsPane(foldState.hinge) {
-            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                Box(Modifier.weight(1f)) {
-                    when (section) {
-                        AppSection.MEDIA -> MediaCatalogScreen(settings.gallery,
-                            onSettings = { gallery -> settingsRepository.update { it.copy(gallery = gallery) } },
-                            sharingSettings = settings.mediaSharing,
-                            onSharingSettings = { sharing -> settingsRepository.update { it.copy(mediaSharing = sharing) } },
-                            proxySettings = settings.proxy,
-                            onProxySettings = { proxy -> settingsRepository.update { it.copy(proxy = proxy) } },
-                            playbackSettings = settings.playback,
-                            onPlaybackSettings = { playback -> settingsRepository.update { it.copy(playback = playback) } })
-                        AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
-                            AboutScreen(
-                                onBack = { settingsPage = SettingsPage.MAIN },
-                                onReplayTour = {
-                                    onboardingStore.reset()
-                                    settingsPage = SettingsPage.MAIN
-                                    onboardingDone = false
-                                },
-                            )
-                        } else if (settingsPage == SettingsPage.CAPABILITIES) {
-                            CameraCapabilitiesScreen(
-                                cameras = state.cameras,
-                                activeCameraId = state.selectedCameraId,
-                                onBack = { settingsPage = SettingsPage.MAIN },
-                            )
-                        } else {
-                            settingsStateHolder.SaveableStateProvider("settings") {
-                            SettingsScreen(
-                                state = state,
-                                settings = settings,
-                                audioPermissionGranted = audioPermissionGranted,
-                                onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                                onOpenAbout = { settingsPage = SettingsPage.ABOUT },
-                                onSettingsChange = settingsRepository::set,
-                                onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
-                                onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
-                            )
-                            }
+            AppShell(section, foldState.hinge, onSelect = {
+                settingsPage = SettingsPage.MAIN
+                section = it
+            }) {
+                when (section) {
+                    AppSection.MEDIA -> MediaCatalogScreen(settings.gallery,
+                        onSettings = { gallery -> settingsRepository.update { it.copy(gallery = gallery) } },
+                        sharingSettings = settings.mediaSharing,
+                        onSharingSettings = { sharing -> settingsRepository.update { it.copy(mediaSharing = sharing) } },
+                        proxySettings = settings.proxy,
+                        onProxySettings = { proxy -> settingsRepository.update { it.copy(proxy = proxy) } },
+                        playbackSettings = settings.playback,
+                        onPlaybackSettings = { playback -> settingsRepository.update { it.copy(playback = playback) } })
+                    AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
+                        AboutScreen(
+                            onBack = { settingsPage = SettingsPage.MAIN },
+                            onReplayTour = {
+                                onboardingStore.reset()
+                                settingsPage = SettingsPage.MAIN
+                                onboardingDone = false
+                            },
+                        )
+                    } else if (settingsPage == SettingsPage.CAPABILITIES) {
+                        CameraCapabilitiesScreen(
+                            cameras = state.cameras,
+                            activeCameraId = state.selectedCameraId,
+                            onBack = { settingsPage = SettingsPage.MAIN },
+                        )
+                    } else {
+                        settingsStateHolder.SaveableStateProvider("settings") {
+                        SettingsScreen(
+                            state = state,
+                            settings = settings,
+                            audioPermissionGranted = audioPermissionGranted,
+                            onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                            onOpenAbout = { settingsPage = SettingsPage.ABOUT },
+                            onSettingsChange = settingsRepository::set,
+                            onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
+                            onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
+                        )
                         }
-                        AppSection.CAPTURE -> Unit
                     }
+                    AppSection.CAPTURE -> Unit
                 }
-                NavigationBar(section) {
-                    settingsPage = SettingsPage.MAIN
-                    section = it
-                }
-            }
             }
         }
     }
@@ -512,7 +505,8 @@ private fun rememberCaptureServiceBinder(enabled: Boolean): CaptureService.Local
 @Composable
 private fun PermissionScreen(onGrant: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Graphite).windowInsetsPadding(WindowInsets.safeDrawing).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(Graphite).windowInsetsPadding(WindowInsets.safeDrawing)
+            .verticalScroll(rememberScrollState()).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -3607,25 +3601,6 @@ internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = M
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun NavigationBar(selected: AppSection, onSelect: (AppSection) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().height(54.dp).background(MaterialTheme.colorScheme.surfaceContainer)) {
-        AppSection.entries.forEach { section ->
-            val label = when (section) {
-                AppSection.CAPTURE -> stringResource(R.string.capture_tab)
-                AppSection.MEDIA -> stringResource(R.string.media_tab)
-                AppSection.SETTINGS -> stringResource(R.string.settings_tab)
-            }
-            Box(
-                modifier = Modifier.weight(1f).fillMaxHeight().clickable { onSelect(section) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, color = if (selected == section) Amber else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-            }
-        }
     }
 }
 
