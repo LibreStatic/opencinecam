@@ -3720,58 +3720,27 @@ internal fun SettingsContent(
         }
         if ("appearance" in visibleIds) settingsCard("appearance") { AppearanceSettings() }
         if ("layout" in visibleIds) settingsCard("layout") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.mode_selector_style), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.mode_selector_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ModeSelectorStyle.entries.forEach { style ->
-                        TextButton(onClick = { onSettingsChange(settings.copy(modeSelectorStyle = style)) }) {
-                            Text(
-                                if (style == ModeSelectorStyle.DIAL) stringResource(R.string.mode_selector_dial) else stringResource(R.string.mode_selector_buttons),
-                                color = if (settings.modeSelectorStyle == style) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (settings.modeSelectorStyle == style) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.mode_selector_style), stringResource(R.string.mode_selector_summary),
+                ModeSelectorStyle.entries, settings.modeSelectorStyle,
+                label = { stringResource(if (it == ModeSelectorStyle.DIAL) R.string.mode_selector_dial else R.string.mode_selector_buttons) },
+                tag = { "mode-selector-$it" }, onSelect = { onSettingsChange(settings.copy(modeSelectorStyle = it)) })
         }
         if ("translucent-chrome" in visibleIds) settingsCard("translucent-chrome") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SettingsToggleRow(
-                    title = stringResource(R.string.translucent_chrome),
-                    summary = stringResource(R.string.translucent_chrome_summary),
-                    checked = settings.translucentChrome,
-                    onCheckedChange = { onSettingsChange(settings.copy(translucentChrome = it)) },
-                )
-                if (settings.translucentChrome) {
-                    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                        Text(stringResource(R.string.viewfinder_scale), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                        Text(stringResource(R.string.viewfinder_scale_summary), color = Muted, fontSize = 14.sp)
-                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ViewfinderScale.entries.forEach { scale ->
-                                TextButton(onClick = { onSettingsChange(settings.copy(viewfinderScale = scale)) }) {
-                                    Text(
-                                        if (scale == ViewfinderScale.FIT) stringResource(R.string.viewfinder_scale_fit) else stringResource(R.string.viewfinder_scale_fill),
-                                        color = if (settings.viewfinderScale == scale) Amber else MaterialTheme.colorScheme.onSurface,
-                                        fontWeight = if (settings.viewfinderScale == scale) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            "${stringResource(R.string.chrome_opacity)} · ${(settings.chromeOpacity * 100).roundToInt()}%",
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        CineSlider(
-                            value = settings.chromeOpacity,
-                            onValueChange = { onSettingsChange(settings.copy(chromeOpacity = clampChromeOpacity((it * 20f).roundToInt() / 20f))) },
-                            valueRange = MIN_CHROME_OPACITY..MAX_CHROME_OPACITY,
-                            steps = 10,
-                        )
-                    }
-                }
+            SettingsToggleRow(
+                title = stringResource(R.string.translucent_chrome),
+                summary = stringResource(R.string.translucent_chrome_summary),
+                checked = settings.translucentChrome,
+                onCheckedChange = { onSettingsChange(settings.copy(translucentChrome = it)) },
+            )
+            if (settings.translucentChrome) {
+                SettingsOptionRow(stringResource(R.string.viewfinder_scale), stringResource(R.string.viewfinder_scale_summary),
+                    ViewfinderScale.entries, settings.viewfinderScale,
+                    label = { stringResource(if (it == ViewfinderScale.FIT) R.string.viewfinder_scale_fit else R.string.viewfinder_scale_fill) },
+                    tag = { "viewfinder-scale-$it" }, onSelect = { onSettingsChange(settings.copy(viewfinderScale = it)) })
+                SettingsSliderRow("${stringResource(R.string.chrome_opacity)} · ${(settings.chromeOpacity * 100).roundToInt()}%",
+                    settings.chromeOpacity,
+                    { onSettingsChange(settings.copy(chromeOpacity = clampChromeOpacity((it * 20f).roundToInt() / 20f))) },
+                    MIN_CHROME_OPACITY..MAX_CHROME_OPACITY, steps = 10, sliderModifier = Modifier.testTag("chrome-opacity"))
             }
         }
         if ("audio" in visibleIds) settingsCard("audio") {
@@ -3808,101 +3777,30 @@ internal fun SettingsContent(
             }
         }
         if ("burst" in visibleIds) settingsCard("burst") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                SettingsHelp(stringResource(R.string.burst_capture_help))
-                Text("${stringResource(R.string.burst_count)} · ${settings.burstCount}", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                CineSlider(
-                    value = settings.burstCount.toFloat(),
-                    onValueChange = { onSettingsChange(settings.copy(burstCount = it.roundToInt().coerceIn(3, 10))) },
-                    valueRange = 3f..10f,
-                    steps = 6,
-                )
-            }
+            SettingsSectionTitle(stringResource(R.string.burst_mode), help = stringResource(R.string.burst_capture_help), helpTag = "burst-help")
+            SettingsSliderRow("${stringResource(R.string.burst_count)} · ${settings.burstCount}", settings.burstCount.toFloat(),
+                { onSettingsChange(settings.copy(burstCount = it.roundToInt().coerceIn(3, 10))) }, 3f..10f, steps = 6,
+                sliderModifier = Modifier.testTag("burst-count"))
         }
         if ("bitrate" in visibleIds) settingsCard("bitrate") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.video_bitrate), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(12, 20, 40).forEach { bitrate ->
-                        TextButton(onClick = { onSettingsChange(settings.copy(videoBitrateMbps = bitrate)) }) {
-                            Text(
-                                "$bitrate Mbps",
-                                color = if (settings.videoBitrateMbps == bitrate) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (settings.videoBitrateMbps == bitrate) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.video_bitrate), null, listOf(12, 20, 40), settings.videoBitrateMbps,
+                label = { "$it Mbps" }, tag = { "video-bitrate-$it" }, onSelect = { onSettingsChange(settings.copy(videoBitrateMbps = it)) })
         }
         if ("geometry" in visibleIds) settingsCard("geometry") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.recording_geometry), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.recording_geometry_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RecordingGeometryMode.entries.forEach { mode ->
-                        TextButton(onClick = { onSettingsChange(settings.copy(recordingGeometryMode = mode)) }) {
-                            Text(
-                                stringResource(
-                                    if (mode == RecordingGeometryMode.COMPATIBLE) {
-                                        R.string.recording_geometry_compatible
-                                    } else {
-                                        R.string.recording_geometry_native
-                                    },
-                                ),
-                                color = if (settings.recordingGeometryMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (settings.recordingGeometryMode == mode) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.recording_geometry), stringResource(R.string.recording_geometry_summary),
+                RecordingGeometryMode.entries, settings.recordingGeometryMode,
+                label = { stringResource(if (it == RecordingGeometryMode.COMPATIBLE) R.string.recording_geometry_compatible else R.string.recording_geometry_native) },
+                tag = { "recording-geometry-$it" }, onSelect = { onSettingsChange(settings.copy(recordingGeometryMode = it)) })
         }
         if ("anamorphic" in visibleIds) settingsCard("anamorphic") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.anamorphic), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.anamorphic_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    AnamorphicSqueeze.entries.forEach { squeeze ->
-                        TextButton(
-                            onClick = { onSettingsChange(settings.copy(anamorphicSqueeze = squeeze)) },
-                            contentPadding = PaddingValues(0.dp),
-                        ) {
-                            Text(
-                                when (squeeze) {
-                                    AnamorphicSqueeze.NONE -> "OFF"
-                                    AnamorphicSqueeze.SQUEEZE_1_33X -> "1.33x"
-                                    AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
-                                    AnamorphicSqueeze.SQUEEZE_2X -> "2x"
-                                },
-                                color = if (settings.anamorphicSqueeze == squeeze) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontSize = 14.sp,
-                                fontWeight = if (settings.anamorphicSqueeze == squeeze) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-                if (settings.anamorphicSqueeze.isActive) {
-                    Text(stringResource(R.string.anamorphic_output), color = Muted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        AnamorphicOutputMode.entries.forEach { mode ->
-                            TextButton(
-                                onClick = { onSettingsChange(settings.copy(anamorphicOutputMode = mode)) },
-                                contentPadding = PaddingValues(0.dp),
-                            ) {
-                                Text(
-                                    when (mode) {
-                                        AnamorphicOutputMode.SQUEEZED -> "SQUEEZE+SAR"
-                                        AnamorphicOutputMode.DESQUEEZED -> "DESQUEEZE"
-                                    },
-                                    color = if (settings.anamorphicOutputMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 14.sp,
-                                    fontWeight = if (settings.anamorphicOutputMode == mode) FontWeight.Bold else FontWeight.Normal,
-                                )
-                            }
-                        }
-                    }
-                }
+            SettingsOptionRow(stringResource(R.string.anamorphic), stringResource(R.string.anamorphic_summary),
+                AnamorphicSqueeze.entries, settings.anamorphicSqueeze, label = { anamorphicSqueezeLabel(it) },
+                tag = { "anamorphic-squeeze-$it" }, onSelect = { onSettingsChange(settings.copy(anamorphicSqueeze = it)) })
+            if (settings.anamorphicSqueeze.isActive) {
+                SettingsOptionRow(stringResource(R.string.anamorphic_output), stringResource(R.string.anamorphic_output_summary),
+                    AnamorphicOutputMode.entries, settings.anamorphicOutputMode,
+                    label = { stringResource(if (it == AnamorphicOutputMode.SQUEEZED) R.string.anamorphic_output_squeezed else R.string.anamorphic_output_desqueezed) },
+                    tag = { "anamorphic-output-$it" }, onSelect = { onSettingsChange(settings.copy(anamorphicOutputMode = it)) })
             }
         }
         if ("accumulation" in visibleIds) settingsCard("accumulation") {
@@ -3954,20 +3852,9 @@ internal fun SettingsContent(
             )
         }
         if ("grid-mode" in visibleIds) settingsCard("grid-mode") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.composition_grid_mode), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompositionGridMode.entries.forEach { mode ->
-                        TextButton(onClick = { onSettingsChange(settings.copy(compositionGridMode = mode)) }) {
-                            Text(
-                                stringResource(compositionGridModeTitle(mode)),
-                                color = if (settings.compositionGridMode == mode) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (settings.compositionGridMode == mode) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.composition_grid_mode), null, CompositionGridMode.entries, settings.compositionGridMode,
+                label = { stringResource(compositionGridModeTitle(it)) }, tag = { "grid-mode-$it" },
+                onSelect = { onSettingsChange(settings.copy(compositionGridMode = it)) })
         }
         if ("horizon" in visibleIds) settingsCard("horizon") {
             SettingsToggleRow(
@@ -3998,41 +3885,16 @@ internal fun SettingsContent(
             LogGreyReferenceSettings(state, settings, onSettingsChange)
         }
         if ("focus-lock" in visibleIds) settingsCard("focus-lock") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.af_lock_behavior), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.af_lock_behavior_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AfLockBehavior.entries.forEach { behavior ->
-                        TextButton(onClick = { onSettingsChange(settings.copy(afLockBehavior = behavior)) }) {
-                            Text(
-                                if (behavior == AfLockBehavior.FREEZE_CURRENT) stringResource(R.string.af_lock_freeze_current)
-                                else stringResource(R.string.af_lock_focus_and_lock),
-                                color = if (settings.afLockBehavior == behavior) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (settings.afLockBehavior == behavior) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.af_lock_behavior), stringResource(R.string.af_lock_behavior_summary),
+                AfLockBehavior.entries, settings.afLockBehavior,
+                label = { stringResource(if (it == AfLockBehavior.FREEZE_CURRENT) R.string.af_lock_freeze_current else R.string.af_lock_focus_and_lock) },
+                tag = { "af-lock-$it" }, onSelect = { onSettingsChange(settings.copy(afLockBehavior = it)) })
         }
         if ("zoom-lens" in visibleIds) settingsCard("zoom-lens") {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.zoom_lens_switch_mode), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.zoom_lens_switch_mode_summary), color = Muted, fontSize = 14.sp)
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ZoomLensSwitchMode.entries.forEach { mode ->
-                        val chosen = settings.zoomLensSwitchMode == mode
-                        TextButton(onClick = { onSettingsChange(settings.copy(zoomLensSwitchMode = mode)) },
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("zoom-lens-switch-$mode").semantics { selected = chosen }) {
-                            Text(
-                                stringResource(if (mode == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic),
-                                color = if (chosen) Amber else MaterialTheme.colorScheme.onSurface,
-                                fontWeight = if (chosen) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsOptionRow(stringResource(R.string.zoom_lens_switch_mode), stringResource(R.string.zoom_lens_switch_mode_summary),
+                ZoomLensSwitchMode.entries, settings.zoomLensSwitchMode,
+                label = { stringResource(if (it == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic) },
+                tag = { "zoom-lens-switch-$it" }, onSelect = { onSettingsChange(settings.copy(zoomLensSwitchMode = it)) })
         }
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
@@ -4041,44 +3903,15 @@ internal fun SettingsContent(
             SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
                 Modifier.testTag("settings-open-capabilities"))
         }
-        if ("hardware" in visibleIds) settingsCard("hardware") {
-            val descriptor = state.descriptor
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp)) {
-                Text(stringResource(R.string.hardware_truth), color = VerifiedCyan, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.hardware_camera_line, descriptor?.cameraId ?: "—", descriptor?.previewSize?.width ?: 0, descriptor?.previewSize?.height ?: 0), color = MaterialTheme.colorScheme.onSurface)
-                Text(stringResource(R.string.hardware_still_line, descriptor?.jpegSize?.width ?: 0, descriptor?.jpegSize?.height ?: 0,
-                    stringResource(if (descriptor?.supportsRaw == true) R.string.hardware_supported else R.string.hardware_not_supported)), color = Muted)
-                val profilesVerifiedTemplate = stringResource(R.string.hardware_log_profiles_verified)
-                val logUnsupported = stringResource(R.string.hardware_log_unsupported)
-                Text(
-                    if (descriptor?.supportsOpenCineLog == true) {
-                        val trueLog = descriptor.logProfiles.filter { it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020 }
-                        val hfrLog = descriptor.logProfiles.filter { it.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP }
-                        val verifiedCount = descriptor.logProfiles.count { it.isVerified }
-                        val qualification = if (descriptor.allOpenCineLogProfilesVerified) {
-                            "VERIFIED"
-                        } else {
-                            profilesVerifiedTemplate.format(verifiedCount, descriptor.logProfiles.size)
-                        }
-                        "OCLog2 $qualification · HLG10-DERIVED ${trueLog.maxOfOrNull { it.size.width } ?: 0}×${trueLog.maxOfOrNull { it.size.height } ?: 0} @ ${trueLog.maxOfOrNull { it.fps } ?: 0} max" +
-                            if (hfrLog.isNotEmpty()) " · HFR ISP-DERIVED ${hfrLog.maxOf { it.fps }} max" else ""
-                    } else {
-                        logUnsupported
-                    },
-                    color = when {
-                        descriptor?.allOpenCineLogProfilesVerified == true -> VerifiedCyan
-                        descriptor?.supportsOpenCineLog == true -> Amber
-                        else -> RecordRed
-                    },
-                    fontSize = 14.sp,
-                )
-            }
-        }
-        if ("modes" in visibleIds) items(CaptureMode.entries) { mode ->
-            val gate = state.modeGates.getValue(mode)
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(7.dp)).padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(modeLabel(mode), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-                Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        if ("hardware" in visibleIds) settingsCard("hardware") { HardwareSettingsSummary(state.descriptor) }
+        if ("modes" in visibleIds) settingsCard("modes") {
+            SettingsSectionTitle(stringResource(R.string.settings_mode_availability))
+            CaptureMode.entries.forEach { mode ->
+                val gate = state.modeGates.getValue(mode)
+                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(modeLabel(mode), Modifier.weight(1f).padding(end = 16.dp), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                    Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         if ("about" in visibleIds) settingsCard("about") {
@@ -4092,23 +3925,19 @@ internal fun SettingsContent(
 /** A row that opens a full page of its own (About, camera capabilities). */
 @Composable
 private fun SettingsLinkRow(title: String, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    // The card is the surface; the whole row opens the page and ends in a quiet chevron.
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description }
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-            Text(description, color = Muted, fontSize = 14.sp)
-        }
-        Text("›", color = Amber, fontSize = 22.sp)
+        Box(Modifier.weight(1f)) { SettingsRowLabel(title, description) }
+        CineGlyph(CineIcon.CHEVRON_RIGHT, Muted, Modifier.size(20.dp))
     }
 }
 
@@ -4119,11 +3948,9 @@ private fun ProfessionalAudioSettings(
     onSettingsChange: (CameraSettings) -> Unit,
 ) {
     val capabilities = state.audioCapabilities
-    Column(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(stringResource(R.string.professional_audio), color = VerifiedCyan, fontWeight = FontWeight.Bold)
+    // The settings card is the surface; no second box inside it.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SettingsSectionTitle(stringResource(R.string.professional_audio))
         AudioListeningSettingsControls(state, settings, onSettingsChange, LocalAudioListeningActions.current)
         AudioEffectsSettingsStatus(state, settings)
         AudioMeterSettingsControls(settings, onSettingsChange)
@@ -4132,7 +3959,7 @@ private fun ProfessionalAudioSettings(
             return@Column
         }
         if (capabilities.formats.isEmpty()) {
-            Text(stringResource(R.string.audio_no_route), color = RecordRed, fontSize = 14.sp)
+            Text(stringResource(R.string.audio_no_route), color = LocalCineColors.current.pending, fontSize = 14.sp)
             return@Column
         }
         fun update(candidate: CameraSettings) = onSettingsChange(candidate.normalizedFor(capabilities))
@@ -4211,8 +4038,7 @@ private fun ProfessionalAudioSettings(
             Text(stringResource(R.string.audio_gain_aac_backend), color = Muted, fontSize = 14.sp)
         } else {
             val derived = settings.audioSampleRateHz * settings.audioBitDepth.bits * settings.audioChannels / 1_000
-            val container = if (settings.audioOutputFormat == AudioOutputFormat.FLAC) "Lossless compressed FLAC" else "WAV PCM"
-            Text("$container · PCM fuente: $derived kbps · archivo sincronizado junto al video", color = VerifiedCyan, fontSize = 14.sp)
+            Text(stringResource(R.string.audio_pcm_rate, derived), Modifier.testTag("audio-pcm-rate"), color = Muted, fontSize = 14.sp)
         }
 
         AudioChoiceRow(
@@ -4600,10 +4426,11 @@ private fun gateLabel(gate: ModeGateState): String = when (gate) {
 @Composable
 @ReadOnlyComposable
 private fun gateColor(gate: ModeGateState): Color = when (gate) {
+    // Red belongs to REC; a failed mode is a warning, like a pending one.
     ModeGateState.AVAILABLE -> VerifiedCyan
-    ModeGateState.CANDIDATE -> Amber
+    ModeGateState.CANDIDATE -> MaterialTheme.colorScheme.onSurface
     ModeGateState.UNSUPPORTED -> Muted
-    ModeGateState.FAILED -> RecordRed
+    ModeGateState.FAILED -> LocalCineColors.current.pending
 }
 
 private fun formatShutter(exposureTimeNs: Long): String {

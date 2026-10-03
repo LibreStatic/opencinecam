@@ -19,4 +19,13 @@
     <string name="pro_wb_temperature">Température de couleur</string>
     <string name="caps_section_readback">Demandé et indiqué</string>
     <string name="caps_section_readback_summary">Ce que OpenCineCam a demandé à la caméra utilisée, à côté de ce que la caméra a indiqué dans sa dernière image.</string>
+    <string name="hardware_log_status">OCLog2 : %1$s</string>
+    <string name="hardware_log_all_verified">tous les formats vérifiés</string>
+    <string name="hardware_log_hdr">Depuis la vidéo HDR 10 bits : jusqu\'à %1$d×%2$d, jusqu\'à %3$d fps</string>
+    <string name="hardware_log_high_speed">Haute vitesse depuis la vidéo 8 bits : jusqu\'à %1$d fps</string>
+    <string name="anamorphic_off">Désactivé</string>
+    <string name="anamorphic_output_squeezed">Garder anamorphosé</string>
+    <string name="anamorphic_output_desqueezed">Désanamorphoser</string>
+    <string name="anamorphic_output_summary">Garder anamorphosé enregistre l\'image de l\'objectif telle quelle et indique aux lecteurs de l\'étirer. Désanamorphoser l\'étire dans le fichier.</string>
+    <string name="audio_pcm_rate">Source non compressée : %1$d kbit/s</string>
 </resources>

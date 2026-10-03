@@ -18,4 +18,13 @@
     <string name="pro_wb_temperature">Farbtemperatur</string>
     <string name="caps_section_readback">Angefordert und gemeldet</string>
     <string name="caps_section_readback_summary">Was OpenCineCam von der aktiven Kamera angefordert hat, neben dem, was die Kamera im letzten Bild gemeldet hat.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">alle Formate verifiziert</string>
+    <string name="hardware_log_hdr">Aus 10-Bit-HDR-Video: bis %1$d×%2$d, bis %3$d fps</string>
+    <string name="hardware_log_high_speed">Zeitlupe aus 8-Bit-Video: bis %1$d fps</string>
+    <string name="anamorphic_off">Aus</string>
+    <string name="anamorphic_output_squeezed">Gestaucht lassen</string>
+    <string name="anamorphic_output_desqueezed">Entzerren</string>
+    <string name="anamorphic_output_summary">Gestaucht lassen speichert das Bild des Objektivs unverändert und weist Player an, es zu strecken. Entzerren streckt es in der Datei.</string>
+    <string name="audio_pcm_rate">Unkomprimierte Quelle: %1$d kbit/s</string>
 </resources>

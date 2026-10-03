@@ -8,7 +8,7 @@
     <string name="audio_gain_agc_suspended">O modo manual suspende o AGC, inclusive em 0 dB. A preferência de AGC é mantida para quando o modo manual for desativado.</string>
     <string name="audio_gain_agc_backend">O AGC é uma solicitação, não uma prova de aplicação. Os efeitos de hardware e o AGC por software dependem do backend de gravação ativo e do formato PCM; o MediaRecorder não expõe esse controle.</string>
     <string name="audio_gain_pending">As alterações de ganho de gravação estão pendentes para a próxima tomada. Esta tomada mantém o ganho e a configuração de AGC admitidos.</string>
-    <string name="audio_gain_aac_backend">O AAC-LC é incorporado ao MP4. O MediaRecorder direto não expõe ganho manual de amostras nem AGC controlado pelo app; isso exige um caminho de codificação PCM compatível.</string>
+    <string name="audio_gain_aac_backend">Com AAC, o codificador do telefone define o ganho. O ganho manual e o controle automático de ganho exigem WAV ou FLAC.</string>
     <string name="audio_gain_no_receipt">Sem recibo de aplicação de ganho PCM atual. O valor configurado é apenas uma solicitação.</string>
     <string name="audio_gain_applied">Ganho PCM digital aplicado: %1$d dB</string>
     <string name="audio_gain_manual_not_applied">A fonte PCM ativa informa que o ganho manual está desativado; isso não confirma o AGC.</string>

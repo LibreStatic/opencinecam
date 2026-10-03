@@ -18,4 +18,13 @@
     <string name="pro_wb_temperature">Color temperature</string>
     <string name="caps_section_readback">Requested and reported</string>
     <string name="caps_section_readback_summary">What OpenCineCam asked the camera in use for, next to what the camera reported in its latest frame.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">all formats verified</string>
+    <string name="hardware_log_hdr">From 10-bit HDR video: up to %1$d×%2$d, up to %3$d fps</string>
+    <string name="hardware_log_high_speed">High speed from 8-bit video: up to %1$d fps</string>
+    <string name="anamorphic_off">Off</string>
+    <string name="anamorphic_output_squeezed">Keep squeezed</string>
+    <string name="anamorphic_output_desqueezed">De-squeeze</string>
+    <string name="anamorphic_output_summary">Keep squeezed saves the lens image as it is and tells players to stretch it. De-squeeze stretches it in the file.</string>
+    <string name="audio_pcm_rate">Uncompressed source: %1$d kbps</string>
 </resources>

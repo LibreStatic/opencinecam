@@ -19,4 +19,13 @@
     <string name="pro_wb_temperature">Temperatura de cor</string>
     <string name="caps_section_readback">Solicitado e informado</string>
     <string name="caps_section_readback_summary">O que o OpenCineCam pediu à câmera em uso, ao lado do que a câmera informou no último quadro.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">todos os formatos verificados</string>
+    <string name="hardware_log_hdr">A partir de vídeo HDR de 10 bits: até %1$d×%2$d, até %3$d fps</string>
+    <string name="hardware_log_high_speed">Alta velocidade a partir de vídeo de 8 bits: até %1$d fps</string>
+    <string name="anamorphic_off">Desligado</string>
+    <string name="anamorphic_output_squeezed">Manter comprimida</string>
+    <string name="anamorphic_output_desqueezed">Descomprimir</string>
+    <string name="anamorphic_output_summary">Manter comprimida salva a imagem da lente como está e indica aos reprodutores que a estiquem. Descomprimir a estica no arquivo.</string>
+    <string name="audio_pcm_rate">Fonte sem compressão: %1$d kbps</string>
 </resources>

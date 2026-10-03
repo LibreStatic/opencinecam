@@ -22,7 +22,7 @@
     <string name="about_license_error">Le catalogue de licences intégré n\'a pas pu être lu.</string>
     <string name="about_expand_license">Afficher la licence de %1$s</string>
     <string name="about_collapse_license">Masquer la licence de %1$s</string>
-    <string name="hardware_truth">Verdade de hardware</string>
+    <string name="hardware_truth">Matériel de la caméra</string>
     <string name="photo_mode">Photo</string>
     <string name="raw_photo_mode">Photo RAW</string>
     <string name="burst_mode">Rafale</string>
@@ -231,7 +231,7 @@
     <string name="fold_adapt">Séparer l\'aperçu et les commandes à la charnière</string>
     <string name="fold_swap">Échanger les volets aperçu et commandes</string>
     <string name="fold_unknown">Inconnu</string>
-    <string name="fold_unsupported">Non pris en charge par l\'API publique</string>
+    <string name="fold_unsupported">Non pris en charge sur cet appareil</string>
     <string name="fold_unavailable">Temporairement indisponible</string>
     <string name="fold_available">Disponible</string>
     <string name="fold_active">Actif</string>
@@ -643,12 +643,12 @@
     <string name="audio_choice_without_audio">Enregistrer sans audio</string>
     <string name="audio_input_device_hint">Android vous laisse choisir le périphérique d\'entrée ; il ne garantit pas la sélection d\'une capsule de microphone intégrée individuelle.</string>
     <string name="audio_format_container_hint">L\'AAC est intégré au MP4. WAV et FLAC sont enregistrés en fichiers séparés synchronisés avec les métadonnées de capture.</string>
-    <string name="hardware_camera_line">Caméra %1$s · %2$d×%3$d</string>
-    <string name="hardware_still_line">JPEG %1$d×%2$d · RAW %3$s</string>
-    <string name="hardware_supported">OUI</string>
-    <string name="hardware_not_supported">NON</string>
-    <string name="hardware_log_profiles_verified">%1$d/%2$d profils vérifiés</string>
-    <string name="hardware_log_unsupported">OCLog2 NON PRIS EN CHARGE · aucun graphe appuyé sur les capacités</string>
+    <string name="hardware_camera_line">Caméra %1$s · aperçu %2$d×%3$d</string>
+    <string name="hardware_still_line">Photos jusqu\'à %1$d×%2$d · RAW : %3$s</string>
+    <string name="hardware_supported">Oui</string>
+    <string name="hardware_not_supported">Non</string>
+    <string name="hardware_log_profiles_verified">%1$d formats vérifiés sur %2$d</string>
+    <string name="hardware_log_unsupported">OCLog2 n\'est pas disponible sur cette caméra</string>
     <string name="panel_title_ev">EV</string>
     <string name="panel_title_resolution">RÉSOLUTION</string>
     <string name="panel_title_fixed_fps">FPS FIXES</string>

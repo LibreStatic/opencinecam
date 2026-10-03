@@ -22,7 +22,7 @@
     <string name="about_license_error">Impossibile leggere il catalogo delle licenze incluso.</string>
     <string name="about_expand_license">Mostra la licenza di %1$s</string>
     <string name="about_collapse_license">Nascondi la licenza di %1$s</string>
-    <string name="hardware_truth">Verità hardware</string>
+    <string name="hardware_truth">Hardware della fotocamera</string>
     <string name="photo_mode">Foto</string>
     <string name="raw_photo_mode">Foto RAW</string>
     <string name="burst_mode">Raffica</string>
@@ -231,7 +231,7 @@
     <string name="fold_adapt">Separa anteprima e controlli alla cerniera</string>
     <string name="fold_swap">Scambia i pannelli di anteprima e controlli</string>
     <string name="fold_unknown">Sconosciuto</string>
-    <string name="fold_unsupported">Non supportato dall\'API pubblica</string>
+    <string name="fold_unsupported">Non supportato su questo dispositivo</string>
     <string name="fold_unavailable">Temporaneamente non disponibile</string>
     <string name="fold_available">Disponibile</string>
     <string name="fold_active">Attivo</string>
@@ -643,12 +643,12 @@
     <string name="audio_choice_without_audio">Registra senza audio</string>
     <string name="audio_input_device_hint">Android ti permette di scegliere il dispositivo di ingresso; non garantisce la selezione di una singola capsula microfonica integrata.</string>
     <string name="audio_format_container_hint">L\'AAC è incorporato nell\'MP4. WAV e FLAC sono salvati come file separati sincronizzati con i metadati di acquisizione.</string>
-    <string name="hardware_camera_line">Fotocamera %1$s · %2$d×%3$d</string>
-    <string name="hardware_still_line">JPEG %1$d×%2$d · RAW %3$s</string>
-    <string name="hardware_supported">SÌ</string>
-    <string name="hardware_not_supported">NO</string>
-    <string name="hardware_log_profiles_verified">%1$d/%2$d profili verificati</string>
-    <string name="hardware_log_unsupported">OCLog2 NON SUPPORTATO · nessun grafo basato sulle capacità</string>
+    <string name="hardware_camera_line">Fotocamera %1$s · anteprima %2$d×%3$d</string>
+    <string name="hardware_still_line">Foto fino a %1$d×%2$d · RAW: %3$s</string>
+    <string name="hardware_supported">Sì</string>
+    <string name="hardware_not_supported">No</string>
+    <string name="hardware_log_profiles_verified">%1$d formati su %2$d verificati</string>
+    <string name="hardware_log_unsupported">OCLog2 non è disponibile su questa fotocamera</string>
     <string name="panel_title_ev">EV</string>
     <string name="panel_title_resolution">RISOLUZIONE</string>
     <string name="panel_title_fixed_fps">FPS FISSI</string>
