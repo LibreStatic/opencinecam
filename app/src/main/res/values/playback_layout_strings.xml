@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="playback_layout_photo_title">Photo</string>
+    <string name="playback_layout_share_photo">Share photo</string>
+    <string name="playback_layout_delete_photo">Delete photo</string>
+    <string name="playback_layout_photo_info">Photo details</string>
+    <string name="playback_layout_close_info">Close details</string>
+    <string name="playback_layout_file_name">File name</string>
+    <string name="playback_layout_review_position">In this review</string>
+    <string name="playback_layout_size">Size</string>
+    <string name="playback_layout_photo_size">%1$d × %2$d pixels</string>
+    <string name="playback_layout_section_format">Format</string>
+    <string name="playback_layout_section_accuracy">Frame accuracy</string>
+    <string name="playback_layout_frame_estimate">About frame %1$d/%2$d</string>
+    <string name="playback_layout_estimated_detail">While playing, the frame number is the player’s estimate. Pause to see an exact frame.</string>
+    <string name="playback_layout_direct_output">Direct output</string>
+    <string name="playback_layout_show_controls">Show controls</string>
+    <string name="playback_layout_hide_controls">Hide controls</string>
+    <string name="playback_layout_position" translatable="false">%1$d / %2$d</string>
+    <string name="playback_layout_position_more" translatable="false">%1$d / %2$d+</string>
+</resources>

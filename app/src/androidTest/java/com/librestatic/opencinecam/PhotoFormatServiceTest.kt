@@ -459,6 +459,8 @@ class PhotoFormatServiceTest {
                         compose.onAllNodesWithTag("media-playback-frame",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty()
                 }
                 node("error-detail").assertDoesNotExist()
+                // A single file is named in the take details, where the DNG note is too; several get the switcher.
+                compose.openPlaybackDetails()
                 node("member").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_member,index+1,members.size,artifact.name))
                 for(tag in listOf("play-pause","exact","next-frame","previous-frame","native-frame-mode")) node(tag).assertDoesNotExist()
                 val content=originals.getValue(artifact.uri)
@@ -472,6 +474,7 @@ class PhotoFormatServiceTest {
                 if(artifact.mimeType=="image/x-adobe-dng") node("dng-preview").performScrollTo().assertTextEquals(
                     context.getString(R.string.media_playback_dng_preview,oriented.width,oriented.height))
                 else node("dng-preview").assertDoesNotExist()
+                compose.closePlaybackDetails()
                 var screenshot:android.graphics.Bitmap?=null
                 var reference:android.graphics.Bitmap?=null
                 try {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="playback_screen_title">OpenCineCam · Clip playback</string>
+    <string name="playback_screen_title">Clip playback</string>
     <string name="playback_screen_share">Share clip</string>
     <string name="playback_screen_delete">Delete clip</string>
     <string name="playback_screen_take_position">%1$d of %2$d</string>
@@ -13,8 +13,8 @@
     <string name="playback_screen_rec709" translatable="false">Rec.709</string>
     <string name="playback_screen_histogram">Luma histogram</string>
     <string name="playback_screen_settings">Playback settings</string>
-    <string name="playback_screen_native_surface">Use native Surface</string>
-    <string name="playback_screen_cpu_frames">Use CPU frames</string>
+    <string name="playback_screen_native_surface">Use direct display output</string>
+    <string name="playback_screen_cpu_frames">Use verified colour frames</string>
     <string name="playback_screen_retry">Retry</string>
     <string name="playback_screen_interpret_track">Interpret track</string>
     <string name="playback_screen_exact_error_title">We couldn\'t enable exact frames on this device.</string>

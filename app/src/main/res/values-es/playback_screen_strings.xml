@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="playback_screen_title">OpenCineCam · Reproducción de clip</string>
+    <string name="playback_screen_title">Reproducción de clip</string>
     <string name="playback_screen_share">Compartir clip</string>
     <string name="playback_screen_delete">Eliminar clip</string>
     <string name="playback_screen_take_position">%1$d de %2$d</string>
@@ -11,8 +11,8 @@
     <string name="playback_screen_monitoring">LUT de monitoreo</string>
     <string name="playback_screen_histogram">Histograma de luminancia</string>
     <string name="playback_screen_settings">Ajustes de reproducción</string>
-    <string name="playback_screen_native_surface">Usar Surface nativa</string>
-    <string name="playback_screen_cpu_frames">Usar cuadros por CPU</string>
+    <string name="playback_screen_native_surface">Usar salida directa a pantalla</string>
+    <string name="playback_screen_cpu_frames">Usar fotogramas con color verificado</string>
     <string name="playback_screen_retry">Reintentar</string>
     <string name="playback_screen_interpret_track">Interpretar pista</string>
     <string name="playback_screen_exact_error_title">No pudimos activar cuadros exactos en este dispositivo.</string>

@@ -113,12 +113,11 @@ class MediaPlaybackSurfaceUiTest {
     }
 
     private fun exact(index: Int, pts: Long) {
-        val text = context.getString(R.string.media_playback_exact, index, 4, pts)
         compose.waitUntil(20_000) {
-            runCatching { node("exact").assertTextEquals(text) }.isSuccess || present("error-detail")
+            runCatching { node("exact").assertExactFrame(context, index, 4, pts) }.isSuccess || present("error-detail")
         }
         node("error-detail").assertDoesNotExist()
-        node("exact").performScrollTo().assertTextEquals(text)
+        node("exact").performScrollTo().assertExactFrame(context, index, 4, pts)
         node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
     }
 

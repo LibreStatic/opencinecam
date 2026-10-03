@@ -619,12 +619,7 @@
     <string name="still_recovery_notice">Verworfene unterbrochene Fotogruppen: %1$d; Wiederherstellung ausstehend: %2$d</string>
     <string name="recording_recovery_notice">Verworfene unterbrochene Takes: %1$d; Wiederherstellung ausstehend: %2$d</string>
     <string name="webdav_transfer_waiting_media">Übertragungen warten, solange lokale Mediendateien geändert werden.</string>
-    <string name="media_playback_native_frames">Native Surface für exakte Frames verwenden</string>
-    <string name="media_playback_cpu_frames">CPU-Frame-Vorschau verwenden (SDR)</string>
-    <string name="media_playback_log_view_rec709">Rec.709-Ansichtshilfe anzeigen</string>
-    <string name="media_playback_log_view_flat">Flaches OCLog2 anzeigen</string>
-    <string name="media_playback_log_stage_error">OCLog2-Ansicht nicht verfügbar; Rohwerte werden angezeigt: %1$s</string>
-    <string name="media_playback_native_frame_mode">Frames auf nativer Surface: Exakte Positionen erfordern einen Render-Callback. Die Farbe folgt der Systempipeline; ein Wechsel der Ausgabe startet die Ansicht ohne Autoplay neu.</string>
+    <string name="media_playback_native_frame_mode">Die direkte Bildschirmausgabe ist an: Bilder gehen direkt auf den Bildschirm, und die Farbe folgt dem System statt der geprüften Vorschau. Sie lässt sich in den Wiedergabeeinstellungen ausschalten.</string>
     <string name="media_playback_native_hdr_available">%1$s: Dieses Display bietet den passenden HDR-Typ an. Die physische HDR-Treue ist nicht verifiziert.</string>
     <string name="media_playback_native_hdr_unavailable">%1$s: Dieses Display bietet den passenden HDR-Typ nicht an. Das System kann per Tone-Mapping auf SDR umrechnen.</string>
     <string name="proxy_share">Nur Proxy teilen</string>

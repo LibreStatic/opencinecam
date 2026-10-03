@@ -54,6 +54,33 @@ fun loadFilmstrip(context: Context, uri: String, durationUs: Long, count: Int, h
     return frames
 }
 
+/**
+ * A quick still of the clip's first sync frame, at most [maxEdgePx] on its long side, shown while the exact
+ * reader indexes the clip and decodes frame 0 (seconds on long or 10-bit clips). Approximate by design:
+ * OCLog2 clips go through the platform retriever and the review [view], like the filmstrip fallback.
+ * Blocking; null when the platform cannot decode it.
+ */
+fun loadPoster(context: Context, uri: String, maxEdgePx: Int, log: OcLogClip?, view: PreciseLogView): Bitmap? {
+    if (maxEdgePx <= 0) return null
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, Uri.parse(uri))
+        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: return null
+        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: return null
+        if (width <= 0 || height <= 0) return null
+        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        val (shownWidth, shownHeight) = if ((rotation % 360 + 360) % 360 in setOf(90, 270)) height to width else width to height
+        val scale = minOf(1.0, maxEdgePx.toDouble() / maxOf(shownWidth, shownHeight))
+        val frame = retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            (shownWidth * scale).roundToInt().coerceAtLeast(1), (shownHeight * scale).roundToInt().coerceAtLeast(1)) ?: return null
+        if (log == null) frame else logThumbnail(frame, view)
+    } catch (_: Exception) {
+        null
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
 /** Null when the exact reader cannot open the clip; frames that fail individually are skipped. */
 private fun preciseLogFilmstrip(context: Context, uri: String, count: Int, heightPx: Int, log: OcLogClip, view: PreciseLogView): List<Bitmap>? {
     val reader = runCatching { PreciseVideoFrames(context, uri, log = log.signal) }.getOrNull() ?: return null

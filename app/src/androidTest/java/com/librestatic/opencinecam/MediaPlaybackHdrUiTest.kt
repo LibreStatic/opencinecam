@@ -21,12 +21,19 @@ class MediaPlaybackHdrUiTest {
     private fun click(tag: String) { node(tag).performScrollTo().performClick() }
     private fun exact(index: Int, pts: Long) {
         compose.waitUntil(30_000) {
-            runCatching { node("exact").assertTextEquals(context.getString(R.string.media_playback_exact, index, 4, pts)) }.isSuccess ||
+            runCatching { node("exact").assertExactFrame(context, index, 4, pts) }.isSuccess ||
                 compose.onAllNodesWithTag("media-playback-error-detail", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
         node("error-detail").assertDoesNotExist()
-        node("exact").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_exact, index, 4, pts))
+        node("exact").performScrollTo().assertExactFrame(context, index, 4, pts)
         node("status").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_paused))
+    }
+    /** The decoding notes live in the take details; they are closed again so the transport takes touches. */
+    private fun assertHdrPreview(transfer: PreciseHdrTransfer) {
+        compose.openPlaybackDetails()
+        node("hdr-preview").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_hdr_preview, transfer.name))
+        node("color-interpretation").assertDoesNotExist()
+        compose.closePlaybackDetails()
     }
     @Test fun pqHlgExactReviewLabelsSdrPreviewAndRetiresBeforeLeavingOriginalsUnchanged() {
         assertTrue("Positive P010 UI acceptance requires API33+", Build.VERSION.SDK_INT >= 33)
@@ -53,13 +60,12 @@ class MediaPlaybackHdrUiTest {
             for ((member, transfer) in listOf(PreciseHdrTransfer.PQ, PreciseHdrTransfer.HLG).withIndex()) {
                 if (member > 0) click("next-member")
                 exact(1, 0L)
-                node("hdr-preview").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_hdr_preview, transfer.name))
-                node("color-interpretation").assertDoesNotExist()
+                assertHdrPreview(transfer)
                 node("interpret-track").assertDoesNotExist()
                 click("next-frame"); exact(2, 400_000L)
                 click("end"); exact(4, 1_700_000L)
                 node("next-frame").performScrollTo().assertIsNotEnabled()
-                node("hdr-preview").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_hdr_preview, transfer.name))
+                assertHdrPreview(transfer)
                 click("start"); exact(1, 0L)
                 node("previous-frame").performScrollTo().assertIsNotEnabled()
             }

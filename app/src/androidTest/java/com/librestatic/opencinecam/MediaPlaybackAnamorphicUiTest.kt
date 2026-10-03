@@ -58,7 +58,7 @@ class MediaPlaybackAnamorphicUiTest {
             assertFrame(0, rotation, false)
             node("native-frame-mode").assertDoesNotExist()
             if (native) {
-                click("native-frames")
+                compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = true) }
                 compose.waitUntil(30_000) { (present("native-frame-mode") && !present("frame") && present("exact")) || present("error-detail") }
                 assertFrame(0, rotation, true)
             }
@@ -96,7 +96,7 @@ class MediaPlaybackAnamorphicUiTest {
             compose.waitUntil(30_000) { present("exact") || present("error-detail") }
             node("error-detail").assertDoesNotExist()
             val pausedIndex = pts.indices.singleOrNull { index ->
-                runCatching { node("exact").assertTextEquals(exactText(index)) }.isSuccess
+                runCatching { node("exact").assertExactFrame(context, index + 1, pts.size, pts[index]) }.isSuccess
             }
             assertNotNull("Paused output must identify one actual indexed PTS", pausedIndex)
             assertFrame(requireNotNull(pausedIndex), rotation, native)
@@ -104,7 +104,7 @@ class MediaPlaybackAnamorphicUiTest {
             click("start"); assertFrame(0, rotation, native)
 
             if (native) {
-                click("native-frames")
+                compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = false) }
                 compose.waitUntil(30_000) { (!present("native-frame-mode") && present("frame") && present("exact")) || present("error-detail") }
                 assertFrame(0, rotation, false)
             }
@@ -112,7 +112,7 @@ class MediaPlaybackAnamorphicUiTest {
             click("next-frame"); assertFrame(1, rotation, false)
             compose.runOnIdle {
                 assertEquals(initialSettings, settings.value)
-                assertEquals("Decoder choice and navigation must not persist preferences", 0, settingsWrites)
+                assertEquals("Review navigation must not write preferences", 0, settingsWrites)
             }
             node("close").performClick()
             node("dialog").assertDoesNotExist()
@@ -137,13 +137,12 @@ class MediaPlaybackAnamorphicUiTest {
             ("media-playback-native-frame-mode" in byTag) == native
     }
 
-    private fun exactText(index: Int) = context.getString(R.string.media_playback_exact, index + 1, pts.size, pts[index])
     private fun exact(index: Int) {
         compose.waitUntil(30_000) {
-            runCatching { node("exact").assertTextEquals(exactText(index)) }.isSuccess || present("error-detail")
+            runCatching { node("exact").assertExactFrame(context, index + 1, pts.size, pts[index]) }.isSuccess || present("error-detail")
         }
         node("error-detail").assertDoesNotExist()
-        node("exact").performScrollTo().assertTextEquals(exactText(index))
+        node("exact").performScrollTo().assertExactFrame(context, index + 1, pts.size, pts[index])
         node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
     }
 
@@ -159,7 +158,7 @@ class MediaPlaybackAnamorphicUiTest {
             assertEquals("CPU image rectangle must apply crop and SAR once", ratio(rotation), bounds.width.toDouble() / bounds.height, 0.025)
         }
         rendered(rotation, index)
-        node("exact").assertTextEquals(exactText(index))
+        node("exact").assertExactFrame(context, index + 1, pts.size, pts[index])
         node("status").assertTextEquals(context.getString(R.string.media_playback_paused))
         if (native) node("frame").assertDoesNotExist() else node("frame").assertExists()
     }

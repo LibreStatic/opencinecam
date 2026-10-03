@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="playback_screen_title">OpenCineCam · Lecture du clip</string>
+    <string name="playback_screen_title">Lecture du clip</string>
     <string name="playback_screen_share">Partager le clip</string>
     <string name="playback_screen_delete">Supprimer le clip</string>
     <string name="playback_screen_take_position">%1$d sur %2$d</string>
@@ -11,8 +11,8 @@
     <string name="playback_screen_monitoring">LUT de monitoring</string>
     <string name="playback_screen_histogram">Histogramme de luminance</string>
     <string name="playback_screen_settings">Réglages de lecture</string>
-    <string name="playback_screen_native_surface">Utiliser la Surface native</string>
-    <string name="playback_screen_cpu_frames">Utiliser les images CPU</string>
+    <string name="playback_screen_native_surface">Utiliser la sortie directe vers l\'écran</string>
+    <string name="playback_screen_cpu_frames">Utiliser les images à couleur vérifiée</string>
     <string name="playback_screen_retry">Réessayer</string>
     <string name="playback_screen_interpret_track">Interpréter la piste</string>
     <string name="playback_screen_exact_error_title">Impossible d\'activer les images exactes sur cet appareil.</string>

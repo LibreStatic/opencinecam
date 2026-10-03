@@ -2,9 +2,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <resources>
     <string name="media_playback_close">Fermer la revue</string>
-    <string name="media_playback_member">Élément %1$d sur %2$d : %3$s</string>
-    <string name="media_playback_previous_member">Élément précédent</string>
-    <string name="media_playback_next_member">Élément suivant</string>
+    <string name="media_playback_member">Fichier %1$d sur %2$d : %3$s</string>
+    <string name="media_playback_previous_member">Fichier précédent</string>
+    <string name="media_playback_next_member">Fichier suivant</string>
     <string name="media_playback_previous_take">Prise précédente</string>
     <string name="media_playback_next_take">Prise suivante</string>
     <string name="media_playback_loading">Lecture du média…</string>
@@ -14,9 +14,8 @@
     <string name="media_playback_ended">Fin du média</string>
     <string name="media_playback_error">Échec de lecture du média ; aucune image approximative n\'est substituée.</string>
     <string name="media_playback_closed">Lecteur fermé</string>
-    <string name="media_playback_retry">Réessayer la lecture</string>
-    <string name="media_playback_exact">Image vérifiée %1$d / %2$d · PTS %3$d µs</string>
-    <string name="media_playback_estimated">Position du lecteur : %1$d ms (image non vérifiée)</string>
+    <string name="media_playback_exact">L\'image %1$d sur %2$d est affichée exactement telle qu\'elle est enregistrée dans le fichier, à %3$s s.</string>
+    <string name="media_playback_estimated">Position du lecteur : %1$d ms</string>
     <string name="media_playback_pause">Pause</string>
     <string name="media_playback_play">Lecture</string>
     <string name="media_playback_start">Aller au début</string>
@@ -27,8 +26,6 @@
     <string name="media_playback_color_interpreted">Couleur interprétée à partir des balises de la piste, non vérifiée. Le PTS exact ne change pas. La lecture continue utilise l\'interprétation couleur propre au lecteur. Ce choix est réinitialisé quand vous quittez cet élément.</string>
     <string name="media_playback_color_tags">Interprétation de la piste : standard %1$d, plage %2$d. Décodeur : standard %3$d, plage %4$d.</string>
     <string name="media_playback_color_strict">Revenir à la lecture couleur stricte</string>
-    <string name="media_playback_color_choice">La couleur du décodeur n\'est pas prise en charge. Vous pouvez interpréter explicitement cette revue avec les balises SDR de la piste sans modifier le fichier ; la fidélité des couleurs n\'est pas vérifiée.</string>
-    <string name="media_playback_interpret_track">Interpréter cette revue avec la couleur SDR de la piste</string>
     <string name="media_playback_hdr_preview">Échantillons %1$s décodés en 10 bits · les images fixes précises utilisent un aperçu SDR tone-mappé (référence 203 nits ; affichage HLG 1000 nits). La lecture continue utilise le pipeline couleur du système. Cela ne vérifie pas la fidélité d\'affichage HDR natif ; les originaux ne changent pas.</string>
     <string name="media_playback_dng_preview">DNG — aperçu décodé par la plateforme (%1$d × %2$d px). Le fichier RAW d\'origine ne change pas.</string>
 </resources>

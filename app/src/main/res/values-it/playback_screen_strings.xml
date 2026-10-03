@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="playback_screen_title">OpenCineCam · Riproduzione clip</string>
+    <string name="playback_screen_title">Riproduzione clip</string>
     <string name="playback_screen_share">Condividi clip</string>
     <string name="playback_screen_delete">Elimina clip</string>
     <string name="playback_screen_take_position">%1$d di %2$d</string>
@@ -11,8 +11,8 @@
     <string name="playback_screen_monitoring">LUT di monitoraggio</string>
     <string name="playback_screen_histogram">Istogramma di luminanza</string>
     <string name="playback_screen_settings">Impostazioni di riproduzione</string>
-    <string name="playback_screen_native_surface">Usa Surface nativa</string>
-    <string name="playback_screen_cpu_frames">Usa fotogrammi CPU</string>
+    <string name="playback_screen_native_surface">Usa l\'uscita diretta sullo schermo</string>
+    <string name="playback_screen_cpu_frames">Usa fotogrammi con colore verificato</string>
     <string name="playback_screen_retry">Riprova</string>
     <string name="playback_screen_interpret_track">Interpreta traccia</string>
     <string name="playback_screen_exact_error_title">Non è stato possibile attivare i fotogrammi esatti su questo dispositivo.</string>

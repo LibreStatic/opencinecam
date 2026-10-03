@@ -50,7 +50,7 @@ class MediaPlaybackGopUiTest {
                 MediaReviewSelection(listOf(take), artifact, GallerySettings(), "", null), settings.value,
                 { writes++; settings.value = it }, { visible.value = false }, { error("No next page") }) } }
             exact(0, false)
-            if (native) { click("native-frames"); exact(0, true) }
+            if (native) { compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = true) }; exact(0, true) }
             node("previous-frame").performScrollTo().assertIsNotEnabled()
             // Includes every B/P/I frame in presentation order, across the second sync boundary.
             for (index in 1..pts.lastIndex) { click("next-frame"); exact(index, native) }
@@ -77,7 +77,7 @@ class MediaPlaybackGopUiTest {
             node("next-frame").performScrollTo().assertIsNotEnabled()
             click("previous-frame"); exact(pts.lastIndex - 1, native)
             click("start"); exact(0, native)
-            if (native) { click("native-frames"); exact(0, false) }
+            if (native) { compose.runOnIdle { settings.value = settings.value.copy(nativeSurfaceFrames = false) }; exact(0, false) }
             compose.runOnIdle { assertEquals(originalSettings, settings.value); assertEquals(0, writes) }
             node("close").performClick(); node("dialog").assertDoesNotExist()
             retired(existing)
@@ -91,12 +91,12 @@ class MediaPlaybackGopUiTest {
     }
 
     private fun exact(index: Int, native: Boolean, ended: Boolean = false) {
-        val expected = context.getString(R.string.media_playback_exact, index + 1, pts.size, pts[index])
+        fun expected() = node("exact").assertExactFrame(context, index + 1, pts.size, pts[index])
         compose.waitUntil(35_000) {
-            (runCatching { node("exact").assertTextEquals(expected) }.isSuccess && present("native-frame-mode") == native) || present("error-detail")
+            (runCatching { expected() }.isSuccess && present("native-frame-mode") == native) || present("error-detail")
         }
         node("error-detail").assertDoesNotExist()
-        node("exact").performScrollTo().assertTextEquals(expected)
+        node("exact").performScrollTo(); expected()
         node("status").assertTextEquals(context.getString(if (ended) R.string.media_playback_ended else R.string.media_playback_paused))
         if (native) { node("native-frame-mode").assertExists(); node("frame").assertDoesNotExist() }
         else { node("native-frame-mode").assertDoesNotExist(); node("frame").assertExists() }
@@ -118,7 +118,7 @@ class MediaPlaybackGopUiTest {
         val sample = requireNotNull(colors)
         assertTrue("PTS=${pts[index]} must display only its own gray=$gray; actual=${sample.first}", matches(gray, sample.first))
         assertTrue("White spatial reference", matches(255, sample.second))
-        node("exact").assertTextEquals(expected)
+        expected()
         Log.i("E16GopUiProbe", "native=$native index=$index ptsUs=${pts[index]} expectedGray=$gray rgb=${Color.red(sample.first)},${Color.green(sample.first)},${Color.blue(sample.first)} exactComposited=true")
     }
 

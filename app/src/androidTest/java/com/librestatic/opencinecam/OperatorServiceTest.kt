@@ -805,15 +805,21 @@ class OperatorServiceTest {
         compose.onNodeWithTag("gallery-name-${take.id}", useUnmergedTree = true).assertTextEquals(name)
         compose.onNodeWithTag("gallery-primary-${take.id}", useUnmergedTree = true).performScrollTo().performClick()
         fun node(tag: String) = compose.onNodeWithTag("media-playback-$tag", useUnmergedTree = true)
+        // Decoding notes live in the take details; close them again so the transport takes touches.
+        fun assertInterpreted() {
+            compose.openPlaybackDetails()
+            node("color-interpretation").performScrollTo().assertIsDisplayed()
+            compose.closePlaybackDetails()
+        }
         fun waitExact(index: Int) {
-            val expected = context.getString(R.string.media_playback_exact, index + 1, expectedPts.size, expectedPts[index])
+            fun expected() = node("exact").assertExactFrame(context, index + 1, expectedPts.size, expectedPts[index])
             awaitFrames(30_000) {
                 compose.onAllNodesWithTag("media-playback-error-detail", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() ||
-                    runCatching { node("exact").performScrollTo().assertTextEquals(expected) }.isSuccess
+                    runCatching { node("exact").performScrollTo(); expected() }.isSuccess
             }
             node("error-detail").assertDoesNotExist()
-            node("exact").assertTextEquals(expected)
-            if (interpretColor) node("color-interpretation").performScrollTo().assertIsDisplayed()
+            expected()
+            if (interpretColor) assertInterpreted()
         }
         fun click(tag: String) { node(tag).performScrollTo().assertIsEnabled().performClick() }
         val playbackBeforeReview = SettingsRepositories.get(context).states.value.playback
@@ -833,7 +839,7 @@ class OperatorServiceTest {
                 compose.onAllNodesWithTag("media-playback-exact", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
             }
             waitExact(0)
-            node("color-interpretation").performScrollTo().assertIsDisplayed()
+            assertInterpreted()
         }
         try {
             if (interpretColor) {
