@@ -55,14 +55,18 @@ class MediaCatalogUiTest {
             else LocalMediaPage(listOf(take("one")), null) }
         settings.value = settings.value.copy(autoThumbnails = false)
         show()
-        reveal("name-one").assertTextEquals("take1.jpg")
+        reveal("name-one").assertTextEquals(title("one"))
         compose.runOnIdle { assertEquals(3, pages); assertEquals(0, thumbnails) }
         reveal("filters").performClick()
         reveal("slate").performClick()
         reveal("technical").performClick()
         compose.runOnIdle { assertEquals(3, pages); assertFalse(settings.value.showSlate); assertTrue(settings.value.showTechnical) }
+        // Slate and file properties live in the take's details, not on the card.
+        compose.openGalleryDetails("one")
         node("slate-one").assertDoesNotExist()
-        reveal("technical-primary-one").assertTextEquals(text(R.string.gallery_technical, "image/jpeg", 101L, 1700000000L))
+        node("technical-primary-one").performScrollTo().assertTextEquals(galleryTechnicalText(context, artifact(1)))
+        compose.closeGalleryDetails()
+        compose.runOnIdle { assertEquals(3, pages) }
         reveal("end").assertTextEquals(text(R.string.gallery_no_more))
     }
 
@@ -81,10 +85,10 @@ class MediaCatalogUiTest {
         reveal("more").performClick()
         reveal("error").assertTextEquals(text(R.string.gallery_load_failed))
         node("empty").assertDoesNotExist()
-        reveal("name-one").assertTextEquals("take1.jpg")
+        reveal("name-one").assertTextEquals(title("one"))
         reveal("retry").performClick()
-        reveal("name-two").assertTextEquals("take2.jpg")
-        reveal("name-one").assertTextEquals("take1.jpg")
+        reveal("name-two").assertTextEquals(title("two"))
+        reveal("name-one").assertTextEquals(title("one"))
         compose.runOnIdle { assertEquals(3, calls) }
     }
 
@@ -100,10 +104,10 @@ class MediaCatalogUiTest {
             reveal("search").performTextReplacement("old")
             compose.waitUntil(5000) { oldEntered.isCompleted }
             reveal("search").performTextReplacement("new")
-            reveal("name-two").assertTextEquals("take2.jpg")
+            reveal("name-two").assertTextEquals(title("two"))
             compose.runOnIdle { releaseOld.complete(Unit) }
             compose.waitForIdle()
-            reveal("name-two").assertTextEquals("take2.jpg")
+            reveal("name-two").assertTextEquals(title("two"))
             node("name-one").assertDoesNotExist()
             reveal("search").performTextReplacement("x".repeat(129))
             reveal("search-invalid").assertTextEquals(text(R.string.gallery_search_invalid))
@@ -120,23 +124,25 @@ class MediaCatalogUiTest {
         // With automatic thumbnails off, nothing is decoded until the operator asks for it.
         settings.value = settings.value.copy(autoThumbnails = false)
         show()
-        reveal("scene-conditions-one").assertTextEquals(text(R.string.gallery_scene_conditions,
+        compose.openGalleryDetails("one")
+        node("scene-conditions-one").performScrollTo().assertTextEquals(text(R.string.gallery_scene_conditions,
             text(R.string.production_slate_interior), text(R.string.production_slate_night)))
         compose.runOnIdle { assertEquals(0, thumbnails); assertTrue(opened.isEmpty()) }
-        reveal("files-one").performClick()
-        for (file in group.originals + group.metadata) reveal("open-${file.uri}").assertHeightIsAtLeast(48.dp).performClick()
+        node("files-one").performScrollTo().performClick()
+        for (file in group.originals + group.metadata) node("open-${file.uri}").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
         compose.runOnIdle { assertEquals(group.originals + group.metadata, opened) }
+        compose.closeGalleryDetails()
         reveal("thumbnail-load-one").performClick()
         reveal("thumbnail-error-one").assertTextEquals(text(R.string.gallery_thumbnail_unavailable))
         compose.runOnIdle { assertEquals(1, thumbnails); failOpen = true }
-        reveal("primary-one").performClick()
+        compose.galleryMenuAction("one", "primary")
         reveal("open-failed").assertTextEquals(text(R.string.gallery_open_failed))
     }
 
     @Test fun automaticThumbnailsLoadOncePerVisibleTake() {
         read = { _, _, _ -> LocalMediaPage(listOf(take("one")), null) }
         show()
-        reveal("name-one").assertTextEquals("take1.jpg")
+        reveal("name-one").assertTextEquals(title("one"))
         compose.waitUntil(5000) { thumbnails == 1 }
         // The fixture has no picture, so the take says so instead of offering a load button.
         reveal("thumbnail-error-one").assertTextEquals(text(R.string.gallery_thumbnail_unavailable))
@@ -155,7 +161,11 @@ class MediaCatalogUiTest {
         for ((value, label) in labels) {
             compose.runOnIdle { status = value }
             reveal("refresh").performClick()
-            reveal("relation-one").assertTextEquals(text(label))
+            // The card only flags a problem; the plain-words state is in the Integrity section.
+            if (takeNeedsAttention(value)) reveal("warning-one").assertExists() else node("warning-one").assertDoesNotExist()
+            compose.openGalleryDetails("one")
+            node("relation-one").performScrollTo().assertTextEquals(text(label))
+            compose.closeGalleryDetails()
         }
         compose.runOnIdle { status = null }
         reveal("refresh").performClick()
@@ -199,8 +209,10 @@ class MediaCatalogUiTest {
     }
     private fun node(tag: String) = compose.settingsNode("gallery-$tag", Regex("^kind-[A-Z_]+(-label)?$").matches(tag))
     private fun reveal(tag: String): SemanticsNodeInteraction {
-        compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-$tag"))
+        compose.onNodeWithTag("gallery-list", useUnmergedTree = true).performScrollToNode(hasTestTag("gallery-$tag"))
         return node(tag)
     }
-    private fun text(id: Int, vararg args: Any) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
+    private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    private fun title(id: String) = takeTitleText(context, take(id))
+    private fun text(id: Int, vararg args: Any) = context.getString(id, *args)
 }

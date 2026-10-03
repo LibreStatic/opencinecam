@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Escena %1$s · Toma %2$d</string>
+    <string name="media_today">Hoy</string>
+    <string name="media_yesterday">Ayer</string>
+    <string name="media_more_actions">Más acciones para %1$s</string>
+    <string name="media_action_play">Reproducir</string>
+    <string name="media_action_details">Detalles</string>
+    <string name="media_action_share">Compartir</string>
+    <string name="media_action_rename">Renombrar</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Eliminar</string>
+    <string name="media_details_title">Detalles de la toma</string>
+    <string name="media_details_close">Cerrar detalles</string>
+    <string name="media_details_empty">Elegí una toma para ver sus detalles.</string>
+    <string name="media_section_integrity">Integridad</string>
+    <string name="media_section_slate">Claqueta</string>
+    <string name="media_section_properties">Propiedades del archivo</string>
+    <string name="media_section_files">Archivos</string>
+    <string name="media_files_summary">Originales: %1$d · Metadatos: %2$d</string>
+    <string name="media_integrity_declared">Se encontraron todos los archivos que lista esta toma. No se volvió a comprobar su contenido.</string>
+    <string name="media_integrity_legacy">Un archivo suelto sin registro de toma. Se puede reproducir y compartir tal cual.</string>
+    <string name="media_integrity_missing">Falta el registro de la toma, así que no se pueden confirmar los archivos relacionados.</string>
+    <string name="media_integrity_invalid">No se puede leer el registro de la toma, así que no se pueden confirmar los archivos relacionados.</string>
+    <string name="media_integrity_incomplete">Faltan algunos archivos que lista el registro de la toma.</string>
+    <string name="media_share_step_choose">Qué enviar</string>
+    <string name="media_share_step_check">Revisión</string>
+    <string name="media_share_step_send">Enviar</string>
+    <string name="media_share_ready">Listo para enviar.</string>
+    <string name="media_share_blocked_originals">Esta toma no tiene archivos originales para enviar.</string>
+    <string name="media_share_blocked_group">Los metadatos solo se pueden enviar si están todos los archivos de esta toma. Enviá solo los originales o actualizá la galería.</string>
+    <string name="media_share_blocked_slate">Esta toma no tiene una claqueta legible, así que no se pueden enviar datos de producción. Enviá los datos técnicos en su lugar.</string>
+    <string name="media_share_fix_originals">Enviar solo originales</string>
+    <string name="media_share_fix_technical">Enviar datos técnicos</string>
+    <string name="media_details_show">Detalles</string>
+    <string name="media_details_hide">Ocultar detalles</string>
+</resources>

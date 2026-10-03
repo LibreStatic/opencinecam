@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Scène %1$s · Prise %2$d</string>
+    <string name="media_today">Aujourd’hui</string>
+    <string name="media_yesterday">Hier</string>
+    <string name="media_more_actions">Plus d’actions pour %1$s</string>
+    <string name="media_action_play">Lire</string>
+    <string name="media_action_details">Détails</string>
+    <string name="media_action_share">Partager</string>
+    <string name="media_action_rename">Renommer</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Supprimer</string>
+    <string name="media_details_title">Détails de la prise</string>
+    <string name="media_details_close">Fermer les détails</string>
+    <string name="media_details_empty">Sélectionnez une prise pour voir ses détails.</string>
+    <string name="media_section_integrity">Intégrité</string>
+    <string name="media_section_slate">Clap</string>
+    <string name="media_section_properties">Propriétés du fichier</string>
+    <string name="media_section_files">Fichiers</string>
+    <string name="media_files_summary">Originaux : %1$d · Métadonnées : %2$d</string>
+    <string name="media_integrity_declared">Tous les fichiers listés par cette prise ont été trouvés. Leur contenu n’a pas été revérifié.</string>
+    <string name="media_integrity_legacy">Fichier isolé sans fiche de prise. Il peut être lu et partagé tel quel.</string>
+    <string name="media_integrity_missing">La fiche de la prise est absente : les fichiers associés ne peuvent pas être confirmés.</string>
+    <string name="media_integrity_invalid">La fiche de la prise est illisible : les fichiers associés ne peuvent pas être confirmés.</string>
+    <string name="media_integrity_incomplete">Certains fichiers listés dans la fiche de la prise sont absents.</string>
+    <string name="media_share_step_choose">Quoi envoyer</string>
+    <string name="media_share_step_check">Vérification</string>
+    <string name="media_share_step_send">Envoi</string>
+    <string name="media_share_ready">Prêt à envoyer.</string>
+    <string name="media_share_blocked_originals">Cette prise n’a aucun fichier original à envoyer.</string>
+    <string name="media_share_blocked_group">Les métadonnées ne peuvent être envoyées que si tous les fichiers de cette prise sont présents. Envoyez uniquement les originaux ou actualisez la galerie.</string>
+    <string name="media_share_blocked_slate">Cette prise n’a pas de clap lisible : les données de production ne peuvent pas être envoyées. Envoyez plutôt les données techniques.</string>
+    <string name="media_share_fix_originals">Envoyer les originaux seuls</string>
+    <string name="media_share_fix_technical">Envoyer les données techniques</string>
+    <string name="media_details_show">Détails</string>
+    <string name="media_details_hide">Masquer les détails</string>
+</resources>

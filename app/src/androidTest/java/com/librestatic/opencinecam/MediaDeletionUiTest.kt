@@ -43,8 +43,10 @@ class MediaDeletionUiTest {
         show()
         for ((index, artifact) in (take.originals + take.metadata).withIndex()) {
             reveal("member-$index-label").assertTextContains(artifact.name, substring = true)
-            reveal("member-$index-uri").assertTextEquals(artifact.uri)
+            // Provider URIs are not operator language; nothing in the dialog spells one out.
+            compose.onAllNodes(hasText(artifact.uri, substring = true), useUnmergedTree = true).assertCountEquals(0)
         }
+        node("take-label").assertTextEquals(takeTitleText(InstrumentationRegistry.getInstrumentation().targetContext, take))
         node("confirm").assertIsNotEnabled()
         node("cancel").performClick()
         node("dialog").assertDoesNotExist()
@@ -147,14 +149,13 @@ class MediaDeletionUiTest {
                         { refreshed.incrementAndGet(); generation.intValue++ }, source) }
                 }
             }
-            compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-delete-${take.id}"))
-            compose.onNodeWithTag("gallery-delete-${take.id}").performClick()
+            compose.galleryMenuAction(take.id, "delete")
             confirm(); await { barrier.entered.count == 0L }
             assertEquals(1, pageCalls.get()); assertEquals(0, refreshed.get())
             barrier.release.countDown(); awaitResult(); await { pageCalls.get() == 2 }
             node("cancel").performClick()
-            compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-name-${take.id}"))
-            compose.onNodeWithTag("gallery-name-${take.id}").assertTextEquals(take.primary.name)
+            compose.revealInGallery("gallery-name-${take.id}")
+                .assertTextEquals(takeTitleText(InstrumentationRegistry.getInstrumentation().targetContext, take))
             assertEquals(1, refreshed.get())
         } finally { barrier.release.countDown() }
     }
@@ -164,7 +165,7 @@ class MediaDeletionUiTest {
         reveal("acknowledge").assertHeightIsAtLeast(48.dp)
         node("confirm").assertHeightIsAtLeast(48.dp)
         node("cancel").assertHeightIsAtLeast(48.dp)
-        for (tag in listOf("help", "acknowledge-label") + (0..2).flatMap { listOf("member-$it-label", "member-$it-uri") }) {
+        for (tag in listOf("help", "acknowledge-label") + (0..2).flatMap { listOf("member-$it-label") }) {
             unclipped(reveal(tag), tag)
         }
         unclipped(node("confirm-label"), "confirm-label")

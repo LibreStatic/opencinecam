@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_take_scene_take">Scena %1$s · Ripresa %2$d</string>
+    <string name="media_today">Oggi</string>
+    <string name="media_yesterday">Ieri</string>
+    <string name="media_more_actions">Altre azioni per %1$s</string>
+    <string name="media_action_play">Riproduci</string>
+    <string name="media_action_details">Dettagli</string>
+    <string name="media_action_share">Condividi</string>
+    <string name="media_action_rename">Rinomina</string>
+    <string name="media_action_proxy">Proxy</string>
+    <string name="media_action_delete">Elimina</string>
+    <string name="media_details_title">Dettagli della ripresa</string>
+    <string name="media_details_close">Chiudi dettagli</string>
+    <string name="media_details_empty">Seleziona una ripresa per vederne i dettagli.</string>
+    <string name="media_section_integrity">Integrità</string>
+    <string name="media_section_slate">Ciak</string>
+    <string name="media_section_properties">Proprietà del file</string>
+    <string name="media_section_files">File</string>
+    <string name="media_files_summary">Originali: %1$d · Metadati: %2$d</string>
+    <string name="media_integrity_declared">Tutti i file elencati da questa ripresa sono stati trovati. Il loro contenuto non è stato ricontrollato.</string>
+    <string name="media_integrity_legacy">File singolo senza scheda di ripresa. Si può riprodurre e condividere così com’è.</string>
+    <string name="media_integrity_missing">Manca la scheda della ripresa, quindi i file collegati non possono essere confermati.</string>
+    <string name="media_integrity_invalid">La scheda della ripresa non è leggibile, quindi i file collegati non possono essere confermati.</string>
+    <string name="media_integrity_incomplete">Mancano alcuni file elencati nella scheda della ripresa.</string>
+    <string name="media_share_step_choose">Cosa inviare</string>
+    <string name="media_share_step_check">Verifica</string>
+    <string name="media_share_step_send">Invio</string>
+    <string name="media_share_ready">Pronto per l’invio.</string>
+    <string name="media_share_blocked_originals">Questa ripresa non ha file originali da inviare.</string>
+    <string name="media_share_blocked_group">I metadati si possono inviare solo se tutti i file di questa ripresa sono presenti. Invia solo gli originali o aggiorna la galleria.</string>
+    <string name="media_share_blocked_slate">Questa ripresa non ha un ciak leggibile, quindi i dati di produzione non si possono inviare. Invia invece i dati tecnici.</string>
+    <string name="media_share_fix_originals">Invia solo gli originali</string>
+    <string name="media_share_fix_technical">Invia i dati tecnici</string>
+    <string name="media_details_show">Dettagli</string>
+    <string name="media_details_hide">Nascondi dettagli</string>
+</resources>

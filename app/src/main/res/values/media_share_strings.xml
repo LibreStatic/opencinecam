@@ -12,7 +12,6 @@
     <string name="media_share_lut">Include exact referenced LUT files with technical metadata</string>
     <string name="media_share_lut_help">A missing referenced LUT stops preparation unless you explicitly exclude LUT files. A baked recording LUT must not be applied again to the recorded pixels.</string>
     <string name="media_share_temporary">Generated files expire after 24 hours and may be reclaimed from cache earlier. Keep an external copy if needed. Opening the Android chooser does not verify delivery.</string>
-    <string name="media_share_relation_required">Selected metadata requires a complete declared relationship. Production metadata also requires a consistent readable slate. Choose another selection or refresh the catalog; no fallback is applied automatically.</string>
     <string name="media_share_sources">Available sources — Originals: %1$d; Metadata: %2$d</string>
     <string name="media_share_confirm">Prepare and open Android chooser</string>
     <string name="media_share_preparing">Preparing selected export…</string>

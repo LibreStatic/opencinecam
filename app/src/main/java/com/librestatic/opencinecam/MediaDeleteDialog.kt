@@ -2,19 +2,21 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.*
 
@@ -50,12 +52,11 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
     val canDelete = selected.originals.isNotEmpty() && expected.map { it.uri }.distinct().size == expected.size
     DisposableEffect(owner) { onDispose { owner.valid = false } }
     fun dismiss() { if (!busy) { owner.valid = false; onDismiss() } }
-    Dialog(onDismissRequest = ::dismiss) {
-        Surface(Modifier.fillMaxWidth().heightIn(max = 680.dp).testTag("media-delete-dialog"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    MediaDialogFrame("media-delete-dialog", ::dismiss) {
                 Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
                     .testTag("media-delete-scroll"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.media_delete_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLarge)
+                    MediaDialogTake(selected, "media-delete-take")
                     Text(stringResource(R.string.media_delete_help), Modifier.fillMaxWidth().testTag("media-delete-help"))
                     Text(stringResource(R.string.media_delete_sources, selected.originals.size, selected.metadata.size), Modifier.fillMaxWidth())
                     val observed = result
@@ -66,7 +67,6 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                         Column(Modifier.fillMaxWidth().testTag("media-delete-member-$index")) {
                             Text(stringResource(if (index < selected.originals.size) R.string.media_delete_original else R.string.media_delete_metadata,
                                 artifact.name), Modifier.fillMaxWidth().testTag("media-delete-member-$index-label"))
-                            Text(artifact.uri, Modifier.fillMaxWidth().testTag("media-delete-member-$index-uri"))
                             if (finished) {
                                 val member = observed?.files?.singleOrNull { it.artifact == artifact }
                                 Text(stringResource(when (member?.status) {
@@ -75,16 +75,23 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                                     MediaDeleteStatus.NOT_ATTEMPTED -> R.string.media_delete_not_attempted
                                     MediaDeleteStatus.UNKNOWN, null -> R.string.media_delete_member_unknown
                                 }), Modifier.fillMaxWidth().testTag("media-delete-member-$index-status"))
-                                member?.detail?.let { Text(it, Modifier.fillMaxWidth()) }
+                                member?.detail?.let { detail ->
+                                    MediaDetails("media-delete-member-$index-details") {
+                                        Text(detail, Modifier.fillMaxWidth().testTag("media-delete-member-$index-detail"), fontSize = 12.sp)
+                                    }
+                                }
                             }
                         }
                     }
                     if (!finished) {
-                        val label = stringResource(R.string.media_delete_acknowledge)
-                        Text(label, Modifier.fillMaxWidth().testTag("media-delete-acknowledge-label"))
-                        Checkbox(acknowledged, { acknowledged = it }, enabled = !busy,
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("media-delete-acknowledge")
-                                .semantics { contentDescription = label })
+                        // One row: the whole line toggles, so the label and the box can never drift apart.
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.small)
+                            .toggleable(acknowledged, enabled = !busy, role = Role.Checkbox) { acknowledged = it }
+                            .testTag("media-delete-acknowledge"),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Checkbox(acknowledged, onCheckedChange = null, enabled = !busy)
+                            Text(stringResource(R.string.media_delete_acknowledge), Modifier.weight(1f).testTag("media-delete-acknowledge-label"))
+                        }
                     }
                     if (busy) Text(stringResource(R.string.media_delete_busy), Modifier.fillMaxWidth().testTag("media-delete-busy"))
                     if (finished) {
@@ -95,7 +102,11 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                             observed.files.all { it.status == MediaDeleteStatus.NOT_ATTEMPTED } -> R.string.media_delete_rejected
                             else -> R.string.media_delete_unknown
                         }), Modifier.fillMaxWidth().testTag("media-delete-result"))
-                        observed?.error?.let { Text(it, Modifier.fillMaxWidth().testTag("media-delete-error")) }
+                        observed?.error?.let { error ->
+                            MediaDetails("media-delete-details") {
+                                Text(error, Modifier.fillMaxWidth().testTag("media-delete-error"), fontSize = 12.sp)
+                            }
+                        }
                         Text(stringResource(R.string.media_delete_refresh), Modifier.fillMaxWidth().testTag("media-delete-refresh"))
                     }
                 }
@@ -119,8 +130,6 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                     }
                 }
                 DeleteButton("cancel", R.string.media_delete_cancel, !busy, ::dismiss)
-            }
-        }
     }
 }
 

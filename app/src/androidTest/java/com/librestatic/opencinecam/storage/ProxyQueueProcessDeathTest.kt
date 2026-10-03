@@ -20,6 +20,7 @@ import androidx.media3.effect.DebugTraceUtil
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.galleryMenuAction
 import com.librestatic.opencinecam.MainActivity
 import com.librestatic.opencinecam.ProxySettings
 import com.librestatic.opencinecam.R
@@ -228,7 +229,7 @@ class ProxyQueueProcessDeathTest {
         compose.waitUntil(20_000) {
             runCatching { compose.onNodeWithTag("gallery-list").performScrollToKey(take.id) }.isSuccess
         }
-        compose.onNodeWithTag("gallery-proxy-${take.id}", true).performScrollTo().performClick()
+        compose.galleryMenuAction(take.id, "proxy")
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("media-proxy-job-id", true).fetchSemanticsNodes().isNotEmpty() }
     }
 

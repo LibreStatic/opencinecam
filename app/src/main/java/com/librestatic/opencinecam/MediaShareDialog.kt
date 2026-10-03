@@ -7,14 +7,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.*
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -60,10 +63,24 @@ private class ShareDialogOwner {
     fun cancel() { valid.set(false); job?.cancel() }
 }
 
-internal fun canPrepareMediaShare(take: LocalMediaTake, settings: MediaSharingSettings): Boolean =
-    if (settings.content == MediaShareContent.ORIGINALS_ONLY) take.originals.isNotEmpty()
-    else take.relationStatus == LocalMediaRelationStatus.DECLARED &&
-        (settings.metadata == MediaShareMetadata.TECHNICAL || take.slate != null)
+/** Why a share cannot be prepared with the current choices; null when it can. */
+internal enum class MediaShareBlocker { NO_ORIGINALS, GROUP_UNCHECKED, NO_SLATE }
+
+internal fun mediaShareBlocker(take: LocalMediaTake, settings: MediaSharingSettings): MediaShareBlocker? = when {
+    settings.content == MediaShareContent.ORIGINALS_ONLY -> if (take.originals.isEmpty()) MediaShareBlocker.NO_ORIGINALS else null
+    take.relationStatus != LocalMediaRelationStatus.DECLARED -> MediaShareBlocker.GROUP_UNCHECKED
+    settings.metadata != MediaShareMetadata.TECHNICAL && take.slate == null -> MediaShareBlocker.NO_SLATE
+    else -> null
+}
+
+/** The one-tap change that clears [blocker], or null when no choice of what to send can. */
+internal fun mediaShareFix(blocker: MediaShareBlocker, settings: MediaSharingSettings): MediaSharingSettings? = when (blocker) {
+    MediaShareBlocker.NO_ORIGINALS -> null
+    MediaShareBlocker.GROUP_UNCHECKED -> settings.copy(content = MediaShareContent.ORIGINALS_ONLY)
+    MediaShareBlocker.NO_SLATE -> settings.copy(metadata = MediaShareMetadata.TECHNICAL)
+}
+
+internal fun canPrepareMediaShare(take: LocalMediaTake, settings: MediaSharingSettings): Boolean = mediaShareBlocker(take, settings) == null
 
 @Composable
 internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharingSettings,
@@ -76,36 +93,64 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
     var cleanupFailed by remember(owner) { mutableStateOf(false) }
     var launched by remember(owner) { mutableStateOf(false) }
     var files by remember(owner) { mutableStateOf<List<PreparedMediaShareFile>>(emptyList()) }
-    val canPrepare = canPrepareMediaShare(take, settings)
+    val blocker = mediaShareBlocker(take, settings)
+    val canPrepare = blocker == null
     DisposableEffect(owner) { onDispose { owner.cancel() } }
     fun cancel() { owner.cancel(); onDismiss() }
-    Dialog(onDismissRequest = ::cancel) {
-        Surface(Modifier.fillMaxWidth().heightIn(max = 680.dp).testTag("media-share-dialog"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val placement = if (mediaDialogAtSide(LocalAdaptiveWindow.current.widthClass)) MediaDialogPlacement.SIDE else MediaDialogPlacement.CENTER
+    MediaDialogFrame("media-share-dialog", ::cancel, placement) {
                 Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
-                    .testTag("media-share-scroll"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(take.primary.name, Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(when (take.relationStatus) {
-                        LocalMediaRelationStatus.DECLARED -> R.string.gallery_declared
-                        LocalMediaRelationStatus.LEGACY -> R.string.gallery_legacy
-                        LocalMediaRelationStatus.MISSING_METADATA -> R.string.gallery_missing
-                        LocalMediaRelationStatus.INVALID_METADATA -> R.string.gallery_invalid
-                        LocalMediaRelationStatus.INCOMPLETE -> R.string.gallery_incomplete
-                    }), Modifier.fillMaxWidth().testTag("media-share-relation"))
-                    MediaSharingSettingsControls(settings, onSettings, enabled = !busy && !launched)
-                    Text(stringResource(R.string.media_share_temporary), Modifier.fillMaxWidth().testTag("media-share-temporary"))
-                    Text(stringResource(R.string.media_share_sources, take.originals.size, take.metadata.size),
-                        Modifier.fillMaxWidth().testTag("media-share-sources"))
-                    take.originals.forEach { Text(it.name, Modifier.fillMaxWidth()) }
-                    take.metadata.forEach { Text(it.name, Modifier.fillMaxWidth()) }
-                    if (!canPrepare) Text(stringResource(R.string.media_share_relation_required), Modifier.fillMaxWidth().testTag("media-share-relation-required"))
-                    if (busy) Text(stringResource(R.string.media_share_preparing), Modifier.fillMaxWidth().testTag("media-share-preparing"))
-                    if (failed) Text(stringResource(R.string.media_share_error), Modifier.fillMaxWidth().testTag("media-share-error"))
-                    if (cleanupFailed) Text(stringResource(R.string.media_share_cleanup_error), Modifier.fillMaxWidth().testTag("media-share-cleanup-error"))
-                    if (launched) {
-                        Text(stringResource(R.string.media_share_launched), Modifier.fillMaxWidth().testTag("media-share-launched"))
-                        Text(stringResource(R.string.media_share_prepared_files, files.size), Modifier.fillMaxWidth())
-                        files.forEach { Text(it.name, Modifier.fillMaxWidth()) }
+                    .testTag("media-share-scroll"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.media_share_action), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLarge)
+                    MediaDialogTake(take, "media-share-take")
+                    // Three steps, so a disabled button is never the only sign that something is missing.
+                    ShareStep(1, R.string.media_share_step_choose) {
+                        MediaSharingSettingsControls(settings, onSettings, enabled = !busy && !launched)
+                    }
+                    ShareStep(2, R.string.media_share_step_check) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val attention = takeNeedsAttention(take.relationStatus)
+                            CineGlyph(if (attention) CineIcon.WARNING else CineIcon.CHECK,
+                                if (attention) GalleryWarning else LocalCineColors.current.ok, Modifier.size(16.dp))
+                            Text(stringResource(relationLabel(take.relationStatus)), Modifier.weight(1f).testTag("media-share-relation"))
+                        }
+                        Text(stringResource(R.string.media_share_sources, take.originals.size, take.metadata.size),
+                            Modifier.fillMaxWidth().testTag("media-share-sources"), color = SettingsMuted, fontSize = 13.sp)
+                        MediaDetails("media-share-files") {
+                            take.originals.forEach { Text(it.name, Modifier.fillMaxWidth(), fontSize = 12.sp) }
+                            take.metadata.forEach { Text(it.name, Modifier.fillMaxWidth(), fontSize = 12.sp) }
+                        }
+                        if (blocker != null) {
+                            Text(stringResource(when (blocker) {
+                                MediaShareBlocker.NO_ORIGINALS -> R.string.media_share_blocked_originals
+                                MediaShareBlocker.GROUP_UNCHECKED -> R.string.media_share_blocked_group
+                                MediaShareBlocker.NO_SLATE -> R.string.media_share_blocked_slate
+                            }), Modifier.fillMaxWidth().testTag("media-share-relation-required"), color = GalleryWarning)
+                            mediaShareFix(blocker, settings)?.let { fixed ->
+                                OutlinedButton({ onSettings(fixed) }, enabled = !busy && !launched,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("media-share-fix")) {
+                                    Text(stringResource(if (blocker == MediaShareBlocker.GROUP_UNCHECKED) R.string.media_share_fix_originals
+                                        else R.string.media_share_fix_technical), Modifier.weight(1f).testTag("media-share-fix-label"),
+                                        textAlign = TextAlign.Center)
+                                }
+                            }
+                        } else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CineGlyph(CineIcon.CHECK, LocalCineColors.current.ok, Modifier.size(16.dp))
+                            Text(stringResource(R.string.media_share_ready), Modifier.weight(1f).testTag("media-share-ready"))
+                        }
+                    }
+                    ShareStep(3, R.string.media_share_step_send) {
+                        Text(stringResource(R.string.media_share_temporary), Modifier.fillMaxWidth().testTag("media-share-temporary"),
+                            color = SettingsMuted, fontSize = 13.sp)
+                        if (busy) Text(stringResource(R.string.media_share_preparing), Modifier.fillMaxWidth().testTag("media-share-preparing"))
+                        if (failed) Text(stringResource(R.string.media_share_error), Modifier.fillMaxWidth().testTag("media-share-error"),
+                            color = MaterialTheme.colorScheme.error)
+                        if (cleanupFailed) Text(stringResource(R.string.media_share_cleanup_error), Modifier.fillMaxWidth().testTag("media-share-cleanup-error"))
+                        if (launched) {
+                            Text(stringResource(R.string.media_share_launched), Modifier.fillMaxWidth().testTag("media-share-launched"))
+                            Text(stringResource(R.string.media_share_prepared_files, files.size), Modifier.fillMaxWidth())
+                            files.forEach { Text(it.name, Modifier.fillMaxWidth(), fontSize = 12.sp) }
+                        }
                     }
                 }
                 OutlinedButton(onClick = {
@@ -144,7 +189,14 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
                 OutlinedButton(onClick = ::cancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("media-share-cancel")) {
                     Text(stringResource(R.string.media_share_cancel), Modifier.weight(1f).testTag("media-share-cancel-label"), textAlign = TextAlign.Center)
                 }
-            }
-        }
+    }
+}
+
+@Composable
+private fun ShareStep(number: Int, title: Int, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("$number · ${stringResource(title)}", Modifier.fillMaxWidth().testTag("media-share-step-$number"), color = SettingsAccent,
+            fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        content()
     }
 }

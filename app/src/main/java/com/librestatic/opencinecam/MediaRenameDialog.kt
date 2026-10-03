@@ -17,7 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.*
 
@@ -47,6 +47,8 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
     val keyboard = LocalSoftwareKeyboardController.current
     var stem by rememberSaveable(selected.id) { mutableStateOf("") }
     var excessiveInput by rememberSaveable(selected.id) { mutableStateOf(false) }
+    // An empty field is not a mistake yet: the name is judged once the operator edits or submits it.
+    var edited by rememberSaveable(selected.id) { mutableStateOf(false) }
     var busy by remember(owner) { mutableStateOf(false) }
     var finished by remember(owner) { mutableStateOf(false) }
     var result by remember(owner) { mutableStateOf<MediaRenameResult?>(null) }
@@ -56,12 +58,11 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
     val expected = selected.originals + selected.metadata
     DisposableEffect(owner) { onDispose { owner.valid = false } }
     fun dismiss() { if (!busy) { owner.valid = false; onDismiss() } }
-    Dialog(onDismissRequest = ::dismiss) {
-        Surface(Modifier.fillMaxWidth().heightIn(max = 680.dp).testTag("media-rename-dialog"), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    MediaDialogFrame("media-rename-dialog", ::dismiss) {
                 Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())
                     .testTag("media-rename-scroll"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.media_rename_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLarge)
+                    MediaDialogTake(selected, "media-rename-take")
                     Text(stringResource(R.string.media_rename_help), Modifier.fillMaxWidth().testTag("media-rename-help"))
                     Text(stringResource(R.string.media_rename_remote_warning), Modifier.fillMaxWidth().testTag("media-rename-remote-warning"))
                     OutlinedTextField(stem, { candidate ->
@@ -71,17 +72,18 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                             // The String-based field/IME can echo the retained value after a
                             // rejected edit. That is not a new accepted name and must not clear
                             // the rejection or re-enable confirmation of the previous preview.
+                            if (candidate != stem) edited = true
                             if (candidate != stem || !excessiveInput) {
                                 excessiveInput = candidate.length > 512
                                 if (!excessiveInput) stem = candidate
                             }
                         }
-                    }, enabled = !busy && !finished, isError = preview == null, singleLine = true,
+                    }, enabled = !busy && !finished, isError = edited && preview == null, singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+                        keyboardActions = KeyboardActions(onDone = { edited = true; keyboard?.hide() }),
                         label = { Text(stringResource(R.string.media_rename_stem), Modifier.fillMaxWidth().testTag("media-rename-stem-label")) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("media-rename-stem"))
-                    if (preview == null) Text(stringResource(R.string.media_rename_invalid), Modifier.fillMaxWidth().testTag("media-rename-invalid"))
+                    if (edited && preview == null) Text(stringResource(R.string.media_rename_invalid), Modifier.fillMaxWidth().testTag("media-rename-invalid"))
                     val observed = result
                     val exact = observed != null && preview != null && observed.files.size == expected.size &&
                         observed.files.map { it.artifact }.toSet() == expected.toSet() &&
@@ -89,7 +91,6 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                         observed.files.all { item -> preview.files.singleOrNull { it.artifact == item.artifact }?.newName == item.requestedName }
                     for ((index, artifact) in expected.withIndex()) {
                         Text(stringResource(R.string.media_rename_old, artifact.name), Modifier.fillMaxWidth().testTag("media-rename-member-$index-old"))
-                        Text(artifact.uri, Modifier.fillMaxWidth().testTag("media-rename-member-$index-uri"))
                         preview?.files?.singleOrNull { it.artifact == artifact }?.let {
                             Text(stringResource(R.string.media_rename_new, it.newName), Modifier.fillMaxWidth().testTag("media-rename-member-$index-new"))
                         }
@@ -105,7 +106,11 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                                 MediaRenameStatus.NOT_ATTEMPTED -> R.string.media_rename_status_not_attempted
                                 MediaRenameStatus.UNKNOWN, null -> R.string.media_rename_status_unknown
                             }), Modifier.fillMaxWidth().testTag("media-rename-member-$index-status"))
-                            member?.detail?.let { Text(it, Modifier.fillMaxWidth()) }
+                            member?.detail?.let { detail ->
+                                MediaDetails("media-rename-member-$index-details") {
+                                    Text(detail, Modifier.fillMaxWidth().testTag("media-rename-member-$index-detail"), fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                     if (busy) Text(stringResource(R.string.media_rename_busy), Modifier.fillMaxWidth().testTag("media-rename-busy"))
@@ -118,7 +123,11 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                             observed.partial -> R.string.media_rename_partial
                             else -> R.string.media_rename_unknown
                         }), Modifier.fillMaxWidth().testTag("media-rename-result"))
-                        observed?.error?.let { Text(it, Modifier.fillMaxWidth().testTag("media-rename-error")) }
+                        observed?.error?.let { error ->
+                            MediaDetails("media-rename-details") {
+                                Text(error, Modifier.fillMaxWidth().testTag("media-rename-error"), fontSize = 12.sp)
+                            }
+                        }
                         Text(stringResource(R.string.media_rename_refresh), Modifier.fillMaxWidth().testTag("media-rename-refresh"))
                     }
                 }
@@ -140,8 +149,6 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                     }
                 }
                 RenameButton("cancel", R.string.media_rename_cancel, !busy, ::dismiss)
-            }
-        }
     }
 }
 

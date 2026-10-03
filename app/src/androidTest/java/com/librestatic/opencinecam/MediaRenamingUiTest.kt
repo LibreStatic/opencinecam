@@ -44,11 +44,13 @@ class MediaRenamingUiTest {
 
     @Test fun editingShowsExactPreviewForEveryFileAndCancelNeverWrites() {
         show(); node("confirm").assertIsNotEnabled()
+        // An untouched, empty field is not an error yet.
+        node("invalid").assertDoesNotExist()
         enter("Scene_12")
         val preview = mediaRenamePreview(take, "Scene_12")
         for ((index, artifact) in (take.originals + take.metadata).withIndex()) {
             reveal("member-$index-old").assertTextEquals(text(R.string.media_rename_old, artifact.name))
-            reveal("member-$index-uri").assertTextEquals(artifact.uri)
+            compose.onAllNodes(hasText(artifact.uri, substring = true), useUnmergedTree = true).assertCountEquals(0)
             reveal("member-$index-new").assertTextEquals(text(R.string.media_rename_new, preview.files.single { it.artifact == artifact }.newName))
         }
         reveal("remote-warning").assertTextEquals(text(R.string.media_rename_remote_warning))
@@ -151,14 +153,13 @@ class MediaRenamingUiTest {
                 dialog.value?.let { MediaRenameDialogContent(it, { dialog.value = null },
                     { refreshed.incrementAndGet(); generation.intValue++ }, source) }
             } }
-            compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-rename-${take.id}"))
-            compose.onNodeWithTag("gallery-rename-${take.id}").performClick()
+            compose.galleryMenuAction(take.id, "rename")
             enter("Scene_12"); node("confirm").performClick(); await { barrier.entered.count == 0L }
             assertEquals(1, pageCalls.get()); assertEquals(0, refreshed.get())
             barrier.release.countDown(); awaitResult(); await { pageCalls.get() == 2 }
             node("cancel").performClick()
-            compose.onNodeWithTag("gallery-list").performScrollToNode(hasTestTag("gallery-name-${take.id}"))
-            compose.onNodeWithTag("gallery-name-${take.id}").assertTextEquals(take.primary.name)
+            compose.revealInGallery("gallery-name-${take.id}")
+                .assertTextEquals(takeTitleText(InstrumentationRegistry.getInstrumentation().targetContext, take))
             assertEquals(1, refreshed.get())
         } finally { barrier.release.countDown() }
     }
@@ -167,7 +168,7 @@ class MediaRenamingUiTest {
         show(doubleFont = true); enter("Scene_12")
         reveal("stem").assertHeightIsAtLeast(48.dp)
         node("confirm").assertHeightIsAtLeast(48.dp); node("cancel").assertHeightIsAtLeast(48.dp)
-        for (tag in listOf("help", "remote-warning", "stem-label") + (0..2).flatMap { listOf("member-$it-old", "member-$it-new", "member-$it-uri") }) {
+        for (tag in listOf("help", "remote-warning", "stem-label") + (0..2).flatMap { listOf("member-$it-old", "member-$it-new") }) {
             unclipped(reveal(tag), tag)
         }
         unclipped(node("confirm-label"), "confirm-label"); unclipped(node("cancel-label"), "cancel-label")
