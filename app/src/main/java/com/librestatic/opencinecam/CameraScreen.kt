@@ -43,7 +43,6 @@ import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.monitoringPreviewScale
-import com.librestatic.opencinecam.camera.monitoringDisplayPoint
 import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
@@ -890,7 +889,7 @@ private fun MonitoringToggleGrid(
 }
 
 @Composable
-private fun MonitoringOverlay(
+internal fun MonitoringOverlay(
     state: CameraUiState,
     options: MonitoringOptions,
     sourceWidth: Int,
@@ -943,16 +942,16 @@ private fun MonitoringOverlay(
         // Guides belong to the recorded picture; anything placed by a corner uses the shown part of it.
         val imageRect = monitoringImageRect(overlayWidth.toFloat(), overlayHeight.toFloat(), gpuScale.first, gpuScale.second)
         val shownRect = visibleImageRect(imageRect, visibleBounds)
+        val peakingMask = state.focusPeakingMask.takeIf { showPeaking && analysisFresh }
+        val peakingImage = rememberFocusPeakingImage(peakingMask, options.peakingColor.composeColor())
         ProfessionalScopeImage(state, options, analysisFresh, displayDegrees, sourceWidth, sourceHeight, squeezeFactor, Modifier.matchParentSize())
         val levelColor = VerifiedCyan; val tiltColor = Amber
         val levelMarkColor = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f)
         Canvas(Modifier.matchParentSize()) {
             val domain = state.monitoringScopes?.domain ?: MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR
             /** A point of the 16 × 9 analysis grid, normalised, on screen. */
-            fun gridPoint(x: Float, y: Float): Offset {
-                val p = monitoringDisplayPoint(x, y, domain, sensorOrientation, displayDegrees, frontFacing)
-                return Offset((.5f + (p.first - .5f) * gpuScale.first) * size.width, (.5f + (p.second - .5f) * gpuScale.second) * size.height)
-            }
+            fun gridPoint(x: Float, y: Float): Offset = monitoringOverlayPoint(x, y, domain, sensorOrientation, displayDegrees,
+                frontFacing, size.width, size.height, gpuScale.first, gpuScale.second)
             fun cellRect(index: Int): androidx.compose.ui.geometry.Rect {
                 val a = gridPoint((index % 16) / 16f, (index / 16) / 9f)
                 val b = gridPoint((index % 16 + 1) / 16f, (index / 16 + 1) / 9f)
@@ -974,14 +973,13 @@ private fun MonitoringOverlay(
                     }
                 }
             }
-            if (showPeaking && analysisFresh && state.focusCells.any { it }) {
-                // The analysis only says which of 16 × 9 cells hold detail, so mark those regions
-                // lightly: a faint wash and one hairline around each merged region, never boxes.
-                val color = options.peakingColor.composeColor()
-                drawPath(cellsPath(state.focusCells), color.copy(alpha = alpha * .2f))
-                cellRegionBoundary(state.focusCells, 16, 9).forEach { (a, b) ->
-                    drawLine(color.copy(alpha = alpha), gridPoint(a.x / 16f, a.y / 9f), gridPoint(b.x / 16f, b.y / 9f), strokeWidth = 1.dp.toPx())
-                }
+            if (peakingMask != null && peakingImage != null) {
+                // Without the active array, assume the analysis stream already has the sensor's shape.
+                val crop = state.descriptor?.sensorActiveArray
+                drawFocusPeaking(peakingImage, focusPeakingPlacement(peakingMask.width, peakingMask.height, peakingMask.domain,
+                    sourceWidth, sourceHeight, crop?.width() ?: peakingMask.width, crop?.height() ?: peakingMask.height,
+                    sensorOrientation, displayDegrees, frontFacing, size.width, size.height, gpuScale.first, gpuScale.second),
+                    imageRect, alpha)
             }
             if (showGrid) {
                 val gridColor = Color.White.copy(alpha = .45f)

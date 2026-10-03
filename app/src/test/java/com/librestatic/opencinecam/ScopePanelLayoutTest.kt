@@ -120,12 +120,4 @@ class ScopePanelLayoutTest {
         val (w, h) = overlayScopesPanelSizeDp(360f, 300f, 12f)
         assertTrue(w in 160f..336f && h <= 276f && h >= 160f)
     }
-
-    @Test fun regionOutlinesDropSharedEdges() {
-        val single = List(4) { it == 0 }
-        assertEquals(4, cellRegionBoundary(single, 2, 2).size)
-        assertEquals(6, cellRegionBoundary(listOf(true, true, false, false), 2, 2).size)
-        assertEquals(2 * (16 + 9), cellRegionBoundary(List(144) { true }, 16, 9).size)
-        assertTrue(cellRegionBoundary(List(144) { false }, 16, 9).isEmpty())
-    }
 }

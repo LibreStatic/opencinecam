@@ -117,9 +117,18 @@ class MonitoringGpuDeviceTest {
         val frames = CopyOnWriteArrayList<Camera2Analysis>()
         SubjectPreviewGpuTest.Fixture(onAnalysisFrame = { frames += it }).use { fixture ->
             options(fixture, frames, enabled.copy(peakingThreshold = 1))
-            assertTrue(awaitFrames(fixture, frames, stripes = true).focusCells.any { it })
+            assertNull(awaitFrames(fixture, frames, stripes = true).focusPeaking)
+            onGl(fixture) { fixture.pipeline.setFocusPeakingEnabled(true); frames.clear() }
+            val peaking = awaitFrames(fixture, frames, stripes = true)
+            val mask = requireNotNull(peaking.focusPeaking)
+            assertEquals(320, mask.width); assertEquals(180, mask.height); assertTrue(mask.edgeCount > 0)
+            assertEquals(MonitoringSignalDomain.SDR_BT709_CODE, mask.domain)
+            // The finer readback is for the mask only; the scopes keep their sample grid.
+            val scope = requireNotNull(peaking.scopes)
+            assertEquals(160, scope.sampledWidth); assertEquals(90, scope.sampledHeight)
             options(fixture, frames, enabled.copy(peakingThreshold = 255))
-            assertTrue(awaitFrames(fixture, frames, stripes = true).focusCells.none { it })
+            assertEquals(0, requireNotNull(awaitFrames(fixture, frames, stripes = true).focusPeaking).edgeCount)
+            onGl(fixture) { fixture.pipeline.setFocusPeakingEnabled(false); frames.clear() }
             val slow = enabled.copy(refreshHz = 1)
             options(fixture, frames, slow)
             awaitFrames(fixture, frames, count = 3)

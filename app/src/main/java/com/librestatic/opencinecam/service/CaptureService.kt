@@ -797,6 +797,7 @@ class CaptureService : Service() {
                 blueHistogram = emptyList(),
                 analysisUpdatedAtMs = 0L,
                 monitoringScopes = null,
+                focusPeakingMask = null,
                 operatorLutStatus = currentOperatorLut?.let { OperatorLutStatus(it.cube.sha256, OperatorLutState.WAITING_FOR_GPU, selectionId = monitorLutIdentity(it)) } ?: OperatorLutStatus(),
                 subjectLutStatus = waitingSubjectLutStatus(),
                 analysisIntervalMs = 0L,
@@ -1110,7 +1111,7 @@ class CaptureService : Service() {
                 analysisUpdatedAtMs = analysis.capturedAtElapsedRealtimeMs,
                 monitoringScopes = analysis.scopes,
                 zebraCells = analysis.zebraCells,
-                focusCells = analysis.focusCells,
+                focusPeakingMask = analysis.focusPeaking,
             ) }
         }
 
@@ -2083,6 +2084,7 @@ class CaptureService : Service() {
                 previewEngine.setTorch(settings.flashEnabled, settings.torchStrengthLevel)
             }
             previewEngine.setMonitoringOptions(settings.monitoring)
+            previewEngine.setFocusPeakingEnabled(settings.peakingEnabled)
             previewEngine.setSubjectFramingEnabled(settings.subjectDisplay.outOfFrameWarning)
             if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.logViewAssistEnabled)
             if (previous.logGreyReference != settings.logGreyReference) previewEngine.setOpenCineLogGreyReference(settings.logGreyReference)
