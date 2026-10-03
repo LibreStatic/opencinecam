@@ -9,4 +9,11 @@
     <string name="focus_curve_ease_in">Avvio dolce</string>
     <string name="focus_curve_ease_out">Arrivo dolce</string>
     <string name="focus_curve_s">Curva a S</string>
+    <string name="error_try_supported_settings">Prova impostazioni supportate</string>
+    <string name="error_encoder_rejects_size">Questo dispositivo non può registrare %1$s a %2$d fps.</string>
+    <string name="error_headline_recording">Registrazione non riuscita</string>
+    <string name="error_headline_save">Impossibile salvare</string>
+    <string name="error_headline_preview">Anteprima interrotta</string>
+    <string name="error_headline_permission">Autorizzazione necessaria</string>
+    <string name="error_headline_disconnected">Fotocamera scollegata</string>
 </resources>

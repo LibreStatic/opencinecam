@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizando…</string>
     <string name="rec_state_saved">Clipe salvo</string>
     <string name="rec_state_unavailable">Indisponível</string>
-    <string name="error_restore_previous">Restaurar configuração anterior</string>
     <string name="error_open_settings">Abrir configurações</string>
     <string name="error_failed_configuration">Falhou: %1$s</string>
     <string name="error_details_show">Detalhes técnicos</string>

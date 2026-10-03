@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizzazione…</string>
     <string name="rec_state_saved">Clip salvata</string>
     <string name="rec_state_unavailable">Non disponibile</string>
-    <string name="error_restore_previous">Ripristina configurazione precedente</string>
     <string name="error_open_settings">Apri impostazioni</string>
     <string name="error_failed_configuration">Non riuscito: %1$s</string>
     <string name="error_details_show">Dettagli tecnici</string>

@@ -11,4 +11,11 @@
     <string name="focus_curve_ease_in">Slow start</string>
     <string name="focus_curve_ease_out">Slow end</string>
     <string name="focus_curve_s">S-curve</string>
+    <string name="error_try_supported_settings">Try supported settings</string>
+    <string name="error_encoder_rejects_size">This device cannot record %1$s at %2$d fps.</string>
+    <string name="error_headline_recording">Recording failed</string>
+    <string name="error_headline_save">Could not save</string>
+    <string name="error_headline_preview">Preview stopped</string>
+    <string name="error_headline_permission">Permission needed</string>
+    <string name="error_headline_disconnected">Camera disconnected</string>
 </resources>

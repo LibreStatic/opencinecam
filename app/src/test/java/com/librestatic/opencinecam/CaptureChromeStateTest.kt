@@ -35,7 +35,7 @@ class CaptureChromeStateTest {
 
     @Test fun operatorErrorTextDropsTheExceptionClass() {
         assertEquals(
-            "No hardware video/avc Surface encoder accepts 720x1280 at 30 fps.",
+            "No hardware video/avc Surface encoder accepts 1280×720 at 30 fps.",
             operatorErrorText("java.lang.IllegalStateException: No hardware video/avc Surface encoder accepts 720x1280 at 30 fps."),
         )
         assertEquals("Camera disconnected", operatorErrorText("android.hardware.camera2.CameraAccessException: Camera disconnected"))

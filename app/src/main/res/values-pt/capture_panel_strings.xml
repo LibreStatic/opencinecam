@@ -9,4 +9,11 @@
     <string name="focus_curve_ease_in">Início suave</string>
     <string name="focus_curve_ease_out">Final suave</string>
     <string name="focus_curve_s">Curva em S</string>
+    <string name="error_try_supported_settings">Tentar configurações compatíveis</string>
+    <string name="error_encoder_rejects_size">Este dispositivo não consegue gravar %1$s a %2$d fps.</string>
+    <string name="error_headline_recording">A gravação falhou</string>
+    <string name="error_headline_save">Não foi possível salvar</string>
+    <string name="error_headline_preview">A pré-visualização parou</string>
+    <string name="error_headline_permission">Permissão necessária</string>
+    <string name="error_headline_disconnected">Câmera desconectada</string>
 </resources>

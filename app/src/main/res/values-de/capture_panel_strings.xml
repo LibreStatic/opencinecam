@@ -9,4 +9,11 @@
     <string name="focus_curve_ease_in">Sanfter Start</string>
     <string name="focus_curve_ease_out">Sanftes Ende</string>
     <string name="focus_curve_s">S-Kurve</string>
+    <string name="error_try_supported_settings">Unterstützte Einstellungen verwenden</string>
+    <string name="error_encoder_rejects_size">Dieses Gerät kann %1$s nicht mit %2$d fps aufnehmen.</string>
+    <string name="error_headline_recording">Aufnahme fehlgeschlagen</string>
+    <string name="error_headline_save">Speichern fehlgeschlagen</string>
+    <string name="error_headline_preview">Vorschau angehalten</string>
+    <string name="error_headline_permission">Berechtigung erforderlich</string>
+    <string name="error_headline_disconnected">Kamera getrennt</string>
 </resources>

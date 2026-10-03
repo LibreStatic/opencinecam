@@ -9,4 +9,11 @@
     <string name="focus_curve_ease_in">Départ doux</string>
     <string name="focus_curve_ease_out">Arrivée douce</string>
     <string name="focus_curve_s">Courbe en S</string>
+    <string name="error_try_supported_settings">Essayer des réglages compatibles</string>
+    <string name="error_encoder_rejects_size">Cet appareil ne peut pas enregistrer en %1$s à %2$d fps.</string>
+    <string name="error_headline_recording">Échec de l\'enregistrement</string>
+    <string name="error_headline_save">Impossible d\'enregistrer le fichier</string>
+    <string name="error_headline_preview">Aperçu interrompu</string>
+    <string name="error_headline_permission">Autorisation requise</string>
+    <string name="error_headline_disconnected">Caméra déconnectée</string>
 </resources>

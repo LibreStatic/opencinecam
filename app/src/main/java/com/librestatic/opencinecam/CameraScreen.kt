@@ -37,8 +37,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
@@ -77,7 +75,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import android.os.BatteryManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
@@ -781,9 +778,10 @@ internal fun CaptureSurface(
         }
         if (state.phase == CameraUiPhase.ERROR) {
             val knownGood = remember(state.errorCode, state.message) { knownGoodStore.load() }
-            // Fall back to the stock 1080p30 geometry when nothing has previewed on this install yet.
-            val restoreTarget = (knownGood ?: KnownGoodCapture.safeDefault(state.selectedMode))
-                .takeIf { it.differsFrom(settings, state.selectedMode) }
+            // Fall back to the stock 1080p30 geometry when nothing has previewed on this install yet,
+            // or when the last configuration that previewed is the one that just failed to record.
+            val restoreTarget = listOfNotNull(knownGood, KnownGoodCapture.safeDefault(state.selectedMode))
+                .firstOrNull { it.differsFrom(settings, state.selectedMode) }
             CameraErrorSheet(
                 state = state,
                 failed = KnownGoodCapture.of(settings, state.selectedMode, state.selectedCameraId),
@@ -802,106 +800,6 @@ internal fun CaptureSurface(
         }
     }
 }
-
-/**
- * Operational error sheet. The scrim swallows input so nothing behind it, REC included, reads as
- * actionable; the operator sees the cause in plain words and can open the raw technical text,
- * which is never shown by default on the shooting surface.
- */
-@Composable
-private fun BoxScope.CameraErrorSheet(
-    state: CameraUiState,
-    failed: KnownGoodCapture,
-    restoreTarget: KnownGoodCapture?,
-    onRetry: () -> Unit,
-    onRestore: (() -> Unit)?,
-    onOpenSettings: () -> Unit,
-) {
-    var showDetails by remember(state.message, state.errorCode) { mutableStateOf(false) }
-    val raw = state.message.orEmpty()
-    Box(
-        Modifier
-            .matchParentSize()
-            .background(Color.Black.copy(alpha = .72f))
-            .pointerInput(Unit) { detectTapGestures { } }
-            .testTag("camera-error-scrim"),
-    )
-    Column(
-        Modifier
-            .align(Alignment.BottomCenter)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(12.dp)
-            .widthIn(max = 560.dp)
-            .fillMaxWidth()
-            .background(Color(0xFF12171A), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF344047), RoundedCornerShape(12.dp))
-            .padding(horizontal = 20.dp, vertical = 18.dp)
-            .testTag("camera-error-sheet"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        CineGlyph(CineIcon.WARNING, RecordRed, Modifier.size(32.dp))
-        Text(stringResource(R.string.camera_error), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text(operatorErrorText(raw), color = Color(0xFFAAB4BA), fontSize = 14.sp, textAlign = TextAlign.Center)
-        // Name the configuration that failed, so the operator can tell what "restore" moves away from.
-        Text(
-            stringResource(R.string.error_failed_configuration, captureSummary(failed)),
-            color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("camera-error-failed-config"),
-        )
-        // Retrying replays the configuration that failed, so restoring the last one that
-        // previewed leads, alone on its row; the lighter actions share the row below.
-        val primary = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black)
-        val outline = BorderStroke(1.dp, Color(0xFF344047))
-        if (onRestore != null) {
-            Button(onClick = onRestore, colors = primary,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("camera-error-restore")) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.error_restore_previous), fontWeight = FontWeight.Bold)
-                    restoreTarget?.let { Text(captureSummary(it), fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth().testTag("camera-error-actions"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val action = Modifier.weight(1f).heightIn(min = 48.dp)
-            if (onRestore != null) OutlinedButton(onClick = onRetry, border = outline, modifier = action) {
-                Text(stringResource(R.string.retry), color = Color.White, textAlign = TextAlign.Center)
-            } else Button(onClick = onRetry, colors = primary, modifier = action) {
-                Text(stringResource(R.string.retry), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            }
-            OutlinedButton(onClick = onOpenSettings, border = outline, modifier = action.testTag("camera-error-settings")) {
-                Text(stringResource(R.string.error_open_settings), color = Color.White, textAlign = TextAlign.Center)
-            }
-        }
-        if (raw.isNotBlank() || state.errorCode != null) {
-            TextButton(onClick = { showDetails = !showDetails }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(if (showDetails) R.string.error_details_hide else R.string.error_details_show), color = VerifiedCyan)
-            }
-            if (showDetails) SelectionContainer {
-                Text(
-                    listOfNotNull(state.errorCode, raw.takeIf { it.isNotBlank() }).joinToString("\n"),
-                    color = Muted,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.fillMaxWidth().testTag("camera-error-details"),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun captureSummary(capture: KnownGoodCapture): String =
-    listOfNotNull(
-        capture.geometry()?.let { (w, h, _) -> "$w×$h" },
-        capture.geometry()?.third?.let { "$it fps" },
-        modeLabel(capture.mode),
-    ).joinToString(" · ")
-
-/** Drops the exception class a failure message may carry, keeping the sentence the operator can act on. */
-internal fun operatorErrorText(message: String): String =
-    message.replace(Regex("""^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Exception|Error)\s*:\s*"""), "").trim()
-        .ifEmpty { message.trim() }
 
 /**
  * A monitoring chip: symbol plus a short visible label, so no tool has to be memorised by letter.
@@ -4534,7 +4432,7 @@ private fun SettingsToggleRow(
 }
 
 @Composable
-private fun modeLabel(mode: CaptureMode): String = when (mode) {
+internal fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.PHOTO -> stringResource(R.string.photo_mode)
     CaptureMode.RAW_PHOTO -> stringResource(R.string.raw_photo_mode)
     CaptureMode.BURST -> stringResource(R.string.burst_mode)
