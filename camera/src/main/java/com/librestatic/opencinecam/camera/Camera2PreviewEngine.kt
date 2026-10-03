@@ -3460,7 +3460,13 @@ class Camera2PreviewEngine(
     ) {
         val photoPipeline = logPipeline.takeIf { gpuPhotoPreviewEnabled }
         if (gpuPhotoPreviewEnabled) check(photoPipeline != null && surface === photoPipeline.cameraInputSurface)
-        val outputs = mutableListOf(OutputConfiguration(surface))
+        // A density or rotation change can abandon the preview surface while the camera opens;
+        // wrapping it then throws, and nothing may escape onOpened on the camera executor.
+        val previewOutput = try { OutputConfiguration(surface) } catch (failure: Exception) {
+            listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+            return
+        }
+        val outputs = mutableListOf(previewOutput)
         var stillOutput: OutputConfiguration? = null
         var rawOutput: OutputConfiguration? = null
         var graphRawReader: ImageReader? = null
@@ -3601,18 +3607,20 @@ class Camera2PreviewEngine(
                 rawReader = null
             }
         }
-        fun createSession(index: Int) {
-            val graph = graphs[index]
-            val ids = graph.outputs.map { it.id }
-            releaseDropped(ids.toSet())
-            val hasFallback = index + 1 < graphs.size
-            fun fallback(reason: String) {
-                val dropped = ids - graphs[index + 1].outputs.map { it.id }.toSet()
+        PreviewGraphFallback(
+            graphCount = graphs.size,
+            ownsGraph = ::ownsGraph,
+            onRetry = { rejected, reason ->
+                val dropped = graphs[rejected].outputs.map { it.id } - graphs[rejected + 1].outputs.map { it.id }.toSet()
                 // analysis: scopes unavailable; raw: DNG capture unavailable (captureStill returns false).
                 Log.w(TAG, "Preview graph rejected; retrying without ${dropped.joinToString()} ($reason).")
-                createSession(index + 1)
-            }
-            // The first attempt uses the original configurations; retries get fresh ones.
+            },
+            onFailure = { code, message -> listener?.onFailure(code, message, true) },
+        ) { index ->
+            val ids = graphs[index].outputs.map { it.id }
+            releaseDropped(ids.toSet())
+            // The first attempt uses the original configurations; retries get fresh ones. Wrapping
+            // a surface again throws once the UI abandoned it, so this stays inside the attempt.
             val sessionOutputs = if (index == 0) ids.map(configs::getValue)
                 else ids.mapNotNull { configs.getValue(it).surface }.map(::OutputConfiguration)
             val configuration = SessionConfiguration(
@@ -3632,41 +3640,17 @@ class Camera2PreviewEngine(
 
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
-                        if (!ownsGraph()) return
-                        if (hasFallback) {
-                            fallback("configure failed")
-                            return
-                        }
-                        listener?.onFailure("preview-session-failed", "Camera preview configuration failed.", true)
+                        configureFailed(index)
                     }
                 },
             )
-            fun onException(failure: Exception) {
-                if (!ownsGraph()) return
-                if (hasFallback) {
-                    fallback(failure.message ?: failure.javaClass.simpleName)
-                    return
-                }
-                listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+            configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
+            if (skipBySessionPreCheck(sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }, hasFallback(index))) {
+                return@PreviewGraphFallback false
             }
-            val skip = try {
-                configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
-                skipBySessionPreCheck(sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }, hasFallback)
-            } catch (failure: Exception) {
-                onException(failure)
-                return
-            }
-            if (skip) {
-                fallback("isSessionConfigurationSupported=false")
-                return
-            }
-            try {
-                device.createCaptureSession(configuration)
-            } catch (failure: Exception) {
-                onException(failure)
-            }
-        }
-        createSession(0)
+            device.createCaptureSession(configuration)
+            true
+        }.start()
     }
 
     private fun startRepeating(
