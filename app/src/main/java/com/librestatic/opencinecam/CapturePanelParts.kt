@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -106,7 +109,7 @@ internal fun PanelNote(text: String, modifier: Modifier = Modifier) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 17.sp, modifier = modifier)
 }
 
-/** Tiles laid out in as many equal columns as fit, each at least [minTileWidth] wide. */
+/** Tiles laid out in as many equal columns as fit, each at least [minTileWidth] wide; a row's tiles share one height. */
 @Composable
 internal fun <T> ChoiceGrid(
     items: List<T>,
@@ -121,8 +124,8 @@ internal fun <T> ChoiceGrid(
         val columns = if (balanced) balancedGridColumns(fit, items.size) else fit
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items.chunked(columns).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { tile(it, Modifier.weight(1f)) }
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { tile(it, Modifier.weight(1f).fillMaxHeight()) }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
