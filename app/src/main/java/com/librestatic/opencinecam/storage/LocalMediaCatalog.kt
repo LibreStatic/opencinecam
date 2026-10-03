@@ -16,7 +16,13 @@ data class LocalMediaArtifact(val uri: String, val name: String, val mimeType: S
 data class LocalMediaTake(val id: String, val primary: LocalMediaArtifact,
     val originals: List<LocalMediaArtifact>, val metadata: List<LocalMediaArtifact>,
     val kind: LocalMediaKind, val slate: ProductionSlateSettings?, val relationStatus: LocalMediaRelationStatus)
-data class LocalMediaPage(val takes: List<LocalMediaTake>, val next: LocalMediaCursor?)
+/** Codec facts a take's sidecars declare. They stay out of [LocalMediaTake], whose equality is the
+ * identity check behind sharing, renaming and proxy jobs. */
+data class LocalMediaEncoding(val videoMime: String? = null, val videoProfile: String? = null,
+    val audioContainer: String? = null, val audioSamples: String? = null)
+/** [encodings] holds, by take id, what the page's sidecars declared; takes without one are absent. */
+data class LocalMediaPage(val takes: List<LocalMediaTake>, val next: LocalMediaCursor?,
+    val encodings: Map<String, LocalMediaEncoding> = emptyMap())
 
 /** Opaque, constant-size keyset state. No accumulated take IDs or offset-based pagination. */
 class LocalMediaCursor internal constructor(internal val filter: String,
@@ -70,9 +76,11 @@ internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, que
 }
 
 /** Validates declarations against available owned namespace members, not filename similarity.
- * DECLARED means relationship identity was checked, never that content hashes were verified. */
+ * DECLARED means relationship identity was checked, never that content hashes were verified.
+ * [onEncoding] receives the codec facts of a valid take, read from the same parse. */
 internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
-    documents: List<MetadataDocument>, incomplete: Boolean = false): LocalMediaTake? {
+    documents: List<MetadataDocument>, incomplete: Boolean = false,
+    onEncoding: ((LocalMediaEncoding) -> Unit)? = null): LocalMediaTake? {
     val originals = members.filter { it.kind != null }
     val primary = catalogPrimary(originals) ?: return null
     val known = originals.associateBy { it.artifact.uri }
@@ -81,6 +89,7 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     val references = mutableSetOf<String>()
     val slates = mutableSetOf<ProductionSlateSettings>()
     var slateAbsent = false
+    var encoding = LocalMediaEncoding()
     for (document in documents) {
         if (document.disappeared) { missing = true; continue }
         try {
@@ -137,10 +146,17 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
             val slate = if (node == null) null else requireNotNull(parseProductionSlateJson(node as? JsonObject ?: error("Slate object required")))
             if (slate == null) slateAbsent = true else slates += slate
             references += declared.map { it.first }
+            when (schema) {
+                "opencinecam-oclog-sidecar-v2" -> (obj["encoding"] as? JsonObject)?.let {
+                    encoding = encoding.copy(videoMime = it.label("mime"), videoProfile = it.label("profile"))
+                }
+                "opencinecam-audio-sidecar-v1" -> encoding = encoding.copy(audioContainer = obj.label("container"), audioSamples = obj.label("encoding"))
+            }
         } catch (_: Exception) { invalid = true }
     }
     if (slates.size > 1 || slates.isNotEmpty() && slateAbsent) invalid = true
     if (documents.isNotEmpty() && known.keys.any { it !in references }) missing = true
+    if (!invalid && encoding != LocalMediaEncoding()) onEncoding?.invoke(encoding)
     val status = when {
         invalid -> LocalMediaRelationStatus.INVALID_METADATA
         missing -> LocalMediaRelationStatus.INCOMPLETE
@@ -150,6 +166,9 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     return LocalMediaTake(namespace.key, primary.artifact, originals.sortedWith(catalogComparator(false)).map { it.artifact },
         documents.map { it.artifact }, requireNotNull(primary.kind), slates.singleOrNull().takeUnless { invalid }, status)
 }
+/** A short string value; anything longer is no codec name and is dropped. */
+private fun JsonObject.label(key: String): String? =
+    (this[key] as? JsonPrimitive)?.takeIf { it.isString && it.content.length <= 32 }?.content
 private val recordingSchemas = setOf("opencinecam-audio-sidecar-v1", "opencinecam.recording.v1",
     "opencinecam.timecode.v1", "opencinecam.av-timing.v1", "opencinecam.recording-color.v1",
     "opencinecam.recording-audio.v1", "opencinecam.recording-timing.v1", "opencinecam-oclog-sidecar-v2",

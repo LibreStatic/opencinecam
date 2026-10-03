@@ -109,6 +109,29 @@ class LocalMediaCatalogTest {
         assertEquals(slate, take.slate)
         assertEquals(LocalMediaKind.VIDEO, take.kind)
     }
+    @Test fun encodingComesFromTheOcLogAndAudioSidecarsOfAValidTake() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        val audio = row(2, LocalMediaKind.AUDIO, recording)
+        val slate = ProductionSlateSettings(project = "Feature")
+        val oclog = buildJsonObject {
+            put("schema", "opencinecam-oclog-sidecar-v2"); put("bundleId", id); put("videoUri", video.artifact.uri)
+            put("productionSlate", productionSlateJson(slate))
+            put("encoding", buildJsonObject { put("mime", "video/hevc"); put("profile", "Main10"); put("codecName", "c2.hevc") })
+        }.toString()
+        val wav = JsonObject(Json.parseToJsonElement(recordingJson(audio, slate)).jsonObject +
+            mapOf("container" to JsonPrimitive("WAV"), "encoding" to JsonPrimitive("PCM_24"))).toString()
+        var encoding: LocalMediaEncoding? = null
+        val take = requireNotNull(catalogTake(recording, listOf(audio, video), listOf(document(recordingJson(video, slate)),
+            document(oclog, 2), document(wav, 3))) { encoding = it })
+        assertEquals(LocalMediaRelationStatus.DECLARED, take.relationStatus)
+        assertEquals(LocalMediaEncoding("video/hevc", "Main10", "WAV", "PCM_24"), encoding)
+        // An invalid take reports nothing, and a take that declares no codec reports nothing either.
+        encoding = null
+        catalogTake(recording, listOf(audio, video), listOf(document(oclog), document(recordingJson(audio, ProductionSlateSettings(project = "B")), 2))) { encoding = it }
+        assertNull(encoding)
+        catalogTake(recording, listOf(audio, video), listOf(document(recordingJson(video, slate)), document(recordingJson(audio, slate), 2))) { encoding = it }
+        assertNull(encoding)
+    }
     @Test fun conflictingSlatesAreInvalidAndDoNotPickOne() {
         val video = row(9, LocalMediaKind.VIDEO, recording)
         val audio = row(2, LocalMediaKind.AUDIO, recording)
