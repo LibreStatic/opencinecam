@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_badge_depth">%1$s %2$d bit</string>
+    <string name="media_badge_depth_float">%1$s %2$d bit in virgola mobile</string>
+    <string name="media_badge_proxy_ready">Proxy pronto</string>
+    <string name="media_badge_proxy_queued">Proxy in coda</string>
+    <string name="media_badge_proxy_making">Generazione del proxy</string>
+    <string name="media_badge_proxy_failed">Proxy non riuscito</string>
+</resources>

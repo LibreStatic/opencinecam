@@ -179,7 +179,8 @@ internal class GalleryTakeActions(
  */
 @Composable
 internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
-    thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, selected: Boolean, clickLabel: String, actions: GalleryTakeActions, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, selected: Boolean, clickLabel: String,
+    actions: GalleryTakeActions, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(12.dp)
     val title = takeTitleText(context, take)
@@ -195,7 +196,7 @@ internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, so
             .testTag("gallery-take-${take.id}"),
     ) {
         val thumbnail = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
-        GalleryThumbnailTile(take, thumbnail, settings.autoThumbnails, facts, Modifier.fillMaxWidth().aspectRatio(16f / 10f))
+        GalleryThumbnailTile(take, thumbnail, settings.autoThumbnails, facts, Modifier.fillMaxWidth().aspectRatio(16f / 10f), badges = badges)
         Row(Modifier.fillMaxWidth().padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, Modifier.fillMaxWidth().testTag("gallery-name-${take.id}"), color = MaterialTheme.colorScheme.onSurface,
@@ -312,12 +313,29 @@ internal fun GalleryBadge(text: String, modifier: Modifier = Modifier, accent: B
         .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.82f), RoundedCornerShape(6.dp))
         .padding(horizontal = 6.dp, vertical = 2.dp),
         color = if (accent) SettingsAccent else MaterialTheme.colorScheme.onSurface, fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, maxLines = 1)
+        fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+/** The proxy glyph with a tick once the proxy exists, or an ellipsis while it is queued or being made. */
+@Composable
+private fun GalleryProxyBadge(state: TakeProxyState, modifier: Modifier = Modifier) {
+    val label = state.label()?.let { stringResource(it) } ?: return
+    val tint = state.tint
+    Row(modifier
+        .heightIn(min = 22.dp)
+        .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.82f), RoundedCornerShape(6.dp))
+        .padding(horizontal = 5.dp)
+        .semantics { contentDescription = label },
+        horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        CineGlyph(CineIcon.PROXY, tint, Modifier.size(14.dp))
+        if (state == TakeProxyState.READY) CineGlyph(CineIcon.CHECK, tint, Modifier.size(10.dp))
+        else Text("…", color = tint, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
 }
 
 @Composable
 internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailState, automatic: Boolean, facts: GalleryFacts?,
-    modifier: Modifier = Modifier, tag: String = "gallery") {
+    modifier: Modifier = Modifier, tag: String = "gallery", badges: TakeBadges? = null) {
     val id = take.id
     val bitmap = state.bitmap
     val requestLabel = stringResource(R.string.gallery_thumbnail)
@@ -362,8 +380,15 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
             if (takeIsLog(take)) GalleryBadge("LOG", accent = true)
             if (facts?.hdr == true) GalleryBadge("HDR")
         }
-        formatTakeDuration(facts?.durationMs)?.let {
-            GalleryBadge(it, Modifier.align(Alignment.BottomEnd).padding(6.dp).testTag("$tag-duration-$id"))
+        // A card's codec and proxy: at most these two, the proxy only while it exists or is on its way.
+        val proxy = badges?.proxy ?: TakeProxyState.NONE
+        if (proxy == TakeProxyState.READY || proxy == TakeProxyState.QUEUED || proxy == TakeProxyState.MAKING)
+            GalleryProxyBadge(proxy, Modifier.align(Alignment.TopEnd).padding(6.dp).testTag("$tag-proxy-badge-$id"))
+        Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).padding(end = 4.dp)) {
+                badges?.codec?.let { GalleryBadge(codecBadgeText(it), Modifier.testTag("$tag-codec-$id")) }
+            }
+            formatTakeDuration(facts?.durationMs)?.let { GalleryBadge(it, Modifier.testTag("$tag-duration-$id")) }
         }
     }
 }

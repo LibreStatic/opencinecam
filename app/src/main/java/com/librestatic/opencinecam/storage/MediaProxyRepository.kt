@@ -601,10 +601,7 @@ internal class MediaProxyRepository(context: Context) {
     }
 
     private fun receipt(take: LocalMediaTake): AtomicFile = receiptForId(take.id)
-    private fun receiptForId(takeId: String): AtomicFile {
-        val key = MessageDigest.getInstance("SHA-256").digest(takeId.toByteArray()).proxyHex()
-        return AtomicFile(File(directory, "$key.json"))
-    }
+    private fun receiptForId(takeId: String): AtomicFile = AtomicFile(File(directory, proxyReceiptName(takeId)))
     private fun encode(take: LocalMediaTake, result: MediaProxyResult, source: ProxyMediaProbe, encoder: String, id: String) = buildJsonObject {
         put("schema", "opencinecam.proxy.v1"); put("takeId", take.id); put("proxyId", id)
         put("originalUri", result.originalUri); put("proxyUri", result.proxyUri); put("metadataUri", result.metadataUri)
@@ -632,3 +629,7 @@ internal class MediaProxyRepository(context: Context) {
         val originalHashes = ProxySourceHashCache()
     }
 }
+
+/** The commit receipt's file name in `filesDir/media-proxies`; the gallery lists these to badge takes. */
+internal fun proxyReceiptName(takeId: String): String =
+    MessageDigest.getInstance("SHA-256").digest(takeId.toByteArray()).proxyHex() + ".json"
