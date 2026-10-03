@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_tab_waveform">Wellenform</string>
+    <string name="scope_tab_vectorscope">Vektorskop</string>
+    <string name="scope_tab_false_color">Falschfarben</string>
+    <string name="scope_tab_histogram">Histogramm</string>
+    <string name="scope_tab_waveform_short">WFM</string>
+    <string name="scope_tab_vectorscope_short">VEK</string>
+    <string name="scope_tab_false_color_short">FF</string>
+    <string name="scope_tab_histogram_short">HIST</string>
+    <string name="scope_next">Nächster Scope</string>
+    <string name="scope_hide">Scopes ausblenden</string>
+</resources>

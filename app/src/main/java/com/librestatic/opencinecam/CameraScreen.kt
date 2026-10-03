@@ -1110,7 +1110,7 @@ private val SCOPES_BESIDE_MIN_WIDTH = 140.dp
 
 /** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
 @Composable
-private fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
+internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
     var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -1122,9 +1122,11 @@ private fun rememberScopeAnalysisFresh(state: CameraUiState, options: Monitoring
         (state.monitoringScopes == null || state.monitoringScopes.options == options)
 }
 
+/** [tag] lets a second histogram (the scopes panel's) coexist with the capture instruments' one. */
 @Composable
-private fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier) {
-    Canvas(modifier.testTag("histogram-graph")) {
+internal fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier,
+    tag: String = "histogram-graph") {
+    Canvas(modifier.testTag(tag)) {
         drawRect(Color.Black.copy(alpha = .55f))
         if (histogramMode == HistogramMode.LUMA) {
             val peak = state.histogram.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
