@@ -32,6 +32,9 @@ internal const val SIDE_PANE_WIDTH_DP = 320f
 /** Always-open inspector of large windows. Fixed, so the viewfinder never reflows under it. */
 internal const val INSPECTOR_WIDTH_DP = 360f
 
+/** The inspector's scopes shrink to fit its height down to this, then its column scrolls instead. */
+internal const val INSPECTOR_SCOPES_MIN_HEIGHT_DP = 200f
+
 /** A side pane of the stacked layout: at most this wide, and never more than [SIDE_PANE_MAX_FRACTION]. */
 internal const val SIDE_PANE_MAX_WIDTH_DP = 380f
 internal const val SIDE_PANE_MAX_FRACTION = 0.45f

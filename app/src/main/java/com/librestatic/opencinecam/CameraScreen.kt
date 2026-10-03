@@ -2019,23 +2019,40 @@ internal fun AdaptiveCaptureChrome(
                 .testTag("capture-inspector"),
         ) {
             if (paneShown) CaptureContextPane(ContextPanePlacement.SIDE, Modifier.weight(1f).fillMaxWidth(), paneContent)
-            else Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
-                if (!recording) {
-                    ThermalHudChip()
-                    OutOfFrameHudChip(state)
+            else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val viewport = maxHeight
+                var aboveScopesPx by remember { mutableIntStateOf(0) }
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // The recording format and time left stay above the scopes, never scrolled away under them.
+                    Column(
+                        Modifier.fillMaxWidth().onSizeChanged { aboveScopesPx = it.height },
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
+                        if (!recording) {
+                            ThermalHudChip()
+                            OutOfFrameHudChip(state)
+                        }
+                        CaptureStatus(state)
+                        if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
+                        CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                        CaptureSlotRows(slots, activeSlot, onSlot)
+                        presets()
+                        StatusInfoBar(state, settings)
+                    }
+                    // The panel scrolls its own scopes, so it needs a bounded height inside this column:
+                    // the room the rest leaves, but never so little a trace stops reading; then the column scrolls.
+                    if (scopesShown) {
+                        val room = viewport - 34.dp - with(density) { aboveScopesPx.toDp() }
+                        Box(
+                            Modifier.fillMaxWidth().heightIn(max = room.coerceIn(INSPECTOR_SCOPES_MIN_HEIGHT_DP.dp, 320.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) { scopes(Modifier) }
+                    }
                 }
-                CaptureStatus(state)
-                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
-                CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
-                CaptureSlotRows(slots, activeSlot, onSlot)
-                // The panel scrolls its own scopes, so it needs a bounded height inside this column.
-                if (scopesShown) Box(Modifier.fillMaxWidth().heightIn(max = 320.dp), contentAlignment = Alignment.Center) { scopes(Modifier) }
-                presets()
-                StatusInfoBar(state, settings)
             }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
