@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam.camera
 
 import java.nio.ByteBuffer
+import kotlin.math.abs
 
 /**
  * In-focus edges of one analysis frame, one bit per pixel, row-major.
@@ -161,3 +162,33 @@ fun outputFrameInStream(frameWidth: Int, frameHeight: Int, streamWidth: Int, str
     val height = (frameH / streamH).toFloat()
     return NormalizedFrame((1f - width) / 2f, (1f - height) / 2f, width, height)
 }
+
+/**
+ * Index of the preview stream among [sizes] (width to height): nearest 16:9, then nearest 1080p,
+ * within 1080p's pixel count. A tall unfolded panel never turns into a non-standard stream.
+ */
+internal fun previewSizeIndex(sizes: List<Pair<Int, Int>>): Int {
+    require(sizes.isNotEmpty())
+    val bounded = sizes.indices.filter { sizes[it].first.toLong() * sizes[it].second <= PREVIEW_PIXELS }.ifEmpty { sizes.indices.toList() }
+    return bounded.minWith(compareBy<Int> { val (w, h) = sizes[it]; abs(maxOf(w, h).toDouble() / minOf(w, h) - 16.0 / 9.0) }
+        .thenBy { abs(sizes[it].first.toLong() * sizes[it].second - PREVIEW_PIXELS) })
+}
+
+/**
+ * Index of the YUV analysis stream among [sizes], or -1 when there is none. It takes the preview's
+ * aspect whenever the HAL offers it at a modest size, because outputs of one aspect crop the sensor
+ * alike on any HAL. Outputs of different aspects only line up when the HAL centres each crop, as
+ * Camera2 documents; the emulator does not, so a 4:3 mask over its 16:9 preview sat a sixth of the
+ * frame off. Otherwise the size nearest 320 × 240, placed by [outputFrameInStream].
+ */
+internal fun analysisSizeIndex(sizes: List<Pair<Int, Int>>, previewWidth: Int, previewHeight: Int): Int {
+    fun area(index: Int) = sizes[index].first.toLong() * sizes[index].second
+    fun nearest(candidates: List<Int>) = candidates.minByOrNull { abs(area(it) - ANALYSIS_PIXELS) }
+    val sameAspect = sizes.indices.filter { area(it) <= MAX_MATCHED_ANALYSIS_PIXELS &&
+        sizes[it].first.toLong() * previewHeight == sizes[it].second.toLong() * previewWidth }
+    return nearest(sameAspect) ?: nearest(sizes.indices.toList()) ?: -1
+}
+
+private const val PREVIEW_PIXELS = 1920L * 1080L
+private const val ANALYSIS_PIXELS = 320L * 240L
+private const val MAX_MATCHED_ANALYSIS_PIXELS = 1280L * 720L

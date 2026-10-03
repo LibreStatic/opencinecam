@@ -4515,7 +4515,9 @@ class Camera2PreviewEngine(
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)
                     map.getOutputSizes(ImageFormat.HEIC)?.maxByOrNull { it.width.toLong() * it.height } else null,
                 rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height },
-                analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.minByOrNull { abs(it.width.toLong() * it.height - 320L * 240L) },
+                analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.toList().orEmpty().let { sizes ->
+                    sizes.getOrNull(analysisSizeIndex(sizes.map { it.width to it.height }, previewSize.width, previewSize.height))
+                },
                 sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0,
                 sensitivityRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE),
                 exposureTimeRangeNs = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE),
@@ -4605,17 +4607,8 @@ class Camera2PreviewEngine(
             )
         }.getOrNull()
 
-    private fun choosePreviewSize(sizes: List<Size>, targetWidth: Int, targetHeight: Int): Size {
-        // The display may be extremely tall/unfolded; never turn its panel ratio into a
-        // non-standard recording size. Keep the production default interoperable 16:9.
-        val targetRatio = 16.0 / 9.0
-        val bounded = sizes.filter { it.width.toLong() * it.height <= MAX_PREVIEW_PIXELS }
-            .ifEmpty { sizes }
-        return bounded.minWithOrNull(
-            compareBy<Size> { abs((maxOf(it.width, it.height).toDouble() / minOf(it.width, it.height)) - targetRatio) }
-                .thenBy { abs(it.width.toLong() * it.height - TARGET_PREVIEW_PIXELS) },
-        ) ?: sizes.first()
-    }
+    private fun choosePreviewSize(sizes: List<Size>, targetWidth: Int, targetHeight: Int): Size =
+        sizes[previewSizeIndex(sizes.map { it.width to it.height })]
 
     private fun streamCanReachFps(
         map: android.hardware.camera2.params.StreamConfigurationMap,
@@ -5032,8 +5025,6 @@ class Camera2PreviewEngine(
         private const val ZOOM_REPORT_PERIOD_MS = 33L
         private const val TAP_FOCUS_HOLD_MS = 3_000L
         internal const val SCOPE_HISTOGRAM_BINS = 64
-        private const val MAX_PREVIEW_PIXELS = 1920L * 1080L
-        private const val TARGET_PREVIEW_PIXELS = 1920L * 1080L
         private const val MAX_BURST_IMAGES = 10
         private const val MOTOROLA_IS_CAMERA2_KEY = "com.lenovo.moto.clientapp.is_motcamera2"
         private const val MOTOROLA_CURRENT_MODE_KEY = "com.lenovo.moto.clientapp.current_mode"
