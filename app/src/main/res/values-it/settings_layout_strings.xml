@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="settings_category_matches">
+        <item quantity="one">%d risultato</item>
+        <item quantity="many">%d risultati</item>
+        <item quantity="other">%d risultati</item>
+    </plurals>
+</resources>

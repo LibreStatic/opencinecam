@@ -3641,13 +3641,17 @@ internal fun SettingsContent(
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
     onOpenCapabilities: (() -> Unit)? = null,
 ) {
-    // Cards flow into two columns wherever each keeps a usable width (an unfolded foldable
-    // already qualifies); long forms and libraries always take the whole row.
+    // One column of equal-width cards, capped and centred for the pane's width class; the gutter
+    // is content padding so the whole pane still scrolls. Rows lay out side by side when the
+    // card is wide enough for a label and a control column.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val pane = maxWidth.value
+    val gutter = settingsSideGutterDp(pane)
+    CompositionLocalProvider(LocalSettingsRowLayout provides settingsRowLayout(settingsRowWidthDp(pane))) {
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Adaptive(260.dp),
+        columns = StaggeredGridCells.Fixed(1),
         modifier = Modifier.fillMaxSize().background(Graphite).testTag("settings-list"),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = gutter.dp, vertical = 16.dp),
         verticalItemSpacing = 12.dp,
     ) {
         if ("media-sharing" in visibleIds) settingsCard("media-sharing", fullLine = true) {
@@ -4080,6 +4084,8 @@ internal fun SettingsContent(
         if ("about" in visibleIds) settingsCard("about") {
             SettingsLinkRow(stringResource(R.string.about_title), stringResource(R.string.about_settings_summary), onOpenAbout)
         }
+    }
+    }
     }
 }
 
