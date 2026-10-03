@@ -1613,6 +1613,25 @@ internal fun AdaptiveCaptureChrome(
             else -> 0.dp
         }
 
+        // The stacked F-key column stands over the frame's end edge and stops above whatever docks
+        // on the deck under it (a pane that reaches the end edge, or the scope tray). The zoom rocker
+        // sits at mid-height under it; when the keys need more room than that leaves, the rocker
+        // drops to the bottom of the frame so every key shows without scrolling.
+        val paneEdgeGap = if (compact) 0.dp else ((maxWidth - DOCKED_SHEET_MAX_WIDTH_DP.dp) / 2).coerceAtLeast(0.dp)
+        val dockedUnderKeys = when {
+            dockedBottomPane && paneEdgeGap < CAPTURE_RAIL_WIDTH_DP.dp -> with(density) { dockedPaneHeightPx.toDp() }
+            scopeTray -> scopeTrayHeight
+            else -> 0.dp
+        }
+        val keyColumnFloor = maxHeight - deckHeight - dockedUnderKeys - 14.dp
+        val rockerHeight = 120.dp
+        val keysAboveMidRocker = maxHeight / 2 - rockerHeight / 2 - 12.dp
+        val keysAboveLowRocker = keyColumnFloor - rockerHeight - 12.dp
+        var keyColumnNaturalPx by remember { mutableIntStateOf(0) }
+        val zoomRockerLow = stackedFamily && !hinge && state.zoomSupported &&
+            with(density) { keyColumnNaturalPx.toDp() } > keysAboveMidRocker - topBar - 6.dp &&
+            keysAboveLowRocker > keysAboveMidRocker
+
         // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
         // visible during recording even when the rest of the chrome hides.
         if (state.zoomSupported) {
@@ -1639,27 +1658,20 @@ internal fun AdaptiveCaptureChrome(
                     }
                 },
                 onRelease = {},
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
+                modifier = (if (zoomRockerLow) Modifier.align(Alignment.BottomEnd).padding(bottom = maxHeight - keyColumnFloor)
+                    else Modifier.align(Alignment.CenterEnd))
                     .padding(end = endOccupied + 8.dp)
                     .width(28.dp)
-                    .height(120.dp),
+                    .height(rockerHeight),
             )
         }
 
         if (chromeVisible) {
             if (stackedFamily) {
-                // The F-keys stand over the frame's end edge under the lock toggles. They stop above
-                // the zoom rocker at mid-height and above whatever docks on the deck under them (a
-                // pane that reaches the end edge, or the scope tray), and scroll rather than run into it.
-                val paneEdgeGap = if (compact) 0.dp else ((maxWidth - DOCKED_SHEET_MAX_WIDTH_DP.dp) / 2).coerceAtLeast(0.dp)
-                val dockedUnderKeys = when {
-                    dockedBottomPane && paneEdgeGap < CAPTURE_RAIL_WIDTH_DP.dp -> with(density) { dockedPaneHeightPx.toDp() }
-                    scopeTray -> scopeTrayHeight
-                    else -> 0.dp
-                }
-                val keyColumnFloor = maxHeight - deckHeight - dockedUnderKeys - 14.dp
-                val keyColumnMax = (if (state.zoomSupported) minOf(maxHeight / 2 - 60.dp - 12.dp, keyColumnFloor) else keyColumnFloor) - topBar
+                // The F-keys stand over the frame's end edge under the lock toggles, stop above the
+                // zoom rocker and the docked deck, and scroll rather than run into either.
+                val keyColumnMax = (if (state.zoomSupported) minOf(if (zoomRockerLow) keysAboveLowRocker else keysAboveMidRocker, keyColumnFloor)
+                    else keyColumnFloor) - topBar
                 // Whole 48 dp keys only (6 dp apart, under the 48 dp lock row): a key cut by the
                 // column's edge would read as one hidden under the pane.
                 val keyPitch = 48.dp + 6.dp
@@ -1674,9 +1686,16 @@ internal fun AdaptiveCaptureChrome(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior)
-                    // A hinge split has no picture under its chrome: its F-keys go in the deck.
-                    if (!hinge) OperatorButtonColumn(state, settings)
+                    // Measured at its natural height (the scroll leaves it unbounded) to place the rocker.
+                    Column(
+                        Modifier.onSizeChanged { keyColumnNaturalPx = it.height },
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior)
+                        // A hinge split has no picture under its chrome: its F-keys go in the deck.
+                        if (!hinge) OperatorButtonColumn(state, settings)
+                    }
                 }
                 CaptureTopBar(
                     state = state,

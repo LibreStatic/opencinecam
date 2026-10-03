@@ -74,6 +74,7 @@ internal fun driverCaptureState(
     aeLockSupported = true, afLockSupported = true, focusMarks = mapOf("A" to 0.5f, "B" to 2f),
     targetFps = if (mode == CaptureMode.PHOTO) 30 else 24, targetVideoWidth = 3840, targetVideoHeight = 2160,
     recordingWidth = 3840, recordingHeight = 2160, availableStorageBytes = 96_000_000_000L,
+    zoomSupported = true, zoomMinRatio = 1f, zoomMaxRatio = 8f,
 )
 
 /** Settings with the waveform, vectorscope and false colour switched on, and the histogram. */
