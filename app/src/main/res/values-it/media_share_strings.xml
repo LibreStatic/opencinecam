@@ -16,7 +16,7 @@
     <string name="media_share_sources">Sorgenti disponibili — Originali: %1$d; Metadati: %2$d</string>
     <string name="media_share_confirm">Prepara e apri il selettore Android</string>
     <string name="media_share_preparing">Preparazione dell\'esportazione selezionata…</string>
-    <string name="media_share_cancel">Annulla / chiudi</string>
+    <string name="media_share_cancel">Annulla</string>
     <string name="media_share_error">L\'esportazione non è stata consegnata correttamente. Riprova, cambia la selezione, oppure chiudi e aggiorna il catalogo. Gli originali sono conservati.</string>
     <string name="media_share_cleanup_error">Pulizia dell\'esportazione temporanea non riuscita; gli originali sono conservati.</string>
     <string name="media_share_launched">Selettore Android aperto — la consegna non è verificata.</string>

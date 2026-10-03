@@ -16,7 +16,7 @@
     <string name="media_share_sources">Verfügbare Quellen – Originale: %1$d; Metadaten: %2$d</string>
     <string name="media_share_confirm">Vorbereiten und Android-Auswahl öffnen</string>
     <string name="media_share_preparing">Ausgewählter Export wird vorbereitet…</string>
-    <string name="media_share_cancel">Abbrechen / schließen</string>
+    <string name="media_share_cancel">Abbrechen</string>
     <string name="media_share_error">Der Export wurde nicht erfolgreich übergeben. Versuche es erneut, ändere die Auswahl oder schließe und aktualisiere den Katalog. Originale bleiben erhalten.</string>
     <string name="media_share_cleanup_error">Das Bereinigen des temporären Exports ist fehlgeschlagen; Originale bleiben erhalten.</string>
     <string name="media_share_launched">Android-Auswahl geöffnet – die Zustellung ist nicht verifiziert.</string>

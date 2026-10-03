@@ -8,7 +8,7 @@
     <string name="media_delete_original">Originale: %1$s</string>
     <string name="media_delete_metadata">Metadati: %1$s</string>
     <string name="media_delete_confirm">Elimina definitivamente i file elencati</string>
-    <string name="media_delete_cancel">Annulla / chiudi</string>
+    <string name="media_delete_cancel">Annulla</string>
     <string name="media_delete_busy">Eliminazione in corso. L\'annullamento non è più disponibile; attendi il risultato per ogni file. Uscire da questa schermata non interrompe un\'operazione già confermata.</string>
     <string name="media_delete_complete">Tutti i file selezionati sono stati eliminati.</string>
     <string name="media_delete_partial">Eliminazione parziale. Controlla il risultato di ogni file; non presumere che la ripresa sia stata eliminata del tutto.</string>

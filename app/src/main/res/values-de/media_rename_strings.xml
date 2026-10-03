@@ -11,7 +11,7 @@
     <string name="media_rename_current">Beobachteter Name nach dem Vorgang: %1$s</string>
     <string name="media_rename_unknown_name">Aktueller Name unbekannt; aktualisiere und prüfe die Datei.</string>
     <string name="media_rename_confirm">Lokales Umbenennen bestätigen</string>
-    <string name="media_rename_cancel">Abbrechen / schließen</string>
+    <string name="media_rename_cancel">Abbrechen</string>
     <string name="media_rename_busy">Das Umbenennen läuft. Abbrechen ist nicht mehr möglich; warte auf das verifizierte Ergebnis. Das Verlassen dieses Bildschirms stoppt einen bereits bestätigten Vorgang nicht.</string>
     <string name="media_rename_complete">Der gesamte lokale Dateisatz wurde umbenannt. Remote-Kopien wurden nicht umbenannt.</string>
     <string name="media_rename_compensated">Das Umbenennen ist fehlgeschlagen; die vorherigen Dateinamen und die Bytes der zugehörigen Metadaten wurden wiederhergestellt. Prüfe das Ergebnis vor einem neuen Versuch.</string>

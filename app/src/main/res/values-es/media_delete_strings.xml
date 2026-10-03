@@ -8,7 +8,7 @@
     <string name="media_delete_original">Original: %1$s</string>
     <string name="media_delete_metadata">Metadatos: %1$s</string>
     <string name="media_delete_confirm">Borrar permanentemente los archivos de la lista</string>
-    <string name="media_delete_cancel">Cancelar / cerrar</string>
+    <string name="media_delete_cancel">Cancelar</string>
     <string name="media_delete_busy">El borrado está en curso. La cancelación ya no está disponible; esperá el resultado por archivo. Salir de esta pantalla no detiene una operación ya confirmada.</string>
     <string name="media_delete_complete">Todos los archivos seleccionados se borraron.</string>
     <string name="media_delete_partial">El borrado fue parcial. Revisá el resultado de cada archivo; no supongas que la toma se borró por completo.</string>

@@ -8,7 +8,7 @@
     <string name="media_delete_original">Original: %1$s</string>
     <string name="media_delete_metadata">Metadaten: %1$s</string>
     <string name="media_delete_confirm">Aufgelistete Dateien dauerhaft löschen</string>
-    <string name="media_delete_cancel">Abbrechen / schließen</string>
+    <string name="media_delete_cancel">Abbrechen</string>
     <string name="media_delete_busy">Das Löschen läuft. Abbrechen ist nicht mehr möglich; warte auf das Ergebnis pro Datei. Das Verlassen dieses Bildschirms stoppt einen bereits bestätigten Vorgang nicht.</string>
     <string name="media_delete_complete">Alle ausgewählten Dateien wurden gelöscht.</string>
     <string name="media_delete_partial">Das Löschen war teilweise erfolgreich. Prüfe jedes Dateiergebnis; gehe nicht davon aus, dass der Take vollständig gelöscht wurde.</string>

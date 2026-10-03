@@ -16,7 +16,7 @@
     <string name="media_share_sources">Available sources — Originals: %1$d; Metadata: %2$d</string>
     <string name="media_share_confirm">Prepare and open Android chooser</string>
     <string name="media_share_preparing">Preparing selected export…</string>
-    <string name="media_share_cancel">Cancel / close</string>
+    <string name="media_share_cancel">Cancel</string>
     <string name="media_share_error">Export was not handed off successfully. Retry, change the selection, or close and refresh the catalog. Originals are retained.</string>
     <string name="media_share_cleanup_error">Temporary export cleanup failed; originals are retained.</string>
     <string name="media_share_launched">Android chooser opened — delivery is not verified.</string>

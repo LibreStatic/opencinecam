@@ -11,7 +11,7 @@
     <string name="media_rename_current">Nome osservato dopo l\'operazione: %1$s</string>
     <string name="media_rename_unknown_name">Nome corrente sconosciuto; aggiorna e controlla il file.</string>
     <string name="media_rename_confirm">Conferma rinomina locale</string>
-    <string name="media_rename_cancel">Annulla / chiudi</string>
+    <string name="media_rename_cancel">Annulla</string>
     <string name="media_rename_busy">Rinomina in corso. L\'annullamento non è più disponibile; attendi il risultato verificato. Uscire da questa schermata non interrompe un\'operazione già confermata.</string>
     <string name="media_rename_complete">L\'intero insieme di file locali è stato rinominato. Le copie remote non sono state rinominate.</string>
     <string name="media_rename_compensated">La rinomina non è riuscita; i nomi di file precedenti e i byte dei metadati correlati sono stati ripristinati. Controlla il risultato prima di un nuovo tentativo.</string>
