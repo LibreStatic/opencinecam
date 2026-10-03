@@ -85,6 +85,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -820,7 +821,8 @@ internal fun CaptureSurface(
 private fun MonitorToggle(icon: CineIcon, label: String, description: String, enabled: Boolean, onClick: () -> Unit,
     cycleState: String? = null, modifier: Modifier = Modifier) {
     val on = enabled && cycleState == null
-    val content = if (on) Color.Black else Color.White
+    val colors = MaterialTheme.colorScheme
+    val content = if (on) colors.onPrimary else colors.onSurface
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -829,8 +831,8 @@ private fun MonitorToggle(icon: CineIcon, label: String, description: String, en
                 if (cycleState != null) stateDescription = cycleState
             }
             .clip(RoundedCornerShape(8.dp))
-            .background(if (on) Amber else Color(0xFF1B2226))
-            .border(1.dp, if (on) Amber else Color(0xFF344047), RoundedCornerShape(8.dp))
+            .background(if (on) colors.primary else colors.surfaceContainerHigh)
+            .border(1.dp, if (on) colors.primary else colors.outline, RoundedCornerShape(8.dp))
             .then(
                 if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = onClick)
                 else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { onClick() })
@@ -862,28 +864,29 @@ private fun MonitoringToggleGrid(
     onToggleGrid: () -> Unit,
     onCycleGridMode: () -> Unit,
     onToggleHorizon: () -> Unit,
+    modifier: Modifier = Modifier.widthIn(max = 312.dp),
 ) {
     val histogramModeTitle = stringResource(if (histogramMode == HistogramMode.RGB) R.string.histogram_mode_rgb else R.string.histogram_mode_luma)
     val gridModeTitle = stringResource(compositionGridModeTitle(gridMode))
     // Pairs share a row: each tool sits beside its mode, and the level closes the grid. The cells
-    // share the row's width, so the grid fits a 320 dp pane as well as a phone's sheet.
-    Column(Modifier.widthIn(max = 312.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = Modifier.weight(1f))
-            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = Modifier.weight(1f))
+    // share the row's width, so the grid fills a pane as well as the recording HUD's 312 dp popup.
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.ZEBRA, stringResource(R.string.monitor_zebra_short), stringResource(R.string.monitor_zebra), zebra, onToggleZebra, modifier = Modifier.weight(1f).fillMaxHeight())
+            MonitorToggle(CineIcon.PEAKING, stringResource(R.string.monitor_peaking_short), stringResource(R.string.monitor_peaking), peaking, onTogglePeaking, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.HISTOGRAM, stringResource(R.string.monitor_histogram_short), stringResource(R.string.monitor_histogram), histogram, onToggleHistogram, modifier = Modifier.weight(1f).fillMaxHeight())
             MonitorToggle(CineIcon.HISTOGRAM_MODE, histogramModeTitle, stringResource(R.string.monitor_histogram_mode), true, onCycleHistogramMode,
-                cycleState = histogramModeTitle, modifier = Modifier.weight(1f))
+                cycleState = histogramModeTitle, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.GRID, stringResource(R.string.monitor_grid_short), stringResource(R.string.monitor_grid), showGrid, onToggleGrid, modifier = Modifier.weight(1f).fillMaxHeight())
             MonitorToggle(CineIcon.GRID_MODE, gridModeTitle, stringResource(R.string.monitor_grid_mode), true, onCycleGridMode,
-                cycleState = gridModeTitle, modifier = Modifier.weight(1f))
+                cycleState = gridModeTitle, modifier = Modifier.weight(1f).fillMaxHeight())
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MonitorToggle(CineIcon.LEVEL, stringResource(R.string.monitor_horizon_short), stringResource(R.string.monitor_horizon), showHorizon, onToggleHorizon, modifier = Modifier.weight(1f).fillMaxHeight())
             Spacer(Modifier.weight(1f))
         }
     }
@@ -1851,6 +1854,7 @@ internal fun AdaptiveCaptureChrome(
                         zebra, peaking, histogramShown, histogramMode, showGrid, gridMode, showHorizon,
                         onToggleZebra, onTogglePeaking, toggleHistogram, onCycleHistogramMode,
                         onToggleGrid, onCycleGridMode, onToggleHorizon,
+                        Modifier.fillMaxWidth(),
                     )
                     if (scopesEnabled && !hinge) MonitorToggle(
                         CineIcon.MONITORING,
@@ -1858,7 +1862,7 @@ internal fun AdaptiveCaptureChrome(
                         stringResource(R.string.capture_scopes_toggle),
                         !scopesHidden,
                         { scopeVisibility.toggle() },
-                        modifier = Modifier.widthIn(max = 312.dp).fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 null -> Unit
