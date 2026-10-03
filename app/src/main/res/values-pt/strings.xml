@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizando…</string>
     <string name="rec_state_saved">Clipe salvo</string>
     <string name="rec_state_unavailable">Indisponível</string>
-    <string name="error_restore_previous">Restaurar configuração anterior</string>
     <string name="error_open_settings">Abrir configurações</string>
     <string name="error_failed_configuration">Falhou: %1$s</string>
     <string name="error_details_show">Detalhes técnicos</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Clipes SDR são reduzidos ao cinza do HLG. Sem perdas: nada é cortado.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Clipes HLG são elevados ao cinza do SDR. Altas luzes acima de cerca de 75% do sinal HLG são cortadas.</string>
     <string name="capture_status_free">%1$s livres</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s livres</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s livres</string>
     <string name="camera_switch_timeout">A câmera %1$s não iniciou; câmera %2$s restaurada.</string>
     <string name="recording_channel">Gravação</string>
     <string name="recording_channel_summary">Status de gravação visível e ação de parar</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">BALANÇO DE BRANCO</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">PUXAR FOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (lente fixa)</string>
+    <string name="focus_auto_fixed_lens">Esta lente tem foco fixo; não há nada para ajustar.</string>
     <string name="focus_marks_title">MARCAS</string>
     <string name="focus_mark_empty">DEFINIR</string>
-    <string name="focus_marks_hint">Toque: puxar · Pressão longa: salvar/limpar</string>
-    <string name="focus_pull_duration">DURAÇÃO %1$.1f s</string>
+    <string name="focus_marks_hint">Toque numa marca vazia para salvar o foco atual, ou numa salva para puxar o foco até ela. Mantenha pressionado para limpá-la.</string>
+    <string name="focus_pull_duration">DURAÇÃO DA PUXADA</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">CANCELAR PUXADA</string>
     <string name="histogram_mode_rgb">RGB</string>

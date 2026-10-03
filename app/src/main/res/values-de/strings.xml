@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Wird finalisiert…</string>
     <string name="rec_state_saved">Clip gespeichert</string>
     <string name="rec_state_unavailable">Nicht verfügbar</string>
-    <string name="error_restore_previous">Vorherige Konfiguration wiederherstellen</string>
     <string name="error_open_settings">Einstellungen öffnen</string>
     <string name="error_failed_configuration">Fehlgeschlagen: %1$s</string>
     <string name="error_details_show">Technische Details</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">SDR-Clips werden auf das HLG-Grau abgesenkt. Verlustfrei: nichts clippt.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG-Clips werden auf das SDR-Grau angehoben. Lichter über etwa 75 % HLG-Signal clippen.</string>
     <string name="capture_status_free">%1$s frei</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s frei</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s frei</string>
     <string name="camera_switch_timeout">Kamera %1$s wurde nicht gestartet; Kamera %2$s wiederhergestellt.</string>
     <string name="recording_channel">Aufnahme</string>
     <string name="recording_channel_summary">Sichtbarer Aufnahmestatus und Stopp-Aktion</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">WEISSABGLEICH</string>
     <string name="panel_title_focus">FOKUS</string>
     <string name="panel_title_focus_pull">FOKUSZUG</string>
-    <string name="focus_auto_fixed_lens">AUTO (Festbrennweite)</string>
+    <string name="focus_auto_fixed_lens">Dieses Objektiv hat einen Fixfokus; es gibt nichts einzustellen.</string>
     <string name="focus_marks_title">MARKEN</string>
     <string name="focus_mark_empty">SETZEN</string>
-    <string name="focus_marks_hint">Tippen: ziehen · Lange drücken: speichern/löschen</string>
-    <string name="focus_pull_duration">DAUER %1$.1f s</string>
+    <string name="focus_marks_hint">Tippe auf eine leere Marke, um den aktuellen Fokus zu speichern, auf eine gespeicherte, um dorthin zu ziehen. Halten zum Löschen.</string>
+    <string name="focus_pull_duration">ZUGDAUER</string>
     <string name="focus_pull_curve">KURVE</string>
     <string name="focus_pull_cancel">ZUG ABBRECHEN</string>
     <string name="histogram_mode_rgb">RGB</string>

@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizing…</string>
     <string name="rec_state_saved">Clip saved</string>
     <string name="rec_state_unavailable">Unavailable</string>
-    <string name="error_restore_previous">Restore previous configuration</string>
     <string name="error_open_settings">Open settings</string>
     <string name="error_failed_configuration">Failed: %1$s</string>
     <string name="error_details_show">Technical details</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">SDR clips are scaled down to the HLG grey. Lossless: nothing clips.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG clips are scaled up to the SDR grey. Highlights above about 75% HLG signal clip.</string>
     <string name="capture_status_free">%1$s free</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s free</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s free</string>
     <string name="camera_switch_timeout">Camera %1$s did not start; restored camera %2$s.</string>
     <string name="recording_channel">Recording</string>
     <string name="recording_channel_summary">Visible recording status and stop action</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">WHITE BALANCE</string>
     <string name="panel_title_focus">FOCUS</string>
     <string name="panel_title_focus_pull">FOCUS PULL</string>
-    <string name="focus_auto_fixed_lens">AUTO (fixed lens)</string>
+    <string name="focus_auto_fixed_lens">This lens has fixed focus, so there is nothing to adjust.</string>
     <string name="focus_marks_title">MARKS</string>
     <string name="focus_mark_empty">SET</string>
-    <string name="focus_marks_hint">Tap: pull · Long press: save/clear</string>
-    <string name="focus_pull_duration">DURATION %1$.1fs</string>
+    <string name="focus_marks_hint">Tap an empty mark to save the current focus, a saved one to pull to it. Hold to clear.</string>
+    <string name="focus_pull_duration">PULL DURATION</string>
     <string name="focus_pull_curve">CURVE</string>
     <string name="focus_pull_cancel">CANCEL PULL</string>
     <string name="histogram_mode_rgb">RGB</string>

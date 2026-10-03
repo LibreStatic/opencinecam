@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">El objetivo informa %1$s</string>
+    <string name="focus_advanced">Avanzado</string>
+    <string name="focus_mark_pull_action">Llevar el foco a la marca %1$s</string>
+    <string name="focus_mark_save_action">Guardar el foco actual como marca %1$s</string>
+    <string name="focus_mark_clear_action">Borrar la marca %1$s</string>
+    <string name="focus_curve_linear">Lineal</string>
+    <string name="focus_curve_ease_in">Inicio suave</string>
+    <string name="focus_curve_ease_out">Final suave</string>
+    <string name="focus_curve_s">Curva S</string>
+    <string name="error_try_supported_settings">Probar ajustes compatibles</string>
+    <string name="error_encoder_rejects_size">Este dispositivo no puede grabar %1$s a %2$d fps.</string>
+    <string name="error_headline_recording">Falló la grabación</string>
+    <string name="error_headline_save">No se pudo guardar</string>
+    <string name="error_headline_preview">La vista previa se detuvo</string>
+    <string name="error_headline_permission">Se necesita un permiso</string>
+    <string name="error_headline_disconnected">Cámara desconectada</string>
+    <string name="panel_title_shutter">OBTURACIÓN</string>
+    <string name="exposure_manual_unavailable_iso">Esta cámara no permite fijar el ISO a mano; lo elige ella misma.</string>
+    <string name="exposure_manual_unavailable_shutter">Esta cámara no permite fijar la velocidad de obturación a mano; la elige ella misma.</string>
+    <string name="panel_high_speed_auto">Con cuadros por segundo de alta velocidad, la cámara ajusta esto sola.</string>
+    <string name="ev_unavailable">Esta cámara no ofrece compensación de exposición.</string>
+    <string name="wb_preset_daylight">Luz de día</string>
+    <string name="wb_preset_cloudy">Nublado</string>
+    <string name="wb_preset_tungsten">Tungsteno</string>
+    <string name="wb_preset_fluorescent">Fluorescente</string>
+    <string name="wb_tint">MATIZ</string>
+    <string name="wb_tint_green">Verde</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Las tasas en gris no están disponibles en %1$s.</string>
+    <string name="status_audio_off">Sin audio</string>
+    <string name="status_time_left">quedan %1$s</string>
+    <string name="status_view_assist">Vista %1$s</string>
+</resources>

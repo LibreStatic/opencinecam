@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalisation…</string>
     <string name="rec_state_saved">Clip enregistré</string>
     <string name="rec_state_unavailable">Indisponible</string>
-    <string name="error_restore_previous">Restaurer la configuration précédente</string>
     <string name="error_open_settings">Ouvrir les réglages</string>
     <string name="error_failed_configuration">Échec : %1$s</string>
     <string name="error_details_show">Détails techniques</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Les clips SDR sont abaissés au gris HLG. Sans perte : rien n\'est écrêté.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Les clips HLG sont relevés au gris SDR. Les hautes lumières au-delà d\'environ 75 % du signal HLG sont écrêtées.</string>
     <string name="capture_status_free">%1$s libres</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s libres</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s libres</string>
     <string name="camera_switch_timeout">La caméra %1$s n\'a pas démarré ; caméra %2$s restaurée.</string>
     <string name="recording_channel">Enregistrement</string>
     <string name="recording_channel_summary">État d\'enregistrement visible et action d\'arrêt</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">BALANCE DES BLANCS</string>
     <string name="panel_title_focus">MISE AU POINT</string>
     <string name="panel_title_focus_pull">TIRAGE DE POINT</string>
-    <string name="focus_auto_fixed_lens">AUTO (objectif fixe)</string>
+    <string name="focus_auto_fixed_lens">Cet objectif a une mise au point fixe ; il n\'y a rien à régler.</string>
     <string name="focus_marks_title">REPÈRES</string>
     <string name="focus_mark_empty">DÉFINIR</string>
-    <string name="focus_marks_hint">Toucher : tirer · Appui long : enregistrer/effacer</string>
-    <string name="focus_pull_duration">DURÉE %1$.1f s</string>
+    <string name="focus_marks_hint">Touchez un repère vide pour enregistrer la mise au point actuelle, un repère enregistré pour y aller. Appui long pour l\'effacer.</string>
+    <string name="focus_pull_duration">DURÉE DU TIRAGE</string>
     <string name="focus_pull_curve">COURBE</string>
     <string name="focus_pull_cancel">ANNULER LE TIRAGE</string>
     <string name="histogram_mode_rgb">RGB</string>

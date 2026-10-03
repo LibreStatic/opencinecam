@@ -37,8 +37,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
@@ -77,7 +75,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import android.os.BatteryManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
@@ -209,7 +206,6 @@ import com.librestatic.opencinecam.camera.label
 import com.librestatic.opencinecam.camera.snapKelvinTo100
 import com.librestatic.opencinecam.camera.KELVIN_PRESETS
 import com.librestatic.opencinecam.camera.adaptTo
-import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
 import com.librestatic.opencinecam.camera.TimecodeMode
@@ -779,9 +775,10 @@ internal fun CaptureSurface(
         }
         if (state.phase == CameraUiPhase.ERROR) {
             val knownGood = remember(state.errorCode, state.message) { knownGoodStore.load() }
-            // Fall back to the stock 1080p30 geometry when nothing has previewed on this install yet.
-            val restoreTarget = (knownGood ?: KnownGoodCapture.safeDefault(state.selectedMode))
-                .takeIf { it.differsFrom(settings, state.selectedMode) }
+            // Fall back to the stock 1080p30 geometry when nothing has previewed on this install yet,
+            // or when the last configuration that previewed is the one that just failed to record.
+            val restoreTarget = listOfNotNull(knownGood, KnownGoodCapture.safeDefault(state.selectedMode))
+                .firstOrNull { it.differsFrom(settings, state.selectedMode) }
             CameraErrorSheet(
                 state = state,
                 failed = KnownGoodCapture.of(settings, state.selectedMode, state.selectedCameraId),
@@ -800,106 +797,6 @@ internal fun CaptureSurface(
         }
     }
 }
-
-/**
- * Operational error sheet. The scrim swallows input so nothing behind it, REC included, reads as
- * actionable; the operator sees the cause in plain words and can open the raw technical text,
- * which is never shown by default on the shooting surface.
- */
-@Composable
-private fun BoxScope.CameraErrorSheet(
-    state: CameraUiState,
-    failed: KnownGoodCapture,
-    restoreTarget: KnownGoodCapture?,
-    onRetry: () -> Unit,
-    onRestore: (() -> Unit)?,
-    onOpenSettings: () -> Unit,
-) {
-    var showDetails by remember(state.message, state.errorCode) { mutableStateOf(false) }
-    val raw = state.message.orEmpty()
-    Box(
-        Modifier
-            .matchParentSize()
-            .background(Color.Black.copy(alpha = .72f))
-            .pointerInput(Unit) { detectTapGestures { } }
-            .testTag("camera-error-scrim"),
-    )
-    Column(
-        Modifier
-            .align(Alignment.BottomCenter)
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(12.dp)
-            .widthIn(max = 560.dp)
-            .fillMaxWidth()
-            .background(Color(0xFF12171A), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF344047), RoundedCornerShape(12.dp))
-            .padding(horizontal = 20.dp, vertical = 18.dp)
-            .testTag("camera-error-sheet"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        CineGlyph(CineIcon.WARNING, RecordRed, Modifier.size(32.dp))
-        Text(stringResource(R.string.camera_error), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text(operatorErrorText(raw), color = Color(0xFFAAB4BA), fontSize = 14.sp, textAlign = TextAlign.Center)
-        // Name the configuration that failed, so the operator can tell what "restore" moves away from.
-        Text(
-            stringResource(R.string.error_failed_configuration, captureSummary(failed)),
-            color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("camera-error-failed-config"),
-        )
-        // Retrying replays the configuration that failed, so restoring the last one that
-        // previewed leads, alone on its row; the lighter actions share the row below.
-        val primary = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black)
-        val outline = BorderStroke(1.dp, Color(0xFF344047))
-        if (onRestore != null) {
-            Button(onClick = onRestore, colors = primary,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("camera-error-restore")) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.error_restore_previous), fontWeight = FontWeight.Bold)
-                    restoreTarget?.let { Text(captureSummary(it), fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth().testTag("camera-error-actions"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val action = Modifier.weight(1f).heightIn(min = 48.dp)
-            if (onRestore != null) OutlinedButton(onClick = onRetry, border = outline, modifier = action) {
-                Text(stringResource(R.string.retry), color = Color.White, textAlign = TextAlign.Center)
-            } else Button(onClick = onRetry, colors = primary, modifier = action) {
-                Text(stringResource(R.string.retry), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            }
-            OutlinedButton(onClick = onOpenSettings, border = outline, modifier = action.testTag("camera-error-settings")) {
-                Text(stringResource(R.string.error_open_settings), color = Color.White, textAlign = TextAlign.Center)
-            }
-        }
-        if (raw.isNotBlank() || state.errorCode != null) {
-            TextButton(onClick = { showDetails = !showDetails }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(if (showDetails) R.string.error_details_hide else R.string.error_details_show), color = VerifiedCyan)
-            }
-            if (showDetails) SelectionContainer {
-                Text(
-                    listOfNotNull(state.errorCode, raw.takeIf { it.isNotBlank() }).joinToString("\n"),
-                    color = Muted,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.fillMaxWidth().testTag("camera-error-details"),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun captureSummary(capture: KnownGoodCapture): String =
-    listOfNotNull(
-        capture.geometry()?.let { (w, h, _) -> "$w×$h" },
-        capture.geometry()?.third?.let { "$it fps" },
-        modeLabel(capture.mode),
-    ).joinToString(" · ")
-
-/** Drops the exception class a failure message may carry, keeping the sentence the operator can act on. */
-internal fun operatorErrorText(message: String): String =
-    message.replace(Regex("""^(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Exception|Error)\s*:\s*"""), "").trim()
-        .ifEmpty { message.trim() }
 
 /**
  * A monitoring chip: symbol plus a short visible label, so no tool has to be memorised by letter.
@@ -3013,11 +2910,13 @@ internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
 @Composable
 private fun rememberBatteryPercent(): Int? {
     val context = LocalContext.current
-    var batteryPercent by remember { mutableStateOf<Int?>(null) }
+    fun read() = (context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager)
+        ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
+    // Read once up front so the first frame already carries the value.
+    var batteryPercent by remember { mutableStateOf(read()) }
     LaunchedEffect(Unit) {
         while (true) {
-            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-            batteryPercent = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 }
+            batteryPercent = read()
             delay(5_000)
         }
     }
@@ -3025,31 +2924,34 @@ private fun rememberBatteryPercent(): Int? {
 }
 
 /**
- * The top bar's one line of camera state: timecode when one runs, free space and battery. It
- * replaces the camera id and pipeline phase, which told the operator nothing they could act on.
+ * The top bar's one line of camera state: timecode when one runs, free space and battery. A value
+ * the device does not report is left out rather than shown as a dash.
  */
 @Composable
 private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifier, maxLines: Int = 1, textAlign: TextAlign? = null) {
     val battery = rememberBatteryPercent()
-    val low = battery != null && battery <= 15
+    val muted = Muted
+    // Low battery is a warning, not a failure: amber, never the recording red.
+    val batteryColor = if (battery != null && battery <= 15) LocalCineColors.current.pending else OkGreen
+    val free = state.availableStorageBytes?.let { stringResource(R.string.capture_status_free, formatBytes(it)) }
     val text = androidx.compose.ui.text.buildAnnotatedString {
+        fun separator() { if (length > 0) append("  ·  ") }
         state.timecodeDisplay?.let { tc ->
-            withStyle(androidx.compose.ui.text.SpanStyle(color = Muted)) { append("TC ") }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("TC ") }
             append(tc)
-            append("  ·  ")
         }
-        state.availableStorageBytes?.let { bytes ->
-            append(stringResource(R.string.capture_status_free, formatBytes(bytes)))
-            append("  ·  ")
+        free?.let { separator(); append(it) }
+        battery?.let {
+            separator()
+            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("BAT ") }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = batteryColor)) { append("$it%") }
         }
-        withStyle(androidx.compose.ui.text.SpanStyle(color = Muted)) { append("BAT ") }
-        withStyle(androidx.compose.ui.text.SpanStyle(color = if (low) RecordRed else OkGreen)) { append(battery?.let { "$it%" } ?: "—") }
     }
     Text(
         text,
-        color = Color.White,
-        fontSize = 11.sp,
-        lineHeight = 13.sp,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
         fontWeight = FontWeight.SemiBold,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -3058,47 +2960,45 @@ private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifie
     )
 }
 
+/**
+ * One line under the capture controls with what the next take records: codec, bitrate, sound, the
+ * time left on the storage and, when set, the anamorphic squeeze and the LOG view. Stills modes
+ * only list what applies to them; free space and battery live in the top bar's status line.
+ */
 @Composable
 private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
-    val batteryPercent = rememberBatteryPercent()
-    val isStill = state.selectedMode.isStillMode()
-    val codec = when {
-        state.selectedMode == CaptureMode.LOG -> "H.265 HEVC 10-bit LOG"
-        state.selectedMode == CaptureMode.RAW_VIDEO -> "RAW 10-bit"
-        isStill -> "--"
-        else -> "H.264 AVC"
-    }
-    val audio = if (settings.audioEnabled) audioOutputLabel(settings.audioOutputFormat) + " " + (settings.audioSampleRateHz / 1000) + " kHz" else "Audio OFF"
-    val bitrate = settings.videoBitrateMbps.toString() + " Mbps"
-    val time = if (state.phase == CameraUiPhase.RECORDING) formatDuration(state.recordingElapsedMs)
-        else state.availableStorageBytes?.takeIf { it > 0 }?.let { formatDuration(it * 8L * 1000L / (settings.videoBitrateMbps * 1_000_000L)) } ?: "--"
-    val free = formatBytes(state.availableStorageBytes) + " libre"
-    val battery = batteryPercent?.let { "$it%" } ?: "--"
-    val lut = if (state.selectedMode == CaptureMode.LOG) (if (settings.logViewAssistEnabled) "Rec.709" else "Flat") else "--"
-   val wb = state.requestedWhiteBalance.label()
-   val focus = if (state.requestedFocusDiopters != null) "MF" else "AF-C"
-    val ana = if (settings.anamorphicSqueeze.isActive) {
-        val squeezeLabel = when (settings.anamorphicSqueeze) {
-            AnamorphicSqueeze.SQUEEZE_1_33X -> "1.33x"
-            AnamorphicSqueeze.SQUEEZE_1_5X -> "1.5x"
-            AnamorphicSqueeze.SQUEEZE_2X -> "2x"
-            else -> ""
+    val video = !state.selectedMode.isStillMode()
+    // Off-speed takes are silent by design.
+    val silent = !settings.audioEnabled || (state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
+    val parts = buildList {
+        if (video) {
+            add(when (state.selectedMode) {
+                CaptureMode.LOG -> "HEVC 10-bit LOG"
+                CaptureMode.RAW_VIDEO -> "RAW 10-bit"
+                else -> "H.264"
+            })
+            add("${settings.videoBitrateMbps} Mbps")
+            add(if (silent) stringResource(R.string.status_audio_off)
+                else audioOutputLabel(settings.audioOutputFormat) + " " + formatAudioRate(settings.audioSampleRateHz))
+            recordTimeLeftMs(state.availableStorageBytes, settings.videoBitrateMbps)?.let {
+                add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it)))
+            }
         }
-        val modeLabel = if (settings.anamorphicOutputMode == AnamorphicOutputMode.DESQUEEZED) "DQ" else "SQ"
-        "ANA $squeezeLabel/$modeLabel"
-    } else null
-    val primary = buildList {
-        add(codec)
-        if (!isStill) { add(bitrate); add(audio) }
-           add(time)
-            if (ana != null) add(ana)
-            if (state.timecodeDisplay != null) add(state.timecodeDisplay!!)
-    }.joinToString(" \u00b7 ")
-    val secondary = listOf(free, battery, "LUT: $lut", "WB: $wb", "FOCUS: $focus").joinToString(" \u00b7 ")
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(primary, color = Color.White, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(secondary, color = Muted, fontSize = 9.sp, lineHeight = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        anamorphicStatusLabel(settings.anamorphicSqueeze, settings.anamorphicOutputMode)?.let(::add)
+        if (state.selectedMode == CaptureMode.LOG) {
+            add(stringResource(R.string.status_view_assist, if (settings.logViewAssistEnabled) "Rec.709" else "LOG"))
+        }
     }
+    if (parts.isEmpty()) return
+    Text(
+        parts.joinToString(" · "),
+        color = Muted,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().testTag("status-info-bar"),
+    )
 }
 
 @Composable
@@ -3117,7 +3017,9 @@ private fun RecordingOverlay(
     var showMonitors by remember { mutableStateOf(false) }
     val stopRecordingDescription = stringResource(R.string.stop_recording)
     BoxWithConstraints(modifier.padding(top = 8.dp, start = 10.dp, end = 10.dp).fillMaxWidth()) {
-        val compact = maxWidth < 500.dp
+        // A phone-width strip drops the frame size and the monitoring shortcut to keep REC, the
+        // meter and stop on one row.
+        val compact = windowWidthClass(maxWidth.value) == WindowWidthClass.COMPACT
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -3129,19 +3031,20 @@ private fun RecordingOverlay(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(RecordRed))
-                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs), color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
+                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs),
+                    color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (!compact && state.recordingWidth != null && state.recordingHeight != null) {
-                    Text("${state.recordingWidth}\u00d7${state.recordingHeight}", color = Muted, fontSize = 10.sp)
+                    Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
                 }
             }
             AudioMeterHud(state, binder, meterWidth = if (compact) 96.dp else 132.dp)
-            ThermalHudChip()
+            ThermalHudChip(recording = true)
             OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
             if (!compact) TopAction(CineIcon.MONITORING, stringResource(R.string.monitoring_tools)) { showMonitors = !showMonitors }
             if (showStop) {
                 Box(
-                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, Color.White, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
+                    Modifier.size(48.dp).semantics { contentDescription = stopRecordingDescription }.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape).padding(5.dp).clip(CircleShape).clickable { binder?.capturePrimary() },
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
             }
@@ -3181,9 +3084,12 @@ internal fun AudioMeterHud(
     val held = if (snapshot != null) holder.observe(snapshot.capturedAtElapsedRealtimeMs, now, displayed, meterSettings.peakHoldMs)
         else { holder.clear(); emptyList() }
     val resetLabel = stringResource(R.string.audio_meter_reset_clip)
+    // Every line is single and ellipsised, and the panel clips, so a narrow portrait slot never
+    // lets the meter spill over the instruments next to it.
     Column(
         modifier.width(meterWidth).heightIn(min = 48.dp).testTag("audio-meter-hud")
             .background(Panel, RoundedCornerShape(7.dp))
+            .clipToBounds()
             .clickable(enabled = state.audioClipLatched, onClickLabel = resetLabel, onClick = onResetClip)
             .semantics { if (state.audioClipLatched) contentDescription = resetLabel }
             .padding(horizontal = 7.dp, vertical = 5.dp),
@@ -3191,18 +3097,23 @@ internal fun AudioMeterHud(
     ) {
         Text(if (snapshot != null) "MIC" else stringResource(R.string.audio_meter_no_pcm),
             Modifier.testTag("audio-meter-current"), color = if (snapshot != null) VerifiedCyan else Muted,
-            fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted, fontSize = 10.sp)
-        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted,
+            fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 12.sp,
+            lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        val meterTrack = MaterialTheme.colorScheme.surfaceContainerHighest
+        val meterLine = MaterialTheme.colorScheme.onSurface
+        val meterGreen = OkGreen
         repeat(max(1, levels.size)) { index ->
             val level = levels.getOrNull(index)
             val value = displayed.getOrNull(index)
             val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(label, color = Muted, fontSize = 9.sp)
+                Text(label, color = Muted, fontSize = 12.sp, lineHeight = 12.sp, maxLines = 1)
                 val meterRed = RecordRed; val meterAmber = Amber
                 Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
-                    drawRect(Color(0xFF283033))
+                    drawRect(meterTrack)
                     if (value != null) {
                         val minimum = if (meterSettings.mode == AudioMeterMode.VU) -30f else -60f
                         val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
@@ -3210,11 +3121,11 @@ internal fun AudioMeterHud(
                         val signalColor = when {
                             (level?.peakDbfs ?: -120f) >= -3f -> meterRed
                             (level?.peakDbfs ?: -120f) >= -12f -> meterAmber
-                            else -> Color(0xFF46C36F)
+                            else -> meterGreen
                         }
                         drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
                         if (meterSettings.mode == AudioMeterMode.PEAK_RMS) level?.rmsDbfs?.takeIf { it.isFinite() }?.let { rms ->
-                            drawLine(Color.White, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
+                            drawLine(meterLine, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
                                 androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
                         }
                         held.getOrNull(index)?.let { peak ->
@@ -3231,9 +3142,11 @@ internal fun AudioMeterHud(
                     AudioMeterMode.VU -> stringResource(R.string.audio_meter_vu_value, number(value))
                     AudioMeterMode.PPM -> stringResource(R.string.audio_meter_ppm_value, number(value))
                 }
-                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = Color.White, fontSize = 10.sp)
+                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (value != null && meterSettings.peakHoldMs > 0) Text(stringResource(R.string.audio_meter_hold_value, number(held.getOrNull(index))),
-                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 10.sp)
+                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -3262,7 +3175,7 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
         stringResource(R.string.pro_capture_notice) else null
     val baseStatus = when {
         state.phase == CameraUiPhase.RECORDING && state.recordingWidth != null && state.recordingHeight != null ->
-            stringResource(R.string.recording_status, state.recordingWidth, state.recordingHeight, state.targetFps,
+            stringResource(R.string.recording_status, formatFrameSize(state.recordingWidth, state.recordingHeight), state.targetFps,
                 formatDuration(state.recordingElapsedMs), formatBytes(state.availableStorageBytes))
         // The error sheet already states a failure; repeating it here would show it twice.
         state.phase == CameraUiPhase.ERROR -> null
@@ -3277,8 +3190,9 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
     Text(
         status,
-        color = if (state.errorCode == null) Color.White else RecordRed,
-        fontSize = if (chip) 11.sp else 10.sp,
+        color = if (state.errorCode == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+        fontSize = 12.sp,
+        lineHeight = 15.sp,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         textAlign = if (chip) TextAlign.Center else null,
@@ -3290,6 +3204,11 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     )
 }
 
+/**
+ * A capture panel's content. It fills the width its host gives it and scrolls inside, so the host
+ * only bounds its height. [showHeader] false leaves the title row and close button to a host that
+ * draws its own (the capture context pane); the content then starts with the controls.
+ */
 @Composable
 private fun ManualControlDial(
     control: ControlDial,
@@ -3297,90 +3216,128 @@ private fun ManualControlDial(
     binder: CaptureService.LocalBinder?,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
+    showHeader: Boolean = true,
+    onClose: () -> Unit,
+) {
+    if (state.descriptor == null) return
+    CompositionLocalProvider(LocalPanelHeaderVisible provides (showHeader && LocalPanelHeaderVisible.current)) {
+        when (control) {
+            ControlDial.RESOLUTION -> ResolutionDial(state, binder, onClose)
+            ControlDial.FPS -> FpsDial(state, binder, onClose)
+            ControlDial.WB -> WbDial(state, binder, onClose)
+            ControlDial.EV -> EvDial(state, binder, onClose)
+            ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
+            ControlDial.INT -> IntervalometerDial(state, settings, onSettingsChanged, onClose)
+            ControlDial.ISO -> ExposureDial(iso = true, state, binder, settings, onSettingsChanged, onClose)
+            ControlDial.SHUTTER -> ExposureDial(iso = false, state, binder, settings, onSettingsChanged, onClose)
+        }
+    }
+}
+
+/** High-speed sessions leave exposure and white balance to the camera. */
+private fun CameraUiState.highSpeedSession(): Boolean =
+    activeVideoProfile?.constrainedHighSpeed == true || activeLogProfile?.constrainedHighSpeed == true
+
+/** The one large value a panel is about, centred over its controls. */
+@Composable
+private fun PanelReadout(text: String, color: Color, modifier: Modifier = Modifier) {
+    Text(text, color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center, modifier = modifier.fillMaxWidth().testTag("panel-readout"))
+}
+
+/** Range ends under a slider, with an AUTO reset between them when [onAuto] is set. */
+@Composable
+private fun PanelRangeRow(start: String, end: String, onAuto: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(start, color = Muted, fontSize = 12.sp)
+        if (onAuto != null) TextButton(onClick = onAuto, modifier = Modifier.heightIn(min = 48.dp).testTag("panel-auto")) {
+            Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(end, color = Muted, fontSize = 12.sp)
+    }
+}
+
+/** ISO or shutter. Where the camera cannot take either value by hand the panel says so instead. */
+@Composable
+private fun ExposureDial(
+    iso: Boolean,
+    state: CameraUiState,
+    binder: CaptureService.LocalBinder?,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
     onClose: () -> Unit,
 ) {
     val descriptor = state.descriptor ?: return
-    if (control == ControlDial.RESOLUTION) {
-        ResolutionDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.FPS) {
-        FpsDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.WB) {
-        WbDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.EV) {
-        EvDial(state, binder, onClose)
-        return
-    }
-    if (control == ControlDial.FOCUS) {
-        FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
-        return
-    }
-    if (control == ControlDial.INT) {
-        IntervalometerDial(state, settings, onSettingsChanged, onClose)
-        return
-    }
-    val value = when (control) {
-        ControlDial.RESOLUTION -> 0f
-        ControlDial.FPS -> 0f
-        ControlDial.ISO -> logPosition((state.requestedIso ?: state.sensitivityIso ?: descriptor.sensitivityRange?.lower ?: 100).toDouble(), descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0)
-        ControlDial.SHUTTER -> if (settings.exposure.shutterUnit == ShutterUnit.ANGLE) ((settings.exposure.angleTenths - 1) / 3599f) else logPosition((state.requestedExposureTimeNs ?: state.exposureTimeNs ?: 16_666_667L).toDouble(), descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0, descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0)
-        ControlDial.FOCUS -> ((state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f) / (descriptor.minimumFocusDistance ?: 1f)).coerceIn(0f, 1f)
-        ControlDial.WB -> 0f
-        ControlDial.EV -> 0f
-        ControlDial.INT -> 0f
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(control.name, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    val caps = descriptor.exposureCapabilities
+    val manual = caps.supports(ExposureMode.MANUAL)
+    val priority = if (iso) ExposureMode.ISO_PRIORITY else ExposureMode.SHUTTER_PRIORITY
+    PanelColumn(Modifier.testTag(if (iso) "iso-panel" else "shutter-panel")) {
+        PanelHeader(stringResource(if (iso) R.string.panel_title_iso else R.string.panel_title_shutter), onClose)
+        if (state.highSpeedSession()) {
+            PanelNote(stringResource(R.string.panel_high_speed_auto), Modifier.testTag("exposure-unavailable"))
+            return@PanelColumn
+        }
+        if (!manual && !caps.supports(priority)) {
+            PanelNote(stringResource(if (iso) R.string.exposure_manual_unavailable_iso else R.string.exposure_manual_unavailable_shutter),
+                Modifier.testTag("exposure-unavailable"))
+            return@PanelColumn
+        }
+        val isoMin = descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0
+        val isoMax = descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0
+        val timeMin = descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0
+        val timeMax = descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0
+        val mode = settings.exposure.mode
+        // The camera picks this value itself in full auto and in the other value's priority mode.
+        val autoHere = mode == ExposureMode.AUTO || mode == (if (iso) ExposureMode.SHUTTER_PRIORITY else ExposureMode.ISO_PRIORITY)
+        val angle = !iso && settings.exposure.shutterUnit == ShutterUnit.ANGLE
+        val isoValue = if (autoHere) state.sensitivityIso ?: state.requestedIso else state.requestedIso ?: state.sensitivityIso
+        val timeValue = if (autoHere) state.exposureTimeNs ?: state.requestedExposureTimeNs else state.requestedExposureTimeNs ?: state.exposureTimeNs
+        val value = when {
+            iso -> isoValue?.let { "ISO $it" }
+            angle && !autoHere -> String.format(java.util.Locale.ROOT, "%.1f°", settings.exposure.angleTenths / 10f)
+            else -> timeValue?.let(::formatShutter)
+        }
+        val autoLabel = stringResource(R.string.auto_value)
+        PanelReadout(
+            when {
+                value == null -> autoLabel
+                autoHere -> "$value · $autoLabel"
+                else -> value
+            },
+            color = if (autoHere) VerifiedCyan else Amber,
+        )
         CineSlider(
-            value = value,
+            value = when {
+                iso -> logPosition((isoValue ?: isoMin.toInt()).toDouble(), isoMin, isoMax)
+                angle -> (settings.exposure.angleTenths - 1) / 3599f
+                else -> logPosition((timeValue ?: 16_666_667L).toDouble(), timeMin, timeMax)
+            },
             onValueChange = { position ->
-                when (control) {
-                    ControlDial.RESOLUTION -> Unit
-                    ControlDial.FPS -> Unit
-                    ControlDial.ISO -> {
-                        val iso = logValue(position, descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0, descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0).toInt()
-                        onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
-                            mode = if (settings.exposure.mode == ExposureMode.ISO_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
-                            iso = iso,
-                            timeNs = if (settings.exposure.mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
-                        )))
-                    }
-                    ControlDial.SHUTTER -> {
-                        val intent = settings.exposure.copy(
-                            mode = if (settings.exposure.mode == ExposureMode.SHUTTER_PRIORITY || !descriptor.exposureCapabilities.supports(ExposureMode.MANUAL)) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
-                            iso = if (settings.exposure.mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
-                        )
-                        onSettingsChanged(settings.copy(exposure = if (intent.shutterUnit == ShutterUnit.ANGLE) {
-                            intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
-                        } else intent.copy(timeNs = logValue(position, descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0,
-                            descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0).toLong())))
-                    }
-                    ControlDial.FOCUS -> binder?.setManualFocus(position * (descriptor.minimumFocusDistance ?: 1f))
-                    ControlDial.WB -> Unit
-                    ControlDial.EV -> Unit
-                    ControlDial.INT -> Unit
+                if (iso) {
+                    onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
+                        mode = if (mode == ExposureMode.ISO_PRIORITY || !manual) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
+                        iso = logValue(position, isoMin, isoMax).toInt(),
+                        timeNs = if (mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
+                    )))
+                } else {
+                    val intent = settings.exposure.copy(
+                        mode = if (mode == ExposureMode.SHUTTER_PRIORITY || !manual) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
+                        iso = if (mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
+                    )
+                    onSettingsChanged(settings.copy(exposure = if (angle) {
+                        intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
+                    } else intent.copy(timeNs = logValue(position, timeMin, timeMax).toLong())))
                 }
             },
-            modifier = Modifier.weight(1f).height(28.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag(if (iso) "iso-slider" else "shutter-slider"),
         )
-        TextButton(onClick = {
-            when (control) {
-                ControlDial.RESOLUTION -> Unit
-                ControlDial.FPS -> Unit
-                ControlDial.ISO, ControlDial.SHUTTER -> binder?.setManualExposure(null, null)
-                ControlDial.FOCUS -> binder?.setManualFocus(null)
-                ControlDial.WB -> binder?.setWhiteBalance(com.librestatic.opencinecam.camera.WhiteBalanceSelection.Auto)
-                ControlDial.EV -> binder?.setExposureCompensation(0)
-                ControlDial.INT -> Unit
-            }
-            onClose()
-        }) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
-        TextButton(onClick = onClose) { Text("×", color = Color.White, fontSize = 14.sp) }
+        PanelRangeRow(
+            start = when { iso -> isoMin.toInt().toString(); angle -> "0.1°"; else -> formatShutter(timeMin.toLong()) },
+            end = when { iso -> isoMax.toInt().toString(); angle -> "360°"; else -> formatShutter(timeMax.toLong()) },
+            // AUTO hands the value back to the camera and keeps the panel open on the live reading.
+            onAuto = { binder?.setManualExposure(null, null) },
+        )
     }
 }
 
@@ -3390,37 +3347,24 @@ private fun EvDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    PanelColumn(Modifier.testTag("ev-panel")) {
         PanelHeader(stringResource(R.string.panel_title_ev), onClose)
-        val range = state.aeCompensationIndexRange ?: return@Column
+        val range = state.aeCompensationIndexRange
+        if (range == null || range.last <= range.first) {
+            PanelNote(stringResource(R.string.ev_unavailable), Modifier.testTag("ev-unavailable"))
+            return@PanelColumn
+        }
         val step = state.descriptor?.aeCompensationStep?.takeIf { it > 0f } ?: 1f
-        val minEv = range.first * step
-        val maxEv = range.last * step
         val current = state.requestedAeCompensationIndex.coerceIn(range.first, range.last)
-        Text(
-            formatEv(current * step),
-            color = Amber,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
+        PanelReadout(formatEv(current * step), color = if (current == 0) VerifiedCyan else Amber)
         CineSlider(
             value = current.toFloat(),
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first - 1).coerceAtLeast(0),
             onValueChange = { index -> binder?.setExposureCompensation(index.roundToInt()) },
-            modifier = Modifier.fillMaxWidth().height(28.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("ev-slider"),
         )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(formatEv(minEv), color = Muted, fontSize = 10.sp)
-            TextButton(onClick = { binder?.setExposureCompensation(0); onClose() }) {
-                Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
-            }
-            Text(formatEv(maxEv), color = Muted, fontSize = 10.sp)
-        }
+        PanelRangeRow(formatEv(range.first * step), formatEv(range.last * step)) { binder?.setExposureCompensation(0) }
     }
 }
 
@@ -3430,18 +3374,13 @@ private fun ResolutionDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    PanelColumn(Modifier.testTag("resolution-panel")) {
         PanelHeader(stringResource(R.string.panel_title_resolution), onClose)
-        state.availableVideoSizes.chunked(2).forEach { sizes ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                sizes.forEach { (width, height) ->
-                    val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
-                    ChoiceTile("${width}×$height", selected, Modifier.weight(1f)) {
-                        binder?.selectVideoResolution(width, height)
-                        onClose()
-                    }
-                }
-                if (sizes.size == 1) Spacer(Modifier.weight(1f))
+        ChoiceGrid(state.availableVideoSizes, minTileWidth = 104.dp, maxColumns = 3) { (width, height), modifier ->
+            val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
+            ChoiceTile(formatFrameSize(width, height), selected, modifier) {
+                binder?.selectVideoResolution(width, height)
+                onClose()
             }
         }
     }
@@ -3453,46 +3392,53 @@ private fun FpsDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PanelHeader(stringResource(R.string.panel_title_fixed_fps), onClose)
-        val modeRates = if (state.selectedMode == CaptureMode.LOG) {
-            VideoGeometryPolicy.unionLogFps(state.availableLogProfiles.map { it.toSpec() })
-        } else if (state.selectedMode in CameraUiState.videoProfileModes) {
-            VideoGeometryPolicy.unionFps(state.availableVideoProfiles.map { it.toSpec() })
-        } else {
-            state.availableTargetFps
+    val log = state.selectedMode == CaptureMode.LOG
+    val logSpecs = state.availableLogProfiles.map { it.toSpec() }
+    val videoSpecs = state.availableVideoProfiles.map { it.toSpec() }
+    val modeRates = when {
+        log -> VideoGeometryPolicy.unionLogFps(logSpecs)
+        state.selectedMode in CameraUiState.videoProfileModes -> VideoGeometryPolicy.unionFps(videoSpecs)
+        else -> state.availableTargetFps
+    }
+    val offeredAtSize = if (log) VideoGeometryPolicy.supportedLogFps(logSpecs, state.targetVideoWidth, state.targetVideoHeight)
+        else VideoGeometryPolicy.supportedFps(videoSpecs, state.targetVideoWidth, state.targetVideoHeight)
+    val options = modeRates.map { fps ->
+        val logProfile = state.availableLogProfiles.firstOrNull {
+            log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps
         }
-        modeRates.chunked(4).forEach { rates ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                rates.forEach { fps ->
-                    val logProfile = state.availableLogProfiles.firstOrNull {
-                        state.selectedMode == CaptureMode.LOG && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps
-                    }
-                    val highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
-                        state.selectedMode != CaptureMode.LOG && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
-                    }
-                    val label = when {
-                        logProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP -> "$fps HFR"
-                        highSpeed -> "$fps HS"
-                        else -> fps.toString()
-                    }
-                    val supported = if (state.selectedMode == CaptureMode.LOG) {
-                        VideoGeometryPolicy.supportedLogFps(state.availableLogProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
-                    } else {
-                        VideoGeometryPolicy.supportedFps(state.availableVideoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight).contains(fps)
-                    }
-                    ChoiceTile(label, fps == state.targetFps, Modifier.weight(1f), enabled = supported) {
-                        binder?.selectTargetFps(fps)
-                        onClose()
-                    }
-                }
-                repeat(4 - rates.size) { Spacer(Modifier.weight(1f)) }
+        FpsOption(
+            fps = fps,
+            offered = fps in offeredAtSize,
+            highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
+                !log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
+            },
+            ispHighRate = logProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP,
+        )
+    }
+    PanelColumn(Modifier.testTag("fps-panel")) {
+        PanelHeader(stringResource(R.string.panel_title_fixed_fps), onClose)
+        ChoiceGrid(options, minTileWidth = 72.dp, maxColumns = 6) { option, modifier ->
+            val label = when {
+                option.ispHighRate -> "${option.fps} HFR"
+                option.highSpeed -> "${option.fps} HS"
+                else -> option.fps.toString()
+            }
+            ChoiceTile(label, option.fps == state.targetFps, modifier, enabled = option.offered) {
+                binder?.selectTargetFps(option.fps)
+                onClose()
             }
         }
-        // Camera2 feeds the preview one frame per high-speed batch, so the viewfinder of a 120 or
-        // 240 fps session runs at 30 fps while the file keeps every frame. Say so here.
-        Text(stringResource(R.string.fps_high_speed_preview_note), color = Muted, fontSize = 12.sp,
-            modifier = Modifier.testTag("fps-high-speed-note"))
+        // Notes only describe what this grid offers: the viewfinder rate when a high-speed rate
+        // can be picked here, and greyed-out rates only when some are.
+        if (fpsHighSpeedNoteApplies(options)) {
+            // Camera2 feeds the preview one frame per high-speed batch, so the viewfinder of a 120 or
+            // 240 fps session runs at 30 fps while the file keeps every frame.
+            PanelNote(stringResource(R.string.fps_high_speed_preview_note), Modifier.testTag("fps-high-speed-note"))
+        }
+        if (options.any { !it.offered }) {
+            PanelNote(stringResource(R.string.fps_unavailable_at_size, formatFrameSize(state.targetVideoWidth, state.targetVideoHeight)),
+                Modifier.testTag("fps-unavailable-note"))
+        }
     }
 }
 
@@ -3507,85 +3453,65 @@ private fun WbDial(
     val selection = state.requestedWhiteBalance
     val retainedTint = (state.effectiveSettings?.whiteBalance as? WhiteBalanceSelection.Kelvin)?.tint
         ?: (selection as? WhiteBalanceSelection.Kelvin)?.tint ?: 0
-
-    if (kelvinRange != null) {
-        // Direct Kelvin (CCT) path - slider + presets
-        val currentK = (selection as? WhiteBalanceSelection.Kelvin)?.kelvin
-            ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange }
-            ?: kelvinRange.first
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
-
-            // Live Kelvin readout
-            val displayK = if (selection is WhiteBalanceSelection.Kelvin) selection.kelvin else currentK
-            Text(
-                if (selection is WhiteBalanceSelection.Auto) "AUTO" else "${displayK}K",
-                color = if (selection is WhiteBalanceSelection.Auto) VerifiedCyan else Amber,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-
-            // Kelvin slider - 100K steps within device range
-            if (selection !is WhiteBalanceSelection.Auto) {
-                CineSlider(
-                    value = displayK.toFloat(),
-                    valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
-                    steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
-                    onValueChange = { raw ->
-                        val snapped = snapKelvinTo100(raw.toInt(), kelvinRange)
-                        if (snapped != null) binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(snapped, retainedTint))
-                    },
-                    modifier = Modifier.fillMaxWidth().height(28.dp),
-                )
-            }
-
-            // Preset Kelvin chips
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                KELVIN_PRESETS.forEach { preset ->
-                    val inRange = preset in kelvinRange
-                    val presetSel = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
-                    ChoiceTile("${preset}K", presetSel, Modifier.weight(1f), enabled = inRange) {
-                        binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset, retainedTint))
-                    }
-                }
-            }
-
-            // AUTO + range labels row
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text("${kelvinRange.first}K", color = Muted, fontSize = 10.sp)
-                TextButton(onClick = { binder?.setWhiteBalance(WhiteBalanceSelection.Auto) }) {
-                    Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp)
-                }
-                Text("${kelvinRange.last}K", color = Muted, fontSize = 10.sp)
-            }
+    PanelColumn(Modifier.testTag("wb-panel")) {
+        PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
+        if (state.highSpeedSession()) {
+            PanelNote(stringResource(R.string.panel_high_speed_auto), Modifier.testTag("wb-unavailable"))
+            return@PanelColumn
         }
-    } else {
-        // Legacy AWB preset path - devices without CCT support
-        val choices = listOf(
-            null to "AUTO",
-            CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to "DAY",
-            CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to "CLOUD",
-            CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to "TUNG",
-            CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to "FLUO",
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            PanelHeader(stringResource(R.string.panel_title_white_balance), onClose)
-            choices.chunked(3).forEach { rowChoices ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    rowChoices.forEach { (mode, label) ->
-                        val isSelected = if (mode == null) selection is WhiteBalanceSelection.Auto
-                            else selection is WhiteBalanceSelection.Preset && selection.awbMode == mode
-                        ChoiceTile(label, isSelected, Modifier.weight(1f)) {
-                            binder?.setWhiteBalance(
-                                if (mode != null) WhiteBalanceSelection.Preset(mode) else WhiteBalanceSelection.Auto,
-                            )
-                        }
-                    }
-                    repeat(3 - rowChoices.size) { Spacer(Modifier.weight(1f)) }
+        if (kelvinRange != null) {
+            val auto = selection is WhiteBalanceSelection.Auto
+            val displayK = (selection as? WhiteBalanceSelection.Kelvin)?.kelvin
+                ?: KELVIN_PRESETS.firstOrNull { it in kelvinRange } ?: kelvinRange.first
+            PanelReadout(if (auto) stringResource(R.string.auto_value) else "${displayK}K", color = if (auto) VerifiedCyan else Amber)
+            // Kelvin slider in 100 K steps within the device range.
+            if (!auto) CineSlider(
+                value = displayK.toFloat(),
+                valueRange = kelvinRange.first.toFloat()..kelvinRange.last.toFloat(),
+                steps = ((kelvinRange.last - kelvinRange.first) / 100 - 1).coerceAtLeast(0),
+                onValueChange = { raw ->
+                    snapKelvinTo100(raw.toInt(), kelvinRange)?.let { binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(it, retainedTint)) }
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("wb-kelvin-slider"),
+            )
+            ChoiceGrid(KELVIN_PRESETS, minTileWidth = 72.dp, maxColumns = 4, balanced = true) { preset, modifier ->
+                val selected = selection is WhiteBalanceSelection.Kelvin && selection.kelvin == preset
+                ChoiceTile("${preset}K", selected, modifier, enabled = preset in kelvinRange) {
+                    binder?.setWhiteBalance(WhiteBalanceSelection.Kelvin(preset, retainedTint))
+                }
+            }
+            PanelRangeRow("${kelvinRange.first}K", "${kelvinRange.last}K") { binder?.setWhiteBalance(WhiteBalanceSelection.Auto) }
+            // Tint shifts a Kelvin value between green and magenta, where the camera offers it.
+            if (descriptor.tintSupported && selection is WhiteBalanceSelection.Kelvin) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    PanelSectionLabel(stringResource(R.string.wb_tint), Modifier.weight(1f))
+                    Text(if (selection.tint > 0) "+${selection.tint}" else selection.tint.toString(), color = Amber,
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("wb-tint-value"))
+                }
+                CineSlider(
+                    value = selection.tint.toFloat(),
+                    valueRange = -50f..50f,
+                    steps = 99,
+                    onValueChange = { binder?.setWhiteBalance(selection.copy(tint = it.roundToInt().coerceIn(-50, 50))) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("wb-tint-slider"),
+                )
+                PanelRangeRow(stringResource(R.string.wb_tint_green), stringResource(R.string.wb_tint_magenta))
+            }
+        } else {
+            // Cameras without colour-temperature control offer the classic presets only.
+            val offered = descriptor?.availableAwbModes.orEmpty()
+            val choices = listOf(
+                null to R.string.auto_value,
+                CaptureRequest.CONTROL_AWB_MODE_DAYLIGHT to R.string.wb_preset_daylight,
+                CaptureRequest.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT to R.string.wb_preset_cloudy,
+                CaptureRequest.CONTROL_AWB_MODE_INCANDESCENT to R.string.wb_preset_tungsten,
+                CaptureRequest.CONTROL_AWB_MODE_FLUORESCENT to R.string.wb_preset_fluorescent,
+            ).filter { (mode, _) -> mode == null || offered.isEmpty() || mode in offered }
+            ChoiceGrid(choices, minTileWidth = 96.dp, maxColumns = 3) { (mode, label), modifier ->
+                val selected = if (mode == null) selection is WhiteBalanceSelection.Auto
+                    else selection is WhiteBalanceSelection.Preset && selection.awbMode == mode
+                ChoiceTile(stringResource(label), selected, modifier) {
+                    binder?.setWhiteBalance(if (mode != null) WhiteBalanceSelection.Preset(mode) else WhiteBalanceSelection.Auto)
                 }
             }
         }
@@ -3594,7 +3520,7 @@ private fun WbDial(
 
 @Composable
 private fun IntervalometerDial(state: CameraUiState, settings: CameraSettings, onSettingsChanged: (CameraSettings) -> Unit, onClose: () -> Unit) {
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    PanelColumn(Modifier.testTag("interval-panel")) {
         PanelHeader(stringResource(R.string.timelapse_interval), onClose)
         TimelapseSettings(state, settings, onSettingsChanged)
     }
@@ -3615,44 +3541,6 @@ private fun formatIntervalShort(intervalMs: Long): String {
             val m = (totalSeconds.toInt() % 3600) / 60
             if (m == 0) "${h}h" else "${h}h${m}m"
         }
-    }
-}
-
-
-@Composable
-private fun PanelHeader(title: String, onClose: () -> Unit) {
-    val closeDescription = stringResource(R.string.close_panel, title)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = Amber, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Box(
-            Modifier
-                .size(48.dp)
-                .semantics { contentDescription = closeDescription }
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) { Text("×", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp) }
-    }
-}
-
-@Composable
-internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        modifier
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                when {
-                    selected -> Amber
-                    !enabled -> MaterialTheme.colorScheme.surfaceContainerLow
-                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                },
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else if (!enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface, fontSize = 9.sp, lineHeight = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -4428,7 +4316,7 @@ private fun SettingsToggleRow(
 }
 
 @Composable
-private fun modeLabel(mode: CaptureMode): String = when (mode) {
+internal fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.PHOTO -> stringResource(R.string.photo_mode)
     CaptureMode.RAW_PHOTO -> stringResource(R.string.raw_photo_mode)
     CaptureMode.BURST -> stringResource(R.string.burst_mode)
@@ -4483,165 +4371,7 @@ private fun FocusPullDial(
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
     onClose: () -> Unit,
-) {
-    val descriptor = state.descriptor ?: return
-    val minDistance = descriptor.minimumFocusDistance ?: 0f
-    val supportsManualFocus = minDistance > 0f
-    val currentDiopters = state.requestedFocusDiopters ?: state.focusDistanceDiopters ?: 0f
-    val focusSliderPos = if (supportsManualFocus) (currentDiopters / minDistance).coerceIn(0f, 1f) else 0f
-    val marks = state.focusMarks
-    val markLabels = listOf("A", "B", "C", "D")
-    val pullActive = state.focusPullActive
-
-    Column(
-        Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        PanelHeader(stringResource(if (pullActive) R.string.panel_title_focus_pull else R.string.panel_title_focus), onClose)
-
-        Text(
-            if (supportsManualFocus) {
-                val effective = state.focusDistanceDiopters
-                val requested = state.requestedFocusDiopters
-                if (pullActive) {
-                    "-> %.1fD".format(state.focusPullTargetDiopters ?: 0f)
-                } else if (requested != null) {
-                    "%.1fD".format(requested) + (effective?.let { " (%.1fD)".format(it) } ?: "")
-                } else if (effective != null) {
-                    "%.1fD".format(effective)
-                } else "AUTO"
-            } else stringResource(R.string.focus_auto_fixed_lens),
-            color = if (pullActive) RecordRed else Amber,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-
-        if (supportsManualFocus) {
-            CineSlider(
-                value = focusSliderPos,
-                onValueChange = { pos ->
-                    binder?.setManualFocus(pos * minDistance)
-                },
-                modifier = Modifier.fillMaxWidth().height(28.dp),
-                enabled = !pullActive,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("0D", color = Muted, fontSize = 9.sp)
-                TextButton(
-                    onClick = { binder?.setManualFocus(null) },
-                    contentPadding = PaddingValues(0.dp),
-                ) { Text(stringResource(R.string.auto_value), color = VerifiedCyan, fontSize = 10.sp) }
-                Text("%.1fD".format(minDistance), color = Muted, fontSize = 9.sp)
-            }
-        }
-
-        if (supportsManualFocus && !pullActive) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
-
-            Text(stringResource(R.string.focus_marks_title), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                markLabels.forEach { label ->
-                    val savedDiopters = marks[label]
-                    val hasMark = savedDiopters != null
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(36.dp)
-                            .background(
-                                if (hasMark) Color(0xFF1A3A1A) else Color(0xFF1A1F21),
-                                RoundedCornerShape(6.dp),
-                            )
-                            .pointerInput(label, hasMark, currentDiopters) {
-                                detectTapGestures(
-                                    onTap = {
-                                        if (hasMark) {
-                                            binder?.startFocusPull(
-                                                savedDiopters!!,
-                                                settings.focusPullDurationMs,
-                                                settings.focusPullEasing,
-                                            )
-                                        }
-                                    },
-                                    onLongPress = {
-                                        if (hasMark) {
-                                            binder?.clearFocusMark(label)
-                                        } else {
-                                            binder?.setFocusMark(label, currentDiopters)
-                                        }
-                                    },
-                                )
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                label,
-                                color = if (hasMark) VerifiedCyan else Muted,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            if (hasMark) {
-                                Text("%.1fD".format(savedDiopters), color = Muted, fontSize = 7.sp)
-                            } else {
-                                Text(stringResource(R.string.focus_mark_empty), color = Color(0xFF444444), fontSize = 7.sp)
-                            }
-                        }
-                    }
-                }
-            }
-            Text(
-                stringResource(R.string.focus_marks_hint),
-                color = Color(0xFF555555),
-                fontSize = 8.sp,
-            )
-
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF333333)))
-
-            Text(stringResource(R.string.focus_pull_duration, settings.focusPullDurationMs / 1000.0), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            CineSlider(
-                value = settings.focusPullDurationMs.toFloat(),
-                onValueChange = { v ->
-                    onSettingsChanged(settings.copy(focusPullDurationMs = (v / 500).toInt() * 500L))
-                },
-                valueRange = 500f..10_000f,
-                steps = 18,
-                modifier = Modifier.fillMaxWidth().height(28.dp),
-            )
-
-            Text(stringResource(R.string.focus_pull_curve), color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FocusPullEasing.entries.forEach { easing ->
-                    TextButton(
-                        onClick = { onSettingsChanged(settings.copy(focusPullEasing = easing)) },
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(0.dp),
-                    ) {
-                        Text(
-                            when (easing) {
-                                FocusPullEasing.LINEAR -> "LIN"
-                                FocusPullEasing.EASE_IN -> "IN"
-                                FocusPullEasing.EASE_OUT -> "OUT"
-                                FocusPullEasing.EASE_IN_OUT -> "S-CURVE"
-                            },
-                            color = if (settings.focusPullEasing == easing) Amber else Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = if (settings.focusPullEasing == easing) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-        }
-
-        if (pullActive) {
-            Button(
-                onClick = { binder?.cancelFocusPull() },
-                colors = ButtonDefaults.buttonColors(containerColor = RecordRed, contentColor = Color.White),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.focus_pull_cancel), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-        }
-    }
-}
+) = FocusPanel(state, binder, settings, onSettingsChanged, onClose)
 
 private fun logPosition(value: Double, minimum: Double, maximum: Double): Float {
     if (minimum <= 0.0 || maximum <= minimum) return 0f

@@ -10,7 +10,7 @@
     <string name="audio_meter_hold">Retenção do pico exibido: %1$d ms (0 desativa)</string>
     <string name="audio_meter_numbers">Mostrar valores numéricos</string>
     <string name="audio_meter_reset_clip">Redefinir indicador de clipping de áudio retido</string>
-    <string name="audio_meter_no_pcm">Sem PCM atual</string>
+    <string name="audio_meter_no_pcm">Sem sinal de áudio</string>
     <string name="audio_meter_peak_rms_values">Pico %1$s / RMS %2$s dBFS</string>
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>

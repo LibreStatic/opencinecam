@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">L\'objectif indique %1$s</string>
+    <string name="focus_advanced">Avancé</string>
+    <string name="focus_mark_pull_action">Amener la mise au point au repère %1$s</string>
+    <string name="focus_mark_save_action">Enregistrer la mise au point actuelle comme repère %1$s</string>
+    <string name="focus_mark_clear_action">Effacer le repère %1$s</string>
+    <string name="focus_curve_linear">Linéaire</string>
+    <string name="focus_curve_ease_in">Départ doux</string>
+    <string name="focus_curve_ease_out">Arrivée douce</string>
+    <string name="focus_curve_s">Courbe en S</string>
+    <string name="error_try_supported_settings">Essayer des réglages compatibles</string>
+    <string name="error_encoder_rejects_size">Cet appareil ne peut pas enregistrer en %1$s à %2$d fps.</string>
+    <string name="error_headline_recording">Échec de l\'enregistrement</string>
+    <string name="error_headline_save">Impossible d\'enregistrer le fichier</string>
+    <string name="error_headline_preview">Aperçu interrompu</string>
+    <string name="error_headline_permission">Autorisation requise</string>
+    <string name="error_headline_disconnected">Caméra déconnectée</string>
+    <string name="panel_title_shutter">OBTURATEUR</string>
+    <string name="exposure_manual_unavailable_iso">Cette caméra ne permet pas de régler l\'ISO à la main ; elle le choisit elle-même.</string>
+    <string name="exposure_manual_unavailable_shutter">Cette caméra ne permet pas de régler la vitesse d\'obturation à la main ; elle la choisit elle-même.</string>
+    <string name="panel_high_speed_auto">Aux cadences haute vitesse, la caméra règle cela elle-même.</string>
+    <string name="ev_unavailable">Cette caméra ne propose pas de correction d\'exposition.</string>
+    <string name="wb_preset_daylight">Lumière du jour</string>
+    <string name="wb_preset_cloudy">Nuageux</string>
+    <string name="wb_preset_tungsten">Tungstène</string>
+    <string name="wb_preset_fluorescent">Fluorescent</string>
+    <string name="wb_tint">TEINTE</string>
+    <string name="wb_tint_green">Vert</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Les cadences grisées ne sont pas disponibles en %1$s.</string>
+    <string name="status_audio_off">Sans son</string>
+    <string name="status_time_left">%1$s restantes</string>
+    <string name="status_view_assist">Vue %1$s</string>
+</resources>

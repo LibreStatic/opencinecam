@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">Objektiv meldet %1$s</string>
+    <string name="focus_advanced">Erweitert</string>
+    <string name="focus_mark_pull_action">Fokus zu Marke %1$s ziehen</string>
+    <string name="focus_mark_save_action">Aktuellen Fokus als Marke %1$s speichern</string>
+    <string name="focus_mark_clear_action">Marke %1$s löschen</string>
+    <string name="focus_curve_linear">Linear</string>
+    <string name="focus_curve_ease_in">Sanfter Start</string>
+    <string name="focus_curve_ease_out">Sanftes Ende</string>
+    <string name="focus_curve_s">S-Kurve</string>
+    <string name="error_try_supported_settings">Unterstützte Einstellungen verwenden</string>
+    <string name="error_encoder_rejects_size">Dieses Gerät kann %1$s nicht mit %2$d fps aufnehmen.</string>
+    <string name="error_headline_recording">Aufnahme fehlgeschlagen</string>
+    <string name="error_headline_save">Speichern fehlgeschlagen</string>
+    <string name="error_headline_preview">Vorschau angehalten</string>
+    <string name="error_headline_permission">Berechtigung erforderlich</string>
+    <string name="error_headline_disconnected">Kamera getrennt</string>
+    <string name="panel_title_shutter">VERSCHLUSS</string>
+    <string name="exposure_manual_unavailable_iso">Bei dieser Kamera lässt sich die ISO nicht von Hand einstellen; sie wählt sie selbst.</string>
+    <string name="exposure_manual_unavailable_shutter">Bei dieser Kamera lässt sich die Verschlusszeit nicht von Hand einstellen; sie wählt sie selbst.</string>
+    <string name="panel_high_speed_auto">Bei Hochgeschwindigkeits-Bildraten stellt die Kamera das selbst ein.</string>
+    <string name="ev_unavailable">Diese Kamera bietet keine Belichtungskorrektur.</string>
+    <string name="wb_preset_daylight">Tageslicht</string>
+    <string name="wb_preset_cloudy">Bewölkt</string>
+    <string name="wb_preset_tungsten">Kunstlicht</string>
+    <string name="wb_preset_fluorescent">Leuchtstoff</string>
+    <string name="wb_tint">TÖNUNG</string>
+    <string name="wb_tint_green">Grün</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Ausgegraute Bildraten gibt es bei %1$s nicht.</string>
+    <string name="status_audio_off">Kein Ton</string>
+    <string name="status_time_left">noch %1$s</string>
+    <string name="status_view_assist">Ansicht %1$s</string>
+</resources>

@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizando…</string>
     <string name="rec_state_saved">Clip guardado</string>
     <string name="rec_state_unavailable">No disponible</string>
-    <string name="error_restore_previous">Restaurar configuración anterior</string>
     <string name="error_open_settings">Abrir ajustes</string>
     <string name="error_failed_configuration">Falló: %1$s</string>
     <string name="error_details_show">Detalles técnicos</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Los clips SDR se bajan al gris de HLG. Sin pérdida: nada se recorta.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Los clips HLG se suben al gris de SDR. Las altas luces por encima de ~75 % de señal HLG se recortan.</string>
     <string name="capture_status_free">%1$s libres</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s libres</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s libres</string>
     <string name="camera_switch_timeout">La cámara %1$s no inició; se restauró la cámara %2$s.</string>
     <string name="recording_channel">Grabación</string>
     <string name="recording_channel_summary">Estado visible de grabación y acción para detenerla</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">BALANCE DE BLANCOS</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">CAMBIO DE FOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (lente fija)</string>
+    <string name="focus_auto_fixed_lens">Este objetivo tiene foco fijo; no hay nada que ajustar.</string>
     <string name="focus_marks_title">MARCAS</string>
     <string name="focus_mark_empty">FIJAR</string>
-    <string name="focus_marks_hint">Tocar: pull · Mantener: guardar/borrar</string>
-    <string name="focus_pull_duration">DURACIÓN %1$.1fs</string>
+    <string name="focus_marks_hint">Tocá una marca vacía para guardar el foco actual, o una guardada para llevar el foco hasta ella. Mantené presionado para borrarla.</string>
+    <string name="focus_pull_duration">DURACIÓN DEL CAMBIO</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">CANCELAR PULL</string>
     <string name="histogram_mode_rgb">RGB</string>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_lens_reports">L\'obiettivo indica %1$s</string>
+    <string name="focus_advanced">Avanzate</string>
+    <string name="focus_mark_pull_action">Sposta il fuoco al segno %1$s</string>
+    <string name="focus_mark_save_action">Salva il fuoco attuale come segno %1$s</string>
+    <string name="focus_mark_clear_action">Cancella il segno %1$s</string>
+    <string name="focus_curve_linear">Lineare</string>
+    <string name="focus_curve_ease_in">Avvio dolce</string>
+    <string name="focus_curve_ease_out">Arrivo dolce</string>
+    <string name="focus_curve_s">Curva a S</string>
+    <string name="error_try_supported_settings">Prova impostazioni supportate</string>
+    <string name="error_encoder_rejects_size">Questo dispositivo non può registrare %1$s a %2$d fps.</string>
+    <string name="error_headline_recording">Registrazione non riuscita</string>
+    <string name="error_headline_save">Impossibile salvare</string>
+    <string name="error_headline_preview">Anteprima interrotta</string>
+    <string name="error_headline_permission">Autorizzazione necessaria</string>
+    <string name="error_headline_disconnected">Fotocamera scollegata</string>
+    <string name="panel_title_shutter">OTTURATORE</string>
+    <string name="exposure_manual_unavailable_iso">Questa fotocamera non permette di impostare l\'ISO a mano; lo sceglie da sola.</string>
+    <string name="exposure_manual_unavailable_shutter">Questa fotocamera non permette di impostare il tempo di posa a mano; lo sceglie da sola.</string>
+    <string name="panel_high_speed_auto">Con le frequenze ad alta velocità la fotocamera lo regola da sola.</string>
+    <string name="ev_unavailable">Questa fotocamera non offre la compensazione dell\'esposizione.</string>
+    <string name="wb_preset_daylight">Luce diurna</string>
+    <string name="wb_preset_cloudy">Nuvoloso</string>
+    <string name="wb_preset_tungsten">Tungsteno</string>
+    <string name="wb_preset_fluorescent">Fluorescente</string>
+    <string name="wb_tint">TINTA</string>
+    <string name="wb_tint_green">Verde</string>
+    <string name="wb_tint_magenta">Magenta</string>
+    <string name="fps_unavailable_at_size">Le frequenze in grigio non sono disponibili a %1$s.</string>
+    <string name="status_audio_off">Senza audio</string>
+    <string name="status_time_left">%1$s rimanenti</string>
+    <string name="status_view_assist">Vista %1$s</string>
+</resources>

@@ -49,7 +49,6 @@
     <string name="rec_state_finalizing">Finalizzazione…</string>
     <string name="rec_state_saved">Clip salvata</string>
     <string name="rec_state_unavailable">Non disponibile</string>
-    <string name="error_restore_previous">Ripristina configurazione precedente</string>
     <string name="error_open_settings">Apri impostazioni</string>
     <string name="error_failed_configuration">Non riuscito: %1$s</string>
     <string name="error_details_show">Dettagli tecnici</string>
@@ -150,7 +149,7 @@
     <string name="log_grey_reference_match_hlg_detail">Le clip SDR vengono abbassate al grigio HLG. Senza perdita: nulla viene tagliato.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Le clip HLG vengono alzate al grigio SDR. Le alte luci oltre circa il 75% del segnale HLG vengono tagliate.</string>
     <string name="capture_status_free">%1$s liberi</string>
-    <string name="recording_status">REC %1$d×%2$d · %3$d fps · %4$s · %5$s liberi</string>
+    <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s liberi</string>
     <string name="camera_switch_timeout">La fotocamera %1$s non si è avviata; ripristinata la fotocamera %2$s.</string>
     <string name="recording_channel">Registrazione</string>
     <string name="recording_channel_summary">Stato di registrazione visibile e azione di stop</string>
@@ -650,11 +649,11 @@
     <string name="panel_title_white_balance">BILANCIAMENTO DEL BIANCO</string>
     <string name="panel_title_focus">FUOCO</string>
     <string name="panel_title_focus_pull">SPOSTAMENTO FUOCO</string>
-    <string name="focus_auto_fixed_lens">AUTO (obiettivo fisso)</string>
+    <string name="focus_auto_fixed_lens">Questo obiettivo ha il fuoco fisso; non c\'è nulla da regolare.</string>
     <string name="focus_marks_title">SEGNI</string>
     <string name="focus_mark_empty">IMPOSTA</string>
-    <string name="focus_marks_hint">Tocco: sposta · Pressione lunga: salva/cancella</string>
-    <string name="focus_pull_duration">DURATA %1$.1f s</string>
+    <string name="focus_marks_hint">Tocca un segno vuoto per salvare il fuoco attuale, uno salvato per spostarvi il fuoco. Tieni premuto per cancellarlo.</string>
+    <string name="focus_pull_duration">DURATA SPOSTAMENTO</string>
     <string name="focus_pull_curve">CURVA</string>
     <string name="focus_pull_cancel">ANNULLA SPOSTAMENTO</string>
     <string name="histogram_mode_rgb">RGB</string>
