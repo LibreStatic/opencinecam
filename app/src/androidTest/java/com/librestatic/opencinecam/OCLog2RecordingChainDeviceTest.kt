@@ -447,16 +447,15 @@ class OCLog2RecordingChainDeviceTest {
 
     /** Double mirror of the production OUTPUT_OCLOG branch of HLG_FRAGMENT_SHADER / SDR_FRAGMENT_SHADER. */
     private fun shaderCodes(tier: Tier, signal: DoubleArray): List<Double> = when (tier) {
-        Tier.HLG -> signal.map { encodeOcLog2(inverseHlg(it)) }
-        Tier.SDR -> {
-            val linear = signal.map(::inverseRec709)
-            listOf(
-                0.627404 * linear[0] + 0.329283 * linear[1] + 0.043313 * linear[2],
-                0.069097 * linear[0] + 0.919540 * linear[1] + 0.011362 * linear[2],
-                0.016391 * linear[0] + 0.088013 * linear[1] + 0.895595 * linear[2],
-            ).map(::encodeOcLog2)
-        }
+        Tier.HLG -> bt709ToBt2020(signal.map(::inverseHlg)).map(::encodeOcLog2)
+        Tier.SDR -> bt709ToBt2020(signal.map(::inverseRec709)).map(::encodeOcLog2)
     }
+
+    private fun bt709ToBt2020(linear: List<Double>): List<Double> = listOf(
+        0.627404 * linear[0] + 0.329283 * linear[1] + 0.043313 * linear[2],
+        0.069097 * linear[0] + 0.919540 * linear[1] + 0.011362 * linear[2],
+        0.016391 * linear[0] + 0.088013 * linear[1] + 0.895595 * linear[2],
+    )
 
     private enum class Orientation(val map: (Int) -> Int) {
         IDENTITY({ it }),

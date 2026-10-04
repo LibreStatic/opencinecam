@@ -3135,13 +3135,16 @@ class CaptureService : Service() {
             .put("colorSpace", evidence.sourceColorSpace)
             .put("transfer", evidence.sourceTransfer)
             .put("precision", evidence.sourcePrecision)
+            // Primaries the decode assumed before converting to BT.2020. Clips without it are HLG takes
+            // that read the BT.709-primaried stream as BT.2020 (see OpenCineLogGpuPipeline).
+            .put("primaries", "BT.709")
             .put("androidDataSpace", evidence.sourceDataSpace ?: JSONObject.NULL)
             .put("dataSpaceMismatchedFrames", evidence.sourceDataSpaceMismatchedFrames ?: JSONObject.NULL)
             .put("unexpectedAndroidDataSpace", evidence.unexpectedSourceDataSpace ?: JSONObject.NULL)
             .put(
                 "interpretation",
                 if (evidence.sourcePath == OpenCineLogSourcePath.HLG10_BT2020) {
-                    "HLG OETF decoded to scene-linear BT.2020 in highp GLES"
+                    "HLG OETF decoded to scene-linear, BT.709 primaries measured on device converted to BT.2020 in highp GLES"
                 } else {
                     "Standard-range ISP output interpreted with the BT.709 video transfer, linearized, and converted to BT.2020 in highp GLES; runtime dataspace is recorded and no source gamut, 10-bit, or HDR highlight claim is made"
                 },

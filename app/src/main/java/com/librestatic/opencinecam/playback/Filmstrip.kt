@@ -8,6 +8,7 @@ import android.net.Uri
 import com.librestatic.opencinecam.storage.OcLogClip
 import com.librestatic.opencinecam.storage.PreciseLogView
 import com.librestatic.opencinecam.storage.PreciseVideoFrames
+import com.librestatic.opencinecam.storage.PreciseLogSignal
 import com.librestatic.opencinecam.storage.oclog2CodesToArgb
 import kotlin.math.roundToInt
 
@@ -45,7 +46,7 @@ fun loadFilmstrip(context: Context, uri: String, durationUs: Long, count: Int, h
             val frame = runCatching {
                 retriever.getScaledFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, widthPx, heightPx)
             }.getOrNull() ?: continue
-            frames += if (log == null) frame else runCatching { logThumbnail(frame, view) }.getOrNull() ?: continue
+            frames += if (log == null) frame else runCatching { logThumbnail(frame, view, log.signal) }.getOrNull() ?: continue
         }
     } catch (_: Exception) {
     } finally {
@@ -73,7 +74,7 @@ fun loadPoster(context: Context, uri: String, maxEdgePx: Int, log: OcLogClip?, v
         val scale = minOf(1.0, maxEdgePx.toDouble() / maxOf(shownWidth, shownHeight))
         val frame = retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
             (shownWidth * scale).roundToInt().coerceAtLeast(1), (shownHeight * scale).roundToInt().coerceAtLeast(1)) ?: return null
-        if (log == null) frame else logThumbnail(frame, view)
+        if (log == null) frame else logThumbnail(frame, view, log.signal)
     } catch (_: Exception) {
         null
     } finally {
@@ -110,13 +111,13 @@ private fun preciseLogFilmstrip(context: Context, uri: String, count: Int, heigh
     }
 }
 
-private fun logThumbnail(frame: Bitmap, view: PreciseLogView): Bitmap {
+private fun logThumbnail(frame: Bitmap, view: PreciseLogView, signal: PreciseLogSignal): Bitmap {
     val source = if (frame.config == Bitmap.Config.HARDWARE) frame.copy(Bitmap.Config.ARGB_8888, false) else frame
     val pixels = IntArray(source.width * source.height)
     source.getPixels(pixels, 0, source.width, 0, 0, source.width, source.height)
     for (i in pixels.indices) {
         val p = pixels[i]
-        pixels[i] = oclog2CodesToArgb(p shr 16 and 0xFF, p shr 8 and 0xFF, p and 0xFF, view)
+        pixels[i] = oclog2CodesToArgb(p shr 16 and 0xFF, p shr 8 and 0xFF, p and 0xFF, view, signal)
     }
     val mapped = Bitmap.createBitmap(pixels, source.width, source.height, Bitmap.Config.ARGB_8888)
     if (source !== frame) source.recycle()

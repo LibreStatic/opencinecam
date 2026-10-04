@@ -94,7 +94,7 @@ private fun SubjectReviewPlayer(pick: SubjectReviewPick, logView: PreciseLogView
     fun output(holder: Surface?): Surface? {
         val log = pick.log
         if (holder == null || !holder.isValid || log == null) return holder
-        val stage = renderer ?: runCatching { LogPlaybackRenderer(holder, log.fullRange, logView) }
+        val stage = renderer ?: runCatching { LogPlaybackRenderer(holder, log.signal, logView) }
             .onFailure { failure() }.getOrNull()?.also { renderer = it }
         return stage?.inputSurface
     }

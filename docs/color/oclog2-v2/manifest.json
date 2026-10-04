@@ -25,16 +25,16 @@
       "sha256": "db2b17bd80447b3e2aebc11bbd3169ad70fea1b7d478729bcdc151fd45d0d51e"
     },
     "spec.json": {
-      "bytes": 3090,
-      "sha256": "5850d76c0c75eba6b4786b8ad90b17647153f45885ceecf63411d8af17137007"
+      "bytes": 3183,
+      "sha256": "76d5df005d4d963fe3507c8311af49b9de137b182d9b34f43ad904d66b0213f9"
     },
     "vectors.json": {
       "bytes": 1019,
-      "sha256": "a877ebc9aa870b41c3f81e003e90dbc15e2f7fee4f81b518ec2738826cd7213a"
+      "sha256": "4d64eafd06c03f170bc2bccae0ce34b65b25198477f82e9fa246071f18382422"
     }
   },
   "generator": "tools/generate_oclog2_artifacts.py",
-  "generatorSha256": "2358feb8efa7b03d4717b835706546f0a852b5539d5b8907b01c151cc00c0893",
+  "generatorSha256": "b1cd002d5f2c791045a595aaf8e53b18f7939781b4c0eb871f52060f9e1927e4",
   "schema": "opencinecam-oclog2-artifacts-v1",
   "specVersion": "2.0.0"
 }

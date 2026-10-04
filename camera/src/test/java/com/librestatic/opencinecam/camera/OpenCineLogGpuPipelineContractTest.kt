@@ -17,21 +17,21 @@ class OpenCineLogGpuPipelineContractTest {
     @Test
     fun productionShaderIsPinnedToTheSidecarIdentity() {
         assertEquals(
-            "38d6e5012470a4b1e6b31c2a2c47d0d9241a175a77a6b2b8b6e90a09b3023f9c",
+            "66ba3a4d5c432c935110f4639e64eb894b3a334a7397ce80fe139f9b787233aa",
             OpenCineLogGpuPipeline.TRANSFORM_SHA256,
         )
         assertEquals(
-            "fec609172dfc90e6f802d27e21b1f81e590f053cf77fd37ce44ce3e9f3b35c0e",
+            "25db8970358056bc48d4aa3ed1540979af82764c58bae9a76d56a250cce9a0f8",
             OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256,
         )
         assertNotEquals(OpenCineLogGpuPipeline.TRANSFORM_SHA256, OpenCineLogGpuPipeline.SDR_TRANSFORM_SHA256)
         // Driver-sampler fallback identities, recorded so qualification can name and reject them.
         assertEquals(
-            "78890c17ab1a4f2896667982e409fd3a296be723ee697a16866005cd359533de",
+            "41e87f366a5e89a0e78e5775147d080a0d82e54ec6b2c4afbb46a86e49107ffa",
             OpenCineLogGpuPipeline.transformSha256(OpenCineLogSourcePath.HLG10_BT2020, shaderYcbcr = false),
         )
         assertEquals(
-            "01184aec3c8a1a2c1c3f1ab576f7db06c3e3907e71150fca272a9e542aa5ffa4",
+            "bdb5d9f3db71d3d6d37a065e9d1a4d7f660e4c8ce98ceb2fa701dc71e10f997b",
             OpenCineLogGpuPipeline.transformSha256(OpenCineLogSourcePath.SDR_BT709_ISP, shaderYcbcr = false),
         )
     }

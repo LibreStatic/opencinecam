@@ -2,37 +2,42 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.camera.OpenCineLog2Curve
+import com.librestatic.opencinecam.camera.OpenCineLogViewAssist
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /** How review shows an OCLog2 recording. Neither view changes the recorded bytes. */
 enum class PreciseLogView { FLAT_LOG, REC709 }
 
-/** A recording whose sidecar declares OCLog2 code values in BT.2020, 10-bit YCbCr. */
-data class PreciseLogSignal(val fullRange: Boolean)
+/**
+ * A recording whose sidecar declares OCLog2 code values in BT.2020, 10-bit YCbCr. [viewGain] lands
+ * its middle grey at 0.18 in the Rec.709 view; [legacyBt709Primaries] means the codes hold BT.709
+ * colours (HLG takes recorded before the source conversion), so no BT.2020 to BT.709 matrix applies.
+ */
+data class PreciseLogSignal(val fullRange: Boolean, val viewGain: Double = 1.0, val legacyBt709Primaries: Boolean = false)
 
 /**
  * The same monitoring math the capture shaders use (OpenCineLogGpuPipeline HLG/SDR tiers), on the CPU:
  * BT.2020 non-constant-luminance YCbCr to OCLog2 R'G'B' codes, then either the Rec.709 view assist
- * (decode, BT.2020 to BT.709, Rec.709 OETF) or the flat monitor (display gamut, 0.68 saturation, OCLog2).
+ * (decode, BT.2020 to BT.709, [OpenCineLogViewAssist]) or the flat monitor (display gamut, 0.68 saturation, OCLog2).
  */
-fun oclog2P010ToArgb(y: Int, u: Int, v: Int, fullRange: Boolean, view: PreciseLogView): Int =
-    oclog2CodeValuesToArgb(oclog2Codes(y, u, v, fullRange), view)
+fun oclog2P010ToArgb(y: Int, u: Int, v: Int, signal: PreciseLogSignal, view: PreciseLogView): Int =
+    oclog2CodeValuesToArgb(oclog2Codes(y, u, v, signal.fullRange), view, signal)
 
 /**
  * 8-bit OCLog2 R'G'B' code values through the same view math as [oclog2P010ToArgb]. Review thumbnails
  * feed it the RGB a platform decoder produced for an OCLog2 clip, which only approximates the codes.
  */
-fun oclog2CodesToArgb(r: Int, g: Int, b: Int, view: PreciseLogView): Int =
-    oclog2CodeValuesToArgb(doubleArrayOf(r.coerceIn(0, 255) / 255.0, g.coerceIn(0, 255) / 255.0, b.coerceIn(0, 255) / 255.0), view)
+fun oclog2CodesToArgb(r: Int, g: Int, b: Int, view: PreciseLogView, signal: PreciseLogSignal = PreciseLogSignal(fullRange = true)): Int =
+    oclog2CodeValuesToArgb(doubleArrayOf(r.coerceIn(0, 255) / 255.0, g.coerceIn(0, 255) / 255.0, b.coerceIn(0, 255) / 255.0), view, signal)
 
-private fun oclog2CodeValuesToArgb(code: DoubleArray, view: PreciseLogView): Int {
+private fun oclog2CodeValuesToArgb(code: DoubleArray, view: PreciseLogView, signal: PreciseLogSignal): Int {
     val linear = DoubleArray(3) { OpenCineLog2Curve.decode(code[it].coerceIn(OpenCineLog2Curve.BLACK_CODE, OpenCineLog2Curve.WHITE_CODE)) }
-    val display = bt2020ToBt709(linear).map { max(it, 0.0) }
+    val viewLinear = if (signal.legacyBt709Primaries) linear else bt2020ToBt709(linear)
+    val display = viewLinear.map { max(it, 0.0) }
     val out = when (view) {
-        PreciseLogView.REC709 -> display.map(::rec709Oetf)
+        PreciseLogView.REC709 -> OpenCineLogViewAssist.encode(viewLinear, signal.viewGain).toList()
         PreciseLogView.FLAT_LOG -> {
             val luma = 0.2126 * display[0] + 0.7152 * display[1] + 0.0722 * display[2]
             display.map { encodeOcLog2(luma + (it - luma) * 0.68) }
@@ -59,11 +64,6 @@ private fun bt2020ToBt709(c: DoubleArray) = doubleArrayOf(
     -0.124550 * c[0] + 1.132900 * c[1] - 0.008349 * c[2],
     -0.018151 * c[0] - 0.100579 * c[1] + 1.118730 * c[2],
 )
-
-internal fun rec709Oetf(x: Double): Double {
-    val clamped = x.coerceIn(0.0, 1.0)
-    return if (clamped < 0.018) 4.5 * clamped else 1.099 * clamped.pow(0.45) - 0.099
-}
 
 private fun encodeOcLog2(linear: Double): Double =
     0.10 + 0.80 * ln(1.0 + 50.0 * linear.coerceIn(0.0, 1.0)) / ln(51.0)

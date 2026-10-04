@@ -23,6 +23,23 @@ class OcLogSidecarTest {
         assertEquals("HEVCProfileMain10", clip.profile)
     }
 
+    private fun tiered(path: String, sceneGain: Double, primaries: String?) = """
+        {"schema":"opencinecam-oclog-sidecar-v2","videoUri":"$uri",
+         "source":{"path":"$path"${primaries?.let { ",\"primaries\":\"$it\"" } ?: ""}},
+         "transform":{"curve":"OCLog2","version":"2","gamut":"BT.2020","sceneGain":$sceneGain},
+         "encoding":{"range":"full"}}
+    """.trimIndent()
+
+    @Test fun hlgTakesGetTheGreyViewGainAndOldOnesKeepTheirBt709Colours() {
+        val current = parseOcLogSidecar(tiered("HLG10_BT2020", 1.0, "BT.709"), uri)!!.signal
+        assertEquals(0.18 / (0.38 * 0.38 / 3.0), current.viewGain, 1e-9)
+        assertFalse(current.legacyBt709Primaries)
+        assertTrue(parseOcLogSidecar(tiered("HLG10_BT2020", 1.0, null), uri)!!.signal.legacyBt709Primaries)
+        val sdr = parseOcLogSidecar(tiered("SDR_BT709_ISP", 0.5, null), uri)!!.signal
+        assertEquals(2.0, sdr.viewGain, 1e-9)
+        assertFalse(sdr.legacyBt709Primaries)
+    }
+
     @Test fun encodedRangeWinsOverTheCameraInputConversion() {
         assertFalse(parseOcLogSidecar(sidecar(range = "limited"), uri)!!.fullRange)
         assertNull(parseOcLogSidecar(sidecar(range = "studio"), uri))
