@@ -30,7 +30,7 @@ internal data class KnownGoodCapture(
 
     /** Resolution and rate the camera opens with in [mode], or null for modes that have none. */
     fun geometry(mode: CaptureMode = this.mode): Triple<Int, Int, Int?>? = when (mode) {
-        CaptureMode.LOG -> Triple(logWidth, logHeight, logFps)
+        CaptureMode.LOG, CaptureMode.HLG -> Triple(logWidth, logHeight, logFps)
         CaptureMode.TIME_LAPSE -> Triple(timelapseWidth, timelapseHeight, null)
         in CameraUiState.videoProfileModes -> Triple(videoWidth, videoHeight, videoFps)
         else -> null

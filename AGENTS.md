@@ -97,6 +97,7 @@ Outputs and logs:
 | `CaptureSheetWb` / `CaptureSheetFocus` | `AdaptiveCaptureChrome` | the white balance or focus panel open (focus marks A and B) |
 | `CaptureModeSheet` | `AdaptiveCaptureChrome` | the phone's modal mode sheet open (a dialog: use `tree`) |
 | `CaptureModes` / `CaptureMonitor` | `AdaptiveCaptureChrome` | the modes or the monitoring toggles in the docked pane |
+| `CaptureHlg` | `AdaptiveCaptureChrome` | HLG selected, with LOG and HLG offered in the docked modes pane (use `--device inner`) |
 | `CaptureScopes` / `CaptureScopesHidden` | `AdaptiveCaptureChrome` | waveform, vectorscope and false colour with live fake analysis; shown, or hidden as with H |
 | `CaptureLocked` | `AdaptiveCaptureChrome` | controls locked while a photo saves, with the saved notice |
 | `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |

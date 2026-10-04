@@ -81,14 +81,14 @@ fun operatorActionToggleState(action: OperatorAction, settings: CameraSettings, 
         OperatorAction.WAVEFORM -> effective.monitoring.waveformEnabled
         OperatorAction.VECTORSCOPE -> effective.monitoring.vectorscopeEnabled
         OperatorAction.FALSE_COLOR -> effective.monitoring.falseColorEnabled
-        OperatorAction.VIEW_ASSIST -> effective.logViewAssistEnabled && state.selectedMode == CaptureMode.LOG
+        OperatorAction.VIEW_ASSIST -> effective.logViewAssistEnabled && state.selectedMode.usesLogGraph
         OperatorAction.CONTROL_LOCK -> effective.operation.lockDuringTake
         else -> null
     }
 }
 
 private fun CameraUiState.operatorHighSpeed(): Boolean =
-    if (selectedMode == CaptureMode.LOG) activeLogProfile?.constrainedHighSpeed == true
+    if (selectedMode.usesLogGraph) activeLogProfile?.constrainedHighSpeed == true
     else selectedMode in CameraUiState.videoProfileModes && activeVideoProfile?.constrainedHighSpeed == true
 
 /**
@@ -134,7 +134,7 @@ fun operatorActionUnavailableReason(action: OperatorAction, state: CameraUiState
     // Color view assist is applied only by the OCLog2 shader. Every other GPU viewfinder (time-lapse,
     // VIDEO with a LUT or subject preview, PHOTO with an operator LUT) is SDR passthrough and ignores
     // it, so offering it there would be a silent no-op.
-    if (action == OperatorAction.VIEW_ASSIST) return if (state.selectedMode == CaptureMode.LOG) null else OperatorUnavailableReason.LOG_ONLY
+    if (action == OperatorAction.VIEW_ASSIST) return if (state.selectedMode.usesLogGraph) null else OperatorUnavailableReason.LOG_ONLY
     if (action in ScopeActions || action == OperatorAction.EXTERIOR) return null
     if (state.captureControlsLocked) return OperatorUnavailableReason.LOCKED
     if (action in setOf(OperatorAction.PRESET_C1, OperatorAction.PRESET_C2)) return if (state.descriptor != null) null else OperatorUnavailableReason.NOT_READY

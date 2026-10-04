@@ -15,6 +15,9 @@ object HevcVuiTransfer {
     /** H.273 TransferCharacteristics 2: unspecified. */
     const val UNSPECIFIED = 2
 
+    /** H.273 TransferCharacteristics 18: ARIB STD-B67 (HLG). */
+    const val ARIB_STD_B67 = 18
+
     private const val SPS_NAL_TYPE = 33
 
     /**

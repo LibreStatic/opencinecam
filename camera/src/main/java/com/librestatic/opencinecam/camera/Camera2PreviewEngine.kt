@@ -2795,6 +2795,8 @@ class Camera2PreviewEngine(
         audio: Camera2EmbeddedAudioConfig? = null,
         separateAudioClock: CaptureEpochClock? = null,
         recordingLut: MonitorLut? = null,
+        /** Record the camera's HLG signal as BT.2020 HLG (HDR) instead of OCLog2. */
+        hlgOutput: Boolean = false,
     ): Boolean {
         val pipeline = logPipeline ?: return false
         val descriptor = activeDescriptor ?: return false
@@ -2808,6 +2810,7 @@ class Camera2PreviewEngine(
             audio = audio,
             separateAudioClock = separateAudioClock,
             recordingLut = recordingLut,
+            hlgOutput = hlgOutput,
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },
