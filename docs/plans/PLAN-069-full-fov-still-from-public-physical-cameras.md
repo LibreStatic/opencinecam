@@ -1,7 +1,7 @@
 ---
 plan_id: OCC-PLAN-069
 title: "Full-FOV still from public physical cameras"
-status: InProgress
+status: Done
 revision: 1
 milestone: H2
 intended_executor: Claude Code
@@ -125,12 +125,14 @@ Note: default-parameter changes to `Camera2CameraDescriptor`/`CameraUiState` can
 - [x] A rejected routed graph retries exactly once with logical-only sizes and keeps the viewfinder alive.
 - [x] The RES panel lists 4096x3072 as "13 MP" above "12 MP" while zoom is in the base window, and drops physical sizes outside it.
 - [x] Host suites pass: camera 722, app 1404, media, core; lint and format clean.
-- [ ] On the Razr Fold, OpenCineCam captures a JPEG that decodes to 4096x3072 from the 13 MP option.
-- [ ] On the Razr Fold, the 4000x3000 "12 MP" path still captures unchanged.
+- [x] On the Razr Fold, OpenCineCam captures a JPEG that decodes to 4096x3072 from the 13 MP option.
+- [x] On the Razr Fold, the 4000x3000 "12 MP" path still captures unchanged.
 
 ## 17. Evidence to Record
 
 U0 probe log and capture summary (already preserved outside the repository, referenced from section 5), the U5 device photo EXIF/dimensions, and the U4 suite exit codes in the execution record.
+
+- Evidence: `build/implementation-plan-069/VERIFICATION.txt`, `evidence/plan-069/u0-probe.txt`, `evidence/plan-069/u5-panel.txt`, `evidence/plan-069/app-13mp.jpg`, `evidence/plan-069/app-12mp.jpg`
 
 ## 18. Rollback and Recovery
 
@@ -145,8 +147,10 @@ Revert the single implementation commit (six files: engine, choices, two tests, 
 
 ## 20. Completion Update
 
-Open. U1–U4 landed on `feat/plan-069-full-fov-still`; U5 physical gate pending a Razr session with the user.
+Done 2026-10-04. U1–U4 landed in `2531a42`; U5 passed on the Razr Fold the same day (`build/implementation-plan-069/VERIFICATION.txt`): the RES panel offers 13 MP 4096x3072 above 12 MP 4000x3000 at base zoom, the 13 MP capture decodes to 4096x3072, and the 12 MP control capture decodes to 4000x3000.
 
 ## 21. Execution Record
 
-2026-10-04 (Claude Code, main session): U0 probe on the Razr Fold confirmed logical "0" + physical "5" routing (session configured, JPEG decoded 4096x3072). U1–U4 implemented and verified: `:camera:testDebugUnitTest` 722 passed, `:app:testDebugUnitTest` 1404 passed, `:media:testDebugUnitTest` and `:core:model:test` passed, `:app:lintDebug` and `./tools/check_format.sh` clean (all with `-Dorg.gradle.caching=false` after removing module build directories). U5 remains open; the plan stays InProgress until the physical gate records its evidence.
+2026-10-04 (Claude Code, main session): U0 probe on the Razr Fold confirmed logical "0" + physical "5" routing (session configured, JPEG decoded 4096x3072). U1–U4 implemented and verified: `:camera:testDebugUnitTest` 722 passed, `:app:testDebugUnitTest` 1404 passed, `:media:testDebugUnitTest` and `:core:model:test` passed, `:app:lintDebug` and `./tools/check_format.sh` clean (all with `-Dorg.gradle.caching=false` after removing module build directories). Committed as `2531a42` (implementation) and `048ca45` (plan documentation).
+
+2026-10-04 (U5, Razr Fold): installed with `adb -s 192.168.0.250:37539 install -r -t` (applicationId `com.librestatic.opencinecam.debug`). The RES panel listed 13 MP 4096x3072 above 12 MP 4000x3000 with 13 MP active by default; a capture at 13 MP decoded to 4096x3072 and, after selecting 12 MP (graph rebuilt, HUD read "12 MP"), a control capture decoded to 4000x3000. Both photos are preserved under `DCIM/OpenCineCam/` on the device and mirrored with the probe evidence outside the repository. Verification details and hashes: `build/implementation-plan-069/VERIFICATION.txt`. All Section 16 criteria pass; the plan is Done.
