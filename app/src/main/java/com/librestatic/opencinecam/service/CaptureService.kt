@@ -2320,6 +2320,25 @@ class CaptureService : Service() {
             cameraState.value = current.copy(zoomRatio = coerced, zoomEffectiveRatio = coerced)
             current.selectedCameraId?.let { perCameraZoom[it] = coerced }
             previewEngine.setZoomRatio(coerced)
+            rebuildGraphWhenPhysicalStillZoomWindowCrosses(current, coerced)
+        }
+
+        /**
+         * OCC-PLAN-069: the full-FOV still rides a public physical camera's stream and cannot
+         * follow lens switches, so crossing the base-zoom window rebuilds the graph; the RES list
+         * loses the physical sizes and the session falls back to logical ones on its own.
+         */
+        private fun rebuildGraphWhenPhysicalStillZoomWindowCrosses(previous: CameraUiState, ratio: Float) {
+            if ((previous.zoomRatio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW) ==
+                (ratio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW)
+            ) return
+            val current = cameraState.value
+            if (current.selectedMode !in CameraUiState.photoResolutionModes || current.selectedMode == CaptureMode.RAW_PHOTO) return
+            val active = current.activeStillSize ?: return
+            val heic = current.selectedMode == CaptureMode.PHOTO &&
+                current.effectiveSettings?.photoFormat == StillPhotoFormat.HEIC
+            if (current.descriptor?.isPhysicalOnlyStill(active.first, active.second, heic) != true) return
+            attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
         }
 
         fun selectZoomAnchor(ratio: Float) {

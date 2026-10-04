@@ -21,4 +21,24 @@ class StillSizeChoicesTest {
         assertEquals(listOf(4000 to 3000), stillSizeChoices(listOf(4000 to 3000)))
         assertEquals(emptyList<Pair<Int, Int>>(), stillSizeChoices(emptyList()))
     }
+
+    /** OCC-PLAN-069: the Razr Fold's logical map tops at 4000x3000 while physical "5" offers 4096x3072. */
+    @Test fun physicalStillRoutingPicksTheOwningPhysicalCamera() {
+        val logical = listOf(4000 to 3000, 3840 to 2880, 3264 to 2448)
+        val physical = mapOf("5" to listOf(4096 to 3072))
+        assertEquals("5", physicalStillRouting(4096 to 3072, logical, physical))
+    }
+
+    @Test fun physicalStillRoutingPrefersTheLogicalMap() {
+        val logical = listOf(4000 to 3000)
+        val physical = mapOf("5" to listOf(4096 to 3072, 4000 to 3000))
+        assertEquals(null, physicalStillRouting(4000 to 3000, logical, physical))
+        assertEquals(null, physicalStillRouting(1920 to 1440, logical, physical))
+    }
+
+    @Test fun physicalStillRoutingBreaksTiesBySmallestPhysicalId() {
+        val logical = listOf(4000 to 3000)
+        val physical = mapOf("5" to listOf(4096 to 3072), "2" to listOf(4096 to 3072))
+        assertEquals("2", physicalStillRouting(4096 to 3072, logical, physical))
+    }
 }

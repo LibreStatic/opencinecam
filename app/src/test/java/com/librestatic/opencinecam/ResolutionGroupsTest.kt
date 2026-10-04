@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.camera.stillSizeChoices
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -54,5 +55,19 @@ class ResolutionGroupsTest {
         assertEquals("5 MP", megapixelName(2592, 1944))
         assertEquals("1.6 MP", megapixelName(1440, 1080))
         assertEquals("50 MP", megapixelName(8192, 6144))
+    }
+
+    /**
+     * OCC-PLAN-069: the Razr Fold's hidden full-FOV still merges above the logical sizes, and its
+     * 12.6 MP round to a "13 MP" label so the panel shows it next to — not instead of — "12 MP".
+     */
+    @Test fun physicalFullFovStillMergesAboveTheLogicalSizes() {
+        val logical = listOf(4000 to 3000, 3840 to 2880, 3264 to 2448, 1920 to 1440)
+        val merged = logical + listOf(4096 to 3072)
+        assertEquals(
+            listOf(4096 to 3072, 4000 to 3000, 3840 to 2880, 3264 to 2448, 1920 to 1440),
+            stillSizeChoices(merged.shuffled(java.util.Random(3))),
+        )
+        assertEquals("13 MP", megapixelName(4096, 3072))
     }
 }

@@ -234,8 +234,13 @@ data class CameraUiState(
             }
             val heic = selectedMode == CaptureMode.PHOTO &&
                 effectiveSettings?.photoFormat == com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC
-            val sizes = if (heic) descriptor.heicSizes else descriptor.jpegSizes
-            return com.librestatic.opencinecam.camera.stillSizeChoices(sizes.map { it.width to it.height })
+            // OCC-PLAN-069: sizes only a public physical camera advertises ride that physical's
+            // still stream, so they are offered while zoom sits at the base 1.0x window only.
+            val physicalSizes = if (zoomRatio in PHYSICAL_STILL_ZOOM_WINDOW) {
+                (if (heic) descriptor.physicalHeicSizes.values else descriptor.physicalJpegSizes.values).flatten()
+            } else emptyList()
+            val sizes = (if (heic) descriptor.heicSizes else descriptor.jpegSizes) + physicalSizes
+            return com.librestatic.opencinecam.camera.stillSizeChoices(sizes.map { it.width to it.height }.distinct())
         }
 
     /** The still size the session runs: the operator's pick when offered, otherwise the largest. */
@@ -282,6 +287,8 @@ data class CameraUiState(
         val photoResolutionModes = setOf(
             CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL,
         )
+        /** OCC-PLAN-069: zoom window where a physical camera's exclusive still sizes are offered. */
+        val PHYSICAL_STILL_ZOOM_WINDOW = 0.95f..1.05f
         val defaultModeGates: Map<CaptureMode, ModeGateState> = mapOf(
             CaptureMode.PHOTO to ModeGateState.AVAILABLE,
             CaptureMode.RAW_PHOTO to ModeGateState.AVAILABLE,

@@ -122,11 +122,24 @@ data class Camera2CameraDescriptor(
     val jpegSizes: List<Size> = listOfNotNull(jpegSize),
     /** Every advertised HEIC output, largest first; [heicSize] is its head. */
     val heicSizes: List<Size> = listOfNotNull(heicSize),
+    /** Compressed still sizes only public physical cameras advertise, keyed by physical id (OCC-PLAN-069). */
+    val physicalJpegSizes: Map<String, List<Size>> = emptyMap(),
+    /** HEIC counterparts of [physicalJpegSizes]; empty when the logical camera has no HEIC output. */
+    val physicalHeicSizes: Map<String, List<Size>> = emptyMap(),
     val aeCompensationStepNumerator: Int = 0,
     val aeCompensationStepDenominator: Int = 1,
     /** OCC-PLAN-068 U7: advertised STATISTICS_FACE_DETECT_MODE values; empty when the request key is absent. */
     val faceDetectModes: Set<Int> = emptySet(),
 ) {
+    /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
+    fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
+        val size = Size(width, height)
+        val logical = if (heic) heicSizes else jpegSizes
+        if (size in logical) return false
+        val physical = if (heic) physicalHeicSizes else physicalJpegSizes
+        return physical.values.any { size in it }
+    }
+
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
 
@@ -355,6 +368,9 @@ class Camera2PreviewEngine(
     private var activeStillFormat = StillPhotoFormat.JPEG
     /** Requested compressed still size; null or unadvertised falls back to the largest output. */
     private var activeStillSize: Size? = null
+
+    /** True once a rejected physical-still routing retired this graph's physical stills (OCC-PLAN-069). */
+    private var physicalStillFallbackTaken = false
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private class RecorderRequest(val generation: Long, val device: CameraDevice) {
         val stopRequested = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -708,6 +724,7 @@ class Camera2PreviewEngine(
                 }
                 this.activeStillFormat = stillFormat
                 this.activeStillSize = stillSize
+                this.physicalStillFallbackTaken = false
                 this.previewSurface = surface
                 this.activeDescriptor = descriptor
                 this.displayRotationDegrees = displayRotationDegrees
@@ -3507,9 +3524,11 @@ class Camera2PreviewEngine(
         var stillOutput: OutputConfiguration? = null
         var rawOutput: OutputConfiguration? = null
         var graphRawReader: ImageReader? = null
+        var compressedPlan: CompressedStillPlan? = null
         if (activeVideoProfile == null) {
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
-        val compressedSize = compressedStillSize(descriptor)
+        compressedPlan = compressedStillPlan(descriptor)
+        val compressedSize = compressedPlan?.size
         compressedSize?.let { size ->
             jpegReader = ImageReader.newInstance(size.width, size.height, compressedFormat, MAX_BURST_IMAGES + 2).apply {
                 setOnImageAvailableListener({ reader ->
@@ -3564,7 +3583,12 @@ class Camera2PreviewEngine(
                     } finally { if (!transferred) ticket?.let(compressedHandoff::release) }
                 }, imageHandler)
             }
-            stillOutput = OutputConfiguration(requireNotNull(jpegReader).surface).also { outputs += it }
+            stillOutput = OutputConfiguration(requireNotNull(jpegReader).surface).also { output ->
+                // OCC-PLAN-069: a size only a public physical camera advertises rides that
+                // physical's stream; the preview and analysis keep flowing from the logical device.
+                compressedPlan?.physicalId?.let(output::setPhysicalCameraId)
+                outputs += output
+            }
         }
         descriptor.rawSize?.takeIf { activeStillFormat != StillPhotoFormat.HEIC }?.let { size ->
             rawReader = ImageReader.newInstance(size.width, size.height, ImageFormat.RAW_SENSOR, 2).apply {
@@ -3652,7 +3676,21 @@ class Camera2PreviewEngine(
                 // analysis: scopes unavailable; raw: DNG capture unavailable (captureStill returns false).
                 Log.w(TAG, "Preview graph rejected; retrying without ${dropped.joinToString()} ($reason).")
             },
-            onFailure = { code, message -> listener?.onFailure(code, message, true) },
+            onFailure = { code, message ->
+                val routedPhysical = compressedPlan?.physicalId
+                if (routedPhysical != null && !physicalStillFallbackTaken) {
+                    Log.w(
+                        TAG,
+                        "Physical still routing to camera $routedPhysical was rejected ($code: $message); " +
+                            "retrying the graph with logical-only still sizes.",
+                    )
+                    physicalStillFallbackTaken = true
+                    retireGraphReaders()
+                    configureSession(device, descriptor, surface, currentGeneration)
+                } else {
+                    listener?.onFailure(code, message, true)
+                }
+            },
         ) { index ->
             val ids = graphs[index].outputs.map { it.id }
             releaseDropped(ids.toSet())
@@ -4379,6 +4417,31 @@ class Camera2PreviewEngine(
         effectiveFps = effectiveFps?.let { it * 0.8 + sample * 0.2 } ?: sample
     }
 
+    /**
+     * Compressed still sizes the logical camera's public physical members advertise beyond its own
+     * map, keyed by physical id (OCC-PLAN-069). A physical that cannot be read costs only its own
+     * extras; the logical map stays the source of truth for everything it already covers.
+     */
+    private fun physicalExtraStillSizes(
+        physicalIds: Set<String>,
+        format: Int,
+        logicalMap: android.hardware.camera2.params.StreamConfigurationMap,
+    ): Map<String, List<Size>> {
+        val logicalSizes = logicalMap.getOutputSizes(format)?.toList().orEmpty()
+        return physicalIds
+            .filter { it.isNotBlank() }
+            .mapNotNull { id ->
+                runCatching {
+                    manager.getCameraCharacteristics(id)
+                        .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        ?.getOutputSizes(format)?.toList().orEmpty()
+                        .filterNot { it in logicalSizes }
+                }.getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { extras -> id to extras.sortedByDescending { s -> s.width.toLong() * s.height } }
+            }.toMap()
+    }
+
     private fun descriptor(cameraId: String, targetWidth: Int, targetHeight: Int): Camera2CameraDescriptor? =
         runCatching {
             val characteristics = manager.getCameraCharacteristics(cameraId)
@@ -4534,6 +4597,9 @@ class Camera2PreviewEngine(
                 jpegSizes = map.getOutputSizes(ImageFormat.JPEG)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty(),
                 heicSizes = if (ImageFormat.HEIC in map.outputFormats)
                     map.getOutputSizes(ImageFormat.HEIC)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty() else emptyList(),
+                physicalJpegSizes = physicalExtraStillSizes(physicalFocals.map { it.first }.toSet(), ImageFormat.JPEG, map),
+                physicalHeicSizes = if (ImageFormat.HEIC in map.outputFormats)
+                    physicalExtraStillSizes(physicalFocals.map { it.first }.toSet(), ImageFormat.HEIC, map) else emptyMap(),
                 rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height },
                 analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.toList().orEmpty().let { sizes ->
                     sizes.getOrNull(analysisSizeIndex(sizes.map { it.width to it.height }, previewSize.width, previewSize.height))
@@ -4741,10 +4807,37 @@ class Camera2PreviewEngine(
         runCatching { device.close() }.onFailure(::failNativeRetirement)
     }
 
-    private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? {
+    private data class CompressedStillPlan(val size: Size, val physicalId: String?)
+
+    /**
+     * Active compressed still size plus the public physical camera that publishes it when the
+     * logical map does not (OCC-PLAN-069). A graph that already fell back to logical sizes never
+     * routes physically again, so a rejected combination degrades instead of failing the preview.
+     */
+    private fun compressedStillPlan(descriptor: Camera2CameraDescriptor): CompressedStillPlan? {
         val heic = activeStillFormat == StillPhotoFormat.HEIC
-        val advertised = if (heic) descriptor.heicSizes else descriptor.jpegSizes
-        return activeStillSize?.takeIf { it in advertised } ?: if (heic) descriptor.heicSize else descriptor.jpegSize
+        val logicalSizes = if (heic) descriptor.heicSizes else descriptor.jpegSizes
+        val physicalSizes = if (heic) descriptor.physicalHeicSizes else descriptor.physicalJpegSizes
+        val chosen = activeStillSize?.takeIf { it in logicalSizes || physicalSizes.values.any { s -> it in s } }
+            ?: logicalSizes.firstOrNull()
+        val size = chosen ?: return null
+        val routed = physicalStillRouting(
+            size.width to size.height,
+            logicalSizes.map { it.width to it.height },
+            physicalSizes.mapValues { entry -> entry.value.map { it.width to it.height } },
+        )
+        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken })
+    }
+
+    private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? = compressedStillPlan(descriptor)?.size
+
+    /** Closes the readers the preview graph owns so a rebuilt graph can create fresh ones (OCC-PLAN-069). */
+    private fun retireGraphReaders() {
+        runCatching { jpegReader?.close() }
+        jpegReader = null
+        runCatching { rawReader?.close() }
+        rawReader = null
+        closeAnalysisReader()
     }
 
     private fun closeResources() {

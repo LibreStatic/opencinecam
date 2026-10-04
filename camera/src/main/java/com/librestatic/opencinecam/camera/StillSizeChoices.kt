@@ -24,4 +24,18 @@ fun stillSizeChoices(sizes: List<Pair<Int, Int>>): List<Pair<Int, Int>> {
 /** Rounded megapixels, e.g. 4000x3000 -> 12. */
 fun stillMegapixels(width: Int, height: Int): Int = Math.round(width.toLong() * height / 1_000_000.0).toInt()
 
+/**
+ * Public physical camera that publishes [size] as a compressed still when the logical camera's own
+ * map does not, or null when the logical map already covers it (OCC-PLAN-069). Ties between
+ * physical cameras resolve to the smallest id so the routing stays deterministic.
+ */
+fun physicalStillRouting(
+    size: Pair<Int, Int>,
+    logicalSizes: List<Pair<Int, Int>>,
+    physicalSizes: Map<String, List<Pair<Int, Int>>>,
+): String? {
+    if (size in logicalSizes) return null
+    return physicalSizes.keys.sorted().firstOrNull { id -> size in physicalSizes.getValue(id) }
+}
+
 private const val MIN_STILL_PIXELS = 1_900_000L
