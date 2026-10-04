@@ -382,6 +382,7 @@ class OpenCineLogGpuPipeline(
     private var subjectLutTextureHash: String? = null
     private var subjectLutFailure: OperatorLutStatus? = null
     private var operatorLutProgram = 0
+    private var hlgSignalProgram = 0
     private var operatorLutTexture = 0
     private var operatorLutTextureHash: String? = null
     private var failedOperatorLutHash: String? = null
@@ -571,6 +572,7 @@ class OpenCineLogGpuPipeline(
         onStopped: (Boolean, OpenCineLogRecordingEvidence?) -> Unit,
         onRecordingLutApplied: ((BakedLutEvidence) -> Unit)? = null,
         recordingLut: MonitorLut? = null,
+        hlgOutput: Boolean = false,
     ): Boolean {
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
             separateAudioClock.cameraRealtime == cameraTimestampRealtime) { "Separate audio clock requires a matching regular capture route" }
@@ -602,6 +604,8 @@ class OpenCineLogGpuPipeline(
                     "Recording geometry does not match the active source."
                 }
                 require(timelapse == null || (passthroughSdr && audio == null)) { "Interval capture requires silent SDR." }
+                require(!hlgOutput || (!passthroughSdr && sourcePath == OpenCineLogSourcePath.HLG10_BT2020 && recordingLut == null &&
+                    timelapse == null && projectRateOverride == null)) { "HLG output requires a real-time HLG10 source without a LUT." }
                 require(projectRateOverride == null || (timelapse == null && passthroughSdr && audio == null)) { "Off-speed requires silent SDR and a single project clock." }
                 require(recordingLut == null || monitorLutCompatible(recordingLut, passthroughSdr)) {
                     "Recording LUT input domain does not match the active source."
@@ -611,6 +615,11 @@ class OpenCineLogGpuPipeline(
                     // This is mandatory output processing, not an optional monitor. Failure
                     // aborts preparation before any native onStarted admission or file samples.
                     operatorProgram(recordingLut, forRecording = true)
+                }
+                if (hlgOutput && hlgSignalProgram == 0) {
+                    check(makeCurrent(pbuffer)) { "HLG program context is unavailable." }
+                    // Mandatory output processing, like a recording LUT: no fallback to OCLog2 pixels.
+                    hlgSignalProgram = linkProgram(VERTEX_SHADER, hlgSignalShader(shaderYcbcr))
                 }
                 val projectRate = timelapse?.projectRate ?: projectRateOverride ?: CaptureFrameRate(targetFps)
                 val projectFps = projectRate.numerator.toDouble() / projectRate.denominator
@@ -632,7 +641,11 @@ class OpenCineLogGpuPipeline(
                     if (timelapse != null || projectRateOverride != null) setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
-                    if (passthroughSdr || recordingLut != null) {
+                    if (hlgOutput) {
+                        setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
+                        setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
+                        setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_HLG)
+                    } else if (passthroughSdr || recordingLut != null) {
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
                         setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
                         setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
@@ -672,7 +685,8 @@ class OpenCineLogGpuPipeline(
                     val eglSurface = createWindowSurface(
                         if (passthroughSdr) requireNotNull(config8) else requireNotNull(config10),
                         codecSurface,
-                        if (passthroughSdr || recordingLut != null) intArrayOf(EGL14.EGL_NONE) else {
+                        if (hlgOutput) hlgSurfaceAttributes()
+                        else if (passthroughSdr || recordingLut != null) intArrayOf(EGL14.EGL_NONE) else {
                             intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_LINEAR_EXT, EGL14.EGL_NONE)
                         },
                     )
@@ -680,7 +694,13 @@ class OpenCineLogGpuPipeline(
                     encoderEglSurface = eglSurface
                     val takeGreyReference = if (passthroughSdr) OpenCineLogGreyReference.NATIVE else greyReference
                     val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied,
-                        takeGreyReference, sceneGain(takeGreyReference), clearsVuiTransfer = !passthroughSdr && recordingLut == null)
+                        takeGreyReference, sceneGain(takeGreyReference),
+                        vuiTransfer = when {
+                            hlgOutput -> HevcVuiTransfer.ARIB_STD_B67
+                            !passthroughSdr && recordingLut == null -> HevcVuiTransfer.UNSPECIFIED
+                            else -> null
+                        },
+                        hlgOutput = hlgOutput)
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -866,6 +886,18 @@ class OpenCineLogGpuPipeline(
         return if (ok && count[0] > 0) configs[0] else null
     }
 
+    /**
+     * Tags the encoder surface BT.2020 HLG when the driver offers it, so the buffer dataspace agrees
+     * with the codec's colour keys. Without the extension the surface keeps the driver default; the
+     * codec keys and the SPS rewrite still carry the HLG tag.
+     */
+    private fun hlgSurfaceAttributes(): IntArray {
+        val extensions = EGL14.eglQueryString(display, EGL14.EGL_EXTENSIONS).orEmpty().split(' ')
+        return if ("EGL_EXT_gl_colorspace_bt2020_hlg" in extensions) {
+            intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_HLG_EXT, EGL14.EGL_NONE)
+        } else intArrayOf(EGL14.EGL_NONE)
+    }
+
     private fun initializeTextureAndProgram() {
         val textures = IntArray(1)
         GLES30.glGenTextures(1, textures, 0)
@@ -949,6 +981,7 @@ class OpenCineLogGpuPipeline(
                         previewOutput = false,
                         recordingGeometry = active.geometry,
                         recordingLut = active.recordingLut,
+                        hlgSignal = active.hlgOutput,
                     )
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
@@ -1127,8 +1160,10 @@ class OpenCineLogGpuPipeline(
         outputGeometry: OpenCineLogPreviewGeometry? = null,
         subjectLutOutput: Boolean = false,
         recordingLut: MonitorLut? = null,
+        hlgSignal: Boolean = false,
     ): OperatorLutStatus? {
         check(!previewOutput || !subjectLutOutput)
+        check(!hlgSignal || recordingLut == null && !previewOutput && !subjectLutOutput)
         check(recordingLut == null || !previewOutput && !subjectLutOutput)
         GLES30.glViewport(0, 0, width, height)
         GLES30.glClearColor(0f, 0f, 0f, 1f)
@@ -1137,7 +1172,10 @@ class OpenCineLogGpuPipeline(
         val selection = if (previewOutput) operatorLut else if (subjectLutOutput) subjectLut else recordingLut
         val lut = selection?.takeIf { monitorLutCompatible(it, passthroughSdr) }
         val previousFailure = if (subjectLutOutput) subjectLutFailure?.hash else failedOperatorLutHash
-        val selectedProgram = if (recordingLut != null) {
+        val selectedProgram = if (hlgSignal) {
+            check(hlgSignalProgram != 0) { "HLG recording program is not prepared." }
+            hlgSignalProgram
+        } else if (recordingLut != null) {
             check(lut === recordingLut) { "Recording LUT domain changed." }
             // No fallback is permitted for requested file pixels, even if monitor uploads fail.
             check(recordingLutTexture != 0 && recordingLutTextureHash == recordingLut.cube.sha256) {
@@ -1298,9 +1336,11 @@ class OpenCineLogGpuPipeline(
         }
 
         // OCLog2 is no standard transfer, but encoders write one anyway (PQ on Qualcomm). Clear it to
-        // H.273 unspecified in every SPS; an SPS that cannot be parsed keeps the encoder's tag.
+        // H.273 unspecified in every SPS; HLG takes get 18 instead of the encoder's PQ. An SPS that
+        // cannot be parsed keeps the encoder's tag.
+        val forcedTransfer = active.vuiTransfer ?: HevcVuiTransfer.UNSPECIFIED
         fun clearTransfer(annexB: ByteArray): ByteArray = try {
-            HevcVuiTransfer.rewrite(annexB, HevcVuiTransfer.UNSPECIFIED).let { result ->
+            HevcVuiTransfer.rewrite(annexB, forcedTransfer).let { result ->
                 result.previousTransfer?.let { if (active.encoderVuiTransfer == null) active.encoderVuiTransfer = it }
                 result.bytes
             }
@@ -1316,10 +1356,11 @@ class OpenCineLogGpuPipeline(
             val csd = format.getByteBuffer("csd-0")?.duplicate()?.let { value -> ByteArray(value.remaining()).also { value.get(it) } } ?: return
             val cleared = clearTransfer(csd)
             active.containerVuiTransfer = runCatching { HevcVuiTransfer.transferOf(cleared) }.getOrNull()
-            if (active.containerVuiTransfer != HevcVuiTransfer.UNSPECIFIED) return
+            if (active.containerVuiTransfer != forcedTransfer) return
             format.setByteBuffer("csd-0", ByteBuffer.wrap(cleared))
             // MediaMuxer writes the colr box from this key; without it the box says unspecified too.
-            format.removeKey(MediaFormat.KEY_COLOR_TRANSFER)
+            if (active.hlgOutput) format.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_HLG)
+            else format.removeKey(MediaFormat.KEY_COLOR_TRANSFER)
         }
 
         fun drainOne(codec: MediaCodec, info: MediaCodec.BufferInfo, video: Boolean, timeoutUs: Long): Boolean {
@@ -1484,10 +1525,10 @@ class OpenCineLogGpuPipeline(
                     sourceTransfer = sourcePath.transfer,
                     sourcePrecision = sourcePath.sourcePrecision,
                     recordingLut = active.lutEvidence,
-                    curve = if (active.recordingLut != null) "LUT_BAKED_SDR" else "OCLog2",
-                    curveVersion = if (active.recordingLut != null) "1" else "2.0",
+                    curve = if (active.hlgOutput) "HLG" else if (active.recordingLut != null) "LUT_BAKED_SDR" else "OCLog2",
+                    curveVersion = if (active.hlgOutput) "ARIB STD-B67" else if (active.recordingLut != null) "1" else "2.0",
                     gamut = if (active.recordingLut != null) "BT.709" else "BT.2020",
-                    range = if (active.recordingLut != null) "limited" else "full",
+                    range = if (active.recordingLut != null || active.hlgOutput) "limited" else "full",
                     codecMime = if (passthroughSdr) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC,
                     codecProfile = if (passthroughSdr) "AVC_${active.candidate.profile}" else "Main10",
                     eglRenderTargetBits = if (passthroughSdr) 8 else 10,
@@ -1496,7 +1537,7 @@ class OpenCineLogGpuPipeline(
                     sourceDataSpace = lastSourceDataSpace,
                     sourceDataSpaceMismatchedFrames = active.dataSpaceMismatchedFrames,
                     unexpectedSourceDataSpace = active.unexpectedDataSpace,
-                    transformSha256 = transformSha256(sourcePath, shaderYcbcr),
+                    transformSha256 = if (active.hlgOutput) hlgSignalSha256(shaderYcbcr) else transformSha256(sourcePath, shaderYcbcr),
                     encodedFrames = active.frames,
                     firstPtsUs = active.firstPtsUs,
                     lastPtsUs = active.lastPtsUs,
@@ -1619,6 +1660,7 @@ class OpenCineLogGpuPipeline(
                     surfaceTexture?.release()
                     inputSurface?.release()
                     if (operatorLutProgram != 0) GLES30.glDeleteProgram(operatorLutProgram)
+                    if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
                     if (operatorLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(operatorLutTexture), 0)
                     if (subjectLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(subjectLutTexture), 0)
                     releaseRecordingLutTexture()
@@ -1938,9 +1980,15 @@ class OpenCineLogGpuPipeline(
         val onRecordingLutApplied: ((BakedLutEvidence) -> Unit)?,
         val greyReference: OpenCineLogGreyReference,
         val sceneGain: Float,
-        /** OCLog2 takes clear the encoder's VUI transfer; baked-LUT and SDR takes keep their real tag. */
-        val clearsVuiTransfer: Boolean,
+        /**
+         * H.273 transfer forced into every SPS: 2 (unspecified) for OCLog2, 18 (HLG) for HLG takes,
+         * whose Qualcomm encoder still writes PQ. Null keeps the encoder's tag (baked-LUT and SDR takes).
+         */
+        val vuiTransfer: Int?,
+        /** Records the camera's HLG signal (re-encoded to BT.2020 primaries) instead of OCLog2. */
+        val hlgOutput: Boolean,
     ) {
+        val clearsVuiTransfer: Boolean get() = vuiTransfer != null
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
         var lutApplied = false
         val takeId = takeIds.incrementAndGet()
@@ -2036,6 +2084,7 @@ class OpenCineLogGpuPipeline(
         private const val PEAKING_ANALYSIS_SCALE = 2
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
         private const val EGL_GL_COLORSPACE_BT2020_LINEAR_EXT = 0x333F
+        private const val EGL_GL_COLORSPACE_BT2020_HLG_EXT = 0x3540
 
         /** HEVC Main10 hardware Surface encoder; rules live in [VideoEncoderSelector.selectSurfaceEncoder]. */
         fun findEncoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
@@ -2166,6 +2215,47 @@ class OpenCineLogGpuPipeline(
             }
         """.trimIndent()
 
+        // HLG recording output. The Razr's HLG10 stream is tagged BT.2020 but carries BT.709
+        // primaries, so the signal is decoded to scene light, moved to BT.2020 primaries (709 fits
+        // inside 2020, nothing clips) and re-encoded with the same OETF. No gain is applied: the
+        // file holds the camera's own exposure, and the encoder tags it BT.2020 / HLG / limited.
+        private val HLG_SIGNAL_FRAGMENT_SHADER = """
+            #version 300 es
+            #extension GL_OES_EGL_image_external_essl3 : require
+            precision highp float;
+            uniform samplerExternalOES uTexture;
+            in vec2 vTexCoord;
+            out vec4 outColor;
+            const float HLG_A = 0.17883277;
+            const float HLG_B = 0.28466892;
+            const float HLG_C = 0.55991073;
+            vec3 inverseHlg(vec3 e) {
+                e = clamp(e, 0.0, 1.0);
+                bvec3 low = lessThanEqual(e, vec3(0.5));
+                vec3 lowPart = (e * e) / 3.0;
+                vec3 highPart = (exp((e - HLG_C) / HLG_A) + HLG_B) / 12.0;
+                return mix(highPart, lowPart, low);
+            }
+            vec3 hlgOetf(vec3 x) {
+                x = clamp(x, 0.0, 1.0);
+                bvec3 low = lessThanEqual(x, vec3(1.0 / 12.0));
+                vec3 lowPart = sqrt(3.0 * x);
+                vec3 highPart = HLG_A * log(max(12.0 * x - HLG_B, 1e-6)) + HLG_C;
+                return mix(highPart, lowPart, low);
+            }
+            vec3 bt709ToBt2020(vec3 c) {
+                return mat3(
+                    0.627404, 0.069097, 0.016391,
+                    0.329283, 0.919540, 0.088013,
+                    0.043313, 0.011362, 0.895595
+                ) * c;
+            }
+            void main() {
+                vec3 sceneLinear = bt709ToBt2020(inverseHlg(texture(uTexture, vTexCoord).rgb));
+                outColor = vec4(hlgOetf(sceneLinear), 1.0);
+            }
+        """.trimIndent()
+
         private val SDR_FRAGMENT_SHADER = """
             #version 300 es
             #extension GL_OES_EGL_image_external_essl3 : require
@@ -2245,9 +2335,14 @@ class OpenCineLogGpuPipeline(
          * ([OpenCineLogYcbcrConversion]), clamped to [0, 1] like a normalized sampler result.
          * Derived textually so both variants share one transform body.
          */
-        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean): String {
-            val base = fragmentShader(sourcePath)
-            if (!shaderYcbcr) return base
+        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean): String =
+            if (shaderYcbcr) ycbcrVariant(fragmentShader(sourcePath)) else fragmentShader(sourcePath)
+
+        /** The HLG recording shader as linked; it shares the tier shader's YCbCr decoding. */
+        fun hlgSignalShader(shaderYcbcr: Boolean): String =
+            if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
+
+        private fun ycbcrVariant(base: String): String {
             for (anchor in YCBCR_ANCHORS) check(base.split(anchor).size == 2) { "YCbCr shader anchor drifted: $anchor" }
             return base
                 .replace(
@@ -2273,6 +2368,11 @@ class OpenCineLogGpuPipeline(
         /** Identity of the linked transform; the shader-YCbCr variant is the qualified one. */
         fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
             .digest(transformShader(sourcePath, shaderYcbcr).toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+        /** Identity of the linked HLG recording shader. */
+        fun hlgSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
+            .digest(hlgSignalShader(shaderYcbcr).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Backward-compatible identity of the qualified HLG transform. */

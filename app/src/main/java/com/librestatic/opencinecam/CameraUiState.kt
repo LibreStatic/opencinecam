@@ -38,9 +38,17 @@ enum class CaptureMode(val experimental: Boolean = false) {
     BRACKET,
     LIGHT_TRAIL,
     LOG,
+    HLG,
     APV(true),
     RAW_VIDEO(true),
 }
+
+/** LOG and HLG share the HLG10 GPU graph; they differ only in what the encoder receives. */
+val CaptureMode.usesLogGraph: Boolean get() = this == CaptureMode.LOG || this == CaptureMode.HLG
+
+/** HLG records the camera's HLG10 signal, so the ISP-derived high-speed OCLog profiles do not apply. */
+fun com.librestatic.opencinecam.camera.Camera2CameraDescriptor.logProfilesFor(mode: CaptureMode): List<com.librestatic.opencinecam.camera.Camera2LogProfile> =
+    if (mode == CaptureMode.HLG) logProfiles.filter { it.sourcePath == com.librestatic.opencinecam.camera.OpenCineLogSourcePath.HLG10_BT2020 } else logProfiles
 
 enum class ModeGateState { AVAILABLE, CANDIDATE, UNSUPPORTED, FAILED }
 
@@ -189,7 +197,7 @@ data class CameraUiState(
 
     val structuralSettingsFrozen: Boolean
         get() = stillCapturePending || recordingFinalizing || phase == CameraUiPhase.RECORDING ||
-            (phase == CameraUiPhase.CAPTURING && selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL, CaptureMode.VIDEO, CaptureMode.LOG,
+            (phase == CameraUiPhase.CAPTURING && selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL, CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG,
                 CaptureMode.TIME_LAPSE, CaptureMode.SLOW_MOTION, CaptureMode.APV, CaptureMode.RAW_VIDEO))
 
     val descriptor: Camera2CameraDescriptor?
@@ -198,7 +206,7 @@ data class CameraUiState(
     val availableTargetFps: List<Int>
         get() = descriptor?.let { descriptor ->
             when {
-                selectedMode == CaptureMode.LOG -> descriptor.logProfiles
+                selectedMode.usesLogGraph -> descriptor.logProfilesFor(selectedMode)
                     .filter { it.size.width == targetVideoWidth && it.size.height == targetVideoHeight }
                     .map { it.fps }.distinct().sorted()
                 selectedMode in videoProfileModes -> descriptor.videoProfiles
@@ -212,11 +220,11 @@ data class CameraUiState(
         get() = descriptor?.videoProfiles.orEmpty()
 
     val availableLogProfiles: List<Camera2LogProfile>
-        get() = descriptor?.logProfiles.orEmpty()
+        get() = descriptor?.logProfilesFor(selectedMode).orEmpty()
 
     val availableVideoSizes: List<Pair<Int, Int>>
         get() = when (selectedMode) {
-            CaptureMode.LOG -> availableLogProfiles.map { it.size.width to it.size.height }
+            CaptureMode.LOG, CaptureMode.HLG -> availableLogProfiles.map { it.size.width to it.size.height }
             else -> availableVideoProfiles.map { it.size.width to it.size.height }
         }
             .distinct().sortedWith(compareByDescending<Pair<Int, Int>> { it.first.toLong() * it.second }.thenByDescending { it.first })
@@ -281,8 +289,8 @@ data class CameraUiState(
 
         val videoProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE)
         /** Modes whose recording rate the operator chooses (slow motion runs on VIDEO). */
-        val frameRateModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG)
-        val resolutionProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)
+        val frameRateModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG)
+        val resolutionProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE)
         /** Modes whose RES slot picks the compressed still size. */
         val photoResolutionModes = setOf(
             CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL,
@@ -299,6 +307,7 @@ data class CameraUiState(
             CaptureMode.BRACKET to ModeGateState.AVAILABLE,
             CaptureMode.LIGHT_TRAIL to ModeGateState.AVAILABLE,
             CaptureMode.LOG to ModeGateState.CANDIDATE,
+            CaptureMode.HLG to ModeGateState.CANDIDATE,
             CaptureMode.APV to ModeGateState.UNSUPPORTED,
             CaptureMode.RAW_VIDEO to ModeGateState.FAILED,
         )

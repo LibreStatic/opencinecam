@@ -9,14 +9,14 @@ fun CameraPreset.compatibilityIssues(state: CameraUiState): List<String> = build
     if (d == null) { add("camera"); return@buildList }
     if (state.modeGates[mode] != ModeGateState.AVAILABLE) add("mode")
     val hfr = when (mode) {
-        CaptureMode.LOG -> d.logProfiles.firstOrNull { it.size.width == settings.logWidth && it.size.height == settings.logHeight && it.fps == settings.logFps }?.constrainedHighSpeed
+        CaptureMode.LOG, CaptureMode.HLG -> d.logProfilesFor(mode).firstOrNull { it.size.width == settings.logWidth && it.size.height == settings.logHeight && it.fps == settings.logFps }?.constrainedHighSpeed
         CaptureMode.VIDEO -> d.videoProfiles.firstOrNull { it.size.width == settings.videoWidth && it.size.height == settings.videoHeight && it.fps == settings.videoFps }?.constrainedHighSpeed
         CaptureMode.TIME_LAPSE -> d.videoProfiles.firstOrNull { it.size.width == settings.timelapseWidth && it.size.height == settings.timelapseHeight && it.fps == settings.timelapseFps }?.constrainedHighSpeed
         else -> false
     }
     if (hfr == null) add("format")
     val caps = if (hfr == true) ExposureCapabilities() else d.exposureCapabilities
-    val fps = when (mode) { CaptureMode.LOG -> settings.logFps; CaptureMode.TIME_LAPSE -> settings.timelapseFps; else -> settings.videoFps }
+    val fps = when (mode) { CaptureMode.LOG, CaptureMode.HLG -> settings.logFps; CaptureMode.TIME_LAPSE -> settings.timelapseFps; else -> settings.videoFps }
     val exposure = settings.exposure.resolve(caps, CaptureFrameRate(fps))
     if (!caps.supports(settings.exposure.mode) || exposure.clamped) add("exposure")
     val wb = settings.whiteBalance.adaptTo(d.kelvinRange.takeUnless { hfr == true }, d.tintSupported, if (hfr == true) emptySet() else d.availableAwbModes)

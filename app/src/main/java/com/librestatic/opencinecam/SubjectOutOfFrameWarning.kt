@@ -59,7 +59,7 @@ internal fun faceDetectGraphFor(state: CameraUiState): FaceDetectGraph {
     val hfrLog = log.isNotEmpty() && log.all { it.constrainedHighSpeed }
     return when (state.selectedMode) {
         CaptureMode.SLOW_MOTION -> FaceDetectGraph.HIGH_SPEED
-        CaptureMode.LOG -> if (hfrLog) FaceDetectGraph.HIGH_SPEED else FaceDetectGraph.LOG
+        CaptureMode.LOG, CaptureMode.HLG -> if (hfrLog) FaceDetectGraph.HIGH_SPEED else FaceDetectGraph.LOG
         CaptureMode.VIDEO, CaptureMode.TIME_LAPSE -> if (hfrVideo) FaceDetectGraph.HIGH_SPEED else FaceDetectGraph.VIDEO
         else -> FaceDetectGraph.PREVIEW
     }
