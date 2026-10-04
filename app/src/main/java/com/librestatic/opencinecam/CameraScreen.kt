@@ -310,7 +310,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     LaunchedEffect(state.selectedMode, state.targetVideoWidth, state.targetVideoHeight, state.targetFps) {
         if (state.phase == CameraUiPhase.RECORDING) return@LaunchedEffect
         val updated = when (state.selectedMode) {
-            CaptureMode.LOG -> settings.copy(
+            CaptureMode.LOG, CaptureMode.HLG -> settings.copy(
                 logWidth = state.targetVideoWidth,
                 logHeight = state.targetVideoHeight,
                 logFps = state.targetFps,
@@ -587,7 +587,7 @@ internal fun CaptureSurface(
         val descriptor = state.descriptor
         val landscape = widthPx > heightPx
         val previewStreamSize = descriptor?.let {
-            if (state.selectedMode == CaptureMode.LOG) {
+            if (state.selectedMode.usesLogGraph) {
                 state.activeLogProfile?.size ?: it.preferredLogProfile?.size ?: it.previewSize
             } else if (state.selectedMode in CameraUiState.videoProfileModes) {
                 state.activeVideoProfile?.size ?: it.previewSize
@@ -685,9 +685,9 @@ internal fun CaptureSurface(
                 descriptor.cameraId,
                 streamSize.width,
                 streamSize.height,
-                state.gpuViewfinder || state.selectedMode == CaptureMode.LOG,
+                state.gpuViewfinder || state.selectedMode.usesLogGraph,
                 state.targetFps,
-                descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && state.selectedMode != CaptureMode.LOG,
+                descriptor.lensFacing == CameraCharacteristics.LENS_FACING_FRONT && !state.gpuViewfinder && !state.selectedMode.usesLogGraph,
                 widthPx,
                 heightPx,
                 binder,
@@ -949,7 +949,7 @@ internal fun MonitoringOverlay(
         val frontFacing = state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT
         val overlayWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.coerceAtLeast(1) else 1
         val overlayHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.coerceAtLeast(1) else 1
-        val gpuScale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
+        val gpuScale = if (state.gpuViewfinder || state.selectedMode.usesLogGraph)
             monitoringPreviewScale(sourceWidth, sourceHeight, overlayWidth, overlayHeight, sensorOrientation, displayDegrees, frontFacing, squeezeFactor)
             else 1f to 1f
         // Guides belong to the recorded picture; anything placed by a corner uses the shown part of it.
@@ -1755,7 +1755,7 @@ internal fun AdaptiveCaptureChrome(
         // around the picture, or under the chrome.
         val recordingHudTop = when {
             !chromeVisible || sideRails || inspector -> 0.dp
-            state.selectedMode == CaptureMode.LOG -> topBar + 26.dp
+            state.selectedMode.usesLogGraph -> topBar + 26.dp
             else -> topBar
         }
         // The recording HUD grows with its meter and monitor toggles; measure it instead of guessing.
@@ -2447,11 +2447,12 @@ private fun MediaThumbnailAction(lastSavedUri: String?, onClick: () -> Unit, siz
 
 @Composable
 private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modifier: Modifier = Modifier) {
-    if (state.selectedMode != CaptureMode.LOG) return
+    if (!state.selectedMode.usesLogGraph) return
     val profile = state.activeLogProfile
     val sourcePath = profile?.sourcePath
     val qualification = ocLogQualificationLabel(profile)?.let { " · $it" }.orEmpty()
     val text = when {
+        state.selectedMode == CaptureMode.HLG -> "HLG · BT.2020 10-BIT · VIEW REC.709"
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP && settings.logViewAssistEnabled ->
             "OCLOG2 HFR · ISP SDR · VIEW ASSIST$qualification"
         sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP ->
@@ -2494,9 +2495,9 @@ private fun InstrumentStack(
     // While recording, the recording HUD carries its own meter.
     // Off-speed (slow motion) takes are silent by design, so there is no microphone to meter.
     val showAudio = chromeVisible && !recording && settings.audioEnabled && settings.audioMeter.visible &&
-        state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG) &&
+        state.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG) &&
         !(state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
-    val showLogSource = chromeVisible && state.selectedMode == CaptureMode.LOG
+    val showLogSource = chromeVisible && state.selectedMode.usesLogGraph
     val showZoom = chromeVisible && state.zoomSupported
     val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
     if (!showAudio && !showLogSource && !showZoom && !showHistogram) return
@@ -3126,6 +3127,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
         if (video) {
             add(when (state.selectedMode) {
                 CaptureMode.LOG -> "HEVC 10-bit LOG"
+                CaptureMode.HLG -> "HEVC 10-bit HLG"
                 CaptureMode.RAW_VIDEO -> "RAW 10-bit"
                 else -> "H.264"
             })
@@ -3558,7 +3560,7 @@ private fun FpsDial(
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
-    val log = state.selectedMode == CaptureMode.LOG
+    val log = state.selectedMode.usesLogGraph
     val logSpecs = state.availableLogProfiles.map { it.toSpec() }
     val videoSpecs = state.availableVideoProfiles.map { it.toSpec() }
     val modeRates = when {
@@ -4490,6 +4492,7 @@ internal fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.BRACKET -> stringResource(R.string.bracket_mode)
     CaptureMode.LIGHT_TRAIL -> stringResource(R.string.light_trail_mode)
     CaptureMode.LOG -> stringResource(R.string.log_mode)
+    CaptureMode.HLG -> stringResource(R.string.hlg_mode)
     CaptureMode.APV -> stringResource(R.string.apv_mode)
     CaptureMode.RAW_VIDEO -> stringResource(R.string.raw_video_mode)
 }

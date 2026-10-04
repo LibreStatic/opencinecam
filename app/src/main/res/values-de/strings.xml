@@ -32,6 +32,7 @@
     <string name="bracket_mode">Belichtungsreihe</string>
     <string name="light_trail_mode">Light Painting</string>
     <string name="log_mode">Log</string>
+    <string name="hlg_mode">HLG</string>
     <string name="apv_mode">APV</string>
     <string name="raw_video_mode">RAW-Video</string>
     <string name="available">Verfügbar</string>

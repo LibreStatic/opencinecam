@@ -11,6 +11,9 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import android.util.Size
 import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.sqrt
 import kotlin.math.pow
 
 class OpenCineLogGpuPipelineContractTest {
@@ -48,6 +51,33 @@ class OpenCineLogGpuPipelineContractTest {
             // Everything after the sampled value is the same transform body.
             assertEquals(driver.substringAfter("texture(uTexture, vTexCoord).rgb"), shader.substringAfter("uYcbcrOffset), 0.0, 1.0)"))
         }
+    }
+
+    @Test
+    fun hlgRecordingShaderSharesTheYcbcrDecodeAndStaysSeparateFromLog() {
+        val driver = OpenCineLogGpuPipeline.hlgSignalShader(shaderYcbcr = false)
+        val shader = OpenCineLogGpuPipeline.hlgSignalShader(shaderYcbcr = true)
+        assertTrue(shader.contains("#extension GL_EXT_YUV_target : require"))
+        assertTrue(shader.contains("uniform __samplerExternal2DY2YEXT uTexture;"))
+        assertFalse(shader.contains("samplerExternalOES"))
+        assertEquals(driver.substringAfter("texture(uTexture, vTexCoord).rgb"), shader.substringAfter("uYcbcrOffset), 0.0, 1.0)"))
+        assertTrue(shader.contains("bt709ToBt2020(inverseHlg("))
+        assertNotEquals(OpenCineLogGpuPipeline.TRANSFORM_SHA256, OpenCineLogGpuPipeline.hlgSignalSha256())
+    }
+
+    @Test
+    fun hlgRecordingSignalKeepsNeutralsAndRoundTripsTheCurve() {
+        // The shader's math, mirrored: HLG10 code -> scene linear BT.709 -> BT.2020 -> HLG code.
+        for (code in listOf(0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0)) {
+            assertEquals(code, hlgOetf(inverseHlg(code)), 1e-6)
+            // Rows of the 709 -> 2020 matrix sum to one, so greys are untouched.
+            val grey = DoubleArray(3) { inverseHlg(code) }
+            val converted = bt709ToBt2020(grey)
+            converted.forEach { assertEquals(code, hlgOetf(it), 1e-5) }
+        }
+        // A saturated BT.709 red lands inside BT.2020, i.e. less saturated codes.
+        val red = bt709ToBt2020(doubleArrayOf(inverseHlg(0.75), 0.0, 0.0)).map(::hlgOetf)
+        assertTrue(red[0] < 0.75 && red[1] > 0.0 && red[2] > 0.0)
     }
 
     @Test
@@ -182,6 +212,17 @@ class OpenCineLogGpuPipelineContractTest {
     } else {
         (exp((code - 0.55991073) / 0.17883277) + 0.28466892) / 12.0
     }.coerceIn(0.0, 1.0)
+
+    private fun hlgOetf(linear: Double): Double {
+        val x = linear.coerceIn(0.0, 1.0)
+        return if (x <= 1.0 / 12.0) sqrt(3.0 * x) else 0.17883277 * ln(max(12.0 * x - 0.28466892, 1e-6)) + 0.55991073
+    }
+
+    private fun bt709ToBt2020(c: DoubleArray) = doubleArrayOf(
+        0.627404 * c[0] + 0.329283 * c[1] + 0.043313 * c[2],
+        0.069097 * c[0] + 0.919540 * c[1] + 0.011362 * c[2],
+        0.016391 * c[0] + 0.088013 * c[1] + 0.895595 * c[2],
+    )
 
     private fun rec709Oetf(linear: Double): Double = if (linear < 0.018) {
         4.5 * linear

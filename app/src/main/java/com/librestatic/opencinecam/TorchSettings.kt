@@ -32,7 +32,7 @@ import kotlin.math.roundToInt
 internal fun TorchSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val capabilities = state.descriptor?.torchCapabilities
     val highSpeed = when (state.selectedMode) {
-        CaptureMode.LOG -> state.activeLogProfile?.constrainedHighSpeed == true
+        CaptureMode.LOG, CaptureMode.HLG -> state.activeLogProfile?.constrainedHighSpeed == true
         in CameraUiState.videoProfileModes -> state.activeVideoProfile?.constrainedHighSpeed == true
         else -> false
     }

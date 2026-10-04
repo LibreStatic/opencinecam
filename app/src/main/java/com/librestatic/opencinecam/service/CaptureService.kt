@@ -54,6 +54,8 @@ import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
+import com.librestatic.opencinecam.logProfilesFor
+import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.TimeLapseLimitMode
 import com.librestatic.opencinecam.normalizedFor
 import com.librestatic.opencinecam.toSpec
@@ -388,9 +390,9 @@ class CaptureService : Service() {
         val timelapseWidth: Int = 1920,
         val timelapseHeight: Int = 1080,
     ) {
-        fun width(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG -> logWidth; CaptureMode.TIME_LAPSE -> timelapseWidth; else -> videoWidth }
-        fun height(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG -> logHeight; CaptureMode.TIME_LAPSE -> timelapseHeight; else -> videoHeight }
-        fun fps(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG -> logFps; CaptureMode.TIME_LAPSE -> 30; else -> videoFps }
+        fun width(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG, CaptureMode.HLG -> logWidth; CaptureMode.TIME_LAPSE -> timelapseWidth; else -> videoWidth }
+        fun height(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG, CaptureMode.HLG -> logHeight; CaptureMode.TIME_LAPSE -> timelapseHeight; else -> videoHeight }
+        fun fps(mode: CaptureMode): Int = when (mode) { CaptureMode.LOG, CaptureMode.HLG -> logFps; CaptureMode.TIME_LAPSE -> 30; else -> videoFps }
     }
 
     @Volatile private var currentOperatorLut: MonitorLut? = null
@@ -581,7 +583,7 @@ class CaptureService : Service() {
         val current = cameraState.value
         return !serviceDestroyed && attachedPreviewSurface?.isValid == true &&
             current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) &&
-            current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG) &&
+            current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG) &&
             transferCapture.get() == null && !transferWaiting && !recordingWbPreparing &&
             settings.audioEnabled &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -595,7 +597,7 @@ class CaptureService : Service() {
         val retirement = stopPreviewAudioMonitor(clearLevels = false)
         val generation = previewAudioGeneration
         if (!previewAudioEligible()) {
-            if (!settings.audioEnabled || cameraState.value.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG)) {
+            if (!settings.audioEnabled || cameraState.value.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG)) {
                 cameraState.update { it.copy(audioLevels = null, audioMonitoringActive = false) }
             }
             return
@@ -678,7 +680,7 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
 
     private fun desiredGpuViewfinder(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
-        mode in setOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE) ||
+        mode in setOf(CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
         // The subject preview rides the GPU viewfinder in every mode it supports. A constrained
         // high-speed take still reaches the encoder directly (startVideo); only the 30 fps preview
         // share goes through the GPU to the operator and subject windows.
@@ -1186,7 +1188,9 @@ class CaptureService : Service() {
             mainHandler.removeCallbacks(recordingTicker)
             cameraState.value = cameraState.value.copy(
                 phase = CameraUiPhase.RECORDING,
-                message = if (cameraState.value.selectedMode == CaptureMode.LOG) {
+                message = if (cameraState.value.selectedMode == CaptureMode.HLG) {
+                    "REC ${width}×$height · HLG BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
+                } else if (cameraState.value.selectedMode.usesLogGraph) {
                     val source = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                         "HFR ISP-derived · source depth not claimed"
                     } else "HLG-derived 10-bit"
@@ -1251,11 +1255,14 @@ class CaptureService : Service() {
             try {
                 val requestedAudioFailure = take.audioStartFailure
                 val audioOutput = take.audio
-                val logEvidence = previewEngine.consumeLastOpenCineLogEvidence()
+                val graphEvidence = previewEngine.consumeLastOpenCineLogEvidence()
+                // HLG takes run through the same graph but are standard HDR video: no OCLog sidecar.
+                val hlgEvidence = graphEvidence?.takeIf { it.curve == HLG_CURVE }
+                val logEvidence = graphEvidence?.takeUnless { it.curve == HLG_CURVE }
                 val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
                 val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
                 val finalizedSuccess = success && nativeRetired && requestedAudioFailure == null && bakingVerified &&
-                    (cameraState.value.selectedMode != CaptureMode.LOG || logEvidence != null)
+                    (!cameraState.value.selectedMode.usesLogGraph || graphEvidence != null)
                 val geometry = take.geometry
                 var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
                 val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
@@ -1288,6 +1295,7 @@ class CaptureService : Service() {
                     prepareVideo = { output?.prepareCompletion(
                         run {
                             val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
+                                ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
                                 ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
                                 ?: timing?.let { timelapseTimingJson(it, requireNotNull(cameraState.value.recordingProjectRate)) }
                             val withBaking = if (bakedEvidence != null) {
@@ -1309,7 +1317,7 @@ class CaptureService : Service() {
                             } ?: withTimecode
                         },
                         expectedGeometry = geometry,
-                        timingSidecar = logEvidence == null && (bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null),
+                        timingSidecar = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null),
                     ) },
                     onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
@@ -1341,7 +1349,9 @@ class CaptureService : Service() {
                     message = (if (finalizedSuccess) {
                         val audioSaved = sidecarResult?.let { " + ${it.bitDepth.bits}-bit ${it.container} ${it.sampleRateHz / 1000.0} kHz" }
                             ?: if (activeRecordingAudioLabel.startsWith("AAC")) " + $activeRecordingAudioLabel" else ""
-                        if (logEvidence != null) {
+                        if (hlgEvidence != null) {
+                            "HLG HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                        } else if (logEvidence != null) {
                             val source = if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                                 "HFR ISP-derived"
                             } else "HLG-derived 10-bit"
@@ -1532,10 +1542,11 @@ class CaptureService : Service() {
                 )
                 val logProfile = normalizedLogProfile(
                     selectedDescriptor,
+                    cameraState.value.selectedMode,
                     geometrySeeds.logWidth,
                     geometrySeeds.logHeight,
                     geometrySeeds.logFps,
-                ).takeIf { cameraState.value.selectedMode == CaptureMode.LOG }
+                ).takeIf { cameraState.value.selectedMode.usesLogGraph }
                 val selectedWidth = logProfile?.size?.width ?: videoProfile?.size?.width
                     ?: cameraState.value.targetVideoWidth
                 val selectedHeight = logProfile?.size?.height ?: videoProfile?.size?.height
@@ -1558,6 +1569,7 @@ class CaptureService : Service() {
                     modeGates = cameraState.value.modeGates + mapOf(
                         CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                         CaptureMode.LOG to if (preferred.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                        CaptureMode.HLG to if (preferred.supportsOpenCineLog && preferred.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                         CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
@@ -1655,16 +1667,16 @@ class CaptureService : Service() {
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
-                openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
-                gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
+                openCineLog = cameraState.value.selectedMode.usesLogGraph,
+                gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
-                viewAssist = settings.logViewAssistEnabled,
+                viewAssist = settings.previewViewAssist(cameraState.value.selectedMode),
                 targetFps = cameraState.value.targetFps,
                 videoProfile = cameraState.value.activeVideoProfile.takeIf {
                     cameraState.value.selectedMode in CameraUiState.videoProfileModes
                 },
                 logProfile = cameraState.value.activeLogProfile.takeIf {
-                    cameraState.value.selectedMode == CaptureMode.LOG
+                    cameraState.value.selectedMode.usesLogGraph
                 },
             )
             return true
@@ -1747,8 +1759,8 @@ class CaptureService : Service() {
                 descriptor, geometrySeeds.width(current.selectedMode), geometrySeeds.height(current.selectedMode), geometrySeeds.fps(current.selectedMode),
             )
             val logProfile = normalizedLogProfile(
-                descriptor, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps,
-            ).takeIf { current.selectedMode == CaptureMode.LOG }
+                descriptor, current.selectedMode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps,
+            ).takeIf { current.selectedMode.usesLogGraph }
             val selectedWidth = logProfile?.size?.width ?: videoProfile?.size?.width ?: geometrySeeds.width(current.selectedMode)
             val selectedHeight = logProfile?.size?.height ?: videoProfile?.size?.height ?: geometrySeeds.height(current.selectedMode)
             val previous = current.selectedCameraId ?: return
@@ -1773,6 +1785,7 @@ class CaptureService : Service() {
                 modeGates = current.modeGates + mapOf(
                     CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     CaptureMode.LOG to if (descriptor.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                    CaptureMode.HLG to if (descriptor.supportsOpenCineLog && descriptor.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                 ),
             )
@@ -1787,16 +1800,16 @@ class CaptureService : Service() {
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
-                openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
-                gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
+                openCineLog = cameraState.value.selectedMode.usesLogGraph,
+                gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
-                viewAssist = settings.logViewAssistEnabled,
+                viewAssist = settings.previewViewAssist(cameraState.value.selectedMode),
                 targetFps = cameraState.value.targetFps,
                 videoProfile = cameraState.value.activeVideoProfile.takeIf {
                     cameraState.value.selectedMode in CameraUiState.videoProfileModes
                 },
                 logProfile = cameraState.value.activeLogProfile.takeIf {
-                    cameraState.value.selectedMode == CaptureMode.LOG
+                    cameraState.value.selectedMode.usesLogGraph
                 },
             )
             mainHandler.postDelayed({
@@ -1816,16 +1829,16 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
-                        openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
-                        gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
+                        openCineLog = cameraState.value.selectedMode.usesLogGraph,
+                        gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
-                        viewAssist = settings.logViewAssistEnabled,
+                        viewAssist = settings.previewViewAssist(cameraState.value.selectedMode),
                         targetFps = cameraState.value.targetFps,
                         videoProfile = cameraState.value.activeVideoProfile.takeIf {
                             cameraState.value.selectedMode in CameraUiState.videoProfileModes
                         },
                         logProfile = cameraState.value.activeLogProfile.takeIf {
-                            cameraState.value.selectedMode == CaptureMode.LOG
+                            cameraState.value.selectedMode.usesLogGraph
                         },
                     )
                 }
@@ -1843,13 +1856,13 @@ class CaptureService : Service() {
             val changedSignalPath =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
-                (current.selectedMode == CaptureMode.LOG) != (mode == CaptureMode.LOG) ||
+                (current.selectedMode.usesLogGraph) != (mode.usesLogGraph) ||
                     (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
                     (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes)
             val descriptor = current.descriptor
             val selectedLogProfile = descriptor?.let {
-                normalizedLogProfile(it, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
-            }.takeIf { mode == CaptureMode.LOG }
+                normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
+            }.takeIf { mode.usesLogGraph }
             val selectedVideoProfile = descriptor?.let {
                 normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
@@ -1893,15 +1906,15 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
-                        openCineLog = mode == CaptureMode.LOG,
-                        gpuPreview = desiredGpuViewfinder() && mode != CaptureMode.LOG,
+                        openCineLog = mode.usesLogGraph,
+                        gpuPreview = desiredGpuViewfinder() && !mode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(mode),
-                        viewAssist = settings.logViewAssistEnabled,
+                        viewAssist = settings.previewViewAssist(mode),
                         targetFps = cameraState.value.targetFps,
                         videoProfile = cameraState.value.activeVideoProfile.takeIf {
                             mode in CameraUiState.videoProfileModes
                         },
-                        logProfile = cameraState.value.activeLogProfile.takeIf { mode == CaptureMode.LOG },
+                        logProfile = cameraState.value.activeLogProfile.takeIf { mode.usesLogGraph },
                     )
                     }
                     // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
@@ -1922,9 +1935,9 @@ class CaptureService : Service() {
             var effectiveFps = fps
             val transient: Boolean
             when (current.selectedMode) {
-                CaptureMode.LOG -> {
+                CaptureMode.LOG, CaptureMode.HLG -> {
                     val snap = VideoGeometryPolicy.snapLog(
-                        descriptor.logProfiles.map { it.toSpec() },
+                        descriptor.logProfilesFor(current.selectedMode).map { it.toSpec() },
                         current.targetVideoWidth,
                         current.targetVideoHeight,
                         fps,
@@ -1966,16 +1979,16 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
-                        openCineLog = current.selectedMode == CaptureMode.LOG,
-                        gpuPreview = desiredGpuViewfinder(current.selectedMode) && current.selectedMode != CaptureMode.LOG,
+                        openCineLog = current.selectedMode.usesLogGraph,
+                        gpuPreview = desiredGpuViewfinder(current.selectedMode) && !current.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(current.selectedMode),
-                        viewAssist = settings.logViewAssistEnabled,
+                        viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = effectiveFps,
                         videoProfile = cameraState.value.activeVideoProfile.takeIf {
                             current.selectedMode in CameraUiState.videoProfileModes
                         },
                         logProfile = cameraState.value.activeLogProfile.takeIf {
-                            current.selectedMode == CaptureMode.LOG
+                            current.selectedMode.usesLogGraph
                         },
                     )
                 }
@@ -2007,8 +2020,8 @@ class CaptureService : Service() {
             val selectedHighSpeed: Boolean
             val sourceLabel: String
             var snappedFps = false
-            if (current.selectedMode == CaptureMode.LOG) {
-                val choices = descriptor.logProfiles.filter { it.size.width == width && it.size.height == height }
+            if (current.selectedMode.usesLogGraph) {
+                val choices = descriptor.logProfilesFor(current.selectedMode).filter { it.size.width == width && it.size.height == height }
                 if (choices.isEmpty()) return
                 val snap = VideoGeometryPolicy.snapLog(
                     choices.map { it.toSpec() },
@@ -2021,7 +2034,8 @@ class CaptureService : Service() {
                 snappedFps = snap.snapped
                 selectedFps = selected.fps
                 selectedHighSpeed = choices.first { it.size.width == width && it.size.height == height && it.fps == selected.fps }.constrainedHighSpeed
-                sourceLabel = if (selected.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
+                sourceLabel = if (current.selectedMode == CaptureMode.HLG) "HLG · BT.2020 10-bit"
+                else if (selected.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                     "OCLog HFR · ISP-derived"
                 } else "OCLog · HLG 10-bit"
             } else {
@@ -2048,7 +2062,7 @@ class CaptureService : Service() {
                 message = fpsUnavailableNotice(snappedFps || selectedFps != current.targetFps, current.selectedMode, current.targetFps, selectedFps)
                     ?: "$sourceLabel ${width}×$height · $selectedFps fps${if (selectedHighSpeed) " · HIGH SPEED" else ""}",
             )
-            if (current.selectedMode == CaptureMode.LOG) {
+            if (current.selectedMode.usesLogGraph) {
                 attachedPreviewSurface?.takeIf { it.isValid }?.let { surface ->
                     previewEngine.startPreview(
                         descriptor,
@@ -2058,7 +2072,7 @@ class CaptureService : Service() {
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
                         openCineLog = true,
-                        viewAssist = settings.logViewAssistEnabled,
+                        viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = selectedFps,
                         logProfile = cameraState.value.activeLogProfile,
                     )
@@ -2108,7 +2122,7 @@ class CaptureService : Service() {
             previewEngine.setMonitoringOptions(settings.monitoring)
             previewEngine.setFocusPeakingEnabled(settings.peakingEnabled)
             previewEngine.setSubjectFramingEnabled(settings.subjectDisplay.outOfFrameWarning)
-            if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.logViewAssistEnabled)
+            if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.previewViewAssist(cameraState.value.selectedMode))
             if (previous.logGreyReference != settings.logGreyReference) previewEngine.setOpenCineLogGreyReference(settings.logGreyReference)
             if (previous.anamorphicSqueeze != settings.anamorphicSqueeze) previewEngine.setOpenCineLogSqueezeFactor(settings.anamorphicSqueeze.factor)
             timecodeTracker.configure(
@@ -2460,7 +2474,7 @@ class CaptureService : Service() {
             val current = cameraState.value
             // STOP and WB cancellation remain immediate. Still-photo ownership is a separate H4 gate.
             if (recordingWbPreparing || current.phase == CameraUiPhase.RECORDING ||
-                current.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)) {
+                current.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE)) {
                 return capturePrimaryAfterTransfer(audioForThisTake)
             }
             if (current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) || transferCapture.get() != null) return false
@@ -2471,9 +2485,10 @@ class CaptureService : Service() {
                 cameraState.update { it.copy(message = getString(R.string.lut_recording_library_unavailable), errorCode = "recording-lut-library") }
                 return false
             }
-            val lut = admissionSelection.recording
+            // HLG files carry the camera's own HDR signal; a recording LUT would make them SDR.
+            val lut = admissionSelection.recording.takeUnless { current.selectedMode == CaptureMode.HLG }
             currentRecordingLut = lut
-            if (lut != null && !com.librestatic.opencinecam.camera.monitorLutCompatible(lut, current.selectedMode != CaptureMode.LOG)) {
+            if (lut != null && !com.librestatic.opencinecam.camera.monitorLutCompatible(lut, !current.selectedMode.usesLogGraph)) {
                 cameraState.update { it.copy(recordingLutStatus = OperatorLutStatus(lut.cube.sha256,
                     OperatorLutState.INCOMPATIBLE_DOMAIN, selectionId = monitorLutIdentity(lut)),
                     message = getString(R.string.lut_recording_domain_mismatch), errorCode = "recording-lut-domain") }
@@ -2558,13 +2573,13 @@ class CaptureService : Service() {
                 if (!whiteBalancePrepared && settings.recordingWhiteBalance == RecordingWhiteBalancePolicy.CONTINUOUS)
                     it.copy(recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE) else it
             }
-            if (current.phase == CameraUiPhase.RECORDING && current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE, CaptureMode.LOG)) {
+            if (current.phase == CameraUiPhase.RECORDING && current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE, CaptureMode.LOG, CaptureMode.HLG)) {
                 return stopRecording()
             }
             if (current.phase != CameraUiPhase.PREVIEWING && current.phase != CameraUiPhase.SAVED && !(whiteBalancePrepared && current.phase == CameraUiPhase.CAPTURING)) return false
             if (settings.operation.lockDuringTake) previewEngine.cancelFocusPull()
             if (!whiteBalancePrepared && settings.recordingWhiteBalance == RecordingWhiteBalancePolicy.LOCK_ON_RECORD &&
-                current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)) {
+                current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE)) {
                 val token = ++recordingWbGeneration
                 val context = countdownContext()
                 recordingWbPreparing = true
@@ -2774,8 +2789,9 @@ class CaptureService : Service() {
                         false
                     }
                 }
-                CaptureMode.LOG -> {
+                CaptureMode.LOG, CaptureMode.HLG -> {
                     try {
+                        val hlgTake = current.selectedMode == CaptureMode.HLG
                         stopPreviewAudioMonitor(clearLevels = false)
                         cameraState.value = cameraState.value.copy(audioClipLatched = false, audioLevels = null)
                         val requestedAudioEnabled = audioForThisTake ?: settings.audioEnabled
@@ -2851,7 +2867,9 @@ class CaptureService : Service() {
                         cameraState.update { it.copy(
                             phase = CameraUiPhase.CAPTURING,
                             recordingProjectRate = null,
-                            message = if (current.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
+                            message = if (hlgTake) {
+                                "Preparing HLG · ${current.targetFps} fps · HLG10 → BT.2020 HLG → HEVC Main10 · $activeRecordingAudioLabel…"
+                            } else if (current.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                                 "Preparing OCLog2 HFR · ${current.targetFps} fps · ISP SDR → GLES → HEVC Main10 · source depth not claimed · $activeRecordingAudioLabel…"
                             } else {
                                 "Preparing OCLog2 · ${current.targetFps} fps · HLG10 → scene-linear BT.2020 → HEVC Main10 · $activeRecordingAudioLabel…"
@@ -2866,6 +2884,7 @@ class CaptureService : Service() {
                             audio = embeddedAudio,
                             separateAudioClock = audioSidecarRecorder?.captureClock,
                             recordingLut = frozenRecordingLut(),
+                            hlgOutput = hlgTake,
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.
@@ -3117,6 +3136,29 @@ class CaptureService : Service() {
         }) + if (it.audioSourceWindow != null) " · " + getString(R.string.aac_source_window_applied) else ""
     }.orEmpty()
 
+    /** Provenance for an HLG take. The file's own BT.2020/HLG tags are what players read; this records how they were made. */
+    private fun hlgSidecarJson(evidence: OpenCineLogRecordingEvidence, avTiming: com.librestatic.opencinecam.camera.CaptureEpochReport?): String = JSONObject()
+        .put("schema", "opencinecam.hdr-video.v1")
+        .put("hdr", JSONObject()
+            .put("transfer", "HLG")
+            .put("primaries", evidence.gamut)
+            .put("range", evidence.range)
+            .put("sourceDynamicRange", evidence.sourceDynamicRange)
+            .put("sourcePrimaries", "BT.709")
+            .put("codecName", evidence.codecName)
+            .put("codecProfile", evidence.codecProfile)
+            .put("encoderVuiTransfer", evidence.encoderVuiTransfer ?: JSONObject.NULL)
+            .put("containerVuiTransfer", evidence.containerVuiTransfer ?: JSONObject.NULL)
+            .put("ycbcrConversion", evidence.ycbcrConversion ?: JSONObject.NULL)
+            .put("transformSha256", evidence.transformSha256)
+            .put("sourceDataSpaceMismatchedFrames", evidence.sourceDataSpaceMismatchedFrames ?: JSONObject.NULL)
+            .put("encodedFrames", evidence.encodedFrames)
+            .put("targetFps", evidence.targetFps)
+            .put("maxVideoPtsGapUs", evidence.maxVideoPtsGapUs ?: JSONObject.NULL)
+            .put("videoPtsGapsOverThreshold", evidence.videoPtsGapsOverThreshold))
+        .apply { avTiming?.let { put("avTiming", com.librestatic.opencinecam.captureEpochJson(it)) } }
+        .toString(2)
+
     private fun logSidecarJson(evidence: OpenCineLogRecordingEvidence, timecodeReport: RecordingTimecodeReport?): String = JSONObject()
         .put("schema", "opencinecam-oclog-sidecar-v2")
         .put("avTiming", evidence.avTiming?.let(::captureEpochJson) ?: JSONObject.NULL)
@@ -3290,6 +3332,7 @@ class CaptureService : Service() {
         CaptureMode.BRACKET -> getString(R.string.bracket_mode)
         CaptureMode.LIGHT_TRAIL -> getString(R.string.light_trail_mode)
         CaptureMode.LOG -> getString(R.string.log_mode)
+        CaptureMode.HLG -> getString(R.string.hlg_mode)
         CaptureMode.APV -> getString(R.string.apv_mode)
         CaptureMode.RAW_VIDEO -> getString(R.string.raw_video_mode)
     }
@@ -3302,7 +3345,7 @@ class CaptureService : Service() {
         videoHeight: Int = 1080,
     ): Int {
         val supported = when {
-            mode == CaptureMode.LOG -> VideoGeometryPolicy.supportedLogFps(descriptor.logProfiles.map { it.toSpec() }, videoWidth, videoHeight)
+            mode.usesLogGraph -> VideoGeometryPolicy.supportedLogFps(descriptor.logProfilesFor(mode).map { it.toSpec() }, videoWidth, videoHeight)
             mode in CameraUiState.videoProfileModes -> VideoGeometryPolicy.supportedFps(descriptor.videoProfiles.map { it.toSpec() }, videoWidth, videoHeight)
             else -> descriptor.availableFixedFps
         }
@@ -3333,20 +3376,27 @@ class CaptureService : Service() {
 
     private fun normalizedLogProfile(
         descriptor: Camera2CameraDescriptor,
+        mode: CaptureMode,
         width: Int,
         height: Int,
         fps: Int,
-    ) = descriptor.logProfiles.firstOrNull {
+    ): com.librestatic.opencinecam.camera.Camera2LogProfile? = descriptor.logProfilesFor(mode).normalizedLogProfile(width, height, fps)
+
+    private fun List<com.librestatic.opencinecam.camera.Camera2LogProfile>.normalizedLogProfile(
+        width: Int,
+        height: Int,
+        fps: Int,
+    ) = firstOrNull {
         it.size.width == width && it.size.height == height && it.fps == fps
-    } ?: descriptor.logProfiles.firstOrNull {
+    } ?: firstOrNull {
         it.size.width == width && it.size.height == height &&
             it.fps == Camera2PreviewEngine.DEFAULT_TARGET_FPS &&
             it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020
-    } ?: descriptor.logProfiles.firstOrNull {
+    } ?: firstOrNull {
         it.size.width == 1920 && it.size.height == 1080 &&
             it.fps == Camera2PreviewEngine.DEFAULT_TARGET_FPS &&
             it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020
-    } ?: descriptor.logProfiles.minWithOrNull(
+    } ?: minWithOrNull(
         compareBy<com.librestatic.opencinecam.camera.Camera2LogProfile> {
             if (it.sourcePath == OpenCineLogSourcePath.HLG10_BT2020) 0 else 1
         }.thenBy {
@@ -3355,6 +3405,8 @@ class CaptureService : Service() {
     )
 
     companion object {
+        /** [OpenCineLogRecordingEvidence.curve] of an HLG take. */
+        private const val HLG_CURVE = "HLG"
         private const val OWNER_ID = "capture-service"
         private const val RECORDING_TICK_MS = 500L
         private const val CAMERA_SWITCH_TIMEOUT_MS = 6_000L
@@ -3364,3 +3416,7 @@ class CaptureService : Service() {
         private const val PREVIEW_WATCHDOG_INTERVAL_MS = 1_000L
     }
 }
+
+/** HLG takes are monitored through the Rec.709 view assist; the flat OCLog2 view is LOG-only. */
+private fun CameraSettings.previewViewAssist(mode: CaptureMode): Boolean =
+    logViewAssistEnabled || mode == CaptureMode.HLG

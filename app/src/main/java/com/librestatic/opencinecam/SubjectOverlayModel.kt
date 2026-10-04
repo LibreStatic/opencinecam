@@ -31,7 +31,7 @@ internal fun subjectShowsCountdownBadge(state: CameraUiState, settings: SubjectD
 internal fun subjectPreviewStreamSize(state: CameraUiState): Pair<Int, Int>? {
     val descriptor = state.descriptor ?: return null
     return when (state.selectedMode) {
-        CaptureMode.LOG -> (state.activeLogProfile?.size ?: descriptor.preferredLogProfile?.size)?.let { it.width to it.height }
+        CaptureMode.LOG, CaptureMode.HLG -> (state.activeLogProfile?.size ?: descriptor.preferredLogProfile?.size)?.let { it.width to it.height }
         CaptureMode.VIDEO -> state.targetVideoWidth to state.targetVideoHeight
         // The exterior preview is routed only for VIDEO and LOG; other modes show a message.
         else -> null
