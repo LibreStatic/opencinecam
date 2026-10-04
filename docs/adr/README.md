@@ -38,3 +38,4 @@ IDs are permanent; superseded records remain indexed and point to their replacem
 - [ADR-0033: Capture and project timelines](ADR-0033-capture-and-project-timelines.md) — Accepted
 
 - [ADR-0034: Opt-in transfer ownership](ADR-0034-opt-in-transfer-ownership.md) — Accepted
+- [ADR-0035: Full-FOV still from public physical streams](ADR-0035-full-fov-still-from-public-physical-streams.md) — Accepted

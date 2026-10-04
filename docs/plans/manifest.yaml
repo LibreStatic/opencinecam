@@ -907,3 +907,17 @@ plans:
     risks: [RISK-004]
     conditional_gates: []
     intended_executor: Claude Code (Opus 5.5 subagents, parallel waves)
+
+  - id: OCC-PLAN-069
+    title: "Full-FOV still from public physical cameras"
+    status: InProgress
+    revision: 1
+    milestone: H2
+    path: docs/plans/PLAN-069-full-fov-still-from-public-physical-cameras.md
+    depends_on: [OCC-PLAN-015]
+    blocks: []
+    requirements: [OCC-CAM-003, OCC-CAM-004, OCC-CAM-013]
+    adrs: [ADR-0006, ADR-0035]
+    risks: [RISK-001]
+    conditional_gates: []
+    intended_executor: Claude Code
