@@ -1,0 +1,14 @@
+--------- beginning of main
+10-04 04:43:12.300 27975 27995 I FFPROBE : package=com.librestatic.fullfovprobe ts=1791099792300
+10-04 04:43:12.313 27975 27995 I FFPROBE : == public 0 facing=1 jpegMax=4000x3000 physicalIds=[2, 3, 5]
+10-04 04:43:12.322 27975 27995 I FFPROBE :    physical 2 jpegMax=4000x3000 pixelArray=4000x3000
+10-04 04:43:12.328 27975 27995 I FFPROBE :    physical 3 jpegMax=3840x2880 pixelArray=3856x2896
+10-04 04:43:12.332 27975 27995 I FFPROBE :    physical 5 jpegMax=4096x3072 pixelArray=4096x3072
+10-04 04:43:12.335 27975 27995 I FFPROBE : == public 1 facing=0 jpegMax=3280x2460 physicalIds=[]
+10-04 04:43:12.444 27975 27995 I FFPROBE : [open=0 phys=5 fmt=JPEG req=4096x3072] session configured OK
+10-04 04:43:14.081 27975 27995 I FFPROBE : [open=0 phys=5 fmt=JPEG req=4096x3072] *** SUCCESS image=4096x3072 jpegBytes=414928 REAL=4096x3072 saved=cam0_p5_4096.jpg null
+10-04 04:43:14.594 27975 27995 I FFPROBE : [open=0 phys=2 fmt=JPEG req=4000x3000] session configured OK
+10-04 04:43:15.811 27975 27995 I FFPROBE : [open=0 phys=2 fmt=JPEG req=4000x3000] NO IMAGE activePhysical=2
+10-04 04:43:16.355 27975 27995 I FFPROBE : [open=0 (logical) fmt=JPEG req=4000x3000] session configured OK
+10-04 04:43:17.593 27975 27995 I FFPROBE : [open=0 (logical) fmt=JPEG req=4000x3000] NO IMAGE activePhysical=2
+10-04 04:43:18.036 27975 27995 I FFPROBE : DONE

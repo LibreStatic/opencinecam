@@ -910,7 +910,7 @@ plans:
 
   - id: OCC-PLAN-069
     title: "Full-FOV still from public physical cameras"
-    status: InProgress
+    status: Done
     revision: 1
     milestone: H2
     path: docs/plans/PLAN-069-full-fov-still-from-public-physical-cameras.md

@@ -113,4 +113,4 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 
 - [OCC-PLAN-067: Opt-in WebDAV transfers and finalized capture bundles](PLAN-067-opt-in-webdav-transfers.md) — InProgress; transport exists, app wiring and full H5 acceptance remain open.
 - [OCC-PLAN-068: Exterior screen subject features and Razr Fold qualification](PLAN-068-exterior-screen-subject-features.md) — H2 / InProgress; W0–W2 integrated (tally, self-monitor, fill light, review, interview, slate and out-of-frame modes, host and emulator verified); U8 Razr Fold physical qualification remains.
-- [OCC-PLAN-069: Full-FOV still from public physical cameras](PLAN-069-full-fov-still-from-public-physical-cameras.md) — H2 / InProgress; descriptor, routing, fallback, zoom gate and tests landed; Razr Fold physical gate (U5) remains.
+- [OCC-PLAN-069: Full-FOV still from public physical cameras](PLAN-069-full-fov-still-from-public-physical-cameras.md) — H2 / Done; descriptor, routing, fallback, zoom gate, tests and the Razr Fold physical gate all verified (13 MP 4096x3072 above 12 MP 4000x3000).

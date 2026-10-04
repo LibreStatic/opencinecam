@@ -1,0 +1,7 @@
+OCC-PLAN-069 U5 — RES panel on the Razr Fold (2026-10-04, uiautomator dump, Foto mode, zoom 1.0x)
+13 MP  4096x3072   [138,1701][251,1746]   <- offered first, active by default
+12 MP  4000x3000   [483,1701][596,1746]
+11 MP  3840x2880   [829,1701][942,1746]
+8 MP   3264x2448   [150,1848][240,1893]
+2.8 MP 1920x1440   [478,1848][602,1893]
+HUD slot before capture: "13 MP"; after selecting 12 MP: "12 MP".
