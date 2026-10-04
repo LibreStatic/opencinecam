@@ -40,6 +40,7 @@ import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
+import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureInitialPane
 import com.librestatic.opencinecam.CaptureMode
@@ -131,6 +132,15 @@ fun CaptureModeSheet() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), in
 /** The modes in the docked pane, as the wider layouts open them. */
 @Composable
 fun CaptureModes() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.MODES)
+
+/** HLG selected, with LOG and HLG both offered in the docked modes pane. */
+@Composable
+fun CaptureHlg() = CaptureChrome(
+    driverCaptureState(CaptureMode.HLG).let {
+        it.copy(modeGates = it.modeGates + mapOf(CaptureMode.LOG to ModeGateState.AVAILABLE, CaptureMode.HLG to ModeGateState.AVAILABLE))
+    },
+    initialPane = CaptureInitialPane.MODES,
+)
 
 /** The monitoring toggles pane, with every scope switched on. */
 @Composable

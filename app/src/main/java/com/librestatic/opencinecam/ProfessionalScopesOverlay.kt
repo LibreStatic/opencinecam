@@ -67,7 +67,7 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
     fresh: Boolean, displayDegrees: Int, sourceWidth: Int, sourceHeight: Int, squeezeFactor: Float, modifier: Modifier = Modifier) {
     val live = state.scopeAnalysisLive(fresh)
     Canvas(modifier.testTag("monitoring-image-guides")) {
-        val scale = if (state.gpuViewfinder || state.selectedMode == CaptureMode.LOG)
+        val scale = if (state.gpuViewfinder || state.selectedMode.usesLogGraph)
             monitoringPreviewScale(sourceWidth, sourceHeight, size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1),
                 state.descriptor?.sensorOrientation ?: 0, displayDegrees,
                 state.descriptor?.lensFacing == CameraCharacteristics.LENS_FACING_FRONT, squeezeFactor)
