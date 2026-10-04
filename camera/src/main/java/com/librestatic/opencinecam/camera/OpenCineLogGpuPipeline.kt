@@ -362,6 +362,7 @@ class OpenCineLogGpuPipeline(
     private val onFailure: (String, String) -> Unit,
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
+    private val frameDiag = OpenCineLogFrameDiagnostics.createIfEnabled()
     private val handler = Handler(thread.looper)
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var context: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -915,8 +916,10 @@ class OpenCineLogGpuPipeline(
         if (closed.get()) return
         val texture = surfaceTexture ?: return
         try {
+            frameDiag?.frameStart()
             makeCurrent(pbuffer)
             texture.updateTexImage()
+            frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.LATCH)
             val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
             texture.getTransformMatrix(textureMatrix)
             val frameDataSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) texture.dataSpace else null
@@ -941,6 +944,7 @@ class OpenCineLogGpuPipeline(
                     else -> if (active.captureEpoch == null) timestampNs else capturePts
                 }
                 if (selectedPts != null && encoderEglSurface != EGL14.EGL_NO_SURFACE) {
+                    frameDiag?.skip()
                     check(makeCurrent(encoderEglSurface)) { "Encoder EGL surface is unavailable." }
                     draw(
                         outputMode = OUTPUT_OCLOG,
@@ -950,8 +954,10 @@ class OpenCineLogGpuPipeline(
                         recordingGeometry = active.geometry,
                         recordingLut = active.recordingLut,
                     )
+                    frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_DRAW)
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
+                    frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_SWAP)
                     if (!active.lutApplied && active.recordingLut != null) {
                         active.lutApplied = true
                         active.onRecordingLutApplied?.invoke(requireNotNull(active.lutEvidence))
@@ -961,7 +967,9 @@ class OpenCineLogGpuPipeline(
                     }
                 }
             }
+            frameDiag?.skip()
             renderScopeAnalysisIfDue()
+            frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.SCOPES)
             subjectOutput?.let { output ->
                 check(makeCurrent(pbuffer)) { "Subject producer pbuffer is unavailable." }
                 output.render(sourceReceivedAtMs) { width, height, options ->
@@ -982,11 +990,15 @@ class OpenCineLogGpuPipeline(
                     val width = querySurface(EGL14.EGL_WIDTH).coerceAtLeast(1)
                     val height = querySurface(EGL14.EGL_HEIGHT).coerceAtLeast(1)
                     pendingOperatorLutStatus = null
+                    frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.SUBJECT)
                     draw(if (viewAssistEnabled) OUTPUT_VIEW_ASSIST else OUTPUT_FLAT_MONITOR, width, height, previewOutput = true)
+                    frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.PREVIEW_DRAW)
                     check(EGL14.eglSwapBuffers(display, previewEglSurface)) { "Preview EGL swap failed." }
+                    frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.PREVIEW_SWAP)
                     pendingOperatorLutStatus?.let(::reportOperatorLut)
                 }.onFailure(::reportPreviewFailure)
             }
+            frameDiag?.frameEnd(timestampNs, targetFps)
         } catch (failure: Throwable) {
             reportGlFailure(failure)
         } finally {
@@ -1371,7 +1383,9 @@ class OpenCineLogGpuPipeline(
                                     ByteBuffer.wrap(cleared)
                                 }
                             }
+                            val writeStartNs = if (frameDiag != null) android.os.SystemClock.elapsedRealtimeNanos() else 0L
                             active.muxer.writeSampleData(if (video) videoTrack else audioTrack, sample, normalizedInfo)
+                            if (video) frameDiag?.videoSampleWritten((android.os.SystemClock.elapsedRealtimeNanos() - writeStartNs) / 1_000)
                             noteVideoSample(video, normalizedPtsUs)
                         } else {
                             check(pending.size < maxPendingSamples) { "Muxer format/epoch negotiation buffer overflowed." }
