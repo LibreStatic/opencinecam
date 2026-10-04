@@ -287,7 +287,7 @@ class PreciseVideoFrames(context: Context, uri: String, private val colorPolicy:
         if (log != null) {
             requireLog(output)
             val selected = requireNotNull(view)
-            return p010Bitmap(image, output, rotation, deadline) { y, u, v -> oclog2P010ToArgb(y, u, v, log.fullRange, selected) } to null
+            return p010Bitmap(image, output, rotation, deadline) { y, u, v -> oclog2P010ToArgb(y, u, v, log, selected) } to null
         }
         requireSdr(output)
         require(image.format == ImageFormat.YUV_420_888 && image.planes.size == 3) { "Decoder output is not 8-bit YUV420" }

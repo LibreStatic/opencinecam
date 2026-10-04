@@ -337,9 +337,9 @@ internal class GpuPipelineInitializationFailure(
  * Live, public-API LOG pixel path.
  *
  * Camera2 produces an HLG10/BT.2020 PRIVATE stream into an external SurfaceTexture. GLES
- * explicitly decodes HLG to scene-linear BT.2020 and applies OCLog2. The OCLog image is sent
- * to a ten-bit EGL encoder surface. Monitoring is a separate branch: either the same flat
- * OCLog code values or a Rec.709 view-assist transform is drawn to the UI Surface.
+ * explicitly decodes HLG to scene-linear, converts it to BT.2020 and applies OCLog2. The OCLog
+ * image is sent to a ten-bit EGL encoder surface. Monitoring is a separate branch: either the
+ * same flat OCLog code values or a Rec.709 view-assist transform is drawn to the UI Surface.
  */
 class OpenCineLogGpuPipeline(
     private val size: Size,
@@ -2087,6 +2087,12 @@ class OpenCineLogGpuPipeline(
 
         // The exact source is hashed into every clip sidecar. Changing it is a pipeline-version change.
         // uSceneGain is the runtime middle-grey reference gain (OpenCineLogGreyReference), recorded separately.
+        // The HLG stream is tagged BT.2020, but measured against the same scene in the SDR tier its
+        // colours carry BT.709 primaries (Razr 2026-10-04: a neutral matched the SDR tier to 0.001
+        // as BT.709, while reading it as BT.2020 clipped saturated orange and blue), so the decode
+        // converts BT.709 to BT.2020 like the SDR tier does.
+        // viewAssist709 is the Rec.709 view assist: middle grey to 0.18, a luminance shoulder above
+        // 0.5, and a hue-preserving fit into [0, 1] instead of per-channel clipping.
         private val HLG_FRAGMENT_SHADER = """
             #version 300 es
             #extension GL_OES_EGL_image_external_essl3 : require
@@ -2099,12 +2105,20 @@ class OpenCineLogGpuPipeline(
             const float HLG_A = 0.17883277;
             const float HLG_B = 0.28466892;
             const float HLG_C = 0.55991073;
+            const float HLG_REFERENCE_GREY = 0.38 * 0.38 / 3.0;
             vec3 inverseHlg(vec3 e) {
                 e = clamp(e, 0.0, 1.0);
                 bvec3 low = lessThanEqual(e, vec3(0.5));
                 vec3 lowPart = (e * e) / 3.0;
                 vec3 highPart = (exp((e - HLG_C) / HLG_A) + HLG_B) / 12.0;
                 return mix(highPart, lowPart, low);
+            }
+            vec3 bt709ToBt2020(vec3 c) {
+                return mat3(
+                    0.627404, 0.069097, 0.016391,
+                    0.329283, 0.919540, 0.088013,
+                    0.043313, 0.011362, 0.895595
+                ) * c;
             }
             vec3 encodeOcLog2(vec3 linearBt2020) {
                 return vec3(0.10) + vec3(0.80) * log(vec3(1.0) + 50.0 * clamp(linearBt2020, 0.0, 1.0)) / log(vec3(51.0));
@@ -2127,11 +2141,24 @@ class OpenCineLogGpuPipeline(
                 vec3 highPart = 1.099 * pow(x, vec3(0.45)) - 0.099;
                 return mix(highPart, lowPart, low);
             }
+            vec3 viewAssist709(vec3 displayLinear, float viewGain) {
+                vec3 c = displayLinear * viewGain;
+                float y = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1.0e-6);
+                float toned = y <= 0.5 ? y : 0.5 + 0.5 * tanh((y - 0.5) / 0.5);
+                c *= toned / y;
+                float hi = max(c.r, max(c.g, c.b));
+                float lo = min(c.r, min(c.g, c.b));
+                float fit = 1.0;
+                if (hi > 1.0) fit = min(fit, (1.0 - toned) / (hi - toned));
+                if (lo < 0.0) fit = min(fit, toned / (toned - lo));
+                return rec709Oetf(vec3(toned) + fit * (c - vec3(toned)));
+            }
             void main() {
-                vec3 sceneLinearBt2020 = uSceneGain * inverseHlg(texture(uTexture, vTexCoord).rgb);
+                vec3 sceneLinearBt2020 = uSceneGain * bt709ToBt2020(inverseHlg(texture(uTexture, vTexCoord).rgb));
                 vec3 ocLog = encodeOcLog2(sceneLinearBt2020);
-                vec3 displayLinear = max(bt2020ToBt709(decodeOcLog2(ocLog)), vec3(0.0));
-                vec3 monitored = rec709Oetf(displayLinear);
+                vec3 viewLinear = bt2020ToBt709(decodeOcLog2(ocLog));
+                vec3 displayLinear = max(viewLinear, vec3(0.0));
+                vec3 monitored = viewAssist709(viewLinear, 0.18 / (HLG_REFERENCE_GREY * uSceneGain));
                 float luma = dot(displayLinear, vec3(0.2126, 0.7152, 0.0722));
                 vec3 gamutCompressed = mix(vec3(luma), displayLinear, 0.68);
                 vec3 flatMonitor = encodeOcLog2(gamutCompressed);
@@ -2182,11 +2209,24 @@ class OpenCineLogGpuPipeline(
                 vec3 highPart = 1.099 * pow(x, vec3(0.45)) - 0.099;
                 return mix(highPart, lowPart, low);
             }
+            vec3 viewAssist709(vec3 displayLinear, float viewGain) {
+                vec3 c = displayLinear * viewGain;
+                float y = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1.0e-6);
+                float toned = y <= 0.5 ? y : 0.5 + 0.5 * tanh((y - 0.5) / 0.5);
+                c *= toned / y;
+                float hi = max(c.r, max(c.g, c.b));
+                float lo = min(c.r, min(c.g, c.b));
+                float fit = 1.0;
+                if (hi > 1.0) fit = min(fit, (1.0 - toned) / (hi - toned));
+                if (lo < 0.0) fit = min(fit, toned / (toned - lo));
+                return rec709Oetf(vec3(toned) + fit * (c - vec3(toned)));
+            }
             void main() {
                 vec3 sceneLinearBt2020 = uSceneGain * bt709ToBt2020(inverseRec709(texture(uTexture, vTexCoord).rgb));
                 vec3 ocLog = encodeOcLog2(sceneLinearBt2020);
-                vec3 displayLinear = max(bt2020ToBt709(decodeOcLog2(ocLog)), vec3(0.0));
-                vec3 monitored = rec709Oetf(displayLinear);
+                vec3 viewLinear = bt2020ToBt709(decodeOcLog2(ocLog));
+                vec3 displayLinear = max(viewLinear, vec3(0.0));
+                vec3 monitored = viewAssist709(viewLinear, 1.0 / uSceneGain);
                 float luma = dot(displayLinear, vec3(0.2126, 0.7152, 0.0722));
                 vec3 gamutCompressed = mix(vec3(luma), displayLinear, 0.68);
                 vec3 flatMonitor = encodeOcLog2(gamutCompressed);

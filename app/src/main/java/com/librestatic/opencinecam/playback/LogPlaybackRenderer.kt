@@ -15,6 +15,7 @@ import android.os.HandlerThread
 import android.view.Surface
 import com.librestatic.opencinecam.camera.GpuEglDisplayLease
 import com.librestatic.opencinecam.camera.OpenCineLogYcbcrConversion
+import com.librestatic.opencinecam.storage.PreciseLogSignal
 import com.librestatic.opencinecam.storage.PreciseLogView
 import java.io.Closeable
 import java.nio.ByteBuffer
@@ -29,7 +30,7 @@ import java.util.concurrent.TimeUnit
  * When the GPU exposes raw YCbCr (GL_EXT_YUV_target) the shader converts BT.2020 itself, because some
  * drivers' external samplers ignore the buffer's matrix and range.
  */
-internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boolean, view: PreciseLogView) : Closeable {
+internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseLogSignal, view: PreciseLogView) : Closeable {
     private val thread = HandlerThread("oclog-review-gl").apply { start() }
     private val handler = Handler(thread.looper)
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -106,7 +107,7 @@ internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boole
             try {
                 return linkProgram(VERTEX_SHADER, reviewFragmentShader(shaderYcbcr = true)).also { linked ->
                     shaderYcbcr = true
-                    val conversion = OpenCineLogYcbcrConversion.create(OpenCineLogYcbcrConversion.Standard.BT2020, fullRange, 10)
+                    val conversion = OpenCineLogYcbcrConversion.create(OpenCineLogYcbcrConversion.Standard.BT2020, signal.fullRange, 10)
                     GLES30.glUseProgram(linked)
                     GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(linked, "uYcbcrToRgb"), 1, false, conversion.matrix, 0)
                     GLES30.glUniform3fv(GLES30.glGetUniformLocation(linked, "uYcbcrOffset"), 1, conversion.offset, 0)
@@ -146,6 +147,8 @@ internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boole
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uTexture"), 0)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uTextureMatrix"), 1, false, textureMatrix, 0)
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uView"), if (view == PreciseLogView.REC709) 1 else 0)
+        GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uViewGain"), signal.viewGain.toFloat())
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uLegacyBt709"), if (signal.legacyBt709Primaries) 1 else 0)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, QUAD)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
@@ -220,7 +223,11 @@ internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boole
             }
         """.trimIndent()
 
-        /** OCLog2 codes in, monitor out. uView 1 is the capture view assist; 0 is its flat monitor. */
+        /**
+         * OCLog2 codes in, monitor out. uView 1 is the capture view assist (viewAssist709, mirrored by
+         * OpenCineLogViewAssist); 0 is its flat monitor. uLegacyBt709 skips the BT.2020 to BT.709 matrix
+         * for HLG takes whose codes already hold BT.709 colours.
+         */
         internal fun reviewFragmentShader(shaderYcbcr: Boolean): String {
             val extension = if (shaderYcbcr) "#extension GL_EXT_YUV_target : require\n" else ""
             val sampler = if (shaderYcbcr) "uniform __samplerExternal2DY2YEXT uTexture;\nuniform mat3 uYcbcrToRgb;\nuniform vec3 uYcbcrOffset;"
@@ -233,6 +240,8 @@ internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boole
                 |$extension$sampler
                 |precision highp float;
                 |uniform int uView;
+                |uniform float uViewGain;
+                |uniform int uLegacyBt709;
                 |in vec2 vTexCoord;
                 |out vec4 outColor;
                 |vec3 encodeOcLog2(vec3 linearBt2020) {
@@ -254,11 +263,25 @@ internal class LogPlaybackRenderer(output: Surface, private val fullRange: Boole
                 |    bvec3 low = lessThan(x, vec3(0.018));
                 |    return mix(1.099 * pow(x, vec3(0.45)) - 0.099, 4.5 * x, low);
                 |}
+                |vec3 viewAssist709(vec3 displayLinear, float viewGain) {
+                |    vec3 c = displayLinear * viewGain;
+                |    float y = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1.0e-6);
+                |    float toned = y <= 0.5 ? y : 0.5 + 0.5 * tanh((y - 0.5) / 0.5);
+                |    c *= toned / y;
+                |    float hi = max(c.r, max(c.g, c.b));
+                |    float lo = min(c.r, min(c.g, c.b));
+                |    float fit = 1.0;
+                |    if (hi > 1.0) fit = min(fit, (1.0 - toned) / (hi - toned));
+                |    if (lo < 0.0) fit = min(fit, toned / (toned - lo));
+                |    return rec709Oetf(vec3(toned) + fit * (c - vec3(toned)));
+                |}
                 |void main() {
-                |    vec3 displayLinear = max(bt2020ToBt709(decodeOcLog2($sample)), vec3(0.0));
+                |    vec3 linear = decodeOcLog2($sample);
+                |    vec3 viewLinear = uLegacyBt709 == 1 ? linear : bt2020ToBt709(linear);
+                |    vec3 displayLinear = max(viewLinear, vec3(0.0));
                 |    float luma = dot(displayLinear, vec3(0.2126, 0.7152, 0.0722));
                 |    vec3 flatMonitor = encodeOcLog2(mix(vec3(luma), displayLinear, 0.68));
-                |    outColor = vec4(uView == 1 ? rec709Oetf(displayLinear) : flatMonitor, 1.0);
+                |    outColor = vec4(uView == 1 ? viewAssist709(viewLinear, uViewGain) : flatMonitor, 1.0);
                 |}
             """.trimMargin()
         }

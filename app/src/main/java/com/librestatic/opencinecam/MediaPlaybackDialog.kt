@@ -351,7 +351,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     fun output(holder: Surface?): Surface? {
         val clip = logClip
         if (holder == null || !holder.isValid || clip == null) return holder
-        val stage = renderer ?: runCatching { LogPlaybackRenderer(holder, clip.fullRange, currentSettings.logView) }
+        val stage = renderer ?: runCatching { LogPlaybackRenderer(holder, clip.signal, currentSettings.logView) }
             .onFailure { stageError = it.message ?: it.javaClass.simpleName }.getOrNull()?.also { renderer = it }
         return stage?.inputSurface ?: holder
     }
