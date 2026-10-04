@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Rimuovi da %1$s</string>
     <string name="pro_flicker_suggestions">Otturatore senza sfarfallio</string>
     <string name="lut_disable_title">Disattiva LUT</string>
+    <string name="permission_open_settings">Apri impostazioni</string>
+    <string name="permission_blocked_explanation">Android non mostra più la richiesta di autorizzazione. Consentila nelle impostazioni di sistema dell\'app.</string>
 </resources>

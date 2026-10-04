@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Retirer de %1$s</string>
     <string name="pro_flicker_suggestions">Obturation sans scintillement</string>
     <string name="lut_disable_title">Désactiver les LUT</string>
+    <string name="permission_open_settings">Ouvrir les paramètres</string>
+    <string name="permission_blocked_explanation">Android n\'affiche plus la demande d\'autorisation. Autorisez-la dans les paramètres système de l\'app.</string>
 </resources>

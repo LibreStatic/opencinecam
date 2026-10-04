@@ -248,14 +248,12 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var permissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        permissionGranted = it
-    }
+    val cameraAccess = rememberPermissionAccess(Manifest.permission.CAMERA) { permissionGranted = it }
     val binder = rememberCaptureServiceBinder(permissionGranted)
     var audioPermissionGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
-    val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+    val audioAccess = rememberPermissionAccess(Manifest.permission.RECORD_AUDIO) {
         audioPermissionGranted = it
         binder?.refreshAudioCapabilities()
     }
@@ -333,7 +331,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     fun MainContent() {
 
     if (!permissionGranted) {
-        PermissionScreen { permissionLauncher.launch(Manifest.permission.CAMERA) }
+        PermissionScreen(blocked = cameraAccess.blocked, onGrant = cameraAccess.request)
         return
     }
 
@@ -396,7 +394,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             state = state,
                             settings = settings,
                             audioPermissionGranted = audioPermissionGranted,
-                            onRequestAudioPermission = { audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                            audioPermissionBlocked = audioAccess.blocked,
+                            onRequestAudioPermission = audioAccess.request,
                             onOpenAbout = { settingsPage = SettingsPage.ABOUT },
                             onSettingsChange = settingsRepository::set,
                             onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
@@ -515,7 +514,7 @@ private fun rememberCaptureServiceBinder(enabled: Boolean): CaptureService.Local
 }
 
 @Composable
-private fun PermissionScreen(onGrant: () -> Unit) {
+private fun PermissionScreen(blocked: Boolean, onGrant: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().background(Graphite).windowInsetsPadding(WindowInsets.safeDrawing)
             .verticalScroll(rememberScrollState()).padding(32.dp),
@@ -525,9 +524,13 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         Text(stringResource(R.string.camera_permission_title), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.camera_permission_body), color = Muted)
+        if (blocked) {
+            Spacer(Modifier.height(8.dp))
+            Text(stringResource(R.string.permission_blocked_explanation), color = Muted)
+        }
         Spacer(Modifier.height(24.dp))
         Button(onClick = onGrant, colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-            Text(stringResource(R.string.grant_camera))
+            Text(stringResource(if (blocked) R.string.permission_open_settings else R.string.grant_camera))
         }
     }
 }
@@ -2819,7 +2822,7 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
     val currentActionTicket by rememberUpdatedState(actionTicket)
     var audioChoiceTicket by remember { mutableStateOf<CaptureActionTicket?>(null) }
     var audioChoiceOwner by remember { mutableStateOf<CaptureService.LocalBinder?>(null) }
-    val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    val audioAccess = rememberPermissionAccess(Manifest.permission.RECORD_AUDIO) { granted ->
         currentBinder?.refreshAudioCapabilities()
         val requestedTicket = audioChoiceTicket
         val owner = audioChoiceOwner
@@ -2836,12 +2839,16 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
         AlertDialog(
             onDismissRequest = { showAudioChoice = false; audioChoiceTicket = null; audioChoiceOwner = null },
             title = { Text(stringResource(R.string.audio_choice_title)) },
-            text = { Text(stringResource(R.string.audio_choice_message)) },
+            text = {
+                Text(stringResource(R.string.audio_choice_message) +
+                    if (audioAccess.blocked) "\n\n" + stringResource(R.string.permission_blocked_explanation) else "")
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showAudioChoice = false
-                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }) { Text(stringResource(R.string.audio_choice_grant)) }
+                    if (audioAccess.blocked) { audioChoiceTicket = null; audioChoiceOwner = null }
+                    audioAccess.request()
+                }) { Text(stringResource(if (audioAccess.blocked) R.string.permission_open_settings else R.string.audio_choice_grant)) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -3650,6 +3657,7 @@ internal fun SettingsContent(
     state: CameraUiState,
     settings: CameraSettings,
     audioPermissionGranted: Boolean,
+    audioPermissionBlocked: Boolean = false,
     onRequestAudioPermission: () -> Unit,
     onOpenAbout: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
@@ -3773,24 +3781,21 @@ internal fun SettingsContent(
             )
         }
         if (!audioPermissionGranted) {
-            if ("audio-permission" in visibleIds) settingsCard("audio-permission") {
+            if (("audio-permission" in visibleIds || "audio-format" in visibleIds)) settingsCard("audio-permission") {
+                if (audioPermissionBlocked) {
+                    Text(stringResource(R.string.permission_blocked_explanation), color = Muted, fontSize = 14.sp)
+                }
                 Button(
                     onClick = onRequestAudioPermission,
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = MaterialTheme.colorScheme.onPrimary),
-                ) { Text(stringResource(R.string.grant_microphone)) }
+                ) { Text(stringResource(if (audioPermissionBlocked) R.string.permission_open_settings else R.string.grant_microphone)) }
             }
-        }
-        if ("audio-format" in visibleIds) settingsCard("audio-format") {
-            if (!audioPermissionGranted) {
-                Text(stringResource(R.string.audio_permission_summary), color = Muted, fontSize = 14.sp)
-                Button(onClick = onRequestAudioPermission) { Text(stringResource(R.string.grant_microphone)) }
-            } else {
-                ProfessionalAudioSettings(
-                    state = state,
-                    settings = settings,
-                    onSettingsChange = onSettingsChange,
-                )
-            }
+        } else if ("audio-format" in visibleIds) settingsCard("audio-format") {
+            ProfessionalAudioSettings(
+                state = state,
+                settings = settings,
+                onSettingsChange = onSettingsChange,
+            )
         }
         if ("burst" in visibleIds) settingsCard("burst") {
             SettingsSectionTitle(stringResource(R.string.burst_mode), help = stringResource(R.string.burst_capture_help), helpTag = "burst-help")
