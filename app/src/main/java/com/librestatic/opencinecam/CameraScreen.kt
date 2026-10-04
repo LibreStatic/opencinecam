@@ -77,6 +77,9 @@ import android.os.BatteryManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.PaddingValues
@@ -1319,6 +1322,7 @@ internal fun AdaptiveCaptureChrome(
     var dockedPaneHeightPx by remember { mutableIntStateOf(0) }
     // The lock toggles (and in the stacked layouts the F-keys under them) at the frame's top end.
     var topEndClusterWidthPx by remember { mutableIntStateOf(0) }
+    var keyColumnShownPx by remember { mutableIntStateOf(0) }
     // While recording, the full console auto-hides to keep a clean viewfinder. A tap reveals
     // it again; it re-hides after a short idle period unless a pane is open in it.
     LaunchedEffect(recording, manualReveal, pane) {
@@ -1443,8 +1447,10 @@ internal fun AdaptiveCaptureChrome(
         val toggleHistogram: () -> Unit = { scopeVisibility.press(OperatorAction.HISTOGRAM, histogram, onToggleHistogram) }
         val stackedPaneHeight = (height - topBarPx - stableDeckHeightPx).coerceAtLeast(0f)
         val sidePaneWidth = stackedSidePaneWidth(maxWidth.value).dp
+        // Compact portrait overlays its sheets on the frame instead of shrinking it, so they stop
+        // lower there: the frame above stays large enough to aim by.
         val dockCap = minOf(
-            maxHeight * DOCKED_SHEET_MAX_FRACTION,
+            maxHeight * if (compact) COMPACT_SHEET_MAX_FRACTION else DOCKED_SHEET_MAX_FRACTION,
             if (stacked) 400.dp else maxHeight,
             maxHeight - deckHeight - topBar - 8.dp,
         ).coerceAtLeast(160.dp)
@@ -1462,10 +1468,13 @@ internal fun AdaptiveCaptureChrome(
         // ⤢ grows the scopes in place; the dock above is chosen at the resting size, so it never flips.
         val scopeStripWidth = scopeStripWidthDp(scopesExpanded, maxWidth.value).dp
         val scopeTrayHeight = scopeTrayHeightDp(scopesExpanded, with(density) { stackedPaneHeight.toDp() }.value).dp
+            .let { if (compact) minOf(it, maxHeight * COMPACT_SHEET_MAX_FRACTION) else it }
         val targetReserve = when {
             overlay || hinge || inspector -> CaptureFrameReserve.None
             paneShown && sideRails -> CaptureFrameReserve(end = (SIDE_PANE_WIDTH_DP - SIDE_COLUMN_WIDTH_DP).dp.px())
             dockedEndPane -> CaptureFrameReserve(end = sidePaneWidth.px())
+            // A phone in portrait has no height to give: its sheets and scope tray overlay the frame.
+            compact -> CaptureFrameReserve.None
             dockedBottomPane -> CaptureFrameReserve(bottom = dockedPaneHeightPx.toFloat())
             scopeStrip -> CaptureFrameReserve(end = scopeStripWidth.px())
             scopeTray -> CaptureFrameReserve(bottom = scopeTrayHeight.px())
@@ -1630,13 +1639,16 @@ internal fun AdaptiveCaptureChrome(
         val keysAboveMidRocker = maxHeight / 2 - rockerHeight / 2 - 12.dp
         val keysAboveLowRocker = keyColumnFloor - rockerHeight - 12.dp
         var keyColumnNaturalPx by remember { mutableIntStateOf(0) }
+        // Compact portrait has no room for both the rocker and the F-keys above a docked sheet or
+        // tray: the rocker steps aside (pinch still zooms) and the keys take its height.
+        val rockerShown = state.zoomSupported && !(compact && dockedUnderKeys > 0.dp)
         val zoomRockerLow = stackedFamily && !hinge && state.zoomSupported &&
             with(density) { keyColumnNaturalPx.toDp() } > keysAboveMidRocker - topBar - 6.dp &&
             keysAboveLowRocker > keysAboveMidRocker
 
         // Zoom chrome: anchor bar + ratio indicator are part of chrome; the lateral rocker stays
         // visible during recording even when the rest of the chrome hides.
-        if (state.zoomSupported) {
+        if (rockerShown) {
             ZoomRocker(
                 onStep = { offset, deltaSeconds ->
                     val speed = ZoomMath.rockerSpeedOctavesPerSecond(offset)
@@ -1672,19 +1684,20 @@ internal fun AdaptiveCaptureChrome(
             if (stackedFamily) {
                 // The F-keys stand over the frame's end edge under the lock toggles, stop above the
                 // zoom rocker and the docked deck, and scroll rather than run into either.
-                val keyColumnMax = (if (state.zoomSupported) minOf(if (zoomRockerLow) keysAboveLowRocker else keysAboveMidRocker, keyColumnFloor)
+                val keyColumnMax = (if (rockerShown) minOf(if (zoomRockerLow) keysAboveLowRocker else keysAboveMidRocker, keyColumnFloor)
                     else keyColumnFloor) - topBar
                 // Whole 48 dp keys only (6 dp apart, under the 48 dp lock row): a key cut by the
                 // column's edge would read as one hidden under the pane.
                 val keyPitch = 48.dp + 6.dp
                 val wholeKeys = ((keyColumnMax - 48.dp) / keyPitch).toInt().coerceAtLeast(0)
+                val keyScroll = rememberScrollState()
                 Column(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
-                        .onSizeChanged { topEndClusterWidthPx = it.width }
+                        .onSizeChanged { topEndClusterWidthPx = it.width; keyColumnShownPx = it.height }
                         .heightIn(max = 48.dp + keyPitch * wholeKeys)
-                        .verticalScroll(rememberScrollState()),
+                        .verticalScroll(keyScroll),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
@@ -1698,6 +1711,23 @@ internal fun AdaptiveCaptureChrome(
                         // A hinge split has no picture under its chrome: its F-keys go in the deck.
                         if (!hinge) OperatorButtonColumn(state, settings)
                     }
+                }
+                // Keys cut off by a docked sheet scroll; ▾ under the column says more are below
+                // and steps the column one key down.
+                if (keyScroll.canScrollForward) {
+                    val scope = rememberCoroutineScope()
+                    val stepPx = keyPitch.px()
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = endOccupied + 8.dp, top = topBar + 6.dp + with(density) { keyColumnShownPx.toDp() })
+                            .size(48.dp, 20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Panel)
+                            .clickable { scope.launch { keyScroll.animateScrollBy(stepPx) } }
+                            .testTag("capture-keys-more"),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("▾", color = Amber, fontSize = 14.sp, maxLines = 1) }
                 }
                 CaptureTopBar(
                     state = state,
@@ -2488,7 +2518,9 @@ private fun FittingStack(
 ) {
     Layout(content) { measurables, constraints ->
         val gap = spacing.roundToPx()
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        // Unbounded: an instrument measures at its own size (no "1.0" over "×", no "M…" meter)
+        // and is then left out below if it does not fit whole.
+        val loose = Constraints()
         val placeables = if (fillLast && measurables.isNotEmpty()) {
             val leading = measurables.dropLast(1).map { it.measure(loose) }
             val used = leading.sumOf { (if (horizontal) it.width else it.height) + gap }
@@ -2547,6 +2579,8 @@ private fun ZoomReadout(state: CameraUiState, binder: CaptureService.LocalBinder
                 color = Amber,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }
