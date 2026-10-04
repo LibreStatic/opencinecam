@@ -1871,7 +1871,7 @@ internal fun AdaptiveCaptureChrome(
                 onExpandedChange = { scopesExpanded = it }, onClose = { scopeVisibility.hide() },
                 tab = scopeVisibility.tab, onTabChange = { scopeVisibility.tab = it })
         }
-        // The modes, with the selected mode's resolution under them (RES lives here, not in the slots).
+        // The modes alone; resolution is the RES slot's.
         val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
             val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
                 val gate = state.modeGates.getValue(mode)
@@ -1889,14 +1889,6 @@ internal fun AdaptiveCaptureChrome(
                 recording = recording,
                 onSelect = modeSelection.select,
                 onClose = onClose,
-                resolution = if (state.descriptor != null && state.selectedMode in CameraUiState.resolutionProfileModes) {
-                    {
-                        ManualControlDial(ControlDial.RESOLUTION, state, binder, settings, onSettingsChanged, showHeader = false) {
-                            pane = null
-                            modeSheet = false
-                        }
-                    }
-                } else null,
             )
         }
         val paneContent: @Composable ColumnScope.() -> Unit = {
@@ -2221,6 +2213,7 @@ internal fun AdaptiveCaptureChrome(
 }
 
 private fun CaptureSlot.dial(): ControlDial = when (this) {
+    CaptureSlot.RESOLUTION -> ControlDial.RESOLUTION
     CaptureSlot.FPS -> ControlDial.FPS
     CaptureSlot.INTERVAL -> ControlDial.INT
     CaptureSlot.SHUTTER -> ControlDial.SHUTTER
@@ -2230,8 +2223,8 @@ private fun CaptureSlot.dial(): ControlDial = when (this) {
     CaptureSlot.FOCUS -> ControlDial.FOCUS
 }
 
-private fun ControlDial.slot(): CaptureSlot? = when (this) {
-    ControlDial.RESOLUTION -> null
+private fun ControlDial.slot(): CaptureSlot = when (this) {
+    ControlDial.RESOLUTION -> CaptureSlot.RESOLUTION
     ControlDial.FPS -> CaptureSlot.FPS
     ControlDial.INT -> CaptureSlot.INTERVAL
     ControlDial.SHUTTER -> CaptureSlot.SHUTTER
@@ -2241,7 +2234,22 @@ private fun ControlDial.slot(): CaptureSlot? = when (this) {
     ControlDial.FOCUS -> CaptureSlot.FOCUS
 }
 
-/** The five slots of [mode] with their current values, and why any of them cannot be driven now. */
+/**
+ * What the RES slot offers in [mode]: video sizes where the size picks the profile, still sizes in
+ * photo modes. Slow motion, RAW photo and the experimental modes offer at most their one size.
+ */
+private fun CameraUiState.resolutionChoices(mode: CaptureMode): List<Pair<Int, Int>> = when (mode) {
+    in CameraUiState.resolutionProfileModes -> availableVideoSizes
+    in CameraUiState.photoResolutionModes -> availableStillSizes
+    else -> emptyList()
+}
+
+/** The RES slot value: "4K", "1080p" or "3.4K" for video, "12 MP" for stills. */
+private fun CameraUiState.resolutionName(mode: CaptureMode): String =
+    if (mode in CameraUiState.photoResolutionModes) activeStillSize?.let { (w, h) -> megapixelName(w, h) } ?: "—"
+    else resolutionShortName(targetVideoWidth, targetVideoHeight)
+
+/** The six slots of [mode] with their current values, and why any of them cannot be driven now. */
 @Composable
 private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<CaptureSlotModel> {
     val highSpeed = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
@@ -2250,12 +2258,14 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<Cap
     val manualShutter = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
     val auto = stringResource(R.string.auto_value)
     return captureSlots(mode).map { slot ->
-        val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter, state.aeCompensationSupported)
+        val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
+            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode).size)
         // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
-        val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
+        val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
         val value = when {
             autoHighSpeed -> auto
             else -> when (slot) {
+                CaptureSlot.RESOLUTION -> state.resolutionName(mode)
                 CaptureSlot.FPS -> state.targetFps.toString()
                 CaptureSlot.INTERVAL -> formatIntervalShort(state.timelapseIntervalMs)
                 CaptureSlot.SHUTTER -> state.effectiveSettings?.exposure?.takeIf {
@@ -2618,17 +2628,6 @@ internal fun PortraitCaptureTransport(
         BurstCaptureProgress(state) { binder?.cancelBurstCapture() }
         BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
         AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
-    }
-}
-
-/** 3840×2160 reads as 4K and 1920×1080 as 1080p: the short edge names the format. */
-internal fun shortResolutionLabel(width: Int, height: Int): String {
-    val short = minOf(width, height)
-    val long = maxOf(width, height)
-    return when {
-        short <= 0 -> "—"
-        long >= 3840 && short >= 2160 -> "4K"
-        else -> "${short}p"
     }
 }
 
@@ -3522,19 +3521,32 @@ private fun EvDial(
     }
 }
 
+/**
+ * RES: sizes grouped by aspect, each tile its short name over its pixels. Photo modes pick the
+ * still size; framing stays the photo aspect crop, so stills list the sensor's own aspect.
+ */
 @Composable
 private fun ResolutionDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     onClose: () -> Unit,
 ) {
+    val mode = state.selectedMode
+    val photo = mode in CameraUiState.photoResolutionModes
+    val sizes = state.resolutionChoices(mode)
+    val active = if (photo) state.activeStillSize else state.targetVideoWidth to state.targetVideoHeight
+    val enabled = !state.structuralSettingsFrozen && state.phase != CameraUiPhase.CAPTURING && mode != CaptureMode.RAW_PHOTO
     PanelColumn(Modifier.testTag("resolution-panel")) {
         PanelHeader(stringResource(R.string.panel_title_resolution), onClose)
-        ChoiceGrid(state.availableVideoSizes, minTileWidth = 104.dp, maxColumns = 3) { (width, height), modifier ->
-            val selected = width == state.targetVideoWidth && height == state.targetVideoHeight
-            ChoiceTile(formatFrameSize(width, height), selected, modifier) {
-                binder?.selectVideoResolution(width, height)
-                onClose()
+        groupResolutions(sizes).forEach { group ->
+            PanelSectionLabel(group.aspect.label ?: stringResource(R.string.resolution_group_open),
+                Modifier.testTag("resolution-group-${group.aspect.name.lowercase()}"))
+            ChoiceGrid(group.sizes, minTileWidth = 96.dp, maxColumns = 3) { (width, height), modifier ->
+                val name = if (photo) megapixelName(width, height) else resolutionShortName(width, height)
+                ChoiceTile(name, (width to height) == active, modifier, enabled = enabled, detail = formatFrameSize(width, height)) {
+                    if (photo) binder?.selectPhotoResolution(width, height) else binder?.selectVideoResolution(width, height)
+                    onClose()
+                }
             }
         }
     }

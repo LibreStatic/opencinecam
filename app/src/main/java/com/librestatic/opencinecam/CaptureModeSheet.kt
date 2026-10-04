@@ -54,7 +54,7 @@ internal class CaptureModeChoice(
 /**
  * MODE ▾: the current mode in amber over a small MODE caption. Every layout but compact portrait
  * (which keeps the wheel) opens the mode sheet from here; it stays tappable during a take so the
- * resolution and frame rate can be read, though not changed.
+ * modes can be read, though not changed.
  */
 @Composable
 internal fun CaptureModeButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, expanded: Boolean = false) {
@@ -83,17 +83,13 @@ internal fun CaptureModeButton(label: String, onClick: () -> Unit, modifier: Mod
     }
 }
 
-/**
- * The modes as a grid of two per row, with the resolution of the selected mode under them when it
- * has one (RES lives here now, not in the slots). Modes cannot change during a take.
- */
+/** The modes as a grid of two per row; resolution is the RES slot's. Modes cannot change during a take. */
 @Composable
 internal fun CaptureModeContent(
     choices: List<CaptureModeChoice>,
     recording: Boolean,
     onSelect: (CaptureMode) -> Unit,
     onClose: (() -> Unit)?,
-    resolution: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -143,7 +139,6 @@ internal fun CaptureModeContent(
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        if (resolution != null) Box(Modifier.fillMaxWidth().heightIn(max = 240.dp).padding(top = 4.dp)) { resolution() }
     }
 }
 

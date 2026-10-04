@@ -47,27 +47,31 @@ import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import kotlinx.coroutines.launch
 
 /**
- * The five exposure slots under the viewfinder. Each mode has the same five places, so the
+ * The six exposure slots under the viewfinder. Each mode has the same six places, so the
  * operator's thumb learns where shutter or focus is once: a slot the camera cannot drive stays in
  * place, greyed, and says why when tapped, instead of disappearing and shifting the rest.
  */
-internal enum class CaptureSlot { FPS, INTERVAL, SHUTTER, ISO, EV, WB, FOCUS }
+internal enum class CaptureSlot { RESOLUTION, FPS, INTERVAL, SHUTTER, ISO, EV, WB, FOCUS }
 
-/** Video and LOG: FPS · SHUTTER · ISO · WB · FOCUS. Stills: SHUTTER · ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval. */
+/**
+ * RES always leads. Video and LOG: RES · FPS · SHUTTER · ISO · WB · FOCUS. Stills: RES · SHUTTER ·
+ * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval.
+ */
 internal fun captureSlots(mode: CaptureMode): List<CaptureSlot> = when {
     mode == CaptureMode.TIME_LAPSE ->
-        listOf(CaptureSlot.INTERVAL, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
+        listOf(CaptureSlot.RESOLUTION, CaptureSlot.INTERVAL, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
     mode in CameraUiState.frameRateModes || mode == CaptureMode.SLOW_MOTION ->
-        listOf(CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
-    else -> listOf(CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS)
+        listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
+    else -> listOf(CaptureSlot.RESOLUTION, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS)
 }
 
 /** Why a slot is greyed out. */
-internal enum class SlotUnavailableReason { NOT_READY, HIGH_SPEED, NO_MANUAL_EXPOSURE, NO_EV }
+internal enum class SlotUnavailableReason { NOT_READY, SINGLE_RESOLUTION, HIGH_SPEED, NO_MANUAL_EXPOSURE, NO_EV }
 
 /**
  * Whether a slot can be driven now. A high-speed session runs exposure, white balance and focus
- * itself, so only its rate stays adjustable.
+ * itself, so only its size and rate stay adjustable. With a single [resolutionChoices] the RES
+ * slot is a placeholder that names the size ("12 MP").
  */
 internal fun captureSlotUnavailableReason(
     slot: CaptureSlot,
@@ -76,9 +80,12 @@ internal fun captureSlotUnavailableReason(
     manualIso: Boolean,
     manualShutter: Boolean,
     evSupported: Boolean,
+    resolutionChoices: Int = 2,
 ): SlotUnavailableReason? = when {
     !cameraReady -> SlotUnavailableReason.NOT_READY
-    highSpeed && slot != CaptureSlot.FPS && slot != CaptureSlot.INTERVAL -> SlotUnavailableReason.HIGH_SPEED
+    slot == CaptureSlot.RESOLUTION && resolutionChoices < 2 -> SlotUnavailableReason.SINGLE_RESOLUTION
+    highSpeed && slot != CaptureSlot.RESOLUTION && slot != CaptureSlot.FPS && slot != CaptureSlot.INTERVAL ->
+        SlotUnavailableReason.HIGH_SPEED
     slot == CaptureSlot.ISO && !manualIso -> SlotUnavailableReason.NO_MANUAL_EXPOSURE
     slot == CaptureSlot.SHUTTER && !manualShutter -> SlotUnavailableReason.NO_MANUAL_EXPOSURE
     slot == CaptureSlot.EV && !evSupported -> SlotUnavailableReason.NO_EV
@@ -87,6 +94,7 @@ internal fun captureSlotUnavailableReason(
 
 /** The short cell title. */
 internal fun CaptureSlot.labelRes(): Int = when (this) {
+    CaptureSlot.RESOLUTION -> R.string.capture_slot_resolution
     CaptureSlot.FPS -> R.string.capture_slot_fps
     CaptureSlot.INTERVAL -> R.string.capture_slot_interval
     CaptureSlot.SHUTTER -> R.string.capture_slot_shutter
@@ -98,6 +106,7 @@ internal fun CaptureSlot.labelRes(): Int = when (this) {
 
 /** The full name, for screen readers and tooltips. */
 internal fun CaptureSlot.nameRes(): Int = when (this) {
+    CaptureSlot.RESOLUTION -> R.string.capture_slot_resolution_name
     CaptureSlot.FPS -> R.string.capture_slot_fps_name
     CaptureSlot.INTERVAL -> R.string.capture_slot_interval_name
     CaptureSlot.SHUTTER -> R.string.capture_slot_shutter_name
@@ -109,6 +118,7 @@ internal fun CaptureSlot.nameRes(): Int = when (this) {
 
 internal fun SlotUnavailableReason.textRes(): Int = when (this) {
     SlotUnavailableReason.NOT_READY -> R.string.capture_slot_reason_not_ready
+    SlotUnavailableReason.SINGLE_RESOLUTION -> R.string.capture_slot_reason_single_resolution
     SlotUnavailableReason.HIGH_SPEED -> R.string.capture_slot_reason_high_speed
     SlotUnavailableReason.NO_MANUAL_EXPOSURE -> R.string.capture_slot_reason_no_manual
     SlotUnavailableReason.NO_EV -> R.string.capture_slot_reason_no_ev
@@ -130,7 +140,7 @@ internal data class CaptureSlotModel(
 
 private val SlotShape = RoundedCornerShape(10.dp)
 
-/** The slots across the deck of the compact and stacked layouts: five equal cells, never scrolling. */
+/** The slots across the deck of the compact and stacked layouts: six equal cells, never scrolling. */
 @Composable
 internal fun CaptureSlotStrip(
     slots: List<CaptureSlotModel>,
@@ -155,7 +165,7 @@ internal fun CaptureSlotStrip(
     }
 }
 
-/** The slots as one column, for the end column of the side-rail layout. Scrolls only if the window is shorter than five cells. */
+/** The slots as one column, for the end column of the side-rail layout. Scrolls only if the window is shorter than six cells. */
 @Composable
 internal fun CaptureSlotColumn(
     slots: List<CaptureSlotModel>,

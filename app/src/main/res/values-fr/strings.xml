@@ -643,6 +643,7 @@
     <string name="hardware_log_unsupported">OCLog2 n\'est pas disponible sur cette caméra</string>
     <string name="panel_title_ev">EV</string>
     <string name="panel_title_resolution">RÉSOLUTION</string>
+    <string name="resolution_group_open">Open gate</string>
     <string name="panel_title_fixed_fps">FPS FIXES</string>
     <string name="panel_title_white_balance">BALANCE DES BLANCS</string>
     <string name="panel_title_focus">MISE AU POINT</string>

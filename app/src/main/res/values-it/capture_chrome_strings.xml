@@ -4,6 +4,7 @@
     <string name="capture_slot_wb">BB</string>
     <string name="capture_slot_focus">FUOCO</string>
     <string name="capture_slot_interval">INTERV.</string>
+    <string name="capture_slot_resolution_name">Risoluzione</string>
     <string name="capture_slot_fps_name">Frequenza fotogrammi</string>
     <string name="capture_slot_shutter_name">Otturatore</string>
     <string name="capture_slot_iso_name">Sensibilità ISO</string>
@@ -12,6 +13,7 @@
     <string name="capture_slot_focus_name">Messa a fuoco</string>
     <string name="capture_slot_interval_name">Intervallo</string>
     <string name="capture_slot_reason_not_ready">In attesa della fotocamera.</string>
+    <string name="capture_slot_reason_single_resolution">Questa modalità ha una sola risoluzione.</string>
     <string name="capture_slot_reason_high_speed">Le cadenze elevate lo impostano automaticamente.</string>
     <string name="capture_slot_reason_no_manual">Questa fotocamera non offre l\'esposizione manuale.</string>
     <string name="capture_slot_reason_no_ev">Questa fotocamera non offre la compensazione dell\'esposizione.</string>

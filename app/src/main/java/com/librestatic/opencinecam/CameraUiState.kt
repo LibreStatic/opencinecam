@@ -105,6 +105,8 @@ data class CameraUiState(
     val targetFps: Int = 30,
     val targetVideoWidth: Int = 1920,
     val targetVideoHeight: Int = 1080,
+    /** The operator's compressed still size; null means the camera's largest. Not persisted. */
+    val targetStillSize: Pair<Int, Int>? = null,
     val effectiveFps: Double? = null,
     val recordingFinalizing: Boolean = false,
     val recordingPauseStatus: com.librestatic.opencinecam.camera.TimelapsePauseStatus? = null,
@@ -219,6 +221,27 @@ data class CameraUiState(
         }
             .distinct().sortedWith(compareByDescending<Pair<Int, Int>> { it.first.toLong() * it.second }.thenByDescending { it.first })
 
+    /**
+     * Still sizes the RES slot offers in photo modes, largest first. RAW photo is fixed at the
+     * sensor readout, so it lists one size and the slot shows it as a placeholder.
+     */
+    val availableStillSizes: List<Pair<Int, Int>>
+        get() {
+            val descriptor = descriptor ?: return emptyList()
+            if (selectedMode !in photoResolutionModes) return emptyList()
+            if (selectedMode == CaptureMode.RAW_PHOTO) {
+                return listOfNotNull(descriptor.rawSize?.let { it.width to it.height })
+            }
+            val heic = selectedMode == CaptureMode.PHOTO &&
+                effectiveSettings?.photoFormat == com.librestatic.opencinecam.camera.StillPhotoFormat.HEIC
+            val sizes = if (heic) descriptor.heicSizes else descriptor.jpegSizes
+            return com.librestatic.opencinecam.camera.stillSizeChoices(sizes.map { it.width to it.height })
+        }
+
+    /** The still size the session runs: the operator's pick when offered, otherwise the largest. */
+    val activeStillSize: Pair<Int, Int>?
+        get() = availableStillSizes.let { sizes -> targetStillSize?.takeIf { it in sizes } ?: sizes.firstOrNull() }
+
     val activeVideoProfile: Camera2VideoProfile?
         get() = availableVideoProfiles.firstOrNull {
             it.size.width == targetVideoWidth && it.size.height == targetVideoHeight && it.fps == targetFps
@@ -255,6 +278,10 @@ data class CameraUiState(
         /** Modes whose recording rate the operator chooses (slow motion runs on VIDEO). */
         val frameRateModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG)
         val resolutionProfileModes = setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.TIME_LAPSE)
+        /** Modes whose RES slot picks the compressed still size. */
+        val photoResolutionModes = setOf(
+            CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL,
+        )
         val defaultModeGates: Map<CaptureMode, ModeGateState> = mapOf(
             CaptureMode.PHOTO to ModeGateState.AVAILABLE,
             CaptureMode.RAW_PHOTO to ModeGateState.AVAILABLE,

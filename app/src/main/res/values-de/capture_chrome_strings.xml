@@ -4,6 +4,7 @@
     <string name="capture_slot_wb">WA</string>
     <string name="capture_slot_focus">FOKUS</string>
     <string name="capture_slot_interval">INTERVALL</string>
+    <string name="capture_slot_resolution_name">Auflösung</string>
     <string name="capture_slot_fps_name">Bildrate</string>
     <string name="capture_slot_shutter_name">Verschluss</string>
     <string name="capture_slot_iso_name">ISO-Empfindlichkeit</string>
@@ -12,6 +13,7 @@
     <string name="capture_slot_focus_name">Fokus</string>
     <string name="capture_slot_interval_name">Intervall</string>
     <string name="capture_slot_reason_not_ready">Warte auf die Kamera.</string>
+    <string name="capture_slot_reason_single_resolution">Dieser Modus hat nur eine Auflösung.</string>
     <string name="capture_slot_reason_high_speed">Hohe Bildraten stellen das automatisch ein.</string>
     <string name="capture_slot_reason_no_manual">Diese Kamera bietet keine manuelle Belichtung.</string>
     <string name="capture_slot_reason_no_ev">Diese Kamera bietet keine Belichtungskorrektur.</string>

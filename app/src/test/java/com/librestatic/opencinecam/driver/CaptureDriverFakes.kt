@@ -40,7 +40,7 @@ import kotlinx.coroutines.delay
  * the test source set and only feeds the real production composables.
  */
 
-/** A rear camera with manual exposure, white balance in kelvin, manual focus and 4K/1080p video. */
+/** A rear camera with manual exposure, white balance in kelvin, manual focus, Razr-like video sizes and 12/8/5 MP stills. */
 internal val DriverCamera = Camera2CameraDescriptor(
     cameraId = "0", lensFacing = CameraMetadata.LENS_FACING_BACK, focalLengthsMm = listOf(6.9f),
     previewSize = Size(1920, 1080), jpegSize = Size(4000, 3000), rawSize = Size(4000, 3000), analysisSize = Size(640, 360),
@@ -48,7 +48,11 @@ internal val DriverCamera = Camera2CameraDescriptor(
     aeCompensationRange = Range(-6, 6), aeCompensationStep = 1f / 3f, minimumFocusDistance = 10f,
     supportsRaw = true, flashAvailable = true,
     targetFpsRanges = listOf(Range(15, 30), Range(30, 30), Range(60, 60)), availableFixedFps = listOf(24, 25, 30, 60),
-    videoProfiles = listOf(3840 to 2160, 1920 to 1080).flatMap { (w, h) ->
+    // The Razr Fold back camera's sizes, so the RES panel shows every aspect group.
+    videoProfiles = listOf(
+        3840 to 2160, 4000 to 2250, 3376 to 1898, 3264 to 1836, 1920 to 1080,
+        4000 to 3000, 3840 to 2880, 3264 to 2448, 4000 to 1714, 3840 to 1644, 3000 to 3000, 2880 to 2880, 2376 to 2160,
+    ).flatMap { (w, h) ->
         listOf(24, 30, 60).map { Camera2VideoProfile(Size(w, h), it, constrainedHighSpeed = false) }
     },
     logProfiles = emptyList(),
@@ -62,6 +66,7 @@ internal val DriverCamera = Camera2CameraDescriptor(
     exposureCapabilities = ExposureCapabilities(manual = true, isoRange = 50..6400, timeRangeNs = 100_000L..500_000_000L,
         priorities = setOf(ExposureMode.ISO_PRIORITY, ExposureMode.SHUTTER_PRIORITY)),
     awbLockSupported = true, aeCompensationStepNumerator = 1, aeCompensationStepDenominator = 3,
+    jpegSizes = listOf(Size(4000, 3000), Size(4000, 2250), Size(3264, 2448), Size(2592, 1944), Size(1920, 1080)),
 )
 
 /** The fake camera previewing in [mode], with the readings a live preview reports. */

@@ -695,8 +695,12 @@ class CaptureService : Service() {
         else -> StillPhotoFormat.JPEG
     }
 
+    /** RAW photo keeps the camera's own companion size; the DNG is the sensor readout either way. */
+    private fun selectedStillSize(): Size? = cameraState.value.takeIf { it.selectedMode != CaptureMode.RAW_PHOTO }
+        ?.activeStillSize?.let { (width, height) -> Size(width, height) }
+
     private fun previewKey(): List<Any?> = cameraState.value.let {
-        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat())
+        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize())
     }
 
     private fun updateSubjectTarget() {
@@ -1650,6 +1654,7 @@ class CaptureService : Service() {
                 displayRotationDegrees,
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
+                stillSize = selectedStillSize(),
                 openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
                 gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1781,6 +1786,7 @@ class CaptureService : Service() {
                 attachedPreviewRotationDegrees,
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
+                stillSize = selectedStillSize(),
                 openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
                 gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1809,6 +1815,7 @@ class CaptureService : Service() {
                         attachedPreviewRotationDegrees,
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
+                        stillSize = selectedStillSize(),
                         openCineLog = cameraState.value.selectedMode == CaptureMode.LOG,
                         gpuPreview = desiredGpuViewfinder() && cameraState.value.selectedMode != CaptureMode.LOG,
                         gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1885,6 +1892,7 @@ class CaptureService : Service() {
                         attachedPreviewRotationDegrees,
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
+                        stillSize = selectedStillSize(),
                         openCineLog = mode == CaptureMode.LOG,
                         gpuPreview = desiredGpuViewfinder() && mode != CaptureMode.LOG,
                         gpuPhotoPreview = photoPreviewMode(mode),
@@ -1957,6 +1965,7 @@ class CaptureService : Service() {
                         attachedPreviewRotationDegrees,
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
+                        stillSize = selectedStillSize(),
                         openCineLog = current.selectedMode == CaptureMode.LOG,
                         gpuPreview = desiredGpuViewfinder(current.selectedMode) && current.selectedMode != CaptureMode.LOG,
                         gpuPhotoPreview = photoPreviewMode(current.selectedMode),
@@ -1978,6 +1987,16 @@ class CaptureService : Service() {
                 // before CameraService starts the constrained high-speed stream.
                 mainHandler.postDelayed(reopen, 350L)
             } else reopen()
+        }
+
+        fun selectPhotoResolution(width: Int, height: Int) {
+            val current = cameraState.value
+            if (rejectLockedControl() || current.structuralSettingsFrozen || current.phase == CameraUiPhase.CAPTURING) return
+            if (current.selectedMode !in CameraUiState.photoResolutionModes || current.selectedMode == CaptureMode.RAW_PHOTO) return
+            val size = width to height
+            if (size !in current.availableStillSizes || size == current.activeStillSize) return
+            cameraState.update { it.copy(targetStillSize = size) }
+            attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
         }
 
         fun selectVideoResolution(width: Int, height: Int) {
@@ -2037,6 +2056,7 @@ class CaptureService : Service() {
                         attachedPreviewRotationDegrees,
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
+                        stillSize = selectedStillSize(),
                         openCineLog = true,
                         viewAssist = settings.logViewAssistEnabled,
                         targetFps = selectedFps,

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Short labels of the five capture slots; they sit over a 16 sp value in a 56 dp cell. -->
+    <!-- Short labels of the six capture slots; they sit over a 16 sp value in a 56 dp cell. -->
+    <string name="capture_slot_resolution" translatable="false">RES</string>
     <string name="capture_slot_fps" translatable="false">FPS</string>
     <string name="capture_slot_iso" translatable="false">ISO</string>
     <string name="capture_slot_ev" translatable="false">EV</string>
@@ -9,6 +10,7 @@
     <string name="capture_slot_focus">FOCUS</string>
     <string name="capture_slot_interval">INTERVAL</string>
     <!-- Full names, read by screen readers and shown in tooltips. -->
+    <string name="capture_slot_resolution_name">Resolution</string>
     <string name="capture_slot_fps_name">Frame rate</string>
     <string name="capture_slot_shutter_name">Shutter</string>
     <string name="capture_slot_iso_name">ISO sensitivity</string>
@@ -18,6 +20,7 @@
     <string name="capture_slot_interval_name">Interval</string>
     <!-- Why a slot is greyed out; shown when it is tapped. -->
     <string name="capture_slot_reason_not_ready">Waiting for the camera.</string>
+    <string name="capture_slot_reason_single_resolution">This mode has a single resolution.</string>
     <string name="capture_slot_reason_high_speed">High frame rates set this automatically.</string>
     <string name="capture_slot_reason_no_manual">This camera does not offer manual exposure.</string>
     <string name="capture_slot_reason_no_ev">This camera does not offer exposure compensation.</string>

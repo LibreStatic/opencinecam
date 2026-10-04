@@ -118,6 +118,10 @@ data class Camera2CameraDescriptor(
     val timestampSourceRealtime: Boolean = false,
     val photoFlashCapabilities: PhotoFlashCapabilities = PhotoFlashCapabilities(),
     val heicSize: Size? = null,
+    /** Every advertised JPEG output, largest first; [jpegSize] is its head. */
+    val jpegSizes: List<Size> = listOfNotNull(jpegSize),
+    /** Every advertised HEIC output, largest first; [heicSize] is its head. */
+    val heicSizes: List<Size> = listOfNotNull(heicSize),
     val aeCompensationStepNumerator: Int = 0,
     val aeCompensationStepDenominator: Int = 1,
     /** OCC-PLAN-068 U7: advertised STATISTICS_FACE_DETECT_MODE values; empty when the request key is absent. */
@@ -349,6 +353,8 @@ class Camera2PreviewEngine(
     private val queuedRawImages = mutableSetOf<Image>()
     private val pendingRawFrames = linkedMapOf<Long, Image>()
     private var activeStillFormat = StillPhotoFormat.JPEG
+    /** Requested compressed still size; null or unadvertised falls back to the largest output. */
+    private var activeStillSize: Size? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private class RecorderRequest(val generation: Long, val device: CameraDevice) {
         val stopRequested = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -671,6 +677,7 @@ class Camera2PreviewEngine(
         gpuPreview: Boolean = false,
         stillFormat: StillPhotoFormat = StillPhotoFormat.JPEG,
         gpuPhotoPreview: Boolean = false,
+        stillSize: Size? = null,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -700,6 +707,7 @@ class Camera2PreviewEngine(
                     return@Runnable
                 }
                 this.activeStillFormat = stillFormat
+                this.activeStillSize = stillSize
                 this.previewSurface = surface
                 this.activeDescriptor = descriptor
                 this.displayRotationDegrees = displayRotationDegrees
@@ -3501,7 +3509,7 @@ class Camera2PreviewEngine(
         var graphRawReader: ImageReader? = null
         if (activeVideoProfile == null) {
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
-        val compressedSize = if (activeStillFormat == StillPhotoFormat.HEIC) descriptor.heicSize else descriptor.jpegSize
+        val compressedSize = compressedStillSize(descriptor)
         compressedSize?.let { size ->
             jpegReader = ImageReader.newInstance(size.width, size.height, compressedFormat, MAX_BURST_IMAGES + 2).apply {
                 setOnImageAvailableListener({ reader ->
@@ -3615,7 +3623,7 @@ class Camera2PreviewEngine(
             analysisOutput?.let { PREVIEW_GRAPH_ANALYSIS to it },
         ).toMap()
         fun Size.stream() = StreamSize(width, height)
-        val compressedStreamSize = (if (activeStillFormat == StillPhotoFormat.HEIC) descriptor.heicSize else descriptor.jpegSize)?.stream()
+        val compressedStreamSize = compressedStillSize(descriptor)?.stream()
         val streams = runCatching { StreamCapabilityProbe(Camera2StreamMetadataSource(manager)).probe(descriptor.cameraId) }.getOrNull()
         val graphs = GraphNegotiator().fallbackGraphs(
             previewGraphRequest(
@@ -4523,6 +4531,9 @@ class Camera2PreviewEngine(
                 jpegSize = map.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height },
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)
                     map.getOutputSizes(ImageFormat.HEIC)?.maxByOrNull { it.width.toLong() * it.height } else null,
+                jpegSizes = map.getOutputSizes(ImageFormat.JPEG)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty(),
+                heicSizes = if (ImageFormat.HEIC in map.outputFormats)
+                    map.getOutputSizes(ImageFormat.HEIC)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty() else emptyList(),
                 rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height },
                 analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.toList().orEmpty().let { sizes ->
                     sizes.getOrNull(analysisSizeIndex(sizes.map { it.width to it.height }, previewSize.width, previewSize.height))
@@ -4728,6 +4739,12 @@ class Camera2PreviewEngine(
     private fun closeCameraDevice(device: CameraDevice) {
         closingCamera = device
         runCatching { device.close() }.onFailure(::failNativeRetirement)
+    }
+
+    private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? {
+        val heic = activeStillFormat == StillPhotoFormat.HEIC
+        val advertised = if (heic) descriptor.heicSizes else descriptor.jpegSizes
+        return activeStillSize?.takeIf { it in advertised } ?: if (heic) descriptor.heicSize else descriptor.jpegSize
     }
 
     private fun closeResources() {

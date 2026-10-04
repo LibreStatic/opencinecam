@@ -134,8 +134,20 @@ internal fun <T> ChoiceGrid(
 }
 
 @Composable
-internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun ChoiceTile(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    detail: String? = null,
+    onClick: () -> Unit,
+) {
     val colors = MaterialTheme.colorScheme
+    val textColor = when {
+        selected -> colors.onPrimary
+        !enabled -> colors.onSurface.copy(alpha = 0.38f)
+        else -> colors.onSurface
+    }
     Box(
         modifier
             .heightIn(min = 48.dp)
@@ -151,20 +163,23 @@ internal fun ChoiceTile(label: String, selected: Boolean, modifier: Modifier = M
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            label,
-            color = when {
-                selected -> colors.onPrimary
-                !enabled -> colors.onSurface.copy(alpha = 0.38f)
-                else -> colors.onSurface
-            },
-            fontSize = 14.sp,
-            lineHeight = 17.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                label,
+                color = textColor,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // A second, quieter line under the name: the pixels under "4K".
+            detail?.let {
+                Text(it, color = textColor.copy(alpha = textColor.alpha * 0.8f), fontSize = 12.sp, lineHeight = 14.sp,
+                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
