@@ -66,6 +66,8 @@ internal enum class CineIcon {
     COLLAPSE,
     CHEVRON_LEFT,
     CHEVRON_RIGHT,
+    LOCK,
+    UNLOCK,
 }
 
 @Composable
@@ -91,6 +93,15 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
         drawPath(path, color, style = if (filled) Fill else stroke)
     }
     when (icon) {
+        CineIcon.LOCK, CineIcon.UNLOCK -> {
+            // Padlock: the shackle swings open on UNLOCK.
+            box(.22f, .46f, .78f, .88f, filled = true)
+            val right = if (icon == CineIcon.LOCK) .66f else .90f
+            val left = right - .32f
+            drawArc(color, 180f, 180f, false, Offset(w * left, h * .14f), Size(w * .32f, h * .36f), style = stroke)
+            line(left, .32f, left, .46f)
+            if (icon == CineIcon.LOCK) line(right, .32f, right, .46f)
+        }
         CineIcon.MEDIA -> {
             box(.12f, .20f, .88f, .80f)
             poly(.20f to .72f, .40f to .48f, .54f to .62f, .64f to .52f, .80f to .72f, close = false)

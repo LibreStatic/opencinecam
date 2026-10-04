@@ -175,6 +175,9 @@
     <string name="ae_lock">AE LOCK</string>
     <string name="af_lock">AF LOCK</string>
     <string name="af_lock_pending">AF LOCK…</string>
+    <string name="ae_lock_short" translatable="false">AE</string>
+    <string name="af_lock_short" translatable="false">AF</string>
+    <string name="af_lock_pending_short" translatable="false">AF…</string>
     <string name="af_lock_behavior">AF Lock behavior</string>
     <string name="af_lock_behavior_summary">Freeze current focus or perform a focus scan before locking.</string>
     <string name="af_lock_freeze_current">Freeze current</string>

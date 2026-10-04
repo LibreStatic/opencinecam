@@ -180,6 +180,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -2650,6 +2651,7 @@ private fun LockToggles(
         if (state.aeLockSupported) {
             LockButton(
                 label = stringResource(R.string.ae_lock),
+                shortLabel = stringResource(R.string.ae_lock_short),
                 active = state.aeLockActive,
                 enabled = aeAvailable,
                 testTag = "ae-lock-toggle",
@@ -2664,6 +2666,7 @@ private fun LockToggles(
         if (state.afLockSupported) {
             LockButton(
                 label = if (afPending) stringResource(R.string.af_lock_pending) else stringResource(R.string.af_lock),
+                shortLabel = stringResource(if (afPending) R.string.af_lock_pending_short else R.string.af_lock_short),
                 active = afLocked,
                 pending = afPending,
                 enabled = afAvailable,
@@ -2681,6 +2684,7 @@ private fun LockToggles(
 @Composable
 private fun LockButton(
     label: String,
+    shortLabel: String,
     active: Boolean,
     enabled: Boolean = true,
     pending: Boolean = false,
@@ -2693,20 +2697,28 @@ private fun LockButton(
         enabled -> Color(0xFF1B2023).chromePanel()
         else -> Color(0xFF161A1C).chromePanel()
     }
-    val fg = if (active) Color.Black else if (enabled) Color.White else Color(0xFF626A6D)
+    val fg = if (active || pending) Color.Black else if (enabled) Color.White else Color(0xFF626A6D)
     val border = if (active) VerifiedCyan else if (pending) Amber else if (enabled) Color(0xFF41494C) else Color(0xFF2A3033)
+    // Same footprint as the operator keys below: a padlock over a short AE/AF label. The full
+    // name stays the accessible label, and the closed shackle marks the engaged lock.
     Column(
         Modifier
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(48.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(8.dp))
+            .border(1.dp, border, RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick)
-            .testTag(testTag)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                role = Role.Switch
+                stateDescription = if (active) "on" else "off"
+            }
+            .testTag(testTag),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Text(label, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        CineGlyph(if (active) CineIcon.LOCK else CineIcon.UNLOCK, fg, Modifier.size(20.dp))
+        Text(shortLabel, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
     }
 }
 
