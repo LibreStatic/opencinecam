@@ -243,8 +243,9 @@ private fun FocusMarkTile(
     val tap = { if (saved != null) binder?.startFocusPull(saved, settings.focusPullDurationMs, settings.focusPullEasing)
         else binder?.setFocusMark(label, current) }
     Column(
+        // One height for empty and saved tiles, so saving a mark never grows the row under it.
         modifier
-            .heightIn(min = 64.dp)
+            .height(76.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (target) colors.primary else colors.surfaceContainerHighest)
             .border(1.dp, if (saved != null) colors.primary else colors.outlineVariant, RoundedCornerShape(8.dp))

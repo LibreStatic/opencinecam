@@ -63,6 +63,9 @@ internal fun inspectorScopesMaxHeightDp(expanded: Boolean, roomDp: Float): Float
 /** A docked bottom sheet never covers more than this share of the window height. */
 internal const val DOCKED_SHEET_MAX_FRACTION = 0.55f
 
+/** Compact portrait overlays its sheets and scope tray on the frame; they stop at this share of the window. */
+internal const val COMPACT_SHEET_MAX_FRACTION = 0.45f
+
 /** A docked bottom sheet outside compact portrait is at most this wide, centred on the deck. */
 internal const val DOCKED_SHEET_MAX_WIDTH_DP = 640f
 
