@@ -2,7 +2,7 @@
 
 OpenCineCam is a native, open-source cinema camera for Android. It keeps four things apart: what the hardware advertises, what the app requests, what Camera2 reports, and what a recorded file or a controlled test proves. Nothing is presented as supported until the evidence says so.
 
-- **Version:** `0.1.0-beta` (public beta)
+- **Version:** `0.2.0-beta` (public beta)
 - **Package:** `com.librestatic.opencinecam`
 - **Requires:** Android 10 (API 29) or later, ARM64
 - **License:** [Apache-2.0](LICENSE)
