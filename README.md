@@ -71,6 +71,7 @@ Most of the implementation plans are done: the capability/evidence model, Strict
 Still open:
 
 - **OCLog2** is reachable from the launcher and has passed a physical GLES numeric check and cadence-gated 32-second 1080p30 Main10 takes with no dropped frames on the reference device, but stays *experimental* until ISP-derived, OCIO/DCTL/LUT, clipping/range and independent-editor evidence is in ([PLAN-061](docs/plans/PLAN-061-oclog2-specification-interchange-and-device-qualification.md)).
+  - Experimental [Lightforge Studio](docs/color/lightforge/README.md) downloads turn OCLog2 into a stock-camera Rec.709 look: [regular takes (HLG)](https://github.com/LibreStatic/opencinecam/raw/main/docs/color/lightforge/OCLog2_HLG_to_Stock709.cube) and [120/240 fps takes (HFR)](https://github.com/LibreStatic/opencinecam/raw/main/docs/color/lightforge/OCLog2_HFR-SDR_to_Stock709.cube). Set Lightforge's input profile to *Standard Rec.709* before applying them.
 - **RAW video** stays disabled after failing the 60-second RAW10 throughput gate.
 - **F-Droid and Google Play** activation is tracked in [PLAN-062](docs/plans/PLAN-062-f-droid-and-google-play-channel-activation.md).
 
