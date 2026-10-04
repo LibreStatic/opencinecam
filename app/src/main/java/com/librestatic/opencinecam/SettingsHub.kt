@@ -38,6 +38,7 @@ internal fun SettingsScreen(
     audioPermissionGranted: Boolean,
     onRequestAudioPermission: () -> Unit,
     onOpenAbout: () -> Unit,
+    audioPermissionBlocked: Boolean = false,
     onSettingsChange: (CameraSettings) -> Unit,
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
     onOpenCapabilities: (() -> Unit)? = null,
@@ -94,7 +95,7 @@ internal fun SettingsScreen(
                 if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = gutter, vertical = 16.dp))
                 listStates.SaveableStateProvider(if (searching) "search" else (category ?: SettingsCategory.CAPTURE).name) {
-                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities)
+                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities, audioPermissionBlocked = audioPermissionBlocked)
                 }
             }
         }

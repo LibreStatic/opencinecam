@@ -3691,13 +3691,13 @@ internal fun SettingsContent(
     state: CameraUiState,
     settings: CameraSettings,
     audioPermissionGranted: Boolean,
-    audioPermissionBlocked: Boolean = false,
     onRequestAudioPermission: () -> Unit,
     onOpenAbout: () -> Unit,
     onSettingsChange: (CameraSettings) -> Unit,
     visibleIds: Set<String>,
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
     onOpenCapabilities: (() -> Unit)? = null,
+    audioPermissionBlocked: Boolean = false,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
