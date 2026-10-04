@@ -832,6 +832,8 @@ class CaptureService : Service() {
                 phase = CameraUiPhase.PREVIEWING,
                 gpuViewfinder = gpuPath,
                 selectedCameraId = descriptor.cameraId,
+                aeLockSupported = descriptor.aeLockSupported,
+                afLockSupported = descriptor.afLockSupported,
                 focusMarks = previewEngine.getFocusMarks(),
                 errorCode = null,
                 message = pendingMessage,
