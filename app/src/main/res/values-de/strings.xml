@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Von %1$s entfernen</string>
     <string name="pro_flicker_suggestions">Flimmerfreier Verschluss</string>
     <string name="lut_disable_title">LUTs deaktivieren</string>
+    <string name="permission_open_settings">Einstellungen öffnen</string>
+    <string name="permission_blocked_explanation">Android zeigt die Berechtigungsanfrage nicht mehr an. Erlaube sie in den Systemeinstellungen der App.</string>
 </resources>

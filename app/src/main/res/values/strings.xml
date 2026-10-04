@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Remove from %1$s</string>
     <string name="pro_flicker_suggestions">Flicker-safe shutter</string>
     <string name="lut_disable_title">Disable LUTs</string>
+    <string name="permission_open_settings">Open settings</string>
+    <string name="permission_blocked_explanation">Android no longer shows the permission prompt. Allow it in the app\'s system settings.</string>
 </resources>

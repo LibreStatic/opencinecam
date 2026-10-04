@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Quitar de %1$s</string>
     <string name="pro_flicker_suggestions">Obturación sin parpadeo</string>
     <string name="lut_disable_title">Desactivar LUTs</string>
+    <string name="permission_open_settings">Abrir ajustes</string>
+    <string name="permission_blocked_explanation">Android ya no muestra el pedido de permiso. Habilitalo en los ajustes del sistema de la app.</string>
 </resources>

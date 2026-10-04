@@ -195,12 +195,6 @@ private enum class PermissionKind(
     }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
-
 /** How the wizard arranges a step. */
 internal enum class OnboardingLayout {
     /** Header, the step and the buttons stacked in one column. */
@@ -266,10 +260,9 @@ internal fun OnboardingScreen(
     var blocked by remember { mutableStateOf(emptySet<PermissionKind>()) }
     var pendingKinds by remember { mutableStateOf(emptyList<PermissionKind>()) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        val activity = context.findActivity()
+        // Blocked only after a real denial: a prompt dismissed with Back leaves no rationale either.
         val refused = pendingKinds.filter { kind ->
-            !kind.granted(context) && activity != null &&
-                kind.manifestPermissions.none { activity.shouldShowRequestPermissionRationale(it) }
+            !kind.granted(context) && kind.manifestPermissions.all { permissionBlocked(context, it) }
         }
         blocked = blocked + refused
         pendingKinds = emptyList()
@@ -280,13 +273,12 @@ internal fun OnboardingScreen(
         val needed = requested.filter { granted[it] != true }
         if (needed.isEmpty()) return
         if (needed.size == 1 && needed.single() in blocked) {
-            context.startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+            openAppPermissionSettings(context)
             return
         }
         pendingKinds = needed.filterNot { it in blocked }
+        // Records a pending rationale before the prompt, so a later refusal can tell Back from a denial.
+        pendingKinds.forEach { kind -> kind.manifestPermissions.forEach { permissionBlocked(context, it) } }
         launcher.launch(pendingKinds.flatMap { it.manifestPermissions.asList() }.toTypedArray())
     }
 

@@ -763,4 +763,6 @@
     <string name="presets_unassign_slot">Remover de %1$s</string>
     <string name="pro_flicker_suggestions">Obturador sem cintilação</string>
     <string name="lut_disable_title">Desativar LUTs</string>
+    <string name="permission_open_settings">Abrir configurações</string>
+    <string name="permission_blocked_explanation">O Android não mostra mais o pedido de permissão. Permita nas configurações do sistema do app.</string>
 </resources>
