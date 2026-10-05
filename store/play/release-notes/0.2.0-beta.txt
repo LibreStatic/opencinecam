@@ -1,0 +1,24 @@
+<en-US>
+First closed beta of OpenCineCam.
+- Manual ISO, shutter, white balance and focus, with zebra, peaking, false colour and scopes
+- LOG and HLG video modes where the device supports them, with LUT monitoring
+- WAV/FLAC audio, timecode and production slate
+- Adaptive layouts for phones, tablets and foldables
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+Primera beta cerrada de OpenCineCam.
+- ISO, obturador, balance de blancos y foco manuales, con zebra, peaking, falso color y scopes
+- Modos de video LOG y HLG si el dispositivo los admite, con monitoreo por LUT
+- Audio WAV/FLAC, timecode y claqueta de producción
+- Diseños adaptables para teléfonos, tablets y plegables
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+Primera beta cerrada de OpenCineCam.
+- ISO, obturador, balance de blancos y enfoque manuales, con cebra, peaking, falso color y scopes
+- Modos de vídeo LOG y HLG si el dispositivo los admite, con monitorización por LUT
+- Audio WAV/FLAC, código de tiempo y claqueta de producción
+- Diseños adaptables para móviles, tablets y plegables
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
