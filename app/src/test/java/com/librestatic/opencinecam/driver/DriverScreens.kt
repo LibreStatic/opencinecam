@@ -234,7 +234,7 @@ private fun driverTheme(): AppTheme =
 
 /** The app theme over the same full-window background CameraRootScreen gives every section. */
 @Composable
-private fun DriverTheme(forceDark: Boolean = false, content: @Composable () -> Unit) =
+internal fun DriverTheme(forceDark: Boolean = false, content: @Composable () -> Unit) =
     OpenCineCamTheme(driverTheme(), forceDark = forceDark) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { content() }
     }
@@ -293,12 +293,13 @@ private fun CaptureChrome(
 }
 
 @Composable
-private fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null) = DriverTheme {
+internal fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null) = DriverTheme {
     MediaCatalogContent(GallerySettings(), onSettings = {}, source = source, onShare = {}, onDelete = {},
         onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection, onOpen = {})
 }
 
-private class FakeCatalog(private val takes: List<SampleTake>) : MediaCatalogSource {
+internal class FakeCatalog(private val takes: List<SampleTake>,
+    private val thumbnails: (LocalMediaArtifact) -> Bitmap? = { gradientThumbnail(it.name.hashCode()) }) : MediaCatalogSource {
     override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage {
         val shown = takes.filter { query.isBlank() || it.take.primary.name.contains(query, ignoreCase = true) }
         return LocalMediaPage(shown.map { it.take }, next = null,
@@ -306,7 +307,7 @@ private class FakeCatalog(private val takes: List<SampleTake>) : MediaCatalogSou
     }
 
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? =
-        if (artifact.mimeType.startsWith("audio/")) null else gradientThumbnail(artifact.name.hashCode())
+        if (artifact.mimeType.startsWith("audio/")) null else thumbnails(artifact)
 
     override suspend fun facts(artifact: LocalMediaArtifact): GalleryFacts? = takes.firstOrNull { it.take.primary == artifact }?.facts
 
@@ -317,7 +318,7 @@ private class FakeCatalog(private val takes: List<SampleTake>) : MediaCatalogSou
 }
 
 /** A take with what MediaStore, its sidecars, the proxy queue and a probe of its file would say about it. */
-private class SampleTake(val take: LocalMediaTake, val facts: GalleryFacts? = null, val encoding: LocalMediaEncoding? = null,
+internal class SampleTake(val take: LocalMediaTake, val facts: GalleryFacts? = null, val encoding: LocalMediaEncoding? = null,
     val proxy: TakeProxyState = TakeProxyState.NONE, val probed: CodecBadge? = null)
 
 /** A stand-in frame: a two-colour gradient seeded by the file name, so takes are told apart. */
@@ -345,7 +346,7 @@ private fun take(id: Int, name: String, mime: String, kind: LocalMediaKind, size
     return LocalMediaTake(id.toString(), primary, listOf(primary), listOf(sidecar), kind, slate, status)
 }
 
-private val SampleTakes = listOf(
+internal val SampleTakes = listOf(
     SampleTake(take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 3, goodTake = true), log = true),
         GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY),

@@ -2,7 +2,7 @@
 
 All files come from Wikimedia Commons (landscapes only, no people). License as reported by the Commons API (extmetadata LicenseShortName) and re-verified on 2026-09-30; only CC0 / Public domain files were used. Photos were downsized to <=2600 px. No video clips are used: the Android emulator has no AVC encoder, so the gallery shows photo takes only. The downloaded files live in `raw/media/` (gitignored); 
 
-How the photos appear in the screenshots: the emulator camera feed is a flat white frame, so the app's real screens were captured over it and the photos below were composited into the viewfinder (and into the gallery thumbnails) in post-processing, cropped and resized, with the viewfinder overlays (zebra, peaking, false color, waveform, histogram, vectorscope) computed from the photo itself. Used: 18 (capture, tablet capture), 17 (overlay split view, gallery), 22 (scopes, gallery), 24, 20, 21 (gallery thumbnails and small thumbnails). No other media, no people.
+How the photos appear in the screenshots: the headless Compose Driver renders (tools/compose-driver.sh, test-only code in app/src/test/.../driver/StoreScreens.kt) draw the photo behind the real production capture chrome, since the camera viewfinder is not rendered headless. The viewfinder overlays (zebra, focus peaking, false color, waveform, histogram, vectorscope) are computed by the app's own monitoring code from a downsampled copy of the photo. Used: 18 (capture and LOG screens), 17 (overlays screen and gallery), 22 (scopes screen and gallery), 24, 20, 21, 16 (gallery thumbnails). No other media, no people.
 
 Candidates 27-31 of the reference list were rejected (people visible or partly visible, or not a landscape).
 
