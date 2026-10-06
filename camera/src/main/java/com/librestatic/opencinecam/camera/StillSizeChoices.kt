@@ -38,4 +38,21 @@ fun physicalStillRouting(
     return physicalSizes.keys.sorted().firstOrNull { id -> size in physicalSizes.getValue(id) }
 }
 
+/**
+ * Public physical cameras whose lens is the one the logical camera shows at 1x, i.e. whose focal
+ * length is within [UNITY_FOCAL_TOLERANCE] of [logicalFocalMm]. Only these may carry a
+ * physical-only still (OCC-PLAN-069): 3A runs on the lens the logical camera streams, so a still
+ * routed to any other lens (the Razr Fold's 13.3 mm tele "5") gets no metering and a narrower view.
+ * An unknown logical focal length routes nowhere.
+ */
+fun unityZoomPhysicalIds(logicalFocalMm: Float?, physicalFocals: List<Pair<String, Float>>): Set<String> {
+    if (logicalFocalMm == null || logicalFocalMm <= 0f) return emptySet()
+    return physicalFocals
+        .filter { (_, focal) -> focal > 0f && kotlin.math.abs(focal / logicalFocalMm - 1f) <= UNITY_FOCAL_TOLERANCE }
+        .map { it.first }
+        .toSet()
+}
+
+private const val UNITY_FOCAL_TOLERANCE = 0.05f
+
 private const val MIN_STILL_PIXELS = 1_900_000L

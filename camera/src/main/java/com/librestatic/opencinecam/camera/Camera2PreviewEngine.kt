@@ -245,6 +245,8 @@ data class Camera2EmbeddedAudioConfig(
     val listeningSink: PcmListeningSink? = null,
     val enableNoiseSuppressor: Boolean = false,
     val enableAcousticEchoCanceler: Boolean = false,
+    /** Watches the take's routed input and applies the loss policy (OCC-AUDIO-012). */
+    val inputGuard: com.librestatic.opencinecam.media.audio.AudioInputRouteGuard? = null,
 )
 
 data class PhotoFlashReport(
@@ -464,6 +466,7 @@ class Camera2PreviewEngine(
     private val compressedReadFailures = linkedMapOf<Long, String>()
     private val legacyJpegTimestamps = linkedSetOf<Long>()
     private var recorder: MediaRecorder? = null
+    @Volatile private var activeRecorderGuard: com.librestatic.opencinecam.media.audio.AudioInputRouteGuard? = null
     private var recordSurface: Surface? = null
     @Volatile private var recording = false
     private var recordingSessionGeneration = 0L
@@ -2632,6 +2635,11 @@ class Camera2PreviewEngine(
                 recordSurface = configuredRecorder.surface
                 recorderLevelSink = audio?.onAudioLevel
                 configureRecordingSession(device, descriptor, surface, requireNotNull(recordSurface), startRecorder = true)
+                audio?.inputGuard?.let { guard ->
+                    activeRecorderGuard = guard
+                    // The route is read again by the guard once the recorder actually starts.
+                    guard.attach(configuredRecorder, com.librestatic.opencinecam.media.audio.AudioCapturePath.MEDIA_RECORDER)
+                }
             } catch (failure: Exception) {
                 val reportFailure = ownsRecorderRequest(request)
                 releaseRecorder(request)
@@ -4600,9 +4608,9 @@ class Camera2PreviewEngine(
                 jpegSizes = map.getOutputSizes(ImageFormat.JPEG)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty(),
                 heicSizes = if (ImageFormat.HEIC in map.outputFormats)
                     map.getOutputSizes(ImageFormat.HEIC)?.sortedByDescending { it.width.toLong() * it.height }.orEmpty() else emptyList(),
-                physicalJpegSizes = physicalExtraStillSizes(physicalFocals.map { it.first }.toSet(), ImageFormat.JPEG, map),
+                physicalJpegSizes = physicalExtraStillSizes(unityZoomPhysicalIds(logicalFocal, physicalFocals), ImageFormat.JPEG, map),
                 physicalHeicSizes = if (ImageFormat.HEIC in map.outputFormats)
-                    physicalExtraStillSizes(physicalFocals.map { it.first }.toSet(), ImageFormat.HEIC, map) else emptyMap(),
+                    physicalExtraStillSizes(unityZoomPhysicalIds(logicalFocal, physicalFocals), ImageFormat.HEIC, map) else emptyMap(),
                 rawSize = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height },
                 analysisSize = map.getOutputSizes(ImageFormat.YUV_420_888)?.toList().orEmpty().let { sizes ->
                     sizes.getOrNull(analysisSizeIndex(sizes.map { it.width to it.height }, previewSize.width, previewSize.height))
@@ -4929,6 +4937,8 @@ class Camera2PreviewEngine(
         if (recorderRequest.get() !== expected) return
         recording = false
         recorderLevelSink = null
+        activeRecorderGuard?.detach()
+        activeRecorderGuard = null
         runCatching { recorder?.reset() }
         val releaseFailure = runCatching { recorder?.release() }.exceptionOrNull()
         if (releaseFailure != null) {
