@@ -12,7 +12,8 @@ class CameraPresetTest {
         exposure = ExposureSelection(ExposureMode.MANUAL, 800, shutterUnit = ShutterUnit.ANGLE, angleTenths = 900),
         whiteBalance = WhiteBalanceSelection.Kelvin(4300, 17), recordingWhiteBalance = RecordingWhiteBalancePolicy.LOCK_ON_RECORD,
         imageProcessing = ImageProcessingSelection(StabilizationMode.VIDEO, IspMode.HIGH_QUALITY, IspMode.OFF),
-        audioInputDeviceId = 12345, subjectDisplay = SubjectDisplaySettings(prompterText = "private script", operatorCue = "private cue", brightness = 0.4f),
+        audioInputDeviceId = 12345, audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(11, "Private Lavalier", "card=2"),
+        audioInputLossPolicy = com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.CONTINUE_SILENT, subjectDisplay = SubjectDisplaySettings(prompterText = "private script", operatorCue = "private cue", brightness = 0.4f),
         modeSelectorStyle = ModeSelectorStyle.BUTTONS, videoFps = 60), focusDiopters = 2.5f, zoomRatio = 2f)
     private fun document(change: (MutableMap<String, JsonElement>) -> Unit): String {
         val map = Json.parseToJsonElement(CameraPresetCodec.encode(preset())).jsonObject.toMutableMap(); change(map); return JsonObject(map).toString()
@@ -28,13 +29,13 @@ class CameraPresetTest {
         assertEquals(original.settings, CameraPresetCodec.mergeLocal(decoded.settings, original.settings))
         assertNull(decoded.settings.audioInputDeviceId)
         assertEquals("", decoded.settings.subjectDisplay.prompterText)
-        for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id")) assertFalse(text.contains(secret))
+        for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
         assertEquals(164, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun subjectFeaturePreferencesAreNeitherExportedNorResetByAPreset() {

@@ -14,7 +14,7 @@ class MediaSharingSettingsTest {
         assertEquals(MediaSharingSettings(), CameraSettingsStore(PresetPreferences()).load().mediaSharing)
         for (content in MediaShareContent.entries) for (metadata in MediaShareMetadata.entries) for (lut in listOf(false, true)) {
             val source = CameraSettings(mediaSharing = MediaSharingSettings(content, metadata, lut),
-                productionSlate = ProductionSlateSettings(scene = "Keep"), audioInputDeviceId = 42)
+                productionSlate = ProductionSlateSettings(scene = "Keep"), audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=42"))
             val store = CameraSettingsStore(PresetPreferences()); store.save(source)
             assertEquals(source, store.load())
             assertEquals(source.mediaSharing, CameraPresetCodec.decode(document(source).toString()).settings.mediaSharing)

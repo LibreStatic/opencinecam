@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam.service
 
+import com.librestatic.opencinecam.media.audio.AudioCapturePath
+import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -52,6 +54,7 @@ internal class PreviewAudioMonitor private constructor(
     private val onLevel: (AudioLevelSnapshot) -> Unit,
     private val onFailure: (Throwable) -> Unit,
     private val listeningSink: PcmListeningSink?,
+    private val inputGuard: AudioInputRouteGuard?,
 ) : AutoCloseable {
     private val lifecycle = PreviewAudioLifecycle(
         startNative = {
@@ -59,9 +62,10 @@ internal class PreviewAudioMonitor private constructor(
             check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 "Preview AudioRecord did not enter RECORDING state."
             }
+            inputGuard?.attach(audioRecord, AudioCapturePath.PREVIEW)
         },
         readLoop = ::readLoop,
-        stopNative = { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() },
+        stopNative = { inputGuard?.detach(); if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() },
         releaseNative = { releaseAudioResources(effects.map { effect -> { effect.release() } } + { audioRecord.release() }) },
         onFailure = onFailure,
         retainRetirement = AudioRetirementGate::retain,
@@ -122,6 +126,7 @@ internal class PreviewAudioMonitor private constructor(
             onLevel: (AudioLevelSnapshot) -> Unit,
             onFailure: (Throwable) -> Unit,
             listeningSink: PcmListeningSink?,
+            inputGuard: AudioInputRouteGuard? = null,
         ): PreviewAudioMonitor {
             AudioRetirementGate.requireIdle()
             val appContext = context.applicationContext
@@ -195,6 +200,7 @@ internal class PreviewAudioMonitor private constructor(
                     onLevel,
                     onFailure,
                     listeningSink,
+                    inputGuard,
                 )
             } catch (failure: Throwable) {
                 val cleanup = PreviewAudioLifecycle(

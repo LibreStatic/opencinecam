@@ -19,7 +19,7 @@ class AudioRecordingGainSettingsTest {
     @Test fun everyDecibelAndEnabledStateRoundTripsWithoutErasingAgcOrLocalInput() {
         for (db in -24..24) for (enabled in listOf(false, true)) for (agc in listOf(false, true)) {
             val original = CameraSettings(audioRecordingGain = DigitalRecordingGain(enabled, db),
-                automaticGainControlEnabled = agc, audioInputDeviceId = 101, photoQuality = 71)
+                automaticGainControlEnabled = agc, audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=101"), photoQuality = 71)
             val prefs = PresetPreferences(); val store = CameraSettingsStore(prefs)
             store.save(original)
             assertEquals(original, store.load())

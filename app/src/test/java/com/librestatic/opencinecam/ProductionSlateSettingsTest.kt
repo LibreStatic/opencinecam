@@ -18,7 +18,7 @@ class ProductionSlateSettingsTest {
         for (location in ProductionSlateLocation.entries) for (time in ProductionSlateTimeOfDay.entries) {
             for (good in listOf(false, true)) for (increment in listOf(false, true)) for (take in listOf(1, 42, 999999)) {
                 val original = CameraSettings(productionSlate = example.copy(location = location, timeOfDay = time,
-                    goodTake = good, autoIncrementTake = increment, takeNumber = take), audioInputDeviceId = 17)
+                    goodTake = good, autoIncrementTake = increment, takeNumber = take), audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=17"))
                 val store = CameraSettingsStore(PresetPreferences()); store.save(original)
                 assertEquals(original, store.load())
                 assertEquals(original.productionSlate, CameraPresetCodec.decode(document(original).toString()).settings.productionSlate)

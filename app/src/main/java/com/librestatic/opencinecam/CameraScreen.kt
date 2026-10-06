@@ -3245,69 +3245,76 @@ internal fun AudioMeterHud(
     val resetLabel = stringResource(R.string.audio_meter_reset_clip)
     // Every line is single and ellipsised, and the panel clips, so a narrow portrait slot never
     // lets the meter spill over the instruments next to it.
-    Column(
-        modifier.width(meterWidth).heightIn(min = 48.dp).testTag("audio-meter-hud")
-            .background(Panel, RoundedCornerShape(7.dp))
-            .clipToBounds()
-            .clickable(enabled = state.audioClipLatched, onClickLabel = resetLabel, onClick = onResetClip)
-            .semantics { if (state.audioClipLatched) contentDescription = resetLabel }
-            .padding(horizontal = 7.dp, vertical = 5.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Text(if (snapshot != null) "MIC" else stringResource(R.string.audio_meter_no_pcm),
-            Modifier.testTag("audio-meter-current"), color = if (snapshot != null) VerifiedCyan else Muted,
-            fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted,
-            fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 12.sp,
-            lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        val meterTrack = MaterialTheme.colorScheme.surfaceContainerHighest
-        val meterLine = MaterialTheme.colorScheme.onSurface
-        val meterGreen = OkGreen
-        repeat(max(1, levels.size)) { index ->
-            val level = levels.getOrNull(index)
-            val value = displayed.getOrNull(index)
-            val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(label, color = Muted, fontSize = 12.sp, lineHeight = 12.sp, maxLines = 1)
-                val meterRed = RecordRed; val meterAmber = Amber
-                Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
-                    drawRect(meterTrack)
-                    if (value != null) {
-                        val minimum = if (meterSettings.mode == AudioMeterMode.VU) -30f else -60f
-                        val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
-                        fun fraction(db: Float) = ((db - minimum) / (maximum - minimum)).coerceIn(0f, 1f)
-                        val signalColor = when {
-                            (level?.peakDbfs ?: -120f) >= -3f -> meterRed
-                            (level?.peakDbfs ?: -120f) >= -12f -> meterAmber
-                            else -> meterGreen
-                        }
-                        drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
-                        if (meterSettings.mode == AudioMeterMode.PEAK_RMS) level?.rmsDbfs?.takeIf { it.isFinite() }?.let { rms ->
-                            drawLine(meterLine, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
-                                androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
-                        }
-                        held.getOrNull(index)?.let { peak ->
-                            drawLine(meterAmber, androidx.compose.ui.geometry.Offset(size.width * fraction(peak), 0f),
-                                androidx.compose.ui.geometry.Offset(size.width * fraction(peak), size.height), strokeWidth = 2.dp.toPx())
+    val activeInput = state.activeAudioInput
+    // The badge sits outside the clickable column, so it stays its own semantics node rather than
+    // being merged into the clip-reset action.
+    Box(modifier.width(meterWidth)) {
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("audio-meter-hud")
+                .background(Panel, RoundedCornerShape(7.dp))
+                .clipToBounds()
+                .clickable(enabled = state.audioClipLatched, onClickLabel = resetLabel, onClick = onResetClip)
+                .semantics { if (state.audioClipLatched) contentDescription = resetLabel }
+                .padding(horizontal = 7.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(if (snapshot != null) "MIC" else stringResource(R.string.audio_meter_no_pcm),
+                Modifier.padding(end = if (activeInput != null) 40.dp else 0.dp).testTag("audio-meter-current"),
+                color = if (snapshot != null) VerifiedCyan else Muted,
+                fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(audioMeterModeLabel(meterSettings.mode)), Modifier.testTag("audio-meter-mode"), color = Muted,
+                fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (state.audioClipLatched) Text("CLIP", Modifier.testTag("audio-meter-clip"), color = RecordRed, fontSize = 12.sp,
+                lineHeight = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            val meterTrack = MaterialTheme.colorScheme.surfaceContainerHighest
+            val meterLine = MaterialTheme.colorScheme.onSurface
+            val meterGreen = OkGreen
+            repeat(max(1, levels.size)) { index ->
+                val level = levels.getOrNull(index)
+                val value = displayed.getOrNull(index)
+                val label = if (levels.size <= 1) "M" else if (index == 0) "L" else "R"
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(label, color = Muted, fontSize = 12.sp, lineHeight = 12.sp, maxLines = 1)
+                    val meterRed = RecordRed; val meterAmber = Amber
+                    Canvas(Modifier.weight(1f).height(8.dp).testTag("audio-meter-channel-$index")) {
+                        drawRect(meterTrack)
+                        if (value != null) {
+                            val minimum = if (meterSettings.mode == AudioMeterMode.VU) -30f else -60f
+                            val maximum = if (meterSettings.mode == AudioMeterMode.VU) 6f else 0f
+                            fun fraction(db: Float) = ((db - minimum) / (maximum - minimum)).coerceIn(0f, 1f)
+                            val signalColor = when {
+                                (level?.peakDbfs ?: -120f) >= -3f -> meterRed
+                                (level?.peakDbfs ?: -120f) >= -12f -> meterAmber
+                                else -> meterGreen
+                            }
+                            drawRect(signalColor, size = androidx.compose.ui.geometry.Size(size.width * fraction(value), size.height))
+                            if (meterSettings.mode == AudioMeterMode.PEAK_RMS) level?.rmsDbfs?.takeIf { it.isFinite() }?.let { rms ->
+                                drawLine(meterLine, androidx.compose.ui.geometry.Offset(size.width * fraction(rms), 0f),
+                                    androidx.compose.ui.geometry.Offset(size.width * fraction(rms), size.height), strokeWidth = 1.dp.toPx())
+                            }
+                            held.getOrNull(index)?.let { peak ->
+                                drawLine(meterAmber, androidx.compose.ui.geometry.Offset(size.width * fraction(peak), 0f),
+                                    androidx.compose.ui.geometry.Offset(size.width * fraction(peak), size.height), strokeWidth = 2.dp.toPx())
+                            }
                         }
                     }
                 }
-            }
-            if (meterSettings.showValues) {
-                fun number(value: Float?) = value?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "—"
-                val valueText = when (meterSettings.mode) {
-                    AudioMeterMode.PEAK_RMS -> stringResource(R.string.audio_meter_peak_rms_values, number(value), number(level?.rmsDbfs?.takeIf { it.isFinite() }))
-                    AudioMeterMode.VU -> stringResource(R.string.audio_meter_vu_value, number(value))
-                    AudioMeterMode.PPM -> stringResource(R.string.audio_meter_ppm_value, number(value))
+                if (meterSettings.showValues) {
+                    fun number(value: Float?) = value?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "—"
+                    val valueText = when (meterSettings.mode) {
+                        AudioMeterMode.PEAK_RMS -> stringResource(R.string.audio_meter_peak_rms_values, number(value), number(level?.rmsDbfs?.takeIf { it.isFinite() }))
+                        AudioMeterMode.VU -> stringResource(R.string.audio_meter_vu_value, number(value))
+                        AudioMeterMode.PPM -> stringResource(R.string.audio_meter_ppm_value, number(value))
+                    }
+                    Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (value != null && meterSettings.peakHoldMs > 0) Text(stringResource(R.string.audio_meter_hold_value, number(held.getOrNull(index))),
+                        Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
                 }
-                Text(valueText, Modifier.testTag("audio-meter-value-$index"), color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (value != null && meterSettings.peakHoldMs > 0) Text(stringResource(R.string.audio_meter_hold_value, number(held.getOrNull(index))),
-                    Modifier.testTag("audio-meter-hold-$index"), color = Amber, fontSize = 12.sp, lineHeight = 14.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
             }
         }
+        activeInput?.let { AudioInputBadge(it, Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 7.dp)) }
     }
 }
 
@@ -4132,12 +4139,38 @@ private fun ProfessionalAudioSettings(
             selected = settings.audioSource.name,
         ) { source -> update(settings.copy(audioSource = com.librestatic.opencinecam.media.audio.AudioSourceSelection.valueOf(source))) }
 
+        val inputResolution = settings.resolveAudioInputSelection(capabilities.inputs)
+        val autoLabel = inputResolution.autoChoice?.let { choice ->
+            stringResource(R.string.audio_input_auto_with, stringResource(audioInputTypeLabel(choice.kind)))
+        } ?: stringResource(R.string.audio_automatic)
+        val missingKey = settings.audioInputKey?.takeIf { inputResolution.unavailable }
         AudioChoiceRow(
             title = stringResource(R.string.audio_input_device),
-            choices = listOf("auto" to stringResource(R.string.audio_automatic)) + capabilities.inputs.map { it.id.toString() to "${it.label} · ID ${it.id}" },
-            selected = settings.audioInputDeviceId?.toString() ?: "auto",
-        ) { id -> update(settings.copy(audioInputDeviceId = id.takeUnless { it == "auto" }?.toInt())) }
+            choices = listOf("auto" to autoLabel) +
+                capabilities.inputs.map { encodeAudioInputKey(it.key) to audioInputChoiceLabel(it.kind, it.label) } +
+                listOfNotNull(missingKey?.let { key ->
+                    encodeAudioInputKey(key) to stringResource(R.string.audio_input_disconnected, audioInputChoiceLabel(key.kind, key.productName))
+                }),
+            selected = when {
+                settings.audioInputKey == null -> "auto"
+                else -> encodeAudioInputKey(inputResolution.input?.key ?: requireNotNull(settings.audioInputKey))
+            },
+        ) { encoded ->
+            val key = encoded.takeUnless { it == "auto" }?.let(::decodeAudioInputKey)
+            update(settings.copy(audioInputKey = key, legacyAudioInputDeviceId = null,
+                audioInputDeviceId = key?.let { chosen -> capabilities.inputs.firstOrNull { it.key == chosen }?.id }))
+        }
         Text(stringResource(R.string.audio_input_device_hint), color = Muted, fontSize = 14.sp)
+        AudioChoiceRow(
+            title = stringResource(R.string.audio_input_loss_policy),
+            choices = com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.entries.map { it.name to audioInputLossPolicyLabel(it) },
+            selected = settings.audioInputLossPolicy.name,
+        ) { policy -> update(settings.copy(audioInputLossPolicy = com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.valueOf(policy))) }
+        Text(
+            stringResource(if (settings.audioInputLossPolicy == com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.CONTINUE_SILENT)
+                R.string.audio_input_loss_silent_hint else R.string.audio_input_loss_hint),
+            Modifier.testTag("audio-input-loss-hint"), color = Muted, fontSize = 14.sp,
+        )
 
         SettingsToggleRow(
             title = stringResource(R.string.audio_effect_ns),
@@ -4441,6 +4474,50 @@ private fun AudioChoiceRow(
     val labels = choices.toMap()
     SettingsChips(title, choices.map { it.first }, selected, label = { labels.getValue(it) }, onSelect = onSelected)
 }
+
+/**
+ * INT, USB, BT or WIRED: the input the platform actually routed. Amber while the route is not yet
+ * confirmed, or after the requested input was lost and the take fell back or went silent.
+ */
+@Composable
+private fun AudioInputBadge(input: com.librestatic.opencinecam.media.audio.ActiveAudioInput, modifier: Modifier = Modifier) {
+    val kind = input.type?.let { com.librestatic.opencinecam.media.audio.audioInputKind(it) }
+    val healthy = input.confirmed && !input.fallback && !input.silenced
+    val color = if (healthy) VerifiedCyan else Amber
+    val type = kind?.let { stringResource(audioInputTypeLabel(it)) } ?: stringResource(R.string.audio_input_type_other)
+    val status = when {
+        input.silenced -> stringResource(R.string.audio_input_badge_silenced)
+        input.fallback -> stringResource(R.string.audio_input_badge_fallback)
+        !input.confirmed -> stringResource(R.string.audio_input_badge_unconfirmed)
+        else -> null
+    }
+    val description = listOfNotNull(type, input.label?.takeIf { it.isNotBlank() && kind != com.librestatic.opencinecam.media.audio.AudioInputKind.BUILT_IN }, status)
+        .joinToString(", ")
+    Text(
+        kind?.badge ?: "—",
+        modifier.testTag("audio-input-badge")
+            .semantics { contentDescription = description }
+            .border(1.dp, color, RoundedCornerShape(3.dp))
+            .padding(horizontal = 3.dp),
+        color = color, fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+    )
+}
+
+/** "USB microphone · USB-C Lavalier"; the built-in microphone is named by its type alone. */
+@Composable
+private fun audioInputChoiceLabel(kind: com.librestatic.opencinecam.media.audio.AudioInputKind, productName: String): String {
+    val type = stringResource(audioInputTypeLabel(kind))
+    return if (kind == com.librestatic.opencinecam.media.audio.AudioInputKind.BUILT_IN || productName.isBlank()) type else "$type · $productName"
+}
+
+@Composable
+private fun audioInputLossPolicyLabel(policy: com.librestatic.opencinecam.media.audio.AudioInputLossPolicy): String = stringResource(
+    when (policy) {
+        com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.STOP_TAKE -> R.string.audio_input_loss_stop
+        com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.FALLBACK_BUILTIN -> R.string.audio_input_loss_fallback
+        com.librestatic.opencinecam.media.audio.AudioInputLossPolicy.CONTINUE_SILENT -> R.string.audio_input_loss_silent
+    },
+)
 
 private fun formatAudioRate(rate: Int): String = if (rate % 1_000 == 0) "${rate / 1_000} kHz" else "${rate / 1_000.0} kHz"
 

@@ -208,6 +208,10 @@ object CameraPresetCodec {
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,
         audioInputDeviceId = current.audioInputDeviceId,
+        audioInputKey = current.audioInputKey,
+        legacyAudioInputDeviceId = current.legacyAudioInputDeviceId,
+        // What a lost microphone does is a habit of this rig, not part of a look (ADR-0032 is unchanged).
+        audioInputLossPolicy = current.audioInputLossPolicy,
         audioListeningOutputDeviceId = current.audioListeningOutputDeviceId,
         // Not yet a portable preset key (needs a schema revision); keep the device value.
         logGreyReference = current.logGreyReference,

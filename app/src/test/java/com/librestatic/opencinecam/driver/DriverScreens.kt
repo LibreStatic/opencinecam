@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import com.librestatic.opencinecam.normalizedFor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -125,6 +126,25 @@ fun CapturePortrait() = CaptureChrome(driverCaptureState())
 @Composable
 fun CaptureRecording() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L),
+)
+
+/** Recording through a confirmed USB lavalier: the meter shows a USB badge. */
+@Composable
+fun CaptureRecordingUsb() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        activeAudioInput = driverAudioInput(confirmed = true)),
+)
+
+/** The lavalier was unplugged mid-take and the take fell back to the built-in microphone: amber INT. */
+@Composable
+fun CaptureRecordingFallback() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        activeAudioInput = com.librestatic.opencinecam.media.audio.ActiveAudioInput(7, null, "", 15, confirmed = false, fallback = true)),
+)
+
+private fun driverAudioInput(confirmed: Boolean) = com.librestatic.opencinecam.media.audio.ActiveAudioInput(
+    deviceId = 42, key = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "USB-C Lavalier", "card=2;device=0"),
+    label = "USB-C Lavalier", type = 22, confirmed = confirmed,
 )
 
 /** Capture chrome in video mode; start with `--device landscape` for the side rails. */
@@ -596,7 +616,18 @@ fun SelfCaptureRecording() = DriverTheme(forceDark = true) {
 
 /** The audio settings with the permission granted, the built-in microphone and a USB lavalier offered as inputs. */
 @Composable
-fun SettingsAudioInputs() = DriverTheme {
+fun SettingsAudioInputs() = AudioInputSettings(
+    CameraSettings(audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "USB-C Lavalier", "card=2;device=0")),
+)
+
+/** The remembered USB microphone is unplugged: the chip reads "(disconnected)". */
+@Composable
+fun SettingsAudioInputMissing() = AudioInputSettings(
+    CameraSettings(audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "RØDE Wireless GO II RX", "card=3;device=0")),
+)
+
+@Composable
+private fun AudioInputSettings(initial: CameraSettings) = DriverTheme {
     val depths = listOf(com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_16, com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_24)
     val rates = listOf(44_100, 48_000)
     val capabilities = com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities(
@@ -607,12 +638,14 @@ fun SettingsAudioInputs() = DriverTheme {
         aacSampleRates = rates, aacChannelCounts = listOf(1, 2), aacBitratesKbps = listOf(128, 192, 256),
         sources = com.librestatic.opencinecam.media.audio.AudioSourceSelection.entries,
         inputs = listOf(
-            com.librestatic.opencinecam.media.audio.SelectableAudioInput(7, "Built-in microphone", 15, rates, listOf(1, 2), emptyList()),
-            com.librestatic.opencinecam.media.audio.SelectableAudioInput(42, "USB-C Lavalier", 22, listOf(48_000, 96_000), listOf(1), emptyList()),
+            com.librestatic.opencinecam.media.audio.SelectableAudioInput(7, "", 15, rates, listOf(1, 2), emptyList(), address = "bottom"),
+            com.librestatic.opencinecam.media.audio.SelectableAudioInput(42, "USB-C Lavalier", 22, listOf(48_000, 96_000), listOf(1), emptyList(),
+                address = "card=2;device=0"),
         ),
         noiseSuppressorAvailable = true, automaticGainControlAvailable = true, acousticEchoCancelerAvailable = true,
     )
+    var settings by remember { mutableStateOf(initial.normalizedFor(capabilities)) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, audioCapabilities = capabilities),
-        CameraSettings(audioInputDeviceId = 42), audioPermissionGranted = true,
-        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
+        settings, audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it.normalizedFor(capabilities) })
 }
