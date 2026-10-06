@@ -37,6 +37,9 @@ import com.librestatic.opencinecam.camera.requireExclusiveAgcObservation
 import com.librestatic.opencinecam.audioEffectsJson
 import com.librestatic.opencinecam.camera.PcmMeterEncoding
 import java.io.FileOutputStream
+import com.librestatic.opencinecam.media.audio.AudioCapturePath
+import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
+import com.librestatic.opencinecam.media.audio.inputKey
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,6 +63,7 @@ class WavAudioSidecarRecorder private constructor(
     private val onAudioLevel: ((AudioLevelSnapshot) -> Unit)?,
     private val recoveryMember: RecordingRecoveryMember,
     private val listeningSink: PcmListeningSink?,
+    private val inputGuard: AudioInputRouteGuard?,
 ) : AudioSidecarRecorder {
     private val running = AtomicBoolean(false)
     private val capturedSampleRateHz = audioRecord.sampleRate
@@ -107,6 +111,7 @@ class WavAudioSidecarRecorder private constructor(
         audioRecord.startRecording()
         check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord did not enter RECORDING state." }
         routedInputDeviceId = audioRecord.routedDevice?.id
+        inputGuard?.attach(audioRecord, AudioCapturePath.AUDIO_RECORD)
         running.set(true)
         writerThread = Thread(::writeLoop, "OpenCineCamWavWriter").apply { start() }
     }
@@ -228,6 +233,7 @@ class WavAudioSidecarRecorder private constructor(
             timeoutMs = 3_000,
             stop = { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() },
             release = {
+                inputGuard?.detach()
                 releaseAudioResources(effects.map { effect -> { effect.release() } } +
                     listOf({ audioRecord.release() }))
                 effects.clear()
@@ -304,6 +310,7 @@ class WavAudioSidecarRecorder private constructor(
                 if (read <= 0) continue
                 val observedAtMs = SystemClock.elapsedRealtime()
                 val observedEffects = observeEffects(observedAtMs)
+                inputGuard?.silenceIfMuted(buffer, read)
                 levelMeter.observeInput(buffer, read)
                 when (settings.audioBitDepth) {
                     AudioBitDepth.PCM_16 -> softAgc?.processPcm16(buffer, read)
@@ -420,6 +427,7 @@ class WavAudioSidecarRecorder private constructor(
             .put("source", result.source)
             .put("preferredInputDeviceId", result.preferredInputDeviceId ?: JSONObject.NULL)
             .put("routedInputDeviceId", result.routedInputDeviceId ?: JSONObject.NULL)
+            .putAudioInputRoute(settings.audioInputKey ?: preferredInput?.inputKey(), inputGuard)
             .put("noiseSuppressorEnabled", result.noiseSuppressorEnabled)
             .put("automaticGainControlEnabled", result.automaticGainControlEnabled)
             .put("recordingGain", recordingGainJson(result.recordingGain))
@@ -456,6 +464,7 @@ class WavAudioSidecarRecorder private constructor(
             onAudioLevel: ((AudioLevelSnapshot) -> Unit)? = null,
             recoveryGroup: RecordingRecoveryGroup? = null,
             listeningSink: PcmListeningSink? = null,
+            inputGuard: AudioInputRouteGuard? = null,
         ): WavAudioSidecarRecorder {
             AudioRetirementGate.requireIdle()
             val appContext = context.applicationContext
@@ -505,6 +514,7 @@ class WavAudioSidecarRecorder private constructor(
                     onAudioLevel,
                     recoveryMember,
                     listeningSink,
+                    inputGuard,
                 )
             } catch (failure: Throwable) {
                 var retired = true

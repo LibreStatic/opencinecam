@@ -13,7 +13,7 @@ class PlaybackSettingsTest {
         assertEquals(PlaybackSettings(), CameraSettingsStore(PresetPreferences()).load().playback)
         for (muted in listOf(false, true)) for (loop in listOf(false, true)) for (position in listOf(false, true)) {
             val original = CameraSettings(playback = PlaybackSettings(muted, loop, position),
-                audioEnabled = false, audioInputDeviceId = 32, captureNaming = CaptureNamingSettings(true))
+                audioEnabled = false, audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=32"), captureNaming = CaptureNamingSettings(true))
             val memory = PresetPreferences(); val store = CameraSettingsStore(memory); store.save(original)
             assertEquals(original, store.load())
             assertEquals(keys, memory.all.keys.filter { it.startsWith("playback-") }.toSet())
