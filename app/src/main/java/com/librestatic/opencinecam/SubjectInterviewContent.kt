@@ -146,8 +146,11 @@ internal fun SubjectInterviewContent(state: CameraUiState, settings: SubjectDisp
             return@Column
         }
         val index = clampInterviewIndex(cues.interviewIndex, questions.size)
-        Text(stringResource(R.string.subject_interview_counter, index + 1, questions.size), color = Color(0xFFFFCF66),
-            fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("subject-interview-counter"))
+        // The position sits apart from the question, in a pill, so it never reads as part of it.
+        Text(stringResource(R.string.subject_interview_counter, index + 1, questions.size), color = Color(0xFFFFB300),
+            fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally)
+                .background(Color(0xFF1E1806), RoundedCornerShape(50)).padding(horizontal = 18.dp, vertical = 6.dp)
+                .testTag("subject-interview-counter"))
         FittedQuestion(questions[index], settings.prompterFontSp, Modifier.weight(1f).fillMaxWidth())
     }
 }
@@ -155,7 +158,7 @@ internal fun SubjectInterviewContent(state: CameraUiState, settings: SubjectDisp
 /** Starts at the teleprompter size and shrinks a long question until it fits the safe area. */
 @Composable
 private fun FittedQuestion(text: String, maxSp: Int, modifier: Modifier) {
-    BoxWithConstraints(modifier, contentAlignment = Alignment.CenterStart) {
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
         val measurer = rememberTextMeasurer()
         val width = constraints.maxWidth
         val height = constraints.maxHeight
@@ -165,7 +168,7 @@ private fun FittedQuestion(text: String, maxSp: Int, modifier: Modifier) {
                 measurer.measure(text, questionStyle(sp), constraints = Constraints(maxWidth = width)).size.height <= height
             }
         }
-        Text(text, style = questionStyle(fontSp), overflow = TextOverflow.Ellipsis,
+        Text(text, style = questionStyle(fontSp).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), overflow = TextOverflow.Ellipsis,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("subject-interview-question"))
     }
 }

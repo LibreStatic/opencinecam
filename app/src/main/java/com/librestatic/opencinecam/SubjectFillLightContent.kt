@@ -62,6 +62,12 @@ internal fun SubjectFillLightContent(state: CameraUiState, settings: SubjectDisp
     Box(modifier.background(color.scaled(output.colorScale).toComposeColor()).testTag("subject-fill-light")) {
         // The giant numeral in the overlay layer replaces this badge when it is on, so the subject never sees two counts.
         if (subjectShowsCountdownBadge(state, settings)) CountdownBadge(state.countdownSeconds, Modifier.align(Alignment.Center))
+        // A small read-only reading of the light, so the subject and crew can name it; the cover takes no input.
+        if (output.notice == null) Text(String.format(java.util.Locale.ROOT, "%d K", settings.fillLightKelvin),
+            color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing).padding(20.dp)
+                .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50)).padding(horizontal = 14.dp, vertical = 6.dp)
+                .testTag("subject-fill-light-kelvin"))
         output.notice?.let { notice ->
             val timedOut = notice == FillLightNotice.TIMED_OUT
             Text(fillLightNoticeText(notice), color = if (timedOut) Color(0xFFBDBDBD) else Color.White, fontSize = 20.sp,

@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -68,6 +69,10 @@ internal enum class CineIcon {
     CHEVRON_RIGHT,
     LOCK,
     UNLOCK,
+    SCRIPT,
+    SPEECH,
+    SLATE,
+    EDIT,
 }
 
 @Composable
@@ -305,6 +310,27 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             poly(.64f to .14f, .64f to .36f, .86f to .36f, close = false)
             poly(.86f to .64f, .64f to .64f, .64f to .86f, close = false)
             poly(.36f to .86f, .36f to .64f, .14f to .64f, close = false)
+        }
+        CineIcon.SCRIPT -> {
+            // A page of lines: the teleprompter.
+            box(.18f, .10f, .82f, .90f)
+            line(.32f, .32f, .68f, .32f); line(.32f, .50f, .68f, .50f); line(.32f, .68f, .56f, .68f)
+        }
+        CineIcon.SPEECH -> {
+            // A speech bubble: interview questions.
+            drawRoundRect(color, Offset(w * .10f, h * .14f), Size(w * .80f, h * .54f), CornerRadius(w * .14f), style = stroke)
+            poly(.30f to .68f, .26f to .88f, .48f to .68f, close = false)
+        }
+        CineIcon.SLATE -> {
+            // A clapperboard: the hinged stick over the board.
+            box(.12f, .40f, .88f, .86f)
+            poly(.12f to .40f, .16f to .18f, .86f to .10f, .88f to .32f, close = false)
+            line(.36f, .40f, .44f, .16f); line(.60f, .40f, .66f, .13f)
+        }
+        CineIcon.EDIT -> {
+            // A pencil.
+            poly(.20f to .80f, .24f to .62f, .66f to .20f, .80f to .34f, .38f to .76f)
+            line(.58f, .28f, .72f, .42f)
         }
         CineIcon.EXPAND -> poly(.20f to .36f, .50f to .66f, .80f to .36f, close = false)
         CineIcon.COLLAPSE -> poly(.20f to .64f, .50f to .34f, .80f to .64f, close = false)
