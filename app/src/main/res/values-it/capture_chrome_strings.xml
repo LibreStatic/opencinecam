@@ -20,6 +20,18 @@
     <string name="capture_mode_button">Modalità: %1$s</string>
     <string name="capture_scopes_short">Scope</string>
     <string name="capture_scopes_toggle">Mostra scope</string>
-    <string name="capture_locked_banner">Comandi bloccati</string>
+    <string name="capture_hold_busy_photo">Salvataggio foto…</string>
+    <string name="capture_hold_busy_burst">Raffica in corso…</string>
+    <string name="capture_hold_busy_bracket">Bracketing in corso…</string>
+    <string name="capture_hold_busy_light_trail">Scia luminosa in corso…</string>
+    <string name="capture_hold_busy_hint">I comandi tornano al termine</string>
+    <string name="capture_hold_operator_title">Comandi bloccati per la ripresa</string>
+    <string name="capture_hold_operator_hint">Stop, monitoraggio e Impostazioni restano attivi</string>
+    <string name="capture_hold_short_saving">Salvataggio…</string>
+    <string name="capture_hold_short_burst">Raffica…</string>
+    <string name="capture_hold_short_bracket">Bracketing…</string>
+    <string name="capture_hold_short_light_trail">Scia…</string>
+    <string name="capture_hold_caption_busy">Occupata</string>
+    <string name="capture_hold_caption_locked">Bloccato</string>
     <string name="capture_unlock">Sblocca</string>
 </resources>
