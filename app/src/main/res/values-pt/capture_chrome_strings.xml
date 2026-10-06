@@ -20,6 +20,18 @@
     <string name="capture_mode_button">Modo: %1$s</string>
     <string name="capture_scopes_short">Scopes</string>
     <string name="capture_scopes_toggle">Mostrar scopes</string>
-    <string name="capture_locked_banner">Controles bloqueados</string>
+    <string name="capture_hold_busy_photo">Salvando foto…</string>
+    <string name="capture_hold_busy_burst">Fazendo sequência…</string>
+    <string name="capture_hold_busy_bracket">Fazendo bracketing…</string>
+    <string name="capture_hold_busy_light_trail">Criando rastro de luz…</string>
+    <string name="capture_hold_busy_hint">Os controles voltam ao terminar</string>
+    <string name="capture_hold_operator_title">Controles bloqueados para a tomada</string>
+    <string name="capture_hold_operator_hint">Parar, monitoramento e Configurações seguem ativos</string>
+    <string name="capture_hold_short_saving">Salvando…</string>
+    <string name="capture_hold_short_burst">Sequência…</string>
+    <string name="capture_hold_short_bracket">Bracketing…</string>
+    <string name="capture_hold_short_light_trail">Rastro…</string>
+    <string name="capture_hold_caption_busy">Ocupada</string>
+    <string name="capture_hold_caption_locked">Bloqueado</string>
     <string name="capture_unlock">Desbloquear</string>
 </resources>

@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,39 +90,6 @@ internal fun CapturePaneHeader(title: String, onClose: (() -> Unit)?, modifier: 
                 Text("×", color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp)
             }
         }
-    }
-}
-
-/**
- * "Controls locked" with an Unlock button, in the layout flow above the controls it blocks, so it
- * never lies over the status lines the way a floating banner did.
- */
-@Composable
-internal fun CaptureLockBanner(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
-    val locked = stringResource(R.string.operator_locked)
-    val unlock = stringResource(R.string.operator_unlock)
-    Row(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.secondaryContainer.chromePanel())
-            .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
-            .testTag("operator-locked-banner"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            stringResource(R.string.capture_locked_banner),
-            color = colors.onSecondaryContainer,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f).semantics { contentDescription = locked },
-        )
-        Button(
-            onClick = onUnlock,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
-            modifier = Modifier.semantics { contentDescription = unlock }.testTag("operator-unlock"),
-        ) { Text(stringResource(R.string.capture_unlock)) }
     }
 }
 

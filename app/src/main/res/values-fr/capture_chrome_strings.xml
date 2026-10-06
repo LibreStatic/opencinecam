@@ -20,6 +20,18 @@
     <string name="capture_mode_button">Mode : %1$s</string>
     <string name="capture_scopes_short">Scopes</string>
     <string name="capture_scopes_toggle">Afficher les scopes</string>
-    <string name="capture_locked_banner">Commandes verrouillées</string>
+    <string name="capture_hold_busy_photo">Enregistrement de la photo…</string>
+    <string name="capture_hold_busy_burst">Rafale en cours…</string>
+    <string name="capture_hold_busy_bracket">Bracketing en cours…</string>
+    <string name="capture_hold_busy_light_trail">Traînée lumineuse en cours…</string>
+    <string name="capture_hold_busy_hint">Les commandes reviennent à la fin</string>
+    <string name="capture_hold_operator_title">Commandes verrouillées pour la prise</string>
+    <string name="capture_hold_operator_hint">Arrêt, monitoring et Réglages restent actifs</string>
+    <string name="capture_hold_short_saving">Sauvegarde…</string>
+    <string name="capture_hold_short_burst">Rafale…</string>
+    <string name="capture_hold_short_bracket">Bracketing…</string>
+    <string name="capture_hold_short_light_trail">Traînée…</string>
+    <string name="capture_hold_caption_busy">Occupée</string>
+    <string name="capture_hold_caption_locked">Verrouillé</string>
     <string name="capture_unlock">Déverrouiller</string>
 </resources>

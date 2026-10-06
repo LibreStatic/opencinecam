@@ -20,6 +20,18 @@
     <string name="capture_mode_button">Modus: %1$s</string>
     <string name="capture_scopes_short">Scopes</string>
     <string name="capture_scopes_toggle">Scopes anzeigen</string>
-    <string name="capture_locked_banner">Bedienung gesperrt</string>
+    <string name="capture_hold_busy_photo">Foto wird gespeichert…</string>
+    <string name="capture_hold_busy_burst">Serienaufnahme läuft…</string>
+    <string name="capture_hold_busy_bracket">Belichtungsreihe läuft…</string>
+    <string name="capture_hold_busy_light_trail">Lichtspur wird erstellt…</string>
+    <string name="capture_hold_busy_hint">Die Bedienung kehrt danach zurück</string>
+    <string name="capture_hold_operator_title">Bedienung für die Aufnahme gesperrt</string>
+    <string name="capture_hold_operator_hint">Stopp, Monitoring und Einstellungen bleiben aktiv</string>
+    <string name="capture_hold_short_saving">Speichert…</string>
+    <string name="capture_hold_short_burst">Serie…</string>
+    <string name="capture_hold_short_bracket">Reihe…</string>
+    <string name="capture_hold_short_light_trail">Lichtspur…</string>
+    <string name="capture_hold_caption_busy">Belegt</string>
+    <string name="capture_hold_caption_locked">Gesperrt</string>
     <string name="capture_unlock">Entsperren</string>
 </resources>
