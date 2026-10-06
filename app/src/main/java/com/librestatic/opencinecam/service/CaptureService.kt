@@ -701,15 +701,14 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
 
     private fun desiredGpuViewfinder(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
-        mode in setOf(CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
-        // The subject preview rides the GPU viewfinder in every mode it supports. A constrained
-        // high-speed take still reaches the encoder directly (startVideo); only the 30 fps preview
-        // share goes through the GPU to the operator and subject windows.
+        // Video always previews through the GPU viewfinder so REC only starts the encoder on the
+        // live graph. A direct preview had to be torn down at REC (EGL cannot reconnect to the
+        // SurfaceView the camera just released), which froze the viewfinder for the whole take.
+        // A constrained high-speed take still reaches the encoder directly (startVideo); only the
+        // 30 fps preview share goes through the GPU to the operator and subject windows.
+        mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
+        // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW && subjectPreviewBlock(mode) == null) ||
-        // Off-speed conforms frames on the GPU only at regular rates: in a constrained high-speed
-        // session Camera2 feeds any non-encoder surface 30 fps, so those takes go to the encoder directly.
-        (mode == CaptureMode.VIDEO && ((settings.videoOffSpeed && cameraState.value.activeVideoProfile?.constrainedHighSpeed != true) ||
-            currentOperatorLut != null || currentRecordingLut != null || recordingLutIntent.get()?.lut != null)) ||
         (photoPreviewMode(mode) && currentOperatorLut != null)
 
     private fun selectedStillPhotoFormat(mode: CaptureMode = cameraState.value.selectedMode): StillPhotoFormat = when (mode) {
