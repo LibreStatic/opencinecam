@@ -74,7 +74,7 @@ class SettingsHubTest {
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
                 MaterialTheme {
-                    SettingsScreen(CameraUiState(phase = phase, settingsPending = phase == CameraUiPhase.RECORDING), CameraSettings(), false, {}, {}, {})
+                    SettingsScreen(CameraUiState(phase = phase, settingsPending = phase == CameraUiPhase.RECORDING), CameraSettings(), false, {}, {}, onSettingsChange = {})
                 }
             }
         }
