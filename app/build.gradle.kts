@@ -21,7 +21,7 @@ android {
             ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let {
                 it + (providers.gradleProperty("opencinecam.versionCodeOffset").orNull?.toInt() ?: 100)
             }
-            ?: 109
+            ?: 110
         versionName = "0.3.0-beta"
 
         ndk {
