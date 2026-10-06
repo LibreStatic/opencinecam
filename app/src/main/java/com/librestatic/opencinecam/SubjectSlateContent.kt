@@ -47,6 +47,7 @@ import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.util.Locale
 
 private val SlateLabel = Color(0xFFBDBDBD)
+private val SlateTimecode = Color(0xFFFFB300)
 private const val TIMECODE_TEMPLATE = "88:88:88:88"
 
 /**
@@ -108,7 +109,7 @@ private fun rememberSlateTimecode(state: CameraUiState, rate: TimecodeRate?): St
 @Composable
 private fun SlateCell(line: SubjectSlateLine, modifier: Modifier) {
     val timecode = line.field == SubjectSlateField.TIMECODE
-    BoxWithConstraints(modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag("subject-slate-${line.field.name.lowercase(Locale.ROOT)}")) {
+    BoxWithConstraints(modifier.padding(horizontal = 14.dp, vertical = 8.dp).testTag("subject-slate-${line.field.name.lowercase(Locale.ROOT)}")) {
         val density = LocalDensity.current
         val labelPx = with(density) { (maxHeight * 0.18f).coerceIn(10.dp, 40.dp).toPx() }
         val valueWidth = with(density) { maxWidth.roundToPx() }
@@ -125,7 +126,8 @@ private fun SlateCell(line: SubjectSlateLine, modifier: Modifier) {
                 fontSize = with(density) { (labelPx * labelScale).toSp() }, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
                 overflow = TextOverflow.Clip, onTextLayout = { if (it.didOverflowWidth && labelScale > 0.25f) labelScale *= 0.9f })
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = if (timecode) Alignment.Center else Alignment.CenterStart) {
-                Text(line.value, color = Color.White, fontSize = fitted, fontFamily = family, fontWeight = FontWeight.Bold,
+                // The timecode is the value other cameras read; amber sets it apart from the static fields.
+                Text(line.value, color = if (timecode) SlateTimecode else Color.White, fontSize = fitted * 0.9f, fontFamily = family, fontWeight = FontWeight.Bold,
                     maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
             }
         }

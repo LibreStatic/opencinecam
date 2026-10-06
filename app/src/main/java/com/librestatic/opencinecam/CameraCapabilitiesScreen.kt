@@ -295,7 +295,7 @@ private fun cameraChipLabel(camera: CameraInventory, active: Boolean): String {
 }
 
 @Composable
-private fun facingLabel(facing: Int?): String = stringResource(
+internal fun facingLabel(facing: Int?): String = stringResource(
     when (facing) {
         CameraCharacteristics.LENS_FACING_BACK -> R.string.caps_facing_back
         CameraCharacteristics.LENS_FACING_FRONT -> R.string.caps_facing_front

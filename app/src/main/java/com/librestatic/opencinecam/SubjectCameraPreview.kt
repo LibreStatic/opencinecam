@@ -111,19 +111,36 @@ internal fun SubjectCameraPreview(
 @Composable
 internal fun SubjectFrameBadge(status: SubjectPreviewStatus, modifier: Modifier = Modifier) {
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { delay(200); tick++ } }
+    val receivedAt = status.sourceReceivedAtMs
+    // Ticks only once frames flow: the freshness check needs a clock, the waiting state does not.
+    LaunchedEffect(receivedAt != null) { if (receivedAt != null) while (true) { delay(200); tick++ } }
     // Sample the clock per status too: statuses arrive every ~66 ms stamped after the last tick,
     // and isFresh rejects a submission newer than `now`, so a tick-only clock reads live as paused.
     val now = remember(status, tick) { SystemClock.elapsedRealtime() }
     val failure = status.failure
-    val receivedAt = status.sourceReceivedAtMs
+    if (failure == null && receivedAt == null) {
+        // No picture yet: a calm centred state rather than a bar over a black panel.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                CineGlyph(CineIcon.CAMERA, Color(0xFF7D878D), Modifier.size(56.dp))
+                Text(stringResource(R.string.subject_preview_waiting), color = Color(0xFFBDC5CA), fontSize = 20.sp,
+                    modifier = Modifier.testTag("subject-preview-age"))
+            }
+        }
+        return
+    }
+    val live = failure == null && status.isFresh(now)
     val message = when {
         failure != null -> stringResource(R.string.subject_preview_failed, failure)
-        receivedAt == null -> stringResource(R.string.subject_preview_waiting)
-        !status.isFresh(now) -> stringResource(R.string.subject_preview_stale)
-        else -> stringResource(R.string.subject_preview_age, (now - receivedAt).coerceAtLeast(0))
+        !live -> stringResource(R.string.subject_preview_stale)
+        else -> stringResource(R.string.subject_preview_age, (now - (receivedAt ?: now)).coerceAtLeast(0))
     }
-    Text(message, color = Color.White, fontSize = 16.sp,
+    // A live picture keeps its latency as a small corner reading; problems get the full bar.
+    if (live) Box(modifier, contentAlignment = Alignment.BottomEnd) {
+        Text(message, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp,
+            modifier = Modifier.padding(8.dp).background(Color.Black.copy(alpha = 0.5f), androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 4.dp).testTag("subject-preview-age"))
+    } else Text(message, color = Color.White, fontSize = 16.sp,
         modifier = modifier.background(Color.Black.copy(alpha = 0.85f)).padding(8.dp).testTag("subject-preview-age"))
 }
 

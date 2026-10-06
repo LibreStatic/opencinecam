@@ -17,7 +17,9 @@ class FoldDisplayUiTest {
 
     @Test fun unprobedDisplayCannotBeStartedByTheSettingsButtons() {
         compose.setContent { MaterialTheme { FoldDisplaySettings(CameraUiState(), CameraSettings(), {}) } }
-        compose.onNodeWithTag("fold-present").assertIsNotEnabled()
+        // The reason replaces the subject-display action; self recording stays offered but disabled.
+        compose.onNodeWithTag("fold-present").assertDoesNotExist()
+        compose.onNodeWithTag("fold-present-reason").assertIsDisplayed()
         compose.onNodeWithTag("fold-transfer").assertIsNotEnabled()
     }
 
@@ -52,6 +54,6 @@ class FoldDisplayUiTest {
     @Test fun exteriorSearchFindsCanonicalSettings() {
         compose.setContent { MaterialTheme { SettingsScreen(CameraUiState(), CameraSettings(), false, {}, {}, {}) } }
         compose.onNodeWithTag("settings-search").performTextInput("pantalla exterior")
-        compose.onNodeWithTag("fold-present").assertIsDisplayed()
+        compose.onNodeWithTag("fold-status-card").assertIsDisplayed()
     }
 }

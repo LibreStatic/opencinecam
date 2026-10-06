@@ -110,6 +110,12 @@ Outputs and logs:
 | `About` | `AboutScreen` | real license catalog from assets |
 | `Onboarding` | `OnboardingScreen` | first page, reduced motion |
 | `CapturePeaking` | `MonitoringOverlay` under `AdaptiveCaptureChrome` | video, focus peaking on a synthetic 320×240 analysis frame (sharp ring, disc and glyphs peak; the soft disc must not); the frame is centred in the window, and portrait or landscape follows `--device` |
+| `SubjectStatus` / `SubjectStatusRecording` | `SubjectDisplayScreen` | the exterior status display at rest ("Ready") or recording (REC 01:23, with a cue); use `--device cover` for every `Subject*` screen |
+| `SubjectPrompter` / `SubjectPrompterRecording` | `SubjectDisplayScreen` | the teleprompter, without and with the REC header |
+| `SubjectPreview` / `SubjectFillLight` / `SubjectReview` / `SubjectInterview` / `SubjectSlate` | `SubjectDisplayScreen` | the other subject modes: waiting for a frame, 4300 K fill light, no take yet, question 2 of 3, slate |
+| `SelfCapture` / `SelfCaptureRecording` | `SelfCaptureChrome` | the self-recording controls on the cover, idle with a 3 s timer or recording |
+| `FoldMenuPane` / `FoldMenuFolded` | `FoldDisplaySettings` in `AdaptiveCaptureChrome` | the Displays pane (`CaptureInitialPane.DISPLAYS`) unfolded with the teleprompter chosen, or folded (presentation unavailable); the fold state comes from `LocalFoldDisplayStateWithoutCoordinator` |
+| `FoldMenu` | `FoldDisplaySettings` | the Settings hub version, which adds the inner-screen and folding section |
 
 The capture screens run the fake camera and analysis in `CaptureDriverFakes.kt`, keep their own copy of the settings so toggles, F-keys and scope keys work, and pick the layout from the device: `phone` gives compact portrait, `landscape` the side rails, `inner` and `tablet` the stacked deck, and the 1280x800 dp window the inspector. A panel opens through `AdaptiveCaptureChrome(initialPane = …)`, which production never sets.
 
