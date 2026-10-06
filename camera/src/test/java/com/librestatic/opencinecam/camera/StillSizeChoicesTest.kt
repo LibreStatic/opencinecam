@@ -41,4 +41,17 @@ class StillSizeChoicesTest {
         val physical = mapOf("5" to listOf(4096 to 3072), "2" to listOf(4096 to 3072))
         assertEquals("2", physicalStillRouting(4096 to 3072, logical, physical))
     }
+
+    /** Razr Fold: logical 1x is the 6.57 mm main; "5" is the 13.3 mm tele and must not carry the still. */
+    @Test fun unityZoomPhysicalIdsKeepOnlyTheOneTimesLens() {
+        val physical = listOf("3" to 2.2f, "2" to 6.57f, "5" to 13.3f)
+        assertEquals(setOf("2"), unityZoomPhysicalIds(6.57f, physical))
+        assertEquals(setOf("2"), unityZoomPhysicalIds(6.4f, physical))
+        assertEquals(emptySet<String>(), unityZoomPhysicalIds(6.57f, listOf("5" to 13.3f)))
+    }
+
+    @Test fun unityZoomPhysicalIdsRouteNowhereWithoutALogicalFocal() {
+        assertEquals(emptySet<String>(), unityZoomPhysicalIds(null, listOf("2" to 6.57f)))
+        assertEquals(emptySet<String>(), unityZoomPhysicalIds(0f, listOf("2" to 6.57f)))
+    }
 }
