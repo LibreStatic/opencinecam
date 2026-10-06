@@ -1,0 +1,40 @@
+<en-US>
+- Displays: tap an exterior content to open its settings on their own page, with a way back to all contents
+- Exterior brightness now shows only for self-recording, the one place the cover can change it; in dual screen the cover follows the inner screen's brightness
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Pantallas: tocá un contenido exterior para abrir sus ajustes en su propia página, con un enlace para volver a todos los contenidos
+- El brillo exterior ahora solo aparece en la autograbación, el único caso en que la pantalla exterior lo puede cambiar; en pantalla dual sigue el brillo de la interior
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Pantallas: toca un contenido exterior para abrir sus ajustes en su propia página, con un enlace para volver a todos los contenidos
+- El brillo exterior ahora solo aparece en la autograbación, el único caso en que la pantalla exterior puede cambiarlo; en pantalla dual sigue el brillo de la interior
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Telas: toque em um conteúdo externo para abrir as configurações em uma página própria, com um link para voltar a todos os conteúdos
+- O brilho externo agora só aparece na autogravação, o único caso em que a tela externa pode mudá-lo; na tela dupla ela segue o brilho da interna
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Ecrãs: toque num conteúdo exterior para abrir as definições numa página própria, com uma ligação para voltar a todos os conteúdos
+- O brilho exterior só aparece agora na autogravação, o único caso em que o ecrã exterior o pode mudar; no ecrã duplo segue o brilho do interior
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Écrans : touchez un contenu extérieur pour ouvrir ses réglages sur sa propre page, avec un lien pour revenir à tous les contenus
+- La luminosité extérieure n'apparaît plus qu'en auto-enregistrement, le seul cas où l'écran extérieur peut la changer ; en double écran il suit l'écran intérieur
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Displays: Tippe auf einen Außeninhalt, um seine Einstellungen auf einer eigenen Seite zu öffnen, mit einem Link zurück zu allen Inhalten
+- Die Außenhelligkeit erscheint nur noch bei der Selbstaufnahme, dem einzigen Fall, in dem das Außendisplay sie ändern kann; im Dual-Modus folgt es dem Innendisplay
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Display: tocca un contenuto esterno per aprirne le impostazioni in una pagina propria, con un link per tornare a tutti i contenuti
+- La luminosità esterna ora appare solo nell'autoripresa, l'unico caso in cui lo schermo esterno può cambiarla; nel doppio schermo segue quello interno
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
