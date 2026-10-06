@@ -27,6 +27,18 @@
     <string name="capture_mode_button">Mode: %1$s</string>
     <string name="capture_scopes_short">Scopes</string>
     <string name="capture_scopes_toggle">Show scopes</string>
-    <string name="capture_locked_banner">Controls locked</string>
+    <string name="capture_hold_busy_photo">Saving photo…</string>
+    <string name="capture_hold_busy_burst">Shooting burst…</string>
+    <string name="capture_hold_busy_bracket">Shooting bracket…</string>
+    <string name="capture_hold_busy_light_trail">Building light trail…</string>
+    <string name="capture_hold_busy_hint">Controls return when it finishes</string>
+    <string name="capture_hold_operator_title">Controls locked for the take</string>
+    <string name="capture_hold_operator_hint">Stop, monitoring and Settings still work</string>
+    <string name="capture_hold_short_saving">Saving…</string>
+    <string name="capture_hold_short_burst">Burst…</string>
+    <string name="capture_hold_short_bracket">Bracket…</string>
+    <string name="capture_hold_short_light_trail">Light trail…</string>
+    <string name="capture_hold_caption_busy">Busy</string>
+    <string name="capture_hold_caption_locked">Locked</string>
     <string name="capture_unlock">Unlock</string>
 </resources>

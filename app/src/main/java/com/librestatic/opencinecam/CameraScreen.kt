@@ -1935,10 +1935,9 @@ internal fun AdaptiveCaptureChrome(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
                 if (hinge) OperatorButtonRow(state, settings)
                 presets()
-                CaptureSlotStrip(slots, activeSlot, onSlot, Modifier.padding(horizontal = 8.dp))
+                CaptureHeldSlots(state, unlock, Modifier.fillMaxWidth().padding(horizontal = 8.dp)) { CaptureSlotStrip(slots, activeSlot, onSlot) }
                 if (settings.modeSelectorStyle == ModeSelectorStyle.DIAL) ModeDial(state, binder, onOpenSheet = openModeSheet)
                 else CaptureModeButton(modeName, openModeSheet)
                 PortraitCaptureTransport(
@@ -1954,10 +1953,11 @@ internal fun AdaptiveCaptureChrome(
                     .padding(top = 8.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
                 if (hinge) OperatorButtonRow(state, settings)
                 presets()
-                CaptureSlotStrip(slots, activeSlot, onSlot, Modifier.align(Alignment.CenterHorizontally).widthIn(max = 560.dp))
+                CaptureHeldSlots(state, unlock, Modifier.align(Alignment.CenterHorizontally).widthIn(max = 560.dp)) {
+                    CaptureSlotStrip(slots, activeSlot, onSlot)
+                }
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -2033,17 +2033,20 @@ internal fun AdaptiveCaptureChrome(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
                 // Two columns: the five slots, and beside them the mode, the status and the shutter,
                 // which is held at the bottom so it never scrolls away.
                 Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CaptureSlotColumn(slots, activeSlot, onSlot, Modifier.width(96.dp).fillMaxHeight())
+                    CaptureDimmedWhileHeld(state, Modifier.width(96.dp).fillMaxHeight()) {
+                        CaptureSlotColumn(slots, activeSlot, onSlot, Modifier.fillMaxSize())
+                    }
                     Column(
                         Modifier.weight(1f).fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                        CaptureHeldSlots(state, unlock, Modifier.fillMaxWidth(), HoldStyle.PILL) {
+                            CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
+                        }
                         Column(
                             Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2097,9 +2100,8 @@ internal fun AdaptiveCaptureChrome(
                             OutOfFrameHudChip(state)
                         }
                         CaptureStatus(state)
-                        if (state.captureControlsLocked) CaptureLockBanner(unlock, Modifier.fillMaxWidth())
                         CaptureModeButton(modeName, { togglePane(CapturePane.Modes) }, Modifier.fillMaxWidth())
-                        CaptureSlotRows(slots, activeSlot, onSlot)
+                        CaptureHeldSlots(state, unlock, Modifier.fillMaxWidth()) { CaptureSlotRows(slots, activeSlot, onSlot) }
                         presets()
                         StatusInfoBar(state, settings)
                     }
@@ -2956,7 +2958,9 @@ internal fun CaptureButton(
         },
     )
     val stateLabel = recordState?.let { stringResource(it.label) }
-    val busy = recordState == RecordButtonState.PREPARING || recordState == RecordButtonState.FINALIZING
+    // A still still being saved spins too, so the shutter itself says why it does not answer.
+    val stillBusy = state.selectedMode.isStillMode() && state.captureHold == CaptureHold.BUSY
+    val busy = recordState == RecordButtonState.PREPARING || recordState == RecordButtonState.FINALIZING || stillBusy
     val label: @Composable () -> Unit = {
         if (stateLabel != null) {
             Text(
@@ -3003,6 +3007,7 @@ internal fun CaptureButton(
                         .background(
                             when {
                                 recordState == RecordButtonState.UNAVAILABLE || recordState == RecordButtonState.PREPARING -> Color(0xFF3A4247)
+                                stillBusy -> Amber.copy(alpha = .45f)
                                 state.selectedMode.isStillMode() -> Amber
                                 else -> RecordRed
                             },

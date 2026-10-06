@@ -54,6 +54,7 @@ import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
+import com.librestatic.opencinecam.OperatorPreferences
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureInitialPane
@@ -174,6 +175,14 @@ fun CaptureLocked() = CaptureChrome(
     driverCaptureState().copy(
         stillCapturePending = true,
         message = stringResource(R.string.photo_capture_saved, "OCC_20261003_101500.jpg"),
+    ),
+)
+
+/** A video take starting with "lock capture controls during a take" on: the operator's own lock, with Unlock. */
+@Composable
+fun CaptureOperatorLocked() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.CAPTURING).copy(
+        effectiveSettings = CameraSettings(operation = OperatorPreferences(lockDuringTake = true)),
     ),
 )
 
