@@ -38,9 +38,10 @@ class AudioInputRoutingTest {
         assertNull(resolveAudioInput(AudioInputKey(AudioDeviceInfo.TYPE_USB_DEVICE, "Gone", ""), listOf(builtIn)))
     }
 
-    @Test fun autoPrefersUsbOrWiredThenBluetoothThenBuiltIn() {
+    @Test fun autoPrefersUsbOrWiredThenBuiltInAndBluetoothOnlyAsTheLastResort() {
         assertEquals(lav, preferredAutoInput(listOf(builtIn, bt, lav)))
-        assertEquals(bt, preferredAutoInput(listOf(builtIn, bt)))
+        assertEquals(builtIn, preferredAutoInput(listOf(bt, builtIn)))
+        assertEquals(bt, preferredAutoInput(listOf(bt)))
         assertEquals(builtIn, preferredAutoInput(listOf(builtIn)))
         assertNull(preferredAutoInput(emptyList()))
     }
