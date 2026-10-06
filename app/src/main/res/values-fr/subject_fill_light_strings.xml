@@ -15,7 +15,6 @@
     <string name="subject_fill_light_restart">Rallumer la lumière</string>
     <string name="subject_fill_light_swatch">Aperçu de la couleur de la lumière, %1$d K, teinte %2$d</string>
     <string name="subject_fill_light_swatch_note">Couleur approximative ; l\'écran extérieur n\'est pas calibré.</string>
-    <string name="subject_fill_light_brightness">Luminosité demandée : %1$d %% (une demande, pas une lumière mesurée)</string>
     <string name="subject_fill_light_thermal_help">Quand le téléphone chauffe (état thermique modéré ou plus), la lumière s\'atténue seule et les deux écrans l\'indiquent. La capture ne change jamais.</string>
     <string name="subject_fill_light_presets">Couleurs prédéfinies</string>
     <string name="subject_fill_light_preset_label">%1$s · %2$d K</string>

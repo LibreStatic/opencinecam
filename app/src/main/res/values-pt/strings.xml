@@ -240,6 +240,11 @@
     <string name="fold_mode_settings">Ajustes de %1$s</string>
     <string name="fold_mode_status_help">A tela externa mostra Pronto em repouso e, ao gravar, um REC grande com o tempo da tomada.</string>
     <string name="fold_mode_more_below">As demais opções deste conteúdo estão na própria seção, mais abaixo.</string>
+    <string name="fold_mode_open_hint">Toque num conteúdo para escolhê-lo e abrir as configurações.</string>
+    <string name="fold_back_to_modes">Todos os conteúdos externos</string>
+    <string name="fold_open_short">Abrir</string>
+    <string name="fold_close_short">Fechar</string>
+    <string name="fold_return_short">Voltar</string>
     <string name="fold_general">Geral</string>
     <string name="fold_inner_section">Tela interna e dobra</string>
     <string name="fold_exterior_display">Tela externa</string>

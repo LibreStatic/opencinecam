@@ -129,10 +129,6 @@ internal fun SubjectFillLightSettings(state: CameraUiState, subject: SubjectDisp
             -FILL_LIGHT_TINT_LIMIT.toFloat()..FILL_LIGHT_TINT_LIMIT.toFloat()) {
             onChange(subject.copy(fillLightTint = it.roundToInt().coerceIn(-FILL_LIGHT_TINT_LIMIT, FILL_LIGHT_TINT_LIMIT)))
         }
-        // The same brightness preference as the other modes, labelled as a request rather than measured light.
-        FoldSlider(stringResource(R.string.subject_fill_light_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) {
-            onChange(subject.copy(brightness = (it / 100).coerceIn(0f, 1f)))
-        }
         SettingsChips(stringResource(R.string.subject_fill_light_timeout), listOf(0, 60, 300, 600, 1800), subject.fillLightTimeoutSeconds,
             label = { if (it == 0) stringResource(R.string.subject_fill_light_timeout_off) else stringResource(R.string.subject_fill_light_timeout_minutes, it / 60) },
             onSelect = { onChange(subject.copy(fillLightTimeoutSeconds = it)) }, tag = { "subject-fill-timeout-$it" })

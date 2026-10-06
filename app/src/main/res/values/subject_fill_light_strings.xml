@@ -15,7 +15,6 @@
     <string name="subject_fill_light_restart">Turn the light back on</string>
     <string name="subject_fill_light_swatch">Light colour preview, %1$d K, tint %2$d</string>
     <string name="subject_fill_light_swatch_note">Approximate colour; the cover panel is not calibrated.</string>
-    <string name="subject_fill_light_brightness">Requested brightness: %1$d%% (a request, not measured light)</string>
     <string name="subject_fill_light_thermal_help">When the phone warms up (moderate thermal status or above) the light dims on its own and both screens say so. Capture is never changed.</string>
     <string name="subject_fill_light_presets">Colour presets</string>
     <string name="subject_fill_light_preset_label">%1$s · %2$d K</string>

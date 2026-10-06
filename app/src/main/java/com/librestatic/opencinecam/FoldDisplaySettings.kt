@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,18 +42,28 @@ internal val LocalFoldDisplayStateWithoutCoordinator = staticCompositionLocalOf 
 /**
  * The exterior display menu: a status card with the one action that applies (or why none does), the
  * content modes as a grid, the chosen mode's own settings under it, then the general ones.
- * [inCapturePane] is the capture screen's pane: it adds each mode's full settings, which the settings
- * hub keeps in their own cards, and leaves out the inner-screen layout options, which only the hub shows.
+ * [inCapturePane] is the capture screen's pane: there a mode opens its own page with every setting,
+ * which the settings hub keeps in their own cards, and the inner-screen layout options are left out,
+ * since only the hub shows them. [scroll] is the pane's scroll, sent back to the top on a page change.
  */
 @Composable
 internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit,
-    inCapturePane: Boolean = false) {
+    inCapturePane: Boolean = false, scroll: ScrollState? = null) {
     val coordinator = LocalFoldDisplayCoordinator.current
     val offline = LocalFoldDisplayStateWithoutCoordinator.current
     val fallback = remember(offline) { kotlinx.coroutines.flow.MutableStateFlow(offline) }
     val display by (coordinator?.states ?: fallback).collectAsState()
     val subject = settings.subjectDisplay
     fun update(next: SubjectDisplaySettings) = onChange(settings.copy(subjectDisplay = next))
+    var modePage by rememberSaveable { mutableStateOf(false) }
+    val showModePage = inCapturePane && modePage
+    BackHandler(enabled = showModePage) { modePage = false }
+    LaunchedEffect(showModePage) { scroll?.scrollTo(0) }
+    if (showModePage) {
+        FoldModePage(camera, display, subject, ::update, onBack = { modePage = false },
+            onPresent = { coordinator?.start(DisplayOperation.PRESENT) }, onClose = { coordinator?.closeSession() })
+        return
+    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FoldStatusCard(display, subject.mode, camera.phase == CameraUiPhase.RECORDING,
             onPresent = { coordinator?.start(DisplayOperation.PRESENT) },
@@ -59,40 +71,21 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
             onClose = { coordinator?.closeSession() })
 
         FoldSectionTitle(stringResource(R.string.fold_subject_mode))
-        FoldModeGrid(subject.mode) { update(subject.copy(mode = it)) }
-
-        FoldSectionTitle(stringResource(R.string.fold_mode_settings, stringResource(subject.mode.labelRes())))
-        if (subject.mode != SubjectDisplayMode.FILL_LIGHT) {
-            OutlinedTextField(subject.operatorCue, { update(subject.copy(operatorCue = it.take(200))) }, label = { Text(stringResource(R.string.fold_cue)) },
-                modifier = Modifier.fillMaxWidth().testTag("fold-cue"), colors = readableFieldColors())
+        if (inCapturePane) SettingsHelpText(stringResource(R.string.fold_mode_open_hint), null)
+        FoldModeGrid(subject.mode, opensPage = inCapturePane) {
+            if (it != subject.mode) update(subject.copy(mode = it))
+            if (inCapturePane) modePage = true
         }
-        when (subject.mode) {
-            SubjectDisplayMode.STATUS -> SettingsHelpText(stringResource(R.string.fold_mode_status_help), null)
-            SubjectDisplayMode.TELEPROMPTER -> {
-                FoldScriptPreview(subject.prompterText) { update(subject.copy(prompterText = it.take(20_000))) }
-                FoldSlider(stringResource(R.string.fold_font, subject.prompterFontSp), subject.prompterFontSp.toFloat(), 16f..72f) { update(subject.copy(prompterFontSp = it.roundToInt())) }
-                FoldSlider(stringResource(R.string.fold_speed, subject.prompterSpeedDpPerSecond), subject.prompterSpeedDpPerSecond.toFloat(), 5f..120f) { update(subject.copy(prompterSpeedDpPerSecond = it.roundToInt())) }
-                FoldToggle(stringResource(R.string.fold_pause), subject.prompterPaused) { update(subject.copy(prompterPaused = it)) }
-            }
-            SubjectDisplayMode.PREVIEW -> {
-                SettingsHelpText(stringResource(R.string.fold_preview_help), null)
-                if (inCapturePane) SubjectSelfMonitorSettings(camera, subject, ::update)
-                else FoldToggle(stringResource(R.string.fold_preview_mirror), subject.previewMirror) { update(subject.copy(previewMirror = it)) }
-                FoldToggle(stringResource(R.string.fold_preview_assist), subject.previewViewAssist) { update(subject.copy(previewViewAssist = it)) }
-            }
-            SubjectDisplayMode.REVIEW -> SubjectReviewOperatorBar(help = true)
-            SubjectDisplayMode.FILL_LIGHT -> if (inCapturePane) SubjectFillLightSettings(camera, subject, ::update)
-                else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
-            SubjectDisplayMode.INTERVIEW -> if (inCapturePane) SubjectInterviewSettings(camera, subject, ::update)
-                else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
-            SubjectDisplayMode.SLATE -> if (inCapturePane) SubjectSlateSettings(camera, subject, ::update)
-                else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
+
+        if (!inCapturePane) {
+            FoldSectionTitle(stringResource(R.string.fold_mode_settings, stringResource(subject.mode.labelRes())))
+            FoldModeSettings(camera, subject, inCapturePane = false, ::update)
         }
 
         FoldSectionTitle(stringResource(R.string.fold_general))
-        FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }
+        // In the capture pane the status overlay sits on each mode's page instead.
         FoldToggle(stringResource(R.string.fold_lock_touch), subject.touchLocked) { update(subject.copy(touchLocked = it)) }
-        if (subject.mode != SubjectDisplayMode.STATUS) {
+        if (!inCapturePane && subject.mode != SubjectDisplayMode.STATUS) {
             FoldToggle(stringResource(R.string.fold_show_status), subject.showStatus) { update(subject.copy(showStatus = it)) }
         }
 
@@ -101,6 +94,10 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
             label = { stringResource(R.string.self_timer_short, it) },
             onSelect = { update(subject.copy(selfTimerSeconds = it)) }, tag = { "self-timer-$it" })
         FoldToggle(stringResource(R.string.self_minimal), subject.selfMinimalControls) { update(subject.copy(selfMinimalControls = it)) }
+        // Only self-recording can set the cover's brightness: there the activity window is the cover's own.
+        // A presentation is a brightness follower of the inner screen (Razr dumpsys: reason=follower), so the
+        // system drops its request, and the subject modes offer no slider.
+        FoldBrightness(subject, ::update)
 
         // How the inner screen behaves belongs to the operator's layout, not to what the subject sees.
         if (!inCapturePane) {
@@ -116,6 +113,95 @@ internal fun FoldDisplaySettings(camera: CameraUiState, settings: CameraSettings
         }
     }
 }
+
+/**
+ * One mode's page in the capture pane: a way back to the grid, the mode, the session at a glance with
+ * its open or close action, then every setting of the mode.
+ */
+@Composable
+private fun FoldModePage(camera: CameraUiState, display: FoldDisplayState, subject: SubjectDisplaySettings,
+    update: (SubjectDisplaySettings) -> Unit, onBack: () -> Unit, onPresent: () -> Unit, onClose: () -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag("fold-mode-page"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+                .clickable(role = Role.Button, onClick = onBack).padding(end = 12.dp).testTag("fold-mode-back"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CineGlyph(CineIcon.CHEVRON_LEFT, MaterialTheme.colorScheme.primary, Modifier.size(20.dp))
+            Text(stringResource(R.string.fold_back_to_modes), color = MaterialTheme.colorScheme.primary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CineGlyph(subject.mode.icon(), MaterialTheme.colorScheme.primary, Modifier.size(28.dp))
+            Text(stringResource(subject.mode.labelRes()), color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp,
+                fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
+        }
+        FoldSessionStrip(display, subject.mode, onPresent, onClose)
+        FoldModeSettings(camera, subject, inCapturePane = true, update)
+        if (subject.mode != SubjectDisplayMode.STATUS) {
+            FoldToggle(stringResource(R.string.fold_show_status), subject.showStatus) { update(subject.copy(showStatus = it)) }
+        }
+    }
+}
+
+/** The session state in one row, with the action that applies; the full card stays on the grid page. */
+@Composable
+private fun FoldSessionStrip(display: FoldDisplayState, mode: SubjectDisplayMode, onPresent: () -> Unit, onClose: () -> Unit) {
+    val active = display.phase != DisplaySessionPhase.IDLE
+    val transferring = display.operation == DisplayOperation.TRANSFER
+    val (dot, state) = sessionState(display, mode)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp).heightIn(min = 48.dp).testTag("fold-session-strip"),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+        Text(state, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).testTag("fold-status"))
+        when {
+            active -> TextButton(onClick = onClose, modifier = Modifier.testTag("fold-close")) {
+                Text(stringResource(if (transferring) R.string.fold_return_short else R.string.fold_close_short))
+            }
+            display.presentation == DisplayCapability.AVAILABLE -> Button(onClick = onPresent, modifier = Modifier.testTag("fold-present")) {
+                Text(stringResource(R.string.fold_open_short))
+            }
+        }
+    }
+}
+
+/** The settings that belong to [SubjectDisplaySettings.mode]: the cue, then the mode's own controls. */
+@Composable
+private fun FoldModeSettings(camera: CameraUiState, subject: SubjectDisplaySettings, inCapturePane: Boolean, update: (SubjectDisplaySettings) -> Unit) {
+    if (subject.mode != SubjectDisplayMode.FILL_LIGHT) {
+        OutlinedTextField(subject.operatorCue, { update(subject.copy(operatorCue = it.take(200))) }, label = { Text(stringResource(R.string.fold_cue)) },
+            modifier = Modifier.fillMaxWidth().testTag("fold-cue"), colors = readableFieldColors())
+    }
+    when (subject.mode) {
+        SubjectDisplayMode.STATUS -> SettingsHelpText(stringResource(R.string.fold_mode_status_help), null)
+        SubjectDisplayMode.TELEPROMPTER -> {
+            FoldScriptPreview(subject.prompterText) { update(subject.copy(prompterText = it.take(20_000))) }
+            FoldSlider(stringResource(R.string.fold_font, subject.prompterFontSp), subject.prompterFontSp.toFloat(), 16f..72f) { update(subject.copy(prompterFontSp = it.roundToInt())) }
+            FoldSlider(stringResource(R.string.fold_speed, subject.prompterSpeedDpPerSecond), subject.prompterSpeedDpPerSecond.toFloat(), 5f..120f) { update(subject.copy(prompterSpeedDpPerSecond = it.roundToInt())) }
+            FoldToggle(stringResource(R.string.fold_pause), subject.prompterPaused) { update(subject.copy(prompterPaused = it)) }
+        }
+        SubjectDisplayMode.PREVIEW -> {
+            SettingsHelpText(stringResource(R.string.fold_preview_help), null)
+            if (inCapturePane) SubjectSelfMonitorSettings(camera, subject, update)
+            else FoldToggle(stringResource(R.string.fold_preview_mirror), subject.previewMirror) { update(subject.copy(previewMirror = it)) }
+            FoldToggle(stringResource(R.string.fold_preview_assist), subject.previewViewAssist) { update(subject.copy(previewViewAssist = it)) }
+        }
+        SubjectDisplayMode.REVIEW -> SubjectReviewOperatorBar(help = true)
+        SubjectDisplayMode.FILL_LIGHT -> if (inCapturePane) SubjectFillLightSettings(camera, subject, update)
+            else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
+        SubjectDisplayMode.INTERVIEW -> if (inCapturePane) SubjectInterviewSettings(camera, subject, update)
+            else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
+        SubjectDisplayMode.SLATE -> if (inCapturePane) SubjectSlateSettings(camera, subject, update)
+            else SettingsHelpText(stringResource(R.string.fold_mode_more_below), null)
+    }
+}
+
+@Composable
+private fun FoldBrightness(subject: SubjectDisplaySettings, update: (SubjectDisplaySettings) -> Unit) =
+    FoldSlider(stringResource(R.string.fold_brightness, (subject.brightness * 100).roundToInt()), subject.brightness * 100, 0f..100f) { update(subject.copy(brightness = it / 100)) }
 
 private val FoldOk = Color(0xFF4BD28A)
 private val FoldPending = Color(0xFFFFB300)
@@ -148,16 +234,12 @@ private fun SubjectDisplayMode.icon(): CineIcon = when (this) {
     SubjectDisplayMode.SLATE -> CineIcon.SLATE
 }
 
-/**
- * The exterior display at a glance: what it is doing, and the action that applies. When the action
- * cannot run, the reason takes its place, and the self-recording route stays offered beside it.
- */
+/** The session's state dot and words, shared by the full card and the one-row strip. */
 @Composable
-private fun FoldStatusCard(display: FoldDisplayState, mode: SubjectDisplayMode, recording: Boolean,
-    onPresent: () -> Unit, onTransfer: () -> Unit, onClose: () -> Unit) {
+private fun sessionState(display: FoldDisplayState, mode: SubjectDisplayMode): Pair<Color, String> {
     val active = display.phase != DisplaySessionPhase.IDLE
     val transferring = display.operation == DisplayOperation.TRANSFER
-    val (dot, state) = when {
+    return when {
         display.phase == DisplaySessionPhase.STARTING -> FoldPending to stringResource(R.string.fold_state_starting)
         active && transferring -> FoldOk to stringResource(R.string.fold_state_self)
         active && !display.visible -> FoldPending to stringResource(R.string.fold_hidden)
@@ -169,6 +251,18 @@ private fun FoldStatusCard(display: FoldDisplayState, mode: SubjectDisplayMode, 
             DisplayCapability.UNKNOWN -> FoldIdle to stringResource(R.string.fold_state_checking)
         }
     }
+}
+
+/**
+ * The exterior display at a glance: what it is doing, and the action that applies. When the action
+ * cannot run, the reason takes its place, and the self-recording route stays offered beside it.
+ */
+@Composable
+private fun FoldStatusCard(display: FoldDisplayState, mode: SubjectDisplayMode, recording: Boolean,
+    onPresent: () -> Unit, onTransfer: () -> Unit, onClose: () -> Unit) {
+    val active = display.phase != DisplaySessionPhase.IDLE
+    val transferring = display.operation == DisplayOperation.TRANSFER
+    val (dot, state) = sessionState(display, mode)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .padding(14.dp).testTag("fold-status-card"),
@@ -231,13 +325,13 @@ private fun FoldStatusCard(display: FoldDisplayState, mode: SubjectDisplayMode, 
 
 /** The seven contents as a grid of icon cards; the chosen one is outlined in amber. */
 @Composable
-private fun FoldModeGrid(selected: SubjectDisplayMode, onSelect: (SubjectDisplayMode) -> Unit) {
+private fun FoldModeGrid(selected: SubjectDisplayMode, opensPage: Boolean = false, onSelect: (SubjectDisplayMode) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth().selectableGroup()) {
         val columns = (maxWidth / 132.dp).toInt().coerceIn(2, 4)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SubjectDisplayMode.entries.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { mode -> FoldModeCard(mode, mode == selected, Modifier.weight(1f)) { onSelect(mode) } }
+                    row.forEach { mode -> FoldModeCard(mode, mode == selected, opensPage, Modifier.weight(1f)) { onSelect(mode) } }
                     repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
@@ -246,22 +340,28 @@ private fun FoldModeGrid(selected: SubjectDisplayMode, onSelect: (SubjectDisplay
 }
 
 @Composable
-private fun FoldModeCard(mode: SubjectDisplayMode, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun FoldModeCard(mode: SubjectDisplayMode, selected: Boolean, opensPage: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     val accent = MaterialTheme.colorScheme.primary
-    Column(
+    Box(
         modifier.heightIn(min = 84.dp).clip(shape)
             .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(if (selected) 2.dp else 1.dp, if (selected) accent else MaterialTheme.colorScheme.outlineVariant, shape)
             .selectable(selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 12.dp)
             .testTag("fold-mode-${mode.name}"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
     ) {
-        CineGlyph(mode.icon(), if (selected) accent else MaterialTheme.colorScheme.onSurface, Modifier.size(26.dp))
-        Text(stringResource(mode.labelRes()), color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-            fontSize = 13.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, maxLines = 2)
+        Column(
+            Modifier.fillMaxWidth().align(Alignment.Center).padding(horizontal = 8.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+        ) {
+            CineGlyph(mode.icon(), if (selected) accent else MaterialTheme.colorScheme.onSurface, Modifier.size(26.dp))
+            Text(stringResource(mode.labelRes()), color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, maxLines = 2)
+        }
+        // A tap opens the mode's settings page, so the card carries the same chevron as the other drill-ins.
+        if (opensPage) CineGlyph(CineIcon.CHEVRON_RIGHT, MaterialTheme.colorScheme.onSurfaceVariant,
+            Modifier.align(Alignment.TopEnd).padding(8.dp).size(16.dp))
     }
 }
 

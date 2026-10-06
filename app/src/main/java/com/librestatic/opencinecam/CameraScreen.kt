@@ -1915,10 +1915,13 @@ internal fun AdaptiveCaptureChrome(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                CapturePane.Displays -> Column(Modifier.verticalScroll(rememberScrollState()).testTag("fold-displays-pane"),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CapturePaneHeader(stringResource(R.string.fold_settings_title), { pane = null })
-                    FoldDisplaySettings(state, settings, onSettingsChanged, inCapturePane = true)
+                CapturePane.Displays -> {
+                    val displaysScroll = rememberScrollState()
+                    Column(Modifier.verticalScroll(displaysScroll).testTag("fold-displays-pane"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CapturePaneHeader(stringResource(R.string.fold_settings_title), { pane = null })
+                        FoldDisplaySettings(state, settings, onSettingsChanged, inCapturePane = true, scroll = displaysScroll)
+                    }
                 }
                 null -> Unit
             }

@@ -240,6 +240,11 @@
     <string name="fold_mode_settings">Réglages : %1$s</string>
     <string name="fold_mode_status_help">L\'écran extérieur affiche Prêt au repos, puis un grand REC et la durée de la prise pendant l\'enregistrement.</string>
     <string name="fold_mode_more_below">Les autres options de ce contenu sont dans leur propre section, plus bas.</string>
+    <string name="fold_mode_open_hint">Touchez un contenu pour le choisir et ouvrir ses réglages.</string>
+    <string name="fold_back_to_modes">Tous les contenus extérieurs</string>
+    <string name="fold_open_short">Ouvrir</string>
+    <string name="fold_close_short">Fermer</string>
+    <string name="fold_return_short">Revenir</string>
     <string name="fold_general">Général</string>
     <string name="fold_inner_section">Écran intérieur et pliage</string>
     <string name="fold_exterior_display">Écran extérieur</string>

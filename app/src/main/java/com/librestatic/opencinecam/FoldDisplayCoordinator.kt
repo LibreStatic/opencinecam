@@ -217,10 +217,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
             activity.window.attributes = activity.window.attributes.apply { screenBrightness = value }
             activityBrightnessOverridden = transferRequest != null
         }
-        val window = (session as? WindowAreaSessionPresenter)?.window ?: return
-        // Fill light replaces the request with its timeout/thermal-capped level; it is still only a request.
-        val requested = fillLightMonitor.output?.windowBrightness ?: preferences.states.value.subjectDisplay.brightness
-        window.attributes = window.attributes.apply { screenBrightness = requested }
+        // A presentation gets no request: in concurrent mode the cover follows the inner screen's brightness
+        // and the system ignores the window's own (Razr: reason=follower). The fill light dims by pixel scale.
     }
 
     private fun ended(token: Long, failure: Throwable?) {

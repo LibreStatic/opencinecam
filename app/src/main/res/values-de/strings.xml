@@ -240,6 +240,11 @@
     <string name="fold_mode_settings">Einstellungen: %1$s</string>
     <string name="fold_mode_status_help">Das Außendisplay zeigt in Ruhe Bereit und während der Aufnahme ein großes REC mit der Aufnahmezeit.</string>
     <string name="fold_mode_more_below">Weitere Optionen für diesen Inhalt stehen weiter unten in einem eigenen Abschnitt.</string>
+    <string name="fold_mode_open_hint">Tippe auf einen Inhalt, um ihn zu wählen und seine Einstellungen zu öffnen.</string>
+    <string name="fold_back_to_modes">Alle Außeninhalte</string>
+    <string name="fold_open_short">Öffnen</string>
+    <string name="fold_close_short">Schließen</string>
+    <string name="fold_return_short">Zurück</string>
     <string name="fold_general">Allgemein</string>
     <string name="fold_inner_section">Innendisplay und Falten</string>
     <string name="fold_exterior_display">Außendisplay</string>
