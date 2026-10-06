@@ -1,0 +1,64 @@
+<en-US>
+- Redesigned Displays menu and exterior screen for foldables
+- USB microphones: reliable input selection and route checks; Auto prefers the built-in mic over Bluetooth
+- Busy and locked states now show in place, without the layout jumping
+- Fixed: the viewfinder froze while recording plain video
+- Fixed: some photos were taken with the telephoto lens instead of the 1x lens
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Rediseño del menú Pantallas y de la pantalla exterior en plegables
+- Micrófonos USB: selección de entrada confiable y verificación de ruta; Automático prefiere el micrófono interno antes que Bluetooth
+- Los estados ocupado y bloqueado se muestran en su lugar, sin saltos en el diseño
+- Corregido: el visor se congelaba al grabar video normal
+- Corregido: algunas fotos se tomaban con el teleobjetivo en lugar de la lente 1x
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Rediseño del menú Pantallas y de la pantalla exterior en plegables
+- Micrófonos USB: selección de entrada fiable y comprobación de ruta; Automático prefiere el micrófono interno antes que Bluetooth
+- Los estados ocupado y bloqueado se muestran en su sitio, sin saltos en el diseño
+- Corregido: el visor se congelaba al grabar vídeo normal
+- Corregido: algunas fotos se hacían con el teleobjetivo en lugar de la lente 1x
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Menu Telas e tela externa redesenhados em dobráveis
+- Microfones USB: seleção de entrada confiável e verificação de rota; Automático prefere o microfone interno ao Bluetooth
+- Estados ocupado e bloqueado aparecem no lugar, sem o layout pular
+- Corrigido: o visor congelava ao gravar vídeo comum
+- Corrigido: algumas fotos eram tiradas com a teleobjetiva em vez da lente 1x
+Relate problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Menu Ecrãs e ecrã exterior redesenhados em dobráveis
+- Microfones USB: seleção de entrada fiável e verificação de rota; Automático prefere o microfone interno ao Bluetooth
+- Os estados ocupado e bloqueado aparecem no lugar, sem o esquema saltar
+- Corrigido: o visor congelava ao gravar vídeo normal
+- Corrigido: algumas fotografias eram tiradas com a teleobjetiva em vez da lente 1x
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Menu Écrans et écran extérieur repensés sur les pliables
+- Micros USB : sélection fiable de l'entrée et vérification du routage ; Auto préfère le micro intégré au Bluetooth
+- Les états occupé et verrouillé s'affichent sur place, sans décalage de la mise en page
+- Corrigé : le viseur se figeait pendant l'enregistrement vidéo standard
+- Corrigé : certaines photos étaient prises avec le téléobjectif au lieu de l'objectif 1x
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Neu gestaltetes Bildschirme-Menü und Außendisplay auf Foldables
+- USB-Mikrofone: zuverlässige Eingangswahl und Routenprüfung; Auto bevorzugt das eingebaute Mikrofon vor Bluetooth
+- Belegt- und Gesperrt-Status erscheinen an Ort und Stelle, ohne dass das Layout springt
+- Behoben: Der Sucher fror bei normaler Videoaufnahme ein
+- Behoben: Manche Fotos wurden mit dem Teleobjektiv statt mit dem 1x-Objektiv aufgenommen
+Probleme melden: github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Menu Schermi e schermo esterno riprogettati sui pieghevoli
+- Microfoni USB: selezione affidabile dell'ingresso e verifica del percorso; Auto preferisce il microfono integrato al Bluetooth
+- Gli stati occupato e bloccato appaiono sul posto, senza spostare il layout
+- Corretto: il mirino si bloccava durante la registrazione video normale
+- Corretto: alcune foto venivano scattate con il teleobiettivo invece dell'obiettivo 1x
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
