@@ -5,7 +5,8 @@ package com.librestatic.opencinecam
 
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.compose.material3.MaterialTheme
+import com.librestatic.opencinecam.ui.theme.AppTheme
+import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -168,7 +169,8 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                     val sessionCues by cues.collectAsState()
                                     val fill by fillLightOutput.collectAsState()
                                     val syncFlash by syncMarker.flash.collectAsState()
-                                    MaterialTheme {
+                                    // The subject faces the Cine palette whatever the operator's theme: black, amber cues, red only for REC.
+                                    OpenCineCamTheme(AppTheme.CINE, forceDark = true) {
                                         CompositionLocalProvider(
                                             LocalSubjectFillLightOutput provides fill,
                                             LocalSubjectReviewFeed provides review,

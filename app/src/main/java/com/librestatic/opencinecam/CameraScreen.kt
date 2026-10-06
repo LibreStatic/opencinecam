@@ -1258,10 +1258,11 @@ private sealed interface CapturePane {
     data class Control(val dial: ControlDial) : CapturePane
     data object Modes : CapturePane
     data object Monitor : CapturePane
+    data object Displays : CapturePane
 }
 
 /** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
-internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET }
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET, DISPLAYS }
 
 private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
@@ -1269,6 +1270,7 @@ private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.MONITOR -> CapturePane.Monitor
     CaptureInitialPane.MODES -> CapturePane.Modes
     CaptureInitialPane.MODE_SHEET -> null
+    CaptureInitialPane.DISPLAYS -> CapturePane.Displays
 }
 
 @Composable
@@ -1737,6 +1739,7 @@ internal fun AdaptiveCaptureChrome(
                     onOpenSettings = onOpenSettings,
                     settings = settings,
                     onSettingsChanged = onSettingsChanged,
+                    onOpenDisplays = { togglePane(CapturePane.Displays) },
                     modifier = Modifier.align(Alignment.TopCenter),
                     showThumbnail = !compact,
                     height = topBar,
@@ -1912,6 +1915,11 @@ internal fun AdaptiveCaptureChrome(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                CapturePane.Displays -> Column(Modifier.verticalScroll(rememberScrollState()).testTag("fold-displays-pane"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CapturePaneHeader(stringResource(R.string.fold_settings_title), { pane = null })
+                    FoldDisplaySettings(state, settings, onSettingsChanged, inCapturePane = true)
+                }
                 null -> Unit
             }
         }
@@ -1989,6 +1997,7 @@ internal fun AdaptiveCaptureChrome(
                     onOpenSettings = onOpenSettings,
                     settings = settings,
                     onSettingsChanged = onSettingsChanged,
+                    onOpenDisplays = { togglePane(CapturePane.Displays) },
                     vertical = true,
                     showThumbnail = false,
                     showStatus = false,
@@ -2304,6 +2313,8 @@ private fun CaptureTopBar(
     onOpenSettings: () -> Unit,
     settings: CameraSettings,
     onSettingsChanged: (CameraSettings) -> Unit,
+    // The exterior display menu opens as a capture pane, beside the frame or as a sheet, like WB and focus.
+    onOpenDisplays: () -> Unit,
     modifier: Modifier = Modifier,
     // The side-rail layout stacks the same actions in the start rail instead of across the top.
     vertical: Boolean = false,
@@ -2316,13 +2327,6 @@ private fun CaptureTopBar(
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val fold by (foldCoordinator?.states ?: foldFallback).collectAsStateWithLifecycle()
-    var showDisplays by remember { mutableStateOf(false) }
-    if (showDisplays) AlertDialog(
-        onDismissRequest = { showDisplays = false },
-        confirmButton = { TextButton(onClick = { showDisplays = false }) { Text(stringResource(android.R.string.ok)) } },
-        text = { FoldDisplaySettings(state, settings, onSettingsChanged) },
-        containerColor = Panel,
-    )
     var showLight by remember { mutableStateOf(false) }
     if (showLight) AlertDialog(
         onDismissRequest = { showLight = false },
@@ -2341,7 +2345,7 @@ private fun CaptureTopBar(
         if (fold.operation == DisplayOperation.TRANSFER && fold.phase == DisplaySessionPhase.ACTIVE) {
             TopAction(CineIcon.RETURN, stringResource(R.string.fold_return)) { foldCoordinator?.closeSession() }
         } else {
-            TopAction(CineIcon.DISPLAYS, stringResource(R.string.fold_settings_title)) { showDisplays = true }
+            TopAction(CineIcon.DISPLAYS, stringResource(R.string.fold_settings_title), onClick = onOpenDisplays)
         }
         // An F-key already mapped to the torch is the torch control; a second one up here was a duplicate.
         if (OperatorAction.TORCH !in settings.operation.buttons) {
@@ -3779,7 +3783,7 @@ internal fun SettingsContent(
             ProfessionalExposureSettings(state, settings, onSettingsChange)
         }
         if ("fold-displays" in visibleIds) settingsCard("fold-displays") {
-            FoldDisplaySettings(state, settings, onSettingsChange, showTitle = false)
+            FoldDisplaySettings(state, settings, onSettingsChange)
         }
         // OCC-PLAN-068 subject features: each card's controls live in that unit's own file.
         val subject = settings.subjectDisplay

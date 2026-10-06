@@ -35,6 +35,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import com.librestatic.opencinecam.DisplayCapability
+import com.librestatic.opencinecam.FoldDisplaySettings
+import com.librestatic.opencinecam.FoldDisplayState
+import com.librestatic.opencinecam.FoldPosture
+import com.librestatic.opencinecam.LocalFoldDisplayStateWithoutCoordinator
+import com.librestatic.opencinecam.SelfCaptureChrome
+import com.librestatic.opencinecam.SubjectDisplayMode
+import com.librestatic.opencinecam.SubjectDisplayScreen
+import com.librestatic.opencinecam.SubjectDisplaySettings
+import com.librestatic.opencinecam.SubjectSessionCues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
@@ -251,6 +265,7 @@ private fun CaptureChrome(
     initialPane: CaptureInitialPane? = null,
     scopesHidden: Boolean = false,
     hardwareKeyboard: Boolean = false,
+    foldState: FoldDisplayState = FoldDisplayState(),
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
@@ -258,7 +273,8 @@ private fun CaptureChrome(
         val scopes = rememberSaveable(saver = CaptureScopeVisibility.Saver) { CaptureScopeVisibility(scopesHidden) }
         val live = withDriverAnalysis(state, current.monitoring)
         val actions = driverOperatorActions(live, current, scopes) { current = it }
-        CompositionLocalProvider(LocalAdaptiveWindow provides window, LocalOperatorActions provides actions) {
+        CompositionLocalProvider(LocalAdaptiveWindow provides window, LocalOperatorActions provides actions,
+            LocalFoldDisplayStateWithoutCoordinator provides foldState) {
             AdaptiveCaptureChrome(
                 state = live,
                 binder = null,
@@ -480,4 +496,123 @@ private fun peakingScene(x: Float, y: Float, w: Float, h: Float, s: Float): Int 
         }
     }
     return value.coerceIn(0, 255)
+}
+
+// ---- Exterior (subject) display and the fold menu. Subject screens are meant for `--device cover`. ----
+
+private const val SUBJECT_SCRIPT = "Hola, soy Ana. Hoy les muestro cómo grabamos este corto con un solo teléfono.\n\n" +
+    "Primero, la luz: usamos la pantalla externa como relleno suave.\n\nDespués, el encuadre y el sonido."
+
+private fun subjectRecording(): CameraUiState =
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L)
+
+/** The exterior display as FoldDisplayCoordinator hosts it: always the Cine palette. */
+@Composable
+private fun Subject(state: CameraUiState, settings: SubjectDisplaySettings, cues: SubjectSessionCues = SubjectSessionCues()) =
+    OpenCineCamTheme(AppTheme.CINE, forceDark = true) {
+        SubjectDisplayScreen(state, settings, previewPort = null, cues = cues,
+            productionSlate = ProductionSlateSettings(project = "CORTO", scene = "12A", reel = "A001", camera = "A", lens = "24mm", takeNumber = 3))
+    }
+
+/** Exterior display, Status: Ready at rest. */
+@Composable
+fun SubjectStatus() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisplaySettings())
+
+/** Exterior display, Status: REC 01:23 with an operator cue. */
+@Composable
+fun SubjectStatusRecording() = Subject(subjectRecording(), SubjectDisplaySettings(operatorCue = "Mirá a cámara"))
+
+/** Exterior display, teleprompter at rest with a cue. */
+@Composable
+fun SubjectPrompter() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT, operatorCue = "Más despacio"))
+
+/** Exterior display, teleprompter while recording: the REC header shows. */
+@Composable
+fun SubjectPrompterRecording() = Subject(subjectRecording(),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT))
+
+/** Exterior display, camera preview waiting for frames (no viewfinder headless). */
+@Composable
+fun SubjectPreview() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisplaySettings(mode = SubjectDisplayMode.PREVIEW))
+
+/** Exterior display, fill light at 4300 K. */
+@Composable
+fun SubjectFillLight() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.FILL_LIGHT, fillLightKelvin = 4300))
+
+/** Exterior display, take review before the operator picks a take. */
+@Composable
+fun SubjectReview() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisplaySettings(mode = SubjectDisplayMode.REVIEW))
+
+/** Exterior display, interview question 2 of 3. */
+@Composable
+fun SubjectInterview() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW,
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+    SubjectSessionCues(interviewIndex = 1))
+
+/** Exterior display, digital slate. */
+@Composable
+fun SubjectSlate() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisplaySettings(mode = SubjectDisplayMode.SLATE))
+
+private val FoldUnfolded = FoldDisplayState(DisplayCapability.AVAILABLE, DisplayCapability.AVAILABLE, posture = FoldPosture.FLAT)
+private val FoldFolded = FoldDisplayState(DisplayCapability.UNAVAILABLE, DisplayCapability.AVAILABLE)
+
+/** The Displays pane on the capture screen, unfolded, teleprompter chosen (use `--device inner`). */
+@Composable
+fun FoldMenuPane() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO),
+    CameraSettings(histogramEnabled = true, subjectDisplay = SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT)),
+    CaptureInitialPane.DISPLAYS, foldState = FoldUnfolded)
+
+/** The Displays pane folded: the reason replaces the start action, self recording stays offered (a sheet on `phone`). */
+@Composable
+fun FoldMenuFolded() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.DISPLAYS, foldState = FoldFolded)
+
+/** The fold menu as the settings hub shows it, with the inner-screen options, unfolded. */
+@Composable
+fun FoldMenu() = DriverTheme(forceDark = true) {
+    var settings by remember { mutableStateOf(CameraSettings()) }
+    CompositionLocalProvider(LocalFoldDisplayStateWithoutCoordinator provides FoldUnfolded) {
+        Box(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+            FoldDisplaySettings(driverCaptureState(CaptureMode.VIDEO), settings, { settings = it })
+        }
+    }
+}
+
+/** Rear-screen self recording: the minimal camera interface on the cover (use `--device cover`). */
+@Composable
+fun SelfCapture() = DriverTheme(forceDark = true) {
+    var settings by remember { mutableStateOf(CameraSettings(subjectDisplay = SubjectDisplaySettings(selfTimerSeconds = 3))) }
+    SelfCaptureChrome(driverCaptureState(CaptureMode.VIDEO), binder = null, settings = settings, onSettingsChanged = { settings = it }, onOpenSettings = {})
+}
+
+/** Self recording while a take runs at 01:23. */
+@Composable
+fun SelfCaptureRecording() = DriverTheme(forceDark = true) {
+    var settings by remember { mutableStateOf(CameraSettings()) }
+    SelfCaptureChrome(subjectRecording(), binder = null, settings = settings, onSettingsChanged = { settings = it }, onOpenSettings = {})
+}
+
+/** The audio settings with the permission granted, the built-in microphone and a USB lavalier offered as inputs. */
+@Composable
+fun SettingsAudioInputs() = DriverTheme {
+    val depths = listOf(com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_16, com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_24)
+    val rates = listOf(44_100, 48_000)
+    val capabilities = com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities(
+        permissionGranted = true,
+        formats = com.librestatic.opencinecam.media.audio.AudioOutputFormat.entries,
+        sampleRates = rates, bitDepths = depths, channelCounts = listOf(1, 2),
+        pcmConfigurations = rates.flatMap { r -> depths.flatMap { d -> listOf(1, 2).map { c -> com.librestatic.opencinecam.media.audio.PcmAudioConfiguration(r, d, c) } } },
+        aacSampleRates = rates, aacChannelCounts = listOf(1, 2), aacBitratesKbps = listOf(128, 192, 256),
+        sources = com.librestatic.opencinecam.media.audio.AudioSourceSelection.entries,
+        inputs = listOf(
+            com.librestatic.opencinecam.media.audio.SelectableAudioInput(7, "Built-in microphone", 15, rates, listOf(1, 2), emptyList()),
+            com.librestatic.opencinecam.media.audio.SelectableAudioInput(42, "USB-C Lavalier", 22, listOf(48_000, 96_000), listOf(1), emptyList()),
+        ),
+        noiseSuppressorAvailable = true, automaticGainControlAvailable = true, acousticEchoCancelerAvailable = true,
+    )
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, audioCapabilities = capabilities),
+        CameraSettings(audioInputDeviceId = 42), audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
 }

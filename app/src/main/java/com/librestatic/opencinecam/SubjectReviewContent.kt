@@ -6,7 +6,9 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -31,6 +33,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -62,7 +66,11 @@ internal fun SubjectReviewContent(state: CameraUiState, settings: SubjectDisplay
     val pick by (feed?.picks ?: fallback).collectAsState()
     val current = pick?.takeIf { it.uri == cues.reviewUri && !state.reviewBlockedByTake() }
     Box(modifier.background(Color.Black).testTag("subject-review")) {
-        if (current == null) Text(stringResource(R.string.subject_review_waiting), color = Color.LightGray, fontSize = 22.sp)
+        if (current == null) Column(Modifier.align(Alignment.Center).testTag("subject-review-empty"),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            CineGlyph(CineIcon.SLATE, Color(0xFF7D878D), Modifier.size(64.dp))
+            Text(stringResource(R.string.subject_review_waiting), color = Color(0xFFBDC5CA), fontSize = 22.sp, textAlign = TextAlign.Center)
+        }
         // A new pick is a new player: the old session and GL stage are released first.
         else key(current.uri) {
             SubjectReviewPlayer(current, if (settings.previewViewAssist) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG,
