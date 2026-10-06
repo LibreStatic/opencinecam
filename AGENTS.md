@@ -141,3 +141,7 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Endless frame loops (`while (true) withFrameNanos`) never let the test clock go idle, and requests fail after 60 s. Render those screens with `LocalReducedMotion provides true`, as `Onboarding` does.
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
 - Fonts, shadows and blur come from Robolectric's native graphics. They are close to a device but not pixel-identical, so do final visual sign-off on a device.
+
+## Versioning
+
+- Bump `versionName` in `app/build.gradle.kts` in its own commit before every store release; never upload a new build under the previous version. Patch (`x.y.Z`) for fixes and small, self-contained changes (including a single small feature), minor (`x.Y.0`) for medium changes (several features, a reworked screen or flow), major (`X.0.0`) for a large overhaul; keep the pre-release suffix (e.g. `-beta`). The `versionCode` must also be higher than the last uploaded one.

@@ -14,7 +14,7 @@ class CaptureNamingSettingsTest {
         assertEquals(CaptureNamingSettings(), CameraSettingsStore(PresetPreferences()).load().captureNaming)
         for (enabled in listOf(false, true)) for (template in listOf("{project}_{scene}_T{take}", "{camera}_{reel}_{date}_{time}", "Noche Á")) {
             val original = CameraSettings(captureNaming = CaptureNamingSettings(enabled, template),
-                productionSlate = ProductionSlateSettings(project = "Preserve"), audioInputDeviceId = 41,
+                productionSlate = ProductionSlateSettings(project = "Preserve"), audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=41"),
                 mediaSharing = MediaSharingSettings(MediaShareContent.ORIGINALS_ONLY))
             val store = CameraSettingsStore(PresetPreferences()); store.save(original)
             assertEquals(original, store.load())

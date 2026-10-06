@@ -70,6 +70,8 @@ data class CameraUiState(
     val phase: CameraUiPhase = CameraUiPhase.PREPARING,
     val cameras: List<Camera2CameraDescriptor> = emptyList(),
     val audioCapabilities: ProfessionalAudioCapabilities? = null,
+    /** The input the meter or the take is actually reading from, as routed by the platform. */
+    val activeAudioInput: com.librestatic.opencinecam.media.audio.ActiveAudioInput? = null,
     val selectedCameraId: String? = null,
     val selectedMode: CaptureMode = CaptureMode.PHOTO,
     val modeGates: Map<CaptureMode, ModeGateState> = defaultModeGates,

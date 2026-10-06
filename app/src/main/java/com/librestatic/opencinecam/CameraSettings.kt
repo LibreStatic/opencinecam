@@ -18,6 +18,11 @@ import com.librestatic.opencinecam.camera.Antibanding
 import com.librestatic.opencinecam.camera.RecordingWhiteBalancePolicy
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
+import com.librestatic.opencinecam.media.audio.AudioInputKey
+import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
+import com.librestatic.opencinecam.media.audio.SelectableAudioInput
+import com.librestatic.opencinecam.media.audio.preferredAutoInput
+import com.librestatic.opencinecam.media.audio.resolveAudioInput
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
@@ -65,7 +70,17 @@ data class CameraSettings(
     val audioBitDepth: AudioBitDepth = AudioBitDepth.PCM_24,
     val audioChannels: Int = 1,
     val audioBitrateKbps: Int = 128,
+    /**
+     * Runtime only: the live device id the selection resolves to on this connection, or null for
+     * the platform default. Derived by [normalizedFor]; never persisted, because it changes on
+     * every reconnection.
+     */
     val audioInputDeviceId: Int? = null,
+    /** The remembered input; null means "Auto". Kept while the device is unplugged (OCC-AUDIO-009). */
+    val audioInputKey: AudioInputKey? = null,
+    /** An id saved by an older version, turned into [audioInputKey] by the first probe that sees it. */
+    val legacyAudioInputDeviceId: Int? = null,
+    val audioInputLossPolicy: AudioInputLossPolicy = AudioInputLossPolicy.STOP_TAKE,
     val audioListening: AudioListeningSettings = AudioListeningSettings(),
     val audioMeter: AudioMeterSettings = AudioMeterSettings(),
     /** Local explicit consent; never portable through presets or inferred from permission. */
@@ -181,11 +196,35 @@ fun CameraSettings.normalizedTimecode(): CameraSettings {
 fun CameraSettings.withTimecodeRate(fps: Int, dropFrame: Boolean): CameraSettings =
     copy(timecodeNominalFps = fps, timecodeDropFrame = dropFrame).normalizedTimecode()
 
+/** Where the input selection points on the current connection. */
+data class AudioInputResolution(
+    /** The resolved input, or null when nothing specific is bound (Auto on the built-in, or a missing key). */
+    val input: SelectableAudioInput?,
+    /** The remembered key is not connected right now. */
+    val unavailable: Boolean,
+    /** What "Auto" picks, shown next to the Auto choice. */
+    val autoChoice: SelectableAudioInput?,
+)
+
+fun CameraSettings.resolveAudioInputSelection(inputs: List<SelectableAudioInput>): AudioInputResolution {
+    val auto = preferredAutoInput(inputs)
+    val key = audioInputKey ?: return AudioInputResolution(auto, false, auto)
+    val resolved = resolveAudioInput(key, inputs)
+    return AudioInputResolution(resolved, resolved == null, auto)
+}
+
+fun CameraSettings.audioInputUnavailable(capabilities: ProfessionalAudioCapabilities?): Boolean =
+    capabilities != null && capabilities.permissionGranted && resolveAudioInputSelection(capabilities.inputs).unavailable
+
 fun CameraSettings.normalizedFor(capabilities: ProfessionalAudioCapabilities): CameraSettings {
     if (!capabilities.permissionGranted || capabilities.formats.isEmpty()) return this
     val format = audioOutputFormat.takeIf { it in capabilities.formats } ?: capabilities.formats.first()
     val source = audioSource.takeIf { it in capabilities.sources } ?: capabilities.sources.firstOrNull() ?: AudioSourceSelection.MIC
-    val inputId = audioInputDeviceId?.takeIf { requested -> capabilities.inputs.any { it.id == requested } }
+    // A legacy id is only meaningful on the connection it was saved on; migrate it if it still matches.
+    val inputKey = audioInputKey ?: legacyAudioInputDeviceId?.let { legacy -> capabilities.inputs.firstOrNull { it.id == legacy }?.key }
+    val resolution = copy(audioInputKey = inputKey).resolveAudioInputSelection(capabilities.inputs)
+    // Auto binds only an external input; the built-in microphone is already the platform default.
+    val inputId = if (inputKey == null) resolution.input?.takeIf { it.isExternal }?.id else resolution.input?.id
     return when (format) {
         AudioOutputFormat.AAC_MP4 -> copy(
             audioOutputFormat = format,
@@ -196,6 +235,8 @@ fun CameraSettings.normalizedFor(capabilities: ProfessionalAudioCapabilities): C
             audioBitrateKbps = audioBitrateKbps.takeIf { it in capabilities.aacBitratesKbps }
                 ?: capabilities.aacBitratesKbps.minByOrNull { kotlin.math.abs(it - 128) } ?: 128,
             audioInputDeviceId = inputId,
+            audioInputKey = inputKey,
+            legacyAudioInputDeviceId = null,
             audioSource = source,
             noiseSuppressorEnabled = noiseSuppressorEnabled && capabilities.noiseSuppressorAvailable,
             // Preserve requested AGC; actual hardware/software application is a backend result.
@@ -222,6 +263,8 @@ fun CameraSettings.normalizedFor(capabilities: ProfessionalAudioCapabilities): C
                 audioBitDepth = chosen?.bitDepth ?: audioBitDepth,
                 audioChannels = chosen?.channels ?: audioChannels,
                 audioInputDeviceId = inputId,
+                audioInputKey = inputKey,
+                legacyAudioInputDeviceId = null,
                 audioSource = source,
                 noiseSuppressorEnabled = noiseSuppressorEnabled && capabilities.noiseSuppressorAvailable,
                 automaticGainControlEnabled = automaticGainControlEnabled,
@@ -312,7 +355,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         audioChannels = preferences.getInt(KEY_AUDIO_CHANNELS, 1).coerceIn(1, 2),
         audioBitrateKbps = preferences.getInt(KEY_AUDIO_BITRATE, 128)
             .takeIf { it in setOf(64, 96, 128, 160, 192, 256, 320) } ?: 128,
-        audioInputDeviceId = preferences.getInt(KEY_AUDIO_INPUT, NO_DEVICE).takeUnless { it == NO_DEVICE },
+        audioInputKey = preferences.getString(KEY_AUDIO_INPUT_KEY, null)?.let(::decodeAudioInputKey),
+        legacyAudioInputDeviceId = if (preferences.contains(KEY_AUDIO_INPUT_KEY)) null
+            else preferences.getInt(KEY_AUDIO_INPUT, NO_DEVICE).takeUnless { it == NO_DEVICE },
+        audioInputLossPolicy = enumPreference(KEY_AUDIO_INPUT_LOSS_POLICY, AudioInputLossPolicy.STOP_TAKE),
         audioListening = loadAudioListening(),
         audioMeter = loadAudioMeter(),
         geotaggingEnabled = preferences.getBoolean("geotagging-enabled", false),
@@ -459,7 +505,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_AUDIO_BIT_DEPTH, settings.audioBitDepth.name)
             .putInt(KEY_AUDIO_CHANNELS, settings.audioChannels)
             .putInt(KEY_AUDIO_BITRATE, settings.audioBitrateKbps)
-            .putInt(KEY_AUDIO_INPUT, settings.audioInputDeviceId ?: NO_DEVICE)
+            .also { editor ->
+                // Until the first probe migrates it, the legacy id stays the only record of the choice.
+                if (settings.legacyAudioInputDeviceId != null) editor.putInt(KEY_AUDIO_INPUT, settings.legacyAudioInputDeviceId)
+                else editor.remove(KEY_AUDIO_INPUT).putString(KEY_AUDIO_INPUT_KEY, settings.audioInputKey?.let(::encodeAudioInputKey).orEmpty())
+            }
+            .putString(KEY_AUDIO_INPUT_LOSS_POLICY, settings.audioInputLossPolicy.name)
             .putInt("proxy-max-long-edge", settings.proxy.maxLongEdge)
             .putInt("proxy-video-bitrate-mbps", settings.proxy.videoBitrateMbps)
             .putBoolean("playback-muted", settings.playback.muted)
@@ -741,7 +792,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_AUDIO_BIT_DEPTH = "audio-bit-depth"
         const val KEY_AUDIO_CHANNELS = "audio-channels"
         const val KEY_AUDIO_BITRATE = "audio-bitrate-kbps"
+        /** Legacy: a volatile device id saved by versions before the stable input key. */
         const val KEY_AUDIO_INPUT = "audio-input-device-id"
+        const val KEY_AUDIO_INPUT_KEY = "audio-input-key"
+        const val KEY_AUDIO_INPUT_LOSS_POLICY = "audio-input-loss-policy"
         const val KEY_AUDIO_SOURCE = "audio-source"
         const val KEY_AUDIO_NS = "audio-noise-suppressor"
         const val KEY_AUDIO_AGC = "audio-automatic-gain-control"
@@ -793,4 +847,15 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_AF_LOCK_BEHAVIOR = "af-lock-behavior"
         const val NO_DEVICE = Int.MIN_VALUE
     }
+}
+
+/** "type\naddress\nproduct"; an empty string stores "Auto". Line breaks are not part of any device name. */
+internal fun encodeAudioInputKey(key: AudioInputKey): String =
+    listOf(key.type.toString(), key.address, key.productName).joinToString("\n") { it.replace('\n', ' ') }
+
+internal fun decodeAudioInputKey(encoded: String): AudioInputKey? {
+    val parts = encoded.split('\n', limit = 3)
+    if (parts.size != 3) return null
+    val type = parts[0].toIntOrNull() ?: return null
+    return AudioInputKey(type, parts[2], parts[1])
 }

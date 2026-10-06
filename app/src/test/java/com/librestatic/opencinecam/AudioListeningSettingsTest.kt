@@ -21,7 +21,7 @@ class AudioListeningSettingsTest {
     @Test fun allVolumesOutputKindsAndEnableStatesRoundTripIndependentlyOfInputAndGain() {
         for (volume in 0..100) for (output in AudioListeningOutput.entries) for (enabled in listOf(false, true)) {
             val original = CameraSettings(audioListening = AudioListeningSettings(enabled, volume, output),
-                audioListeningOutputDeviceId = 212, audioInputDeviceId = 111,
+                audioListeningOutputDeviceId = 212, audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=111"),
                 audioRecordingGain = DigitalRecordingGain(true, -6), automaticGainControlEnabled = true)
             val store = CameraSettingsStore(PresetPreferences()); store.save(original)
             assertEquals(original, store.load())

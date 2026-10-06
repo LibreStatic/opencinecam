@@ -17,7 +17,7 @@ class AudioMeterSettingsTest {
         assertEquals(AudioMeterSettings(), CameraSettingsStore(PresetPreferences()).load().audioMeter)
         for (mode in AudioMeterMode.entries) for (reference in -24..-6) for (hold in listOf(0, 1, 1500, 2999, 3000)) {
             val value = CameraSettings(audioMeter = AudioMeterSettings(false, mode, reference, hold, true),
-                audioRecordingGain = DigitalRecordingGain(true, -9), audioInputDeviceId = 12)
+                audioRecordingGain = DigitalRecordingGain(true, -9), audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=12"))
             val store = CameraSettingsStore(PresetPreferences()); store.save(value)
             assertEquals(value, store.load())
             assertEquals(value.audioMeter, CameraPresetCodec.decode(document(value).toString()).settings.audioMeter)

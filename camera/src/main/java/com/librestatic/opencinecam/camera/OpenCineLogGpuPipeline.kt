@@ -1719,6 +1719,7 @@ class OpenCineLogGpuPipeline(
         private val listeningSink: PcmListeningSink?,
         private val captureEpoch: CaptureEpochClock,
         val calibration: AacCodecCalibration,
+        private val inputGuard: com.librestatic.opencinecam.media.audio.AudioInputRouteGuard?,
     ) : AutoCloseable {
         private val stopRequested = AtomicBoolean(false)
         private val stopDeadline = CodecStopDeadline(CODEC_STOP_TIMEOUT_NS)
@@ -1739,6 +1740,7 @@ class OpenCineLogGpuPipeline(
             check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 "AudioRecord did not enter RECORDING state."
             }
+            inputGuard?.attach(audioRecord, com.librestatic.opencinecam.media.audio.AudioCapturePath.AUDIO_RECORD)
             val startedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
             val pcmEpoch = PcmCaptureEpoch(sampleRateHz)
             val timestamp = android.media.AudioTimestamp()
@@ -1772,6 +1774,7 @@ class OpenCineLogGpuPipeline(
                         val appliedAgc = if (softAgc == null) platformAgc else platformAgc.copy(
                             state = AudioEffectState.ENABLED, implementation = AudioEffectImplementation.SOFTWARE, hasControl = null)
                         val observedEffects = AudioEffectsSnapshot(effectReaders[0].read(), appliedAgc, effectReaders[2].read())
+                        inputGuard?.silenceIfMuted(buffer, read)
                         levelMeter.observeInput(buffer, read)
                         softAgc?.processPcm16(buffer, read)
                         recordingGain.process(buffer, read, PcmMeterEncoding.PCM_16, channels)
@@ -1857,6 +1860,7 @@ class OpenCineLogGpuPipeline(
                     if (first == null) failure = problem else if (first !== problem) first.addSuppressed(problem)
                 }
             }
+            release { inputGuard?.detach() }
             effects.forEach { effect -> release { effect.release() } }
             release { audioRecord.release() }
             release { if (codecStarted) codec.stop() }
@@ -1954,7 +1958,7 @@ class OpenCineLogGpuPipeline(
                             MediaCodec.CONFIGURE_FLAG_ENCODE,
                         )
                         return EmbeddedAac(codec, audioRecord, config.sampleRateHz, config.channels, hardwareAgc,
-                            effects, listOf(ns.second, agc.second, aec.second), agc.second, softwareAgc, config.onAudioLevel, config.recordingGain, config.listeningSink, captureEpoch, calibration)
+                            effects, listOf(ns.second, agc.second, aec.second), agc.second, softwareAgc, config.onAudioLevel, config.recordingGain, config.listeningSink, captureEpoch, calibration, config.inputGuard)
                     } catch (failure: Throwable) {
                         try { codec.release() } catch (cleanup: Throwable) {
                             onRetirementFailure(cleanup); if (cleanup !== failure) failure.addSuppressed(cleanup)
