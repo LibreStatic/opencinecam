@@ -52,7 +52,7 @@ class FoldDisplayUiTest {
     }
 
     @Test fun exteriorSearchFindsCanonicalSettings() {
-        compose.setContent { MaterialTheme { SettingsScreen(CameraUiState(), CameraSettings(), false, {}, {}, {}) } }
+        compose.setContent { MaterialTheme { SettingsScreen(CameraUiState(), CameraSettings(), false, {}, {}, onSettingsChange = {}) } }
         compose.onNodeWithTag("settings-search").performTextInput("pantalla exterior")
         compose.onNodeWithTag("fold-status-card").assertIsDisplayed()
     }
