@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -122,7 +123,7 @@ private val FoldIdle = Color(0xFF7D878D)
 
 @Composable
 private fun FoldSectionTitle(title: String) {
-    Text(title.uppercase(java.util.Locale.getDefault()), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp,
+    Text(title.uppercase(LocalConfiguration.current.locales[0]), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp,
         fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
         modifier = Modifier.padding(top = 10.dp).semantics { heading() })
 }
