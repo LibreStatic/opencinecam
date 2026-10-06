@@ -154,7 +154,7 @@ class GeotaggingSettingsUiTest {
 
     @Test fun actualSearchRouteFindsGeotaggingWithoutChangingConsentOrRequestingAccess() {
         compose.setContent { MaterialTheme {
-            SettingsScreen(CameraUiState(), settings.value, false, {}, {}, {
+            SettingsScreen(CameraUiState(), settings.value, false, {}, {}, onSettingsChange = {
                 settings.value = it; changes++
             })
         } }

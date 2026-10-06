@@ -76,7 +76,7 @@ class ProxySettingsUiTest {
 
     @Test fun searchableSettingsRouteEditsSameCameraSettingsProxyOnly() {
         compose.setContent { MaterialTheme {
-            SettingsScreen(CameraUiState(), settings.value, false, {}, {}, { settings.value = it; changes++ })
+            SettingsScreen(CameraUiState(), settings.value, false, {}, {}, onSettingsChange = { settings.value = it; changes++ })
         } }
         compose.onNodeWithTag("settings-search").performTextInput("proxy")
         node("edge-640").performScrollTo().performClick()
