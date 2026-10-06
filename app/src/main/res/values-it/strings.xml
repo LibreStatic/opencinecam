@@ -240,6 +240,11 @@
     <string name="fold_mode_settings">Impostazioni: %1$s</string>
     <string name="fold_mode_status_help">Lo schermo esterno mostra Pronto a riposo e, durante la registrazione, un grande REC con il tempo della ripresa.</string>
     <string name="fold_mode_more_below">Le altre opzioni di questo contenuto sono nella loro sezione, più in basso.</string>
+    <string name="fold_mode_open_hint">Tocca un contenuto per sceglierlo e aprirne le impostazioni.</string>
+    <string name="fold_back_to_modes">Tutti i contenuti esterni</string>
+    <string name="fold_open_short">Apri</string>
+    <string name="fold_close_short">Chiudi</string>
+    <string name="fold_return_short">Torna</string>
     <string name="fold_general">Generali</string>
     <string name="fold_inner_section">Schermo interno e piegatura</string>
     <string name="fold_exterior_display">Schermo esterno</string>

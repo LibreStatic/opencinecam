@@ -240,6 +240,11 @@
     <string name="fold_mode_settings">Ajustes de %1$s</string>
     <string name="fold_mode_status_help">La pantalla exterior muestra Listo en reposo y, al grabar, un REC grande con el tiempo de la toma.</string>
     <string name="fold_mode_more_below">Las demás opciones de este contenido están en su propia sección, más abajo.</string>
+    <string name="fold_mode_open_hint">Tocá un contenido para elegirlo y abrir sus ajustes.</string>
+    <string name="fold_back_to_modes">Todos los contenidos exteriores</string>
+    <string name="fold_open_short">Abrir</string>
+    <string name="fold_close_short">Cerrar</string>
+    <string name="fold_return_short">Volver</string>
     <string name="fold_general">General</string>
     <string name="fold_inner_section">Pantalla interna y plegado</string>
     <string name="fold_exterior_display">Pantalla exterior</string>

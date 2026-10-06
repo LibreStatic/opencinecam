@@ -243,6 +243,11 @@
     <string name="fold_mode_settings">%1$s settings</string>
     <string name="fold_mode_status_help">The exterior display shows Ready at rest, then a large REC and the take time while recording.</string>
     <string name="fold_mode_more_below">More options for this content are in their own section below.</string>
+    <string name="fold_mode_open_hint">Tap a content to choose it and open its settings.</string>
+    <string name="fold_back_to_modes">All exterior contents</string>
+    <string name="fold_open_short">Open</string>
+    <string name="fold_close_short">Close</string>
+    <string name="fold_return_short">Return</string>
     <string name="fold_general">General</string>
     <string name="fold_inner_section">Inner screen and folding</string>
     <string name="fold_exterior_display">Exterior display</string>
