@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-069
 title: "Full-FOV still from public physical cameras"
 status: Done
-revision: 1
+revision: 2
 milestone: H2
 intended_executor: Claude Code
 execution_mode: implementation
@@ -149,8 +149,12 @@ Revert the single implementation commit (six files: engine, choices, two tests, 
 
 Done 2026-10-04. U1–U4 landed in `2531a42`; U5 passed on the Razr Fold the same day (`build/implementation-plan-069/VERIFICATION.txt`): the RES panel offers 13 MP 4096x3072 above 12 MP 4000x3000 at base zoom, the 13 MP capture decodes to 4096x3072, and the 12 MP control capture decodes to 4000x3000.
 
+Revision 2 (2026-10-05): the premise in section 2 was wrong. Physical "5" is the Razr Fold's 13.3 mm f/2.4 telephoto, not a full-sensor view of the 6.57 mm main camera, so the 13 MP still had a narrower field of view. It was also metered by nobody: 3A runs on the lens the logical camera streams (the main camera at 1x), and no repeating request targets "5", so every 13 MP capture used the same fixed HAL exposure (1/285 s, ISO 143), about 7.5 EV darker than a 12 MP capture of the same dark scene (1/19 s, ISO 809, f/1.6). Routing is now limited to public physical cameras whose focal length is within 5% of the logical camera's 1x focal length (`unityZoomPhysicalIds`). On the Razr Fold only physical "2" (6.57 mm, 4000x3000) qualifies; it adds no size beyond the logical map, so the RES panel no longer offers 13 MP there.
+
 ## 21. Execution Record
 
 2026-10-04 (Claude Code, main session): U0 probe on the Razr Fold confirmed logical "0" + physical "5" routing (session configured, JPEG decoded 4096x3072). U1–U4 implemented and verified: `:camera:testDebugUnitTest` 722 passed, `:app:testDebugUnitTest` 1404 passed, `:media:testDebugUnitTest` and `:core:model:test` passed, `:app:lintDebug` and `./tools/check_format.sh` clean (all with `-Dorg.gradle.caching=false` after removing module build directories). Committed as `2531a42` (implementation) and `048ca45` (plan documentation).
 
 2026-10-04 (U5, Razr Fold): installed with `adb -s 192.168.0.250:37539 install -r -t` (applicationId `com.librestatic.opencinecam.debug`). The RES panel listed 13 MP 4096x3072 above 12 MP 4000x3000 with 13 MP active by default; a capture at 13 MP decoded to 4096x3072 and, after selecting 12 MP (graph rebuilt, HUD read "12 MP"), a control capture decoded to 4000x3000. Both photos are preserved under `DCIM/OpenCineCam/` on the device and mirrored with the probe evidence outside the repository. Verification details and hashes: `build/implementation-plan-069/VERIFICATION.txt`. All Section 16 criteria pass; the plan is Done.
+
+2026-10-05 (Claude Code, revision 2): added the focal-length gate. `:camera:testDebugUnitTest` 732 passed. On the Razr Fold (`dumpsys media.camera`: logical "0" 6.57 mm, physical "2" 6.57 mm, "5" 13.3 mm), the RES panel no longer lists 13 MP at 1x. Three captures after the install all decoded to 4000x3000 at 6.57 mm f/1.6 with metered exposures (1/20 s to 1/25 s, ISO 730 to 939). The capture before the install was 4096x3072 at 13.3 mm, 1/285 s, ISO 143.
