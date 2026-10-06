@@ -653,6 +653,10 @@
     <string name="audio_input_type_bluetooth">Micro Bluetooth</string>
     <string name="audio_input_type_wired">Micro filaire</string>
     <string name="audio_input_type_other">Entrée externe</string>
+    <string name="audio_input_position_bottom">bas</string>
+    <string name="audio_input_position_back">arrière</string>
+    <string name="audio_input_position_top">haut</string>
+    <string name="audio_input_position_front">avant</string>
     <string name="audio_input_auto_with">Auto · %1$s</string>
     <string name="audio_input_disconnected">%1$s (déconnecté)</string>
     <string name="audio_input_loss_policy">Si l\'entrée est déconnectée</string>

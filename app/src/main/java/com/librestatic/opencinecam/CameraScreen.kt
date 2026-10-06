@@ -4147,9 +4147,10 @@ private fun ProfessionalAudioSettings(
         AudioChoiceRow(
             title = stringResource(R.string.audio_input_device),
             choices = listOf("auto" to autoLabel) +
-                capabilities.inputs.map { encodeAudioInputKey(it.key) to audioInputChoiceLabel(it.kind, it.label) } +
+                capabilities.inputs.map { encodeAudioInputKey(it.key) }
+                    .zip(uniqueAudioInputLabels(capabilities.inputs.map { audioInputChoiceLabel(it.kind, it.label, it.address) })) +
                 listOfNotNull(missingKey?.let { key ->
-                    encodeAudioInputKey(key) to stringResource(R.string.audio_input_disconnected, audioInputChoiceLabel(key.kind, key.productName))
+                    encodeAudioInputKey(key) to stringResource(R.string.audio_input_disconnected, audioInputChoiceLabel(key.kind, key.productName, key.address))
                 }),
             selected = when {
                 settings.audioInputKey == null -> "auto"
@@ -4505,9 +4506,12 @@ private fun AudioInputBadge(input: com.librestatic.opencinecam.media.audio.Activ
 
 /** "USB microphone · USB-C Lavalier"; the built-in microphone is named by its type alone. */
 @Composable
-private fun audioInputChoiceLabel(kind: com.librestatic.opencinecam.media.audio.AudioInputKind, productName: String): String {
+private fun audioInputChoiceLabel(kind: com.librestatic.opencinecam.media.audio.AudioInputKind, productName: String, address: String): String {
     val type = stringResource(audioInputTypeLabel(kind))
-    return if (kind == com.librestatic.opencinecam.media.audio.AudioInputKind.BUILT_IN || productName.isBlank()) type else "$type · $productName"
+    if (kind == com.librestatic.opencinecam.media.audio.AudioInputKind.BUILT_IN) {
+        return builtInMicPositionLabel(address)?.let { "$type · ${stringResource(it)}" } ?: type
+    }
+    return if (productName.isBlank()) type else "$type · $productName"
 }
 
 @Composable

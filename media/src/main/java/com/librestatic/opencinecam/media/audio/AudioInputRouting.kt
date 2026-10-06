@@ -34,6 +34,21 @@ fun audioInputKind(type: Int): AudioInputKind = when (type) {
     else -> AudioInputKind.OTHER
 }
 
+/**
+ * Android also lists ports that are not microphones as inputs: call audio, internal capture
+ * (remote submix), the FM and TV tuners and the echo-canceller reference. None can record a take.
+ */
+fun isCaptureInputType(type: Int): Boolean = type !in NON_CAPTURE_INPUT_TYPES
+
+// TYPE_ECHO_REFERENCE is API 31; the literal keeps the check valid on older releases.
+private val NON_CAPTURE_INPUT_TYPES = setOf(
+    AudioDeviceInfo.TYPE_TELEPHONY,
+    AudioDeviceInfo.TYPE_REMOTE_SUBMIX,
+    AudioDeviceInfo.TYPE_FM_TUNER,
+    AudioDeviceInfo.TYPE_TV_TUNER,
+    28,
+)
+
 fun isExternalInputType(type: Int): Boolean = audioInputKind(type).let {
     it == AudioInputKind.USB || it == AudioInputKind.WIRED || it == AudioInputKind.BLUETOOTH
 }

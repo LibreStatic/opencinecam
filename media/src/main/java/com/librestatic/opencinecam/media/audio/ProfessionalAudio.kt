@@ -98,7 +98,7 @@ class AndroidProfessionalAudioProbe(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun probe(requestedInput: AudioInputKey? = null): ProfessionalAudioCapabilities {
         val permission = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val infos = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).filter(AudioDeviceInfo::isSource)
+        val infos = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).filter { it.isSource && isCaptureInputType(it.type) }
         val devices = infos
             .map { device ->
                 SelectableAudioInput(

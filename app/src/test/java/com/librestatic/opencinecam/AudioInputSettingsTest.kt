@@ -78,4 +78,18 @@ class AudioInputSettingsTest {
         val merged = CameraPresetCodec.mergeLocal(CameraSettings(), local)
         assertEquals(lav.key, merged.audioInputKey); assertEquals(AudioInputLossPolicy.FALLBACK_BUILTIN, merged.audioInputLossPolicy)
     }
+
+    @Test fun identicalInputLabelsAreNumberedInOrder() {
+        assertEquals(
+            listOf("Built-in microphone", "External input (1)", "USB · Lav", "External input (2)"),
+            uniqueAudioInputLabels(listOf("Built-in microphone", "External input", "USB · Lav", "External input")),
+        )
+    }
+
+    @Test fun builtInMicrophonePositionsComeFromTheAddress() {
+        assertEquals(R.string.audio_input_position_bottom, builtInMicPositionLabel("bottom"))
+        assertEquals(R.string.audio_input_position_back, builtInMicPositionLabel(" Back "))
+        assertNull(builtInMicPositionLabel(""))
+        assertNull(builtInMicPositionLabel("card=2;device=0"))
+    }
 }

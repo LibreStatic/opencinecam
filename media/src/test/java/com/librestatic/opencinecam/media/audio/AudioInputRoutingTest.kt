@@ -86,4 +86,10 @@ class AudioInputRoutingTest {
         for (i in 0 until 48) assertEquals(0.toByte(), buffer.get(i))
         assertEquals(49.toByte(), buffer.get(48))
     }
+
+    @Test fun portsThatAreNotMicrophonesAreNotCaptureInputs() {
+        // The Razr Fold lists these next to its microphones.
+        for (type in listOf(18, 25, 16, 17, 28)) assertEquals(false, isCaptureInputType(type))
+        for (type in listOf(15, 11, 22, 7, 3, 26)) assertEquals(true, isCaptureInputType(type))
+    }
 }
