@@ -653,6 +653,10 @@
     <string name="audio_input_type_bluetooth">Bluetooth-Mikrofon</string>
     <string name="audio_input_type_wired">Kabelmikrofon</string>
     <string name="audio_input_type_other">Externer Eingang</string>
+    <string name="audio_input_position_bottom">unten</string>
+    <string name="audio_input_position_back">hinten</string>
+    <string name="audio_input_position_top">oben</string>
+    <string name="audio_input_position_front">vorne</string>
     <string name="audio_input_auto_with">Auto · %1$s</string>
     <string name="audio_input_disconnected">%1$s (getrennt)</string>
     <string name="audio_input_loss_policy">Wenn der Eingang getrennt wird</string>

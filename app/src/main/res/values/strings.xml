@@ -656,6 +656,10 @@
     <string name="audio_input_type_bluetooth">Bluetooth microphone</string>
     <string name="audio_input_type_wired">Wired microphone</string>
     <string name="audio_input_type_other">External input</string>
+    <string name="audio_input_position_bottom">bottom</string>
+    <string name="audio_input_position_back">back</string>
+    <string name="audio_input_position_top">top</string>
+    <string name="audio_input_position_front">front</string>
     <string name="audio_input_auto_with">Auto · %1$s</string>
     <string name="audio_input_disconnected">%1$s (disconnected)</string>
     <string name="audio_input_loss_policy">If the input is disconnected</string>

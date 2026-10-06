@@ -9,6 +9,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import com.librestatic.opencinecam.media.audio.isCaptureInputType
 
 /**
  * Hotplug for audio inputs. Plugging a USB microphone in or out fires a burst of callbacks, so
@@ -44,7 +45,8 @@ internal class AudioInputMonitor(context: Context, private val onChanged: () -> 
     }
 
     private fun currentInputs(): Set<Int> =
-        audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).mapTo(mutableSetOf()) { it.id }
+        audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
+            .filter { isCaptureInputType(it.type) }.mapTo(mutableSetOf()) { it.id }
 
     private companion object {
         const val DEBOUNCE_MS = 300L
