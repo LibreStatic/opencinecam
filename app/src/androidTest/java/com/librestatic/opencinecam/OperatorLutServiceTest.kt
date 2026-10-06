@@ -149,7 +149,9 @@ class OperatorLutServiceTest {
             library.select(sdr)
             compose.waitUntil(10_000) { owner.cameraStates.value.operatorLutStatus.state==OperatorLutState.ACTIVE }
             library.select(null)
-            compose.waitUntil(20_000) { owner.cameraStates.value.phase==CameraUiPhase.PREVIEWING && !owner.cameraStates.value.gpuViewfinder }
+            compose.waitUntil(20_000) { owner.cameraStates.value.phase==CameraUiPhase.PREVIEWING && owner.cameraStates.value.operatorLutStatus == OperatorLutStatus() }
+            // Video keeps the GPU viewfinder without a LUT, so REC never rebuilds the preview graph.
+            assertTrue(owner.cameraStates.value.gpuViewfinder)
             assertEquals(OperatorLutStatus(),owner.cameraStates.value.operatorLutStatus)
             assertEquals(CaptureMode.VIDEO,owner.cameraStates.value.selectedMode)
         } finally {
