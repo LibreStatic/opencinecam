@@ -64,15 +64,19 @@ fun resolveAudioInput(key: AudioInputKey, inputs: List<SelectableAudioInput>): S
     return sameProduct.singleOrNull()
 }
 
-/** "Auto": an external USB or wired microphone wins, then Bluetooth, then the built-in one. */
+/**
+ * "Auto": an external USB or wired microphone wins, then the built-in one. Bluetooth headset
+ * microphones record narrowband mono (8 or 16 kHz), and earbuds connected only for listening would
+ * otherwise take over the take, so Auto picks one only when it is the sole input; choose it by hand.
+ */
 fun preferredAutoInput(inputs: List<SelectableAudioInput>): SelectableAudioInput? =
     inputs.minByOrNull { autoRank(it.type) }
 
 private fun autoRank(type: Int): Int = when (audioInputKind(type)) {
     AudioInputKind.USB, AudioInputKind.WIRED -> 0
-    AudioInputKind.BLUETOOTH -> 1
-    AudioInputKind.BUILT_IN -> 2
-    AudioInputKind.OTHER -> 3
+    AudioInputKind.BUILT_IN -> 1
+    AudioInputKind.OTHER -> 2
+    AudioInputKind.BLUETOOTH -> 3
 }
 
 /** What happens to a take when its audio input disappears or the platform reroutes it. */
