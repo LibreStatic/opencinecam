@@ -112,6 +112,15 @@ import com.librestatic.opencinecam.storage.FlacAudioSidecarRecorder
 import com.librestatic.opencinecam.storage.WavAudioSidecarRecorder
 import com.librestatic.opencinecam.media.audio.AndroidProfessionalAudioProbe
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
+import com.librestatic.opencinecam.media.audio.ActiveAudioInput
+import com.librestatic.opencinecam.media.audio.AudioInputKey
+import com.librestatic.opencinecam.media.audio.AudioInputLossAction
+import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
+import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
+import com.librestatic.opencinecam.media.audio.audioInputKind
+import com.librestatic.opencinecam.audioInputTypeLabel
+import com.librestatic.opencinecam.audioInputUnavailable
+import com.librestatic.opencinecam.resolveAudioInputSelection
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.AudioListeningStatus
 import java.util.concurrent.CompletableFuture
@@ -305,6 +314,11 @@ class CaptureService : Service() {
     // Report-only A/V clock drift of the last separate WAV/FLAC take (ADAPTIVE; never stops a take).
     @Volatile private var lastSeparateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? = null
     private var previewAudioMonitor: PreviewAudioMonitor? = null
+    private var audioInputMonitor: AudioInputMonitor? = null
+    /** Only the newest guard may publish [CameraUiState.activeAudioInput]; retired guards may still post. */
+    private var audioRouteOwner: AudioInputRouteGuard? = null
+    private var audioInputRefreshDeferred = false
+    private var lastAutoAudioInput: AudioInputKey? = null
     @Volatile private var audioListeningController: AudioListeningController? = null
     private val latestListeningStatus = AtomicReference<AudioListeningStatus?>(null)
     private var audioListeningRetirement = CompletableFuture.completedFuture(Unit)
@@ -431,6 +445,7 @@ class CaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        audioInputMonitor = AudioInputMonitor(this, ::onAudioInputsChanged).also { it.register() }
         mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
             latestListeningStatus.set(status)
@@ -598,7 +613,7 @@ class CaptureService : Service() {
         val generation = previewAudioGeneration
         if (!previewAudioEligible()) {
             if (!settings.audioEnabled || cameraState.value.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG)) {
-                cameraState.update { it.copy(audioLevels = null, audioMonitoringActive = false) }
+                cameraState.update { it.copy(audioLevels = null, audioMonitoringActive = false, activeAudioInput = null) }
             }
             return
         }
@@ -614,9 +629,14 @@ class CaptureService : Service() {
                     AudioRetirementGate.requireIdle()
                     val onLevel = newAudioLevelConsumer()
                     val epoch = audioLevelEpoch.get()
+                    if (audioInputRefreshDeferred) {
+                        audioInputRefreshDeferred = false
+                        localBinder.refreshAudioCapabilities()
+                    }
+                    val monitorSettings = cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings
                     val monitor = PreviewAudioMonitor.create(
                         this,
-                        cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings,
+                        monitorSettings,
                         onLevel,
                         onFailure = { failure ->
                             mainHandler.post failedAudio@ {
@@ -627,6 +647,7 @@ class CaptureService : Service() {
                             }
                         },
                         listeningSink = newAudioListeningSink(),
+                        inputGuard = newAudioRouteGuard(monitorSettings, AudioInputLossAction.IGNORE),
                     )
                     previewAudioMonitor = monitor
                     monitor.start()
@@ -1616,9 +1637,10 @@ class CaptureService : Service() {
 
         fun refreshAudioCapabilities() {
             if (serviceDestroyed) return
+            val requestedInput = settings.audioInputKey
             try {
                 storageExecutor.execute {
-                    val capabilities = runCatching { AndroidProfessionalAudioProbe(this@CaptureService).probe() }
+                    val capabilities = runCatching { AndroidProfessionalAudioProbe(this@CaptureService).probe(requestedInput) }
                         .getOrElse {
                             val message = "Audio capability probe failed: ${it.message}"
                             mainHandler.post {
@@ -1631,6 +1653,7 @@ class CaptureService : Service() {
                         // queued callbacks and retired the actor. Never revive that service.
                         if (serviceDestroyed) return@post
                         cameraState.value = cameraState.value.copy(audioCapabilities = capabilities)
+                        announceAutoAudioInput(capabilities)
                         val repository = SettingsRepositories.get(this@CaptureService)
                         repository.update { it.normalizedFor(capabilities) }
                         localBinder.applySettings(repository.states.value)
@@ -2157,6 +2180,7 @@ class CaptureService : Service() {
                     audioListeningOutputDeviceId = settings.audioListeningOutputDeviceId,
                     audioMeter = settings.audioMeter, productionSlate = settings.productionSlate,
                     gallery = settings.gallery, mediaSharing = settings.mediaSharing) == settings
+                if (previous.audioInputKey != settings.audioInputKey && !takeInProgress()) refreshAudioCapabilities()
                 if (!onlyAudioDisplayChanged || previewAudioMonitor == null) startPreviewAudioMonitorIfEligible()
             }
         }
@@ -2681,9 +2705,10 @@ class CaptureService : Service() {
                             fail("microphone-permission-required", "Grant microphone permission or disable audio before recording.")
                             return false
                         }
-                        val audioSettings = cameraState.value.audioCapabilities
+                        val takeInput = takeAudioInput(cameraState.value.audioCapabilities
                             ?.let(settings::normalizedFor)
-                            ?: settings
+                            ?: settings, requestedAudioEnabled) ?: return false
+                        val audioSettings = takeInput.settings
                         val audioRequested = requestedAudioEnabled
                         activeRecordingGain = audioSettings.audioRecordingGain.takeIf { audioRequested }
                         val onAudioLevel = newAudioLevelConsumer()
@@ -2701,6 +2726,7 @@ class CaptureService : Service() {
                                 recordingGain = audioSettings.audioRecordingGain,
                                 onAudioLevel = onAudioLevel,
                                 listeningSink = listeningSink,
+                                inputGuard = takeInput.guard,
                             )
                         } else null
                         when (val start = foreground.start(audioRequested)) {
@@ -2720,9 +2746,9 @@ class CaptureService : Service() {
                         audioSidecarRecorder = when {
                             !audioRequested -> null
                             audioSettings.audioOutputFormat == AudioOutputFormat.WAV_PCM ->
-                                WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink)
+                                WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             audioSettings.audioOutputFormat == AudioOutputFormat.FLAC ->
-                                FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink)
+                                FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             else -> null
                         }
                         activeRecordingAudioLabel = when {
@@ -2818,7 +2844,9 @@ class CaptureService : Service() {
                             fail("microphone-permission-required", "Grant microphone permission or disable audio before recording.")
                             return false
                         }
-                        val audioSettings = cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings
+                        val takeInput = takeAudioInput(cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings,
+                            requestedAudioEnabled) ?: return false
+                        val audioSettings = takeInput.settings
                         activeRecordingGain = audioSettings.audioRecordingGain.takeIf { requestedAudioEnabled }
                         val onAudioLevel = newAudioLevelConsumer()
                         val listeningSink = newAudioListeningSink()
@@ -2835,6 +2863,7 @@ class CaptureService : Service() {
                                 recordingGain = audioSettings.audioRecordingGain,
                                 onAudioLevel = onAudioLevel,
                                 listeningSink = listeningSink,
+                                inputGuard = takeInput.guard,
                             )
                         } else null
                         when (val start = foreground.start(requestedAudioEnabled)) {
@@ -2854,9 +2883,9 @@ class CaptureService : Service() {
                         audioSidecarRecorder = when {
                             !requestedAudioEnabled || embeddedAudio != null -> null
                             audioSettings.audioOutputFormat == AudioOutputFormat.WAV_PCM ->
-                                WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink)
+                                WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             audioSettings.audioOutputFormat == AudioOutputFormat.FLAC ->
-                                FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink)
+                                FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             else -> error("Unsupported LOG audio format ${audioSettings.audioOutputFormat}.")
                         }
                         activeRecordingAudioLabel = when {
@@ -3012,6 +3041,9 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        audioInputMonitor?.unregister()
+        audioInputMonitor = null
+        audioRouteOwner = null
         mainHandler.removeCallbacks(previewStartWatchdog)
         transferPreparationToken++
         transferWaiting = false
@@ -3079,6 +3111,100 @@ class CaptureService : Service() {
             cameraState.update { state -> state.copy(message = getString(R.string.recording_orientation_assumed_upright), messageTransient = true) }
             0
         }
+
+    private fun takeInProgress(): Boolean = cameraState.value.phase in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING)
+
+    private class TakeAudioInput(val settings: CameraSettings, val guard: AudioInputRouteGuard?)
+
+    /**
+     * Applies the loss policy to a remembered input that is missing before REC (OCC-AUDIO-012).
+     * Null means the take is refused; the failure is already published.
+     */
+    private fun takeAudioInput(audioSettings: CameraSettings, audioRequested: Boolean): TakeAudioInput? {
+        if (!audioRequested) return TakeAudioInput(audioSettings, null)
+        val requested = AudioInputRouteGuard.inputDevice(this, audioSettings.audioInputDeviceId)
+        val missing = (audioSettings.audioInputDeviceId != null && requested == null) ||
+            cameraState.value.audioCapabilities?.let(audioSettings::audioInputUnavailable) == true
+        if (!missing) return TakeAudioInput(audioSettings, newAudioRouteGuard(audioSettings, AudioInputLossAction.IGNORE, requested))
+        val startDegraded = when (audioSettings.audioInputLossPolicy) {
+            AudioInputLossPolicy.STOP_TAKE -> {
+                fail("audio-input-missing", getString(R.string.audio_input_missing_refused))
+                return null
+            }
+            AudioInputLossPolicy.FALLBACK_BUILTIN -> AudioInputLossAction.FALLBACK
+            AudioInputLossPolicy.CONTINUE_SILENT -> AudioInputLossAction.SILENCE
+        }
+        val degraded = audioSettings.copy(audioInputDeviceId = null)
+        return TakeAudioInput(degraded, newAudioRouteGuard(degraded, startDegraded, null))
+    }
+
+    private fun newAudioRouteGuard(
+        audioSettings: CameraSettings,
+        startDegraded: AudioInputLossAction,
+        requested: android.media.AudioDeviceInfo? = AudioInputRouteGuard.inputDevice(this, audioSettings.audioInputDeviceId),
+    ): AudioInputRouteGuard {
+        lateinit var guard: AudioInputRouteGuard
+        guard = AudioInputRouteGuard(
+            this, requested, audioSettings.audioInputLossPolicy, startDegraded,
+            onRoute = { route -> mainHandler.post { publishAudioRoute(guard, route) } },
+            onLoss = { action -> mainHandler.post { onAudioInputLost(guard, action) } },
+        )
+        audioRouteOwner = guard
+        return guard
+    }
+
+    private fun publishAudioRoute(guard: AudioInputRouteGuard, route: ActiveAudioInput) {
+        if (serviceDestroyed || audioRouteOwner !== guard) return
+        cameraState.update { it.copy(activeAudioInput = route) }
+    }
+
+    private fun onAudioInputLost(guard: AudioInputRouteGuard, action: AudioInputLossAction) {
+        if (serviceDestroyed || audioRouteOwner !== guard) return
+        when (action) {
+            AudioInputLossAction.STOP_TAKE -> {
+                android.util.Log.w("CaptureService", "Stopping take: audio-input-lost")
+                stopTakeForLostInput(guard, attemptsLeft = LOST_INPUT_STOP_ATTEMPTS)
+            }
+            AudioInputLossAction.FALLBACK ->
+                cameraState.update { it.copy(message = getString(R.string.audio_input_lost_fallback)) }
+            AudioInputLossAction.SILENCE ->
+                cameraState.update { it.copy(message = getString(R.string.audio_input_lost_silent)) }
+            AudioInputLossAction.IGNORE -> Unit
+        }
+    }
+
+    /** A loss can arrive while the take is still starting; stopRecording only accepts a RECORDING take. */
+    private fun stopTakeForLostInput(guard: AudioInputRouteGuard, attemptsLeft: Int) {
+        if (serviceDestroyed || audioRouteOwner !== guard || !takeInProgress()) return
+        if (localBinder.stopRecording()) {
+            cameraState.update { it.copy(message = getString(R.string.audio_input_lost_stopped)) }
+        } else if (attemptsLeft > 0) {
+            mainHandler.postDelayed({ stopTakeForLostInput(guard, attemptsLeft - 1) }, LOST_INPUT_STOP_RETRY_MS)
+        }
+    }
+
+    /** Hotplug: a microphone appeared or disappeared. A running take keeps its guard; the probe waits. */
+    private fun onAudioInputsChanged() {
+        if (serviceDestroyed) return
+        if (takeInProgress()) {
+            audioInputRefreshDeferred = true
+            return
+        }
+        localBinder.refreshAudioCapabilities()
+        startPreviewAudioMonitorIfEligible()
+    }
+
+    /** "Using USB microphone: <name>" when Auto moves to a newly connected external input. */
+    private fun announceAutoAudioInput(capabilities: com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities) {
+        val choice = settings.resolveAudioInputSelection(capabilities.inputs).autoChoice
+        val previous = lastAutoAudioInput
+        lastAutoAudioInput = choice?.key
+        if (settings.audioInputKey != null || takeInProgress() || choice == null || !choice.isExternal) return
+        if (previous == null || previous == choice.key) return
+        val label = choice.label.ifBlank { getString(audioInputTypeLabel(audioInputKind(choice.type))) }
+        cameraState.update { it.copy(message = getString(R.string.audio_input_auto_using,
+            getString(audioInputTypeLabel(audioInputKind(choice.type))), label)) }
+    }
 
     private fun fail(code: String, message: String) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
@@ -3405,6 +3531,8 @@ class CaptureService : Service() {
     )
 
     companion object {
+        private const val LOST_INPUT_STOP_ATTEMPTS = 20
+        private const val LOST_INPUT_STOP_RETRY_MS = 250L
         /** [OpenCineLogRecordingEvidence.curve] of an HLG take. */
         private const val HLG_CURVE = "HLG"
         private const val OWNER_ID = "capture-service"

@@ -13,7 +13,7 @@ class ProxySettingsTest {
         assertEquals(ProxySettings(), CameraSettingsStore(PresetPreferences()).load().proxy)
         for (edge in listOf(640, 1280, 1920)) for (bitrate in listOf(1, 2, 3, 5, 8)) {
             val value = CameraSettings(proxy = ProxySettings(edge, bitrate), geotaggingEnabled = true,
-                productionSlate = ProductionSlateSettings(scene = "Keep"), audioInputDeviceId = 29)
+                productionSlate = ProductionSlateSettings(scene = "Keep"), audioInputKey = com.librestatic.opencinecam.media.audio.AudioInputKey(22, "Lav", "card=29"))
             val memory = PresetPreferences(); val store = CameraSettingsStore(memory)
             store.save(value)
             assertEquals(value, store.load())
