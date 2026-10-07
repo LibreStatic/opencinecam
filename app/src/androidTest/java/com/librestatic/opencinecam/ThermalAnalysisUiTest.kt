@@ -59,7 +59,7 @@ class ThermalAnalysisUiTest {
         compose.onNodeWithTag("analysis-suspended-thermal").assertIsDisplayed()
             .assertTextEquals(context.getString(R.string.analysis_suspended_thermal))
         compose.onNodeWithTag("monitoring-waveform-graph").assertDoesNotExist()
-        compose.onNodeWithTag("monitoring-freshness").assertTextEquals(context.getString(R.string.scope_suspended))
+        compose.onNodeWithTag("monitoring-freshness", useUnmergedTree = true).assertTextEquals(context.getString(R.string.scope_suspended))
         for (index in 1..3) {
             compose.onNodeWithTag("operator-button-$index")
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,

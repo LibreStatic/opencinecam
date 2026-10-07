@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.text.style.TextAlign
+import com.librestatic.opencinecam.camera.AnalysisSuspension
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
@@ -1063,9 +1064,10 @@ internal fun MonitoringOverlay(
                     (shownRect.center.y - panelHeight.dp.toPx() / 2f).roundToInt())
             }.size(panelWidth.dp, panelHeight.dp))
         }
-        // The overlay spans the whole screen: clear the top bar and the AE/AF lock toggles
-        // (top end, from 62 dp) and keep right of the zoom column (top start).
-        AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 116.dp, start = 88.dp, end = 12.dp))
+        // The full chrome stacks the notice with its instruments, clear of its controls; a hinge
+        // split's preview pane and the self-recording chrome have no such stack (72 dp clears the
+        // latter's top row).
+        if (drawScopesPanel) AnalysisSuspensionNotice(state, Modifier.align(Alignment.TopCenter).padding(top = 72.dp, start = 16.dp, end = 16.dp))
     }
 }
 
@@ -2509,16 +2511,28 @@ private fun InstrumentStack(
     val showLogSource = chromeVisible && state.selectedMode.usesLogGraph
     val showZoom = chromeVisible && state.zoomSupported
     val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
-    if (!showAudio && !showLogSource && !showZoom && !showHistogram) return
+    // A hinge split has no picture here: the preview pane's overlay says it instead.
+    val showSuspension = !dedicatedPane && state.analysisSuspension != AnalysisSuspension.NONE
+    if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showSuspension) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
         val stretchHistogram = dedicatedPane && horizontal && showHistogram
-        FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram) {
-            if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
-            if (showZoom) ZoomReadout(state, binder)
-            if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
-            if (showHistogram) HistogramGraph(state, settings.monitoring, histogramMode,
-                if (stretchHistogram) Modifier.fillMaxSize() else Modifier.width(histogramWidth).height(histogramWidth * .32f))
+        // The notice goes under the zoom, so the lens anchors never move when it comes and goes.
+        // A row has no width to spare for it: there it takes its own line under the row.
+        val notice: @Composable () -> Unit = {
+            AnalysisSuspensionNotice(state, Modifier.widthIn(max = minOf(maxWidth, if (horizontal) 360.dp else 280.dp)))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
+                wrapCross = horizontal && showSuspension, modifier = if (horizontal && showSuspension) Modifier else Modifier.weight(1f)) {
+                if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
+                if (showZoom) ZoomReadout(state, binder)
+                if (showSuspension && !horizontal) notice()
+                if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
+                if (showHistogram) HistogramGraph(state, settings.monitoring, histogramMode,
+                    if (stretchHistogram) Modifier.fillMaxSize() else Modifier.width(histogramWidth).height(histogramWidth * .32f))
+            }
+            if (showSuspension && horizontal) notice()
         }
     }
 }
@@ -2535,9 +2549,12 @@ private fun FittingStack(
     spacing: androidx.compose.ui.unit.Dp,
     fillLast: Boolean = false,
     maxFillCross: androidx.compose.ui.unit.Dp = 160.dp,
+    // A row that reports only the height it uses, so something can follow it.
+    wrapCross: Boolean = false,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Layout(content) { measurables, constraints ->
+    Layout(content, modifier) { measurables, constraints ->
         val gap = spacing.roundToPx()
         // Unbounded: an instrument measures at its own size (no "1.0" over "×", no "M…" meter)
         // and is then left out below if it does not fit whole.
@@ -2567,7 +2584,8 @@ private fun FittingStack(
                 cursor += main + gap
             }
         }
-        layout(constraints.maxWidth, constraints.maxHeight) {
+        val height = if (wrapCross) positions.maxOfOrNull { it.first.height } ?: 0 else constraints.maxHeight
+        layout(constraints.maxWidth, height) {
             positions.forEach { (item, at) -> item.place(at) }
         }
     }
