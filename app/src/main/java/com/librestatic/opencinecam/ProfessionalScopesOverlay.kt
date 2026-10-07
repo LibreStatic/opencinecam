@@ -34,7 +34,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
@@ -53,13 +56,29 @@ internal fun FalseColorBand.composeColor(palette: FalseColorPalette): Color = wh
 /** Scope samples are only drawable while the engine is still producing them; a suspended engine leaves stale ones behind. */
 internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh && analysisSuspension == AnalysisSuspension.NONE
 
-/** Says why scopes stopped while analysis is suspended; the picture and any take keep running. */
+/**
+ * Says why scopes stopped while analysis is suspended; the picture and any take keep running.
+ * A chip in the chrome's language: the host bounds its width and it wraps to a second line
+ * rather than running under the controls beside it.
+ */
 @Composable internal fun AnalysisSuspensionNotice(state: CameraUiState, modifier: Modifier = Modifier) {
     if (state.analysisSuspension != AnalysisSuspension.THERMAL) return
-    Text(stringResource(R.string.analysis_suspended_thermal), color = Color.Yellow,
-        style = MaterialTheme.typography.labelLarge,
-        modifier = modifier.background(Color.Black.copy(alpha = .75f)).padding(horizontal = 10.dp, vertical = 6.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite }.testTag("analysis-suspended-thermal"))
+    val warning = LocalCineColors.current.pending
+    Row(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .85f).chromePanel())
+            .drawBehind { drawRect(warning, size = Size(3.dp.toPx(), size.height)) }
+            .padding(start = 9.dp, end = 10.dp, top = 5.dp, bottom = 5.dp)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+            .testTag("analysis-suspended-thermal"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        CineGlyph(CineIcon.WARNING, warning, Modifier.size(14.dp))
+        Text(stringResource(R.string.analysis_suspended_thermal), color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 /** Operator only: never mutates the encoder, subject output, crop or stored image. */

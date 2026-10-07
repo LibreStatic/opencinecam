@@ -99,6 +99,7 @@ Outputs and logs:
 | `CaptureModes` / `CaptureMonitor` | `AdaptiveCaptureChrome` | the modes or the monitoring toggles in the docked pane |
 | `CaptureHlg` | `AdaptiveCaptureChrome` | HLG selected, with LOG and HLG offered in the docked modes pane (use `--device inner`) |
 | `CaptureScopes` / `CaptureScopesHidden` | `AdaptiveCaptureChrome` | waveform, vectorscope and false colour with live fake analysis; shown, or hidden as with H |
+| `CaptureThermal` / `CaptureThermalRecording` | `AdaptiveCaptureChrome` | video with the scopes, analysis suspended for heat: the "Scopes paused" notice sits in the instrument stack under the zoom (on its own line in a row layout); idle or recording |
 | `CaptureLocked` | `AdaptiveCaptureChrome` | controls locked while a photo saves, with the saved notice |
 | `CaptureOperatorLocked` | `AdaptiveCaptureChrome` | video recording with *lock during take* on: the slots give way to the Locked card with Unlock |
 | `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |

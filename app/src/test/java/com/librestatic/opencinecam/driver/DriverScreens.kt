@@ -189,6 +189,21 @@ fun CaptureScopes() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), drive
 @Composable
 fun CaptureScopesHidden() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driverScopeSettings(), scopesHidden = true)
 
+/** The device ran too hot: analysis is suspended and the scope keys read unavailable; the notice stacks under the zoom. */
+@Composable
+fun CaptureThermal() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(analysisSuspension = com.librestatic.opencinecam.camera.AnalysisSuspension.THERMAL),
+    driverScopeSettings(),
+)
+
+/** The same while recording, with the recording HUD above the instruments. */
+@Composable
+fun CaptureThermalRecording() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        analysisSuspension = com.librestatic.opencinecam.camera.AnalysisSuspension.THERMAL),
+    driverScopeSettings(),
+)
+
 /** Controls locked while a photo is saved, with the saved notice: the state review item 21 covers. */
 @Composable
 fun CaptureLocked() = CaptureChrome(
