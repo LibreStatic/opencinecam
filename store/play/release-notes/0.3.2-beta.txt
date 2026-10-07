@@ -1,0 +1,32 @@
+<en-US>
+- When the device gets too hot, the "Scopes paused" notice now sits under the zoom with the other viewfinder readouts instead of running under the buttons beside the frame
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Cuando el dispositivo se calienta demasiado, el aviso "Scopes en pausa" ahora aparece debajo del zoom, junto a los otros indicadores del visor, en lugar de quedar detrás de los botones al costado de la imagen
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Cuando el dispositivo se calienta demasiado, el aviso "Scopes en pausa" aparece ahora debajo del zoom, junto a los demás indicadores del visor, en lugar de quedar detrás de los botones al lado de la imagen
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Quando o aparelho esquenta demais, o aviso "Scopes pausados" agora aparece abaixo do zoom, junto aos outros indicadores do visor, em vez de ficar atrás dos botões ao lado da imagem
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Quando o aparelho aquece demasiado, o aviso "Scopes pausados" aparece agora por baixo do zoom, junto aos outros indicadores do visor, em vez de ficar atrás dos botões ao lado da imagem
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Quand l'appareil chauffe trop, l'avis « Scopes en pause » s'affiche désormais sous le zoom, avec les autres indicateurs du viseur, au lieu de passer sous les boutons à côté de l'image
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Wird das Gerät zu heiß, erscheint der Hinweis „Scopes pausiert“ jetzt unter dem Zoom bei den anderen Sucheranzeigen, statt hinter den Tasten neben dem Bild zu liegen
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Quando il dispositivo si scalda troppo, l'avviso "Scope in pausa" ora appare sotto lo zoom, insieme agli altri indicatori del mirino, invece di finire dietro i pulsanti accanto all'immagine
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
