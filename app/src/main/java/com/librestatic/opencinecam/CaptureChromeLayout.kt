@@ -203,3 +203,26 @@ internal fun reservedPreviewViewport(
     val inner = fittedPreviewViewport(width, height, ratio)
     return if (rightToLeft) inner.copy(left = inner.left + reserve.end.coerceAtLeast(0f)) else inner
 }
+
+/**
+ * The frame inside a side-rails viewfinder pane of [paneWidth] × [paneHeight] (its own pixel space),
+ * which sits between a rail [leftRail] wide on its left and one [rightRail] wide on its right. The
+ * rails slide away during a take, and [expansion] grows the frame into their room, centred on the
+ * whole window. The result can reach outside the pane (a negative left).
+ */
+internal fun railsPreviewViewport(
+    paneWidth: Float,
+    paneHeight: Float,
+    leftRail: Float,
+    rightRail: Float,
+    expansion: Float,
+    reserve: CaptureFrameReserve,
+    ratio: Float?,
+    rightToLeft: Boolean = false,
+): PreviewViewport {
+    val t = expansion.coerceIn(0f, 1f)
+    val grownLeft = leftRail.coerceAtLeast(0f) * t
+    val grownWidth = paneWidth + grownLeft + rightRail.coerceAtLeast(0f) * t
+    val inner = reservedPreviewViewport(grownWidth, paneHeight, 0f, 0f, reserve, ratio, rightToLeft)
+    return inner.copy(left = inner.left - grownLeft)
+}

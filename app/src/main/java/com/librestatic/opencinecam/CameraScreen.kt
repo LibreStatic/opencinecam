@@ -640,9 +640,10 @@ internal fun CaptureSurface(
         // inset, so a filled (cropped) frame overflows the physical screen rather than relying on
         // Compose clipping, which a SurfaceView does not reliably honour.
         val overlayChrome = fullChrome && settings.translucentChrome
-        // The deck slides away during a take, and the stacked viewfinder grows into its space.
+        val sideRails = fullChrome && family == CaptureLayoutFamily.SIDE_RAILS
+        // The deck (or the side rails) slides away during a take, and the viewfinder grows into its space.
         val viewfinderExpansion by animateFloatAsState(
-            if (stacked && !overlayChrome && state.phase == CameraUiPhase.RECORDING) 1f else 0f,
+            if ((stacked || sideRails) && !overlayChrome && state.phase == CameraUiPhase.RECORDING) 1f else 0f,
             tween(RECORDING_VIEWFINDER_EXPANSION_MS, easing = FastOutSlowInEasing),
             label = "recording-viewfinder-expansion",
         )
@@ -651,7 +652,7 @@ internal fun CaptureSurface(
         val reserveBottom by animateFloatAsState(frameReserve.bottom, reserveSpec, label = "frame-reserve-bottom")
         val previewPaneModifier = when {
             overlayChrome -> paneModifier(null)
-            fullChrome && family == CaptureLayoutFamily.SIDE_RAILS -> paneModifier(null)
+            sideRails -> paneModifier(null)
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(top = extraTop, start = CAPTURE_RAIL_WIDTH_DP.dp, end = SIDE_COLUMN_WIDTH_DP.dp)
             fullChrome && family == CaptureLayoutFamily.INSPECTOR -> paneModifier(null)
@@ -684,7 +685,13 @@ internal fun CaptureSurface(
             val deckSpace = if (stacked && !overlayChrome) stackedDeckHeightPx.toFloat() else 0f
             val reserve = if (fullChrome && !overlayChrome) CaptureFrameReserve(reserveEnd, reserveBottom) else CaptureFrameReserve.None
             val restingFrame = fittedPreviewViewport(paneWidth, paneHeight, displayRatio)
-            val targetFrame = reservedPreviewViewport(paneWidth, paneHeight, deckSpace, viewfinderExpansion, reserve, displayRatio, rightToLeft)
+            val targetFrame = if (sideRails && !overlayChrome) with(density) {
+                // The pane's start padding is the rail and its end padding the column, mirrored right to left.
+                val railPx = CAPTURE_RAIL_WIDTH_DP.dp.toPx()
+                val columnPx = SIDE_COLUMN_WIDTH_DP.dp.toPx()
+                railsPreviewViewport(paneWidth, paneHeight, if (rightToLeft) columnPx else railPx, if (rightToLeft) railPx else columnPx,
+                    viewfinderExpansion, reserve, displayRatio, rightToLeft)
+            } else reservedPreviewViewport(paneWidth, paneHeight, deckSpace, viewfinderExpansion, reserve, displayRatio, rightToLeft)
             val frameMoved = targetFrame != restingFrame && restingFrame.width > 0f
             val frameScale = if (frameMoved) targetFrame.width / restingFrame.width else 1f
             val shiftX = if (frameMoved) (targetFrame.left + targetFrame.width / 2f) - (restingFrame.left + restingFrame.width / 2f) else 0f
@@ -1556,8 +1563,12 @@ internal fun AdaptiveCaptureChrome(
             hinge -> PreviewViewport(0f, topBarPx, width,
                 (height - topBarPx - if (chromeVisible) controlDeckHeightPx.toFloat() else 0f).coerceAtLeast(0f))
             sideRails || inspector -> {
-                val inner = reservedPreviewViewport((width - startRailPx - endColumnPx).coerceAtLeast(0f), height, 0f, 0f, reserve, ratio, rightToLeft)
-                inner.copy(left = inner.left + if (rightToLeft) endColumnPx else startRailPx)
+                val leftPx = if (rightToLeft) endColumnPx else startRailPx
+                val rightPx = if (rightToLeft) startRailPx else endColumnPx
+                // The rails slide away during a take and the frame grows into their room; the inspector stays.
+                val inner = railsPreviewViewport((width - startRailPx - endColumnPx).coerceAtLeast(0f), height, leftPx, rightPx,
+                    if (sideRails) viewfinderExpansion else 0f, reserve, ratio, rightToLeft)
+                inner.copy(left = inner.left + leftPx)
             }
             else -> {
                 val inner = reservedPreviewViewport(width, stackedPaneHeight, stableDeckHeightPx.toFloat(), viewfinderExpansion, reserve, ratio, rightToLeft)

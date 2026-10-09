@@ -109,7 +109,10 @@ internal fun CaptureModeButton(label: String, onClick: () -> Unit, modifier: Mod
     }
 }
 
-/** The modes as a grid of two per row; resolution is the RES slot's. Modes cannot change during a take. */
+/**
+ * The modes as a grid of two per row; resolution is the RES slot's. Modes cannot change during a take.
+ * Picking a mode closes the pane or sheet.
+ */
 @Composable
 internal fun CaptureModeContent(
     choices: List<CaptureModeChoice>,
@@ -141,6 +144,7 @@ internal fun CaptureModeContent(
                             )
                             .selectable(selected = choice.selected, enabled = enabled, role = Role.RadioButton) {
                                 onSelect(choice.mode)
+                                onClose?.invoke()
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                             .testTag("capture-mode-${choice.mode.name.lowercase()}"),
