@@ -30,7 +30,7 @@ swap the build of a release that Google has not approved yet. Any remaining word
    - Run `free -h`. The gate needs about 10 GB with the settings below. Stop if less is available.
 
 2. **Version.**
-   - Find the last `versionCode` uploaded to Play: the track page, or Test and release > Latest releases and bundles.
+   - Find the last `versionCode` uploaded to Play with `tools/play-publish.py status` ("highest uploaded versionCode").
    - Find the latest CI code with `gh release list --limit 3` and `gh run list --workflow play-prerelease.yml --limit 1`.
    - New code: above both, and equal to the next CI run number + 100 when the Play prerelease workflow is enabled
      (`gh workflow list --all`), so that the GitHub prerelease and the Play build share a code.
