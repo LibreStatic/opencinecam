@@ -84,6 +84,7 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
 /** Operator only: never mutates the encoder, subject output, crop or stored image. */
 @Composable internal fun ProfessionalScopeImage(state: CameraUiState, options: MonitoringOptions,
     fresh: Boolean, displayDegrees: Int, sourceWidth: Int, sourceHeight: Int, squeezeFactor: Float, modifier: Modifier = Modifier) {
+    val state = liveCameraState(state)
     val live = state.scopeAnalysisLive(fresh)
     Canvas(modifier.testTag("monitoring-image-guides")) {
         val scale = if (state.gpuViewfinder || state.selectedMode.usesLogGraph)
@@ -133,6 +134,7 @@ internal fun CameraUiState.scopeAnalysisLive(fresh: Boolean): Boolean = fresh &&
     fresh: Boolean, modifier: Modifier = Modifier, expanded: Boolean = false,
     onExpandedChange: ((Boolean) -> Unit)? = null, histogramMode: HistogramMode? = null,
     onClose: (() -> Unit)? = null, tab: ScopeTab? = null, onTabChange: ((ScopeTab) -> Unit)? = null) {
+    val state = liveCameraState(state)
     val tabs = enabledScopeTabs(options.waveformEnabled, options.vectorscopeEnabled, options.falseColorEnabled, histogramMode != null)
     var savedTab by rememberSaveable { mutableStateOf<ScopeTab?>(null) }
     val selected = resolveScopeTab(if (onTabChange != null) tab else savedTab, tabs) ?: return
