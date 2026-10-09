@@ -1,0 +1,56 @@
+<en-US>
+- Foldables: new "Split screen with camera" option for exterior screen contents, showing the content on top and what the rear camera sees below; fill light adds a preview brightness slider
+- The MODES pane now closes after you pick a mode
+- On landscape phones the frame grows over the side controls while recording
+- Gallery: the type filters have icons and stay on one line
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Plegables: nueva opción "Pantalla dividida con la cámara" para los contenidos exteriores, con el contenido arriba y lo que ve la cámara trasera abajo; la luz de relleno suma un control de brillo de la vista previa
+- El panel MODOS ahora se cierra al elegir un modo
+- En teléfonos horizontales el encuadre crece sobre los controles laterales mientras grabás
+- Galería: los filtros de tipo tienen íconos y entran en una línea
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Plegables: nueva opción "Pantalla dividida con la cámara" para los contenidos exteriores, con el contenido arriba y lo que ve la cámara trasera abajo; la luz de relleno añade un control de brillo de la vista previa
+- El panel MODOS se cierra ahora al elegir un modo
+- En móviles en horizontal el encuadre crece sobre los controles laterales mientras grabas
+- Galería: los filtros de tipo tienen iconos y caben en una línea
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Dobráveis: nova opção "Tela dividida com a câmera" para os conteúdos externos, com o conteúdo em cima e o que a câmera traseira vê embaixo; a luz de preenchimento ganha um controle de brilho da pré-visualização
+- O painel MODOS agora fecha ao escolher um modo
+- Em celulares na horizontal o quadro cresce sobre os controles laterais durante a gravação
+- Galeria: os filtros de tipo têm ícones e cabem em uma linha
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Dobráveis: nova opção "Ecrã dividido com a câmara" para os conteúdos exteriores, com o conteúdo em cima e o que a câmara traseira vê em baixo; a luz de preenchimento ganha um controlo de brilho da pré-visualização
+- O painel MODOS fecha agora ao escolher um modo
+- Em telemóveis na horizontal o enquadramento cresce sobre os controlos laterais durante a gravação
+- Galeria: os filtros de tipo têm ícones e cabem numa linha
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Pliables : nouvelle option « Écran partagé avec la caméra » pour les contenus extérieurs, avec le contenu en haut et la caméra arrière en bas ; la lumière d'appoint permet de régler la luminosité de l'aperçu
+- Le panneau MODES se ferme après le choix d'un mode
+- En paysage, le cadre s'agrandit sur les commandes latérales en enregistrement
+- Galerie : les filtres de type ont des icônes et tiennent sur une ligne
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Faltbare Geräte: neue Option „Geteiltes Display mit Kamera“ für Inhalte des Außendisplays, oben der Inhalt, unten was die Rückkamera sieht; das Fülllicht erhält einen Regler für die Vorschauhelligkeit
+- Das MODI-Fenster schließt sich jetzt nach der Moduswahl
+- Auf Smartphones im Querformat wächst das Bild während der Aufnahme über die seitlichen Bedienelemente
+- Galerie: Die Typfilter haben Symbole und passen in eine Zeile
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Pieghevoli: nuova opzione "Schermo diviso con la fotocamera" per i contenuti esterni, con il contenuto in alto e la fotocamera posteriore in basso; la luce di riempimento permette di regolare la luminosità dell'anteprima
+- Il pannello MODI si chiude dopo la scelta di una modalità
+- In orizzontale l'inquadratura si allarga sui comandi laterali mentre registri
+- Galleria: i filtri per tipo hanno icone e stanno su una riga
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
