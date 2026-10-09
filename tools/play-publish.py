@@ -141,6 +141,8 @@ def cmd_status(play, args):
                 f"{r.get('name', '?')} {r.get('versionCodes', [])} {r.get('status')}" for r in releases
             ) or "empty"
             print(f"{track['track']}: {summary}")
+        codes = [b["versionCode"] for b in play.call("GET", play.edit_url(edit, "/bundles")).get("bundles", [])]
+        print(f"highest uploaded versionCode: {max(codes) if codes else 'none'}")
     finally:
         play.call("DELETE", play.edit_url(edit))
 
