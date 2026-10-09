@@ -27,7 +27,7 @@ swap the build of a release that Google has not approved yet. Any remaining word
 1. **Preflight.**
    - You are on `main` and in sync with `origin/main`. List the unpushed commits; they ship in this release.
    - Leave unrelated working-tree changes uncommitted, and never stage them.
-   - Run `free -h`. The gate needs about 10 GB with the settings below. Stop if less is available.
+   - Run `free -h`. The gate needs about 12 GB with the settings below. With less available, drop to `parallel=false` and `workers.max=2` (about 8 GB); below that, stop.
 
 2. **Version.**
    - Find the last `versionCode` uploaded to Play with `tools/play-publish.py status` ("highest uploaded versionCode").
@@ -51,7 +51,7 @@ swap the build of a release that Google has not approved yet. Any remaining word
      `git worktree add --detach ~/.cache/claude-tmp/libremagic/release-wt main`. Never use /tmp or /dev/shm.
    - Run the CI gate there with `--continue`, `JAVA_HOME=/usr/lib/jvm/java-17-openjdk`,
      `ANDROID_HOME=ANDROID_SDK_ROOT=$HOME/Android/Sdk`, and
-     `GRADLE_OPTS="-Dorg.gradle.parallel=false -Dorg.gradle.workers.max=2 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx3g"`.
+     `GRADLE_OPTS="-Dorg.gradle.parallel=true -Dorg.gradle.workers.max=4 -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.daemon.jvm.options=-Xmx3g"`.
    - Run it from a script file in the background; the context-mode hook blocks raw `./gradlew` in Bash.
    - `build-play-bundle.sh` runs no tests, so this gate is the only check. Fix every failure in its own commit.
      Known traps:
