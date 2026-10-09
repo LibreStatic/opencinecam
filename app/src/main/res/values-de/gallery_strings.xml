@@ -4,7 +4,7 @@
     <string name="gallery_title">Lokaler Aufnahmekatalog</string>
     <string name="gallery_settings_help">Live-Einstellungen für Anzeige und Filter. Sie ändern die aufgenommenen Dateien nicht. Das Filtern nach guten Takes erfordert einen lesbaren Slate, der den Take ausdrücklich als gut markiert.</string>
     <string name="gallery_help">Takes sind nach Drehtag gruppiert, jeder mit seinen Dateien beisammen. Über ⋮ an einem Take erreichst du Details, Teilen, Umbenennen, Proxys und Löschen.</string>
-    <string name="gallery_all">Alle Medien</string>
+    <string name="gallery_all">Alle</string>
     <string name="gallery_photo">Fotos</string>
     <string name="gallery_video">Videos</string>
     <string name="gallery_audio">Audio</string>

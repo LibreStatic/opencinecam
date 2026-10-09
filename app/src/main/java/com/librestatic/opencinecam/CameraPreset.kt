@@ -23,7 +23,7 @@ data class CameraPreset(
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 20
+    const val VERSION = 21
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -130,6 +130,7 @@ object CameraPresetCodec {
     private val portableV18 = portableV17 + setOf("playback-muted", "playback-loop", "playback-show-frame-position")
     private val portableV19 = portableV18 + setOf("gallery-auto-thumbnails")
     private val portableV20 = portableV19 + setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity")
+    private val portableV21 = portableV20 + setOf("subject-split-preview-modes", "subject-fill-light-preview-level")
     /**
      * The exact key set a payload of [version] must carry. Every published version stays frozen
      * here, so a payload written by an older build keeps decoding without its keys being guessed.
@@ -141,11 +142,12 @@ object CameraPresetCodec {
         version == 11 -> portableV11; version == 12 -> portableV12; version == 13 -> portableV13
         version == 14 -> portableV14; version == 15 -> portableV15; version == 16 -> portableV16
         version == 17 -> portableV17; version == 18 -> portableV18; version == 19 -> portableV19
-        else -> portableV20
+        version == 20 -> portableV20
+        else -> portableV21
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV20 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV21 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys
@@ -226,6 +228,7 @@ object CameraPresetCodec {
             prompterPaused = preset.subjectDisplay.prompterPaused, continueRecordingOnFold = preset.subjectDisplay.continueRecordingOnFold,
             adaptToHinge = preset.subjectDisplay.adaptToHinge, swapPanes = preset.subjectDisplay.swapPanes,
             previewMirror = preset.subjectDisplay.previewMirror, previewViewAssist = preset.subjectDisplay.previewViewAssist,
+            splitPreviewModes = preset.subjectDisplay.splitPreviewModes, fillLightPreviewLevel = preset.subjectDisplay.fillLightPreviewLevel,
             selfTimerSeconds = preset.subjectDisplay.selfTimerSeconds, selfMinimalControls = preset.subjectDisplay.selfMinimalControls,
         ))
 

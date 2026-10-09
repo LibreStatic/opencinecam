@@ -47,6 +47,10 @@ data class SubjectDisplaySettings(
     val slateSyncBeep: Boolean = false,
     val outOfFrameWarning: Boolean = false,
     val outOfFrameDelaySeconds: Int = 2,
+    // Modes whose cover screen is split: the mode on top, the rear camera preview below. Never PREVIEW.
+    val splitPreviewModes: Set<SubjectDisplayMode> = emptySet(),
+    // Percent of the split preview's pixels left visible by the fill-light dither mask.
+    val fillLightPreviewLevel: Int = 50,
 ) {
     init {
         require(brightness.isFinite() && brightness in 0f..1f)
@@ -61,8 +65,17 @@ data class SubjectDisplaySettings(
         require(interviewQuestions.size <= SUBJECT_INTERVIEW_MAX_QUESTIONS)
         require(interviewQuestions.all { it.isNotBlank() && it.length <= SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH })
         require(outOfFrameDelaySeconds in 1..10)
+        require(SubjectDisplayMode.PREVIEW !in splitPreviewModes)
+        require(fillLightPreviewLevel in 10..100)
     }
 }
+
+val SubjectDisplaySettings.splitsPreview: Boolean
+    get() = mode != SubjectDisplayMode.PREVIEW && mode in splitPreviewModes
+
+/** True when the cover screen shows the rear camera's live view, whole or split. */
+val SubjectDisplaySettings.wantsCameraPreview: Boolean
+    get() = mode == SubjectDisplayMode.PREVIEW || splitsPreview
 
 /** Operator-driven subject state that is never persisted: the review pick and the interview position. */
 data class SubjectSessionCues(

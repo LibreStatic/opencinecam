@@ -67,7 +67,16 @@ internal fun SubjectDisplayScreen(
     // The REC header is for a take in progress; at rest the modes keep the whole panel.
     val active = state.phase == CameraUiPhase.RECORDING || state.recordingFinalizing || state.phase == CameraUiPhase.ERROR
     Box(Modifier.fillMaxSize().background(Color.Black).testTag("subject-display")) {
-        if (settings.mode == SubjectDisplayMode.FILL_LIGHT) {
+        if (settings.mode == SubjectDisplayMode.FILL_LIGHT && settings.splitsPreview) {
+            // Light on top; the camera below, dimmed on its own so it does not out-shine the light.
+            Column(Modifier.fillMaxSize()) {
+                SubjectFillLightContent(state, settings, Modifier.weight(1f).fillMaxWidth())
+                Box(Modifier.weight(1f).fillMaxWidth().testTag("subject-split-preview")) {
+                    SubjectCameraPreview(previewPort, Modifier.fillMaxSize(), state, settings)
+                    PreviewDitherMask(settings.fillLightPreviewLevel, Modifier.fillMaxSize().testTag("subject-preview-dither"))
+                }
+            }
+        } else if (settings.mode == SubjectDisplayMode.FILL_LIGHT) {
             // The light is full bleed, so it ignores the safe-drawing padding of the other modes.
             SubjectFillLightContent(state, settings, Modifier.fillMaxSize())
         } else Column(
@@ -79,19 +88,28 @@ internal fun SubjectDisplayScreen(
             if (!hero && settings.showStatus && active) SubjectRecHeader(state, status)
             if (!hero && settings.operatorCue.isNotBlank()) SubjectCue(settings.operatorCue)
             val content = Modifier.weight(1f).fillMaxWidth()
-            when (settings.mode) {
-                SubjectDisplayMode.TELEPROMPTER -> Text(
-                    settings.prompterText.ifBlank { stringResource(R.string.subject_empty_script) },
-                    color = Color.White, fontSize = settings.prompterFontSp.sp,
-                    lineHeight = (settings.prompterFontSp * 1.4f).sp,
-                    modifier = content.verticalScroll(scroll, enabled = !settings.touchLocked).padding(horizontal = 8.dp).testTag("subject-script"),
-                )
-                SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, content, state, settings)
-                SubjectDisplayMode.REVIEW -> SubjectReviewContent(state, settings, cues, content)
-                SubjectDisplayMode.INTERVIEW -> SubjectInterviewContent(state, settings, cues, content)
-                SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, content, timecodeRate)
-                SubjectDisplayMode.STATUS, SubjectDisplayMode.FILL_LIGHT -> SubjectStatusHero(state, status, settings.operatorCue, content)
+            val modeContent: @Composable (Modifier) -> Unit = { slot ->
+                when (settings.mode) {
+                    SubjectDisplayMode.TELEPROMPTER -> Text(
+                        settings.prompterText.ifBlank { stringResource(R.string.subject_empty_script) },
+                        color = Color.White, fontSize = settings.prompterFontSp.sp,
+                        lineHeight = (settings.prompterFontSp * 1.4f).sp,
+                        modifier = slot.verticalScroll(scroll, enabled = !settings.touchLocked).padding(horizontal = 8.dp).testTag("subject-script"),
+                    )
+                    SubjectDisplayMode.PREVIEW -> SubjectCameraPreview(previewPort, slot, state, settings)
+                    SubjectDisplayMode.REVIEW -> SubjectReviewContent(state, settings, cues, slot)
+                    SubjectDisplayMode.INTERVIEW -> SubjectInterviewContent(state, settings, cues, slot)
+                    SubjectDisplayMode.SLATE -> SubjectSlateContent(state, settings, productionSlate, slot, timecodeRate)
+                    SubjectDisplayMode.STATUS, SubjectDisplayMode.FILL_LIGHT -> SubjectStatusHero(state, status, settings.operatorCue, slot)
+                }
             }
+            if (settings.splitsPreview) {
+                Column(content, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    modeContent(Modifier.weight(1f).fillMaxWidth())
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x33FFFFFF)))
+                    SubjectCameraPreview(previewPort, Modifier.weight(1f).fillMaxWidth().testTag("subject-split-preview"), state, settings)
+                }
+            } else modeContent(content)
         }
         // Tally, countdown and warnings layer above every mode, including the full-bleed fill light.
         SubjectOverlayLayer(state, settings, cues, Modifier.matchParentSize())

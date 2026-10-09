@@ -215,6 +215,9 @@
     <string name="fold_brightness">Brillo exterior solicitado: %1$d%%</string>
     <string name="fold_lock_touch">Bloquear desplazamiento del sujeto</string>
     <string name="fold_show_status">Mostrar estado de grabación</string>
+    <string name="fold_split_preview">Pantalla dividida con la cámara</string>
+    <string name="fold_split_preview_help">Arriba: este modo. Abajo: lo que ve la cámara trasera.</string>
+    <string name="fold_split_preview_level">Brillo de la vista previa: %1$d%%</string>
     <string name="fold_cue">Indicación del operador (200 caracteres)</string>
     <string name="fold_script">Guion local (20.000 caracteres)</string>
     <string name="fold_font">Texto del guion: %1$d sp</string>
