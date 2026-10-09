@@ -257,11 +257,12 @@ internal fun SettingsChoiceDialog(
 /**
  * One choice or action as a pill sized to its label. Callers put a group of them in a FlowRow, so
  * a set of short options reads as one row instead of a stack of full-width buttons. The pill
- * carries [tag] and its label carries "[tag]-label".
+ * carries [tag] and its label carries "[tag]-label". An [icon] leads the label and tightens the
+ * side padding, so a row of iconned pills stays about as wide as the plain ones.
  */
 @Composable
 internal fun SettingsPill(label: String, tag: String, selected: Boolean = false, enabled: Boolean = true,
-    role: Role = Role.RadioButton, onClick: () -> Unit) {
+    role: Role = Role.RadioButton, icon: CineIcon? = null, onClick: () -> Unit) {
     androidx.compose.foundation.layout.Box(
         Modifier
             .heightIn(min = 48.dp)
@@ -271,12 +272,16 @@ internal fun SettingsPill(label: String, tag: String, selected: Boolean = false,
             .border(1.dp, if (selected) SettingsAccent else SettingsBorder, RoundedCornerShape(24.dp))
             .selectable(selected = selected, enabled = enabled, role = role, onClick = onClick)
             .testTag(tag)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = if (icon == null) 16.dp else 12.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = when { !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); selected -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface },
-            fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier.width(IntrinsicSize.Max).testTag("$tag-label"))
+        val content = when { !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); selected -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (icon != null) CineGlyph(icon, content, Modifier.size(18.dp))
+            Text(label, color = content, maxLines = 1,
+                fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.width(IntrinsicSize.Max).testTag("$tag-label"))
+        }
     }
 }
 

@@ -4,7 +4,7 @@
     <string name="gallery_title">Catalogue des captures locales</string>
     <string name="gallery_settings_help">Préférences d\'affichage et de filtrage en direct. Elles ne modifient pas les fichiers enregistrés. Le filtre des bonnes prises exige un clap lisible qui marque explicitement la prise comme bonne.</string>
     <string name="gallery_help">Les prises sont regroupées par jour de tournage, chacune avec ses fichiers. Le menu ⋮ d’une prise propose les détails, le partage, le renommage, les proxys et la suppression.</string>
-    <string name="gallery_all">Tous les médias</string>
+    <string name="gallery_all">Tout</string>
     <string name="gallery_photo">Photos</string>
     <string name="gallery_video">Vidéos</string>
     <string name="gallery_audio">Audio</string>

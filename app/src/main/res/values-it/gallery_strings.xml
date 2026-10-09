@@ -4,7 +4,7 @@
     <string name="gallery_title">Catalogo delle acquisizioni locali</string>
     <string name="gallery_settings_help">Preferenze di visualizzazione e filtro in tempo reale. Non modificano i file registrati. Il filtro delle riprese buone richiede un ciak leggibile che segni esplicitamente la ripresa come buona.</string>
     <string name="gallery_help">Le riprese sono raggruppate per giorno, ognuna con i suoi file. In ⋮ su una ripresa trovi dettagli, condivisione, rinomina, proxy ed eliminazione.</string>
-    <string name="gallery_all">Tutti i contenuti</string>
+    <string name="gallery_all">Tutto</string>
     <string name="gallery_photo">Foto</string>
     <string name="gallery_video">Video</string>
     <string name="gallery_audio">Audio</string>

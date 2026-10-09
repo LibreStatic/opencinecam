@@ -18,6 +18,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -289,8 +291,11 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 isError = queryInvalid, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("gallery-search"))
             if (queryInvalid) Text(stringResource(R.string.gallery_search_invalid), Modifier.fillMaxWidth().testTag("gallery-search-invalid"))
             // The media type is the filter used most, so it stays one tap away above the list.
-            SettingsPillRow { for (kind in GalleryMediaKind.entries) {
-                SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-type-$kind", settings.kind == kind) {
+            // One line, never wrapped: a narrow window scrolls the row sideways instead.
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("gallery-types"),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) { for (kind in GalleryMediaKind.entries) {
+                SettingsPill(stringResource(galleryKindLabel(kind)), "gallery-type-$kind", settings.kind == kind,
+                    icon = galleryKindIcon(kind)) {
                     onSettings(settings.copy(kind = kind))
                 }
             } }

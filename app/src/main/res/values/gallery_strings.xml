@@ -4,7 +4,7 @@
     <string name="gallery_title">Local capture catalog</string>
     <string name="gallery_settings_help">Live display and filter preferences. They do not change the recorded files. Good-take filtering requires a readable slate that explicitly marks the take as good.</string>
     <string name="gallery_help">Takes are grouped by shooting day, each with its files kept together. ⋮ on a take has its details, sharing, renaming, proxies and deletion.</string>
-    <string name="gallery_all">All media</string>
+    <string name="gallery_all">All</string>
     <string name="gallery_photo">Photos</string>
     <string name="gallery_video">Videos</string>
     <string name="gallery_audio">Audio</string>
