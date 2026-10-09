@@ -1,6 +1,6 @@
 # Capture screen frame drops: diagnosis
 
-Status: fixes 1, 2 and 3 are implemented on `perf/capture-jank`. Fix 4 (onboarding) was left out by decision. Fix 5 (R8) was measured and then reverted, because the minified build crashes (see Results).
+Status: fixes 1, 2 and 3 are implemented on `perf/capture-jank`. Fix 4 (onboarding) was left out by decision. Fix 5 (R8) was first reverted because the minified build crashed when a scope was toggled. The cause is an ART JIT bug, now worked around, and R8 is enabled (see "R8 and the scope crash").
 
 ## Symptom
 
@@ -139,9 +139,9 @@ An earlier 10 s trace (`t2`) showed the same rate: 194 recomposes and 1284 scope
 
 4. **Throttle the onboarding backdrop** (cause 4). Cap the loop at about 30 fps, or pause it while the page is idle. Low priority.
 
-5. **Separately: enable R8 minification for release** (`app/build.gradle.kts:55`).
-   - This is a general speed-up for Compose code, but it needs keep rules and a full device regression pass.
-   - It is out of scope for this fix, so it is listed only to note it.
+5. **Separately: enable R8 minification for release** (`app/build.gradle.kts`).
+   - This is a general speed-up for Compose code. It needed no extra keep rules, but it exposed an ART JIT bug, described in "R8 and the scope crash" below.
+   - It is now enabled for release and for the benchmark build.
 
 ## How to verify
 
@@ -168,7 +168,7 @@ In the table:
 | + Fix 1 (freshness clock) | 107 / 98 | 694 / 622 | 29 / 26 | 120, 86 / 97, 60 | 52 / 34 | 40 / 32 |
 | + Fix 2 (in-window sheet) | 108 / 117 | 697 / 728 | 44 / 91 | 79, 46 / 89, 58 | 72 / 56 | 146 / 109 |
 | + Fix 3 (live-state split) | 82 / 84 | 108 / 112 | 4 / 28 | 41, 22 / 26, 22 | 7 / 127 | 54 / 305 |
-| + Fix 5 (R8), reverted | 84 / 80 | 108 / 104 | 5 / 10 | 20, 14 / 20, 18 | 4 / 6 | 30 / 25 |
+| + Fix 5 (R8) | 84 / 80 | 108 / 104 | 5 / 10 | 20, 14 / 20, 18 | 4 / 6 | 30 / 25 |
 
 Notes on the data:
 
@@ -178,19 +178,40 @@ Notes on the data:
   - idle recomposition drops by about 85% (scopes 756 → 108 per 5 s);
   - the idle frame rate falls from 112–153 to about 83 per 5 s;
   - the sheet opens in 22–41 ms, down from 94–120 ms.
-- **With R8 as well,** every interaction stayed at or under 30 ms and the x86_64 APK shrank from 39 MB to 8 MB, but see below.
+- **With R8 as well,** every interaction stayed at or under 30 ms and the x86_64 APK shrank from 39 MB to 8 MB. The first R8 build crashed; see below.
 
-### Why R8 was reverted
+### R8 and the scope crash
 
-The R8 build crashes when a scope (waveform, vectorscope or false colour) is toggled: `IllegalArgumentException: Failed requirement` on the `OpenCineCamImage` thread, in `MonitoringScopeFrame.<init>` (`camera/.../MonitoringAnalysis.kt`) called from `analyzeMonitoringRgb`.
+The first R8 build crashed when a scope (waveform, vectorscope or false colour) was toggled: `IllegalArgumentException: Failed requirement` on the `OpenCineCamImage` thread, in `MonitoringScopeFrame.<init>` (`camera/.../MonitoringAnalysis.kt`) called from `analyzeMonitoringRgb`. The failing check was the second `init` block's repeat of the first block's size check (`sampledWidth > 0 && … && sampledWidth.toLong() * sampledHeight == sampleCount.toLong()`).
 
-- It reproduces on every attempt with the R8 APK. The same fixes without R8 survive the same toggles from the same saved state, so neither fix 3 nor the `:camera` code is at fault on its own.
-- The failing check is the second `init` block's repeat of `require(sampledWidth > 0 && sampledHeight > 0 && sampleCount in 1..MAX_PIXELS && …)` (dex pc 0x142 in the merged class `i31`).
-- R8 merged the two identical checks: the second one reuses the `cmp-long` result in register v12 from the first. The first check passes on the same registers a few instructions earlier, and nothing writes them in between. The bytecode is logically correct, yet the second check fails at runtime.
-- That points at ART on this image (Android 16, `BE4B.251210.005`, x86_64) compiling or deoptimizing R8's code shape wrongly, probably after the toggle changes the branch profile. It was not proven.
-- R8 9.3.16 (AGP 9.3.1), with horizontal class merging: `MonitoringScopeFrame` was merged with Media3 and Compose classes into one class.
+**Cause: an ART optimizing-JIT bug, triggered by a code shape R8 produces.**
 
-Enabling R8 needs its own investigation and a full regression pass on the Razr. One option is a minimal repro and an upstream report. Another is to drop the redundant second `require` and check whether the crash moves.
+1. R8 9.3.16 (AGP 9.3.1) merged `MonitoringScopeFrame` horizontally with Media3 and Compose classes into one class, and common-subexpression elimination made the second check reuse the first check's `cmp-long` result (register v12). The second check also had calls between it and the first (`toList`, `unmodifiableList`). The bytecode is correct.
+2. ART's `InstructionSimplifier` folds the `HCompare` into the `HCondition` that tests it and then calls `RemoveEnvironmentUsers()` on the compare (`compiler/optimizing/instruction_simplifier.cc`, `VisitCondition`). The guard `HasAnyEnvironmentUseBefore` only looks for deoptimization points before that first condition, not between it and a later reuse.
+3. So deoptimization points after the first check (the inlined calls) no longer record v12. When the JIT code deopts there ("Single-frame deopting … due to JIT inline cache"), the interpreter resumes with v12 holding ART's dead-value filler instead of 0, and `if-nez v12` throws.
+
+**Evidence** (emulator, Android 16 `BE4B.251210.005`, x86_64):
+
+- The R8 APK crashes on the first toggle after warm-up when it runs under the JIT (`cmd package compile -m verify -f`). Compiled AOT with `-m speed` (no inline-cache deopts), it survives 8 rounds in two runs.
+- A standalone repro calling the merged constructor through reflection under `dalvikvm64` fails 3/3. It passes with `-Xusejit:false`, and it passes 3/3 with `-Xcompiler-option --inline-max-code-units=0` (no inlined calls, so no deopt point inside the window).
+- `--dump-cfg` of the JIT-compiled `<init>` shows v12 in every environment until `instruction_simplifier$after_gvn`, where it becomes `_` (dropped) in the environments of the later inlined calls.
+- `-verbose:deopt` shows the inline-cache deopt in `<init>` right before the throw.
+
+**Fix.** The second `init` no longer repeats the dimension check; the first `init` already enforces it before any field is set. With no second test of the same compare, R8 has nothing to reuse. The fixed APK passes the `dalvikvm64` repro 3/3 while still deopting at the same place, and the app survives 10 rounds of toggles, three cold relaunches with three rounds each, and the Monitor > Show scopes > rail-toggle path. `MonitoringAnalysisTest` still covers mismatched dimensions.
+
+**Release regression pass** (benchmark build with R8, emulator, clean install): onboarding with every permission, photo, burst, F1–F3, the Monitor pane, scopes (enlarge, hide, toggle), switch camera, Displays and foldables, every Settings category and search, About with the license list, the gallery (filters, refresh, saved proxies, review with next/previous file and take, details), relaunch after force-stop. No crash and no R8 linkage error (`ClassNotFoundException`, `NoSuchMethodError` and so on). RAW photo and video fail the same way on the debug build without R8, because the emulator lacks the metadata and the AVC encoder; they were checked on the Razr (below).
+
+**On the Razr** (motorola razr fold, Android 16 `W3WB36.36-123-2`, arm64, ART module 372042580, newer than the emulator's 361153460):
+
+- An arm64 build with the repeated check restored fails the `dalvikvm64` repro 3/3 at the same round, and passes with `-Xusejit:false` and with inlining off. The bug is in ART, not in the emulator image.
+- The fixed build passes the repro 3/3.
+- The fixed R8 app, installed beside the Play build under a temporary package name and forced to JIT (`cmd package compile -m verify -f`), survived 45 scope toggles in photo and video mode. Photo, RAW (DNG), a 5-frame burst, a 20 s AVC video, a 10 s Log take (HEVC Main 10, BT.2020), video playback and clip details, Settings and Displays and foldables all worked, with no crash.
+
+**Residual risk.**
+
+- The ART bug applies to any app and any compare result reused across a deopt point; it is not specific to this class. A scan of the release dex found 80 places where one compare result feeds two or more branches, 28 of them with a call in between. Most are in libraries (Media3, Compose, Kotlin, Guava `LongMath`).
+- Ours are `CameraCapabilityAudit.kt:110`, `Mp4AacSourceWindow.kt:45, 233, 344` and `SubjectPreviewPort.kt:23`. A wrong branch there would weaken a check or affect a display, and they run rarely, so they are unlikely to reach optimized JIT code. They were left alone.
+- Code compiled AOT has no inline-cache deopts, so it did not crash here; JIT-compiled code is exposed. ART updates through its Mainline module, and a newer module (below) still has the bug.
 
 ### What changed
 
