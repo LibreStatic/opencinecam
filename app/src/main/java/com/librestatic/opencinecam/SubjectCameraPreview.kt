@@ -179,6 +179,7 @@ internal fun SubjectSelfMonitorOverlay(state: CameraUiState, settings: SubjectDi
 /** Peak bars from the service's immutable level snapshot; expires like the operator meter. */
 @Composable
 internal fun SubjectAudioMeter(state: CameraUiState, modifier: Modifier = Modifier) {
+    val state = liveCameraState(state)
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(Unit) { while (true) { now = SystemClock.elapsedRealtime(); delay(100) } }
     val levels = currentAudioMeterSnapshot(state.audioLevels, state.audioMonitoringActive, now)?.channels.orEmpty()
