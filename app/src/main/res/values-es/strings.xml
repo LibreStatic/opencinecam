@@ -202,6 +202,7 @@
     <string name="settings_on">Encendida</string>
     <string name="settings_off">Apagada</string>
     <string name="settings_torch_rejected">Solicitud de luz rechazada; se conserva el ajuste anterior: %1$s</string>
+    <string name="control_rejected">La cámara rechazó el cambio; se conserva el ajuste anterior: %1$s</string>
     <string name="fold_settings_title">Pantallas y plegables</string>
     <string name="fold_posture">Postura reportada: %1$s</string>
     <string name="fold_failure">La sesión de pantalla terminó: %1$s</string>

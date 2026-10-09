@@ -202,6 +202,7 @@
     <string name="settings_on">Activé</string>
     <string name="settings_off">Désactivé</string>
     <string name="settings_torch_rejected">Demande de lumière rejetée ; réglage précédent conservé : %1$s</string>
+    <string name="control_rejected">La caméra a rejeté la modification ; réglage précédent conservé : %1$s</string>
     <string name="fold_settings_title">Écrans et pliables</string>
     <string name="fold_posture">Posture signalée : %1$s</string>
     <string name="fold_failure">Session d\'affichage terminée : %1$s</string>

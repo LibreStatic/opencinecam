@@ -202,6 +202,7 @@
     <string name="settings_on">Ein</string>
     <string name="settings_off">Aus</string>
     <string name="settings_torch_rejected">Lichtanforderung abgelehnt; vorherige Einstellung beibehalten: %1$s</string>
+    <string name="control_rejected">Die Kamera hat die Änderung abgelehnt; vorherige Einstellung beibehalten: %1$s</string>
     <string name="fold_settings_title">Displays und Foldables</string>
     <string name="fold_posture">Gemeldete Haltung: %1$s</string>
     <string name="fold_failure">Display-Sitzung beendet: %1$s</string>
