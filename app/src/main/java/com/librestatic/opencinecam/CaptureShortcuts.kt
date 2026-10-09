@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
@@ -88,6 +89,9 @@ internal fun CaptureTooltip(
     state: TooltipState = rememberTooltipState(),
     content: @Composable () -> Unit,
 ) {
+    // The tooltip's popup takes no focus, so Back would pass it by and leave the app from the
+    // capture screen; while it shows, Back only puts it away.
+    BackHandler(enabled = state.isVisible) { state.dismiss() }
     Box(modifier, propagateMinConstraints = true) {
         TooltipBox(
             positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
