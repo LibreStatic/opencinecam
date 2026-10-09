@@ -68,10 +68,21 @@ swap the build of a release that Google has not approved yet. Any remaining word
    - Confirm the printed versionName and versionCode.
    - Copy the `.aab` and `.sha256` to `~/Downloads/`, and remove the older bundles there.
 
-7. **Play Console.** Use Claude in Chrome (`mcp__claude-in-chrome__*`) and work on the DOM first.
+7. **Publish through the API.** See "Publishing to Google Play" in `AGENTS.md`.
+   - `tools/play-publish.py publish --aab <aab> --dry-run`: it must print the new versionCode, notes for
+     8 languages and "edit validated".
+   - Rerun it without `--dry-run`. If the commit refuses to send changes automatically, rerun with `--no-review`
+     and finish from Publishing overview (Submit, then Send changes for review).
+   - `tools/play-publish.py status` must show the track with the new release.
+   - In the Console's release review page, *devices no longer supported* must stay 0. Check it with Claude in Chrome
+     when the manifest or dependencies changed.
+   - Fall back to the Console flow below only if the API is unavailable (for example a 403: the service account
+     lacks access, so ask the user).
+
+7b. **Console fallback.** Use Claude in Chrome (`mcp__claude-in-chrome__*`) and work on the DOM first.
    - Open the track and click **Create new release**.
    - **The upload is the user's step.** `file_upload` caps at 10 MB, and injecting the file with JS or a localhost
-     server is refused, so do not try it. Ask the user to click Upload and pick the file in `~/Downloads`.
+     server needs the user's explicit authorization. Otherwise ask the user to click Upload and pick the file in `~/Downloads`.
      Wait until `find` reports the bundle row with the new code.
    - Release name: keep the suggested `<code> (<versionName>)`.
    - Release notes:

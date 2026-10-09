@@ -149,3 +149,19 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 ## Versioning
 
 - Bump `versionName` in `app/build.gradle.kts` in its own commit before every store release; never upload a new build under the previous version. Patch (`x.y.Z`) for fixes and small, self-contained changes (including a single small feature), minor (`x.Y.0`) for medium changes (several features, a reworked screen or flow), major (`X.0.0`) for a large overhaul; keep the pre-release suffix (e.g. `-beta`). The `versionCode` must also be higher than the last uploaded one.
+
+## Publishing to Google Play
+
+`tools/play-publish.py` publishes through the Play Developer API, so a release needs no Console clicks and no manual upload.
+
+- The key is the organisation-wide LibreStatic service account `play-publisher@librestatic-publisher.iam.gserviceaccount.com`. Its JSON key lives in `~/.android/librestatic/` (override the path with `LIBRESTATIC_PLAY_KEY`). Never copy it into a repository, print it or paste it anywhere.
+- The script only needs the standard library and the system `openssl`.
+- `tools/play-publish.py status` lists every track with its releases.
+- `tools/play-publish.py publish --aab <aab> [--mapping mapping.txt] [--track alpha] [--dry-run] [--no-review]` does the following:
+  1. uploads the bundle, and the R8 mapping if given;
+  2. puts one release named `<versionCode> (<versionName>)` on the track, with the notes from `store/play/release-notes/<versionName>.txt`;
+  3. commits the edit, which sends it for review.
+- Run `--dry-run` first: it validates the edit and discards it.
+- If the commit says the changes cannot be sent automatically, rerun with `--no-review`, then send them from Publishing overview.
+- The closed track is `alpha`.
+- If the API answers 403, the service account lacks access in Play Console > Users and permissions. Ask the user; do not grant it yourself.
