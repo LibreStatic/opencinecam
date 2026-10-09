@@ -715,6 +715,9 @@ class Camera2PreviewEngine(
             pendingPreviewStart = null
             closeResources()
             this.listener = listener
+            // closeResources released both locks; a UI still showing them would toggle a no-op.
+            listener.onAeLockChanged(false)
+            listener.onAfLockChanged(LockState.OFF)
             // A listener that joins while the scopes are suspended (or missed a resume) learns it once.
             notifyAnalysisSuspension(listener)
             if (requestedFocusCameraId != descriptor.cameraId) {
@@ -2400,8 +2403,9 @@ class Camera2PreviewEngine(
      * Toggles AF lock. With [AfLockBehavior.FREEZE_CURRENT] the engine takes the last effective
      * focus distance and switches AF to OFF so the lens holds position. With
      * [AfLockBehavior.FOCUS_AND_LOCK] it performs a one-shot AF scan at the last tap point (or
-     * center) and freezes the distance once focus is confirmed. Constrained high-speed sessions,
-     * manual focus, and an active tap-to-focus scan are incompatible and leave the lock inactive.
+     * center) and freezes the distance once focus is confirmed. Engaging it during a tap-to-focus
+     * always scans at the tapped point. Constrained high-speed sessions and manual focus are
+     * incompatible and leave the lock inactive.
      */
     fun setAfLock(enabled: Boolean, behavior: AfLockBehavior) {
         cameraExecutor.execute {
@@ -2417,8 +2421,14 @@ class Camera2PreviewEngine(
                 listener?.onControlRejected("af-lock-unsupported", "AF lock is not supported in this session.")
                 return@execute
             }
-            if (requestedFocusDiopters != null || activeTapFocusToken != null) {
-                listener?.onControlRejected("af-lock-conflict", "AF lock is incompatible with manual or tap focus.")
+            if (requestedFocusDiopters != null) {
+                listener?.onControlRejected("af-lock-conflict", "AF lock is incompatible with manual focus.")
+                return@execute
+            }
+            if (activeTapFocusToken != null) {
+                // Tap, then lock: lock where the operator tapped rather than refusing the lock.
+                clearTapFocusLocked(notify = true)
+                startAfLockScan(descriptor)
                 return@execute
             }
             when (behavior) {
@@ -3998,6 +4008,14 @@ class Camera2PreviewEngine(
                 builder.set(CaptureRequest.CONTROL_AF_REGIONS, null)
                 builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
             }
+            // The lock scan needs a real AUTO sweep at its region: a trigger in a continuous mode
+            // only locks wherever the lens already is.
+            afLockState == LockState.PENDING -> {
+                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, null)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, tapAfRegion?.let { arrayOf(it) })
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, null)
+            }
             activeTapFocusToken != null -> {
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
                 builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, null)
@@ -4267,6 +4285,7 @@ class Camera2PreviewEngine(
 
     private fun disableAfLock(notify: Boolean) {
         if (afLockState == LockState.OFF && afLockFrozenDiopters == null && afLockScanToken == null) return
+        if (afLockScanToken != null) tapAfRegion = null
         afLockState = LockState.OFF
         afLockFrozenDiopters = null
         afLockScanToken = null

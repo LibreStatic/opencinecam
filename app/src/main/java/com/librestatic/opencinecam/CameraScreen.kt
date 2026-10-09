@@ -1619,10 +1619,12 @@ internal fun AdaptiveCaptureChrome(
                     pinchRatio.floatValue = ZoomMath.coerce(candidate, range)
                     currentPinchBinder?.setZoomRatio(pinchRatio.floatValue)
                 }
-                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, ratio, settings.tapExposureMeteringEnabled, state.phase,
+                .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, chromeVisible, ratio, settings.tapExposureMeteringEnabled, state.phase,
                     previewLeft, previewTop, previewWidth, previewHeight) {
                     detectTapGestures { position ->
                         if (recording) manualReveal = true
+                        // During a take the tap that brings the chrome back must not refocus the shot.
+                        if (recording && !chromeVisible) return@detectTapGestures
                         if (!previewGesturesEnabled || state.captureControlsLocked || ratio == null || position.x !in previewLeft..(previewLeft + previewWidth) ||
                             position.y !in previewTop..(previewTop + previewHeight)
                         ) return@detectTapGestures
