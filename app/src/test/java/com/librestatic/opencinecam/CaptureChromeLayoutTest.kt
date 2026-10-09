@@ -118,6 +118,18 @@ class CaptureChromeLayoutTest {
         assertEquals(400f, mirrored.left, 0.01f)
     }
 
+    @Test fun railsViewportRestsBetweenTheRailsAndGrowsOverThemDuringATake() {
+        // 2400 x 1080 window, 200 px rail and 500 px column: a 1700 x 1080 pane.
+        val resting = railsPreviewViewport(1700f, 1080f, 200f, 500f, 0f, CaptureFrameReserve.None, 16f / 9f)
+        assertEquals(reservedPreviewViewport(1700f, 1080f, 0f, 0f, CaptureFrameReserve.None, 16f / 9f), resting)
+        // Rails gone: the 16:9 frame is height-bound at 1920 x 1080, centred on the window.
+        val grown = railsPreviewViewport(1700f, 1080f, 200f, 500f, 1f, CaptureFrameReserve.None, 16f / 9f)
+        assertEquals(1920f, grown.width, 0.01f)
+        assertEquals(1080f, grown.height, 0.01f)
+        assertEquals((2400f - 1920f) / 2f - 200f, grown.left, 0.01f)
+        assertEquals(0f, grown.top, 0.01f)
+    }
+
     @Test fun reservedViewportKeepsTheFrameAboveABottomTray() {
         val viewport = reservedPreviewViewport(1080f, 1600f, 400f, 0f, CaptureFrameReserve(bottom = 500f), 3f / 4f)
         // 1100 px left: a 3:4 frame is height-bound at 825 x 1100.
