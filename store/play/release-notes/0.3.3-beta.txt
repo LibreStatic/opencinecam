@@ -1,0 +1,48 @@
+<en-US>
+- Smoother capture screen: the MODES sheet opens faster and the controls no longer redraw constantly while the camera is idle
+- Back now closes the tip on a greyed-out control instead of leaving the app
+- "Show welcome tour" now ends on the camera, and Back on its first page skips the tour instead of closing the app
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Pantalla de captura más fluida: la hoja MODOS se abre más rápido y los controles ya no se redibujan todo el tiempo con la cámara en reposo
+- Atrás ahora cierra la ayuda de un control desactivado en lugar de salir de la app
+- "Ver recorrido de bienvenida" ahora termina en la cámara, y Atrás en la primera página saltea el recorrido en lugar de cerrar la app
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Pantalla de captura más fluida: la hoja MODOS se abre más rápido y los controles ya no se redibujan constantemente con la cámara en reposo
+- Atrás cierra ahora la ayuda de un control desactivado en lugar de salir de la app
+- "Ver recorrido de bienvenida" termina ahora en la cámara, y Atrás en la primera página omite el recorrido en lugar de cerrar la app
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Tela de captura mais fluida: a folha MODOS abre mais rápido e os controles não são mais redesenhados o tempo todo com a câmera parada
+- Voltar agora fecha a dica de um controle desativado em vez de sair do app
+- "Mostrar tour de boas-vindas" agora termina na câmera, e Voltar na primeira página pula o tour em vez de fechar o app
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Ecrã de captura mais fluido: a folha MODOS abre mais depressa e os controlos deixam de ser redesenhados constantemente com a câmara parada
+- Voltar fecha agora a dica de um controlo desativado em vez de sair da app
+- "Mostrar tour de boas-vindas" termina agora na câmara, e Voltar na primeira página salta o tour em vez de fechar a app
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Écran de capture plus fluide : le panneau MODES s'ouvre plus vite et les commandes ne se redessinent plus en permanence quand la caméra est au repos
+- Retour ferme désormais l'aide d'une commande grisée au lieu de quitter l'app
+- « Afficher la visite de bienvenue » se termine désormais sur la caméra, et Retour sur la première page passe la visite au lieu de fermer l'app
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Flüssigerer Aufnahmebildschirm: Das MODI-Blatt öffnet schneller, und die Bedienelemente werden im Leerlauf nicht mehr ständig neu gezeichnet
+- Zurück schließt jetzt den Hinweis eines ausgegrauten Elements, statt die App zu verlassen
+- „Willkommenstour anzeigen“ endet jetzt bei der Kamera, und Zurück auf der ersten Seite überspringt die Tour, statt die App zu schließen
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Schermata di acquisizione più fluida: il pannello MODI si apre più in fretta e i controlli non vengono più ridisegnati di continuo con la fotocamera inattiva
+- Indietro ora chiude il suggerimento di un controllo disattivato invece di uscire dall'app
+- "Mostra il tour di benvenuto" ora termina sulla fotocamera, e Indietro nella prima pagina salta il tour invece di chiudere l'app
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
