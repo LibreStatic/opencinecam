@@ -199,13 +199,19 @@ The first R8 build crashed when a scope (waveform, vectorscope or false colour) 
 
 **Fix.** The second `init` no longer repeats the dimension check; the first `init` already enforces it before any field is set. With no second test of the same compare, R8 has nothing to reuse. The fixed APK passes the `dalvikvm64` repro 3/3 while still deopting at the same place, and the app survives 10 rounds of toggles, three cold relaunches with three rounds each, and the Monitor > Show scopes > rail-toggle path. `MonitoringAnalysisTest` still covers mismatched dimensions.
 
-**Release regression pass** (benchmark build with R8, emulator, clean install): onboarding with every permission, photo, burst, F1–F3, the Monitor pane, scopes (enlarge, hide, toggle), switch camera, Displays and foldables, every Settings category and search, About with the license list, the gallery (filters, refresh, saved proxies, review with next/previous file and take, details), relaunch after force-stop. No crash and no R8 linkage error (`ClassNotFoundException`, `NoSuchMethodError` and so on). RAW photo and video fail the same way on the debug build without R8, because the emulator lacks the metadata and the AVC encoder; they need the Razr.
+**Release regression pass** (benchmark build with R8, emulator, clean install): onboarding with every permission, photo, burst, F1–F3, the Monitor pane, scopes (enlarge, hide, toggle), switch camera, Displays and foldables, every Settings category and search, About with the license list, the gallery (filters, refresh, saved proxies, review with next/previous file and take, details), relaunch after force-stop. No crash and no R8 linkage error (`ClassNotFoundException`, `NoSuchMethodError` and so on). RAW photo and video fail the same way on the debug build without R8, because the emulator lacks the metadata and the AVC encoder; they were checked on the Razr (below).
+
+**On the Razr** (motorola razr fold, Android 16 `W3WB36.36-123-2`, arm64, ART module 372042580, newer than the emulator's 361153460):
+
+- An arm64 build with the repeated check restored fails the `dalvikvm64` repro 3/3 at the same round, and passes with `-Xusejit:false` and with inlining off. The bug is in ART, not in the emulator image.
+- The fixed build passes the repro 3/3.
+- The fixed R8 app, installed beside the Play build under a temporary package name and forced to JIT (`cmd package compile -m verify -f`), survived 45 scope toggles in photo and video mode. Photo, RAW (DNG), a 5-frame burst, a 20 s AVC video, a 10 s Log take (HEVC Main 10, BT.2020), video playback and clip details, Settings and Displays and foldables all worked, with no crash.
 
 **Residual risk.**
 
 - The ART bug applies to any app and any compare result reused across a deopt point; it is not specific to this class. A scan of the release dex found 80 places where one compare result feeds two or more branches, 28 of them with a call in between. Most are in libraries (Media3, Compose, Kotlin, Guava `LongMath`).
 - Ours are `CameraCapabilityAudit.kt:110`, `Mp4AacSourceWindow.kt:45, 233, 344` and `SubjectPreviewPort.kt:23`. A wrong branch there would weaken a check or affect a display, and they run rarely, so they are unlikely to reach optimized JIT code. They were left alone.
-- Code compiled AOT has no inline-cache deopts, so it did not crash here; JIT-compiled code is exposed. ART updates through its Mainline module, so devices may differ. Not yet verified on the Razr (ARM64).
+- Code compiled AOT has no inline-cache deopts, so it did not crash here; JIT-compiled code is exposed. ART updates through its Mainline module, and a newer module (below) still has the bug.
 
 ### What changed
 
