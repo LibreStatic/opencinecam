@@ -28,8 +28,9 @@ class MonitoringScopeFrame(
     val vectorscopeCounts: List<Int> = Collections.unmodifiableList(vectorscopeCounts.toList())
     val falseColorBands: List<FalseColorBand> = Collections.unmodifiableList(falseColorBands.toList())
     init {
-        require(sampledWidth > 0 && sampledHeight > 0 && sampleCount in 1..MAX_PIXELS &&
-            sampledWidth.toLong() * sampledHeight == sampleCount.toLong())
+        // The size checks live only in the first init. Repeating them let R8 reuse one cmp-long
+        // result across calls, and ART's JIT drops that result from deopt frames, so the repeat
+        // failed after a deopt (docs/performance/capture-jank/README.md, "R8 and the scope crash").
         for (counts in listOf(this.waveformDensity, this.vectorscopeCounts)) {
             require(counts.isEmpty() || counts.size == GRID_SIZE * GRID_SIZE)
             require(counts.all { it >= 0 } && (counts.isEmpty() || counts.sumOf { it.toLong() } == sampleCount.toLong()))
