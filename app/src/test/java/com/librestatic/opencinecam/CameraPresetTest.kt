@@ -32,11 +32,22 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(164, CameraPresetCodec.portableKeys.size)
+        assertEquals(166, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
         assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
+    }
+    @Test fun splitPreviewKeysArePortableAndSurviveAPresetRoundTrip() {
+        assertTrue(CameraPresetCodec.portableKeys.containsAll(setOf("subject-split-preview-modes", "subject-fill-light-preview-level")))
+        assertFalse("subject-split-preview-modes" in CameraPresetCodec.portableKeysFor(20))
+        val subject = SubjectDisplaySettings(splitPreviewModes = setOf(SubjectDisplayMode.SLATE), fillLightPreviewLevel = 25)
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Split", settings = CameraSettings(subjectDisplay = subject)))
+        assertEquals(subject.splitPreviewModes, CameraPresetCodec.decode(text).settings.subjectDisplay.splitPreviewModes)
+        assertEquals(25, CameraPresetCodec.decode(text).settings.subjectDisplay.fillLightPreviewLevel)
+        val applied = CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, CameraSettings())
+        assertEquals(subject.splitPreviewModes, applied.subjectDisplay.splitPreviewModes)
+        assertEquals(25, applied.subjectDisplay.fillLightPreviewLevel)
     }
     @Test fun subjectFeaturePreferencesAreNeitherExportedNorResetByAPreset() {
         val local = SubjectDisplaySettings(interviewQuestions = listOf("private question"), fillLightKelvin = 3200, tallyBorder = false,
@@ -139,5 +150,5 @@ class CameraPresetTest {
     }
 }
 
-/** Keys added in preset v20; historical fixtures strip them to rebuild older payloads. */
-internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity")
+// Keys newer than preset V19 (V20 and V21), so the historical-document tests can strip them.
+internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level")

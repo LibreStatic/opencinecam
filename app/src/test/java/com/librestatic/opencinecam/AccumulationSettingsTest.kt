@@ -28,7 +28,7 @@ class AccumulationSettingsTest {
         val original=CameraSettings(bracket=BracketSelection(7,BracketStep.THIRD_EV))
         val root=Json.parseToJsonElement(CameraPresetCodec.encode(CameraPreset(name="V7",settings=original))).jsonObject
         val old=root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("monitor-") && !it.startsWith("audio-recording-gain-") && !it.startsWith("audio-listening-") && !it.startsWith("audio-meter-") && !it.startsWith("slate-") && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") }-keys-setOf("photo-aspect-enabled","photo-aspect-width","photo-aspect-height")
-        assertEquals(99,old.size);assertEquals(164, CameraPresetCodec.portableKeys.size)
+        assertEquals(99,old.size);assertEquals(166, CameraPresetCodec.portableKeys.size)
         assertEquals(original,CameraPresetCodec.decode(JsonObject(root+mapOf("version" to JsonPrimitive(7),"settings" to JsonObject(old))).toString()).settings)
         assertThrows(Exception::class.java) {CameraPresetCodec.decode(JsonObject(root+("version" to JsonPrimitive(7))).toString())}
     }

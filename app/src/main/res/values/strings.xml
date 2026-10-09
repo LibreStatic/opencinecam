@@ -218,6 +218,9 @@
     <string name="fold_brightness">Requested exterior brightness: %1$d%%</string>
     <string name="fold_lock_touch">Lock subject scrolling</string>
     <string name="fold_show_status">Show recording status</string>
+    <string name="fold_split_preview">Split screen with camera</string>
+    <string name="fold_split_preview_help">Top: this mode. Bottom: what the rear camera sees.</string>
+    <string name="fold_split_preview_level">Preview brightness: %1$d%%</string>
     <string name="fold_cue">Operator cue (200 characters)</string>
     <string name="fold_script">Local script (20,000 characters)</string>
     <string name="fold_font">Script text: %1$d sp</string>

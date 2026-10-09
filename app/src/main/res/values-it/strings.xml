@@ -215,6 +215,9 @@
     <string name="fold_brightness">Luminosità esterna richiesta: %1$d%%</string>
     <string name="fold_lock_touch">Blocca scorrimento soggetto</string>
     <string name="fold_show_status">Mostra stato di registrazione</string>
+    <string name="fold_split_preview">Schermo diviso con la fotocamera</string>
+    <string name="fold_split_preview_help">In alto: questa modalità. In basso: ciò che vede la fotocamera posteriore.</string>
+    <string name="fold_split_preview_level">Luminosità dell\'anteprima: %1$d%%</string>
     <string name="fold_cue">Cue dell\'operatore (200 caratteri)</string>
     <string name="fold_script">Copione locale (20.000 caratteri)</string>
     <string name="fold_font">Testo del copione: %1$d sp</string>

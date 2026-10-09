@@ -215,6 +215,9 @@
     <string name="fold_brightness">Brilho externo solicitado: %1$d%%</string>
     <string name="fold_lock_touch">Bloquear rolagem do sujeito</string>
     <string name="fold_show_status">Mostrar status da gravação</string>
+    <string name="fold_split_preview">Tela dividida com a câmera</string>
+    <string name="fold_split_preview_help">Em cima: este modo. Embaixo: o que a câmera traseira vê.</string>
+    <string name="fold_split_preview_level">Brilho da pré-visualização: %1$d%%</string>
     <string name="fold_cue">Deixa do operador (200 caracteres)</string>
     <string name="fold_script">Roteiro local (20.000 caracteres)</string>
     <string name="fold_font">Texto do roteiro: %1$d sp</string>

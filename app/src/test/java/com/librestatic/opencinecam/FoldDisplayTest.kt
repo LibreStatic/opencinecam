@@ -130,6 +130,8 @@ class FoldDisplayTest {
         assertFalse(defaults.outOfFrameWarning)
         assertEquals(2, defaults.outOfFrameDelaySeconds)
         assertEquals(SubjectSessionCues(), SubjectSessionCues(reviewUri = null, interviewIndex = 0))
+        assertTrue(defaults.splitPreviewModes.isEmpty())
+        assertEquals(50, defaults.fillLightPreviewLevel)
     }
 
     @Test fun subjectFeatureBoundsAreEnforced() {
@@ -145,11 +147,33 @@ class FoldDisplayTest {
             { SubjectDisplaySettings(interviewQuestions = listOf(" ")) },
             { SubjectDisplaySettings(outOfFrameDelaySeconds = 0) },
             { SubjectDisplaySettings(outOfFrameDelaySeconds = 11) },
+            { SubjectDisplaySettings(splitPreviewModes = setOf(SubjectDisplayMode.PREVIEW)) },
+            { SubjectDisplaySettings(splitPreviewModes = setOf(SubjectDisplayMode.SLATE, SubjectDisplayMode.PREVIEW)) },
+            { SubjectDisplaySettings(fillLightPreviewLevel = 9) },
+            { SubjectDisplaySettings(fillLightPreviewLevel = 101) },
         )
         for (build in invalid) assertTrue(runCatching(build).isFailure)
         assertTrue(runCatching { SubjectSessionCues(interviewIndex = -1) }.isFailure)
         SubjectDisplaySettings(fillLightKelvin = 2700, fillLightTint = -50, fillLightTimeoutSeconds = 3600, outOfFrameDelaySeconds = 10,
             interviewQuestions = List(50) { "x".repeat(300) })
+        SubjectDisplaySettings(fillLightPreviewLevel = 10)
+        SubjectDisplaySettings(fillLightPreviewLevel = 100, splitPreviewModes = SubjectDisplayMode.entries.toSet() - SubjectDisplayMode.PREVIEW)
+    }
+
+    @Test fun splitsPreviewAndWantsCameraPreviewCoverEveryMode() {
+        val everyMode = SubjectDisplayMode.entries.toSet() - SubjectDisplayMode.PREVIEW
+        for (mode in SubjectDisplayMode.entries) {
+            val plain = SubjectDisplaySettings(mode = mode)
+            assertFalse(mode.name, plain.splitsPreview)
+            assertEquals(mode.name, mode == SubjectDisplayMode.PREVIEW, plain.wantsCameraPreview)
+            val split = SubjectDisplaySettings(mode = mode, splitPreviewModes = everyMode)
+            assertEquals(mode.name, mode != SubjectDisplayMode.PREVIEW, split.splitsPreview)
+            assertTrue(mode.name, split.wantsCameraPreview)
+            // A split flag on another mode never affects this one.
+            val other = SubjectDisplaySettings(mode = mode, splitPreviewModes = everyMode - mode)
+            assertFalse(mode.name, other.splitsPreview)
+            assertEquals(mode.name, mode == SubjectDisplayMode.PREVIEW, other.wantsCameraPreview)
+        }
     }
 
     @Test fun subjectFeaturePreferencesRoundTrip() {
@@ -159,7 +183,8 @@ class FoldDisplayTest {
             fillLightKelvin = 3200, fillLightTint = -12, fillLightTimeoutSeconds = 600,
             interviewQuestions = listOf("What brought you here?", "Commas, \"quotes\" and\nbreaks survive"),
             slateFields = setOf(SubjectSlateField.SCENE, SubjectSlateField.TIMECODE), slateSyncFlash = true, slateSyncBeep = true,
-            outOfFrameWarning = true, outOfFrameDelaySeconds = 5)
+            outOfFrameWarning = true, outOfFrameDelaySeconds = 5,
+            splitPreviewModes = setOf(SubjectDisplayMode.TELEPROMPTER, SubjectDisplayMode.FILL_LIGHT), fillLightPreviewLevel = 30)
         for (mode in SubjectDisplayMode.entries) {
             val value = CameraSettings(subjectDisplay = subject.copy(mode = mode))
             store.save(value)
@@ -167,6 +192,8 @@ class FoldDisplayTest {
         }
         store.save(CameraSettings(subjectDisplay = subject.copy(slateFields = emptySet())))
         assertEquals(emptySet<SubjectSlateField>(), store.load().subjectDisplay.slateFields)
+        store.save(CameraSettings(subjectDisplay = subject.copy(splitPreviewModes = emptySet())))
+        assertEquals(emptySet<SubjectDisplayMode>(), store.load().subjectDisplay.splitPreviewModes)
     }
 
     @Test fun storedDataWithoutSubjectFeatureKeysLoadsDefaults() {
@@ -186,6 +213,8 @@ class FoldDisplayTest {
             "subject-out-of-frame-delay" to 0,
             "subject-slate-fields" to "SCENE,LENS,,TAKE",
             "subject-interview-questions" to "not json",
+            "subject-split-preview-modes" to "SLATE,PREVIEW,HOLOGRAM,,TELEPROMPTER",
+            "subject-fill-light-preview-level" to 3,
         ))
         val loaded = CameraSettingsStore(corrupt).load().subjectDisplay
         assertEquals(SubjectDisplayMode.STATUS, loaded.mode)
@@ -196,6 +225,9 @@ class FoldDisplayTest {
         assertEquals(1, loaded.outOfFrameDelaySeconds)
         assertEquals(setOf(SubjectSlateField.SCENE, SubjectSlateField.TAKE), loaded.slateFields)
         assertTrue(loaded.interviewQuestions.isEmpty())
+        assertEquals(setOf(SubjectDisplayMode.SLATE, SubjectDisplayMode.TELEPROMPTER), loaded.splitPreviewModes)
+        assertEquals(50, loaded.fillLightPreviewLevel)
+        assertEquals(50, CameraSettingsStore(PresetPreferences(mapOf("subject-fill-light-preview-level" to 101))).load().subjectDisplay.fillLightPreviewLevel)
         val oversized = kotlinx.serialization.json.JsonArray((List(60) { "x".repeat(400) } + listOf("", "  ")).map(::JsonPrimitive)).toString()
         val clipped = CameraSettingsStore(PresetPreferences(mapOf("subject-interview-questions" to oversized))).load().subjectDisplay
         assertEquals(50, clipped.interviewQuestions.size)
@@ -214,11 +246,13 @@ class FoldDisplayTest {
 
     @Test fun subjectFeaturePreferencesAreLiveAndSearchable() {
         val old = CameraSettings()
-        val next = old.copy(subjectDisplay = old.subjectDisplay.copy(mode = SubjectDisplayMode.FILL_LIGHT, fillLightKelvin = 3000, interviewQuestions = listOf("Next")))
+        val next = old.copy(subjectDisplay = old.subjectDisplay.copy(mode = SubjectDisplayMode.FILL_LIGHT, fillLightKelvin = 3000, interviewQuestions = listOf("Next"),
+            splitPreviewModes = setOf(SubjectDisplayMode.FILL_LIGHT), fillLightPreviewLevel = 20))
         assertEquals(next.subjectDisplay, old.withLivePreferencesFrom(next).subjectDisplay)
         for ((query, id) in listOf("Kelvin" to "subject-fill-light", "fill light" to "subject-fill-light", "entrevista" to "subject-interview",
             "tally" to "subject-tally", "tercios" to "subject-self-monitor", "audio meter" to "subject-self-monitor",
-            "claqueta sync" to "subject-slate", "beep" to "subject-slate", "out of frame" to "subject-out-of-frame", "review" to "fold-displays")) {
+            "claqueta sync" to "subject-slate", "beep" to "subject-slate", "out of frame" to "subject-out-of-frame", "review" to "fold-displays",
+            "dividir pantalla" to "fold-displays", "split screen" to "fold-displays")) {
             assertTrue(query, id in SettingsCatalog.search(query, null) { "" })
             assertTrue(query, id in SettingsCatalog.search("", SettingsCategory.DISPLAYS) { "" })
         }

@@ -137,6 +137,21 @@ private fun FoldModePage(camera: CameraUiState, display: FoldDisplayState, subje
         }
         FoldSessionStrip(display, subject.mode, onPresent, onClose)
         FoldModeSettings(camera, subject, inCapturePane = true, update)
+        if (subject.mode != SubjectDisplayMode.PREVIEW) {
+            Box(Modifier.testTag("fold-split-preview")) {
+                FoldToggle(stringResource(R.string.fold_split_preview), subject.splitsPreview) { on ->
+                    update(subject.copy(splitPreviewModes = if (on) subject.splitPreviewModes + subject.mode else subject.splitPreviewModes - subject.mode))
+                }
+            }
+            SettingsHelpText(stringResource(R.string.fold_split_preview_help), null)
+            if (subject.mode == SubjectDisplayMode.FILL_LIGHT && subject.splitsPreview) {
+                Box(Modifier.testTag("fold-split-preview-level")) {
+                    FoldSlider(stringResource(R.string.fold_split_preview_level, subject.fillLightPreviewLevel), subject.fillLightPreviewLevel.toFloat(), 10f..100f) {
+                        update(subject.copy(fillLightPreviewLevel = it.roundToInt().coerceIn(10, 100)))
+                    }
+                }
+            }
+        }
         if (subject.mode != SubjectDisplayMode.STATUS) {
             FoldToggle(stringResource(R.string.fold_show_status), subject.showStatus) { update(subject.copy(showStatus = it)) }
         }

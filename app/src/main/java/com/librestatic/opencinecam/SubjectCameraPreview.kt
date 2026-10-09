@@ -75,7 +75,7 @@ internal fun SubjectCameraPreview(
         lease = null
         withFrameNanos { }
         withFrameNanos { }
-        if (view.holder.surface.isValid && view.width > 0 && view.height > 0) {
+        if (view.holder.surface?.isValid == true && view.width > 0 && view.height > 0) {
             val rotation = when (view.display?.rotation) {
                 Surface.ROTATION_90 -> 90
                 Surface.ROTATION_180 -> 180
