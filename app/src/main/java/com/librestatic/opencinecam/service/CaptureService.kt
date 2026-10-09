@@ -1471,6 +1471,12 @@ class CaptureService : Service() {
             )
         }
 
+        override fun onControlRejected(code: String, message: String) {
+            // The session kept its previous request: a refused control must never end or discard a take.
+            android.util.Log.w("CaptureService", "Control rejected ($code): $message")
+            cameraState.update { it.copy(message = getString(R.string.control_rejected, message), messageTransient = true) }
+        }
+
         override fun onTorchRejected(message: String) {
             // A rejected optional light request must never finalize or discard a running clip.
             cameraState.value = cameraState.value.copy(

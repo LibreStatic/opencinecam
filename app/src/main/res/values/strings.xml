@@ -205,6 +205,7 @@
     <string name="settings_on">On</string>
     <string name="settings_off">Off</string>
     <string name="settings_torch_rejected">Light request rejected; previous setting retained: %1$s</string>
+    <string name="control_rejected">Camera rejected the change; previous setting retained: %1$s</string>
     <string name="fold_settings_title">Displays and foldables</string>
     <string name="fold_posture">Reported posture: %1$s</string>
     <string name="fold_failure">Display session ended: %1$s</string>

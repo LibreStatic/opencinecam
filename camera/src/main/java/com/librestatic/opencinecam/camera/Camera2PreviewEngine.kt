@@ -284,6 +284,11 @@ interface Camera2PreviewListener {
     fun onRecordingStarted(width: Int, height: Int)
     fun onRecordingStopped(success: Boolean)
     fun onFailure(code: String, message: String, recoverable: Boolean)
+    /**
+     * A control update (locks, focus, exposure, white balance, zoom) was refused while the session
+     * kept running on its previous request. Never a reason to finalize or discard a running take.
+     */
+    fun onControlRejected(code: String, message: String) = onFailure(code, message, true)
     fun onTorchRejected(message: String) = Unit
     fun onPreviewSurfaceLost(message: String) = Unit
     fun onTapFocusState(state: TapFocusState) = Unit
@@ -2015,7 +2020,7 @@ class Camera2PreviewEngine(
             applyManualControls(builder)
             runCatching {
                 configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
-            }.onFailure { listener?.onFailure("manual-control-failed", it.message ?: "Manual control update failed.", true) }
+            }.onFailure { listener?.onControlRejected("manual-control-failed", it.message ?: "Manual control update failed.") }
         }
     }
 
@@ -2151,7 +2156,7 @@ class Camera2PreviewEngine(
                 imageHandler.postDelayed(restoreTapFocus, TAP_FOCUS_HOLD_MS)
             } catch (failure: Exception) {
                 clearTapFocusLocked(notify = true)
-                listener?.onFailure("tap-focus-failed", failure.message ?: "Point autofocus failed.", true)
+                listener?.onControlRejected("tap-focus-failed", failure.message ?: "Point autofocus failed.")
             }
         }
         return true
@@ -2307,7 +2312,7 @@ class Camera2PreviewEngine(
             val configured = session ?: return@execute
             applyManualControls(builder)
             runCatching { configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
-                .onFailure { listener?.onFailure("white-balance-failed", it.message ?: "White balance update failed.", true) }
+                .onFailure { listener?.onControlRejected("white-balance-failed", it.message ?: "White balance update failed.") }
         }
     }
 
@@ -2326,7 +2331,7 @@ class Camera2PreviewEngine(
             val configured = session ?: return@execute
             applyManualControls(builder)
             runCatching { configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false)) }
-                .onFailure { listener?.onFailure("exposure-compensation-failed", it.message ?: "Exposure compensation update failed.", true) }
+                .onFailure { listener?.onControlRejected("exposure-compensation-failed", it.message ?: "Exposure compensation update failed.") }
         }
     }
 
@@ -2386,7 +2391,7 @@ class Camera2PreviewEngine(
                 .onFailure {
                     aeLockActive = false
                     listener?.onAeLockChanged(false)
-                    listener?.onFailure("ae-lock-failed", it.message ?: "AE lock update failed.", true)
+                    listener?.onControlRejected("ae-lock-failed", it.message ?: "AE lock update failed.")
                 }
         }
     }
@@ -2409,11 +2414,11 @@ class Camera2PreviewEngine(
                 return@execute
             }
             if (!descriptor.afLockSupported || isHighSpeedSession()) {
-                listener?.onFailure("af-lock-unsupported", "AF lock is not supported in this session.", true)
+                listener?.onControlRejected("af-lock-unsupported", "AF lock is not supported in this session.")
                 return@execute
             }
             if (requestedFocusDiopters != null || activeTapFocusToken != null) {
-                listener?.onFailure("af-lock-conflict", "AF lock is incompatible with manual or tap focus.", true)
+                listener?.onControlRejected("af-lock-conflict", "AF lock is incompatible with manual or tap focus.")
                 return@execute
             }
             when (behavior) {
@@ -2421,7 +2426,7 @@ class Camera2PreviewEngine(
                     val frozen = lastReportedFocusDiopters
                         ?: descriptor.minimumFocusDistance?.takeIf { it > 0f }?.let { 0f }
                     if (frozen == null) {
-                        listener?.onFailure("af-lock-no-distance", "No focus distance to freeze yet.", true)
+                        listener?.onControlRejected("af-lock-no-distance", "No focus distance to freeze yet.")
                         return@execute
                     }
                     afLockFrozenDiopters = frozen
@@ -2429,7 +2434,8 @@ class Camera2PreviewEngine(
                     afLockScanToken = null
                     afLockResultReported = false
                     listener?.onAfLockChanged(LockState.LOCKED)
-                    reapplyRepeating()
+                    // The refused request left the lens on continuous AF; do not report a lock.
+                    if (!reapplyRepeating()) disableAfLock(notify = true)
                 }
                 AfLockBehavior.FOCUS_AND_LOCK -> startAfLockScan(descriptor)
             }
@@ -2492,7 +2498,7 @@ class Camera2PreviewEngine(
                 requestedZoomRatio = lastAcceptedZoomRatio
                 listener?.onZoomRejected(requestedZoomRatio, lastAcceptedZoomRatio)
             } else {
-                listener?.onFailure("zoom-request-failed", failure.message ?: "Zoom update failed.", true)
+                listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
         }
     }
@@ -4110,7 +4116,7 @@ class Camera2PreviewEngine(
         runCatching {
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
         }.onFailure {
-            listener?.onFailure("tap-focus-restore-failed", it.message ?: "Continuous autofocus could not be restored.", true)
+            listener?.onControlRejected("tap-focus-restore-failed", it.message ?: "Continuous autofocus could not be restored.")
         }
     }
 
@@ -4142,15 +4148,16 @@ class Camera2PreviewEngine(
             activeVideoProfile?.constrainedHighSpeed == true ||
             activeLogProfile?.constrainedHighSpeed == true
 
-    private fun reapplyRepeating() {
-        val builder = repeatingBuilder ?: return
-        val configured = session ?: return
+    /** Returns false when the session refused the request and kept running on its previous one. */
+    private fun reapplyRepeating(): Boolean {
+        val builder = repeatingBuilder ?: return true
+        val configured = session ?: return true
         applyManualControls(builder)
-        runCatching {
+        return runCatching {
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
         }.onFailure {
-            listener?.onFailure("lock-reapply-failed", it.message ?: "Lock update could not be applied.", true)
-        }
+            listener?.onControlRejected("lock-reapply-failed", it.message ?: "Lock update could not be applied.")
+        }.isSuccess
     }
 
     /**
@@ -4304,7 +4311,7 @@ class Camera2PreviewEngine(
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, false))
         } catch (failure: Exception) {
             disableAfLock(notify = true)
-            listener?.onFailure("af-lock-scan-failed", failure.message ?: "AF lock scan failed.", true)
+            listener?.onControlRejected("af-lock-scan-failed", failure.message ?: "AF lock scan failed.")
         }
     }
 
@@ -4321,13 +4328,13 @@ class Camera2PreviewEngine(
                 tapAfRegion = null
                 afLockScanToken = null
                 listener?.onAfLockChanged(LockState.LOCKED)
-                reapplyRepeating()
+                if (!reapplyRepeating()) disableAfLock(notify = true)
             }
             android.hardware.camera2.CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> {
                 afLockResultReported = true
                 disableAfLock(notify = true)
                 reapplyRepeating()
-                listener?.onFailure("af-lock-unfocused", "AF lock failed: focus could not be confirmed.", true)
+                listener?.onControlRejected("af-lock-unfocused", "AF lock failed: focus could not be confirmed.")
             }
         }
     }

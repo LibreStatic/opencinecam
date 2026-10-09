@@ -202,6 +202,7 @@
     <string name="settings_on">Attivo</string>
     <string name="settings_off">Disattivato</string>
     <string name="settings_torch_rejected">Richiesta di luce rifiutata; impostazione precedente mantenuta: %1$s</string>
+    <string name="control_rejected">La fotocamera ha rifiutato la modifica; impostazione precedente mantenuta: %1$s</string>
     <string name="fold_settings_title">Display e pieghevoli</string>
     <string name="fold_posture">Postura segnalata: %1$s</string>
     <string name="fold_failure">Sessione display terminata: %1$s</string>
