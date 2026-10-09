@@ -3,6 +3,35 @@
 
 package com.librestatic.opencinecam
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,12 +48,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 
 /** One mode in the mode sheet. [gateLabel] says why a mode is not ready yet ("Probing…"), if it is not. */
@@ -142,23 +168,66 @@ internal fun CaptureModeContent(
     }
 }
 
-/** The mode sheet on compact windows: a modal bottom sheet that Esc and Back close. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The mode sheet on compact windows: a sheet over the chrome that the scrim, a downward drag,
+ * Esc and Back close (the chrome handles the last two). It draws in the activity's window rather
+ * than a dialog's: creating a dialog window made the first frame of every open take ~100 ms.
+ */
 @Composable
-internal fun CaptureModeBottomSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        // Opens straight to full height and closes in one step: no half-open stop.
-        sheetState = rememberBottomSheetState(SheetValue.Hidden, setOf(SheetValue.Hidden, SheetValue.Expanded)),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.testTag("capture-mode-sheet"),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp)
-                .dialogShortcuts { action -> if (action == ShortcutAction.DISMISS) { onDismiss(); true } else false },
-        ) { content() }
+internal fun CaptureModeSheet(visible: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val reducedMotion = LocalReducedMotion.current
+    val title = stringResource(R.string.modes_title)
+    val closeLabel = stringResource(R.string.close_panel, title)
+    Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(visible, enter = fadeIn(sheetTween(reducedMotion)), exit = fadeOut(sheetTween(reducedMotion))) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .pointerInput(Unit) { detectTapGestures { onDismiss() } }
+                    .semantics { onClick(closeLabel) { onDismiss(); true } },
+            )
+        }
+        AnimatedVisibility(
+            visible,
+            Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(sheetTween(reducedMotion)) { it },
+            exit = slideOutVertically(sheetTween(reducedMotion)) { it },
+        ) {
+            val density = LocalDensity.current
+            var dragPx by remember { mutableFloatStateOf(0f) }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 640.dp)
+                    .offset { IntOffset(0, dragPx.roundToInt()) }
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .draggable(
+                        rememberDraggableState { delta -> dragPx = (dragPx + delta).coerceAtLeast(0f) },
+                        Orientation.Vertical,
+                        onDragStopped = { velocity ->
+                            if (dragPx > with(density) { SHEET_DISMISS_DRAG.toPx() } || velocity > 1500f) onDismiss() else dragPx = 0f
+                        },
+                    )
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+                    .semantics { paneTitle = title }
+                    .testTag("capture-mode-sheet"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier
+                        .padding(vertical = 12.dp)
+                        .size(width = 32.dp, height = 4.dp)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(2.dp)),
+                )
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)) { content() }
+            }
+        }
     }
 }
+
+private val SHEET_DISMISS_DRAG = 96.dp
+
+private fun <T> sheetTween(reducedMotion: Boolean) = tween<T>(if (reducedMotion) 0 else 250, easing = FastOutSlowInEasing)
