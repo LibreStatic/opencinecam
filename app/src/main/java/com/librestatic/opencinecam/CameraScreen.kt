@@ -264,6 +264,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     }
     val onboardingStore = remember(context) { OnboardingStore(context) }
     var onboardingDone by remember { mutableStateOf(onboardingStore.isCompleted()) }
+    // The tour was started again from About rather than on a first run.
+    var tourReplay by rememberSaveable { mutableStateOf(false) }
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
     val state by stateFlow.collectAsStateWithLifecycle()
@@ -383,6 +385,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onReplayTour = {
                                 onboardingStore.reset()
                                 settingsPage = SettingsPage.MAIN
+                                // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
+                                section = AppSection.CAPTURE
+                                tourReplay = true
                                 onboardingDone = false
                             },
                         )
@@ -471,8 +476,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             onFinished = {
                 onboardingStore.markCompleted()
                 onboardingDone = true
+                tourReplay = false
             },
             hinge = foldState.hinge,
+            replay = tourReplay,
         )
     }
     }

@@ -231,6 +231,7 @@ internal fun OnboardingScreen(
     onPermissionsChanged: () -> Unit,
     onFinished: () -> Unit,
     hinge: FoldHinge? = null,
+    replay: Boolean = false,
 ) {
     val context = LocalContext.current
     val reducedMotion = LocalReducedMotion.current
@@ -346,6 +347,8 @@ internal fun OnboardingScreen(
         return
     }
     BackHandler(enabled = pagerState.currentPage > 0 && !finishing) { goTo(pages[pagerState.currentPage - 1]) }
+    // A tour replayed from About has an app to go back to: Back on its first page leaves it, as Skip does.
+    BackHandler(enabled = replay && pagerState.currentPage == 0 && !finishing) { leave() }
 
     val page = pages[pagerState.currentPage]
     val doneActive = pagerState.targetPage == OnboardingPage.DONE.ordinal

@@ -5,13 +5,19 @@ package com.librestatic.opencinecam
 
 import android.Manifest
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -81,5 +87,37 @@ class OnboardingUiTest {
     fun skipLeavesOnceTheCameraIsAllowed() {
         rule.onNodeWithTag("onboarding-skip").performClick()
         awaitCamera()
+    }
+
+    /** Finishes the first run, then starts the tour again from Settings > About. */
+    private fun replayTourFromAbout() {
+        rule.onNodeWithTag("onboarding-skip").performClick()
+        awaitCamera()
+        rule.onNodeWithContentDescription(context.getString(R.string.settings_tab)).performClick()
+        rule.onNodeWithTag("settings-category-DIAGNOSTICS").performScrollTo().performClick()
+        rule.onNodeWithTag("settings-list").performScrollToNode(hasText(context.getString(R.string.about_title)))
+        rule.onNodeWithContentDescription(context.getString(R.string.about_settings_summary)).performClick()
+        rule.onNodeWithTag("about-list").performScrollToNode(hasTestTag("about-replay-tour"))
+        rule.onNodeWithTag("about-replay-tour").performClick()
+        rule.waitUntil(15_000) { rule.onAllNodesWithTag("onboarding-skip").fetchSemanticsNodes().isNotEmpty() }
+        awaitPage(1)
+    }
+
+    /** Replayed from Settings > About, the tour ends like the first run: on the camera, not back in Settings. */
+    @Test
+    fun skippingAReplayedTourReturnsToTheCamera() {
+        replayTourFromAbout()
+        rule.onNodeWithTag("onboarding-skip").performClick()
+        awaitCamera()
+        assertTrue(rule.onAllNodesWithTag("settings-categories").fetchSemanticsNodes().isEmpty())
+    }
+
+    /** On a replayed tour's first page there is an app to return to, so Back closes the tour instead of leaving the app. */
+    @Test
+    fun backOnTheFirstPageOfAReplayedTourClosesIt() {
+        replayTourFromAbout()
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        awaitCamera()
+        assertFalse(rule.activity.isFinishing)
     }
 }
