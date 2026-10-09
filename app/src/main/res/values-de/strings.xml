@@ -215,6 +215,9 @@
     <string name="fold_brightness">Angeforderte Helligkeit des Außendisplays: %1$d%%</string>
     <string name="fold_lock_touch">Scrollen des Motivs sperren</string>
     <string name="fold_show_status">Aufnahmestatus anzeigen</string>
+    <string name="fold_split_preview">Geteiltes Display mit Kamera</string>
+    <string name="fold_split_preview_help">Oben: dieser Modus. Unten: was die Rückkamera sieht.</string>
+    <string name="fold_split_preview_level">Helligkeit der Vorschau: %1$d%%</string>
     <string name="fold_cue">Operator-Cue (200 Zeichen)</string>
     <string name="fold_script">Lokales Skript (20.000 Zeichen)</string>
     <string name="fold_font">Skripttext: %1$d sp</string>

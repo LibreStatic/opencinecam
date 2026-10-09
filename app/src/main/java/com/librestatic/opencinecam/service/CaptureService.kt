@@ -31,7 +31,7 @@ import com.librestatic.opencinecam.CaptureCountdown
 import com.librestatic.opencinecam.SubjectPreviewPort
 import com.librestatic.opencinecam.SubjectSurfaceRegistry
 import com.librestatic.opencinecam.subjectPreviewBlock
-import com.librestatic.opencinecam.SubjectDisplayMode
+import com.librestatic.opencinecam.wantsCameraPreview
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 
@@ -708,7 +708,7 @@ class CaptureService : Service() {
         // 30 fps preview share goes through the GPU to the operator and subject windows.
         mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
         // The subject preview rides the GPU viewfinder in every mode it supports.
-        (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW && subjectPreviewBlock(mode) == null) ||
+        (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
         (photoPreviewMode(mode) && currentOperatorLut != null)
 
     private fun selectedStillPhotoFormat(mode: CaptureMode = cameraState.value.selectedMode): StillPhotoFormat = when (mode) {
@@ -731,7 +731,7 @@ class CaptureService : Service() {
         if (subjectPortClosed) return
         val lease = subjectSurfaces.current ?: return
         val block = subjectPreviewBlock(cameraState.value.selectedMode)
-        if (block != null || settings.subjectDisplay.mode != SubjectDisplayMode.PREVIEW) {
+        if (block != null || !settings.subjectDisplay.wantsCameraPreview) {
             previewEngine.detachSubjectPreview(lease.token)
             subjectStatus.value = SubjectPreviewStatus(failure = getString(R.string.subject_preview_mode_unavailable))
             resetSubjectLutStatus()
@@ -743,7 +743,7 @@ class CaptureService : Service() {
             mainHandler.post {
                 fun ownsTarget(state: CameraUiState): Boolean = !serviceDestroyed && !subjectPortClosed &&
                     subjectSurfaces.owns(lease.token) && subjectPreviewEpoch.get() == epoch &&
-                    subjectPreviewBlock(state.selectedMode) == null && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW
+                    subjectPreviewBlock(state.selectedMode) == null && settings.subjectDisplay.wantsCameraPreview
                 if (ownsTarget(cameraState.value)) {
                     val presented = status.lutStatus?.takeIf { it.selectionId == monitorLutIdentity(currentSubjectLut) }
                     subjectStatus.value = status.copy(lutStatus = presented)
@@ -1721,7 +1721,7 @@ class CaptureService : Service() {
                 return
             }
             // A live subject lease keeps the GPU graph (photo modes included) for the cover window.
-            if (subjectSurfaces.current != null && settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW &&
+            if (subjectSurfaces.current != null && settings.subjectDisplay.wantsCameraPreview &&
                 subjectPreviewBlock(cameraState.value.selectedMode) == null &&
                 previewEngine.detachOperatorFromActiveGpuPreview()) return
             previewEngine.stopPreview()
@@ -1879,7 +1879,7 @@ class CaptureService : Service() {
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
                 (current.selectedMode.usesLogGraph) != (mode.usesLogGraph) ||
-                    (settings.subjectDisplay.mode == SubjectDisplayMode.PREVIEW && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
+                    (settings.subjectDisplay.wantsCameraPreview && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
                     (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes)
             val descriptor = current.descriptor
             val selectedLogProfile = descriptor?.let {

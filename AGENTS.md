@@ -116,6 +116,9 @@ Outputs and logs:
 | `SubjectPrompter` / `SubjectPrompterRecording` | `SubjectDisplayScreen` | the teleprompter, without and with the REC header |
 | `SubjectPreview` / `SubjectFillLight` / `SubjectReview` / `SubjectInterview` / `SubjectSlate` | `SubjectDisplayScreen` | the other subject modes: waiting for a frame, 4300 K fill light, no take yet, question 2 of 3, slate |
 | `SelfCapture` / `SelfCaptureRecording` | `SelfCaptureChrome` | the self-recording controls on the cover, idle with a 3 s timer or recording |
+| `SubjectPrompterSplit` / `SubjectStatusSplit` / `SubjectInterviewSplit` / `SubjectSlateSplit` / `SubjectReviewSplit` | `SubjectDisplayScreen` | the split cover: the mode on top, the rear camera preview below a thin divider (no viewfinder headless, so the lower half is empty); use `--device cover` |
+| `SubjectFillLightSplit` | `SubjectDisplayScreen` | fill light on top, the camera preview below under the 50% black dither mask (`subject-preview-dither`) |
+| `FoldMenuPaneSplit` | `FoldDisplaySettings` in `AdaptiveCaptureChrome` | the Displays pane with the teleprompter and its *Split screen with camera* switch on (use `--device inner`) |
 | `FoldMenuPane` / `FoldMenuFolded` | `FoldDisplaySettings` in `AdaptiveCaptureChrome` | the Displays pane (`CaptureInitialPane.DISPLAYS`) unfolded with the teleprompter chosen, or folded (presentation unavailable); the fold state comes from `LocalFoldDisplayStateWithoutCoordinator` |
 | `FoldMenu` | `FoldDisplaySettings` | the Settings hub version, which adds the inner-screen and folding section |
 

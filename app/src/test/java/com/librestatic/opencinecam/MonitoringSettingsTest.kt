@@ -15,7 +15,7 @@ class MonitoringSettingsTest {
         assertEquals(original, store.load())
         assertEquals(20, prefs.all.keys.count { it.startsWith("monitor-") })
         assertEquals(original, CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Monitor", settings = original))).settings)
-        assertEquals(20, CameraPresetCodec.VERSION); assertEquals(164, CameraPresetCodec.portableKeys.size)
+        assertEquals(21, CameraPresetCodec.VERSION); assertEquals(166, CameraPresetCodec.portableKeys.size)
     }
     @Test fun versionNineKeeps107KeysAndDefaultsOnlyMonitoring() {
         val original = CameraSettings(photoQuality = 71, zebraEnabled = true)

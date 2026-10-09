@@ -215,6 +215,9 @@
     <string name="fold_brightness">Luminosité extérieure demandée : %1$d%%</string>
     <string name="fold_lock_touch">Verrouiller le défilement sujet</string>
     <string name="fold_show_status">Afficher l\'état d\'enregistrement</string>
+    <string name="fold_split_preview">Écran partagé avec la caméra</string>
+    <string name="fold_split_preview_help">En haut : ce mode. En bas : ce que voit la caméra arrière.</string>
+    <string name="fold_split_preview_level">Luminosité de l\'aperçu : %1$d%%</string>
     <string name="fold_cue">Indication de l\'opérateur (200 caractères)</string>
     <string name="fold_script">Script local (20 000 caractères)</string>
     <string name="fold_font">Texte du script : %1$d sp</string>

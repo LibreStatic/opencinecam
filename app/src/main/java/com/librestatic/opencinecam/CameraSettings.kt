@@ -346,6 +346,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             slateSyncBeep = preferences.getBoolean("subject-slate-sync-beep", false),
             outOfFrameWarning = preferences.getBoolean("subject-out-of-frame", false),
             outOfFrameDelaySeconds = preferences.getInt("subject-out-of-frame-delay", 2).coerceIn(1, 10),
+            splitPreviewModes = preferences.getString("subject-split-preview-modes", null)?.let { saved ->
+                saved.split(',').mapNotNullTo(linkedSetOf()) { name ->
+                    SubjectDisplayMode.entries.firstOrNull { it.name == name && it != SubjectDisplayMode.PREVIEW }
+                }
+            } ?: emptySet(),
+            fillLightPreviewLevel = preferences.getInt("subject-fill-light-preview-level", 50).takeIf { it in 10..100 } ?: 50,
         ),
         audioEnabled = preferences.getBoolean(KEY_AUDIO, true),
         audioOutputFormat = migratedAudioOutputFormat(),
@@ -481,6 +487,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("subject-slate-sync-beep", settings.subjectDisplay.slateSyncBeep)
             .putBoolean("subject-out-of-frame", settings.subjectDisplay.outOfFrameWarning)
             .putInt("subject-out-of-frame-delay", settings.subjectDisplay.outOfFrameDelaySeconds)
+            .putString("subject-split-preview-modes", SubjectDisplayMode.entries.filter { it in settings.subjectDisplay.splitPreviewModes }.joinToString(",") { it.name })
+            .putInt("subject-fill-light-preview-level", settings.subjectDisplay.fillLightPreviewLevel)
             .putString("image-stabilization", settings.imageProcessing.stabilization?.name ?: "DEFAULT")
             .putString("image-noise-reduction", settings.imageProcessing.noiseReduction.name)
             .putString("image-edge-enhancement", settings.imageProcessing.edge.name)

@@ -600,6 +600,40 @@ fun SubjectInterview() = Subject(driverCaptureState(CaptureMode.VIDEO),
 @Composable
 fun SubjectSlate() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisplaySettings(mode = SubjectDisplayMode.SLATE))
 
+/** Exterior display, split screen: teleprompter on top, the rear camera below (no viewfinder headless). */
+@Composable
+fun SubjectPrompterSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT, operatorCue = "Más despacio",
+        splitPreviewModes = setOf(SubjectDisplayMode.TELEPROMPTER)))
+
+/** Exterior display, split screen: the status hero on top. */
+@Composable
+fun SubjectStatusSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(splitPreviewModes = setOf(SubjectDisplayMode.STATUS)))
+
+/** Exterior display, split screen: fill light on top, the camera below dimmed by the 50% dither mask. */
+@Composable
+fun SubjectFillLightSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.FILL_LIGHT, fillLightKelvin = 4300, fillLightPreviewLevel = 50,
+        splitPreviewModes = setOf(SubjectDisplayMode.FILL_LIGHT)))
+
+/** Exterior display, split screen: the interview question on top. */
+@Composable
+fun SubjectInterviewSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW, splitPreviewModes = setOf(SubjectDisplayMode.INTERVIEW),
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+    SubjectSessionCues(interviewIndex = 1))
+
+/** Exterior display, split screen: the slate on top. */
+@Composable
+fun SubjectSlateSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.SLATE, splitPreviewModes = setOf(SubjectDisplayMode.SLATE)))
+
+/** Exterior display, split screen: take review on top. */
+@Composable
+fun SubjectReviewSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
+    SubjectDisplaySettings(mode = SubjectDisplayMode.REVIEW, splitPreviewModes = setOf(SubjectDisplayMode.REVIEW)))
+
 private val FoldUnfolded = FoldDisplayState(DisplayCapability.AVAILABLE, DisplayCapability.AVAILABLE, posture = FoldPosture.FLAT)
 private val FoldFolded = FoldDisplayState(DisplayCapability.UNAVAILABLE, DisplayCapability.AVAILABLE)
 
@@ -607,6 +641,13 @@ private val FoldFolded = FoldDisplayState(DisplayCapability.UNAVAILABLE, Display
 @Composable
 fun FoldMenuPane() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO),
     CameraSettings(histogramEnabled = true, subjectDisplay = SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT)),
+    CaptureInitialPane.DISPLAYS, foldState = FoldUnfolded)
+
+/** The Displays pane with the teleprompter chosen and its split screen with the camera on (use `--device inner`). */
+@Composable
+fun FoldMenuPaneSplit() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO),
+    CameraSettings(histogramEnabled = true, subjectDisplay = SubjectDisplaySettings(mode = SubjectDisplayMode.TELEPROMPTER, prompterText = SUBJECT_SCRIPT,
+        splitPreviewModes = setOf(SubjectDisplayMode.TELEPROMPTER))),
     CaptureInitialPane.DISPLAYS, foldState = FoldUnfolded)
 
 /** The Displays pane folded: the reason replaces the start action, self recording stays offered (a sheet on `phone`). */
