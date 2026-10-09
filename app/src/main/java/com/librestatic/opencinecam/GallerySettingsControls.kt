@@ -42,3 +42,10 @@ internal fun galleryKindLabel(kind: GalleryMediaKind): Int = when (kind) {
     GalleryMediaKind.VIDEO -> R.string.gallery_video
     GalleryMediaKind.AUDIO -> R.string.gallery_audio
 }
+
+internal fun galleryKindIcon(kind: GalleryMediaKind): CineIcon = when (kind) {
+    GalleryMediaKind.ALL -> CineIcon.MEDIA
+    GalleryMediaKind.PHOTO -> CineIcon.CAMERA
+    GalleryMediaKind.VIDEO -> CineIcon.VIDEO
+    GalleryMediaKind.AUDIO -> CineIcon.AUDIO
+}

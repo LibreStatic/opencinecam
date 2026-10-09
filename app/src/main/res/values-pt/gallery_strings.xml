@@ -4,7 +4,7 @@
     <string name="gallery_title">Catálogo de capturas locais</string>
     <string name="gallery_settings_help">Preferências de exibição e filtro ao vivo. Não alteram os arquivos gravados. O filtro de boas tomadas exige uma claquete legível que marque explicitamente a tomada como boa.</string>
     <string name="gallery_help">As tomadas são agrupadas por dia de gravação, cada uma com seus arquivos juntos. Em ⋮ de cada tomada você encontra detalhes, compartilhamento, renomeação, proxies e exclusão.</string>
-    <string name="gallery_all">Toda a mídia</string>
+    <string name="gallery_all">Tudo</string>
     <string name="gallery_photo">Fotos</string>
     <string name="gallery_video">Vídeos</string>
     <string name="gallery_audio">Áudio</string>
