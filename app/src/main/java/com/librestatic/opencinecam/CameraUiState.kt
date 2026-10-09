@@ -315,3 +315,22 @@ data class CameraUiState(
         )
     }
 }
+
+/**
+ * This state without the fields the service refreshes several times a second (analysis, metadata
+ * fps, audio levels). The screen root observes this, so a live sample alone leaves it equal and
+ * recomposes nothing; the leaves that draw samples read them through [liveCameraState].
+ */
+fun CameraUiState.withoutLiveSamples(): CameraUiState = copy(
+    effectiveFps = null,
+    analysisIntervalMs = 0L,
+    analysisUpdatedAtMs = 0L,
+    monitoringScopes = null,
+    histogram = emptyList(),
+    redHistogram = emptyList(),
+    greenHistogram = emptyList(),
+    blueHistogram = emptyList(),
+    zebraCells = emptyList(),
+    focusPeakingMask = null,
+    audioLevels = null,
+)

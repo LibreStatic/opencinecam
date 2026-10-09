@@ -136,10 +136,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -266,7 +268,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var onboardingDone by remember { mutableStateOf(onboardingStore.isCompleted()) }
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
-    val state by stateFlow.collectAsStateWithLifecycle()
+    val liveState = stateFlow.collectAsStateWithLifecycle()
+    // Without the per-sample fields, so a sample alone recomposes nothing here; leaves read them through LocalLiveCameraState.
+    val state by remember(liveState) { derivedStateOf(structuralEqualityPolicy()) { liveState.value.withoutLiveSamples() } }
     val settingsRepository = remember(context) { SettingsRepositories.get(context) }
     val settings by settingsRepository.states.collectAsStateWithLifecycle()
     // A normal start keeps the splash until this: the camera has opened (or failed), or there is a
@@ -276,7 +280,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     val foldDisplays = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val foldState by (foldDisplays?.states ?: foldFallback).collectAsStateWithLifecycle()
-    SubjectStateForwarder(state) { foldDisplays?.updateCameraState(it) }
+    // The cover display draws the audio meter, so it gets every sample, collected outside composition.
+    LaunchedEffect(foldDisplays, liveState) { snapshotFlow { liveState.value }.collect { foldDisplays?.updateCameraState(it) } }
     DisposableEffect(foldDisplays, binder) {
         foldDisplays?.updatePreviewPort(binder?.subjectPreview)
         foldDisplays?.updateSelfRoleObserver { binder?.setSelfRecordingActive(it) }
@@ -341,7 +346,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     }
 
     val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
-    CompositionLocalProvider(LocalOperatorActions provides operatorActions,
+    CompositionLocalProvider(LocalLiveCameraState provides liveState, LocalOperatorActions provides operatorActions,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (section == AppSection.CAPTURE) {
@@ -923,6 +928,7 @@ internal fun MonitoringOverlay(
     /** Clears the F-key column that compact portrait chrome lays over the frame's end edge. */
     scopesPanelEndPadding: androidx.compose.ui.unit.Dp = 12.dp,
 ) {
+    val state = liveCameraState(state)
     val context = LocalContext.current
     val displayView = LocalView.current
     val displayRotationProvider = remember(displayView) {
@@ -1071,17 +1077,25 @@ internal fun MonitoringOverlay(
     }
 }
 
-/** Whether the latest scope analysis is recent enough to draw; refreshed four times a second. */
+/**
+ * Whether the latest scope analysis is recent enough to draw. A new sample arrives as a new
+ * [state]; the only other change is the current sample going stale, so this waits for exactly
+ * that moment rather than ticking. A ticking clock recomposed the whole caller several times a second.
+ */
 @Composable
 internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: MonitoringOptions): Boolean {
-    var analysisClockMs by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(250)
-            analysisClockMs = android.os.SystemClock.elapsedRealtime()
-        }
+    val state = liveCameraState(state)
+    val sampleAtMs = state.analysisUpdatedAtMs
+    val staleAfterMs = options.staleAfterMs
+    var staleSampleAtMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(sampleAtMs, staleAfterMs) {
+        if (sampleAtMs <= 0) return@LaunchedEffect
+        val remainingMs = sampleAtMs + staleAfterMs - SystemClock.elapsedRealtime()
+        if (remainingMs >= 0) delay(remainingMs + 1)
+        staleSampleAtMs = sampleAtMs
     }
-    return state.scopeAnalysisLive(monitoringSampleFresh(state.analysisUpdatedAtMs, maxOf(analysisClockMs, SystemClock.elapsedRealtime()), options)) &&
+    val fresh = staleSampleAtMs != sampleAtMs && monitoringSampleFresh(sampleAtMs, SystemClock.elapsedRealtime(), options)
+    return state.scopeAnalysisLive(fresh) &&
         (state.monitoringScopes == null || state.monitoringScopes.options == options)
 }
 
@@ -1089,6 +1103,7 @@ internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: Monitorin
 @Composable
 internal fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier,
     tag: String = "histogram-graph") {
+    val state = liveCameraState(state)
     Canvas(modifier.testTag(tag)) {
         drawRect(Color.Black.copy(alpha = .55f))
         if (histogramMode == HistogramMode.LUMA) {
@@ -1381,7 +1396,29 @@ internal fun AdaptiveCaptureChrome(
     val extraTop = statusBarClearance()
     val reducedMotion = LocalReducedMotion.current
 
+    // The modes alone; resolution is the RES slot's.
+    val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
+        val displayedMode = modeSelection.displayed
+        val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
+            val gate = state.modeGates.getValue(mode)
+            CaptureModeChoice(
+                mode = mode,
+                label = modeLabel(mode),
+                gateLabel = if (gate != ModeGateState.AVAILABLE) gateLabel(gate) else null,
+                gateColor = gateColor(gate),
+                enabled = CameraUiState.isModeSelectable(gate),
+                selected = mode == displayedMode,
+            )
+        }
+        CaptureModeContent(
+            choices = choices,
+            recording = recording,
+            onSelect = modeSelection.select,
+            onClose = onClose,
+        )
+    }
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {
+    Box(Modifier.fillMaxSize()) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -1869,32 +1906,12 @@ internal fun AdaptiveCaptureChrome(
             BracketCaptureProgress(state) { binder?.cancelBracketCapture() }
             AccumulationCaptureProgress(state, { binder?.finishAccumulationCapture() }, { binder?.cancelAccumulationCapture() })
         }
-        val scopeFresh = rememberScopeAnalysisFresh(state, monitoring)
         val scopes: @Composable (Modifier) -> Unit = { modifier ->
+            val scopeFresh = rememberScopeAnalysisFresh(state, monitoring)
             // No histogram tab: the histogram keeps its own place in the instrument stack.
             ProfessionalScopesPanel(state, monitoring, scopeFresh, modifier, expanded = scopesExpanded,
                 onExpandedChange = { scopesExpanded = it }, onClose = { scopeVisibility.hide() },
                 tab = scopeVisibility.tab, onTabChange = { scopeVisibility.tab = it })
-        }
-        // The modes alone; resolution is the RES slot's.
-        val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
-            val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
-                val gate = state.modeGates.getValue(mode)
-                CaptureModeChoice(
-                    mode = mode,
-                    label = modeLabel(mode),
-                    gateLabel = if (gate != ModeGateState.AVAILABLE) gateLabel(gate) else null,
-                    gateColor = gateColor(gate),
-                    enabled = CameraUiState.isModeSelectable(gate),
-                    selected = mode == displayedMode,
-                )
-            }
-            CaptureModeContent(
-                choices = choices,
-                recording = recording,
-                onSelect = modeSelection.select,
-                onClose = onClose,
-            )
         }
         val paneContent: @Composable ColumnScope.() -> Unit = {
             when (val current = pane) {
@@ -2223,7 +2240,8 @@ internal fun AdaptiveCaptureChrome(
             chip = true,
         )
 
-        if (modeSheet) CaptureModeBottomSheet(onDismiss = { modeSheet = false }) { modesContent { modeSheet = false } }
+    }
+    CaptureModeSheet(visible = modeSheet, onDismiss = { modeSheet = false }) { modesContent { modeSheet = false } }
     }
 }
 }
@@ -2502,6 +2520,7 @@ private fun InstrumentStack(
     dedicatedPane: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val state = liveCameraState(state)
     val analysisFresh = rememberScopeAnalysisFresh(state, settings.monitoring)
     // While recording, the recording HUD carries its own meter.
     // Off-speed (slow motion) takes are silent by design, so there is no microphone to meter.
@@ -3256,6 +3275,7 @@ internal fun AudioMeterHud(
     nowElapsedRealtimeMs: Long? = null,
     onResetClip: () -> Unit = { binder?.resetAudioClip() },
 ) {
+    val state = liveCameraState(state)
     if (!meterSettings.visible) return
     var clockMs by remember { androidx.compose.runtime.mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(nowElapsedRealtimeMs) {
@@ -4312,6 +4332,7 @@ internal fun AudioMeterSettingsControls(settings: CameraSettings, onSettingsChan
 /** Observations belong to the current PCM producer, never to a capability or preference. */
 @Composable
 internal fun AudioEffectsSettingsStatus(state: CameraUiState, settings: CameraSettings) {
+    val state = liveCameraState(state)
     val receipt = state.audioLevels?.effects.takeIf { state.audioMonitoringActive }
     val effective = state.effectiveSettings
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -4452,6 +4473,7 @@ internal fun AudioRecordingGainSettings(
     settings: CameraSettings,
     onSettingsChange: (CameraSettings) -> Unit,
 ) {
+    val state = liveCameraState(state)
     val gain = settings.audioRecordingGain
     val manualLabel = stringResource(R.string.audio_gain_manual)
     val agcLabel = stringResource(R.string.audio_gain_agc_requested)
