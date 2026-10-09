@@ -1,0 +1,48 @@
+<en-US>
+- When the camera refuses a change to a lock, focus, exposure, white balance or zoom, a short notice says so and the take keeps running with the previous setting
+- AF lock no longer shows as locked when the camera did not apply it
+- Smaller, optimised app
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Cuando la cámara rechaza un cambio de bloqueo, foco, exposición, balance de blancos o zoom, un aviso breve lo indica y la toma sigue con el ajuste anterior
+- El bloqueo de AF ya no aparece activo si la cámara no lo aplicó
+- App más liviana y optimizada
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Cuando la cámara rechaza un cambio de bloqueo, enfoque, exposición, balance de blancos o zoom, un aviso breve lo indica y la toma sigue con el ajuste anterior
+- El bloqueo de AF ya no aparece activo si la cámara no lo ha aplicado
+- App más ligera y optimizada
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Quando a câmera rejeita uma mudança de bloqueio, foco, exposição, balanço de branco ou zoom, um aviso breve informa e a gravação continua com o ajuste anterior
+- O bloqueio de AF não aparece mais ativo se a câmera não o aplicou
+- App mais leve e otimizado
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Quando a câmara rejeita uma alteração de bloqueio, focagem, exposição, equilíbrio de brancos ou zoom, um aviso breve informa e a gravação continua com a definição anterior
+- O bloqueio de AF deixa de aparecer ativo se a câmara não o aplicou
+- App mais leve e otimizada
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Quand la caméra refuse un changement de verrouillage, de mise au point, d'exposition, de balance des blancs ou de zoom, un bref avis l'indique et la prise continue avec le réglage précédent
+- Le verrouillage AF n'apparaît plus actif si la caméra ne l'a pas appliqué
+- App plus légère et optimisée
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Lehnt die Kamera eine Änderung an Sperre, Fokus, Belichtung, Weißabgleich oder Zoom ab, weist ein kurzer Hinweis darauf hin und die Aufnahme läuft mit der vorherigen Einstellung weiter
+- Die AF-Sperre wird nicht mehr als aktiv angezeigt, wenn die Kamera sie nicht übernommen hat
+- Kleinere, optimierte App
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Quando la fotocamera rifiuta una modifica a blocco, messa a fuoco, esposizione, bilanciamento del bianco o zoom, un breve avviso lo segnala e la ripresa continua con l'impostazione precedente
+- Il blocco AF non appare più attivo se la fotocamera non l'ha applicato
+- App più leggera e ottimizzata
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
