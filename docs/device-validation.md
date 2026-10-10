@@ -65,6 +65,7 @@ maths, gating, selection and tag plumbing only. On the Razr Fold, before trustin
 4. The encoder accepts the HDR10 profile on a Surface input at every offered size and fps; if it throws, narrow the offer in `Camera2PreviewEngine` (the HDR10 flag of `Camera2LogProfile`).
 5. `EGL_EXT_gl_colorspace_bt2020_pq` is reported by the driver; without it the surface keeps the default colourspace and only the codec keys and SPS carry the PQ tag.
 6. Playback in the gallery and a PQ-capable external player tone maps sensibly; the viewfinder and view assist are unchanged because they read the HLG source, not the encoded output.
+7. The container's mastering display minimum is 0.005 cd/m2 (`ffprobe -show_frames -read_intervals %+#1` side data, or the `mdcv` box: last int32 = 50). Android's `MPEG4Writer::writeMdcvAndClliBoxes` multiplies the KEY_HDR_STATIC_INFO minimum by 10000 although it is already in 0.0001 cd/m2, writing 50 cd/m2; `Mp4MdcvPatch` rewrites that one field after the muxer stops, only when it holds exactly the bugged value, and logs `HDR10 container mdcv: PATCHED` (tag `OpenCineLogGpuPipeline`). The HEVC SEI was always correct (min 0.005, max 1000, MaxCLL 1000, MaxFALL 400 on the Razr, 2026-10-10).
 
 ## Qualcomm exposure metering
 

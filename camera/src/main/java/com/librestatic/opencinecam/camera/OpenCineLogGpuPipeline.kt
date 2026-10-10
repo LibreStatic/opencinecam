@@ -1587,6 +1587,7 @@ class OpenCineLogGpuPipeline(
                 releaseMuxer = { active.fileRetirement.retire(active.muxer::release)?.let { throw it } },
                 finalizeTimeline = timelineFinalizer,
             )
+            if (active.hdr10Output && muxerStarted && active.failure == null) patchHdr10Container(active.outputDescriptor)
             active.fileRetirement.retire { active.codec.stop() }?.let(active::noteFailure)
             active.fileRetirement.retire { active.codec.release() }?.let(active::noteFailure)
             active.fileRetirement.retire { active.codecSurface.release() }?.let(active::noteFailure)
@@ -2524,4 +2525,25 @@ class OpenCineLogGpuPipeline(
         val TRANSFORM_SHA256: String = transformSha256(OpenCineLogSourcePath.HLG10_BT2020)
         val SDR_TRANSFORM_SHA256: String = transformSha256(OpenCineLogSourcePath.SDR_BT709_ISP)
     }
+}
+
+/**
+ * Rewrites the HDR10 `mdcv` minimum the platform muxer scales wrongly ([Mp4MdcvPatch]). Best effort:
+ * the take is already complete and valid, so a failure is only logged.
+ */
+private fun patchHdr10Container(descriptor: ParcelFileDescriptor) {
+    val fd = descriptor.fileDescriptor
+    val outcome = runCatching {
+        Mp4MdcvPatch.patch(object : Mp4MdcvPatch.Io {
+            override val size: Long = descriptor.statSize
+            override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int =
+                android.system.Os.pread(fd, into, offset, length, position).let { if (it == 0) -1 else it }
+            override fun write(position: Long, bytes: ByteArray) {
+                var done = 0
+                while (done < bytes.size) done += android.system.Os.pwrite(fd, bytes, done, bytes.size - done, position + done)
+            }
+        })
+    }
+    outcome.onSuccess { android.util.Log.i("OpenCineLogGpuPipeline", "HDR10 container mdcv: $it") }
+        .onFailure { android.util.Log.w("OpenCineLogGpuPipeline", "HDR10 container mdcv patch failed; the take keeps the muxer's box.", it) }
 }

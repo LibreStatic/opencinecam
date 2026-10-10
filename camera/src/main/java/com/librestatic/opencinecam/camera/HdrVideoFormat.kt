@@ -48,7 +48,7 @@ object Hdr10Video {
     const val MASTERING_PEAK_NITS = 1000
 
     /** Mastering display black, in 0.0001 cd/m2 units: 0.005 cd/m2. */
-    private const val MASTERING_MIN_UNITS = 50
+    const val MASTERING_MIN_UNITS = 50
 
     /** Conservative content light levels, cd/m2: nothing above the mastering peak, a modest frame average. */
     const val MAX_CLL_NITS = 1000
