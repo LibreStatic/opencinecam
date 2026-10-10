@@ -234,6 +234,7 @@ private fun SlotCell(
     val colors = MaterialTheme.colorScheme
     val tooltipState = rememberTooltipState()
     val scope = rememberCoroutineScope()
+    val haptics = LocalAppHaptics.current
     val available = model.unavailableReason == null
     val title = keyHint(model.name, model.shortcut)
     val labelColor = if (available) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.6f)
@@ -246,7 +247,10 @@ private fun SlotCell(
         val cell = Modifier
             .combinedClickable(
                 role = Role.Button,
-                onClick = { if (available) onSelect(model.slot) else scope.launch { tooltipState.show() } },
+                onClick = {
+                    haptics.perform(if (available) HapticEvent.Select else HapticEvent.Rejected)
+                    if (available) onSelect(model.slot) else scope.launch { tooltipState.show() }
+                },
                 onLongClick = { scope.launch { tooltipState.show() } },
             )
             .semantics { model.unavailableReason?.let { stateDescription = it } }

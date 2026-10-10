@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="haptics_title">Haptisches Feedback</string>
+    <string name="haptics_summary">Vibrationen für Aufnahme, Regler, Fokus und Menüs. Erfordert aktiviertes „Touch-Feedback“ in den Systemeinstellungen.</string>
+    <string name="haptics_level_off">Aus</string>
+    <string name="haptics_level_subtle">Dezent</string>
+    <string name="haptics_level_full">Voll</string>
+    <string name="haptics_capture">Aufnahme</string>
+    <string name="haptics_capture_summary">Aufnehmen, Auslöser und Pause</string>
+    <string name="haptics_controls">Regler und Wählräder</string>
+    <string name="haptics_controls_summary">Schieberegler, Zoom und Grenzen</string>
+    <string name="haptics_focus_exposure">Fokus und Belichtung</string>
+    <string name="haptics_focus_exposure_summary">Sperren, Tippen zum Fokussieren und Fokusmarken</string>
+    <string name="haptics_navigation">Menüs und Navigation</string>
+    <string name="haptics_navigation_summary">Moduswähler, Slots und Einstellungen</string>
+    <string name="haptics_mute_during_take">Ticks während einer Aufnahme stummschalten</string>
+    <string name="haptics_mute_during_take_summary">Während der Aufnahme vibrieren nur Stopp und Pause.</string>
+</resources>

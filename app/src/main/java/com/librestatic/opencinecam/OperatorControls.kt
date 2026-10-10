@@ -413,7 +413,8 @@ private fun OperatorChoice(title: String, value: OperatorAction, options: List<O
 }
 @Composable
 private fun OperatorToggle(label: Int, tag: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(checked, role = Role.Switch, onValueChange = onChange).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+    val haptics = LocalAppHaptics.current
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(checked, role = Role.Switch, onValueChange = { haptics.perform(HapticEvent.Toggle); onChange(it) }).testTag(tag), verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(label), Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
         Switch(checked, onCheckedChange = null)
     }

@@ -62,6 +62,7 @@ enum class TimeLapseLimitMode { UNLIMITED, FRAME_COUNT, DURATION }
 data class CameraSettings(
     val monitoring: MonitoringOptions = MonitoringOptions(),
     val operation: OperatorPreferences = OperatorPreferences(),
+    val haptics: HapticPreferences = HapticPreferences(),
     val imageProcessing: ImageProcessingSelection = ImageProcessingSelection(),
     val exposure: ExposureSelection = ExposureSelection(),
     val whiteBalance: WhiteBalanceSelection = WhiteBalanceSelection.Auto,
@@ -295,6 +296,14 @@ class CameraSettingsStore internal constructor(private val preferences: android.
     }
 
     override fun load(): CameraSettings = CameraSettings(
+        haptics = HapticPreferences(
+            level = enumPreference(KEY_HAPTIC_LEVEL, HapticLevel.SUBTLE),
+            capture = preferences.getBoolean(KEY_HAPTIC_CAPTURE, true),
+            controls = preferences.getBoolean(KEY_HAPTIC_CONTROLS, true),
+            focusExposure = preferences.getBoolean(KEY_HAPTIC_FOCUS_EXPOSURE, true),
+            navigation = preferences.getBoolean(KEY_HAPTIC_NAVIGATION, true),
+            muteDuringTake = preferences.getBoolean(KEY_HAPTIC_MUTE_DURING_TAKE, true),
+        ),
         operation = OperatorPreferences(
             button1 = enumPreference("operator-button-1", OperatorAction.TORCH).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.TORCH,
             button2 = enumPreference("operator-button-2", OperatorAction.PEAKING).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.PEAKING,
@@ -470,6 +479,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
 
     override fun save(settings: CameraSettings) {
         preferences.edit()
+            .putString(KEY_HAPTIC_LEVEL, settings.haptics.level.name)
+            .putBoolean(KEY_HAPTIC_CAPTURE, settings.haptics.capture)
+            .putBoolean(KEY_HAPTIC_CONTROLS, settings.haptics.controls)
+            .putBoolean(KEY_HAPTIC_FOCUS_EXPOSURE, settings.haptics.focusExposure)
+            .putBoolean(KEY_HAPTIC_NAVIGATION, settings.haptics.navigation)
+            .putBoolean(KEY_HAPTIC_MUTE_DURING_TAKE, settings.haptics.muteDuringTake)
             .putString("operator-button-1", settings.operation.button1.name)
             .putString("operator-button-2", settings.operation.button2.name)
             .putString("operator-button-3", settings.operation.button3.name)
@@ -866,6 +881,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
+        const val KEY_HAPTIC_LEVEL = "haptic-level"
+        const val KEY_HAPTIC_CAPTURE = "haptic-capture"
+        const val KEY_HAPTIC_CONTROLS = "haptic-controls"
+        const val KEY_HAPTIC_FOCUS_EXPOSURE = "haptic-focus-exposure"
+        const val KEY_HAPTIC_NAVIGATION = "haptic-navigation"
+        const val KEY_HAPTIC_MUTE_DURING_TAKE = "haptic-mute-during-take"
         const val KEY_VIEWFINDER_SCALE = "viewfinder-scale"
         const val KEY_CHROME_OPACITY = "chrome-opacity"
         const val KEY_RECORDING_GEOMETRY_MODE = "recording-geometry-mode"

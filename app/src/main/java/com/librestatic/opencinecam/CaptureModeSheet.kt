@@ -122,6 +122,7 @@ internal fun CaptureModeContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val haptics = LocalAppHaptics.current
     Column(
         modifier.verticalScroll(rememberScrollState()).testTag("capture-mode-content"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -143,6 +144,7 @@ internal fun CaptureModeContent(
                                 RoundedCornerShape(12.dp),
                             )
                             .selectable(selected = choice.selected, enabled = enabled, role = Role.RadioButton) {
+                                haptics.perform(HapticEvent.Select)
                                 onSelect(choice.mode)
                                 onClose?.invoke()
                             }

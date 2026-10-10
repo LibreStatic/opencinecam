@@ -7,6 +7,8 @@ package com.librestatic.opencinecam
 
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.drop
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.LinearEasing
@@ -160,7 +162,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -178,7 +179,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -351,7 +351,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     }
 
     val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
+    val appHaptics = rememberAppHaptics(settings.haptics, state.phase == CameraUiPhase.RECORDING)
     CompositionLocalProvider(LocalLiveCameraState provides liveState, LocalOperatorActions provides operatorActions,
+        LocalAppHaptics provides appHaptics,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (section == AppSection.CAPTURE) {
@@ -860,6 +862,7 @@ internal fun CaptureSurface(
 private fun MonitorToggle(icon: CineIcon, label: String, description: String, enabled: Boolean, onClick: () -> Unit,
     cycleState: String? = null, modifier: Modifier = Modifier) {
     val on = enabled && cycleState == null
+    val haptics = LocalAppHaptics.current
     val colors = MaterialTheme.colorScheme
     val content = if (on) colors.onPrimary else colors.onSurface
     Row(
@@ -873,8 +876,8 @@ private fun MonitorToggle(icon: CineIcon, label: String, description: String, en
             .background(if (on) colors.primary else colors.surfaceContainerHigh)
             .border(1.dp, if (on) colors.primary else colors.outline, RoundedCornerShape(8.dp))
             .then(
-                if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = onClick)
-                else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { onClick() })
+                if (cycleState != null) Modifier.clickable(role = Role.Button, onClick = { haptics.perform(HapticEvent.Select); onClick() })
+                else Modifier.toggleable(value = enabled, role = Role.Switch, onValueChange = { haptics.perform(HapticEvent.Toggle); onClick() })
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1386,6 +1389,26 @@ internal fun AdaptiveCaptureChrome(
     }
     LaunchedEffect(state.tapFocusState) {
         if (state.tapFocusState == TapFocusState.IDLE) tapPoint = null
+    }
+    val zoomHaptics = LocalAppHaptics.current
+    val zoomState by rememberUpdatedState(state)
+    LaunchedEffect(Unit) {
+        // Only the transition into a result; the state already held on entry plays nothing.
+        snapshotFlow { zoomState.tapFocusState }.drop(1).collect {
+            when (it) {
+                TapFocusState.FOCUSED -> zoomHaptics.perform(HapticEvent.FocusConfirmed)
+                TapFocusState.NOT_FOCUSED -> zoomHaptics.perform(HapticEvent.FocusFailed)
+                else -> Unit
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        var previous = zoomState.zoomRatio
+        snapshotFlow { zoomState.zoomRatio }.collect { now ->
+            val s = zoomState
+            zoomHapticFor(previous, now, s.opticalAnchors.map { it.ratio }, s.zoomMinRatio, s.zoomMaxRatio)?.let(zoomHaptics::perform)
+            previous = now
+        }
     }
     fun togglePane(target: CapturePane) {
         pane = if (pane == target) null else target
@@ -2741,7 +2764,7 @@ private fun LockToggles(
     afLockBehavior: AfLockBehavior,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = LocalAppHaptics.current
     val manualExposure = state.requestedIso != null || state.requestedExposureTimeNs != null
     val manualFocus = state.requestedFocusDiopters != null
     val aeAvailable = state.aeLockSupported && !manualExposure && !state.captureControlsLocked
@@ -2758,7 +2781,7 @@ private fun LockToggles(
                 enabled = aeAvailable,
                 testTag = "ae-lock-toggle",
                 onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.perform(if (state.aeLockActive) HapticEvent.LockOff else HapticEvent.LockOn)
                     binder?.setAeLock(!state.aeLockActive)
                 },
             )
@@ -2774,7 +2797,7 @@ private fun LockToggles(
                 enabled = afAvailable,
                 testTag = "af-lock-toggle",
                 onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.perform(if (afLocked || afPending) HapticEvent.LockOff else HapticEvent.LockOn)
                     if (afLocked || afPending) binder?.setAfLock(false, afLockBehavior)
                     else binder?.setAfLock(true, afLockBehavior)
                 },
@@ -2836,7 +2859,7 @@ private fun ModeDial(
     val selectMode: (CaptureMode) -> Unit = selection?.select ?: { mode -> binder?.selectMode(mode) }
     val modes = visibleCaptureModes(state.modeGates, displayedMode)
     val selectedIndex = modes.indexOf(displayedMode).coerceAtLeast(0)
-    val haptics = LocalHapticFeedback.current
+    val haptics = LocalAppHaptics.current
     val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(displayedMode))
     fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
     val labels = modes.map { modeLabel(it) }
@@ -2881,13 +2904,22 @@ private fun ModeDial(
                 listState.animateScrollToItem(selectedIndex)
             }
         }
+        // A detent tick for every mode the operator's drag or fling carries past the centre. A
+        // programmatic scroll (selection from elsewhere, snap-back) is not a gesture and stays silent.
+        val userDragging by listState.interactionSource.collectIsDraggedAsState()
+        var gestureScroll by remember { mutableStateOf(false) }
+        LaunchedEffect(userDragging) { if (userDragging) gestureScroll = true }
+        LaunchedEffect(listState, selectedIndex, haptics) {
+            snapshotFlow { focusedIndex }.drop(1).collect { if (gestureScroll) haptics.perform(HapticEvent.ModeTick) }
+        }
         LaunchedEffect(listState.isScrollInProgress) {
+            if (!listState.isScrollInProgress) gestureScroll = false
             if (!listState.isScrollInProgress && listState.layoutInfo.totalItemsCount > 0) {
                 val idx = focusedIndex.coerceIn(0, modes.lastIndex)
                 if (idx != selectedIndex && modes[idx] != displayedMode && selectable(modes[idx])) {
                     selectMode(modes[idx])
-                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 } else if (idx != selectedIndex && !selectable(modes[idx])) {
+                    haptics.perform(HapticEvent.Rejected)
                     listState.animateScrollToItem(selectedIndex)
                 }
             }
@@ -2927,7 +2959,7 @@ private fun ModeDial(
                             .height(rowHeight)
                             .semantics { selected = isSelected }
                             .clickable(enabled = enabled && (!isSelected || onOpenSheet != null)) {
-                                if (isSelected) onOpenSheet?.invoke() else selectMode(mode)
+                                if (isSelected) onOpenSheet?.invoke() else { haptics.perform(HapticEvent.ModeTick); selectMode(mode) }
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
@@ -3010,8 +3042,16 @@ internal fun rememberCaptureAction(state: CameraUiState, binder: CaptureService.
             },
         )
     }
+    val appHaptics = LocalAppHaptics.current
     return {
+        if (!enabled) appHaptics.perform(HapticEvent.Rejected)
         if (enabled) {
+            // Before the start call, so the vibration never reaches the first audio frames.
+            appHaptics.perform(when {
+                state.phase == CameraUiPhase.RECORDING || state.capturePreparationCancelable || state.countdownSeconds > 0 -> HapticEvent.RecordStop
+                state.selectedMode.isStillMode() -> HapticEvent.Shutter
+                else -> HapticEvent.RecordStart
+            })
             val needsAudioChoice = !state.capturePreparationCancelable && state.countdownSeconds == 0 && state.phase != CameraUiPhase.RECORDING &&
                 settings.captureWantsAudio(state.selectedMode) &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
@@ -3926,6 +3966,26 @@ internal fun SettingsContent(
                 label = { stringResource(if (it == ModeSelectorStyle.DIAL) R.string.mode_selector_dial else R.string.mode_selector_buttons) },
                 tag = { "mode-selector-$it" }, onSelect = { onSettingsChange(settings.copy(modeSelectorStyle = it)) })
         }
+        if ("haptics" in visibleIds) settingsCard("haptics") {
+            val haptics = settings.haptics
+            val appHaptics = LocalAppHaptics.current
+            SettingsOptionRow(stringResource(R.string.haptics_title), stringResource(R.string.haptics_summary),
+                HapticLevel.entries, haptics.level,
+                label = { stringResource(when (it) { HapticLevel.OFF -> R.string.haptics_level_off; HapticLevel.SUBTLE -> R.string.haptics_level_subtle; HapticLevel.FULL -> R.string.haptics_level_full }) },
+                tag = { "haptic-level-$it" },
+                onSelect = { onSettingsChange(settings.copy(haptics = haptics.copy(level = it))); appHaptics.preview(it) })
+            val on = haptics.level != HapticLevel.OFF
+            SettingsToggleRow(stringResource(R.string.haptics_capture), stringResource(R.string.haptics_capture_summary), haptics.capture, on,
+                Modifier.testTag("haptic-capture")) { onSettingsChange(settings.copy(haptics = haptics.copy(capture = it))) }
+            SettingsToggleRow(stringResource(R.string.haptics_controls), stringResource(R.string.haptics_controls_summary), haptics.controls, on,
+                Modifier.testTag("haptic-controls")) { onSettingsChange(settings.copy(haptics = haptics.copy(controls = it))) }
+            SettingsToggleRow(stringResource(R.string.haptics_focus_exposure), stringResource(R.string.haptics_focus_exposure_summary), haptics.focusExposure, on,
+                Modifier.testTag("haptic-focus-exposure")) { onSettingsChange(settings.copy(haptics = haptics.copy(focusExposure = it))) }
+            SettingsToggleRow(stringResource(R.string.haptics_navigation), stringResource(R.string.haptics_navigation_summary), haptics.navigation, on,
+                Modifier.testTag("haptic-navigation")) { onSettingsChange(settings.copy(haptics = haptics.copy(navigation = it))) }
+            SettingsToggleRow(stringResource(R.string.haptics_mute_during_take), stringResource(R.string.haptics_mute_during_take_summary), haptics.muteDuringTake, on,
+                Modifier.testTag("haptic-mute-during-take")) { onSettingsChange(settings.copy(haptics = haptics.copy(muteDuringTake = it))) }
+        }
         if ("translucent-chrome" in visibleIds) settingsCard("translucent-chrome") {
             SettingsToggleRow(
                 title = stringResource(R.string.translucent_chrome),
@@ -4681,12 +4741,14 @@ internal fun SettingsToggleRow(
     summary: String?,
     checked: Boolean,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    val haptics = LocalAppHaptics.current
     // The card is the surface; the row adds no second box, and the gap keeps the switch off the text.
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
-            .toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onCheckedChange),
+        modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(8.dp))
+            .toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = { haptics.perform(HapticEvent.Toggle); onCheckedChange(it) }),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -159,7 +159,7 @@ internal fun ChoiceTile(
                     else -> colors.surfaceContainerHighest
                 },
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, onClick = hapticClick(HapticEvent.Select, onClick))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {

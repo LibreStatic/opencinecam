@@ -270,7 +270,7 @@ internal fun SettingsPill(label: String, tag: String, selected: Boolean = false,
             .clip(RoundedCornerShape(24.dp))
             .background(if (selected) SettingsAccent else SettingsSurfaceRaised)
             .border(1.dp, if (selected) SettingsAccent else SettingsBorder, RoundedCornerShape(24.dp))
-            .selectable(selected = selected, enabled = enabled, role = role, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = role, onClick = hapticClick(HapticEvent.Select, onClick))
             .testTag(tag)
             .padding(horizontal = if (icon == null) 16.dp else 12.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
@@ -304,10 +304,11 @@ internal fun SettingsSwitchRow(
     labelTag: String? = null,
     enabled: Boolean = true,
 ) {
+    val haptics = LocalAppHaptics.current
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f).padding(end = 16.dp).then(labelTag?.let { Modifier.testTag(it) } ?: Modifier),
             color = if (enabled) MaterialTheme.colorScheme.onSurface else SettingsMuted)
-        androidx.compose.material3.Switch(checked, onCheckedChange, enabled = enabled,
+        androidx.compose.material3.Switch(checked, { haptics.perform(HapticEvent.Toggle); onCheckedChange(it) }, enabled = enabled,
             modifier = Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = label })
     }
 }

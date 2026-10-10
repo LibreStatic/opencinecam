@@ -57,6 +57,9 @@ class CameraSettingsTest {
         assertFalse(settings.horizonLevelEnabled)
         assertEquals(ModeSelectorStyle.DIAL, settings.modeSelectorStyle)
         assertFalse(settings.translucentChrome)
+        assertEquals(HapticPreferences(), settings.haptics)
+        assertEquals(HapticLevel.SUBTLE, settings.haptics.level)
+        assertTrue(settings.haptics.muteDuringTake)
         assertEquals(ViewfinderScale.FIT, settings.viewfinderScale)
         assertEquals(DEFAULT_CHROME_OPACITY, settings.chromeOpacity, 0f)
         assertEquals(RecordingGeometryMode.COMPATIBLE, settings.recordingGeometryMode)
@@ -213,5 +216,13 @@ class CameraSettingsTest {
         assertTrue(live.translucentChrome)
         assertEquals(ViewfinderScale.FILL, live.viewfinderScale)
         assertEquals(0.4f, live.chromeOpacity, 0f)
+    }
+
+    @Test
+    fun hapticsChangesApplyLiveAndPersist() {
+        val next = CameraSettings().copy(haptics = HapticPreferences(HapticLevel.FULL, capture = false, controls = false, focusExposure = false, navigation = false, muteDuringTake = false))
+        assertEquals(next.haptics, CameraSettings().withLivePreferencesFrom(next).haptics)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
+        assertEquals(next.haptics, CameraSettingsStore(memory).load().haptics)
     }
 }

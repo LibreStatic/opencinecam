@@ -240,6 +240,7 @@ private fun FocusMarkTile(
     val pull = stringResource(R.string.focus_mark_pull_action, label)
     val save = stringResource(R.string.focus_mark_save_action, label)
     val clear = stringResource(R.string.focus_mark_clear_action, label)
+    val haptics = LocalAppHaptics.current
     val tap = { if (saved != null) binder?.startFocusPull(saved, settings.focusPullDurationMs, settings.focusPullEasing)
         else binder?.setFocusMark(label, current) }
     Column(
@@ -255,7 +256,7 @@ private fun FocusMarkTile(
                 role = Role.Button,
                 onClickLabel = if (saved != null) pull else save,
                 onLongClickLabel = if (saved != null) clear else save,
-                onLongClick = { if (saved != null) binder?.clearFocusMark(label) else binder?.setFocusMark(label, current) },
+                onLongClick = { haptics.perform(HapticEvent.FocusMark); if (saved != null) binder?.clearFocusMark(label) else binder?.setFocusMark(label, current) },
                 onClick = { tap() },
             )
             .padding(horizontal = 4.dp, vertical = 6.dp)

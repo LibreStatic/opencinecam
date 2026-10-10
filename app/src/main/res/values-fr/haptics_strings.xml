@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="haptics_title">Retour haptique</string>
+    <string name="haptics_summary">Vibrations pour la capture, les commandes, la mise au point et les menus. Nécessite que le « Retour tactile » soit activé dans les réglages système.</string>
+    <string name="haptics_level_off">Désactivé</string>
+    <string name="haptics_level_subtle">Discret</string>
+    <string name="haptics_level_full">Complet</string>
+    <string name="haptics_capture">Capture</string>
+    <string name="haptics_capture_summary">Enregistrement, déclencheur et pause</string>
+    <string name="haptics_controls">Commandes et molettes</string>
+    <string name="haptics_controls_summary">Curseurs, zoom et limites</string>
+    <string name="haptics_focus_exposure">Mise au point et exposition</string>
+    <string name="haptics_focus_exposure_summary">Verrous, toucher pour faire la mise au point et repères</string>
+    <string name="haptics_navigation">Menus et navigation</string>
+    <string name="haptics_navigation_summary">Molette de modes, emplacements et réglages</string>
+    <string name="haptics_mute_during_take">Couper les tics pendant une prise</string>
+    <string name="haptics_mute_during_take_summary">Pendant l\'enregistrement, seuls l\'arrêt et la pause vibrent encore.</string>
+</resources>

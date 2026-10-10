@@ -32,7 +32,7 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(167, CameraPresetCodec.portableKeys.size)
+        assertEquals(173, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
         assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
@@ -51,6 +51,22 @@ class CameraPresetTest {
         assertFalse(text.contains("image-saturation")); assertFalse(text.contains("image-sharpness"))
         val applied = CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, current)
         assertEquals(8, applied.imageProcessing.saturation); assertEquals(4, applied.imageProcessing.sharpness)
+    }
+    @Test fun hapticKeysArePortableFromV23AndRoundTrip() {
+        val keys = setOf("haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take")
+        assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
+        assertTrue(CameraPresetCodec.portableKeysFor(22).none { it in keys })
+        assertTrue(CameraPresetCodec.portableKeysFor(23).containsAll(keys))
+        val haptics = HapticPreferences(HapticLevel.FULL, capture = false, navigation = false, muteDuringTake = false)
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Haptic", settings = CameraSettings(haptics = haptics)))
+        assertEquals(haptics, CameraPresetCodec.decode(text).settings.haptics)
+    }
+    @Test fun v22PayloadWithoutHapticKeysStillDecodesToDefaults() {
+        val v21 = document {
+            it["version"] = JsonPrimitive(22)
+            it["settings"] = JsonObject(it.getValue("settings").jsonObject.filterKeys { key -> key in CameraPresetCodec.portableKeysFor(22) })
+        }
+        assertEquals(HapticPreferences(), CameraPresetCodec.decode(v21).settings.haptics)
     }
     @Test fun splitPreviewKeysArePortableAndSurviveAPresetRoundTrip() {
         assertTrue(CameraPresetCodec.portableKeys.containsAll(setOf("subject-split-preview-modes", "subject-fill-light-preview-level")))
@@ -164,5 +180,5 @@ class CameraPresetTest {
     }
 }
 
-// Keys newer than preset V19 (V20 to V22), so the historical-document tests can strip them.
-internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile")
+// Keys newer than preset V19 (V20 to V23), so the historical-document tests can strip them.
+internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take")

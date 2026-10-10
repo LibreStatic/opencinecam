@@ -13,6 +13,10 @@ class SettingsCatalogTest {
             assertTrue(query, "torch" in SettingsCatalog.search(query, null) { "" })
         }
     }
+    @Test fun hapticsAreSearchableInBothLanguages() {
+        for (query in listOf("vibracion", "haptic", "vibración")) assertTrue(query, "haptics" in SettingsCatalog.search(query, null) { "" })
+        assertTrue("haptics" in SettingsCatalog.search("", SettingsCategory.CONTROLS) { "" })
+    }
     @Test fun categoryFiltersAndUnknownSearchIsEmpty() {
         assertFalse("torch" in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
         assertTrue(SettingsCatalog.search("no-such-setting", null) { "" }.isEmpty())

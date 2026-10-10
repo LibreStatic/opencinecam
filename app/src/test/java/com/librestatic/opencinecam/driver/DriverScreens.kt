@@ -228,8 +228,10 @@ fun CaptureDesktop() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driv
 /** The settings hub, home page. 840 dp or wider (`--device inner`) shows the two-pane layout. */
 @Composable
 fun Settings() = DriverTheme {
-    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), CameraSettings(), audioPermissionGranted = false,
-        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
+    // Keeps its own settings so toggles and pills reflect clicks.
+    var settings by remember { mutableStateOf(CameraSettings()) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = false,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
 }
 
 /** The settings hub while recording: changes that need a camera restart are locked. */

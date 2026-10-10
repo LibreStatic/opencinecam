@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="haptics_title">Respuesta háptica</string>
+    <string name="haptics_summary">Vibraciones para captura, controles, enfoque y menús. Requiere tener activada la «Respuesta táctil» en los ajustes del sistema.</string>
+    <string name="haptics_level_off">Desactivada</string>
+    <string name="haptics_level_subtle">Sutil</string>
+    <string name="haptics_level_full">Completa</string>
+    <string name="haptics_capture">Captura</string>
+    <string name="haptics_capture_summary">Grabar, obturador y pausa</string>
+    <string name="haptics_controls">Controles y diales</string>
+    <string name="haptics_controls_summary">Deslizadores, zoom y límites</string>
+    <string name="haptics_focus_exposure">Enfoque y exposición</string>
+    <string name="haptics_focus_exposure_summary">Bloqueos, tocar para enfocar y marcas de enfoque</string>
+    <string name="haptics_navigation">Menús y navegación</string>
+    <string name="haptics_navigation_summary">Dial de modos, ranuras y ajustes</string>
+    <string name="haptics_mute_during_take">Silenciar clics durante una toma</string>
+    <string name="haptics_mute_during_take_summary">Mientras grabás, solo vibran la detención y la pausa.</string>
+</resources>
