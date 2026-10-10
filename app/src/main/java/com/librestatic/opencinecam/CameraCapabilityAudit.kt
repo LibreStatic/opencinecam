@@ -7,6 +7,8 @@ import android.hardware.camera2.CaptureRequest
 import com.librestatic.opencinecam.camera.Antibanding
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.camera.StreamUseCase
+import com.librestatic.opencinecam.camera.StreamUseCaseRejections
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -37,6 +39,7 @@ enum class AppFeature(val title: Int, val usage: Int) {
     TORCH(R.string.caps_feature_torch, R.string.caps_usage_torch),
     PHOTO_FLASH(R.string.caps_feature_flash, R.string.caps_usage_flash),
     SENSOR_CLOCK(R.string.caps_feature_sensor_clock, R.string.caps_usage_sensor_clock),
+    STREAM_USE_CASES(R.string.caps_feature_stream_use_cases, R.string.caps_usage_stream_use_cases),
 }
 
 /** [detail] holds only numbers, units and API names, so it reads the same in every language. */
@@ -192,6 +195,18 @@ fun auditCameraCapabilities(d: Camera2CameraDescriptor): List<AppFeatureFinding>
         }
         AppFeature.SENSOR_CLOCK ->
             if (d.timestampSourceRealtime) feature.active("REALTIME") else feature.partial("UNKNOWN")
+        AppFeature.STREAM_USE_CASES -> streamUseCaseFinding(feature, d, StreamUseCaseRejections.isRejected(d.cameraId), StreamUseCaseRejections.wasApplied(d.cameraId))
+    }
+}
+
+/** [rejected]: the HAL refused a session carrying use cases and the camera runs on DEFAULT; [applied]: a session carried them. */
+internal fun streamUseCaseFinding(feature: AppFeature, d: Camera2CameraDescriptor, rejected: Boolean, applied: Boolean): AppFeatureFinding {
+    val names = d.streamUseCases.filter { it in StreamUseCase.PREVIEW..StreamUseCase.VIDEO_CALL }.sorted().joinToString(" · ") { StreamUseCase.label(it) }
+    return when {
+        names.isEmpty() -> feature.unavailable()
+        rejected -> feature.partial("$names · DEFAULT (refused)")
+        applied -> feature.active("$names · applied")
+        else -> feature.active(names)
     }
 }
 

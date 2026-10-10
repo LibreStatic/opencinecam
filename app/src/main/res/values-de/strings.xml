@@ -803,6 +803,8 @@
     <string name="caps_usage_flash">Fotoblitzmodi und, falls verfügbar, Blitzstärke.</string>
     <string name="caps_feature_sensor_clock">Sensoruhr</string>
     <string name="caps_usage_sensor_clock">Richtet separate WAV/FLAC-Audiodateien über die Sensoruhr am Video aus.</string>
+    <string name="caps_feature_stream_use_cases">Stream-Anwendungsfälle</string>
+    <string name="caps_usage_stream_use_cases">Teilt der Kamera mit, wofür jeder Stream gedacht ist (Vorschau, Foto, Video), damit die HAL ihre Pipeline abstimmen kann. Fällt bei Ablehnung auf die Standardwerte zurück.</string>
     <string name="settings_mode">Modus</string>
     <string name="photo_format_label">Format</string>
     <string name="pro_shutter_unit">Verschlusseinheit</string>

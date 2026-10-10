@@ -803,6 +803,8 @@
     <string name="caps_usage_flash">Modalità del flash foto e, se disponibile, potenza del flash.</string>
     <string name="caps_feature_sensor_clock">Orologio del sensore</string>
     <string name="caps_usage_sensor_clock">Allinea i file audio WAV/FLAC separati al video tramite l\'orologio del sensore.</string>
+    <string name="caps_feature_stream_use_cases">Casi d\'uso degli stream</string>
+    <string name="caps_usage_stream_use_cases">Indica alla fotocamera a cosa serve ogni stream (anteprima, foto, video) così che l\'HAL possa ottimizzare la pipeline. Torna ai valori predefiniti se viene rifiutato.</string>
     <string name="settings_mode">Modalità</string>
     <string name="photo_format_label">Formato</string>
     <string name="pro_shutter_unit">Unità otturatore</string>
