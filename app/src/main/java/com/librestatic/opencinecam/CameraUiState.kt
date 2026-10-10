@@ -151,6 +151,8 @@ data class CameraUiState(
     val redHistogram: List<Float> = emptyList(),
     val greenHistogram: List<Float> = emptyList(),
     val blueHistogram: List<Float> = emptyList(),
+    /** Where the luma [histogram] came from: the frame analysis, or the Qualcomm ISP statistics. */
+    val histogramSource: com.librestatic.opencinecam.camera.HistogramSource = com.librestatic.opencinecam.camera.HistogramSource.FRAME,
     val analysisUpdatedAtMs: Long = 0L,
     val monitoringScopes: com.librestatic.opencinecam.camera.MonitoringScopeFrame? = null,
     val analysisIntervalMs: Long = 0L,
@@ -335,6 +337,7 @@ fun CameraUiState.withoutLiveSamples(): CameraUiState = copy(
     redHistogram = emptyList(),
     greenHistogram = emptyList(),
     blueHistogram = emptyList(),
+    histogramSource = com.librestatic.opencinecam.camera.HistogramSource.FRAME,
     zebraCells = emptyList(),
     focusPeakingMask = null,
     audioLevels = null,

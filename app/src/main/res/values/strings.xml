@@ -93,6 +93,8 @@
     <string name="monitor_peaking">Focus peaking</string>
     <string name="monitor_histogram">Histogram</string>
     <string name="monitor_histogram_mode">Change histogram color mode</string>
+    <string name="histogram_source_isp" translatable="false">ISP</string>
+    <string name="histogram_source_isp_raw" translatable="false">ISP RAW</string>
     <string name="monitor_grid">Composition grid</string>
     <string name="monitor_grid_mode">Change composition grid</string>
     <string name="monitor_horizon">Horizon level</string>

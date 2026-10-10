@@ -79,3 +79,19 @@ otherwise the HAL meters the frame centre. The result key, when reported, is sho
 readback table. To verify on a device: pick each mode and check the readback line
 `org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode` follows the request, then tap to
 meter in Spot and confirm the exposure follows the tapped point.
+
+## ISP statistics histogram (Qualcomm)
+
+`org.codeaurora.qcamera3.histogram.*` (Razr Fold `dumpsys media.camera`, vendor tag table):
+`enable` byte, `buckets`, `max_count`, `stats`, `stats_type` int32. Camera 0 statics report
+`buckets = [256]`, `max_count = [256]`. The same dump lists neither `enable` nor `stats` in
+`android.request.availableRequestKeys` / `availableResultKeys`, and Motorola's camera app has no
+reference to them. `IspHistogram.kt` therefore enables the block only where the enable key is
+advertised and a result carries `stats` with exactly `buckets` entries; on the Razr it is expected
+to stay dormant (frame histogram) until a device probe shows otherwise.
+
+When active it replaces only the HUD luma histogram, and falls back to the frame analysis when the
+ISP result is older than 500 ms. `stats_type` 1 (YUV) is labelled `ISP`; 0 or absent is labelled
+`ISP RAW`, because the Bayer-domain statistics are pre tone map and do not match the display.
+Which channel(s) `stats` holds is not documented by the device. Check logcat for
+`ISP histogram: N buckets, stats_type=…` on a device that advertises the keys.
