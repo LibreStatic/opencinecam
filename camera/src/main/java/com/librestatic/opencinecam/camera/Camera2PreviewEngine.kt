@@ -4049,9 +4049,7 @@ class Camera2PreviewEngine(
                 val descriptor = activeDescriptor ?: return
                 val characteristics = manager.getCameraCharacteristics(descriptor.cameraId)
                 val key = VendorKeys.request(characteristics, descriptor.cameraId, InstantAec.MODE_KEY, InstantAec.AVAILABLE_MODES_KEY, Int::class.javaObjectType) ?: return
-                val modesKey = characteristics.keys.firstOrNull { it.name == InstantAec.AVAILABLE_MODES_KEY } ?: return
-                @Suppress("UNCHECKED_CAST")
-                instantAecModes = characteristics.get(modesKey as CameraCharacteristics.Key<IntArray>)
+                instantAecModes = VendorKeys.staticInts(characteristics, InstantAec.AVAILABLE_MODES_KEY) ?: return
                 instantAecKey = key
                 // A session that starts mid-take (a recorder graph) is not boosted: only a lens switch is.
                 if (!recording) engageInstantAec(armedSession, builder, now, eligible, "session start")
@@ -4226,8 +4224,7 @@ class Camera2PreviewEngine(
         ispSupport?.takeIf { it.first == id }?.let { return it.second }
         val support = runCatching {
             val characteristics = manager.getCameraCharacteristics(id)
-            val buckets = characteristics.keys.firstOrNull { it.name == IspHistogramKeys.BUCKETS }
-                ?.let { characteristics.get(it) as? IntArray }?.firstOrNull()
+            val buckets = VendorKeys.staticInts(characteristics, IspHistogramKeys.BUCKETS)?.firstOrNull()
             val enable = VendorKeys.request(characteristics, id, IspHistogramKeys.ENABLE, IspHistogramKeys.BUCKETS, ByteArray::class.java)
             val count = ispHistogramBuckets(listOfNotNull(enable?.name), buckets)
             if (count != null && enable != null) IspHistogramSupport(id, count, enable) else null
@@ -5001,9 +4998,7 @@ class Camera2PreviewEngine(
     /** Advertised metering modes, only when both the request key and available_modes exist. */
     private fun vendorMeteringModes(characteristics: CameraCharacteristics): Set<ExposureMetering> = runCatching {
         val requestPresent = VendorKeys.request(characteristics, activeDescriptor?.cameraId, ExposureMetering.REQUEST_KEY_NAME, ExposureMetering.AVAILABLE_MODES_KEY_NAME, Int::class.javaObjectType) != null
-        val modesKey = characteristics.keys.firstOrNull { it.name == ExposureMetering.AVAILABLE_MODES_KEY_NAME }
-        @Suppress("UNCHECKED_CAST")
-        meteringModesOf(requestPresent, modesKey?.let { characteristics.get(it as CameraCharacteristics.Key<IntArray>) })
+        meteringModesOf(requestPresent, VendorKeys.staticInts(characteristics, ExposureMetering.AVAILABLE_MODES_KEY_NAME))
     }.getOrDefault(emptySet())
 
     /**
