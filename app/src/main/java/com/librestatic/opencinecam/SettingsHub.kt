@@ -3,7 +3,6 @@ package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import androidx.compose.material3.MaterialTheme
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,14 +52,15 @@ internal fun SettingsScreen(
     val context = LocalContext.current
     val ids = SettingsCatalog.search(query, if (query.isBlank()) category else null, context::getString)
     val searching = query.isNotBlank()
-    BackHandler(enabled = category != null || query.isNotEmpty()) {
-        if (query.isNotEmpty()) query = "" else selectedName = null
-    }
     val open: (SettingsCategory) -> Unit = { selectedName = it.name; query = "" }
     HingeSafeSettingsPane(fold.hinge) {
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
     val hubWidth = maxWidth.value
     val twoPane = settingsTwoPane(hubWidth, LocalDensity.current.fontScale)
+    // Only closing a page in the single pane previews; clearing a query or the two-pane layout just commit.
+    val back = rememberPredictiveBack(enabled = category != null || query.isNotEmpty(), animate = !twoPane && category != null && query.isEmpty()) {
+        if (query.isNotEmpty()) query = "" else selectedName = null
+    }
     val marks = settingsCategoryMarks(category, query, ids, twoPane)
     // Inside a page, the search names the page it searches, so one row carries both.
     val inPage = !twoPane && (category != null || query.isNotEmpty())
@@ -132,8 +132,13 @@ internal fun SettingsScreen(
                 }
                 pending()
             }
-            if (inPage) page(Modifier.weight(1f).fillMaxWidth())
-            else SettingsCategoryList(marks, searching, columns = settingsCategoryColumns(hubWidth, twoPane = false), onOpen = open,
+            // The page keeps one place in the tree, so starting or cancelling the gesture never recomposes it afresh.
+            if (inPage) Box(Modifier.weight(1f).fillMaxWidth()) {
+                // The list the page returns to peeks out from behind the shrinking page.
+                if (back.gesturing && query.isEmpty()) SettingsCategoryList(marks, false, columns = settingsCategoryColumns(hubWidth, twoPane = false),
+                    onOpen = open, modifier = Modifier.align(Alignment.Center).settingsCap(cap).fillMaxSize())
+                page(Modifier.fillMaxSize().predictiveBackPreview(back).background(MaterialTheme.colorScheme.surface))
+            } else SettingsCategoryList(marks, searching, columns = settingsCategoryColumns(hubWidth, twoPane = false), onOpen = open,
                 modifier = Modifier.weight(1f).align(Alignment.CenterHorizontally).settingsCap(cap).fillMaxWidth())
         }
     }

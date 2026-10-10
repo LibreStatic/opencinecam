@@ -7,14 +7,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.activity.BackEventCompat
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
 class SettingsHubTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun searchFindsTorchWithoutNavigatingCategories() {
         show()
@@ -68,6 +70,42 @@ class SettingsHubTest {
             assertFalse(settings.value.flashEnabled)
             assertEquals(3, settings.value.torchStrengthLevel)
         }
+    }
+
+    private fun backEvent(progress: Float) = BackEventCompat(0.1f, 0.5f, progress, BackEventCompat.EDGE_LEFT)
+
+    @Test fun backGesturePeeksTheCategoryListAndCancelKeepsThePage() {
+        show()
+        compose.onNodeWithTag("settings-category-CAPTURE").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-categories").assertDoesNotExist()
+        val dispatcher = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread { dispatcher.dispatchOnBackStarted(backEvent(0f)); dispatcher.dispatchOnBackProgressed(backEvent(0.5f)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("settings-categories").assertExists()
+        compose.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("settings-categories").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("settings-back").assertExists()
+    }
+
+    @Test fun backGestureCommitReturnsToTheCategoryList() {
+        show()
+        compose.onNodeWithTag("settings-category-CAPTURE").performScrollTo().performClick()
+        val dispatcher = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread { dispatcher.dispatchOnBackStarted(backEvent(0f)); dispatcher.dispatchOnBackProgressed(backEvent(0.5f)) }
+        compose.waitForIdle()
+        compose.runOnUiThread { dispatcher.onBackPressed() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("settings-categories").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("settings-back").assertDoesNotExist()
+    }
+
+    @Test fun backClearsTheQueryBeforeClosingAnything() {
+        show()
+        compose.onNodeWithTag("settings-search").performTextInput("luz")
+        // On a device the first Back only puts the keyboard away; this test is about the second.
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("settings-categories").assertExists()
     }
 
     private fun show(fontScale: Float = 1f, phase: CameraUiPhase = CameraUiPhase.READY) {
