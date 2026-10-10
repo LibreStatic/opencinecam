@@ -60,6 +60,12 @@
     <string name="audio_recording">Enregistrer l\'audio du microphone</string>
     <string name="burst_count">Images de la rafale</string>
     <string name="video_bitrate">Débit vidéo</string>
+    <string name="video_codec">Codec vidéo</string>
+    <string name="video_codec_summary">Auto utilise HEVC quand cet appareil peut l\'encoder à la résolution et à la cadence actuelles, ce qui donne des fichiers plus petits, et H.264 sinon.</string>
+    <string name="video_codec_hevc_unavailable">HEVC n\'est pas disponible à la résolution et à la cadence actuelles sur cet appareil. Auto enregistrera en H.264.</string>
+    <string name="video_codec_auto">Auto</string>
+    <string name="video_codec_h264">H.264</string>
+    <string name="video_codec_hevc">HEVC</string>
     <string name="flash_torch">Flash / torche</string>
     <string name="histogram_default">Histogramme activé par défaut</string>
     <string name="composition_grid">Grille de composition</string>

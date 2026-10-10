@@ -101,6 +101,7 @@ data class CameraSettings(
     val bracket: com.librestatic.opencinecam.camera.BracketSelection = com.librestatic.opencinecam.camera.BracketSelection(),
     val accumulation: com.librestatic.opencinecam.camera.AccumulationSelection = com.librestatic.opencinecam.camera.AccumulationSelection(),
     val videoBitrateMbps: Int = 20,
+    val videoCodec: com.librestatic.opencinecam.media.video.VideoCodecPreference = com.librestatic.opencinecam.media.video.VideoCodecPreference.AUTO,
     val flashEnabled: Boolean = false,
     val photoFlash: com.librestatic.opencinecam.camera.PhotoFlashSelection = com.librestatic.opencinecam.camera.PhotoFlashSelection(),
     val photoFormat: StillPhotoFormat = StillPhotoFormat.JPEG,
@@ -388,6 +389,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             enumPreference(KEY_BRACKET_STEP, com.librestatic.opencinecam.camera.BracketStep.TWO_EV)),
         burstCount = preferences.getInt(KEY_BURST, 5).coerceIn(3, 10),
         videoBitrateMbps = preferences.getInt(KEY_BITRATE, 20).takeIf { it in setOf(12, 20, 40) } ?: 20,
+        videoCodec = enumPreference(KEY_VIDEO_CODEC, com.librestatic.opencinecam.media.video.VideoCodecPreference.AUTO),
         flashEnabled = preferences.getBoolean(KEY_FLASH, false),
         photoFlash = com.librestatic.opencinecam.camera.PhotoFlashSelection(
             enumPreference(KEY_PHOTO_FLASH, com.librestatic.opencinecam.camera.PhotoFlashMode.OFF),
@@ -565,6 +567,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_AUDIO_AEC, settings.acousticEchoCancelerEnabled)
             .putInt(KEY_BURST, settings.burstCount)
             .putInt(KEY_BITRATE, settings.videoBitrateMbps)
+            .putString(KEY_VIDEO_CODEC, settings.videoCodec.name)
             .putBoolean(KEY_FLASH, settings.flashEnabled)
             .putBoolean("photo-aspect-enabled", settings.photoAspect.enabled)
             .putInt("photo-aspect-width", settings.photoAspect.width)
@@ -812,6 +815,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_AUDIO_AEC = "audio-acoustic-echo-canceler"
         const val KEY_BURST = "burst-count"
         const val KEY_BITRATE = "video-bitrate-mbps"
+        const val KEY_VIDEO_CODEC = "video-codec"
         const val KEY_FLASH = "flash-enabled"
         const val KEY_BRACKET_COUNT = "bracket-count"
         const val KEY_BRACKET_STEP = "bracket-step"

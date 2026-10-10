@@ -8,7 +8,7 @@ import org.junit.Test
 
 class CameraPresetTest {
     private fun preset() = CameraPreset(name = "Noche", settings = CameraSettings(
-        timecodeRememberPosition = false, timecodeResetRevision = 7,
+        timecodeRememberPosition = false, timecodeResetRevision = 7, videoCodec = com.librestatic.opencinecam.media.video.VideoCodecPreference.H264,
         exposure = ExposureSelection(ExposureMode.MANUAL, 800, shutterUnit = ShutterUnit.ANGLE, angleTenths = 900),
         whiteBalance = WhiteBalanceSelection.Kelvin(4300, 17), recordingWhiteBalance = RecordingWhiteBalancePolicy.LOCK_ON_RECORD,
         imageProcessing = ImageProcessingSelection(StabilizationMode.VIDEO, IspMode.HIGH_QUALITY, IspMode.OFF),
@@ -33,9 +33,9 @@ class CameraPresetTest {
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
         assertEquals(166, CameraPresetCodec.portableKeys.size)
-        assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
+        assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun splitPreviewKeysArePortableAndSurviveAPresetRoundTrip() {

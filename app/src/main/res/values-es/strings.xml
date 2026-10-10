@@ -60,6 +60,12 @@
     <string name="audio_recording">Grabar audio del micrófono</string>
     <string name="burst_count">Fotos por ráfaga</string>
     <string name="video_bitrate">Bitrate de video</string>
+    <string name="video_codec">Códec de video</string>
+    <string name="video_codec_summary">Auto usa HEVC cuando este dispositivo puede codificarlo con la resolución y los fotogramas actuales, lo que da archivos más pequeños, y H.264 en caso contrario.</string>
+    <string name="video_codec_hevc_unavailable">HEVC no está disponible con la resolución y los fotogramas actuales en este dispositivo. Auto grabará en H.264.</string>
+    <string name="video_codec_auto">Auto</string>
+    <string name="video_codec_h264">H.264</string>
+    <string name="video_codec_hevc">HEVC</string>
     <string name="flash_torch">Flash / linterna</string>
     <string name="histogram_default">Histograma activado de forma predeterminada</string>
     <string name="composition_grid">Grilla de composición</string>

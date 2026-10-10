@@ -23,6 +23,13 @@ class CameraSettingsTest {
         assertEquals(30, next.videoFps)
     }
 
+    @Test fun videoCodecDefaultsToAutoAndStaysPendingDuringRecording() {
+        val before = CameraSettings()
+        assertEquals(com.librestatic.opencinecam.media.video.VideoCodecPreference.AUTO, before.videoCodec)
+        val next = before.copy(videoCodec = com.librestatic.opencinecam.media.video.VideoCodecPreference.H264)
+        assertEquals(before, before.withLivePreferencesFrom(next))
+    }
+
     @Test fun logGreyReferenceDefaultsToNativeAndStaysPendingDuringRecording() {
         val before = CameraSettings()
         assertEquals(com.librestatic.opencinecam.camera.OpenCineLogGreyReference.NATIVE, before.logGreyReference)
