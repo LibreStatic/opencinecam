@@ -155,6 +155,11 @@
     <string name="log_grey_reference_native_detail">Cada fonte mantém sua própria curva. Nenhum ganho é aplicado.</string>
     <string name="log_grey_reference_match_hlg_detail">Clipes SDR são reduzidos ao cinza do HLG. Sem perdas: nada é cortado.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">Clipes HLG são elevados ao cinza do SDR. Altas luzes acima de cerca de 75% do sinal HLG são cortadas.</string>
+    <string name="hdr_format">Formato HDR</string>
+    <string name="hdr_format_hlg">HLG</string>
+    <string name="hdr_format_hdr10">HDR10</string>
+    <string name="hdr_format_hlg_summary">O HLG mantém o sinal HDR próprio da câmera. Funciona bem na maioria das telas HDR e degrada de forma aceitável em telas SDR.</string>
+    <string name="hdr_format_hdr10_summary">O HDR10 (PQ) grava o brilho absoluto para telas HDR10 e programas de edição. Vale a partir da próxima gravação.</string>
     <string name="capture_status_free">%1$s livres</string>
     <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s livres</string>
     <string name="camera_switch_timeout">A câmera %1$s não iniciou; câmera %2$s restaurada.</string>

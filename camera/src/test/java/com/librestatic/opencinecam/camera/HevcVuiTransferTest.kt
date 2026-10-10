@@ -62,6 +62,16 @@ class HevcVuiTransferTest {
     }
 
     @Test
+    fun rewriteTagsHdr10RecordingsAsSmpteSt2084() {
+        assertEquals(16, HevcVuiTransfer.SMPTE_ST_2084)
+        fixtures.filter { it.transfer != null }.forEach { fixture ->
+            val result = HevcVuiTransfer.rewrite(annexB(fixture.sps), HevcVuiTransfer.SMPTE_ST_2084)
+            assertEquals(fixture.name, fixture.transfer, result.previousTransfer)
+            assertEquals(fixture.name, HevcVuiTransfer.SMPTE_ST_2084, HevcVuiTransfer.transferOf(result.bytes))
+        }
+    }
+
+    @Test
     fun rewriteKeepsOtherNalUnitsAndStartCodes() {
         val vps = "40010c01ffff02200000030090000003000003003c959809"
         val pps = "4401c172b46240"

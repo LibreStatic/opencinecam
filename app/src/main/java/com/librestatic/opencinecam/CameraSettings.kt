@@ -35,6 +35,7 @@ import com.librestatic.opencinecam.camera.AnamorphicSqueeze
 import com.librestatic.opencinecam.camera.AnamorphicOutputMode
 import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.OpenCineLogGreyReference
+import com.librestatic.opencinecam.camera.HdrVideoFormat
 
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 import kotlinx.serialization.json.Json
@@ -124,6 +125,8 @@ data class CameraSettings(
     val logViewAssistEnabled: Boolean = false,
     /** Structural: changes the recorded OCLog2 code values, so it stays pending during a take. */
     val logGreyReference: OpenCineLogGreyReference = OpenCineLogGreyReference.NATIVE,
+    /** Transfer of an HLG-mode take; HDR10 applies only where the profile offers it (see [com.librestatic.opencinecam.camera.Hdr10Video]). Structural, so pending during a take. */
+    val hdrVideoFormat: HdrVideoFormat = HdrVideoFormat.HLG,
     val modeSelectorStyle: ModeSelectorStyle = ModeSelectorStyle.DIAL,
     /** Viewfinder spans the whole screen and the chrome floats over it with translucent panels. */
     val translucentChrome: Boolean = false,
@@ -416,6 +419,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         tapExposureMeteringEnabled = preferences.getBoolean(KEY_TAP_EXPOSURE_METERING, true),
         logViewAssistEnabled = preferences.getBoolean(KEY_LOG_VIEW_ASSIST, false),
         logGreyReference = enumPreference(KEY_LOG_GREY_REFERENCE, OpenCineLogGreyReference.NATIVE),
+        hdrVideoFormat = enumPreference(KEY_HDR_VIDEO_FORMAT, HdrVideoFormat.HLG),
         modeSelectorStyle = migratedModeSelectorStyle(),
         translucentChrome = preferences.getBoolean(KEY_TRANSLUCENT_CHROME, false),
         viewfinderScale = enumPreference(KEY_VIEWFINDER_SCALE, ViewfinderScale.FIT),
@@ -625,6 +629,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_TAP_EXPOSURE_METERING, settings.tapExposureMeteringEnabled)
             .putBoolean(KEY_LOG_VIEW_ASSIST, settings.logViewAssistEnabled)
             .putString(KEY_LOG_GREY_REFERENCE, settings.logGreyReference.name)
+            .putString(KEY_HDR_VIDEO_FORMAT, settings.hdrVideoFormat.name)
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
             .putBoolean(KEY_TRANSLUCENT_CHROME, settings.translucentChrome)
             .putString(KEY_VIEWFINDER_SCALE, settings.viewfinderScale.name)
@@ -843,6 +848,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_TAP_EXPOSURE_METERING = "tap-exposure-metering-enabled"
         const val KEY_LOG_VIEW_ASSIST = "log-view-assist-enabled"
         const val KEY_LOG_GREY_REFERENCE = "log-grey-reference"
+        const val KEY_HDR_VIDEO_FORMAT = "hdr-video-format"
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"

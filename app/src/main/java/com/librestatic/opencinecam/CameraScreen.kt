@@ -4064,6 +4064,9 @@ internal fun SettingsContent(
         if ("log-grey-reference" in visibleIds) settingsCard("log-grey-reference") {
             LogGreyReferenceSettings(state, settings, onSettingsChange)
         }
+        if (HDR_FORMAT_SETTING_ID in visibleIds && state.descriptor.offersHdr10Video) settingsCard(HDR_FORMAT_SETTING_ID) {
+            HdrFormatSettings(settings, onSettingsChange)
+        }
         if ("focus-lock" in visibleIds) settingsCard("focus-lock") {
             SettingsOptionRow(stringResource(R.string.af_lock_behavior), stringResource(R.string.af_lock_behavior_summary),
                 AfLockBehavior.entries, settings.afLockBehavior,

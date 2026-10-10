@@ -70,6 +70,7 @@ object SettingsCatalog {
         SettingEntry("metering", SettingsCategory.CAPTURE, R.string.tap_exposure_metering, "tap touch toque exposicion exposure metering medicion"),
         SettingEntry("assist", SettingsCategory.MONITORING, R.string.log_view_assist, "LUT LOG Rec709 asistencia assist color"),
         SettingEntry("log-grey-reference", SettingsCategory.RECORDING, R.string.log_grey_reference, "LOG OCLog2 gris medio middle grey gray 18% HLG SDR exposicion exposure referencia reference ganancia gain"),
+        SettingEntry("hdr-format", SettingsCategory.RECORDING, R.string.hdr_format, "HDR HLG HDR10 PQ ST 2084 BT.2020 transferencia transfer formato format video Main10"),
         SettingEntry("focus-lock", SettingsCategory.CAPTURE, R.string.af_lock_behavior, "focus enfoque AF bloqueo lock"),
         SettingEntry("zoom-lens", SettingsCategory.CAPTURE, R.string.zoom_lens_switch_mode, "zoom lente lens cambio switch automatico automatic manual preajuste preset tele gran angular wide pellizco pinch"),
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),

@@ -34,11 +34,19 @@ class HlgModeTest {
         assertFalse(CameraUiState.defaultModeGates[CaptureMode.HLG] == ModeGateState.AVAILABLE)
     }
 
-    private fun profile(fps: Int, path: OpenCineLogSourcePath, highSpeed: Boolean = false) = Camera2LogProfile(
+    @Test
+    fun hdrFormatChoiceNeedsAnHlgProfileThatOffersHdr10() {
+        assertFalse(descriptorWith(listOf(hlg30, hfr120)).offersHdr10Video)
+        assertFalse(null.offersHdr10Video)
+        assertTrue(descriptorWith(listOf(hlg30, profile(60, OpenCineLogSourcePath.HLG10_BT2020, hdr10 = true))).offersHdr10Video)
+    }
+
+    private fun profile(fps: Int, path: OpenCineLogSourcePath, highSpeed: Boolean = false, hdr10: Boolean = false) = Camera2LogProfile(
         size = Size(1920, 1080),
         fps = fps,
         sourcePath = path,
         constrainedHighSpeed = highSpeed,
+        hdr10 = hdr10,
     )
 
     private fun descriptorWith(logProfiles: List<Camera2LogProfile>) = Camera2CameraDescriptor(

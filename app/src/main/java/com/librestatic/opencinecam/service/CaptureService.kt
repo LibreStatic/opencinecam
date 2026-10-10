@@ -81,6 +81,8 @@ import com.librestatic.opencinecam.camera.SmpteTimecode
 import com.librestatic.opencinecam.camera.TimecodeRate
 import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.camera.TimecodeTracker
+import com.librestatic.opencinecam.camera.HdrVideoFormat
+import com.librestatic.opencinecam.camera.Hdr10Video
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
@@ -1238,7 +1240,7 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(
                 phase = CameraUiPhase.RECORDING,
                 message = if (cameraState.value.selectedMode == CaptureMode.HLG) {
-                    "REC ${width}×$height · HLG BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
+                    "REC ${width}×$height · ${hdrTakeFormat(cameraState.value).label} BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
                 } else if (cameraState.value.selectedMode.usesLogGraph) {
                     val source = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                         "HFR ISP-derived · source depth not claimed"
@@ -1306,8 +1308,8 @@ class CaptureService : Service() {
                 val audioOutput = take.audio
                 val graphEvidence = previewEngine.consumeLastOpenCineLogEvidence()
                 // HLG takes run through the same graph but are standard HDR video: no OCLog sidecar.
-                val hlgEvidence = graphEvidence?.takeIf { it.curve == HLG_CURVE }
-                val logEvidence = graphEvidence?.takeUnless { it.curve == HLG_CURVE }
+                val hlgEvidence = graphEvidence?.takeIf { HdrVideoFormat.fromCurve(it.curve) != null }
+                val logEvidence = graphEvidence?.takeUnless { HdrVideoFormat.fromCurve(it.curve) != null }
                 val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
                 val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
                 val finalizedSuccess = success && nativeRetired && requestedAudioFailure == null && bakingVerified &&
@@ -1402,7 +1404,7 @@ class CaptureService : Service() {
                         val audioSaved = sidecarResult?.let { " + ${it.bitDepth.bits}-bit ${it.container} ${it.sampleRateHz / 1000.0} kHz" }
                             ?: if (activeRecordingAudioLabel.startsWith("AAC")) " + $activeRecordingAudioLabel" else ""
                         if (hlgEvidence != null) {
-                            "HLG HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                            "${HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG"} HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
                         } else if (logEvidence != null) {
                             val source = if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                                 "HFR ISP-derived"
@@ -2938,7 +2940,9 @@ class CaptureService : Service() {
                             phase = CameraUiPhase.CAPTURING,
                             recordingProjectRate = null,
                             message = if (hlgTake) {
-                                "Preparing HLG · ${current.targetFps} fps · HLG10 → BT.2020 HLG → HEVC Main10 · $activeRecordingAudioLabel…"
+                                if (hdrTakeFormat(current) == HdrVideoFormat.HDR10) {
+                                    "Preparing HDR10 · ${current.targetFps} fps · HLG10 → BT.2020 PQ → HEVC Main10 HDR10 · $activeRecordingAudioLabel…"
+                                } else "Preparing HLG · ${current.targetFps} fps · HLG10 → BT.2020 HLG → HEVC Main10 · $activeRecordingAudioLabel…"
                             } else if (current.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
                                 "Preparing OCLog2 HFR · ${current.targetFps} fps · ISP SDR → GLES → HEVC Main10 · source depth not claimed · $activeRecordingAudioLabel…"
                             } else {
@@ -2957,6 +2961,7 @@ class CaptureService : Service() {
                             separateAudioClock = audioSidecarRecorder?.captureClock,
                             recordingLut = frozenRecordingLut(),
                             hlgOutput = hlgTake,
+                            hdr10Output = hlgTake && hdrTakeFormat(current) == HdrVideoFormat.HDR10,
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.
@@ -3306,11 +3311,16 @@ class CaptureService : Service() {
         }) + if (it.audioSourceWindow != null) " · " + getString(R.string.aac_source_window_applied) else ""
     }.orEmpty()
 
+    /** The transfer a HLG-mode take records: HDR10 only when chosen and the active profile offers it. */
+    private fun hdrTakeFormat(state: CameraUiState): HdrVideoFormat =
+        Hdr10Video.effectiveFormat(settings.hdrVideoFormat, state.activeLogProfile?.hdr10 == true)
+
     /** Provenance for an HLG take. The file's own BT.2020/HLG tags are what players read; this records how they were made. */
     private fun hlgSidecarJson(evidence: OpenCineLogRecordingEvidence, avTiming: com.librestatic.opencinecam.camera.CaptureEpochReport?): String = JSONObject()
         .put("schema", "opencinecam.hdr-video.v1")
         .put("hdr", JSONObject()
-            .put("transfer", "HLG")
+            .put("transfer", evidence.curve)
+            .put("transferStandard", evidence.curveVersion)
             .put("primaries", evidence.gamut)
             .put("range", evidence.range)
             .put("sourceDynamicRange", evidence.sourceDynamicRange)
@@ -3577,8 +3587,6 @@ class CaptureService : Service() {
     companion object {
         private const val LOST_INPUT_STOP_ATTEMPTS = 20
         private const val LOST_INPUT_STOP_RETRY_MS = 250L
-        /** [OpenCineLogRecordingEvidence.curve] of an HLG take. */
-        private const val HLG_CURVE = "HLG"
         private const val OWNER_ID = "capture-service"
         private const val RECORDING_TICK_MS = 500L
         private const val CAMERA_SWITCH_TIMEOUT_MS = 6_000L
