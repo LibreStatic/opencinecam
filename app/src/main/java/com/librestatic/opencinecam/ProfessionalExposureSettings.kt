@@ -88,7 +88,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             if (flickerActions) SettingsActionsDialog(flickerTitle, flickerSuggestions) { flickerActions = false }
         }
         if (resolved.clamped) Text(stringResource(R.string.pro_clamped), color = pending, fontSize = 14.sp)
-        CameraReportsLine(exposureReadbackDifferences(resolved, state.reportedExposureMode, state.sensitivityIso, state.exposureTimeNs, state.reportedAntibanding))
+        CameraReportsLine(exposureReadbackDifferences(resolved, state.reportedExposureMode, state.sensitivityIso, state.exposureTimeNs, state.reportedAntibanding, state.reportedMeteringMode))
         SettingsChips(stringResource(R.string.pro_antibanding), Antibanding.entries, exposure.antibanding,
             label = { it.displayLabel() }, onSelect = { updateExposure(exposure.copy(antibanding = it)) },
             tag = { "pro-antibanding-${it.name}" }, enabled = { it in caps.antibanding })
@@ -99,6 +99,14 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             SettingsHelp(stringResource(R.string.pro_low_light_boost_help))
             val boost = lowLightBoostFor(state, exposure, resolved, hfr)
             boost.inactive?.let { Text(stringResource(it.explanationResource()), color = pending, fontSize = 14.sp, modifier = Modifier.testTag("pro-low-light-boost-inactive")) }
+        }
+        // Shown only when the camera advertises metering modes (Qualcomm); null keeps the device default.
+        if (caps.meteringModes.isNotEmpty()) {
+            SettingsChips(stringResource(R.string.pro_metering), listOf<ExposureMetering?>(null) + ExposureMetering.entries.filter { it in caps.meteringModes },
+                exposure.metering, label = { it?.displayLabel() ?: stringResource(R.string.pro_metering_default) },
+                onSelect = { updateExposure(exposure.copy(metering = it)) },
+                tag = { "pro-metering-${it?.name ?: "DEFAULT"}" }, rowEnabled = exposure.mode != ExposureMode.MANUAL)
+            SettingsHelp(stringResource(R.string.pro_metering_help))
         }
         RecordingWhiteBalanceSettings(state, settings, onChange)
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
@@ -165,6 +173,13 @@ internal fun Antibanding.displayLabel(): String = when (this) {
     Antibanding.OFF -> stringResource(R.string.image_mode_off)
     Antibanding.HZ50 -> "50 Hz"
     Antibanding.HZ60 -> "60 Hz"
+}
+
+@Composable
+internal fun ExposureMetering.displayLabel(): String = when (this) {
+    ExposureMetering.FRAME_AVERAGE -> stringResource(R.string.pro_metering_frame_average)
+    ExposureMetering.CENTER_WEIGHTED -> stringResource(R.string.pro_metering_center_weighted)
+    ExposureMetering.SPOT -> stringResource(R.string.pro_metering_spot)
 }
 
 /** "1/60 · 16.667 ms": the fraction operators read, with the exact time beside it. */

@@ -65,3 +65,17 @@ maths, gating, selection and tag plumbing only. On the Razr Fold, before trustin
 4. The encoder accepts the HDR10 profile on a Surface input at every offered size and fps; if it throws, narrow the offer in `Camera2PreviewEngine` (the HDR10 flag of `Camera2LogProfile`).
 5. `EGL_EXT_gl_colorspace_bt2020_pq` is reported by the driver; without it the surface keeps the default colourspace and only the codec keys and SPS carry the PQ tag.
 6. Playback in the gallery and a PQ-capable external player tone maps sensibly; the viewfinder and view assist are unchanged because they read the HLG source, not the encoded output.
+
+## Qualcomm exposure metering
+
+The Metering setting drives `org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode`
+(int32 request and result key, tag 0x80960000). It is offered only when that request key exists and
+`...exposure_metering.available_modes` (int32[N], tag 0x80960001) lists known values. The Razr Fold
+(`dumpsys media.camera`, every camera id) advertises `[0 1 2]`. The values follow Qualcomm's
+`cam_auto_exposure_mode_type`: 0 frame average, 1 centre weighted, 2 spot; other values are ignored.
+The mode is sent only while exposure is automatic (including AE compensation and ISO or shutter
+priority). Spot reads `CONTROL_AE_REGIONS`, which carries the tap-to-meter point while one is active;
+otherwise the HAL meters the frame centre. The result key, when reported, is shown in the capabilities
+readback table. To verify on a device: pick each mode and check the readback line
+`org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode` follows the request, then tap to
+meter in Spot and confirm the exposure follows the tapped point.

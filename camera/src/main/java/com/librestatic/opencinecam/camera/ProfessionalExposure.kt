@@ -10,6 +10,27 @@ data class CaptureFrameRate(val numerator: Int, val denominator: Int = 1) {
 enum class ShutterUnit { TIME, ANGLE }
 enum class Antibanding { AUTO, OFF, HZ50, HZ60 }
 
+/**
+ * Qualcomm AE metering (org.codeaurora.qcamera3.exposure_metering). The vendor values follow the
+ * HAL's cam_auto_exposure_mode_type: 0 frame average, 1 centre weighted, 2 spot. Moto Razr Fold
+ * advertises available_modes = [0 1 2] (int32[3]) and the int32 request key exposure_metering_mode
+ * (0x80960000). Further HAL values (smart, user, advanced spot) are not mapped and are omitted.
+ */
+enum class ExposureMetering(val vendorValue: Int) {
+    FRAME_AVERAGE(0), CENTER_WEIGHTED(1), SPOT(2);
+
+    companion object {
+        const val REQUEST_KEY_NAME = "org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode"
+        const val AVAILABLE_MODES_KEY_NAME = "org.codeaurora.qcamera3.exposure_metering.available_modes"
+
+        fun fromVendor(value: Int?): ExposureMetering? = entries.firstOrNull { it.vendorValue == value }
+    }
+}
+
+/** Modes OpenCineCam offers: none unless the request key exists, and only advertised, known values. */
+fun meteringModesOf(requestKeyPresent: Boolean, advertised: IntArray?): Set<ExposureMetering> =
+    if (!requestKeyPresent || advertised == null) emptySet() else advertised.asList().mapNotNull(ExposureMetering::fromVendor).toSet()
+
 data class ExposureSelection(
     val mode: ExposureMode = ExposureMode.AUTO,
     val iso: Int = 100,
@@ -19,6 +40,8 @@ data class ExposureSelection(
     val antibanding: Antibanding = Antibanding.AUTO,
     /** Requests the low-light boost AE mode where it applies; see [resolveLowLightBoost]. */
     val lowLightBoost: Boolean = false,
+    /** Null leaves the device's own metering untouched. */
+    val metering: ExposureMetering? = null,
 ) {
     init { require(iso > 0 && timeNs > 0 && angleTenths in 1..3600) }
     fun requestedTimeNs(rate: CaptureFrameRate): Long = if (shutterUnit == ShutterUnit.TIME) timeNs else
@@ -31,6 +54,7 @@ data class ExposureCapabilities(
     val timeRangeNs: LongRange? = null,
     val priorities: Set<ExposureMode> = emptySet(),
     val antibanding: Set<Antibanding> = emptySet(),
+    val meteringModes: Set<ExposureMetering> = emptySet(),
 ) {
     private val validIso get() = isoRange?.let { it.first > 0 && it.last >= it.first } == true
     private val validTime get() = timeRangeNs?.let { it.first > 0 && it.last >= it.first } == true
@@ -50,10 +74,18 @@ data class ResolvedExposure(
     val antibanding: Antibanding? = null,
     val unavailable: Boolean = false,
     val clamped: Boolean = false,
+    /** Set only while AE is automatic (including priority modes) and the device advertises the mode. */
+    val metering: ExposureMetering? = null,
 )
 
 /** Every manual request supplies both values; unavailable native priority is explicitly disclosed. */
 fun ExposureSelection.resolve(caps: ExposureCapabilities, rate: CaptureFrameRate): ResolvedExposure {
+    val resolved = resolveExposure(caps, rate)
+    val meter = metering?.takeIf { it in caps.meteringModes && resolved.mode != ExposureMode.MANUAL }
+    return if (meter == null) resolved else resolved.copy(metering = meter)
+}
+
+private fun ExposureSelection.resolveExposure(caps: ExposureCapabilities, rate: CaptureFrameRate): ResolvedExposure {
     val band = antibanding.takeIf { it in caps.antibanding }
     if (!caps.supports(mode)) return ResolvedExposure(ExposureMode.AUTO, antibanding = band, unavailable = true)
     if (mode == ExposureMode.AUTO) return ResolvedExposure(mode, antibanding = band)

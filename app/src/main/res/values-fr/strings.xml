@@ -333,6 +333,13 @@
     <string name="pro_low_light_boost_video">Inactif dans ce mode : la vidéo garde une cadence fixe et les photos multi-images exigent des images identiques.</string>
     <string name="pro_low_light_boost_hfr">Inactif : les sessions haute vitesse gardent une cadence fixe.</string>
     <string name="pro_low_light_boost_fps">Inactif : le boost en basse lumière nécessite une cadence de 30 i/s ou moins.</string>
+    <string name="pro_metering">Mesure</string>
+    <string name="pro_metering_default">Réglage de l\'appareil</string>
+    <string name="pro_metering_frame_average">Moyenne de l\'image</string>
+    <string name="pro_metering_center_weighted">Pondérée centrale</string>
+    <string name="pro_metering_spot">Spot</string>
+    <string name="pro_metering_help">La mesure détermine la zone de l\'image que l\'exposition automatique évalue. Le spot utilise le point touché pour mesurer, ou le centre de l\'image. Elle s\'applique tant que l\'exposition est automatique, y compris en modes priorité.</string>
+    <string name="readback_metering">mesure : %1$s</string>
     <string name="pro_shutter_suggestion">Suggestion de vitesse %1$d Hz</string>
     <string name="pro_white_balance">Balance des blancs</string>
     <string name="pro_wb_auto">WB automatique</string>

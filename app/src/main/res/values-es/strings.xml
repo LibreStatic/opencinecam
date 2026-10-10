@@ -333,6 +333,13 @@
     <string name="pro_low_light_boost_video">Inactivo en este modo: el vídeo mantiene una tasa de fotogramas fija y las fotos de varios fotogramas necesitan fotogramas idénticos.</string>
     <string name="pro_low_light_boost_hfr">Inactivo: las sesiones de alta velocidad mantienen una tasa de fotogramas fija.</string>
     <string name="pro_low_light_boost_fps">Inactivo: el refuerzo con poca luz necesita una tasa de 30 fps o menos.</string>
+    <string name="pro_metering">Medición</string>
+    <string name="pro_metering_default">Predeterminado del dispositivo</string>
+    <string name="pro_metering_frame_average">Promedio del encuadre</string>
+    <string name="pro_metering_center_weighted">Ponderada al centro</string>
+    <string name="pro_metering_spot">Puntual</string>
+    <string name="pro_metering_help">La medición define qué parte del encuadre mide la exposición automática. La puntual usa el punto que tocás para medir, o el centro del encuadre. Se aplica con exposición automática, incluidos los modos de prioridad.</string>
+    <string name="readback_metering">medición: %1$s</string>
     <string name="pro_shutter_suggestion">Obturación sugerida para %1$d Hz</string>
     <string name="pro_white_balance">Balance de blancos</string>
     <string name="pro_wb_auto">WB automático</string>

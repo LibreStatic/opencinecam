@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ShutterUnit
 import com.librestatic.opencinecam.camera.Antibanding
+import com.librestatic.opencinecam.camera.ExposureMetering
 import com.librestatic.opencinecam.camera.RecordingWhiteBalancePolicy
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
@@ -317,6 +318,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             angleTenths = preferences.getInt("shutter-angle-tenths", 1800).coerceIn(1, 3600),
             antibanding = enumPreference("antibanding", Antibanding.AUTO),
             lowLightBoost = preferences.getBoolean("low-light-boost", false),
+            metering = preferences.getString("exposure-metering", null)?.let { name -> ExposureMetering.entries.firstOrNull { it.name == name } },
         ),
         recordingWhiteBalance = runCatching { RecordingWhiteBalancePolicy.valueOf(preferences.getString("recording-white-balance", "CONTINUOUS") ?: "CONTINUOUS") }.getOrDefault(RecordingWhiteBalancePolicy.CONTINUOUS),
         whiteBalance = when (preferences.getString("white-balance-kind", "AUTO")) {
@@ -515,6 +517,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putInt("shutter-angle-tenths", settings.exposure.angleTenths)
             .putString("antibanding", settings.exposure.antibanding.name)
             .putBoolean("low-light-boost", settings.exposure.lowLightBoost)
+            .putString("exposure-metering", settings.exposure.metering?.name)
             .putString("recording-white-balance", settings.recordingWhiteBalance.name)
             .putString("white-balance-kind", when (settings.whiteBalance) {
                 is WhiteBalanceSelection.Auto -> "AUTO"

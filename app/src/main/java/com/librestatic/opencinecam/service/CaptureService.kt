@@ -933,6 +933,7 @@ class CaptureService : Service() {
                 reportedExposureMode = metadata.exposureMode,
                 reportedAntibanding = metadata.antibanding,
                 reportedLowLightBoost = metadata.lowLightBoostActive,
+                reportedMeteringMode = metadata.meteringMode,
                 torchEnabled = metadata.torchEnabled == true,
                 torchReported = metadata.torchEnabled,
                 torchStrengthReported = metadata.torchStrengthLevel,

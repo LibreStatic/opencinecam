@@ -96,6 +96,7 @@ data class CameraUiState(
     val reportedAntibanding: Int? = null,
     /** Null unless the low-light boost AE mode was submitted and the camera reported its state. */
     val reportedLowLightBoost: Boolean? = null,
+    val reportedMeteringMode: Int? = null,
     val requestedExposureMode: com.librestatic.opencinecam.camera.ExposureMode = com.librestatic.opencinecam.camera.ExposureMode.AUTO,
     val exposureControlUnavailable: Boolean = false,
     val exposureClamped: Boolean = false,
