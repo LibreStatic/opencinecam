@@ -70,4 +70,34 @@ class ProfessionalExposureTest {
         assertEquals(WhiteBalanceSelection.Auto, WhiteBalanceSelection.Preset(5).adaptTo(null, false, setOf(1)))
         assertTrue(runCatching { wb.copy(tint = 51) }.isFailure)
     }
+    @Test fun meteringModesRequireTheRequestKeyAndOnlyKeepKnownAdvertisedValues() {
+        assertEquals(setOf(ExposureMetering.FRAME_AVERAGE, ExposureMetering.CENTER_WEIGHTED, ExposureMetering.SPOT), meteringModesOf(true, intArrayOf(0, 1, 2)))
+        assertEquals(setOf(ExposureMetering.SPOT), meteringModesOf(true, intArrayOf(2, 3, 4, 99)))
+        assertTrue(meteringModesOf(false, intArrayOf(0, 1, 2)).isEmpty())
+        assertTrue(meteringModesOf(true, null).isEmpty())
+        assertTrue(meteringModesOf(true, intArrayOf(5)).isEmpty())
+    }
+    @Test fun vendorMeteringValuesFollowTheQualcommEnum() {
+        assertEquals(listOf(0, 1, 2), ExposureMetering.entries.map { it.vendorValue })
+        assertEquals(ExposureMetering.SPOT, ExposureMetering.fromVendor(2))
+        assertNull(ExposureMetering.fromVendor(3))
+        assertNull(ExposureMetering.fromVendor(null))
+    }
+    @Test fun meteringAppliesToAutomaticAndPriorityExposureOnlyWhenAdvertised() {
+        val withMetering = caps.copy(meteringModes = setOf(ExposureMetering.SPOT, ExposureMetering.CENTER_WEIGHTED))
+        val rate = CaptureFrameRate(30)
+        assertEquals(ExposureMetering.SPOT, ExposureSelection(metering = ExposureMetering.SPOT).resolve(withMetering, rate).metering)
+        assertEquals(ExposureMetering.SPOT, ExposureSelection(ExposureMode.ISO_PRIORITY, 400, metering = ExposureMetering.SPOT).resolve(withMetering, rate).metering)
+        assertEquals(ExposureMetering.SPOT, ExposureSelection(ExposureMode.SHUTTER_PRIORITY, metering = ExposureMetering.SPOT).resolve(withMetering, rate).metering)
+        assertNull(ExposureSelection(ExposureMode.MANUAL, metering = ExposureMetering.SPOT).resolve(withMetering, rate).metering)
+        assertNull(ExposureSelection(metering = ExposureMetering.FRAME_AVERAGE).resolve(withMetering, rate).metering)
+        assertNull(ExposureSelection(metering = ExposureMetering.SPOT).resolve(caps, rate).metering)
+        assertNull(ExposureSelection().resolve(withMetering, rate).metering)
+    }
+    @Test fun unavailablePriorityFallsBackToAutomaticWithoutLosingMetering() {
+        val withMetering = caps.copy(priorities = emptySet(), meteringModes = setOf(ExposureMetering.SPOT))
+        val resolved = ExposureSelection(ExposureMode.ISO_PRIORITY, 800, metering = ExposureMetering.SPOT).resolve(withMetering, CaptureFrameRate(30))
+        assertTrue(resolved.unavailable)
+        assertEquals(ExposureMetering.SPOT, resolved.metering)
+    }
 }

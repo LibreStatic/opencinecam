@@ -336,6 +336,13 @@
     <string name="pro_low_light_boost_video">Inactive in this mode: video keeps a fixed frame rate, and multi-frame photos need identical frames.</string>
     <string name="pro_low_light_boost_hfr">Inactive: high-speed sessions keep a fixed frame rate.</string>
     <string name="pro_low_light_boost_fps">Inactive: low-light boost needs a frame rate of 30 fps or lower.</string>
+    <string name="pro_metering">Metering</string>
+    <string name="pro_metering_default">Device default</string>
+    <string name="pro_metering_frame_average">Frame average</string>
+    <string name="pro_metering_center_weighted">Centre-weighted</string>
+    <string name="pro_metering_spot">Spot</string>
+    <string name="pro_metering_help">Metering sets which part of the frame automatic exposure measures. Spot uses the point you tap to meter, or the centre of the frame. It applies while exposure is automatic, including priority modes.</string>
+    <string name="readback_metering">metering: %1$s</string>
     <string name="pro_shutter_suggestion">%1$d Hz shutter suggestion</string>
     <string name="pro_white_balance">White balance</string>
     <string name="pro_wb_auto">Automatic WB</string>

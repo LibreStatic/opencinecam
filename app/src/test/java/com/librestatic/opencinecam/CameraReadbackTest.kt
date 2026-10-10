@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.Antibanding
+import com.librestatic.opencinecam.camera.ExposureMetering
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ImageProcessingDefaults
 import com.librestatic.opencinecam.camera.ResolvedExposure
@@ -34,6 +35,15 @@ class CameraReadbackTest {
         assertEquals(listOf(ReadbackDifference.Banding(null)), exposureReadbackDifferences(manual, ExposureMode.MANUAL, 400, 10_000_000L, 9))
     }
 
+    @Test fun meteringIsComparedOnlyWhenRequestedAndReported() {
+        val spot = ResolvedExposure(ExposureMode.AUTO, metering = ExposureMetering.SPOT)
+        assertTrue(exposureReadbackDifferences(spot, ExposureMode.AUTO, null, null, null, 2).isEmpty())
+        assertTrue(exposureReadbackDifferences(spot, ExposureMode.AUTO, null, null, null, null).isEmpty())
+        assertTrue(exposureReadbackDifferences(ResolvedExposure(ExposureMode.AUTO), ExposureMode.AUTO, null, null, null, 1).isEmpty())
+        assertEquals(listOf(ReadbackDifference.Metering(ExposureMetering.CENTER_WEIGHTED)), exposureReadbackDifferences(spot, ExposureMode.AUTO, null, null, null, 1))
+        assertEquals(listOf(ReadbackDifference.Metering(null)), exposureReadbackDifferences(spot, ExposureMode.AUTO, null, null, null, 7))
+    }
+
     @Test fun onlyAFixedTemperatureIsCompared() {
         assertTrue(whiteBalanceReadbackDifferences(WhiteBalanceSelection.Auto, 4000).isEmpty())
         assertTrue(whiteBalanceReadbackDifferences(WhiteBalanceSelection.Kelvin(5600), 5650).isEmpty())
@@ -55,6 +65,9 @@ class CameraReadbackTest {
         assertEquals("ON (1) → OFF (0)", lines["android.lens.opticalStabilizationMode"])
         assertEquals("— → —", lines["android.scaler.cropRegion"])
         assertEquals("AUTO → —", lines["android.control.aeMode"])
+        assertFalse("org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode" in lines)
+        val metered = requestedReportedLines(CameraUiState(reportedMeteringMode = 2)).toMap()
+        assertEquals("— → SPOT (2)", metered["org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode"])
     }
 
     @Test fun lowLightBoostStateIsReportedOnlyWhenTheCameraSaidSo() {

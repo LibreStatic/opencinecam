@@ -333,6 +333,13 @@
     <string name="pro_low_light_boost_video">Inativo neste modo: o vídeo mantém uma taxa de quadros fixa e as fotos de vários quadros precisam de quadros idênticos.</string>
     <string name="pro_low_light_boost_hfr">Inativo: as sessões de alta velocidade mantêm uma taxa de quadros fixa.</string>
     <string name="pro_low_light_boost_fps">Inativo: o reforço com pouca luz precisa de uma taxa de 30 fps ou menos.</string>
+    <string name="pro_metering">Medição</string>
+    <string name="pro_metering_default">Padrão do dispositivo</string>
+    <string name="pro_metering_frame_average">Média do quadro</string>
+    <string name="pro_metering_center_weighted">Ponderada ao centro</string>
+    <string name="pro_metering_spot">Pontual</string>
+    <string name="pro_metering_help">A medição define qual parte do quadro a exposição automática mede. A pontual usa o ponto que você toca para medir, ou o centro do quadro. Vale com exposição automática, inclusive nos modos de prioridade.</string>
+    <string name="readback_metering">medição: %1$s</string>
     <string name="pro_shutter_suggestion">Sugestão de obturador para %1$d Hz</string>
     <string name="pro_white_balance">Balanço de branco</string>
     <string name="pro_wb_auto">WB automático</string>

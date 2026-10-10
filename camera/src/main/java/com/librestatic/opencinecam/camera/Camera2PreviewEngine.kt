@@ -226,6 +226,8 @@ data class Camera2PreviewMetadata(
     val antibanding: Int? = null,
     /** Null unless the submitted request used the low-light boost AE mode and the camera reported its state. */
     val lowLightBoostActive: Boolean? = null,
+    /** Qualcomm exposure_metering_mode from the result, when the device reports it. */
+    val meteringMode: Int? = null,
     val opticalStabilization: Int? = null,
     val videoStabilization: Int? = null,
     val noiseReduction: Int? = null,
@@ -4020,6 +4022,7 @@ class Camera2PreviewEngine(
                                 lowLightBoostActive = if (Build.VERSION.SDK_INT >= 35) lowLightBoostActive(
                                     request.get(CaptureRequest.CONTROL_AE_MODE),
                                     result.get(android.hardware.camera2.CaptureResult.CONTROL_LOW_LIGHT_BOOST_STATE)) else null,
+                                meteringMode = vendorMeteringKeys()?.result?.let { key -> runCatching { result.get(key) }.getOrNull() },
                                 opticalStabilization = result.get(android.hardware.camera2.CaptureResult.LENS_OPTICAL_STABILIZATION_MODE),
                                 videoStabilization = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE),
                                 noiseReduction = result.get(android.hardware.camera2.CaptureResult.NOISE_REDUCTION_MODE),
@@ -4197,6 +4200,7 @@ class Camera2PreviewEngine(
             pro?.mode ?: if (iso != null && exposure != null) ExposureMode.MANUAL else ExposureMode.AUTO,
             videoGraph = defaultAfMode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO,
         )
+        applyVendorMetering(builder, pro?.metering)
         when {
             requestedFocusDiopters != null -> {
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -4717,6 +4721,40 @@ class Camera2PreviewEngine(
     }
 
     /**
+     * Qualcomm exposure metering, set only while AE is automatic. Spot metering reads the AE region
+     * of the request: the tap-to-meter rectangle while one is active, otherwise the HAL centres it.
+     */
+    private fun applyVendorMetering(builder: CaptureRequest.Builder, metering: ExposureMetering?) {
+        val key = vendorMeteringKeys()?.request ?: return
+        runCatching { builder.set(key, metering?.vendorValue) }
+    }
+
+    private class VendorMeteringKeys(val request: CaptureRequest.Key<Int>?, val result: android.hardware.camera2.CaptureResult.Key<Int>?)
+
+    private val vendorMeteringKeyCache = java.util.concurrent.ConcurrentHashMap<String, VendorMeteringKeys>()
+
+    /** Discovered by name so devices without the vendor section are never touched. */
+    private fun vendorMeteringKeys(): VendorMeteringKeys? {
+        val id = activeDescriptor?.cameraId ?: return null
+        return vendorMeteringKeyCache.getOrPut(id) {
+            val characteristics = runCatching { manager.getCameraCharacteristics(id) }.getOrNull()
+            @Suppress("UNCHECKED_CAST")
+            VendorMeteringKeys(
+                characteristics?.availableCaptureRequestKeys?.firstOrNull { it.name == ExposureMetering.REQUEST_KEY_NAME } as CaptureRequest.Key<Int>?,
+                characteristics?.availableCaptureResultKeys?.firstOrNull { it.name == ExposureMetering.REQUEST_KEY_NAME } as android.hardware.camera2.CaptureResult.Key<Int>?,
+            )
+        }
+    }
+
+    /** Advertised metering modes, only when both the request key and available_modes exist. */
+    private fun vendorMeteringModes(characteristics: CameraCharacteristics): Set<ExposureMetering> = runCatching {
+        val requestPresent = characteristics.availableCaptureRequestKeys.any { it.name == ExposureMetering.REQUEST_KEY_NAME }
+        val modesKey = characteristics.keys.firstOrNull { it.name == ExposureMetering.AVAILABLE_MODES_KEY_NAME }
+        @Suppress("UNCHECKED_CAST")
+        meteringModesOf(requestPresent, modesKey?.let { characteristics.get(it as CameraCharacteristics.Key<IntArray>) })
+    }.getOrDefault(emptySet())
+
+    /**
      * Motorola's public Camera2 characteristics expose these vendor session keys and its own
      * slow-motion client supplies both before configuring the constrained session. Without them,
      * the device advertises and configures 120/240 fps but its Qualcomm HAL rejects request zero.
@@ -5048,6 +5086,7 @@ class Camera2PreviewEngine(
                         CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ -> Antibanding.HZ60
                         else -> null
                     } }?.toSet().orEmpty(),
+                    meteringModes = vendorMeteringModes(characteristics),
                 ),
                 photoFlashCapabilities = run {
                     val available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true

@@ -333,6 +333,13 @@
     <string name="pro_low_light_boost_video">Inattivo in questa modalità: il video mantiene una frequenza di fotogrammi fissa e le foto multi-fotogramma richiedono fotogrammi identici.</string>
     <string name="pro_low_light_boost_hfr">Inattivo: le sessioni ad alta velocità mantengono una frequenza di fotogrammi fissa.</string>
     <string name="pro_low_light_boost_fps">Inattivo: il boost con poca luce richiede una frequenza di 30 fps o inferiore.</string>
+    <string name="pro_metering">Misurazione</string>
+    <string name="pro_metering_default">Predefinito del dispositivo</string>
+    <string name="pro_metering_frame_average">Media del fotogramma</string>
+    <string name="pro_metering_center_weighted">Prevalenza centrale</string>
+    <string name="pro_metering_spot">Spot</string>
+    <string name="pro_metering_help">La misurazione stabilisce quale parte dell\'inquadratura misura l\'esposizione automatica. Lo spot usa il punto toccato per misurare, oppure il centro dell\'inquadratura. Vale con esposizione automatica, anche nelle modalità a priorità.</string>
+    <string name="readback_metering">misurazione: %1$s</string>
     <string name="pro_shutter_suggestion">Suggerimento otturatore %1$d Hz</string>
     <string name="pro_white_balance">Bilanciamento del bianco</string>
     <string name="pro_wb_auto">WB automatico</string>

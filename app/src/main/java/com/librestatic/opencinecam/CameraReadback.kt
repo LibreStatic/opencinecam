@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.Antibanding
+import com.librestatic.opencinecam.camera.ExposureMetering
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ImageProcessingDefaults
 import com.librestatic.opencinecam.camera.ResolvedExposure
@@ -23,6 +24,8 @@ internal sealed interface ReadbackDifference {
     data class ExposureTime(val reportedNs: Long) : ReadbackDifference
     /** [reported] is null for a mode code OpenCineCam does not know. */
     data class Banding(val reported: Antibanding?) : ReadbackDifference
+    /** [reported] is null for a vendor value OpenCineCam does not map. */
+    data class Metering(val reported: ExposureMetering?) : ReadbackDifference
     data class Temperature(val reportedK: Int) : ReadbackDifference
     data class Optical(val reported: Int) : ReadbackDifference
     data class Video(val reported: Int) : ReadbackDifference
@@ -53,6 +56,7 @@ internal fun exposureReadbackDifferences(
     reportedIso: Int?,
     reportedTimeNs: Long?,
     reportedAntibanding: Int?,
+    reportedMetering: Int? = null,
 ): List<ReadbackDifference> = buildList {
     if (reportedMode != null && reportedMode != requested.mode) add(ReadbackDifference.Mode(reportedMode))
     val iso = requested.iso
@@ -64,6 +68,10 @@ internal fun exposureReadbackDifferences(
     val band = requested.antibanding
     if (band != null && reportedAntibanding != null && antibandingOf(reportedAntibanding) != band) {
         add(ReadbackDifference.Banding(antibandingOf(reportedAntibanding)))
+    }
+    val metering = requested.metering
+    if (metering != null && reportedMetering != null && reportedMetering != metering.vendorValue) {
+        add(ReadbackDifference.Metering(ExposureMetering.fromVendor(reportedMetering)))
     }
 }
 
@@ -102,13 +110,17 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
     val wb = state.requestedWhiteBalance
     fun code(value: Int?, names: Map<Int, String>) = value?.let { "${names[it] ?: "#$it"} ($it)" }
     fun time(ns: Long?) = ns?.let { "$it ns (${shutter(it)})" }
-    return listOf(
+    return listOfNotNull(
         "android.control.aeMode" to readback(state.requestedExposureMode.name, state.reportedExposureMode?.name),
         "android.sensor.sensitivity" to readback(state.requestedIso?.toString() ?: "AUTO", state.sensitivityIso?.toString()),
         "android.sensor.exposureTime" to readback(time(state.requestedExposureTimeNs) ?: "AUTO", time(state.exposureTimeNs)),
         "android.control.aeAntibandingMode" to readback(state.effectiveSettings?.exposure?.antibanding?.name,
             antibandingOf(state.reportedAntibanding)?.name ?: state.reportedAntibanding?.let { "#$it" }),
         "android.control.lowLightBoostState" to readback(null, state.reportedLowLightBoost?.let { if (it) "ACTIVE" else "INACTIVE" }),
+        ("org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode" to readback(
+            state.effectiveSettings?.exposure?.metering?.let { "${it.name} (${it.vendorValue})" },
+            state.reportedMeteringMode?.let { "${ExposureMetering.fromVendor(it)?.name ?: "#$it"} ($it)" }))
+            .takeIf { state.reportedMeteringMode != null || state.effectiveSettings?.exposure?.metering != null },
         "android.control.awbMode" to readback(when (wb) {
             WhiteBalanceSelection.Auto -> "AUTO"
             is WhiteBalanceSelection.Kelvin -> "OFF"
@@ -147,6 +159,7 @@ private fun readbackLabel(difference: ReadbackDifference): String = when (differ
     is ReadbackDifference.Iso -> "ISO ${difference.reported}"
     is ReadbackDifference.ExposureTime -> shutter(difference.reportedNs)
     is ReadbackDifference.Banding -> stringResource(R.string.readback_antibanding, difference.reported?.displayLabel() ?: stringResource(R.string.pro_unknown))
+    is ReadbackDifference.Metering -> stringResource(R.string.readback_metering, difference.reported?.displayLabel() ?: stringResource(R.string.pro_unknown))
     is ReadbackDifference.Temperature -> "${difference.reportedK} K"
     is ReadbackDifference.Optical -> stringResource(R.string.readback_optical, stabilizationLabel(difference.reported))
     is ReadbackDifference.Video -> stringResource(R.string.readback_video, stabilizationLabel(difference.reported))
