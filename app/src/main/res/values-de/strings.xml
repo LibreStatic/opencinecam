@@ -60,6 +60,12 @@
     <string name="audio_recording">Mikrofon-Audio aufnehmen</string>
     <string name="burst_count">Serienbild-Frames</string>
     <string name="video_bitrate">Video-Bitrate</string>
+    <string name="video_codec">Video-Codec</string>
+    <string name="video_codec_summary">Auto nutzt HEVC, wenn dieses Gerät es bei der aktuellen Auflösung und Bildrate kodieren kann (kleinere Dateien), sonst H.264.</string>
+    <string name="video_codec_hevc_unavailable">HEVC ist bei der aktuellen Auflösung und Bildrate auf diesem Gerät nicht verfügbar. Auto nimmt mit H.264 auf.</string>
+    <string name="video_codec_auto">Auto</string>
+    <string name="video_codec_h264">H.264</string>
+    <string name="video_codec_hevc">HEVC</string>
     <string name="flash_torch">Blitz / Taschenlampe</string>
     <string name="histogram_default">Histogramm standardmäßig aktiviert</string>
     <string name="composition_grid">Kompositionsraster</string>

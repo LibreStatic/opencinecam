@@ -35,13 +35,15 @@ internal fun <T> SettingsOptionRow(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** Greys one choice without disabling the row; an unavailable choice cannot be selected. */
+    choiceEnabled: (T) -> Boolean = { true },
 ) {
     SettingsRow(modifier,
         label = { SettingsRowLabel(title, summary, enabled) },
         control = {
             SettingsPillRow(Modifier.selectableGroup()) {
                 choices.forEach { choice ->
-                    SettingsPill(label(choice), tag(choice), selected = choice == selected, enabled = enabled) { onSelect(choice) }
+                    SettingsPill(label(choice), tag(choice), selected = choice == selected, enabled = enabled && choiceEnabled(choice)) { onSelect(choice) }
                 }
             }
         })

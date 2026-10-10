@@ -135,6 +135,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import com.librestatic.opencinecam.media.video.VideoCodecPreference
+import com.librestatic.opencinecam.media.video.hevcSdrSupported
+import com.librestatic.opencinecam.media.video.resolveVideoCodec
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -3192,13 +3195,17 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
     val video = !state.selectedMode.isStillMode()
     // Off-speed takes are silent by design.
     val silent = !settings.audioEnabled || (state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
+    val sdrProfile = state.activeVideoProfile
+    val hevcAvailable = remember(sdrProfile?.size, sdrProfile?.fps) {
+        sdrProfile != null && hevcSdrSupported(sdrProfile.size.width, sdrProfile.size.height, sdrProfile.fps)
+    }
     val parts = buildList {
         if (video) {
             add(when (state.selectedMode) {
                 CaptureMode.LOG -> "HEVC 10-bit LOG"
                 CaptureMode.HLG -> "HEVC 10-bit HLG"
                 CaptureMode.RAW_VIDEO -> "RAW 10-bit"
-                else -> "H.264"
+                else -> resolveVideoCodec(settings.videoCodec, hevcAvailable).label
             })
             add("${settings.videoBitrateMbps} Mbps")
             add(if (silent) stringResource(R.string.status_audio_off)
@@ -3943,6 +3950,18 @@ internal fun SettingsContent(
         if ("bitrate" in visibleIds) settingsCard("bitrate") {
             SettingsOptionRow(stringResource(R.string.video_bitrate), null, listOf(12, 20, 40), settings.videoBitrateMbps,
                 label = { "$it Mbps" }, tag = { "video-bitrate-$it" }, onSelect = { onSettingsChange(settings.copy(videoBitrateMbps = it)) })
+        }
+        if ("video-codec" in visibleIds) settingsCard("video-codec") {
+            val profile = state.activeVideoProfile
+            val hevcAvailable = remember(profile?.size, profile?.fps) {
+                profile == null || hevcSdrSupported(profile.size.width, profile.size.height, profile.fps)
+            }
+            SettingsOptionRow(stringResource(R.string.video_codec),
+                stringResource(if (hevcAvailable) R.string.video_codec_summary else R.string.video_codec_hevc_unavailable),
+                VideoCodecPreference.entries, settings.videoCodec,
+                label = { stringResource(when (it) { VideoCodecPreference.AUTO -> R.string.video_codec_auto; VideoCodecPreference.H264 -> R.string.video_codec_h264; VideoCodecPreference.HEVC -> R.string.video_codec_hevc }) },
+                tag = { "video-codec-$it" }, onSelect = { onSettingsChange(settings.copy(videoCodec = it)) },
+                choiceEnabled = { it != VideoCodecPreference.HEVC || hevcAvailable || settings.videoCodec == VideoCodecPreference.HEVC })
         }
         if ("geometry" in visibleIds) settingsCard("geometry") {
             SettingsOptionRow(stringResource(R.string.recording_geometry), stringResource(R.string.recording_geometry_summary),

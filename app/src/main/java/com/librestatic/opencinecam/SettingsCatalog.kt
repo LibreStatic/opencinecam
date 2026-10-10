@@ -51,6 +51,7 @@ object SettingsCatalog {
         SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
         SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
         SettingEntry("bitrate", SettingsCategory.RECORDING, R.string.video_bitrate, "video calidad quality Mbps"),
+        SettingEntry("video-codec", SettingsCategory.RECORDING, R.string.video_codec, "video codec codificador H.264 AVC HEVC H.265 formato format tamaño size archivo file"),
         SettingEntry("geometry", SettingsCategory.RECORDING, R.string.recording_geometry, "geometria orientacion rotation raster"),
         SettingEntry("anamorphic", SettingsCategory.RECORDING, R.string.anamorphic, "desqueeze lente squeeze"),
         SettingEntry("accumulation", SettingsCategory.RECORDING, R.string.accumulation_title, "light water stars bulb acumulacion accumulation exposicion larga pintura luz agua estrellas duracion intervalo memoria cancelar"),

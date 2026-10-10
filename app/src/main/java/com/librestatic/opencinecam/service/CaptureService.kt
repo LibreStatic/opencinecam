@@ -1219,7 +1219,7 @@ class CaptureService : Service() {
                     val intervalLabel = formatTimelapseInterval(cameraState.value.timelapseIntervalMs)
                     getString(R.string.timelapse_recording, intervalLabel, cameraState.value.recordingProjectRate?.projectLabel() ?: settings.timelapseProjectRate.projectLabel())
                 } else {
-                    "REC ${width}×$height · H.264 · $activeRecordingAudioLabel" +
+                    "REC ${width}×$height · ${previewEngine.activeVideoCodec()?.label ?: "H.264"} · $activeRecordingAudioLabel" +
                         cameraState.value.recordingProjectRate?.let { " · " + getString(R.string.project_active_rate, it.projectLabel()) }.orEmpty()
                 },
                 recordingElapsedMs = 0L,
@@ -2762,7 +2762,7 @@ class CaptureService : Service() {
                             else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${audioSettings.audioSampleRateHz / 1000.0} kHz · ${audioSettings.audioChannels} ch"
                         }
                         cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, recordingProjectRate = settings.videoProjectRate.takeIf { settings.videoOffSpeed },
-                            message = "Preparing H.264 · $activeRecordingAudioLabel…") }
+                            message = "Preparing video · $activeRecordingAudioLabel…") }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
                         // Constrained high-speed takes must reach the encoder surface directly: the GPU
@@ -2795,6 +2795,7 @@ class CaptureService : Service() {
                             outputFrameRate = projectFps.takeIf { directHighSpeed && settings.videoOffSpeed },
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
                             recordingLut = recordingLutForTake,
+                            videoCodec = settings.videoCodec,
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.
@@ -2993,6 +2994,7 @@ class CaptureService : Service() {
                             timelapse = intervalCapture,
                             videoBitrate = settings.videoBitrateMbps * 1_000_000,
                             recordingLut = frozenRecordingLut(),
+                            videoCodec = settings.videoCodec,
                         ).also { accepted ->
                             if (!accepted) {
                                 // A preparation timeout may still own a duplicated native descriptor.

@@ -37,6 +37,10 @@ import android.os.Build
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.librestatic.opencinecam.media.video.VideoCodec
+import com.librestatic.opencinecam.media.video.VideoCodecPreference
+import com.librestatic.opencinecam.media.video.hevcSdrSupported
+import com.librestatic.opencinecam.media.video.resolveVideoCodec
 import android.util.Range
 import android.util.Size
 import android.view.Surface
@@ -674,6 +678,8 @@ class Camera2PreviewEngine(
             .mapNotNull { it.videoCapabilities }
             .toList()
     }
+    @Volatile private var recorderVideoCodec: VideoCodec? = null
+    @Volatile private var recorderCodecFallback: String? = null
     @Volatile private var lastLogRecordingEvidence: OpenCineLogRecordingEvidence? = null
     @Volatile private var lastRecordingLutEvidence: BakedLutEvidence? = null
 
@@ -1018,13 +1024,13 @@ class Camera2PreviewEngine(
     }
 
     /** Starting/stopping the encoder leaves the preview camera session and subject leases intact. */
-    private fun startExistingGpuVideo(output: ParcelFileDescriptor, audio: Camera2EmbeddedAudioConfig?, geometry: RecordingGeometry, bitrate: Int, timelapse: TimelapseCapture? = null, projectRateOverride: CaptureFrameRate? = null, separateAudioClock: CaptureEpochClock? = null, recordingLut: MonitorLut? = null): Boolean {
+    private fun startExistingGpuVideo(output: ParcelFileDescriptor, audio: Camera2EmbeddedAudioConfig?, geometry: RecordingGeometry, bitrate: Int, timelapse: TimelapseCapture? = null, projectRateOverride: CaptureFrameRate? = null, separateAudioClock: CaptureEpochClock? = null, recordingLut: MonitorLut? = null, videoCodec: VideoCodecPreference = VideoCodecPreference.H264): Boolean {
         val pipeline = logPipeline ?: return false
         if (recording || session == null || !gpuPreviewEnabled) return false
         val cameraGeneration = generation
         return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
             timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
-            recordingLut = recordingLut,
+            recordingLut = recordingLut, videoCodec = videoCodec,
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },
@@ -2551,18 +2557,21 @@ class Camera2PreviewEngine(
         // Playback rate written to the file when it differs from the capture rate: a high-speed
         // capture played at the project rate is slow motion.
         outputFrameRate: Int? = null,
+        // SDR codec choice for the GPU and the direct high-speed routes; LOG and HLG are unaffected.
+        videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
     ): Boolean {
         if (disposed.get() || gpuPhotoPreviewEnabled || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null) return false
         require(outputFrameRate == null || (captureRate != null && outputFrameRate > 0))
+        recorderCodecFallback = null
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null && recordingGeometry != null && captureRate == null)
 
         require(projectRateOverride == null || (timelapse == null && captureRate == null && recordingGeometry != null))
         if (timelapse != null) {
             require(captureRate == null && recordingGeometry != null)
-            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, recordingLut = recordingLut)
+            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, recordingLut = recordingLut, videoCodec = videoCodec)
         }
         if (recordingGeometry != null && captureRate == null) {
-            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock, recordingLut = recordingLut)
+            return startGpuVideo(output, audio, recordingGeometry, videoBitrate, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock, recordingLut = recordingLut, videoCodec = videoCodec)
         }
         // MediaRecorder exposes no owned PCM processing stage: never ignore manual gain.
         if (audio?.recordingGain?.enabled == true) {
@@ -2610,8 +2619,12 @@ class Camera2PreviewEngine(
                 closeAnalysisReader()
                 analysisReader = null
                 val size = activeVideoProfile?.size ?: descriptor.previewSize
+                // The encoder sees every captured frame, so HEVC must reach the capture rate, not the playback rate.
+                val encoderFps = (captureRate ?: requestedTargetFps.toDouble()).toInt()
+                val chosenCodec = resolveVideoCodec(videoCodec, videoCodec != VideoCodecPreference.H264 && hevcSdrSupported(size.width, size.height, encoderFps))
+                recorderCodecFallback = null
                 @Suppress("DEPRECATION")
-                val configuredRecorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                fun configureRecorder(codec: VideoCodec): MediaRecorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     MediaRecorder(appContext)
                 } else {
                     MediaRecorder()
@@ -2622,7 +2635,7 @@ class Camera2PreviewEngine(
                     if (audio != null) setAudioSource(audio.source)
                     setVideoSource(MediaRecorder.VideoSource.SURFACE)
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                    setVideoEncoder(if (codec == VideoCodec.HEVC) MediaRecorder.VideoEncoder.HEVC else MediaRecorder.VideoEncoder.H264)
                     if (audio != null) {
                         setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                         setAudioChannels(audio.channels)
@@ -2647,6 +2660,19 @@ class Camera2PreviewEngine(
                     setOutputFile(output.fileDescriptor)
                     prepare()
                 }
+                val configuredRecorder = try {
+                    configureRecorder(chosenCodec)
+                } catch (failure: Exception) {
+                    if (chosenCodec != VideoCodec.HEVC) throw failure
+                    // A hardware HEVC encoder may still refuse the exact configuration: retry once with H.264.
+                    runCatching { recorder?.reset() }
+                    runCatching { recorder?.release() }.exceptionOrNull()?.let { throw failure.also { primary -> primary.addSuppressed(it) } }
+                    recorder = null
+                    recorderCodecFallback = "HEVC recorder prepare failed (${failure.message ?: failure.javaClass.simpleName}); fell back to H.264."
+                    Log.w(TAG, requireNotNull(recorderCodecFallback))
+                    configureRecorder(VideoCodec.H264)
+                }
+                recorderVideoCodec = if (recorderCodecFallback == null) chosenCodec else VideoCodec.H264
                 recorder = configuredRecorder
                 recordSurface = configuredRecorder.surface
                 recorderLevelSink = audio?.onAudioLevel
@@ -2675,12 +2701,13 @@ class Camera2PreviewEngine(
         projectRateOverride: CaptureFrameRate? = null,
         separateAudioClock: CaptureEpochClock? = null,
         recordingLut: MonitorLut? = null,
+        videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
     ): Boolean {
         val device = camera ?: return false
         val preview = previewSurface ?: return false
         val descriptor = activeDescriptor ?: return false
         if (recording) return false
-        if (gpuPreviewEnabled) return startExistingGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, projectRateOverride, separateAudioClock, recordingLut)
+        if (gpuPreviewEnabled) return startExistingGpuVideo(output, audio, recordingGeometry, videoBitrate, timelapse, projectRateOverride, separateAudioClock, recordingLut, videoCodec)
         if (logPipeline != null) return false
         val cameraGeneration = generation
         cameraExecutor.execute {
@@ -2746,6 +2773,7 @@ class Camera2PreviewEngine(
                     audio = audio,
                     separateAudioClock = separateAudioClock,
                     recordingLut = recordingLut,
+                    videoCodec = videoCodec,
                     onRecordingLutApplied = { evidence ->
                         if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
                     },
@@ -4754,6 +4782,12 @@ class Camera2PreviewEngine(
         }
     }
 
+    /** Codec of the SDR take in flight (GPU or direct MediaRecorder route); null when none or LOG/HLG. */
+    fun activeVideoCodec(): VideoCodec? = logPipeline?.activeVideoCodec() ?: recorderVideoCodec
+
+    /** Why the latest SDR take fell back from HEVC to H.264, or null. */
+    fun videoCodecFallbackReason(): String? = logPipeline?.videoCodecFallbackReason() ?: recorderCodecFallback
+
     /** Public wrapper so the service can validate recording geometry against encoder caps. */
     fun encoderCanReachFps(size: Size): Boolean = encoderCanReachFps(size, requestedTargetFps)
 
@@ -4973,6 +5007,7 @@ class Camera2PreviewEngine(
         }
         recorder = null
         recordSurface = null
+        recorderVideoCodec = null
         recorderOverGpuPreview = false
         // Release the acceptance fence last, never while MediaRecorder still owns native I/O.
         recorderRequest.compareAndSet(expected, null)

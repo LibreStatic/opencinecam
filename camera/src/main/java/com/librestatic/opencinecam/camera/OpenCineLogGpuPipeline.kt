@@ -41,7 +41,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
 import com.librestatic.opencinecam.media.video.SurfaceEncoderPolicy
+import com.librestatic.opencinecam.media.video.VideoCodec
+import com.librestatic.opencinecam.media.video.VideoCodecPreference
 import com.librestatic.opencinecam.media.video.VideoEncoderSelector
+import com.librestatic.opencinecam.media.video.resolveVideoCodec
 import com.librestatic.opencinecam.media.video.platformSurfaceEncoders
 
 data class OpenCineLogEncoderCandidate(
@@ -50,6 +53,7 @@ data class OpenCineLogEncoderCandidate(
     val size: Size,
     val hardwareAccelerated: Boolean = true,
     val level: Int? = null,
+    val mime: String = MediaFormat.MIMETYPE_VIDEO_HEVC,
 )
 
 /**
@@ -130,6 +134,8 @@ data class OpenCineLogRecordingEvidence(
     val codecName: String,
     val codecMime: String = MediaFormat.MIMETYPE_VIDEO_HEVC,
     val codecProfile: String = "Main10",
+    /** Why an SDR take fell back from HEVC to H.264; null when it did not. */
+    val codecFallback: String? = null,
     val eglRenderTargetBits: Int = 10,
     val targetFps: Int,
     val transformSha256: String,
@@ -355,6 +361,8 @@ class OpenCineLogGpuPipeline(
     private val cameraTimestampRealtime: Boolean = false,
     /** Codec selection seam; production retains its hardware gate, tests inject advertised software AVC. */
     private val avcEncoderSelector: (Size, Int, Boolean) -> OpenCineLogEncoderCandidate? = { size, fps, software -> findAvcEncoder(size, fps, software) },
+    /** SDR HEVC Main seam: production requires a hardware encoder; tests inject a fixed pick. */
+    private val hevcSdrEncoderSelector: (Size, Int) -> OpenCineLogEncoderCandidate? = { size, fps -> findHevcSdrEncoder(size, fps) },
     private val onAnalysis: ((Camera2Analysis) -> Unit)? = null,
     private val onPreviewLost: ((String) -> Unit)? = null,
     private val onOperatorLutStatus: ((OperatorLutStatus) -> Unit)? = null,
@@ -363,6 +371,8 @@ class OpenCineLogGpuPipeline(
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
     private val frameDiag = OpenCineLogFrameDiagnostics.createIfEnabled()
+    /** Set when the latest SDR take fell back from HEVC to H.264; reset by each start. */
+    @Volatile private var codecFallbackReason: String? = null
     private val handler = Handler(thread.looper)
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var context: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -574,6 +584,8 @@ class OpenCineLogGpuPipeline(
         onRecordingLutApplied: ((BakedLutEvidence) -> Unit)? = null,
         recordingLut: MonitorLut? = null,
         hlgOutput: Boolean = false,
+        /** Only the SDR passthrough route honours it; LOG and HLG always encode HEVC Main10. */
+        videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
     ): Boolean {
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
             separateAudioClock.cameraRealtime == cameraTimestampRealtime) { "Separate audio clock requires a matching regular capture route" }
@@ -627,10 +639,19 @@ class OpenCineLogGpuPipeline(
                 val encoderRate = kotlin.math.ceil(projectFps).toInt()
                 val encodedSize = geometry.encodedSize
                 val platformEncodedSize = Size(encodedSize.width, encodedSize.height)
-                val mime = if (passthroughSdr) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC
-                val candidate = (if (passthroughSdr) avcEncoderSelector(platformEncodedSize, encoderRate, timelapse != null) else findEncoder(platformEncodedSize, targetFps))
-                    ?: error("No ${if (timelapse == null) "hardware " else "advertised "}$mime Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
-                val format = MediaFormat.createVideoFormat(mime, encodedSize.width, encodedSize.height).apply {
+                codecFallbackReason = null
+                val hevcCandidate = if (passthroughSdr && videoCodec != VideoCodecPreference.H264) {
+                    runCatching { hevcSdrEncoderSelector(platformEncodedSize, encoderRate) }.getOrNull()
+                } else null
+                val useHevc = resolveVideoCodec(videoCodec, hevcCandidate != null) == VideoCodec.HEVC
+                fun avcCandidate() = avcEncoderSelector(platformEncodedSize, encoderRate, timelapse != null)
+                    ?.copy(mime = MediaFormat.MIMETYPE_VIDEO_AVC)
+                    ?: error("No ${if (timelapse == null) "hardware " else "advertised "}${MediaFormat.MIMETYPE_VIDEO_AVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
+                var candidate = if (useHevc) requireNotNull(hevcCandidate)
+                    else if (passthroughSdr) avcCandidate()
+                    else findEncoder(platformEncodedSize, targetFps)
+                        ?: error("No hardware ${MediaFormat.MIMETYPE_VIDEO_HEVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
+                fun buildFormat(candidate: OpenCineLogEncoderCandidate) = MediaFormat.createVideoFormat(candidate.mime, encodedSize.width, encodedSize.height).apply {
                     setInteger(MediaFormat.KEY_PROFILE, candidate.profile)
                     // OMX AVC requires the advertised level whenever a profile is supplied.
                     candidate.level?.let { setInteger(MediaFormat.KEY_LEVEL, it) }
@@ -663,16 +684,32 @@ class OpenCineLogGpuPipeline(
                         setInteger(MediaFormat.KEY_PIXEL_ASPECT_RATIO_HEIGHT, geometry.pixelAspectRatioHeight)
                     }
                 }
+                var format = buildFormat(candidate)
                 check(!preparation.isCancelled && !closed.get()) { "Recording preparation was cancelled" }
                 val ownedOutput = requireNotNull(preparedOutput)
-                val codec = MediaCodec.createByCodecName(candidate.codecName)
+                var codec = MediaCodec.createByCodecName(candidate.codecName)
+                var codecConfigured = false
+                if (useHevc) {
+                    // A hardware HEVC encoder may still refuse the exact format: retry once with H.264.
+                    try {
+                        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                        codecConfigured = true
+                    } catch (failure: Exception) {
+                        runCatching { codec.release() }
+                        codecFallbackReason = "HEVC encoder ${candidate.codecName} refused the format (${failure.message ?: failure.javaClass.simpleName}); fell back to H.264."
+                        android.util.Log.w("OpenCineLogGpuPipeline", requireNotNull(codecFallbackReason))
+                        candidate = avcCandidate()
+                        format = buildFormat(candidate)
+                        codec = MediaCodec.createByCodecName(candidate.codecName)
+                    }
+                }
                 var codecSurface: Surface? = null
                 var muxer: MediaMuxer? = null
                 var embeddedAac: EmbeddedAac? = null
                 var preparedDrain: Thread? = null
                 var codecStarted = false
                 val active = try {
-                    codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    if (!codecConfigured) codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                     codecSurface = codec.createInputSurface()
                     // Own before configuration: a throwing setter must not hide a live muxer.
                     muxer = MediaMuxer(ownedOutput.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -813,6 +850,11 @@ class OpenCineLogGpuPipeline(
             }
         }.also { posted -> if (!posted) lastPauseRejection = CapturePauseRejection.NOT_RECORDING }
     }
+
+    /** Codec of the take in flight (or null when none) and why it fell back from HEVC, for the capture status. */
+    fun activeVideoCodec(): VideoCodec? = recording?.candidate?.let { if (it.mime == MediaFormat.MIMETYPE_VIDEO_AVC) VideoCodec.H264 else VideoCodec.HEVC }
+        ?.takeIf { passthroughSdr }
+    fun videoCodecFallbackReason(): String? = codecFallbackReason
 
     fun stopRecording(): Boolean {
         val active = recording ?: return false
@@ -1543,8 +1585,11 @@ class OpenCineLogGpuPipeline(
                     curveVersion = if (active.hlgOutput) "ARIB STD-B67" else if (active.recordingLut != null) "1" else "2.0",
                     gamut = if (active.recordingLut != null) "BT.709" else "BT.2020",
                     range = if (active.recordingLut != null || active.hlgOutput) "limited" else "full",
-                    codecMime = if (passthroughSdr) MediaFormat.MIMETYPE_VIDEO_AVC else MediaFormat.MIMETYPE_VIDEO_HEVC,
-                    codecProfile = if (passthroughSdr) "AVC_${active.candidate.profile}" else "Main10",
+                    codecMime = if (passthroughSdr) active.candidate.mime else MediaFormat.MIMETYPE_VIDEO_HEVC,
+                    codecProfile = if (!passthroughSdr) "Main10"
+                        else if (active.candidate.mime == MediaFormat.MIMETYPE_VIDEO_HEVC) "Main"
+                        else "AVC_${active.candidate.profile}",
+                    codecFallback = codecFallbackReason,
                     eglRenderTargetBits = if (passthroughSdr) 8 else 10,
                     codecName = active.candidate.codecName,
                     targetFps = targetFps,
@@ -2114,6 +2159,12 @@ class OpenCineLogGpuPipeline(
         fun findAvcEncoder(size: Size, targetFps: Int, allowSoftware: Boolean = false): OpenCineLogEncoderCandidate? =
             VideoEncoderSelector().selectSurfaceEncoder(
                 SurfaceEncoderPolicy.avcHigh(allowSoftware), size.width, size.height, targetFps, platformSurfaceEncoders(),
+            )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level, MediaFormat.MIMETYPE_VIDEO_AVC) }
+
+        /** HEVC Main (8-bit SDR) hardware Surface encoder for the passthrough route. */
+        fun findHevcSdrEncoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
+            VideoEncoderSelector().selectSurfaceEncoder(
+                SurfaceEncoderPolicy.HEVC_MAIN_HARDWARE, size.width, size.height, targetFps, platformSurfaceEncoders(),
             )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
 
         private val VERTEX_SHADER = """
