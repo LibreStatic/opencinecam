@@ -371,6 +371,15 @@
     <string name="image_profile_cine">Cine</string>
     <string name="image_picture_profile_help">Tonkurve des Bildprozessors der Kamera, ohne Zusatzlast. Standard behält den Look der Kamera; Flach hebt Schatten an und mildert Lichter fürs Grading; Cine ist eine weiche S-Kurve mit langer Lichterschulter. Gilt für SDR-Video, Zeitraffer und JPEG/HEIC-Fotos, nicht für LOG, HLG, RAW oder Hochgeschwindigkeitsaufnahmen.</string>
     <string name="image_reset">Kameravorlage wiederherstellen</string>
+    <string name="picture_controls_title">Bildeinstellungen</string>
+    <string name="picture_saturation">Sättigung</string>
+    <string name="picture_sharpness">Schärfe</string>
+    <string name="picture_value">%1$s: %2$d</string>
+    <string name="picture_value_default">%1$s: %2$d · Gerätestandard</string>
+    <string name="picture_value_device">%1$s: %2$d · Gerät</string>
+    <string name="picture_help">Kameraspezifische Regler, nur im Bereich verfügbar, den diese Kamera meldet. Wird ein Regler auf den Gerätestandard zurückgestellt, gilt wieder die Kameravorlage.</string>
+    <string name="picture_blocked_neutral">Wird bei LOG, HLG, RAW oder eingeschränktem High-Speed-Video nicht angewendet, da diese eine neutrale Verarbeitung behalten.</string>
+    <string name="picture_blocked_edge_off">Die Schärfe hat keine Wirkung, solange die Kantenverstärkung ausgeschaltet ist. Wähle einen anderen Kantenmodus, um sie zu nutzen.</string>
     <string name="pro_wb_record_policy">Weißabgleich bei Aufnahmestart</string>
     <string name="pro_wb_continuous">Kontinuierlicher / Live-WB</string>
     <string name="pro_wb_lock_record">WB für den Take halten</string>

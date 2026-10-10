@@ -13,6 +13,7 @@ import com.librestatic.opencinecam.camera.Antibanding
 import com.librestatic.opencinecam.camera.ExposureMetering
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ImageProcessingDefaults
+import com.librestatic.opencinecam.camera.PictureControlReadback
 import com.librestatic.opencinecam.camera.ResolvedExposure
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import kotlin.math.abs
@@ -31,6 +32,8 @@ internal sealed interface ReadbackDifference {
     data class Video(val reported: Int) : ReadbackDifference
     data class Noise(val reported: Int) : ReadbackDifference
     data class Edge(val reported: Int) : ReadbackDifference
+    data class Saturation(val reported: Int) : ReadbackDifference
+    data class Sharpness(val reported: Int) : ReadbackDifference
 }
 
 /** Sensors round exposure to whole lines, so a report this close to the request is the same shutter. */
@@ -93,6 +96,15 @@ internal fun imageProcessingReadbackDifferences(submitted: ImageProcessingDefaul
     )
 }
 
+/** Only a vendor value the request set can disagree; a cleared key has nothing to compare. */
+internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?): List<ReadbackDifference> {
+    if (readback == null) return emptyList()
+    return listOfNotNull(
+        readback.reportedSaturation?.takeIf { readback.submittedSaturation != null && it != readback.submittedSaturation }?.let(ReadbackDifference::Saturation),
+        readback.reportedSharpness?.takeIf { readback.submittedSharpness != null && it != readback.submittedSharpness }?.let(ReadbackDifference::Sharpness),
+    )
+}
+
 private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
 private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
 private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
@@ -110,6 +122,7 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
     val wb = state.requestedWhiteBalance
     fun code(value: Int?, names: Map<Int, String>) = value?.let { "${names[it] ?: "#$it"} ($it)" }
     fun time(ns: Long?) = ns?.let { "$it ns (${shutter(it)})" }
+    val picture = state.pictureControlReadback
     return listOfNotNull(
         "android.control.aeMode" to readback(state.requestedExposureMode.name, state.reportedExposureMode?.name),
         "android.sensor.sensitivity" to readback(state.requestedIso?.toString() ?: "AUTO", state.sensitivityIso?.toString()),
@@ -136,6 +149,11 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.edge.mode" to readback(code(sent?.edge, PROCESSING_MODES), code(state.reportedEdgeEnhancement, PROCESSING_MODES)),
         "android.tonemap.mode" to readback(code(state.submittedToneMapMode, TONEMAP_MODES), code(state.reportedToneMapMode, TONEMAP_MODES)),
         "android.scaler.cropRegion" to readback(null, state.reportedCropRegion?.joinToString(", ", "[", "]")),
+    ) + listOfNotNull(
+        picture?.takeIf { it.reportedSaturation != null }?.let {
+            "org.codeaurora.qcamera3.saturation.use_saturation" to readback(it.submittedSaturation?.toString(), it.reportedSaturation?.toString()) },
+        picture?.takeIf { it.reportedSharpness != null }?.let {
+            "org.codeaurora.qcamera3.sharpness.strength" to readback(it.submittedSharpness?.toString(), it.reportedSharpness?.toString()) },
     )
 }
 
@@ -165,6 +183,8 @@ private fun readbackLabel(difference: ReadbackDifference): String = when (differ
     is ReadbackDifference.Video -> stringResource(R.string.readback_video, stabilizationLabel(difference.reported))
     is ReadbackDifference.Noise -> stringResource(R.string.readback_noise, processingLabel(difference.reported))
     is ReadbackDifference.Edge -> stringResource(R.string.readback_edge, processingLabel(difference.reported))
+    is ReadbackDifference.Saturation -> stringResource(R.string.readback_saturation, difference.reported)
+    is ReadbackDifference.Sharpness -> stringResource(R.string.readback_sharpness, difference.reported)
 }
 
 @Composable

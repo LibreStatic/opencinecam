@@ -931,6 +931,7 @@ class CaptureService : Service() {
                 submittedToneMapMode = metadata.submittedToneMapMode,
                 reportedCropRegion = metadata.cropRegion,
                 submittedImageProcessing = metadata.submittedImageProcessing,
+                pictureControlReadback = metadata.pictureControls,
                 reportedExposureMode = metadata.exposureMode,
                 reportedAntibanding = metadata.antibanding,
                 reportedLowLightBoost = metadata.lowLightBoostActive,

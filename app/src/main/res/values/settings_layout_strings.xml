@@ -10,6 +10,8 @@
     <string name="readback_video">electronic stabilization: %1$s</string>
     <string name="readback_noise">noise reduction: %1$s</string>
     <string name="readback_edge">edge enhancement: %1$s</string>
+    <string name="readback_saturation">saturation: %1$d</string>
+    <string name="readback_sharpness">sharpness: %1$d</string>
     <string name="readback_on">On</string>
     <string name="readback_preview_only">Preview only</string>
     <string name="pro_auto">Auto</string>

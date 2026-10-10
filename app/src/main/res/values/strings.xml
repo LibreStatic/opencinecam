@@ -376,6 +376,15 @@
     <string name="image_profile_cine">Cine</string>
     <string name="image_picture_profile_help">Tone curve applied by the camera\'s image processor at no extra cost. Standard keeps the camera\'s own look; Flat lifts shadows and softens highlights for grading; Cine is a soft S-curve with a long highlight shoulder. Applies to SDR video, time-lapse and JPEG/HEIC photos, not to LOG, HLG, RAW or high-speed takes.</string>
     <string name="image_reset">Restore camera template</string>
+    <string name="picture_controls_title">Picture controls</string>
+    <string name="picture_saturation">Saturation</string>
+    <string name="picture_sharpness">Sharpness</string>
+    <string name="picture_value">%1$s: %2$d</string>
+    <string name="picture_value_default">%1$s: %2$d · device default</string>
+    <string name="picture_value_device">%1$s: %2$d · device</string>
+    <string name="picture_help">Camera-specific controls, offered only over the range this camera advertises. Moving a slider back to the device default restores the camera template.</string>
+    <string name="picture_blocked_neutral">Not applied in LOG, HLG, RAW or constrained high-speed video, which keep neutral processing.</string>
+    <string name="picture_blocked_edge_off">Sharpness has no effect while edge enhancement is Off. Choose another edge mode to use it.</string>
     <string name="pro_wb_record_policy">White balance at recording start</string>
     <string name="pro_wb_continuous">Continuous / live WB</string>
     <string name="pro_wb_lock_record">Hold WB for the take</string>

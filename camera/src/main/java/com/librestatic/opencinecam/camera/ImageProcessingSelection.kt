@@ -7,6 +7,9 @@ data class ImageProcessingSelection(
     val noiseReduction: IspMode = IspMode.DEFAULT,
     val edge: IspMode = IspMode.DEFAULT,
     val pictureProfile: PictureProfile = PictureProfile.STANDARD,
+    /** Qualcomm picture controls; null keeps the camera template (see PictureControls.kt). */
+    val saturation: Int? = null,
+    val sharpness: Int? = null,
 )
 /** CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION. */
 const val PREVIEW_STABILIZATION = 2
@@ -23,6 +26,7 @@ data class ImageProcessingCapabilities(
     /** Empty unless TONEMAP_MODE and TONEMAP_CURVE are both settable request keys. */
     val toneMapModes: Set<Int> = emptySet(),
     val maxCurvePoints: Int = 0,
+    val pictureControls: PictureControlCapabilities = PictureControlCapabilities(),
 ) {
     /** Whether the preview-matched choice is offered: the camera lists it (the engine drops it below API 33). */
     val previewStabilization: Boolean get() = PREVIEW_STABILIZATION in videoModes

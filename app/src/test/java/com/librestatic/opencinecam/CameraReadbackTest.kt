@@ -5,10 +5,13 @@ import com.librestatic.opencinecam.camera.Antibanding
 import com.librestatic.opencinecam.camera.ExposureMetering
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ImageProcessingDefaults
+import com.librestatic.opencinecam.camera.PictureControlRange
+import com.librestatic.opencinecam.camera.PictureControlReadback
 import com.librestatic.opencinecam.camera.ResolvedExposure
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -91,5 +94,38 @@ class LowLightBoostSettingsTest {
         val merged = CameraPresetCodec.mergeLocal(CameraSettings(), on)
         assertTrue(merged.exposure.lowLightBoost)
         assertFalse(CameraPresetCodec.mergeLocal(on, CameraSettings()).exposure.lowLightBoost)
+    }
+
+    @Test fun pictureControlsOnlyDifferWhereTheRequestSetAValue() {
+        assertTrue(pictureControlReadbackDifferences(null).isEmpty())
+        assertTrue(pictureControlReadbackDifferences(PictureControlReadback(null, 5, null, 2)).isEmpty())
+        assertTrue(pictureControlReadbackDifferences(PictureControlReadback(7, 7, 4, 4)).isEmpty())
+        assertEquals(listOf(ReadbackDifference.Saturation(5), ReadbackDifference.Sharpness(2)),
+            pictureControlReadbackDifferences(PictureControlReadback(7, 5, 4, 2)))
+    }
+
+    @Test fun pictureControlLinesAppearOnlyWhenTheCameraReportsThem() {
+        assertNull(requestedReportedLines(CameraUiState()).toMap()["org.codeaurora.qcamera3.saturation.use_saturation"])
+        val lines = requestedReportedLines(CameraUiState(pictureControlReadback = PictureControlReadback(7, 7, null, 2))).toMap()
+        assertEquals("7 → 7", lines["org.codeaurora.qcamera3.saturation.use_saturation"])
+        assertEquals("— → 2", lines["org.codeaurora.qcamera3.sharpness.strength"])
+    }
+
+    @Test fun pictureControlsExplainWhyTheyCannotAct() {
+        assertEquals(PictureControlBlock.NONE, pictureControlBlock(true, CaptureMode.VIDEO, hfr = false, edgeMode = 2))
+        assertEquals(PictureControlBlock.NONE, pictureControlBlock(true, CaptureMode.PHOTO, hfr = false, edgeMode = null))
+        assertEquals(PictureControlBlock.EDGE_OFF, pictureControlBlock(true, CaptureMode.VIDEO, hfr = false, edgeMode = 0))
+        assertEquals(PictureControlBlock.NONE, pictureControlBlock(false, CaptureMode.VIDEO, hfr = false, edgeMode = 0))
+        for (mode in listOf(CaptureMode.LOG, CaptureMode.HLG, CaptureMode.RAW_PHOTO)) {
+            assertEquals(PictureControlBlock.NEUTRAL, pictureControlBlock(false, mode, hfr = false, edgeMode = 2))
+        }
+        assertEquals(PictureControlBlock.NEUTRAL, pictureControlBlock(false, CaptureMode.VIDEO, hfr = true, edgeMode = 2))
+    }
+
+    @Test fun theAdvertisedDefaultStoresNoOverride() {
+        val saturation = PictureControlRange(0, 10, 1, 5, true)
+        assertNull(pictureControlSelection(saturation, 5))
+        assertEquals(8, pictureControlSelection(saturation, 8))
+        assertEquals(3, pictureControlSelection(PictureControlRange(0, 6, 1, 3, false), 3))
     }
 }

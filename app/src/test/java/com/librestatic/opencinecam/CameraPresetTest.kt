@@ -35,7 +35,7 @@ class CameraPresetTest {
         assertEquals(167, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
     }
     @Test fun pictureProfileIsPortableFromV22AndSurvivesAPresetRoundTrip() {
@@ -44,6 +44,13 @@ class CameraPresetTest {
         val text = CameraPresetCodec.encode(CameraPreset(name = "Cine", settings = CameraSettings(imageProcessing = ImageProcessingSelection(pictureProfile = PictureProfile.CINE))))
         assertEquals(PictureProfile.CINE, CameraPresetCodec.decode(text).settings.imageProcessing.pictureProfile)
         assertEquals(PictureProfile.CINE, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, CameraSettings()).imageProcessing.pictureProfile)
+    }
+    @Test fun pictureControlsStayOnThisDeviceWhenAPresetIsApplied() {
+        val current = CameraSettings(imageProcessing = com.librestatic.opencinecam.camera.ImageProcessingSelection(saturation = 8, sharpness = 4))
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Look", settings = current))
+        assertFalse(text.contains("image-saturation")); assertFalse(text.contains("image-sharpness"))
+        val applied = CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, current)
+        assertEquals(8, applied.imageProcessing.saturation); assertEquals(4, applied.imageProcessing.sharpness)
     }
     @Test fun splitPreviewKeysArePortableAndSurviveAPresetRoundTrip() {
         assertTrue(CameraPresetCodec.portableKeys.containsAll(setOf("subject-split-preview-modes", "subject-fill-light-preview-level")))
