@@ -41,4 +41,8 @@
     <string name="capture_hold_caption_busy">Busy</string>
     <string name="capture_hold_caption_locked">Locked</string>
     <string name="capture_unlock">Unlock</string>
+    <string name="capture_slot_reason_night">Night photo sets this automatically.</string>
+    <string name="capture_hold_busy_night">Processing night photo…</string>
+    <string name="capture_hold_busy_night_progress">Processing night photo… %1$d%%</string>
+    <string name="capture_hold_short_night">Night…</string>
 </resources>

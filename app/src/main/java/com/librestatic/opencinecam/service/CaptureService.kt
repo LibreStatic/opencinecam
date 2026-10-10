@@ -722,6 +722,8 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
 
     private fun desiredGpuViewfinder(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
+        // The extension session renders straight into the viewfinder surface, never through the GPU path.
+        !nightExtensionActive(mode) && (
         // Video always previews through the GPU viewfinder so REC only starts the encoder on the
         // live graph. A direct preview had to be torn down at REC (EGL cannot reconnect to the
         // SurfaceView the camera just released), which froze the viewfinder for the whole take.
@@ -730,10 +732,17 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
         // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
-        (photoPreviewMode(mode) && currentOperatorLut != null)
+        (photoPreviewMode(mode) && currentOperatorLut != null))
+
+    /** Night photo applies to PHOTO only, on a camera that offers the extension (API 31+). */
+    private fun nightExtensionActive(mode: CaptureMode = cameraState.value.selectedMode): Boolean {
+        if (mode != CaptureMode.PHOTO) return false
+        return com.librestatic.opencinecam.camera.nightExtensionEngaged(settings.nightPhoto, Build.VERSION.SDK_INT, cameraState.value.descriptor?.nightExtension)
+    }
 
     private fun selectedStillPhotoFormat(mode: CaptureMode = cameraState.value.selectedMode): StillPhotoFormat = when (mode) {
-        CaptureMode.PHOTO -> settings.photoFormat
+        // The extension session delivers JPEG only: no RAW companion and no HEIC.
+        CaptureMode.PHOTO -> if (nightExtensionActive(mode)) StillPhotoFormat.JPEG else settings.photoFormat
         CaptureMode.RAW_PHOTO -> StillPhotoFormat.DNG
         else -> StillPhotoFormat.JPEG
     }
@@ -743,7 +752,7 @@ class CaptureService : Service() {
         ?.activeStillSize?.let { (width, height) -> Size(width, height) }
 
     private fun previewKey(): List<Any?> = cameraState.value.let {
-        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize())
+        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive())
     }
 
     private fun updateSubjectTarget() {
@@ -833,6 +842,8 @@ class CaptureService : Service() {
             cameraState.update { it.copy(
                 phase = CameraUiPhase.OPENING,
                 gpuViewfinder = desiredGpuViewfinder(),
+                nightExtensionRunning = false,
+                nightProgressPercent = null,
                 torchEnabled = false,
                 torchReported = null,
                 photoFlashReport = null,
@@ -879,6 +890,7 @@ class CaptureService : Service() {
             cameraState.update { it.copy(
                 phase = CameraUiPhase.PREVIEWING,
                 gpuViewfinder = gpuPath,
+                nightExtensionRunning = previewEngine.nightExtensionActive(),
                 selectedCameraId = descriptor.cameraId,
                 aeLockSupported = descriptor.aeLockSupported,
                 afLockSupported = descriptor.afLockSupported,
@@ -983,7 +995,7 @@ class CaptureService : Service() {
                         val preview = publication.images.firstOrNull { it.kind != StillImageKind.DNG } ?: publication.images.first()
                         mainHandler.post {
                             if (serviceDestroyed || !stillOwner.compareAndSet(owner, null)) return@post
-                            cameraState.update { it.copy(phase = CameraUiPhase.SAVED, stillCapturePending = false,
+                            cameraState.update { it.copy(phase = CameraUiPhase.SAVED, stillCapturePending = false, nightProgressPercent = null,
                                 lastSavedUri = preview.uri, lastStillPublication = publication,
                                 photoFlashReport = capture.flashReport, errorCode = null,
                                 message = getString(R.string.photo_capture_saved, publication.images.joinToString(" + ") { image -> image.kind.name })) }
@@ -998,6 +1010,13 @@ class CaptureService : Service() {
                 }
             } catch (_: RejectedExecutionException) {
                 mainHandler.post { finishStillFailure(owner, "still-save-busy", "The still-image writer is busy.") }
+            }
+        }
+
+        override fun onNightCaptureProgress(percent: Int) {
+            mainHandler.post {
+                if (serviceDestroyed || stillOwner.get() == null) return@post
+                cameraState.update { it.copy(nightProgressPercent = percent) }
             }
         }
 
@@ -1734,6 +1753,7 @@ class CaptureService : Service() {
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
+                nightExtension = nightExtensionActive(),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1867,6 +1887,7 @@ class CaptureService : Service() {
                 previewListener,
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
+                nightExtension = nightExtensionActive(),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1896,6 +1917,7 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
+                        nightExtension = nightExtensionActive(),
                         openCineLog = cameraState.value.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1923,6 +1945,7 @@ class CaptureService : Service() {
             val changedSignalPath =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
+                nightExtensionActive(current.selectedMode) != nightExtensionActive(mode) ||
                 (current.selectedMode.usesLogGraph) != (mode.usesLogGraph) ||
                     (settings.subjectDisplay.wantsCameraPreview && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
                     (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes)
@@ -1973,6 +1996,7 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
+                        nightExtension = nightExtensionActive(),
                         openCineLog = mode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !mode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(mode),
@@ -2046,6 +2070,7 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
+                        nightExtension = nightExtensionActive(),
                         openCineLog = current.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder(current.selectedMode) && !current.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(current.selectedMode),
@@ -2138,6 +2163,7 @@ class CaptureService : Service() {
                         previewListener,
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
+                        nightExtension = nightExtensionActive(),
                         openCineLog = true,
                         viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = selectedFps,
@@ -2217,7 +2243,8 @@ class CaptureService : Service() {
                 if (attachedPreviewSurface == null && subjectSurfaces.current == null &&
                     cameraState.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)) detachPreview()
                 if (cameraState.value.gpuViewfinder != desiredGpuViewfinder() ||
-                    (cameraState.value.selectedMode == CaptureMode.PHOTO && previous.photoFormat != settings.photoFormat)) {
+                    (cameraState.value.selectedMode == CaptureMode.PHOTO &&
+                        (previous.photoFormat != settings.photoFormat || previous.nightPhoto != settings.nightPhoto))) {
                     attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                 }
                 val onlyAudioDisplayChanged = previous.copy(audioListening = settings.audioListening,
@@ -2681,7 +2708,7 @@ class CaptureService : Service() {
                     if (!stillOwner.compareAndSet(null, owner)) return false
                     settings = settings.copy(productionSlate = owner.productionSlate, captureNaming = owner.captureNames.settings)
                     cameraState.value = current.copy(phase = CameraUiPhase.CAPTURING, message = null,
-                        photoFlashReport = null, lastStillPublication = null, stillCapturePending = true)
+                        photoFlashReport = null, lastStillPublication = null, stillCapturePending = true, nightProgressPercent = null)
                     previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect,
                         zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
                         if (!accepted) finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")

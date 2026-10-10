@@ -103,7 +103,12 @@ internal fun CaptureHeldSlots(
     val shown = rememberShownHold(state)
     val reducedMotion = LocalReducedMotion.current
     val contentAlpha by animateFloatAsState(if (shown == null) 1f else 0f, tween(if (reducedMotion) 0 else 160), label = "heldAlpha")
-    val title = stringResource(holdTitle(state, style))
+    // A night still reports how far the extension has got; the strip shows it as words and as a bar.
+    val nightPercent = state.nightProgressPercent?.takeIf {
+        state.captureHold == CaptureHold.BUSY && state.selectedMode == CaptureMode.PHOTO && state.nightExtensionRunning && style == HoldStyle.STRIP
+    }
+    val title = if (nightPercent != null) stringResource(R.string.capture_hold_busy_night_progress, nightPercent)
+        else stringResource(holdTitle(state, style))
     Box(modifier) {
         Box(
             Modifier
@@ -122,7 +127,7 @@ internal fun CaptureHeldSlots(
             when {
                 target == null -> Unit
                 style == HoldStyle.PILL -> CaptureHoldPill(target, title, onUnlock, Modifier.fillMaxSize())
-                else -> CaptureHoldStrip(target, title, onUnlock, Modifier.fillMaxSize())
+                else -> CaptureHoldStrip(target, title, onUnlock, Modifier.fillMaxSize(), nightPercent)
             }
         }
     }
@@ -155,6 +160,10 @@ private const val BUSY_REVEAL_DELAY_MS = 150L
 private fun holdTitle(state: CameraUiState, style: HoldStyle): Int = when (state.captureHold) {
     CaptureHold.OPERATOR -> if (style == HoldStyle.PILL) R.string.capture_unlock else R.string.capture_hold_operator_title
     else -> when (state.selectedMode) {
+        CaptureMode.PHOTO -> when {
+            state.nightExtensionRunning -> if (style == HoldStyle.PILL) R.string.capture_hold_short_night else R.string.capture_hold_busy_night
+            else -> if (style == HoldStyle.PILL) R.string.capture_hold_short_saving else R.string.capture_hold_busy_photo
+        }
         CaptureMode.BURST -> if (style == HoldStyle.PILL) R.string.capture_hold_short_burst else R.string.capture_hold_busy_burst
         CaptureMode.BRACKET -> if (style == HoldStyle.PILL) R.string.capture_hold_short_bracket else R.string.capture_hold_busy_bracket
         CaptureMode.LIGHT_TRAIL -> if (style == HoldStyle.PILL) R.string.capture_hold_short_light_trail else R.string.capture_hold_busy_light_trail
@@ -175,7 +184,7 @@ private fun HoldIndicator(busy: Boolean, size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> Unit, modifier: Modifier) {
+private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> Unit, modifier: Modifier, percent: Int? = null) {
     val colors = MaterialTheme.colorScheme
     val busy = hold == CaptureHold.BUSY
     val hint = stringResource(if (busy) R.string.capture_hold_busy_hint else R.string.capture_hold_operator_hint)
@@ -207,7 +216,12 @@ private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> U
                 modifier = Modifier.heightIn(min = 40.dp).testTag("operator-unlock"),
             ) { Text(stringResource(R.string.capture_unlock), fontSize = 13.sp, maxLines = 1) }
         }
-        if (busy && !LocalReducedMotion.current) LinearProgressIndicator(
+        if (busy && percent != null) LinearProgressIndicator(
+            progress = { percent / 100f },
+            color = accent,
+            trackColor = Color.Transparent,
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp),
+        ) else if (busy && !LocalReducedMotion.current) LinearProgressIndicator(
             color = accent,
             trackColor = Color.Transparent,
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp),

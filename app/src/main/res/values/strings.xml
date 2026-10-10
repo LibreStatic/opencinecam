@@ -869,4 +869,9 @@
     <string name="gyroflow_log_title">Gyro data for Gyroflow</string>
     <string name="gyroflow_log_enabled">Record gyro data for Gyroflow</string>
     <string name="gyroflow_log_help">Saves the phone\'s motion (gyroscope and accelerometer) next to each video, LOG or HLG take as a .gcsv file with the same name, for stabilizing it in Gyroflow. Motion data is recorded only while this is on and stays in that file on your device. Not used for slow motion or time-lapse. Turn off the camera\'s own stabilization for the best match.</string>
+    <string name="night_photo_title">Night photo</string>
+    <string name="night_photo_help">Takes PHOTO stills through the device\'s night extension, which merges several frames for low light. Hold the camera steady until the save finishes. While Night is on, manual exposure, white balance and focus, RAW, HEIC, flash, bracketing and the scopes are unavailable.</string>
+    <string name="night_photo_unavailable">The night extension could not start on this camera; regular photo is active.</string>
+    <string name="night_photo_format_note">Night photo captures JPEG only.</string>
+    <string name="night_photo_flash_note">Photographic flash is unavailable in Night photo.</string>
 </resources>

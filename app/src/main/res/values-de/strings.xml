@@ -864,4 +864,9 @@
     <string name="gyroflow_log_title">Gyrodaten für Gyroflow</string>
     <string name="gyroflow_log_enabled">Gyrodaten für Gyroflow aufzeichnen</string>
     <string name="gyroflow_log_help">Speichert die Bewegung des Telefons (Gyroskop und Beschleunigungssensor) neben jeder Video-, LOG- oder HLG-Aufnahme als .gcsv-Datei mit demselben Namen, um sie in Gyroflow zu stabilisieren. Bewegungsdaten werden nur aufgezeichnet, solange dies aktiviert ist, und bleiben in dieser Datei auf Ihrem Gerät. Nicht für Zeitlupe oder Zeitraffer. Für die beste Übereinstimmung die kamerainterne Stabilisierung ausschalten.</string>
+    <string name="night_photo_title">Nachtfoto</string>
+    <string name="night_photo_help">Nimmt FOTO-Aufnahmen über die Nachterweiterung des Geräts auf, die mehrere Bilder für wenig Licht zusammenführt. Halte die Kamera ruhig, bis das Speichern abgeschlossen ist. Bei aktivem Nachtmodus sind manuelle Belichtung, Weißabgleich und Fokus, RAW, HEIC, Blitz, Belichtungsreihen und die Scopes nicht verfügbar.</string>
+    <string name="night_photo_unavailable">Die Nachterweiterung konnte auf dieser Kamera nicht gestartet werden; das normale Foto ist aktiv.</string>
+    <string name="night_photo_format_note">Das Nachtfoto nimmt nur JPEG auf.</string>
+    <string name="night_photo_flash_note">Der Fotoblitz ist im Nachtfoto nicht verfügbar.</string>
 </resources>

@@ -2329,7 +2329,8 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<Cap
     val auto = stringResource(R.string.auto_value)
     return captureSlots(mode).map { slot ->
         val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
-            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode).size)
+            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode).size,
+            nightPhoto = mode == CaptureMode.PHOTO && state.nightExtensionRunning)
         // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
         val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
         val value = when {
@@ -4033,6 +4034,9 @@ internal fun SettingsContent(
         if ("zero-shutter-lag" in visibleIds) settingsCard("zero-shutter-lag") {
             ZeroShutterLagSettings(state, settings, onSettingsChange)
         }
+        if ("night-photo" in visibleIds && state.descriptor?.nightExtension != null) settingsCard("night-photo") {
+            NightPhotoSettings(state, settings, onSettingsChange)
+        }
         if ("photo-flash" in visibleIds) settingsCard("photo-flash") {
             PhotoFlashSettings(state, settings, onSettingsChange)
         }
@@ -4672,7 +4676,7 @@ private fun audioSourceLabel(source: com.librestatic.opencinecam.media.audio.Aud
 )
 
 @Composable
-private fun SettingsToggleRow(
+internal fun SettingsToggleRow(
     title: String,
     summary: String?,
     checked: Boolean,

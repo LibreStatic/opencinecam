@@ -66,12 +66,13 @@ internal fun captureSlots(mode: CaptureMode): List<CaptureSlot> = when {
 }
 
 /** Why a slot is greyed out. */
-internal enum class SlotUnavailableReason { NOT_READY, SINGLE_RESOLUTION, HIGH_SPEED, NO_MANUAL_EXPOSURE, NO_EV }
+internal enum class SlotUnavailableReason { NOT_READY, SINGLE_RESOLUTION, HIGH_SPEED, NO_MANUAL_EXPOSURE, NO_EV, NIGHT_PHOTO }
 
 /**
  * Whether a slot can be driven now. A high-speed session runs exposure, white balance and focus
  * itself, so only its size and rate stay adjustable. With a single [resolutionChoices] the RES
- * slot is a placeholder that names the size ("12 MP").
+ * slot is a placeholder that names the size ("12 MP"). A night photo ([nightPhoto]) runs through the
+ * OEM extension, which sets size, exposure, white balance and focus itself, so every slot is held.
  */
 internal fun captureSlotUnavailableReason(
     slot: CaptureSlot,
@@ -81,8 +82,10 @@ internal fun captureSlotUnavailableReason(
     manualShutter: Boolean,
     evSupported: Boolean,
     resolutionChoices: Int = 2,
+    nightPhoto: Boolean = false,
 ): SlotUnavailableReason? = when {
     !cameraReady -> SlotUnavailableReason.NOT_READY
+    nightPhoto -> SlotUnavailableReason.NIGHT_PHOTO
     slot == CaptureSlot.RESOLUTION && resolutionChoices < 2 -> SlotUnavailableReason.SINGLE_RESOLUTION
     highSpeed && slot != CaptureSlot.RESOLUTION && slot != CaptureSlot.FPS && slot != CaptureSlot.INTERVAL ->
         SlotUnavailableReason.HIGH_SPEED
@@ -122,6 +125,7 @@ internal fun SlotUnavailableReason.textRes(): Int = when (this) {
     SlotUnavailableReason.HIGH_SPEED -> R.string.capture_slot_reason_high_speed
     SlotUnavailableReason.NO_MANUAL_EXPOSURE -> R.string.capture_slot_reason_no_manual
     SlotUnavailableReason.NO_EV -> R.string.capture_slot_reason_no_ev
+    SlotUnavailableReason.NIGHT_PHOTO -> R.string.capture_slot_reason_night
 }
 
 /**
