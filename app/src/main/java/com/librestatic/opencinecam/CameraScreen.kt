@@ -1549,10 +1549,9 @@ internal fun AdaptiveCaptureChrome(
             if (stacked) 400.dp else maxHeight,
             maxHeight - deckHeight - topBar - 8.dp,
         ).coerceAtLeast(160.dp)
-        // A stacked window docks a pane, and the scopes, beside the frame or under it, by which
-        // leaves the larger frame.
-        val paneDock = if (stacked && !hinge) stackedPaneDock(width, stackedPaneHeight, sidePaneWidth.px(), dockCap.px(), ratio)
-            else PaneDock.BOTTOM
+        // Context panes (modes, ISO, EV, WB, focus...) dock under the frame, as on a phone. A
+        // stacked window docks the scopes beside the frame or under it, by which leaves the larger frame.
+        val paneDock = PaneDock.BOTTOM
         val scopeDock = if (stacked && !hinge) {
             stackedPaneDock(width, stackedPaneHeight, SCOPE_STRIP_WIDTH_DP.dp.px(), SCOPE_TRAY_HEIGHT_DP.dp.px(), ratio)
         } else PaneDock.BOTTOM
@@ -1790,14 +1789,19 @@ internal fun AdaptiveCaptureChrome(
                 // Whole 48 dp keys only (6 dp apart, under the 48 dp lock row): a key cut by the
                 // column's edge would read as one hidden under the pane.
                 val keyPitch = 48.dp + 6.dp
-                val wholeKeys = ((keyColumnMax - 48.dp) / keyPitch).toInt().coerceAtLeast(0)
+                val keyColumnCap = keyColumnCapDp(
+                    naturalDp = with(density) { keyColumnNaturalPx.toDp() }.value,
+                    availableDp = (keyColumnMax - 6.dp).value,
+                    pitchDp = keyPitch.value,
+                    lockRowDp = 48f,
+                )
                 val keyScroll = rememberScrollState()
                 Column(
                     Modifier
                         .align(Alignment.TopEnd)
                         .padding(end = endOccupied + 8.dp, top = topBar + 6.dp)
                         .onSizeChanged { topEndClusterWidthPx = it.width; keyColumnShownPx = it.height }
-                        .heightIn(max = 48.dp + keyPitch * wholeKeys)
+                        .then(if (keyColumnCap != null) Modifier.heightIn(max = keyColumnCap.dp) else Modifier)
                         .verticalScroll(keyScroll),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp),

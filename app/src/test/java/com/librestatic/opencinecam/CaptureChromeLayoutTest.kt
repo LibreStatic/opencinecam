@@ -97,6 +97,27 @@ class CaptureChromeLayoutTest {
         assertEquals(PaneDock.END, stackedPaneDock(800f, 800f, 200f, 200f, null))
     }
 
+    @Test fun foldInnerScreenIsStackedSoItsPanesDockAtTheBottom() {
+        // Context panes always dock at the bottom of the STACKED family (CameraScreen); stackedPaneDock
+        // now only places the scope strip.
+        assertEquals(CaptureLayoutFamily.STACKED, captureLayoutFamily(850f, 946f))
+        assertEquals(CaptureLayoutFamily.STACKED, captureLayoutFamily(946f, 850f))
+    }
+
+    @Test fun keyColumnIsUncappedWhenItFits() {
+        assertEquals(null, keyColumnCapDp(naturalDp = 318f, availableDp = 320f, pitchDp = 54f, lockRowDp = 48f))
+        // Within 1 dp of rounding still fits.
+        assertEquals(null, keyColumnCapDp(naturalDp = 320.5f, availableDp = 320f, pitchDp = 54f, lockRowDp = 48f))
+        // Not yet measured.
+        assertEquals(null, keyColumnCapDp(naturalDp = 0f, availableDp = 100f, pitchDp = 54f, lockRowDp = 48f))
+    }
+
+    @Test fun keyColumnOverflowQuantisesToWholeKeys() {
+        // 320 available: (320-48)/54 = 5 whole keys -> 48 + 270.
+        assertEquals(318f, keyColumnCapDp(naturalDp = 400f, availableDp = 320f, pitchDp = 54f, lockRowDp = 48f))
+        assertEquals(48f, keyColumnCapDp(naturalDp = 400f, availableDp = 20f, pitchDp = 54f, lockRowDp = 48f))
+    }
+
     @Test fun stackedSidePaneIsCapped() {
         assertEquals(SIDE_PANE_MAX_WIDTH_DP, stackedSidePaneWidth(1100f), 0.01f)
         assertEquals(700f * SIDE_PANE_MAX_FRACTION, stackedSidePaneWidth(700f), 0.01f)
