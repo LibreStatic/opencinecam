@@ -869,4 +869,11 @@
     <string name="night_photo_unavailable">L\'extension nuit n\'a pas pu démarrer sur cet appareil ; la photo normale est active.</string>
     <string name="night_photo_format_note">La photo de nuit ne capture qu\'en JPEG.</string>
     <string name="night_photo_flash_note">Le flash photo est indisponible en photo de nuit.</string>
+    <string name="night_photo_off">Désactivée</string>
+    <string name="night_photo_auto">Auto</string>
+    <string name="night_photo_always">Toujours</string>
+    <string name="night_photo_mode_help">Auto propose Nuit sur l\'écran de capture quand la scène est sombre ; touchez-la pour l\'utiliser pour le moment. Toujours utilise Nuit pour chaque photo.</string>
+    <string name="night_photo_short">NUIT</string>
+    <string name="night_photo_toggle_on">Photo de nuit : activée</string>
+    <string name="night_photo_toggle_off">Photo de nuit : désactivée</string>
 </resources>

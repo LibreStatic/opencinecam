@@ -737,7 +737,17 @@ class CaptureService : Service() {
     /** Night photo applies to PHOTO only, on a camera that offers the extension (API 31+). */
     private fun nightExtensionActive(mode: CaptureMode = cameraState.value.selectedMode): Boolean {
         if (mode != CaptureMode.PHOTO) return false
-        return com.librestatic.opencinecam.camera.nightExtensionEngaged(settings.nightPhoto, Build.VERSION.SDK_INT, cameraState.value.descriptor?.nightExtension)
+        val requested = com.librestatic.opencinecam.camera.nightPhotoRequested(settings.nightPhotoMode, nightTransientEngaged)
+        return com.librestatic.opencinecam.camera.nightExtensionEngaged(requested, Build.VERSION.SDK_INT, cameraState.value.descriptor?.nightExtension)
+    }
+
+    /** The quick toggle's session-only state: counts in AUTO only and is dropped with the mode, camera or service. */
+    @Volatile private var nightTransientEngaged = false
+    private val nightSceneDetector = com.librestatic.opencinecam.camera.NightSceneDetector()
+
+    private fun clearNightTransient() {
+        nightTransientEngaged = false
+        cameraState.update { if (it.nightTransientEngaged) it.copy(nightTransientEngaged = false) else it }
     }
 
     private fun selectedStillPhotoFormat(mode: CaptureMode = cameraState.value.selectedMode): StillPhotoFormat = when (mode) {
@@ -924,7 +934,14 @@ class CaptureService : Service() {
                 latestRollingShutterSkewNs = skew
                 synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.updateRollingShutterSkew(skew)
             }
+            // Judge the scene only from regular results: the extension session reports none, so the
+            // verdict (and the quick toggle with it) stays put while Night is engaged.
+            val nightSuggestedNow = if (cameraState.value.selectedMode == CaptureMode.PHOTO && !nightExtensionActive() &&
+                cameraState.value.descriptor?.nightExtension != null) {
+                nightSceneDetector.update(System.nanoTime(), metadata.sensitivityIso, metadata.exposureTimeNs)
+            } else nightSceneDetector.dark
             cameraState.update { it.copy(
+                nightSuggested = nightSuggestedNow,
                 sensitivityIso = metadata.sensitivityIso,
                 exposureTimeNs = metadata.exposureTimeNs,
                 focusDistanceDiopters = metadata.focusDistanceDiopters,
@@ -1853,7 +1870,12 @@ class CaptureService : Service() {
             val previous = current.selectedCameraId ?: return
             if (previous == cameraId) return
             val surface = attachedPreviewSurface
+            // The new lens meters its own scene and Night from the quick toggle does not follow it.
+            nightTransientEngaged = false
+            nightSceneDetector.reset()
             cameraState.value = current.copy(
+                nightTransientEngaged = false,
+                nightSuggested = false,
                 selectedCameraId = cameraId,
                 targetFps = normalizedTargetFps(
                     descriptor,
@@ -1965,7 +1987,10 @@ class CaptureService : Service() {
             }
                 ?: geometrySeeds.fps(mode)
             previewEngine.setTorch(settings.flashEnabled, settings.torchStrengthLevel)
+            // Night from the quick toggle is for the photo screen it was switched on in.
+            nightTransientEngaged = false
             cameraState.value = cameraState.value.copy(
+                nightTransientEngaged = false,
                 selectedMode = mode,
                 recordingProjectRate = null,
                 recordingPauseStatus = null,
@@ -2181,6 +2206,7 @@ class CaptureService : Service() {
         internal fun applySettings(requested: CameraSettings) {
             val previous = settings
             val wasLocked = cameraState.value.captureControlsLocked
+            val nightBefore = nightExtensionActive()
             if (previous.subjectDisplay.selfTimerSeconds != requested.subjectDisplay.selfTimerSeconds) cancelCountdown()
             settings = if (cameraState.value.phase == CameraUiPhase.CAPTURING && cameraState.value.selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)) {
                 // A metered still uses one immutable exposure/illumination intent through JPEG completion.
@@ -2242,9 +2268,10 @@ class CaptureService : Service() {
                 // during REC, so retire its now-idle graph here rather than keeping a hidden camera.
                 if (attachedPreviewSurface == null && subjectSurfaces.current == null &&
                     cameraState.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)) detachPreview()
+                if (settings.nightPhotoMode != com.librestatic.opencinecam.camera.NightPhotoMode.AUTO && nightTransientEngaged) clearNightTransient()
                 if (cameraState.value.gpuViewfinder != desiredGpuViewfinder() ||
                     (cameraState.value.selectedMode == CaptureMode.PHOTO &&
-                        (previous.photoFormat != settings.photoFormat || previous.nightPhoto != settings.nightPhoto))) {
+                        (previous.photoFormat != settings.photoFormat || nightBefore != nightExtensionActive()))) {
                     attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                 }
                 val onlyAudioDisplayChanged = previous.copy(audioListening = settings.audioListening,
@@ -2383,6 +2410,23 @@ class CaptureService : Service() {
 
         fun cancelFocusPull() {
             previewEngine.cancelFocusPull()
+        }
+
+        /**
+         * Night photo from the capture screen's quick toggle, for now only (AUTO mode). Restarts the
+         * photo graph when it changes what the session is; a no-op while a take holds the controls.
+         */
+        fun setNightPhotoEngaged(engaged: Boolean) {
+            if (rejectLockedControl()) return
+            val current = cameraState.value
+            if (current.structuralSettingsFrozen || current.selectedMode != CaptureMode.PHOTO) return
+            if (settings.nightPhotoMode != com.librestatic.opencinecam.camera.NightPhotoMode.AUTO) return
+            val before = nightExtensionActive()
+            nightTransientEngaged = engaged
+            cameraState.update { it.copy(nightTransientEngaged = engaged) }
+            if (before != nightExtensionActive()) {
+                attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+            }
         }
 
         fun setAeLock(enabled: Boolean) {

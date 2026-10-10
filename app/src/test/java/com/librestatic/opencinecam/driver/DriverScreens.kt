@@ -123,6 +123,24 @@ import kotlinx.coroutines.flow.flowOf
 @Composable
 fun CapturePortrait() = CaptureChrome(driverCaptureState())
 
+/** A back camera that offers the OEM night extension, so the Night quick toggle can exist. */
+private fun driverNightState(dark: Boolean, engaged: Boolean): CameraUiState {
+    val night = DriverCamera.copy(nightExtension = com.librestatic.opencinecam.camera.NightExtensionCapability(listOf(1920 to 1080), listOf(4000 to 3000)))
+    return driverCaptureState().copy(
+        cameras = listOf(night), nightSuggested = dark, nightTransientEngaged = engaged, nightExtensionRunning = engaged,
+        // A dim room: the metering asked for ISO 6400 at 1/30 s.
+        sensitivityIso = if (dark) 6400 else 400, exposureTimeNs = if (dark) 33_333_333L else 10_000_000L,
+    )
+}
+
+/** Photo mode in Auto, the scene dark and Night not yet on: the quick toggle is offered beside the lock keys. */
+@Composable
+fun CaptureNightSuggested() = CaptureChrome(driverNightState(dark = true, engaged = false))
+
+/** Night engaged from the quick toggle: highlighted, and the way back out. */
+@Composable
+fun CaptureNightOn() = CaptureChrome(driverNightState(dark = true, engaged = true))
+
 /** Capture chrome while a video take is recording at 01:23. */
 @Composable
 fun CaptureRecording() = CaptureChrome(

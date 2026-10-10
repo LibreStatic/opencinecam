@@ -869,4 +869,11 @@
     <string name="night_photo_unavailable">Die Nachterweiterung konnte auf dieser Kamera nicht gestartet werden; das normale Foto ist aktiv.</string>
     <string name="night_photo_format_note">Das Nachtfoto nimmt nur JPEG auf.</string>
     <string name="night_photo_flash_note">Der Fotoblitz ist im Nachtfoto nicht verfügbar.</string>
+    <string name="night_photo_off">Aus</string>
+    <string name="night_photo_auto">Automatisch</string>
+    <string name="night_photo_always">Immer</string>
+    <string name="night_photo_mode_help">Automatisch bietet Nacht auf dem Aufnahmebildschirm an, wenn die Szene dunkel ist; tippe dort darauf, um es vorerst zu nutzen. Immer nutzt Nacht für jedes Foto.</string>
+    <string name="night_photo_short">NACHT</string>
+    <string name="night_photo_toggle_on">Nachtfoto: an</string>
+    <string name="night_photo_toggle_off">Nachtfoto: aus</string>
 </resources>

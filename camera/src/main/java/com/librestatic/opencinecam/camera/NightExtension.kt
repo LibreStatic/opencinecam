@@ -39,6 +39,23 @@ fun nightExtensionCapability(
     return NightExtensionCapability(preview, jpeg)
 }
 
+/**
+ * How the operator wants Night photo. OFF never offers or engages it. AUTO offers it from the
+ * capture screen when the scene is dark and engages it only while the operator has switched it on
+ * there. ON engages it for every photo wherever the camera allows it.
+ */
+enum class NightPhotoMode { OFF, AUTO, ON }
+
+/**
+ * Whether the operator's choice asks for the extension now. [transientEngaged] is the quick
+ * toggle's session-only state; it counts in AUTO alone.
+ */
+fun nightPhotoRequested(mode: NightPhotoMode, transientEngaged: Boolean): Boolean = when (mode) {
+    NightPhotoMode.OFF -> false
+    NightPhotoMode.AUTO -> transientEngaged
+    NightPhotoMode.ON -> true
+}
+
 /** True when the operator asked for Night and this device and camera can honour it. */
 fun nightExtensionEngaged(requested: Boolean, sdkInt: Int, capability: NightExtensionCapability?): Boolean =
     requested && sdkInt >= NIGHT_EXTENSION_MIN_SDK && capability != null

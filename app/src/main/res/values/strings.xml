@@ -874,4 +874,11 @@
     <string name="night_photo_unavailable">The night extension could not start on this camera; regular photo is active.</string>
     <string name="night_photo_format_note">Night photo captures JPEG only.</string>
     <string name="night_photo_flash_note">Photographic flash is unavailable in Night photo.</string>
+    <string name="night_photo_off">Off</string>
+    <string name="night_photo_auto">Auto</string>
+    <string name="night_photo_always">Always</string>
+    <string name="night_photo_mode_help">Auto offers Night on the capture screen when the scene is dark; tap it there to use it for now. Always uses Night for every photo.</string>
+    <string name="night_photo_short">NIGHT</string>
+    <string name="night_photo_toggle_on">Night photo: on</string>
+    <string name="night_photo_toggle_off">Night photo: off</string>
 </resources>

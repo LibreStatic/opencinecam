@@ -69,6 +69,7 @@ internal enum class CineIcon {
     CHEVRON_RIGHT,
     LOCK,
     UNLOCK,
+    MOON,
     SCRIPT,
     SPEECH,
     SLATE,
@@ -106,6 +107,12 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             drawArc(color, 180f, 180f, false, Offset(w * left, h * .14f), Size(w * .32f, h * .36f), style = stroke)
             line(left, .32f, left, .46f)
             if (icon == CineIcon.LOCK) line(right, .32f, right, .46f)
+        }
+        CineIcon.MOON -> {
+            // Crescent: a disc with a smaller, offset disc cut out of it.
+            val disc = Path().apply { addOval(androidx.compose.ui.geometry.Rect(Offset(w * .20f, h * .16f), Size(w * .62f, h * .62f))) }
+            val bite = Path().apply { addOval(androidx.compose.ui.geometry.Rect(Offset(w * .42f, h * .04f), Size(w * .56f, h * .56f))) }
+            drawPath(Path.combine(androidx.compose.ui.graphics.PathOperation.Difference, disc, bite), color, style = Fill)
         }
         CineIcon.MEDIA -> {
             box(.12f, .20f, .88f, .80f)

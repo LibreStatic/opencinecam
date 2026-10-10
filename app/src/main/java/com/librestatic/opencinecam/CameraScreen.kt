@@ -1812,7 +1812,7 @@ internal fun AdaptiveCaptureChrome(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior)
+                        LockToggles(state = state, binder = binder, afLockBehavior = settings.afLockBehavior, settings = settings, onSettingsChanged = onSettingsChanged)
                         // A hinge split has no picture under its chrome: its F-keys go in the deck.
                         if (!hinge) OperatorButtonColumn(state, settings)
                     }
@@ -1850,6 +1850,8 @@ internal fun AdaptiveCaptureChrome(
                 state = state,
                 binder = binder,
                 afLockBehavior = settings.afLockBehavior,
+                settings = settings,
+                onSettingsChanged = onSettingsChanged,
                 modifier = Modifier.align(Alignment.TopEnd).padding(end = endOccupied + 8.dp, top = 8.dp)
                     .onSizeChanged { topEndClusterWidthPx = it.width },
             )
@@ -2766,6 +2768,8 @@ private fun LockToggles(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
     afLockBehavior: AfLockBehavior,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalAppHaptics.current
@@ -2777,6 +2781,28 @@ private fun LockToggles(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // Night photo sits first in the row. While it can be offered on this camera its place is
+        // kept, so the lock keys and the instruments under them stay put when it appears.
+        if (nightToggleAvailable(state, settings)) {
+            if (nightToggleVisible(state, settings)) {
+                val engaged = nightPhotoSelected(state, settings)
+                LockButton(
+                    label = stringResource(if (engaged) R.string.night_photo_toggle_on else R.string.night_photo_toggle_off),
+                    shortLabel = stringResource(R.string.night_photo_short),
+                    active = engaged,
+                    enabled = !state.captureControlsLocked,
+                    testTag = "capture-night-toggle",
+                    glyph = CineIcon.MOON,
+                    onClick = {
+                        haptics.perform(if (engaged) HapticEvent.LockOff else HapticEvent.LockOn)
+                        when (val action = nightToggleAction(state, settings)) {
+                            is NightToggleAction.SetEngaged -> binder?.setNightPhotoEngaged(action.engaged)
+                            NightToggleAction.ReleaseForced -> onSettingsChanged(settings.copy(nightPhotoMode = com.librestatic.opencinecam.camera.NightPhotoMode.AUTO))
+                        }
+                    },
+                )
+            } else Spacer(Modifier.size(48.dp))
+        }
         if (state.aeLockSupported) {
             LockButton(
                 label = stringResource(R.string.ae_lock),
@@ -2818,6 +2844,7 @@ private fun LockButton(
     enabled: Boolean = true,
     pending: Boolean = false,
     testTag: String,
+    glyph: CineIcon? = null,
     onClick: () -> Unit,
 ) {
     val bg = when {
@@ -2846,7 +2873,7 @@ private fun LockButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CineGlyph(if (active) CineIcon.LOCK else CineIcon.UNLOCK, fg, Modifier.size(20.dp))
+        CineGlyph(glyph ?: if (active) CineIcon.LOCK else CineIcon.UNLOCK, fg, Modifier.size(20.dp))
         Text(shortLabel, color = fg, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
     }
 }

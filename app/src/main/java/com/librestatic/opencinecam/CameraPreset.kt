@@ -212,6 +212,7 @@ object CameraPresetCodec {
         geotaggingEnabled = current.geotaggingEnabled,
         gyroflowLogEnabled = current.gyroflowLogEnabled,
         zeroShutterLag = current.zeroShutterLag,
+        nightPhotoMode = current.nightPhotoMode,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,
