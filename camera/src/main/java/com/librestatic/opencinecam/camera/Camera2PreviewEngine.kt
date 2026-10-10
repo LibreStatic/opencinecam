@@ -147,6 +147,8 @@ data class Camera2CameraDescriptor(
     val faceDetectModes: Set<Int> = emptySet(),
     /** CONTROL_ENABLE_ZSL is an advertised capture request key; stills may ask for the zero-shutter-lag path. */
     val zslSupported: Boolean = false,
+    /** The camera's night CameraExtensionCharacteristics outputs (API 31+); null when it offers none. */
+    val nightExtension: NightExtensionCapability? = null,
 ) {
     /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
     fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
@@ -295,6 +297,8 @@ interface Camera2PreviewListener {
     fun onOperatorLutStatus(status: OperatorLutStatus) = Unit
     fun onPhotoFlashResult(report: PhotoFlashReport) = Unit
     fun onStillCaptured(capture: CapturedStill) = Unit
+    /** Night extension processing progress, 0..100 (API 34+; never called where the platform omits it). */
+    fun onNightCaptureProgress(percent: Int) = Unit
     fun onBurstCaptured(capture: CapturedBurst) = Unit
     fun onBurstProgress(completed: Int, total: Int) = Unit
     fun onBracketCaptured(capture: CapturedBracket) = Unit
@@ -395,6 +399,9 @@ class Camera2PreviewEngine(
     // cameraExecutor-confined: request replacements share the real graph's one start receipt.
     private var pendingPreviewStartedReceipt: PreviewStartedReceipt? = null
     private var previewSurface: Surface? = null
+    /** The live night extension session (API 31+), which replaces [session] and every still reader. */
+    @Volatile private var nightSession: NightExtensionSession? = null
+    private val nightExtensionCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<NightExtensionCapability>>()
     private var jpegReader: ImageReader? = null
     private var rawReader: ImageReader? = null
     private var analysisReader: ImageReader? = null
@@ -748,6 +755,7 @@ class Camera2PreviewEngine(
         stillFormat: StillPhotoFormat = StillPhotoFormat.JPEG,
         gpuPhotoPreview: Boolean = false,
         stillSize: Size? = null,
+        nightExtension: Boolean = false,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -787,7 +795,11 @@ class Camera2PreviewEngine(
                 this.displayRotationDegrees = displayRotationDegrees
                 this.logPreviewEnabled = openCineLog
                 this.logViewAssistEnabled = viewAssist
-                this.gpuPhotoPreviewEnabled = gpuPhotoPreview && gpuPreview && !openCineLog
+                // Night photo hands the viewfinder surface straight to the extension session, so it
+                // never shares a graph with the GPU monitor, video or LOG paths.
+                val nightRequested = nightExtensionEngaged(nightExtension, Build.VERSION.SDK_INT, descriptor.nightExtension) &&
+                    !openCineLog && videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG
+                this.gpuPhotoPreviewEnabled = gpuPhotoPreview && gpuPreview && !openCineLog && !nightRequested
                 // A photographic GPU monitor retains regular still readers, not a video/HFR graph.
                 this.activeVideoProfile = if (gpuPhotoPreviewEnabled) null
                     else videoProfile?.takeIf { it in descriptor.videoProfiles }
@@ -802,7 +814,7 @@ class Camera2PreviewEngine(
                     ?: preferredTargetFps(supportedFps)
                 this.previousSensorTimestampNs = null
                 this.effectiveFps = null
-                this.gpuPreviewEnabled = gpuPreview && !openCineLog
+                this.gpuPreviewEnabled = gpuPreview && !openCineLog && !nightRequested
                 var analysisPipeline: OpenCineLogGpuPipeline? = null
                 if (openCineLog) {
                     val selectedLogProfile = activeLogProfile
@@ -873,6 +885,7 @@ class Camera2PreviewEngine(
                                 return
                             }
                             camera = device
+                            if (nightRequested && startNightExtension(device, descriptor, surface, currentGeneration)) return
                             if (openCineLog) configureLogSession(device, descriptor, currentGeneration)
                             else if (gpuPhotoPreviewEnabled) configureSession(device, descriptor,
                                 requireNotNull(logPipeline).cameraInputSurface, currentGeneration)
@@ -1106,6 +1119,52 @@ class Camera2PreviewEngine(
             })
     }
 
+    /** True while the live graph is the night extension session rather than a regular capture session. */
+    fun nightExtensionActive(): Boolean = nightSession != null
+
+    private fun nightExtensionFor(cameraId: String): NightExtensionCapability? {
+        if (Build.VERSION.SDK_INT < NIGHT_EXTENSION_MIN_SDK) return null
+        // Probing may bind the OEM extension service, so each camera is asked once per engine.
+        return nightExtensionCache.getOrPut(cameraId) {
+            java.util.Optional.ofNullable(probeNightExtension(manager, cameraId))
+        }.orElse(null)
+    }
+
+    /**
+     * cameraExecutor: replaces the regular session with the night extension session. False means the
+     * extension cannot even be attempted, so the caller builds the regular session. A later failure
+     * before the first preview falls back the same way, once, with the device still open.
+     */
+    private fun startNightExtension(
+        device: CameraDevice,
+        descriptor: Camera2CameraDescriptor,
+        surface: Surface,
+        currentGeneration: Long,
+    ): Boolean {
+        val capability = descriptor.nightExtension ?: return false
+        val sizes = capability.selectSizes(
+            referenceJpeg = descriptor.jpegSize?.let { it.width to it.height },
+            referencePreview = descriptor.previewSize.let { it.width to it.height },
+        )
+        val night = NightExtensionSession(
+            manager, device, descriptor, surface, sizes, cameraExecutor, imageHandler,
+            requireNotNull(listener),
+            jpegOrientation = { jpegOrientation(descriptor) },
+            isCurrent = { !disposed.get() && currentGeneration == generation && camera === device },
+            onUnavailable = { reason ->
+                cameraExecutor.execute {
+                    if (disposed.get() || currentGeneration != generation || camera !== device) return@execute
+                    nightSession = null
+                    Log.w(TAG, "Night extension fell back to the regular photo session: $reason")
+                    configureSession(device, descriptor, surface, currentGeneration)
+                }
+            },
+        )
+        nightSession = night
+        night.start()
+        return true
+    }
+
     /** OFF disables photographic pulses, not the independently requested continuous torch. */
     fun captureJpeg(flash: PhotoFlashSelection = PhotoFlashSelection()): Boolean =
         captureStillInternal(StillPhotoFormat.JPEG, flash, 95, LegacyPhotoDelivery.JPEG)
@@ -1117,6 +1176,11 @@ class Camera2PreviewEngine(
     private fun captureStillInternal(format: StillPhotoFormat, flash: PhotoFlashSelection, quality: Int, legacy: LegacyPhotoDelivery, bracket: BracketRequest? = null, accumulation: AccumulationRequest? = null, aspect: PhotoAspectSelection = PhotoAspectSelection(), burst: BurstRequest? = null, zeroShutterLag: Boolean = false): Boolean {
         require(quality in 1..100)
         if (disposed.get()) return false
+        nightSession?.let { night ->
+            // The extension takes plain JPEG stills only: no RAW, HEIC, groups or photographic flash.
+            if (format != StillPhotoFormat.JPEG || bracket != null || accumulation != null || burst != null) return false
+            return night.capture(quality, aspect, legacy == LegacyPhotoDelivery.JPEG)
+        }
         val raw = if (StillImageKind.DNG in format.requiredKinds) rawReader ?: return false else null
         val reader = if (format == StillPhotoFormat.DNG) requireNotNull(raw) else jpegReader ?: return false
         val expectedFormat = when (format) {
@@ -1226,6 +1290,7 @@ class Camera2PreviewEngine(
     fun cancelJpeg(): Boolean = cancelStill()
 
     fun cancelStill(): Boolean {
+        nightSession?.let { return it.cancel() }
         if (burstRequest.get() != null) return cancelBurst()
         accumulationRequest.get()?.let { owner ->
             if (!owner.cancelled.compareAndSet(false, true)) return false
@@ -5231,6 +5296,7 @@ class Camera2PreviewEngine(
                 zslSupported = runCatching { CaptureRequest.CONTROL_ENABLE_ZSL in characteristics.availableCaptureRequestKeys }.getOrDefault(false),
                 faceDetectModes = if (CaptureRequest.STATISTICS_FACE_DETECT_MODE in characteristics.availableCaptureRequestKeys)
                     characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES)?.toSet().orEmpty() else emptySet(),
+                nightExtension = nightExtensionFor(cameraId),
                 imageProcessingCapabilities = ImageProcessingCapabilities(
                     opticalModes = if (CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.toSet().orEmpty() else emptySet(),
@@ -5447,6 +5513,8 @@ class Camera2PreviewEngine(
 
     private fun closeResources() {
         pendingPreviewStartedReceipt = null
+        nightSession?.close()
+        nightSession = null
         retireGraphAudit()
         burstRequest.get()?.let { retireBurst(it, restore = false) }
         accumulationRequest.get()?.let { retireAccumulation(it, restore = false) }

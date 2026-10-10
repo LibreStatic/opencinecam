@@ -21,7 +21,8 @@ import kotlin.math.roundToInt
 @Composable
 internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val descriptor = state.descriptor
-    fun supported(format: StillPhotoFormat) = when (format) {
+    val night = nightPhotoSelected(state, settings)
+    fun supported(format: StillPhotoFormat) = !night && when (format) {
         StillPhotoFormat.JPEG -> descriptor?.jpegSize != null
         StillPhotoFormat.RAW_JPEG -> descriptor?.supportsRaw == true && descriptor.rawSize != null && descriptor.jpegSize != null
         StillPhotoFormat.HEIC -> descriptor?.heicSize != null
@@ -32,7 +33,9 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
         SettingsChips(stringResource(R.string.photo_format_label), listOf(StillPhotoFormat.JPEG, StillPhotoFormat.RAW_JPEG, StillPhotoFormat.HEIC),
             settings.photoFormat, label = { if (it == StillPhotoFormat.RAW_JPEG) "RAW + JPEG" else it.name },
             onSelect = { onChange(settings.copy(photoFormat = it)) }, tag = { "photo-format-${it.name}" }, enabled = ::supported)
-        if (!supported(settings.photoFormat)) Text(stringResource(R.string.photo_format_unavailable),
+        if (night) Text(stringResource(R.string.night_photo_format_note),
+            color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-format-night"))
+        else if (!supported(settings.photoFormat)) Text(stringResource(R.string.photo_format_unavailable),
             color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-format-unavailable"))
         var quality by remember(settings.photoQuality) { mutableFloatStateOf(settings.photoQuality.toFloat()) }
         val label = stringResource(R.string.photo_quality, quality.roundToInt())

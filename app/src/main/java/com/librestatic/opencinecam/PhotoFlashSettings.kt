@@ -23,6 +23,7 @@ import kotlin.math.roundToInt
 internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {
     val caps = state.descriptor?.photoFlashCapabilities ?: PhotoFlashCapabilities()
     val selection = settings.photoFlash
+    val night = nightPhotoSelected(state, settings)
     fun choice(mode: PhotoFlashMode): PhotoFlashSelection {
         val automatic = PhotoFlashSelection(mode)
         return if (mode == PhotoFlashMode.ON && caps.singleMax > 1 &&
@@ -39,7 +40,9 @@ internal fun PhotoFlashSettings(state: CameraUiState, settings: CameraSettings, 
             }) },
             onSelect = { onChange(settings.copy(photoFlash = choice(it))) },
             tag = { "photo-flash-${it.name}" },
-            enabled = { choice(it).resolve(caps, settings.exposure.mode) is PhotoFlashResolution.Plan })
+            enabled = { !night && choice(it).resolve(caps, settings.exposure.mode) is PhotoFlashResolution.Plan })
+        if (night) Text(stringResource(R.string.night_photo_flash_note),
+            color = LocalCineColors.current.pending, modifier = Modifier.testTag("photo-flash-night"))
         val resolved = selection.resolve(caps, settings.exposure.mode)
         if (resolved is PhotoFlashResolution.Rejected) Text(
             stringResource(R.string.photo_flash_rejected, stringResource(when (resolved.reason) {

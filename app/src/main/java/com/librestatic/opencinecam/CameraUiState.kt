@@ -168,6 +168,10 @@ data class CameraUiState(
     /** In-focus edges of the latest analysis frame; null while focus peaking is off. */
     val focusPeakingMask: com.librestatic.opencinecam.camera.FocusPeakingMask? = null,
     val stillCapturePending: Boolean = false,
+    /** True while the live graph is the night extension session; the engine's truth, not the setting. */
+    val nightExtensionRunning: Boolean = false,
+    /** Night extension processing progress 0..100 while a night still is held; null when unknown or idle. */
+    val nightProgressPercent: Int? = null,
     val lastStillPublication: com.librestatic.opencinecam.storage.StillPublication? = null,
     val lastSavedUri: String? = null,
     val errorCode: String? = null,

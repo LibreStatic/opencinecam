@@ -34,4 +34,8 @@
     <string name="capture_hold_caption_busy">Occupata</string>
     <string name="capture_hold_caption_locked">Bloccato</string>
     <string name="capture_unlock">Sblocca</string>
+    <string name="capture_slot_reason_night">La foto notturna lo imposta automaticamente.</string>
+    <string name="capture_hold_busy_night">Elaborazione della foto notturna…</string>
+    <string name="capture_hold_busy_night_progress">Elaborazione della foto notturna… %1$d%%</string>
+    <string name="capture_hold_short_night">Notte…</string>
 </resources>

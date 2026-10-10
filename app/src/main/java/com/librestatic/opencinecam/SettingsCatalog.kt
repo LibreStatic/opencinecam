@@ -59,6 +59,7 @@ object SettingsCatalog {
         SettingEntry("photo-aspect", SettingsCategory.RECORDING, R.string.photo_aspect_title, "aspecto aspect ratio recorte crop personalizado custom proporcion ancho alto width height JPEG RAW"),
         SettingEntry("photo-format", SettingsCategory.RECORDING, R.string.photo_format_title, "foto photo fotografia formato format raw dng jpeg heic calidad quality pareja pair"),
         SettingEntry("zero-shutter-lag", SettingsCategory.RECORDING, R.string.zsl_title, "zsl zero shutter lag latencia latency retardo disparador obturador shutter foto photo rapido fast"),
+        SettingEntry("night-photo", SettingsCategory.RECORDING, R.string.night_photo_title, "noche night nocturno low light poca luz oscuridad dark foto photo fotografia extension extensión HDR fusion multiples frames"),
         SettingEntry("photo-flash", SettingsCategory.RECORDING, R.string.photo_flash_title, "flash fotografia foto photo automatico automatic forced forzado pulso pulse intensidad strength precaptura"),
         SettingEntry("torch", SettingsCategory.CAPTURE, R.string.flash_torch, "flash torch antorcha linterna luz light intensidad intensity strength LOG"),
         SettingEntry("zebra", SettingsCategory.MONITORING, R.string.monitor_zebra, "zebra cebra exposicion exposure"),

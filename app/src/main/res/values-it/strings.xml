@@ -864,4 +864,9 @@
     <string name="gyroflow_log_title">Dati giroscopio per Gyroflow</string>
     <string name="gyroflow_log_enabled">Registra i dati del giroscopio per Gyroflow</string>
     <string name="gyroflow_log_help">Salva il movimento del telefono (giroscopio e accelerometro) accanto a ogni ripresa video, LOG o HLG in un file .gcsv con lo stesso nome, per stabilizzarla in Gyroflow. I dati di movimento vengono registrati solo mentre l\'opzione è attiva e restano in quel file sul tuo dispositivo. Non usato per slow motion o time-lapse. Disattiva la stabilizzazione della fotocamera per un risultato migliore.</string>
+    <string name="night_photo_title">Foto notturna</string>
+    <string name="night_photo_help">Scatta le foto di FOTO con l\'estensione notturna del dispositivo, che unisce più fotogrammi per la scarsa luce. Tieni ferma la fotocamera finché il salvataggio non termina. Con Notte attiva, esposizione, bilanciamento del bianco e messa a fuoco manuali, RAW, HEIC, flash, bracketing e scope non sono disponibili.</string>
+    <string name="night_photo_unavailable">L\'estensione notturna non si è avviata su questa fotocamera; è attiva la foto normale.</string>
+    <string name="night_photo_format_note">La foto notturna acquisisce solo JPEG.</string>
+    <string name="night_photo_flash_note">Il flash fotografico non è disponibile nella foto notturna.</string>
 </resources>
