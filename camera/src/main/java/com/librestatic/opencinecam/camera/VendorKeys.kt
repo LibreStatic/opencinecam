@@ -45,10 +45,21 @@ internal object VendorKeys {
         return resolveVendorKey(
             name, gate,
             advertised,
-            characteristics.keys.mapTo(HashSet()) { it.name },
+            if (staticInts(characteristics, gate) != null) setOf(gate) else emptySet(),
             Build.VERSION.SDK_INT,
         )
     }
+
+    /**
+     * An int32 static vendor tag by name. getKeys() only lists availableCharacteristicsKeys, which
+     * leaves out the Razr's Qualcomm tags, so on API 29+ the key is also built by name.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun staticInts(characteristics: CameraCharacteristics, name: String): IntArray? = runCatching {
+        val listed = characteristics.keys.firstOrNull { it.name == name } as CameraCharacteristics.Key<IntArray>?
+        val key = listed ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) CameraCharacteristics.Key(name, IntArray::class.java) else null
+        key?.let(characteristics::get)
+    }.getOrNull()
 
     private fun noteByName(cameraId: String?, name: String) {
         if (logged.add("$cameraId/$name")) {

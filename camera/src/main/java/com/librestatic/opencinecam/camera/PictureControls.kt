@@ -116,11 +116,9 @@ internal class PictureControlKeys(
 /** A control is offered only when both its request key and its range key exist and parse. */
 @Suppress("UNCHECKED_CAST")
 internal fun CameraCharacteristics.pictureControlCapabilities(): PictureControlCapabilities = runCatching {
-    val ranges = keys.associateBy { it.name }
     fun range(rangeKey: String, requestKey: String, parse: (IntArray?) -> PictureControlRange?): PictureControlRange? {
         if (VendorKeys.request(this, null, requestKey, rangeKey, IntArray::class.java) == null) return null
-        val key = ranges[rangeKey] as CameraCharacteristics.Key<IntArray>? ?: return null
-        return runCatching { parse(get(key)) }.getOrNull()
+        return runCatching { parse(VendorKeys.staticInts(this, rangeKey)) }.getOrNull()
     }
     PictureControlCapabilities(
         saturation = range(SATURATION_RANGE_KEY, SATURATION_REQUEST_KEY, ::parseSaturationRange),
