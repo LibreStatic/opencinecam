@@ -340,6 +340,7 @@
     <string name="image_mode_off">Off</string>
     <string name="image_mode_optical">OIS · optical</string>
     <string name="image_mode_video">EIS · electronic</string>
+    <string name="image_mode_preview">EIS · preview-matched</string>
     <string name="image_stabilization_help">OIS and EIS are selected separately; simultaneous support is not inferred. EIS can crop or change the field of view. Actual operation depends on resolution, FPS and output surfaces; check reported results, not only advertised modes.</string>
     <string name="image_noise">Image noise reduction</string>
     <string name="image_edge">Image edge enhancement</string>

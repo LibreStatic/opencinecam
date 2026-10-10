@@ -13,7 +13,8 @@ import com.librestatic.opencinecam.core.model.StableFailure
 enum class ExposureMode { AUTO, MANUAL, ISO_PRIORITY, SHUTTER_PRIORITY }
 enum class FocusMode { CONTINUOUS_VIDEO, AUTO, MANUAL }
 enum class WhiteBalanceMode { AUTO, MANUAL }
-enum class StabilizationMode { OFF, VIDEO, OPTICAL }
+/** [PREVIEW] is Camera2 PREVIEW_STABILIZATION (API 33+): the viewfinder shows the stabilized framing of the recording. */
+enum class StabilizationMode { OFF, VIDEO, OPTICAL, PREVIEW }
 enum class IspMode { DEFAULT, HIGH_QUALITY, FAST, OFF }
 
 data class CaptureIntent(
@@ -49,6 +50,7 @@ data class CaptureRequestCapabilities(
     val frameDurationNs: Knowledge<LongRange>,
     val focusDistanceDiopters: Knowledge<ClosedFloatingPointRange<Float>>,
     val videoStabilization: Knowledge<Boolean>,
+    val previewStabilization: Knowledge<Boolean> = Knowledge.Unknown,
     val aePriorityModes: Knowledge<Set<ExposureMode>> = Knowledge.Unknown,
     val opticalStabilization: Knowledge<Boolean> = Knowledge.Unknown,
     val noiseReductionModes: Knowledge<Set<IspMode>> = Knowledge.Unknown,
@@ -188,11 +190,13 @@ class CaptureRequestComposer(
                 values["CONTROL_VIDEO_STABILIZATION_MODE"] = RequestValue.TextValue("OFF")
                 if ((capabilities.opticalStabilization as? Knowledge.Known)?.value == true) values["LENS_OPTICAL_STABILIZATION_MODE"] = RequestValue.TextValue("OFF")
             }
-            StabilizationMode.VIDEO -> when (val support = capabilities.videoStabilization) {
+            StabilizationMode.VIDEO, StabilizationMode.PREVIEW -> when (val support = capabilities.videoStabilization) {
                 Knowledge.Unknown -> return reject(FailureCode.UNKNOWN_CAPABILITY, "Video stabilization capability is unknown.")
                 is Knowledge.Unsupported -> return reject(FailureCode.UNSUPPORTED_CAPABILITY, support.reason)
                 is Knowledge.Known -> if (support.value) {
-                    values["CONTROL_VIDEO_STABILIZATION_MODE"] = RequestValue.TextValue("VIDEO")
+                    // Preview-matched needs its own capability; without it the request is the standard one.
+                    val previewMatched = intent.stabilization == StabilizationMode.PREVIEW && (capabilities.previewStabilization as? Knowledge.Known)?.value == true
+                    values["CONTROL_VIDEO_STABILIZATION_MODE"] = RequestValue.TextValue(if (previewMatched) "PREVIEW_STABILIZATION" else "VIDEO")
                     if ((capabilities.opticalStabilization as? Knowledge.Known)?.value == true) values["LENS_OPTICAL_STABILIZATION_MODE"] = RequestValue.TextValue("OFF")
                 } else if (policy == CompositionPolicy.ADAPTIVE) {
                     values["CONTROL_VIDEO_STABILIZATION_MODE"] = RequestValue.TextValue("OFF")

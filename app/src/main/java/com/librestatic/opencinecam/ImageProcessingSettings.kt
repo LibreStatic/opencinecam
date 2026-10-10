@@ -30,9 +30,11 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
         if (hfr) Text(stringResource(R.string.image_processing_hfr), color = LocalCineColors.current.pending, fontSize = 14.sp)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsChips(stringResource(R.string.image_stabilization),
-                listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO), selected.stabilization,
+                listOf<StabilizationMode?>(null, StabilizationMode.OFF, StabilizationMode.OPTICAL, StabilizationMode.VIDEO,
+                    StabilizationMode.PREVIEW).filter { it != StabilizationMode.PREVIEW || caps.previewStabilization }, selected.stabilization,
                 label = { mode -> stringResource(when (mode) { null -> R.string.image_template_default; StabilizationMode.OFF -> R.string.image_mode_off;
-                    StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video }) },
+                    StabilizationMode.OPTICAL -> R.string.image_mode_optical; StabilizationMode.VIDEO -> R.string.image_mode_video;
+                    StabilizationMode.PREVIEW -> R.string.image_mode_preview }) },
                 onSelect = { onChange(settings.copy(imageProcessing = selected.copy(stabilization = it))) },
                 tag = { "stabilization-${it?.name ?: "DEFAULT"}" }, enabled = { it == null || (!hfr && caps.supports(it)) })
             SettingsHelp(stringResource(R.string.image_stabilization_help))

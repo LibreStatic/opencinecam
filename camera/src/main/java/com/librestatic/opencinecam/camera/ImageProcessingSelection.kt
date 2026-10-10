@@ -7,6 +7,9 @@ data class ImageProcessingSelection(
     val noiseReduction: IspMode = IspMode.DEFAULT,
     val edge: IspMode = IspMode.DEFAULT,
 )
+/** CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION. */
+const val PREVIEW_STABILIZATION = 2
+
 enum class ImageProcessingControl { STABILIZATION, NOISE_REDUCTION, EDGE }
 
 /** Raw Camera2 values are retained: 0=OFF, 1=ON for OIS/EIS; 0/1/2=OFF/FAST/HQ for ISP. */
@@ -17,6 +20,9 @@ data class ImageProcessingCapabilities(
     val edgeModes: Set<Int> = emptySet(),
     val sessionControls: Set<ImageProcessingControl> = emptySet(),
 ) {
+    /** Whether the preview-matched choice is offered: the camera lists it (the engine drops it below API 33). */
+    val previewStabilization: Boolean get() = PREVIEW_STABILIZATION in videoModes
+
     fun supports(mode: StabilizationMode?): Boolean {
         if (mode == null) return true
         val canDisableOptical = opticalModes.isEmpty() || 0 in opticalModes
@@ -25,6 +31,7 @@ data class ImageProcessingCapabilities(
             StabilizationMode.OFF -> (opticalModes.isNotEmpty() || videoModes.isNotEmpty()) && canDisableOptical && canDisableVideo
             StabilizationMode.OPTICAL -> 1 in opticalModes && canDisableVideo
             StabilizationMode.VIDEO -> 1 in videoModes && canDisableOptical
+            StabilizationMode.PREVIEW -> previewStabilization && canDisableOptical
         }
     }
     fun supports(mode: IspMode, control: ImageProcessingControl): Boolean = mode == IspMode.DEFAULT || mode.camera2Value() in when (control) {
@@ -42,13 +49,15 @@ fun ImageProcessingSelection.resolve(caps: ImageProcessingCapabilities, defaults
     val unavailable = mutableSetOf<ImageProcessingControl>()
     var optical = defaults.optical
     var video = defaults.video
+    // A stored preview-matched choice on a camera without it applies the standard mode instead.
+    val stabilization = if (stabilization == StabilizationMode.PREVIEW && !caps.previewStabilization) StabilizationMode.VIDEO else stabilization
     if (stabilization != null) {
         val unknownCounterpartOn = (stabilization == StabilizationMode.OPTICAL && caps.videoModes.isEmpty() && defaults.video != null && defaults.video != 0) ||
-            (stabilization == StabilizationMode.VIDEO && caps.opticalModes.isEmpty() && defaults.optical != null && defaults.optical != 0)
+            ((stabilization == StabilizationMode.VIDEO || stabilization == StabilizationMode.PREVIEW) && caps.opticalModes.isEmpty() && defaults.optical != null && defaults.optical != 0)
         if (constrainedHfr || unknownCounterpartOn || !caps.supports(stabilization)) unavailable += ImageProcessingControl.STABILIZATION
         else {
             if (caps.opticalModes.isNotEmpty()) optical = if (stabilization == StabilizationMode.OPTICAL) 1 else 0
-            if (caps.videoModes.isNotEmpty()) video = if (stabilization == StabilizationMode.VIDEO) 1 else 0
+            if (caps.videoModes.isNotEmpty()) video = when (stabilization) { StabilizationMode.VIDEO -> 1; StabilizationMode.PREVIEW -> PREVIEW_STABILIZATION; else -> 0 }
         }
     }
     fun resolveIsp(mode: IspMode, control: ImageProcessingControl, default: Int?): Int? {
