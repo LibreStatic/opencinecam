@@ -325,6 +325,14 @@
     <string name="pro_clamped">El request se limita al rango del sensor o la duración del cuadro de captura. Revisá los valores reportados.</string>
     <string name="pro_antibanding">Antiparpadeo</string>
     <string name="pro_flicker_help">El antiparpadeo permite que la exposición automática compense el parpadeo de la red eléctrica. Las sugerencias de obturación de 50/60 Hz fijan 1/100 o 1/120 s; no garantizan eliminar el parpadeo de los LED.</string>
+    <string name="hud_low_light_boost">Refuerzo LL</string>
+    <string name="pro_low_light_boost">Refuerzo con poca luz</string>
+    <string name="pro_low_light_boost_help">Permite que la exposición automática ilumine escenas muy oscuras en la vista previa y en las fotos. La cámara puede reducir la tasa de fotogramas para lograrlo.</string>
+    <string name="pro_low_light_boost_manual">Inactivo: el refuerzo con poca luz necesita exposición automática.</string>
+    <string name="pro_low_light_boost_priority">Inactivo: el refuerzo con poca luz no funciona con prioridad de ISO ni de obturación.</string>
+    <string name="pro_low_light_boost_video">Inactivo en este modo: el vídeo mantiene una tasa de fotogramas fija y las fotos de varios fotogramas necesitan fotogramas idénticos.</string>
+    <string name="pro_low_light_boost_hfr">Inactivo: las sesiones de alta velocidad mantienen una tasa de fotogramas fija.</string>
+    <string name="pro_low_light_boost_fps">Inactivo: el refuerzo con poca luz necesita una tasa de 30 fps o menos.</string>
     <string name="pro_shutter_suggestion">Obturación sugerida para %1$d Hz</string>
     <string name="pro_white_balance">Balance de blancos</string>
     <string name="pro_wb_auto">WB automático</string>

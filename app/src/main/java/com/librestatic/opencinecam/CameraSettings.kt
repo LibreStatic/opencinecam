@@ -316,6 +316,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             shutterUnit = enumPreference("shutter-unit", ShutterUnit.TIME),
             angleTenths = preferences.getInt("shutter-angle-tenths", 1800).coerceIn(1, 3600),
             antibanding = enumPreference("antibanding", Antibanding.AUTO),
+            lowLightBoost = preferences.getBoolean("low-light-boost", false),
         ),
         recordingWhiteBalance = runCatching { RecordingWhiteBalancePolicy.valueOf(preferences.getString("recording-white-balance", "CONTINUOUS") ?: "CONTINUOUS") }.getOrDefault(RecordingWhiteBalancePolicy.CONTINUOUS),
         whiteBalance = when (preferences.getString("white-balance-kind", "AUTO")) {
@@ -513,6 +514,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("shutter-unit", settings.exposure.shutterUnit.name)
             .putInt("shutter-angle-tenths", settings.exposure.angleTenths)
             .putString("antibanding", settings.exposure.antibanding.name)
+            .putBoolean("low-light-boost", settings.exposure.lowLightBoost)
             .putString("recording-white-balance", settings.recordingWhiteBalance.name)
             .putString("white-balance-kind", when (settings.whiteBalance) {
                 is WhiteBalanceSelection.Auto -> "AUTO"

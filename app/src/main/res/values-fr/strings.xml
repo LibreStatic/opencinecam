@@ -325,6 +325,14 @@
     <string name="pro_clamped">La demande est limitée par la plage du capteur ou la durée d\'image de capture. Vérifiez les valeurs signalées.</string>
     <string name="pro_antibanding">Anti-scintillement</string>
     <string name="pro_flicker_help">L\'anti-scintillement permet à l\'exposition automatique de compenser le scintillement du secteur. Les suggestions de vitesse 50/60 Hz règlent 1/100 ou 1/120 s ; elles ne garantissent pas la suppression du scintillement des LED.</string>
+    <string name="hud_low_light_boost">Boost LL</string>
+    <string name="pro_low_light_boost">Boost en basse lumière</string>
+    <string name="pro_low_light_boost_help">Permet à l\'exposition automatique d\'éclaircir les scènes très sombres dans l\'aperçu et sur les photos. L\'appareil peut réduire la cadence d\'images pour y parvenir.</string>
+    <string name="pro_low_light_boost_manual">Inactif : le boost en basse lumière nécessite l\'exposition automatique.</string>
+    <string name="pro_low_light_boost_priority">Inactif : le boost en basse lumière ne fonctionne pas avec la priorité ISO ou vitesse.</string>
+    <string name="pro_low_light_boost_video">Inactif dans ce mode : la vidéo garde une cadence fixe et les photos multi-images exigent des images identiques.</string>
+    <string name="pro_low_light_boost_hfr">Inactif : les sessions haute vitesse gardent une cadence fixe.</string>
+    <string name="pro_low_light_boost_fps">Inactif : le boost en basse lumière nécessite une cadence de 30 i/s ou moins.</string>
     <string name="pro_shutter_suggestion">Suggestion de vitesse %1$d Hz</string>
     <string name="pro_white_balance">Balance des blancs</string>
     <string name="pro_wb_auto">WB automatique</string>

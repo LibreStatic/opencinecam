@@ -2526,6 +2526,22 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
     )
 }
 
+/** Same chip style as [LogSourceBadge]; shown only while CONTROL_LOW_LIGHT_BOOST_STATE reports ACTIVE. */
+@Composable
+private fun LowLightBoostBadge(modifier: Modifier = Modifier) {
+    Text(
+        stringResource(R.string.hud_low_light_boost),
+        color = Color.White,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        modifier = modifier
+            .testTag("low-light-boost-badge")
+            .background(Panel, RoundedCornerShape(5.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
 /** VERIFIED only for a profile tied to exact evidence; an unqualified profile makes no claim either way. */
 internal fun ocLogQualificationLabel(profile: Camera2LogProfile?): String? =
     if (profile?.isVerified == true) "VERIFIED" else null
@@ -2552,10 +2568,12 @@ private fun InstrumentStack(
         !(state.selectedMode == CaptureMode.VIDEO && settings.videoOffSpeed)
     val showLogSource = chromeVisible && state.selectedMode.usesLogGraph
     val showZoom = chromeVisible && state.zoomSupported
+    // Shown while the camera reports the boost running, whatever the chrome state: it changes the picture.
+    val showLowLight = state.reportedLowLightBoost == true
     val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
     // A hinge split has no picture here: the preview pane's overlay says it instead.
     val showSuspension = !dedicatedPane && state.analysisSuspension != AnalysisSuspension.NONE
-    if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showSuspension) return
+    if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showSuspension && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
         val stretchHistogram = dedicatedPane && horizontal && showHistogram
@@ -2568,6 +2586,7 @@ private fun InstrumentStack(
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
                 wrapCross = horizontal && showSuspension, modifier = if (horizontal && showSuspension) Modifier else Modifier.weight(1f)) {
                 if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
+                if (showLowLight) LowLightBoostBadge()
                 if (showZoom) ZoomReadout(state, binder)
                 if (showSuspension && !horizontal) notice()
                 if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)

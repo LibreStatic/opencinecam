@@ -93,6 +93,13 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             label = { it.displayLabel() }, onSelect = { updateExposure(exposure.copy(antibanding = it)) },
             tag = { "pro-antibanding-${it.name}" }, enabled = { it in caps.antibanding })
         SettingsHelp(stringResource(R.string.pro_flicker_help))
+        if (descriptor?.lowLightBoostSupported == true) {
+            SettingsSwitchRow(stringResource(R.string.pro_low_light_boost), exposure.lowLightBoost,
+                { updateExposure(exposure.copy(lowLightBoost = it)) }, tag = "pro-low-light-boost")
+            SettingsHelp(stringResource(R.string.pro_low_light_boost_help))
+            val boost = lowLightBoostFor(state, exposure, resolved, hfr)
+            boost.inactive?.let { Text(stringResource(it.explanationResource()), color = pending, fontSize = 14.sp, modifier = Modifier.testTag("pro-low-light-boost-inactive")) }
+        }
         RecordingWhiteBalanceSettings(state, settings, onChange)
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
         val kelvinRange = descriptor?.kelvinRange.takeUnless { hfr }
@@ -124,6 +131,25 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             Text(stringResource(R.string.pro_restore_auto))
         }
     }
+}
+
+/** What the engine will do with the boost toggle given the current mode, exposure and frame rate. */
+internal fun lowLightBoostFor(state: CameraUiState, exposure: ExposureSelection, resolved: ResolvedExposure, highSpeed: Boolean): LowLightBoostDecision =
+    resolveLowLightBoost(
+        supported = state.descriptor?.lowLightBoostSupported == true,
+        enabled = exposure.lowLightBoost,
+        exposureMode = resolved.mode,
+        scene = if (state.selectedMode == CaptureMode.PHOTO || state.selectedMode == CaptureMode.RAW_PHOTO) LowLightBoostScene.PREVIEW_OR_STILL else LowLightBoostScene.VIDEO,
+        highSpeed = highSpeed,
+        maxTargetFps = state.targetFps,
+    )
+
+internal fun LowLightBoostInactive.explanationResource(): Int = when (this) {
+    LowLightBoostInactive.MANUAL_EXPOSURE -> R.string.pro_low_light_boost_manual
+    LowLightBoostInactive.AE_PRIORITY -> R.string.pro_low_light_boost_priority
+    LowLightBoostInactive.VIDEO_FIXED_FRAME_RATE -> R.string.pro_low_light_boost_video
+    LowLightBoostInactive.HIGH_SPEED -> R.string.pro_low_light_boost_hfr
+    LowLightBoostInactive.FRAME_RATE_ABOVE_30 -> R.string.pro_low_light_boost_fps
 }
 
 internal fun ExposureMode.titleResource(): Int = when (this) {

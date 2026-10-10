@@ -224,6 +224,8 @@ object CameraPresetCodec {
         // Encoder support is a property of this device; not yet a portable key (needs a schema revision).
         videoCodec = current.videoCodec,
         hdrVideoFormat = current.hdrVideoFormat,
+        // The low-light boost is a per-device capability choice, not part of a look (no schema revision).
+        exposure = preset.exposure.copy(lowLightBoost = current.exposure.lowLightBoost),
         // OCLog2 review view is a viewing habit of this device, not part of a look.
         playback = preset.playback.copy(logView = current.playback.logView, nativeSurfaceFrames = current.playback.nativeSurfaceFrames),
         // Scripts, cues and the OCC-PLAN-068 subject preferences are not portable keys; only the

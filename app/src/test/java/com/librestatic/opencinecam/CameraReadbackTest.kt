@@ -7,6 +7,7 @@ import com.librestatic.opencinecam.camera.ImageProcessingDefaults
 import com.librestatic.opencinecam.camera.ResolvedExposure
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,5 +55,28 @@ class CameraReadbackTest {
         assertEquals("ON (1) → OFF (0)", lines["android.lens.opticalStabilizationMode"])
         assertEquals("— → —", lines["android.scaler.cropRegion"])
         assertEquals("AUTO → —", lines["android.control.aeMode"])
+    }
+
+    @Test fun lowLightBoostStateIsReportedOnlyWhenTheCameraSaidSo() {
+        fun line(state: CameraUiState) = requestedReportedLines(state).toMap()["android.control.lowLightBoostState"]
+        assertEquals("— → —", line(CameraUiState()))
+        assertEquals("— → ACTIVE", line(CameraUiState(reportedLowLightBoost = true)))
+        assertEquals("— → INACTIVE", line(CameraUiState(reportedLowLightBoost = false)))
+    }
+}
+
+class LowLightBoostSettingsTest {
+    @Test fun lowLightBoostDefaultsOffPersistsAndStaysOutOfPresets() {
+        val memory = PresetPreferences()
+        val store = CameraSettingsStore(memory)
+        assertFalse(store.load().exposure.lowLightBoost)
+        val on = CameraSettings(exposure = com.librestatic.opencinecam.camera.ExposureSelection(lowLightBoost = true))
+        store.save(on)
+        assertEquals(true, memory.all["low-light-boost"])
+        assertEquals(on, store.load())
+        assertFalse("low-light-boost" in CameraPresetCodec.portableKeys)
+        val merged = CameraPresetCodec.mergeLocal(CameraSettings(), on)
+        assertTrue(merged.exposure.lowLightBoost)
+        assertFalse(CameraPresetCodec.mergeLocal(on, CameraSettings()).exposure.lowLightBoost)
     }
 }

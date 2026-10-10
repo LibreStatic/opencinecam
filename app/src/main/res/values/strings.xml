@@ -328,6 +328,14 @@
     <string name="pro_clamped">The request is limited by the sensor range or capture frame duration. Check reported values.</string>
     <string name="pro_antibanding">Anti-banding</string>
     <string name="pro_flicker_help">Anti-banding lets automatic exposure work around mains flicker. The 50/60 Hz shutter suggestions set 1/100 or 1/120 s; they do not guarantee removing LED flicker.</string>
+    <string name="hud_low_light_boost">LL boost</string>
+    <string name="pro_low_light_boost">Low-light boost</string>
+    <string name="pro_low_light_boost_help">Lets automatic exposure brighten very dark scenes in the preview and in photos. The camera may lower the frame rate to do it.</string>
+    <string name="pro_low_light_boost_manual">Inactive: low-light boost needs automatic exposure.</string>
+    <string name="pro_low_light_boost_priority">Inactive: low-light boost does not work with ISO or shutter priority.</string>
+    <string name="pro_low_light_boost_video">Inactive in this mode: video keeps a fixed frame rate, and multi-frame photos need identical frames.</string>
+    <string name="pro_low_light_boost_hfr">Inactive: high-speed sessions keep a fixed frame rate.</string>
+    <string name="pro_low_light_boost_fps">Inactive: low-light boost needs a frame rate of 30 fps or lower.</string>
     <string name="pro_shutter_suggestion">%1$d Hz shutter suggestion</string>
     <string name="pro_white_balance">White balance</string>
     <string name="pro_wb_auto">Automatic WB</string>

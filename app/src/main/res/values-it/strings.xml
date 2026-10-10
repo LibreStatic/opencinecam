@@ -325,6 +325,14 @@
     <string name="pro_clamped">La richiesta è limitata dall\'intervallo del sensore o dalla durata del frame di acquisizione. Controlla i valori segnalati.</string>
     <string name="pro_antibanding">Antisfarfallio</string>
     <string name="pro_flicker_help">L\'antisfarfallio permette all\'esposizione automatica di compensare lo sfarfallio della rete elettrica. I suggerimenti di otturazione a 50/60 Hz impostano 1/100 o 1/120 s; non garantiscono la rimozione dello sfarfallio dei LED.</string>
+    <string name="hud_low_light_boost">Boost LL</string>
+    <string name="pro_low_light_boost">Boost con poca luce</string>
+    <string name="pro_low_light_boost_help">Permette all\'esposizione automatica di schiarire le scene molto buie nell\'anteprima e nelle foto. La fotocamera può ridurre la frequenza dei fotogrammi per farlo.</string>
+    <string name="pro_low_light_boost_manual">Inattivo: il boost con poca luce richiede l\'esposizione automatica.</string>
+    <string name="pro_low_light_boost_priority">Inattivo: il boost con poca luce non funziona con la priorità ISO o otturatore.</string>
+    <string name="pro_low_light_boost_video">Inattivo in questa modalità: il video mantiene una frequenza di fotogrammi fissa e le foto multi-fotogramma richiedono fotogrammi identici.</string>
+    <string name="pro_low_light_boost_hfr">Inattivo: le sessioni ad alta velocità mantengono una frequenza di fotogrammi fissa.</string>
+    <string name="pro_low_light_boost_fps">Inattivo: il boost con poca luce richiede una frequenza di 30 fps o inferiore.</string>
     <string name="pro_shutter_suggestion">Suggerimento otturatore %1$d Hz</string>
     <string name="pro_white_balance">Bilanciamento del bianco</string>
     <string name="pro_wb_auto">WB automatico</string>
