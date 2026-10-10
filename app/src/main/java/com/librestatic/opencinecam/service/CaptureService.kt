@@ -2673,7 +2673,8 @@ class CaptureService : Service() {
                     settings = settings.copy(productionSlate = owner.productionSlate, captureNaming = owner.captureNames.settings)
                     cameraState.value = current.copy(phase = CameraUiPhase.CAPTURING, message = null,
                         photoFlashReport = null, lastStillPublication = null, stillCapturePending = true)
-                    previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect).also { accepted ->
+                    previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect,
+                        zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
                         if (!accepted) finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")
                     }
                 }

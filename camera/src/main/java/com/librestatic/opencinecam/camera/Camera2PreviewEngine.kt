@@ -138,6 +138,8 @@ data class Camera2CameraDescriptor(
     val aeCompensationStepDenominator: Int = 1,
     /** OCC-PLAN-068 U7: advertised STATISTICS_FACE_DETECT_MODE values; empty when the request key is absent. */
     val faceDetectModes: Set<Int> = emptySet(),
+    /** CONTROL_ENABLE_ZSL is an advertised capture request key; stills may ask for the zero-shutter-lag path. */
+    val zslSupported: Boolean = false,
 ) {
     /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
     fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
@@ -410,8 +412,12 @@ class Camera2PreviewEngine(
         val accumulation: AccumulationRequest? = null,
         val aspect: PhotoAspectSelection = PhotoAspectSelection(),
         val burst: BurstRequest? = null,
+        val zeroShutterLag: Boolean = false,
     ) {
         val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        /** Engine admission time, the closest the camera layer gets to the shutter press. */
+        val pressedAtNs = SystemClock.elapsedRealtimeNanos()
+        var zslApplied = false
         var sequence: PhotoCaptureSequence? = null
         var plan: PhotoFlashResolution.Plan? = null
         var still: CaptureRequest? = null
@@ -611,6 +617,7 @@ class Camera2PreviewEngine(
     private var graphAudit: Pair<CameraCaptureSession, CaptureResultAuditor>? = null
     private var lastCaptureAuditSummaryAtMs = 0L
     @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
+    @Volatile private var latestStillShutterLatency: StillShutterLatency? = null
     private val thermalStatusListener = PowerManager.OnThermalStatusChangedListener(::observeThermalStatus)
     init {
         // minSdk 29: the listener API is always present, so no polling fallback is needed. The
@@ -1081,10 +1088,10 @@ class Camera2PreviewEngine(
         captureStillInternal(StillPhotoFormat.JPEG, flash, 95, LegacyPhotoDelivery.JPEG)
 
     fun captureStill(format: StillPhotoFormat, flash: PhotoFlashSelection = PhotoFlashSelection(), quality: Int = 95,
-        aspect: PhotoAspectSelection = PhotoAspectSelection()): Boolean =
-        captureStillInternal(format, flash, quality, LegacyPhotoDelivery.NONE, aspect = aspect)
+        aspect: PhotoAspectSelection = PhotoAspectSelection(), zeroShutterLag: Boolean = false): Boolean =
+        captureStillInternal(format, flash, quality, LegacyPhotoDelivery.NONE, aspect = aspect, zeroShutterLag = zeroShutterLag)
 
-    private fun captureStillInternal(format: StillPhotoFormat, flash: PhotoFlashSelection, quality: Int, legacy: LegacyPhotoDelivery, bracket: BracketRequest? = null, accumulation: AccumulationRequest? = null, aspect: PhotoAspectSelection = PhotoAspectSelection(), burst: BurstRequest? = null): Boolean {
+    private fun captureStillInternal(format: StillPhotoFormat, flash: PhotoFlashSelection, quality: Int, legacy: LegacyPhotoDelivery, bracket: BracketRequest? = null, accumulation: AccumulationRequest? = null, aspect: PhotoAspectSelection = PhotoAspectSelection(), burst: BurstRequest? = null, zeroShutterLag: Boolean = false): Boolean {
         require(quality in 1..100)
         if (disposed.get()) return false
         val raw = if (StillImageKind.DNG in format.requiredKinds) rawReader ?: return false else null
@@ -1097,7 +1104,7 @@ class Camera2PreviewEngine(
         if (reader.imageFormat != expectedFormat || raw?.imageFormat?.let { it != ImageFormat.RAW_SENSOR } == true) return false
         val request = PhotoRequest(photoIds.incrementAndGet(), generation, camera ?: return false,
             session ?: return false, reader, activeDescriptor ?: return false,
-            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst)
+            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst, zeroShutterLag)
         synchronized(stillAdmissionLock) {
             if (bracketRequest.get() !== bracket || accumulationRequest.get() !== accumulation || burstRequest.get() !== burst || legacyStillRequest.get() != null || recording || recorderRequest.get() != null ||
                 bracket != null && !ownsBracket(bracket) || accumulation != null && !ownsAccumulation(accumulation) ||
@@ -1166,6 +1173,7 @@ class Camera2PreviewEngine(
                     builder.get(CaptureRequest.FLASH_MODE),
                     if (Build.VERSION.SDK_INT >= 35) builder.get(CaptureRequest.FLASH_STRENGTH_LEVEL) else null)
                 applyPhotoPlan(builder, plan)
+                applyZeroShutterLag(builder, request, plan, exposureMode)
                 val still = builder.build()
                 request.plan = plan
                 request.sequence = PhotoCaptureSequence(plan.needsPrecapture)
@@ -1320,6 +1328,19 @@ class Camera2PreviewEngine(
         }
     }
 
+    /** Pragmatic ZSL: only the request flag, no reprocessable session; any ineligible still keeps today's request. */
+    private fun applyZeroShutterLag(builder: CaptureRequest.Builder, request: PhotoRequest, plan: PhotoFlashResolution.Plan, exposureMode: ExposureMode?) {
+        val eligible = zeroShutterLagEligible(ZeroShutterLagContext(
+            requested = request.zeroShutterLag, supported = request.descriptor.zslSupported,
+            singleStill = request.bracket == null && request.accumulation == null && request.burst == null,
+            rawOutput = StillImageKind.DNG in request.format.requiredKinds,
+            manualExposure = exposureMode != ExposureMode.AUTO,
+            flashActive = photoFlashPlanActive(plan), needsPrecapture = plan.needsPrecapture))
+        if (!eligible) return
+        request.zslApplied = runCatching { builder.set(CaptureRequest.CONTROL_ENABLE_ZSL, true) }
+            .onFailure { Log.w(TAG, "CONTROL_ENABLE_ZSL rejected; keeping the standard still request.", it) }.isSuccess
+    }
+
     private fun submitPhotoStill(owner: PhotoRequest) {
         if (!ownsPhoto(owner)) return
         try {
@@ -1327,6 +1348,13 @@ class Camera2PreviewEngine(
             owner.repeatingChanged = true
             owner.session.captureSingleRequest(requireNotNull(owner.still), cameraExecutor,
                 object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                        if (session !== owner.session || (request.tag as? PhotoTag)?.id != owner.id || owner.bracket != null || owner.accumulation != null || owner.burst != null) return
+                        measureStillShutterLatency(owner.zslApplied, owner.pressedAtNs, SystemClock.elapsedRealtimeNanos())?.let {
+                            latestStillShutterLatency = it
+                            Log.i(TAG, "Still shutter latency: ${it.latencyMs} ms (zsl=${it.zslApplied})")
+                        }
+                    }
                     override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                         if (!ownsPhoto(owner) || session !== owner.session || (request.tag as? PhotoTag)?.id != owner.id) return
                         val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
@@ -3994,6 +4022,9 @@ class Camera2PreviewEngine(
     /** Latest DIAGNOSTIC capture-result statistics of the current graph, or null before its first result. */
     fun captureDiagnostics(): CaptureAuditStats? = latestCaptureDiagnostics
 
+    /** Latest single-still press-to-start latency and whether ZSL was requested, for on/off device comparison. */
+    fun stillShutterLatency(): StillShutterLatency? = latestStillShutterLatency
+
     /** cameraExecutor: the current graph's DIAGNOSTIC auditor, replaced (and summarized) when the session changes. */
     private fun graphAuditor(session: CameraCaptureSession): CaptureResultAuditor {
         graphAudit?.takeIf { it.first === session }?.let { return it.second }
@@ -4879,6 +4910,7 @@ class Camera2PreviewEngine(
                 awbLockSupported = characteristics.get(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true &&
                     CaptureRequest.CONTROL_AWB_LOCK in characteristics.availableCaptureRequestKeys,
                 availableAwbModes = characteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toSet().orEmpty(),
+                zslSupported = runCatching { CaptureRequest.CONTROL_ENABLE_ZSL in characteristics.availableCaptureRequestKeys }.getOrDefault(false),
                 faceDetectModes = if (CaptureRequest.STATISTICS_FACE_DETECT_MODE in characteristics.availableCaptureRequestKeys)
                     characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES)?.toSet().orEmpty() else emptySet(),
                 imageProcessingCapabilities = ImageProcessingCapabilities(

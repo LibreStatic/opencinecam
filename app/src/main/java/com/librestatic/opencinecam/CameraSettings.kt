@@ -109,6 +109,8 @@ data class CameraSettings(
     val photoFormat: StillPhotoFormat = StillPhotoFormat.JPEG,
     val photoQuality: Int = 95,
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
+    /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
+    val zeroShutterLag: Boolean = true,
     val torchStrengthLevel: Int? = null,
     val zebraEnabled: Boolean = false,
     val peakingEnabled: Boolean = false,
@@ -386,6 +388,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         acousticEchoCancelerEnabled = preferences.getBoolean(KEY_AUDIO_AEC, false),
         accumulation = loadAccumulation(),
         photoAspect = loadPhotoAspect(),
+        zeroShutterLag = preferences.getBoolean("zero-shutter-lag", true),
         monitoring = loadMonitoring(),
         bracket = com.librestatic.opencinecam.camera.BracketSelection(
             preferences.getInt(KEY_BRACKET_COUNT, 3).takeIf { it in setOf(3, 5, 7, 9) } ?: 3,
@@ -573,6 +576,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putInt(KEY_BITRATE, settings.videoBitrateMbps)
             .putString(KEY_VIDEO_CODEC, settings.videoCodec.name)
             .putBoolean(KEY_FLASH, settings.flashEnabled)
+            .putBoolean("zero-shutter-lag", settings.zeroShutterLag)
             .putBoolean("photo-aspect-enabled", settings.photoAspect.enabled)
             .putInt("photo-aspect-width", settings.photoAspect.width)
             .putInt("photo-aspect-height", settings.photoAspect.height)

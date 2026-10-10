@@ -627,6 +627,10 @@
     <string name="photo_aspect_title">Photo aspect and crop</string>
     <string name="photo_aspect_help">Width:height of the final oriented JPEG. Center pixel crop without upscaling; not sensor readout, zoom or a viewfinder guide. Preview stays full-frame.</string>
     <string name="photo_aspect_enabled">Crop JPEG files</string>
+    <string name="zsl_title">Zero shutter lag</string>
+    <string name="zsl_help">Asks the camera to reuse its already running frames so the photo is taken closer to the moment you press the shutter. Applies to single PHOTO stills only; flash, manual or priority exposure, bracketing, bursts, accumulation and RAW capture always use the standard path.</string>
+    <string name="zsl_toggle">Zero shutter lag</string>
+    <string name="zsl_unavailable">This camera does not offer zero shutter lag.</string>
     <string name="photo_aspect_selected">Selected width:height — %1$d:%2$d</string>
     <string name="photo_aspect_width">Width ratio (1–10000)</string>
     <string name="photo_aspect_height">Height ratio (1–10000)</string>
