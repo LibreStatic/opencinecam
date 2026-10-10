@@ -3673,7 +3673,10 @@ class Camera2PreviewEngine(
         }
         try {
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
-            createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
+            createSessionRetryingWithoutStreamUse(
+                device, descriptor, configuration,
+                ColorSpace.Named.BT2020_HLG.takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE },
+            )
         } catch (failure: Throwable) {
             sessionException(failure)
         }
@@ -4635,7 +4638,12 @@ class Camera2PreviewEngine(
      * and the camera id is remembered for the process. The caller's callback only hears about a
      * failure of that second attempt (or of a session that never carried use cases).
      */
-    private fun createSessionRetryingWithoutStreamUse(device: CameraDevice, descriptor: Camera2CameraDescriptor, configuration: SessionConfiguration) {
+    private fun createSessionRetryingWithoutStreamUse(
+        device: CameraDevice,
+        descriptor: Camera2CameraDescriptor,
+        configuration: SessionConfiguration,
+        colorSpace: ColorSpace.Named? = null,
+    ) {
         val carries = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             configuration.outputConfigurations.any { it.streamUseCase != StreamUseCase.DEFAULT }
         if (!carries) {
@@ -4668,10 +4676,9 @@ class Camera2PreviewEngine(
                 }
             })
         configuration.sessionParameters?.let(wrapped::setSessionParameters)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) configuration.colorSpace?.let { space ->
-            // getColorSpace returns the ColorSpace instance; setColorSpace takes its Named id.
-            ColorSpace.Named.entries.firstOrNull { ColorSpace.get(it) == space }?.let(wrapped::setColorSpace)
-        }
+        // The caller names the color space it set: on the Razr getColorSpace() reports SRGB for a
+        // configuration that never set one, and copying it makes the HAL refuse the RAW output.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) colorSpace?.let(wrapped::setColorSpace)
         device.createCaptureSession(wrapped)
     }
 
