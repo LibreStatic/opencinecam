@@ -325,6 +325,14 @@
     <string name="pro_clamped">Die Anforderung wird durch den Sensorbereich oder die Frame-Dauer der Aufnahme begrenzt. Prüfe die gemeldeten Werte.</string>
     <string name="pro_antibanding">Antiflimmern</string>
     <string name="pro_flicker_help">Antiflimmern lässt die automatische Belichtung Netzflimmern ausgleichen. Die Verschlusszeit-Vorschläge für 50/60 Hz stellen 1/100 oder 1/120 s ein; sie garantieren nicht, dass LED-Flimmern verschwindet.</string>
+    <string name="hud_low_light_boost">LL-Boost</string>
+    <string name="pro_low_light_boost">Low-Light-Boost</string>
+    <string name="pro_low_light_boost_help">Lässt die automatische Belichtung sehr dunkle Szenen in der Vorschau und bei Fotos aufhellen. Dafür kann die Kamera die Bildrate senken.</string>
+    <string name="pro_low_light_boost_manual">Inaktiv: Der Low-Light-Boost benötigt die automatische Belichtung.</string>
+    <string name="pro_low_light_boost_priority">Inaktiv: Der Low-Light-Boost funktioniert nicht mit ISO- oder Verschlusszeitpriorität.</string>
+    <string name="pro_low_light_boost_video">In diesem Modus inaktiv: Video behält eine feste Bildrate, und Mehrfachaufnahmen benötigen identische Bilder.</string>
+    <string name="pro_low_light_boost_hfr">Inaktiv: Hochgeschwindigkeitssitzungen behalten eine feste Bildrate.</string>
+    <string name="pro_low_light_boost_fps">Inaktiv: Der Low-Light-Boost benötigt eine Bildrate von höchstens 30 fps.</string>
     <string name="pro_shutter_suggestion">Verschlusszeit-Vorschlag für %1$d Hz</string>
     <string name="pro_white_balance">Weißabgleich</string>
     <string name="pro_wb_auto">Automatischer WB</string>

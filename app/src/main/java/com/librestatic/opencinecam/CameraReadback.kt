@@ -108,6 +108,7 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.sensor.exposureTime" to readback(time(state.requestedExposureTimeNs) ?: "AUTO", time(state.exposureTimeNs)),
         "android.control.aeAntibandingMode" to readback(state.effectiveSettings?.exposure?.antibanding?.name,
             antibandingOf(state.reportedAntibanding)?.name ?: state.reportedAntibanding?.let { "#$it" }),
+        "android.control.lowLightBoostState" to readback(null, state.reportedLowLightBoost?.let { if (it) "ACTIVE" else "INACTIVE" }),
         "android.control.awbMode" to readback(when (wb) {
             WhiteBalanceSelection.Auto -> "AUTO"
             is WhiteBalanceSelection.Kelvin -> "OFF"

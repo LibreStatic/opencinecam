@@ -325,6 +325,14 @@
     <string name="pro_clamped">A solicitação é limitada pela faixa do sensor ou pela duração do quadro de captura. Verifique os valores informados.</string>
     <string name="pro_antibanding">Antioscilação</string>
     <string name="pro_flicker_help">A antioscilação permite que a exposição automática compense a oscilação da rede elétrica. As sugestões de obturador de 50/60 Hz definem 1/100 ou 1/120 s; não garantem a remoção da oscilação dos LEDs.</string>
+    <string name="hud_low_light_boost">Reforço LL</string>
+    <string name="pro_low_light_boost">Reforço com pouca luz</string>
+    <string name="pro_low_light_boost_help">Permite que a exposição automática clareie cenas muito escuras na pré-visualização e nas fotos. A câmera pode reduzir a taxa de quadros para isso.</string>
+    <string name="pro_low_light_boost_manual">Inativo: o reforço com pouca luz precisa de exposição automática.</string>
+    <string name="pro_low_light_boost_priority">Inativo: o reforço com pouca luz não funciona com prioridade de ISO ou de obturador.</string>
+    <string name="pro_low_light_boost_video">Inativo neste modo: o vídeo mantém uma taxa de quadros fixa e as fotos de vários quadros precisam de quadros idênticos.</string>
+    <string name="pro_low_light_boost_hfr">Inativo: as sessões de alta velocidade mantêm uma taxa de quadros fixa.</string>
+    <string name="pro_low_light_boost_fps">Inativo: o reforço com pouca luz precisa de uma taxa de 30 fps ou menos.</string>
     <string name="pro_shutter_suggestion">Sugestão de obturador para %1$d Hz</string>
     <string name="pro_white_balance">Balanço de branco</string>
     <string name="pro_wb_auto">WB automático</string>

@@ -112,6 +112,8 @@ data class Camera2CameraDescriptor(
     val maxAfRegions: Int = 0,
     val maxAeRegions: Int = 0,
     val aeLockSupported: Boolean = false,
+    /** API 35+ with CONTROL_AE_MODE_ON_LOW_LIGHT_BOOST_BRIGHTNESS_PRIORITY advertised. */
+    val lowLightBoostSupported: Boolean = false,
     val afLockSupported: Boolean = false,
     val zoomRatioRange: ClosedFloatingPointRange<Float>? = null,
     val supportsZoomRatioApi: Boolean = false,
@@ -222,6 +224,8 @@ data class Camera2PreviewMetadata(
     val colorTint: Int? = null,
     val exposureMode: ExposureMode? = null,
     val antibanding: Int? = null,
+    /** Null unless the submitted request used the low-light boost AE mode and the camera reported its state. */
+    val lowLightBoostActive: Boolean? = null,
     val opticalStabilization: Int? = null,
     val videoStabilization: Int? = null,
     val noiseReduction: Int? = null,
@@ -1136,6 +1140,11 @@ class Camera2PreviewEngine(
                     val frozen = request.bracket?.controls ?: request.accumulation?.controls ?: request.burst?.controls
                     if (frozen != null) copyPhotoControls(frozen, this) else applyManualControls(this)
                     if (request.format == StillPhotoFormat.DNG) restoreToneMapDefaults(this)
+                    // Multi-frame stills need identical frames: no boost-driven exposure or frame-rate changes.
+                    if (frozen == null && (request.bracket != null || request.accumulation != null || request.burst != null) &&
+                        get(CaptureRequest.CONTROL_AE_MODE) == AE_MODE_ON_LOW_LIGHT_BOOST_BRIGHTNESS_PRIORITY) {
+                        set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    }
                     if (request.accumulation != null || request.aspect.enabled && request.format != StillPhotoFormat.DNG)
                         set(CaptureRequest.JPEG_ORIENTATION, 0)
                     setTag(PhotoTag(request.id))
@@ -4008,6 +4017,9 @@ class Camera2PreviewEngine(
                                     } else ExposureMode.AUTO
                                 },
                                 antibanding = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_ANTIBANDING_MODE),
+                                lowLightBoostActive = if (Build.VERSION.SDK_INT >= 35) lowLightBoostActive(
+                                    request.get(CaptureRequest.CONTROL_AE_MODE),
+                                    result.get(android.hardware.camera2.CaptureResult.CONTROL_LOW_LIGHT_BOOST_STATE)) else null,
                                 opticalStabilization = result.get(android.hardware.camera2.CaptureResult.LENS_OPTICAL_STABILIZATION_MODE),
                                 videoStabilization = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE),
                                 noiseReduction = result.get(android.hardware.camera2.CaptureResult.NOISE_REDUCTION_MODE),
@@ -4108,6 +4120,28 @@ class Camera2PreviewEngine(
         }
     }
 
+    /**
+     * Swaps plain AE_MODE_ON for the low-light boost mode when the user asked for it and
+     * [resolveLowLightBoost] allows it. Video graphs (recording, video/LOG/HLG previews) keep
+     * plain AE: the boost may lengthen frame duration, and a video take must hold its fixed
+     * fps, so the exposure would also jump when a take starts. Only preview and PHOTO use it.
+     * A flash plan applied later overrides the AE mode, so AE_MODE_ON_*FLASH always wins.
+     */
+    private fun applyLowLightBoost(builder: CaptureRequest.Builder, exposureMode: ExposureMode, videoGraph: Boolean) {
+        if (Build.VERSION.SDK_INT < 35 || activeDescriptor?.lowLightBoostSupported != true) return
+        val decision = resolveLowLightBoost(
+            supported = true,
+            enabled = professionalExposure?.lowLightBoost == true,
+            exposureMode = exposureMode,
+            scene = if (videoGraph) LowLightBoostScene.VIDEO else LowLightBoostScene.PREVIEW_OR_STILL,
+            highSpeed = isHighSpeedSession(),
+            maxTargetFps = builder.get(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE)?.upper ?: requestedTargetFps,
+        )
+        if (decision.active) {
+            runCatching { builder.set(CaptureRequest.CONTROL_AE_MODE, AE_MODE_ON_LOW_LIGHT_BOOST_BRIGHTNESS_PRIORITY) }
+        }
+    }
+
     private fun applyManualControls(
         builder: CaptureRequest.Builder,
         defaultAfMode: Int = if (recording || logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null)
@@ -4158,6 +4192,11 @@ class Camera2PreviewEngine(
                 }
             }
         }
+        applyLowLightBoost(
+            builder,
+            pro?.mode ?: if (iso != null && exposure != null) ExposureMode.MANUAL else ExposureMode.AUTO,
+            videoGraph = defaultAfMode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO,
+        )
         when {
             requestedFocusDiopters != null -> {
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -4946,6 +4985,8 @@ class Camera2PreviewEngine(
                 maxAfRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0,
                 maxAeRegions = characteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0,
                 aeLockSupported = characteristics.get(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true,
+                lowLightBoostSupported = lowLightBoostSupported(Build.VERSION.SDK_INT,
+                    characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.toSet().orEmpty()),
                 afLockSupported = runCatching {
                     val afModes = characteristics.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)?.toList().orEmpty()
                     CaptureRequest.CONTROL_AF_MODE_OFF in afModes && CaptureRequest.CONTROL_AF_MODE_AUTO in afModes

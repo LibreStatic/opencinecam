@@ -17,6 +17,8 @@ data class ExposureSelection(
     val shutterUnit: ShutterUnit = ShutterUnit.TIME,
     val angleTenths: Int = 1800,
     val antibanding: Antibanding = Antibanding.AUTO,
+    /** Requests the low-light boost AE mode where it applies; see [resolveLowLightBoost]. */
+    val lowLightBoost: Boolean = false,
 ) {
     init { require(iso > 0 && timeNs > 0 && angleTenths in 1..3600) }
     fun requestedTimeNs(rate: CaptureFrameRate): Long = if (shutterUnit == ShutterUnit.TIME) timeNs else
