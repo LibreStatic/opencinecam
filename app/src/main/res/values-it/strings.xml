@@ -624,6 +624,10 @@
     <string name="photo_aspect_title">Proporzioni e ritaglio della foto</string>
     <string name="photo_aspect_help">Larghezza:altezza del JPEG finale già orientato. Ritaglio centrale in pixel senza ingrandimento; non è lettura del sensore, zoom né guida del mirino. L\'anteprima resta a fotogramma intero.</string>
     <string name="photo_aspect_enabled">Ritaglia file JPEG</string>
+    <string name="zsl_title">Zero shutter lag</string>
+    <string name="zsl_help">Chiede alla fotocamera di riutilizzare i fotogrammi già in acquisizione, così la foto viene scattata più vicino al momento in cui premi l\'otturatore. Vale solo per gli scatti singoli in modalità FOTO; flash, esposizione manuale o a priorità, bracketing, raffiche, accumulo e acquisizione RAW usano sempre il percorso standard.</string>
+    <string name="zsl_toggle">Zero shutter lag</string>
+    <string name="zsl_unavailable">Questa fotocamera non offre lo zero shutter lag.</string>
     <string name="photo_aspect_selected">Larghezza:altezza selezionata — %1$d:%2$d</string>
     <string name="photo_aspect_width">Rapporto di larghezza (1–10000)</string>
     <string name="photo_aspect_height">Rapporto di altezza (1–10000)</string>

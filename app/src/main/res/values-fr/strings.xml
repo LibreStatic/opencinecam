@@ -624,6 +624,10 @@
     <string name="photo_aspect_title">Format et recadrage photo</string>
     <string name="photo_aspect_help">Largeur:hauteur du JPEG final orienté. Recadrage centré en pixels sans agrandissement ; ni lecture capteur, ni zoom, ni repère de viseur. L\'aperçu reste en plein cadre.</string>
     <string name="photo_aspect_enabled">Recadrer les fichiers JPEG</string>
+    <string name="zsl_title">Zéro délai au déclenchement</string>
+    <string name="zsl_help">Demande à l\'appareil de réutiliser les images déjà en cours de capture afin que la photo soit prise au plus près du moment où vous appuyez sur le déclencheur. S\'applique uniquement aux photos uniques en mode PHOTO ; le flash, l\'exposition manuelle ou à priorité, le bracketing, les rafales, l\'accumulation et la capture RAW utilisent toujours le chemin standard.</string>
+    <string name="zsl_toggle">Zéro délai au déclenchement</string>
+    <string name="zsl_unavailable">Cet appareil ne propose pas le zéro délai au déclenchement.</string>
     <string name="photo_aspect_selected">Largeur:hauteur sélectionnée — %1$d:%2$d</string>
     <string name="photo_aspect_width">Ratio de largeur (1–10000)</string>
     <string name="photo_aspect_height">Ratio de hauteur (1–10000)</string>

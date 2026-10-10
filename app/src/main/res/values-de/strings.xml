@@ -624,6 +624,10 @@
     <string name="photo_aspect_title">Seitenverhältnis und Beschnitt des Fotos</string>
     <string name="photo_aspect_help">Breite:Höhe des endgültigen ausgerichteten JPEG. Zentrierter Pixelbeschnitt ohne Hochskalierung; kein Sensor-Auslesebereich, kein Zoom und keine Sucherhilfe. Die Vorschau bleibt bildfüllend.</string>
     <string name="photo_aspect_enabled">JPEG-Dateien beschneiden</string>
+    <string name="zsl_title">Zero Shutter Lag</string>
+    <string name="zsl_help">Weist die Kamera an, bereits laufende Frames wiederzuverwenden, damit das Foto näher am Moment des Auslösens entsteht. Gilt nur für einzelne FOTO-Aufnahmen; Blitz, manuelle oder Prioritätsbelichtung, Belichtungsreihen, Serienbilder, Akkumulation und RAW-Aufnahmen nutzen immer den Standardweg.</string>
+    <string name="zsl_toggle">Zero Shutter Lag</string>
+    <string name="zsl_unavailable">Diese Kamera bietet kein Zero Shutter Lag.</string>
     <string name="photo_aspect_selected">Gewählte Breite:Höhe — %1$d:%2$d</string>
     <string name="photo_aspect_width">Breitenverhältnis (1–10000)</string>
     <string name="photo_aspect_height">Höhenverhältnis (1–10000)</string>

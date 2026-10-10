@@ -207,6 +207,7 @@ object CameraPresetCodec {
     fun mergeLocal(preset: CameraSettings, current: CameraSettings): CameraSettings = preset.copy(
         geotaggingEnabled = current.geotaggingEnabled,
         gyroflowLogEnabled = current.gyroflowLogEnabled,
+        zeroShutterLag = current.zeroShutterLag,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

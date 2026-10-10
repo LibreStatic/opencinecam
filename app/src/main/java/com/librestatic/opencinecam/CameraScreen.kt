@@ -3998,6 +3998,9 @@ internal fun SettingsContent(
         if ("photo-format" in visibleIds) settingsCard("photo-format") {
             PhotoFormatSettings(state, settings, onSettingsChange)
         }
+        if ("zero-shutter-lag" in visibleIds) settingsCard("zero-shutter-lag") {
+            ZeroShutterLagSettings(state, settings, onSettingsChange)
+        }
         if ("photo-flash" in visibleIds) settingsCard("photo-flash") {
             PhotoFlashSettings(state, settings, onSettingsChange)
         }

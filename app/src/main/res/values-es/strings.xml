@@ -624,6 +624,10 @@
     <string name="photo_aspect_title">Aspecto y recorte fotográfico</string>
     <string name="photo_aspect_help">Ancho:alto del JPEG final orientado. Recorte centrado de píxeles sin ampliar; no cambia la lectura del sensor, zoom ni guías. La vista previa conserva el encuadre completo.</string>
     <string name="photo_aspect_enabled">Recortar archivos JPEG</string>
+    <string name="zsl_title">Retardo cero del obturador</string>
+    <string name="zsl_help">Pide a la cámara que reutilice los fotogramas que ya está capturando para que la foto se tome más cerca del instante en que pulsas el disparador. Solo se aplica a fotos individuales en modo FOTO; flash, exposición manual o con prioridad, horquillado, ráfagas, acumulación y captura RAW usan siempre el camino estándar.</string>
+    <string name="zsl_toggle">Retardo cero del obturador</string>
+    <string name="zsl_unavailable">Esta cámara no ofrece retardo cero del obturador.</string>
     <string name="photo_aspect_selected">Ancho:alto seleccionado — %1$d:%2$d</string>
     <string name="photo_aspect_width">Proporción de ancho (1–10000)</string>
     <string name="photo_aspect_height">Proporción de alto (1–10000)</string>

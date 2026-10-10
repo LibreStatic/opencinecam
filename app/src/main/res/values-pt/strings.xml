@@ -624,6 +624,10 @@
     <string name="photo_aspect_title">Proporção e corte da foto</string>
     <string name="photo_aspect_help">Largura:altura do JPEG final já orientado. Corte central em pixels, sem ampliação; não é leitura do sensor, zoom nem guia do visor. A pré-visualização continua em quadro cheio.</string>
     <string name="photo_aspect_enabled">Cortar arquivos JPEG</string>
+    <string name="zsl_title">Atraso zero do obturador</string>
+    <string name="zsl_help">Pede à câmera que reutilize os quadros que já estão em captura para que a foto seja tirada mais perto do momento em que você aperta o obturador. Aplica-se apenas a fotos únicas no modo FOTO; flash, exposição manual ou com prioridade, bracketing, rajadas, acumulação e captura RAW sempre usam o caminho padrão.</string>
+    <string name="zsl_toggle">Atraso zero do obturador</string>
+    <string name="zsl_unavailable">Esta câmera não oferece atraso zero do obturador.</string>
     <string name="photo_aspect_selected">Largura:altura selecionada — %1$d:%2$d</string>
     <string name="photo_aspect_width">Proporção de largura (1–10000)</string>
     <string name="photo_aspect_height">Proporção de altura (1–10000)</string>
