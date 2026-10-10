@@ -80,6 +80,8 @@ readback table. To verify on a device: pick each mode and check the readback lin
 `org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode` follows the request, then tap to
 meter in Spot and confirm the exposure follows the tapped point.
 
+On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and the static metadata (`CameraCharacteristics.getKeys()`) but are NOT listed in `availableCaptureRequestKeys` / `availableCaptureResultKeys`. `VendorKeys.kt` therefore resolves them by name (`CaptureRequest.Key(name, type)`, API 29+) whenever the feature's static gate key (`exposure_metering.available_modes`) is present, and logs `Vendor key <name> resolved by name (not advertised)` once per camera. Advertised keys still win, and a camera without the gate key is never touched.
+
 ## ISP statistics histogram (Qualcomm)
 
 `org.codeaurora.qcamera3.histogram.*` (Razr Fold `dumpsys media.camera`, vendor tag table):
@@ -96,6 +98,8 @@ ISP result is older than 500 ms. `stats_type` 1 (YUV) is labelled `ISP`; 0 or ab
 Which channel(s) `stats` holds is not documented by the device. Check logcat for
 `ISP histogram: N buckets, stats_type=…` on a device that advertises the keys.
 
+On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and the static metadata (`CameraCharacteristics.getKeys()`) but are NOT listed in `availableCaptureRequestKeys` / `availableCaptureResultKeys`. `VendorKeys.kt` therefore resolves them by name (`CaptureRequest.Key(name, type)`, API 29+) whenever the feature's static gate key (`histogram.buckets`) is present, and logs `Vendor key <name> resolved by name (not advertised)` once per camera. Advertised keys still win, and a camera without the gate key is never touched.
+
 ## Qualcomm picture controls (saturation, sharpness)
 
 Evidence from `dumpsys media.camera` on the Razr Fold, camera 0 (the code finds every key by exact name and clamps to the advertised range):
@@ -107,6 +111,10 @@ Evidence from `dumpsys media.camera` on the Razr Fold, camera 0 (the code finds 
 
 Saturation advertises its default, so moving the slider back to it clears the override. Sharpness advertises none (the template reported 2 here, but that is device-specific), so the slider marks the midpoint as "device" and an explicit value is always sent. The controls are not applied in LOG, HLG, RAW or constrained HFR, and sharpness is skipped while `EDGE_MODE` is OFF. Verify on the device: both sliders appear in Settings > Image processing, the capabilities page lists both keys under requested/reported, and neither appears on a camera without the keys.
 
+On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and the static metadata (`CameraCharacteristics.getKeys()`) but are NOT listed in `availableCaptureRequestKeys` / `availableCaptureResultKeys`. `VendorKeys.kt` therefore resolves them by name (`CaptureRequest.Key(name, type)`, API 29+) whenever the feature's static gate key (`saturation.range` / `sharpness.range`) is present, and logs `Vendor key <name> resolved by name (not advertised)` once per camera. Advertised keys still win, and a camera without the gate key is never touched.
+
 ## Qualcomm instant AEC
 
 `org.codeaurora.qcamera3.instant_aec.instant_aec_mode` (request, int32) with static `instant_aec_available_modes` (0x80c90001, int32[3] = `[0 1 2]` on the Razr Fold, every camera id). Values follow the QTI enum: 0 normal, 1 aggressive, 2 fast. The engine boosts when a preview session starts (aggressive, else fast) and when `LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID` changes, i.e. zoom crossing a lens switchover. Inside a take only a lens switch boosts, only with fast, for at most 500 ms. It restores 0 on `CONTROL_AE_STATE` CONVERGED/LOCKED (counted only on a result whose request carried the boost) or on the timeout; never with AE lock, manual exposure or constrained high-speed. Check `adb logcat -s Camera2PreviewEngine` for `Instant AEC engaged ... trigger=` / `released ... timeToConvergeMs=`. To judge it in takes, record a zoom sweep across the switchover with and without the boost and compare the exposure step in both clips; if the HAL's own lens matching already hides it, keep the boost to the viewfinder.
+
+On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and the static metadata (`CameraCharacteristics.getKeys()`) but are NOT listed in `availableCaptureRequestKeys` / `availableCaptureResultKeys`. `VendorKeys.kt` therefore resolves them by name (`CaptureRequest.Key(name, type)`, API 29+) whenever the feature's static gate key (`instant_aec_available_modes`) is present, and logs `Vendor key <name> resolved by name (not advertised)` once per camera. Advertised keys still win, and a camera without the gate key is never touched.
