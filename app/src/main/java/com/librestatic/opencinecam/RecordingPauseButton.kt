@@ -23,7 +23,7 @@ internal fun RecordingPauseButton(state: CameraUiState, onPause: (Boolean) -> Un
     val label = stringResource(if (status.paused) R.string.recording_resume else R.string.recording_pause)
     BoxWithConstraints(Modifier.widthIn(max = 200.dp)) {
         val compact = maxWidth < 160.dp
-        OutlinedButton(onClick = { onPause(!status.paused) },
+        OutlinedButton(onClick = hapticClick(HapticEvent.PauseToggle) { onPause(!status.paused) },
             enabled = !state.recordingFinalizing && !state.recordingPausePending,
             modifier = Modifier.heightIn(min = 48.dp).testTag("recording-pause")
                 .semantics { contentDescription = label }) {

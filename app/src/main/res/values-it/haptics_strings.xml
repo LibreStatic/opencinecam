@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="haptics_title">Feedback aptico</string>
+    <string name="haptics_summary">Vibrazioni per acquisizione, controlli, messa a fuoco e menu. Richiede il « Feedback tattile » attivo nelle impostazioni di sistema.</string>
+    <string name="haptics_level_off">Disattivato</string>
+    <string name="haptics_level_subtle">Leggero</string>
+    <string name="haptics_level_full">Completo</string>
+    <string name="haptics_capture">Acquisizione</string>
+    <string name="haptics_capture_summary">Registrazione, scatto e pausa</string>
+    <string name="haptics_controls">Controlli e ghiere</string>
+    <string name="haptics_controls_summary">Cursori, zoom e limiti</string>
+    <string name="haptics_focus_exposure">Messa a fuoco ed esposizione</string>
+    <string name="haptics_focus_exposure_summary">Blocchi, tocco per mettere a fuoco e punti di fuoco</string>
+    <string name="haptics_navigation">Menu e navigazione</string>
+    <string name="haptics_navigation_summary">Ghiera dei modi, slot e impostazioni</string>
+    <string name="haptics_mute_during_take">Silenzia i tick durante una ripresa</string>
+    <string name="haptics_mute_during_take_summary">Durante la registrazione vibrano ancora solo stop e pausa.</string>
+</resources>

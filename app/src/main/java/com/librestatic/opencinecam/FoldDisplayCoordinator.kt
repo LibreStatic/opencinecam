@@ -174,6 +174,7 @@ internal class FoldDisplayCoordinator(private val activity: ComponentActivity) :
                                         CompositionLocalProvider(
                                             LocalSubjectFillLightOutput provides fill,
                                             LocalSubjectReviewFeed provides review,
+                                            LocalAppHaptics provides rememberAppHaptics(settings.haptics, current.phase == CameraUiPhase.RECORDING),
                                         ) {
                                             SubjectDisplayScreen(current, settings.subjectDisplay, output.takeIf { windowState.visible },
                                                 cues = sessionCues, productionSlate = settings.productionSlate,

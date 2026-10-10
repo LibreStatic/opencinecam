@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="haptics_title">Haptic feedback</string>
+    <string name="haptics_summary">Vibration cues for capture, controls, focus and menus. Needs “Touch feedback” turned on in the system settings.</string>
+    <string name="haptics_level_off">Off</string>
+    <string name="haptics_level_subtle">Subtle</string>
+    <string name="haptics_level_full">Full</string>
+    <string name="haptics_capture">Capture</string>
+    <string name="haptics_capture_summary">Record, shutter and pause</string>
+    <string name="haptics_controls">Controls and dials</string>
+    <string name="haptics_controls_summary">Sliders, zoom and limits</string>
+    <string name="haptics_focus_exposure">Focus and exposure</string>
+    <string name="haptics_focus_exposure_summary">Locks, tap to focus and focus marks</string>
+    <string name="haptics_navigation">Menus and navigation</string>
+    <string name="haptics_navigation_summary">Mode dial, slots and settings</string>
+    <string name="haptics_mute_during_take">Mute ticks during a take</string>
+    <string name="haptics_mute_during_take_summary">While recording, only stop and pause still vibrate.</string>
+</resources>

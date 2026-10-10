@@ -9,6 +9,7 @@ import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 
@@ -40,9 +41,18 @@ internal fun CineSlider(
         SliderDefaults.Track(colors = colors, enabled = enabled, sliderState = sliderState)
     },
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-) = Slider(
+) {
+    val haptics = LocalAppHaptics.current
+    val last = remember { floatArrayOf(value) }
+    // Follow outside changes (reset, preset, clamping) so the next drag ticks from the shown value.
+    SideEffect { last[0] = value }
+    Slider(
     value = value,
-    onValueChange = onValueChange,
+    onValueChange = { new ->
+        sliderHapticFor(last[0], new, steps, valueRange)?.let(haptics::perform)
+        last[0] = new
+        onValueChange(new)
+    },
     modifier = modifier.systemGestureExclusion(),
     enabled = enabled,
     onValueChangeFinished = onValueChangeFinished,
@@ -52,4 +62,28 @@ internal fun CineSlider(
     thumb = thumb,
     track = track,
     valueRange = valueRange,
-)
+    )
+}
+
+/** The haptic for a slider moving from [old] to [new]: a limit when it reaches an end, else a tick when it crosses to another step. */
+internal fun sliderHapticFor(old: Float, new: Float, steps: Int, range: ClosedFloatingPointRange<Float>): HapticEvent? {
+    if (new == old) return null
+    val atEnd = new <= range.start || new >= range.endInclusive
+    val wasAtEnd = old <= range.start || old >= range.endInclusive
+    if (atEnd && !(wasAtEnd && (old <= range.start) == (new <= range.start))) return HapticEvent.Limit
+    if (steps > 0) {
+        val span = range.endInclusive - range.start
+        if (span <= 0f) return null
+        fun index(v: Float) = Math.round((v - range.start) / span * (steps + 1))
+        if (index(old) != index(new)) return HapticEvent.SliderStep
+    }
+    return null
+}
+
+/** Zoom crossing an optical anchor ticks; reaching the minimum or maximum is a limit. */
+internal fun zoomHapticFor(old: Float, new: Float, anchors: List<Float>, min: Float, max: Float): HapticEvent? {
+    if (old == new) return null
+    if ((new <= min && old > min) || (new >= max && old < max)) return HapticEvent.Limit
+    if (anchors.any { (old - it) * (new - it) < 0f || (old != it && new == it) }) return HapticEvent.ZoomAnchor
+    return null
+}

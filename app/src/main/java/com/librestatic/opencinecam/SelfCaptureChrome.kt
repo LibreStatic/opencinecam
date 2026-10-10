@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,8 @@ import java.util.Locale
 @Composable
 internal fun CountdownBadge(seconds: Int, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.self_countdown, seconds)
+    val haptics = LocalAppHaptics.current
+    LaunchedEffect(seconds) { haptics.perform(HapticEvent.CountdownTick) }
     Text(seconds.toString(), color = Color.White, fontSize = 64.sp,
         modifier = modifier.background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(16.dp)).padding(20.dp)
             .testTag("capture-countdown").clearAndSetSemantics {

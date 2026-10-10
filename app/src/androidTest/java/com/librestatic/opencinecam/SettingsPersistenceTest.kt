@@ -146,4 +146,11 @@ class SettingsPersistenceTest {
         assertEquals(ViewfinderScale.FIT, reloaded.viewfinderScale)
         assertEquals(MAX_CHROME_OPACITY, reloaded.chromeOpacity, 0f)
     }
+
+    @Test fun hapticPreferencesSurviveRecreation() {
+        val repository = SettingsRepository(CameraSettingsStore(context))
+        repository.update { it.copy(haptics = HapticPreferences(HapticLevel.FULL, controls = false, muteDuringTake = false)) }
+        assertEquals(HapticLevel.FULL, CameraSettingsStore(context).load().haptics.level)
+        assertEquals(repository.states.value, SettingsRepository(CameraSettingsStore(context)).states.value)
+    }
 }

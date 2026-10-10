@@ -23,7 +23,7 @@ data class CameraPreset(
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 22
+    const val VERSION = 23
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -132,6 +132,7 @@ object CameraPresetCodec {
     private val portableV20 = portableV19 + setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity")
     private val portableV21 = portableV20 + setOf("subject-split-preview-modes", "subject-fill-light-preview-level")
     private val portableV22 = portableV21 + setOf("image-picture-profile")
+    private val portableV23 = portableV22 + setOf("haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take")
     /**
      * The exact key set a payload of [version] must carry. Every published version stays frozen
      * here, so a payload written by an older build keeps decoding without its keys being guessed.
@@ -145,11 +146,12 @@ object CameraPresetCodec {
         version == 17 -> portableV17; version == 18 -> portableV18; version == 19 -> portableV19
         version == 20 -> portableV20
         version == 21 -> portableV21
-        else -> portableV22
+        version == 22 -> portableV22
+        else -> portableV23
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV22 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV23 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys
