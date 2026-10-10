@@ -112,8 +112,8 @@ data class CameraSettings(
     val photoFlash: com.librestatic.opencinecam.camera.PhotoFlashSelection = com.librestatic.opencinecam.camera.PhotoFlashSelection(),
     val photoFormat: StillPhotoFormat = StillPhotoFormat.JPEG,
     val photoQuality: Int = 95,
-    /** Night photo through the OEM night extension; honoured only where the camera offers it. */
-    val nightPhoto: Boolean = false,
+    /** Night photo through the OEM night extension; honoured only where the camera offers it. Device-local. */
+    val nightPhotoMode: com.librestatic.opencinecam.camera.NightPhotoMode = com.librestatic.opencinecam.camera.NightPhotoMode.AUTO,
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
     /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
     val zeroShutterLag: Boolean = true,
@@ -424,7 +424,12 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         ),
         photoFormat = enumPreference(KEY_PHOTO_FORMAT, StillPhotoFormat.JPEG).takeUnless { it == StillPhotoFormat.DNG } ?: StillPhotoFormat.JPEG,
         photoQuality = preferences.getInt(KEY_PHOTO_QUALITY, 95).takeIf { it in 1..100 } ?: 95,
-        nightPhoto = preferences.getBoolean(KEY_NIGHT_PHOTO, false),
+        nightPhotoMode = enumPreference(
+            KEY_NIGHT_PHOTO_MODE,
+            // The first night setting was a switch: on keeps meaning "always", off becomes the new default.
+            if (preferences.getBoolean(KEY_NIGHT_PHOTO, false)) com.librestatic.opencinecam.camera.NightPhotoMode.ON
+            else com.librestatic.opencinecam.camera.NightPhotoMode.AUTO,
+        ),
         torchStrengthLevel = preferences.getInt(KEY_TORCH_STRENGTH, 0).takeIf { it > 0 },
         zebraEnabled = preferences.getBoolean("zebra-enabled", false),
         peakingEnabled = preferences.getBoolean("peaking-enabled", false),
@@ -623,7 +628,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_BRACKET_STEP, settings.bracket.step.name)
             .putString(KEY_PHOTO_FORMAT, settings.photoFormat.name)
             .putInt(KEY_PHOTO_QUALITY, settings.photoQuality)
-            .putBoolean(KEY_NIGHT_PHOTO, settings.nightPhoto)
+            .putString(KEY_NIGHT_PHOTO_MODE, settings.nightPhotoMode.name)
             .putString(KEY_PHOTO_FLASH, settings.photoFlash.mode.name)
             .putInt(KEY_PHOTO_FLASH_STRENGTH, settings.photoFlash.strength ?: 0)
             .putInt(KEY_TORCH_STRENGTH, settings.torchStrengthLevel ?: 0)
@@ -865,7 +870,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_BRACKET_STEP = "bracket-step"
         const val KEY_PHOTO_FORMAT = "photo-format"
         const val KEY_PHOTO_QUALITY = "photo-quality"
+        /** Legacy on/off switch; read once as the default of [KEY_NIGHT_PHOTO_MODE]. */
         const val KEY_NIGHT_PHOTO = "night-photo"
+        const val KEY_NIGHT_PHOTO_MODE = "night-photo-mode"
         const val KEY_PHOTO_FLASH = "photo-flash-mode"
         const val KEY_PHOTO_FLASH_STRENGTH = "photo-flash-strength"
         const val KEY_TORCH_STRENGTH = "torch-strength-level"

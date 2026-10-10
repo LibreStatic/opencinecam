@@ -869,4 +869,11 @@
     <string name="night_photo_unavailable">A extensão noturna não pôde iniciar nesta câmera; a foto normal está ativa.</string>
     <string name="night_photo_format_note">A foto noturna captura apenas JPEG.</string>
     <string name="night_photo_flash_note">O flash fotográfico não está disponível na foto noturna.</string>
+    <string name="night_photo_off">Desativada</string>
+    <string name="night_photo_auto">Automática</string>
+    <string name="night_photo_always">Sempre</string>
+    <string name="night_photo_mode_help">Automática oferece Noite na tela de captura quando a cena está escura; toque nela ali para usá-la por enquanto. Sempre usa Noite em todas as fotos.</string>
+    <string name="night_photo_short">NOITE</string>
+    <string name="night_photo_toggle_on">Foto noturna: ativada</string>
+    <string name="night_photo_toggle_off">Foto noturna: desativada</string>
 </resources>

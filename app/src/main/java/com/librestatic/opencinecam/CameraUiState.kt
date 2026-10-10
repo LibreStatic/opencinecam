@@ -170,6 +170,10 @@ data class CameraUiState(
     val stillCapturePending: Boolean = false,
     /** True while the live graph is the night extension session; the engine's truth, not the setting. */
     val nightExtensionRunning: Boolean = false,
+    /** The scene has been dark long enough to offer Night photo (a light index from the capture results). */
+    val nightSuggested: Boolean = false,
+    /** The operator switched Night on from the capture screen for now (AUTO mode); never persisted. */
+    val nightTransientEngaged: Boolean = false,
     /** Night extension processing progress 0..100 while a night still is held; null when unknown or idle. */
     val nightProgressPercent: Int? = null,
     val lastStillPublication: com.librestatic.opencinecam.storage.StillPublication? = null,
