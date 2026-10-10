@@ -221,6 +221,8 @@ data class Camera2PreviewMetadata(
     val videoStabilization: Int? = null,
     val noiseReduction: Int? = null,
     val edgeEnhancement: Int? = null,
+    val toneMapMode: Int? = null,
+    val submittedToneMapMode: Int? = null,
     val cropRegion: List<Int>? = null,
     val submittedImageProcessing: ImageProcessingDefaults? = null,
     val awbLocked: Boolean? = null,
@@ -636,6 +638,7 @@ class Camera2PreviewEngine(
     @Volatile private var logGreyReference = OpenCineLogGreyReference.NATIVE
     private var imageProcessing = ImageProcessingSelection()
     private val processingDefaults = java.util.WeakHashMap<CaptureRequest.Builder, ImageProcessingDefaults>()
+    private val toneMapDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Pair<Int?, android.hardware.camera2.params.TonemapCurve?>>()
     // OCC-PLAN-068 U7 (cameraExecutor-confined): optional face statistics for the out-of-frame warning.
     @Volatile private var subjectFramingRequested = false
     private val faceDetectGate = FaceDetectGraphGate()
@@ -1127,6 +1130,7 @@ class Camera2PreviewEngine(
                         jpegQuality = request.quality, jpegOrientationDegrees = jpegOrientation(request.descriptor)))
                     val frozen = request.bracket?.controls ?: request.accumulation?.controls ?: request.burst?.controls
                     if (frozen != null) copyPhotoControls(frozen, this) else applyManualControls(this)
+                    if (request.format == StillPhotoFormat.DNG) restoreToneMapDefaults(this)
                     if (request.accumulation != null || request.aspect.enabled && request.format != StillPhotoFormat.DNG)
                         set(CaptureRequest.JPEG_ORIENTATION, 0)
                     setTag(PhotoTag(request.id))
@@ -4000,6 +4004,8 @@ class Camera2PreviewEngine(
                                 videoStabilization = result.get(android.hardware.camera2.CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE),
                                 noiseReduction = result.get(android.hardware.camera2.CaptureResult.NOISE_REDUCTION_MODE),
                                 edgeEnhancement = result.get(android.hardware.camera2.CaptureResult.EDGE_MODE),
+                                toneMapMode = result.get(android.hardware.camera2.CaptureResult.TONEMAP_MODE),
+                                submittedToneMapMode = request.get(CaptureRequest.TONEMAP_MODE),
                                 cropRegion = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)?.let { listOf(it.left, it.top, it.right, it.bottom) },
                                 submittedImageProcessing = ImageProcessingDefaults(
                                     request.get(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE), request.get(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE),
@@ -4234,6 +4240,42 @@ class Camera2PreviewEngine(
         if (caps.videoModes.isNotEmpty()) builder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, resolved.video)
         if (caps.noiseModes.isNotEmpty()) builder.set(CaptureRequest.NOISE_REDUCTION_MODE, resolved.noise)
         if (caps.edgeModes.isNotEmpty()) builder.set(CaptureRequest.EDGE_MODE, resolved.edge)
+        applyPictureProfile(builder, caps)
+    }
+
+    /**
+     * Picture profile as an ISP contrast curve. STANDARD, an ineligible graph or a camera without
+     * the keys restores the template's tone mapping, captured once per builder like the other
+     * processing defaults, so switching back never leaves a stale curve.
+     */
+    private fun applyPictureProfile(builder: CaptureRequest.Builder, caps: ImageProcessingCapabilities) {
+        if (!caps.supportsPictureProfiles) return
+        val defaults = toneMapDefaults.getOrPut(builder) { builder.get(CaptureRequest.TONEMAP_MODE) to builder.get(CaptureRequest.TONEMAP_CURVE) }
+        val context = ToneProfileContext(
+            logOrHlg = logPreviewEnabled || activeLogProfile != null,
+            constrainedHfr = isHighSpeedSession(),
+        )
+        val points = imageProcessing.pictureProfile.resolveCurve(caps, context)
+        try {
+            if (points == null) {
+                builder.set(CaptureRequest.TONEMAP_MODE, defaults.first)
+                builder.set(CaptureRequest.TONEMAP_CURVE, defaults.second)
+            } else {
+                builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE)
+                builder.set(CaptureRequest.TONEMAP_CURVE, android.hardware.camera2.params.TonemapCurve(points, points, points))
+            }
+        } catch (failure: IllegalArgumentException) {
+            Log.w(TAG, "Picture profile curve rejected; keeping the template tone mapping.", failure)
+        }
+    }
+
+    /** A DNG-only still bypasses the ISP tone curve, so it goes out with the template's tone mapping. */
+    private fun restoreToneMapDefaults(builder: CaptureRequest.Builder) {
+        val defaults = toneMapDefaults[builder] ?: return
+        runCatching {
+            builder.set(CaptureRequest.TONEMAP_MODE, defaults.first)
+            builder.set(CaptureRequest.TONEMAP_CURVE, defaults.second)
+        }
     }
 
     /** Supply advertised expensive controls up front; later between-take changes may reconfigure HAL. */
@@ -4929,6 +4971,10 @@ class Camera2PreviewEngine(
                         CaptureRequest.EDGE_MODE -> ImageProcessingControl.EDGE
                         else -> null
                     } }.toSet(),
+                    toneMapModes = if (CaptureRequest.TONEMAP_MODE in characteristics.availableCaptureRequestKeys &&
+                        CaptureRequest.TONEMAP_CURVE in characteristics.availableCaptureRequestKeys)
+                        characteristics.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)?.toSet().orEmpty() else emptySet(),
+                    maxCurvePoints = characteristics.get(CameraCharacteristics.TONEMAP_MAX_CURVE_POINTS) ?: 0,
                 ),
                 exposureCapabilities = ExposureCapabilities(
                     manual = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true,

@@ -88,6 +88,7 @@ internal fun imageProcessingReadbackDifferences(submitted: ImageProcessingDefaul
 private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
 private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
 private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
+private val TONEMAP_MODES = mapOf(0 to "CONTRAST_CURVE", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "GAMMA_VALUE", 4 to "PRESET_CURVE")
 private val AWB_MODES = mapOf(1 to "AUTO", 2 to "INCANDESCENT", 3 to "FLUORESCENT", 4 to "WARM_FLUORESCENT", 5 to "DAYLIGHT",
     6 to "CLOUDY_DAYLIGHT", 7 to "TWILIGHT", 8 to "SHADE")
 
@@ -120,6 +121,7 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.control.videoStabilizationMode" to readback(code(sent?.video, VIDEO_MODES), code(state.reportedVideoStabilization, VIDEO_MODES)),
         "android.noiseReduction.mode" to readback(code(sent?.noise, PROCESSING_MODES), code(state.reportedNoiseReduction, PROCESSING_MODES)),
         "android.edge.mode" to readback(code(sent?.edge, PROCESSING_MODES), code(state.reportedEdgeEnhancement, PROCESSING_MODES)),
+        "android.tonemap.mode" to readback(code(state.submittedToneMapMode, TONEMAP_MODES), code(state.reportedToneMapMode, TONEMAP_MODES)),
         "android.scaler.cropRegion" to readback(null, state.reportedCropRegion?.joinToString(", ", "[", "]")),
     )
 }

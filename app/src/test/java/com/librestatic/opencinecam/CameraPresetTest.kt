@@ -32,11 +32,18 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(166, CameraPresetCodec.portableKeys.size)
+        assertEquals(167, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
         assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "gyroflow-log-enabled", "zero-shutter-lag") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
+    }
+    @Test fun pictureProfileIsPortableFromV22AndSurvivesAPresetRoundTrip() {
+        assertTrue("image-picture-profile" in CameraPresetCodec.portableKeys)
+        assertFalse("image-picture-profile" in CameraPresetCodec.portableKeysFor(21))
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Cine", settings = CameraSettings(imageProcessing = ImageProcessingSelection(pictureProfile = PictureProfile.CINE))))
+        assertEquals(PictureProfile.CINE, CameraPresetCodec.decode(text).settings.imageProcessing.pictureProfile)
+        assertEquals(PictureProfile.CINE, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, CameraSettings()).imageProcessing.pictureProfile)
     }
     @Test fun splitPreviewKeysArePortableAndSurviveAPresetRoundTrip() {
         assertTrue(CameraPresetCodec.portableKeys.containsAll(setOf("subject-split-preview-modes", "subject-fill-light-preview-level")))
@@ -150,5 +157,5 @@ class CameraPresetTest {
     }
 }
 
-// Keys newer than preset V19 (V20 and V21), so the historical-document tests can strip them.
-internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level")
+// Keys newer than preset V19 (V20 to V22), so the historical-document tests can strip them.
+internal val PRESET_V20_KEYS = setOf("translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile")

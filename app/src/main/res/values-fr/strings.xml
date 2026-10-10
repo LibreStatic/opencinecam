@@ -345,6 +345,11 @@
     <string name="image_mode_hq">Haute qualité</string>
     <string name="image_processing_unavailable">Un mode demandé n\'est pas annoncé ici. La valeur du modèle correspondante est conservée ; la préférence est préservée.</string>
     <string name="image_session_keys">Cette caméra applique certains choix de traitement à son démarrage. Les modifier entre deux prises peut ajouter une courte pause avant la prise suivante.</string>
+    <string name="image_picture_profile">Profil d\'image</string>
+    <string name="image_profile_standard">Standard</string>
+    <string name="image_profile_flat">Plat</string>
+    <string name="image_profile_cine">Ciné</string>
+    <string name="image_picture_profile_help">Courbe de tons appliquée par le processeur d\'image de la caméra, sans surcoût. Standard conserve le rendu propre à la caméra ; Plat relève les ombres et adoucit les hautes lumières pour l\'étalonnage ; Ciné est une courbe en S douce avec une longue épaule dans les hautes lumières. S\'applique à la vidéo SDR, au time-lapse et aux photos JPEG/HEIC, pas au LOG, HLG, RAW ni aux prises haute vitesse.</string>
     <string name="image_reset">Restaurer le modèle de la caméra</string>
     <string name="pro_wb_record_policy">Balance des blancs au début de l\'enregistrement</string>
     <string name="pro_wb_continuous">WB continue / en direct</string>

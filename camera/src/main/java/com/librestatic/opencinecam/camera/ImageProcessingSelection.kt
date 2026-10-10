@@ -6,6 +6,7 @@ data class ImageProcessingSelection(
     val stabilization: StabilizationMode? = null,
     val noiseReduction: IspMode = IspMode.DEFAULT,
     val edge: IspMode = IspMode.DEFAULT,
+    val pictureProfile: PictureProfile = PictureProfile.STANDARD,
 )
 /** CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION. */
 const val PREVIEW_STABILIZATION = 2
@@ -19,9 +20,15 @@ data class ImageProcessingCapabilities(
     val noiseModes: Set<Int> = emptySet(),
     val edgeModes: Set<Int> = emptySet(),
     val sessionControls: Set<ImageProcessingControl> = emptySet(),
+    /** Empty unless TONEMAP_MODE and TONEMAP_CURVE are both settable request keys. */
+    val toneMapModes: Set<Int> = emptySet(),
+    val maxCurvePoints: Int = 0,
 ) {
     /** Whether the preview-matched choice is offered: the camera lists it (the engine drops it below API 33). */
     val previewStabilization: Boolean get() = PREVIEW_STABILIZATION in videoModes
+
+    val supportsPictureProfiles: Boolean
+        get() = TONEMAP_MODE_CONTRAST_CURVE_VALUE in toneMapModes && maxCurvePoints >= PictureProfileCurves.MIN_POINT_COUNT
 
     fun supports(mode: StabilizationMode?): Boolean {
         if (mode == null) return true

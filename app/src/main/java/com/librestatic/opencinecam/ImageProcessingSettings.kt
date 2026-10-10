@@ -45,6 +45,15 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
         IspModeChoices(stringResource(R.string.image_edge), "image-edge", selected.edge,
             { !hfr && caps.supports(it, ImageProcessingControl.EDGE) },
             { onChange(settings.copy(imageProcessing = selected.copy(edge = it))) })
+        if (caps.supportsPictureProfiles) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SettingsChips(stringResource(R.string.image_picture_profile), PictureProfile.entries, selected.pictureProfile,
+                    label = { stringResource(it.titleResource()) },
+                    onSelect = { onChange(settings.copy(imageProcessing = selected.copy(pictureProfile = it))) },
+                    tag = { "image-profile-${it.name}" }, enabled = { it == PictureProfile.STANDARD || !hfr })
+                SettingsHelp(stringResource(R.string.image_picture_profile_help))
+            }
+        }
         if (unavailable.isNotEmpty()) Text(stringResource(R.string.image_processing_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         if (caps.sessionControls.isNotEmpty()) Text(stringResource(R.string.image_session_keys), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         CameraReportsLine(imageProcessingReadbackDifferences(state.submittedImageProcessing, reported))
@@ -59,6 +68,11 @@ private fun IspModeChoices(title: String, tag: String, value: IspMode, supported
     SettingsChips(title, listOf(IspMode.DEFAULT, IspMode.OFF, IspMode.FAST, IspMode.HIGH_QUALITY), value,
         label = { stringResource(it.titleResource()) }, onSelect = onChange,
         tag = { "$tag-${it.name}" }, enabled = { it == IspMode.DEFAULT || supported(it) })
+}
+internal fun PictureProfile.titleResource(): Int = when (this) {
+    PictureProfile.STANDARD -> R.string.image_profile_standard
+    PictureProfile.FLAT -> R.string.image_profile_flat
+    PictureProfile.CINE -> R.string.image_profile_cine
 }
 internal fun IspMode.titleResource(): Int = when (this) {
     IspMode.DEFAULT -> R.string.image_template_default

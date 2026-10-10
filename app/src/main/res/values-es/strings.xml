@@ -345,6 +345,11 @@
     <string name="image_mode_hq">Alta calidad</string>
     <string name="image_processing_unavailable">Un modo solicitado no está anunciado aquí. Se conserva el valor de la plantilla y la preferencia solicitada.</string>
     <string name="image_session_keys">Esta cámara aplica algunas opciones de procesamiento al iniciarse. Cambiarlas entre tomas puede añadir una breve pausa antes de la siguiente toma.</string>
+    <string name="image_picture_profile">Perfil de imagen</string>
+    <string name="image_profile_standard">Estándar</string>
+    <string name="image_profile_flat">Plano</string>
+    <string name="image_profile_cine">Cine</string>
+    <string name="image_picture_profile_help">Curva de tonos aplicada por el procesador de imagen de la cámara, sin coste adicional. Estándar mantiene el aspecto propio de la cámara; Plano eleva las sombras y suaviza las luces para el etalonaje; Cine es una curva en S suave con un hombro largo en las luces. Se aplica a vídeo SDR, time-lapse y fotos JPEG/HEIC, no a LOG, HLG, RAW ni tomas de alta velocidad.</string>
     <string name="image_reset">Restaurar plantilla de la cámara</string>
     <string name="pro_wb_record_policy">Balance de blancos al iniciar la toma</string>
     <string name="pro_wb_continuous">WB continuo / en vivo</string>
