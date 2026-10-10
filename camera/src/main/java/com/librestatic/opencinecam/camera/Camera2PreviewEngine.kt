@@ -109,6 +109,7 @@ data class Camera2CameraDescriptor(
     val afLockSupported: Boolean = false,
     val zoomRatioRange: ClosedFloatingPointRange<Float>? = null,
     val supportsZoomRatioApi: Boolean = false,
+    val supportsZoomSettingsOverride: Boolean = false,
     val digitalZoomMaxRatio: Float? = null,
     val opticalAnchors: List<ZoomAnchor> = emptyList(),
     val supportsHfrZoom: Boolean = false,
@@ -517,6 +518,8 @@ class Camera2PreviewEngine(
     private var tapFocusResultReported = false
     private var requestedZoomRatio: Float = 1f
     private var lastAcceptedZoomRatio: Float = 1f
+    private var zoomOverrideArmed = false
+    private var lastZoomChangeAtMs = 0L
     private var effectiveZoomRatio: Float = 1f
     private var lastZoomReportedAtMs = 0L
     private val restoreTapFocus = Runnable {
@@ -2474,7 +2477,12 @@ class Camera2PreviewEngine(
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
         cameraExecutor.execute {
+            val previousRatio = requestedZoomRatio
             requestedZoomRatio = ZoomMath.coerce(ratio, range)
+            if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
+                zoomOverrideArmed = true
+                lastZoomChangeAtMs = SystemClock.elapsedRealtime()
+            }
             val builder = repeatingBuilder ?: return@execute
             val configured = session ?: return@execute
             reissueRepeating(builder, configured, descriptor)
@@ -2485,9 +2493,51 @@ class Camera2PreviewEngine(
     /** Current effective (last-accepted) zoom ratio, or 1f when no session is active. */
     fun currentEffectiveZoomRatio(): Float = effectiveZoomRatio
 
+    private fun zoomOverrideEligible(descriptor: Camera2CameraDescriptor): Boolean =
+        ZoomSettingsOverride.eligible(
+            Build.VERSION.SDK_INT, descriptor.supportsZoomRatioApi, descriptor.supportsZoomSettingsOverride, isHighSpeedSession(),
+        )
+
+    /** Asks the HAL to apply zoom ahead of other settings while zoom is moving; OFF otherwise. */
+    private fun applyZoomSettingsOverride(builder: CaptureRequest.Builder, descriptor: Camera2CameraDescriptor) {
+        if (!zoomOverrideEligible(descriptor)) return
+        try {
+            builder.set(
+                CaptureRequest.CONTROL_SETTINGS_OVERRIDE,
+                if (zoomOverrideArmed) CaptureRequest.CONTROL_SETTINGS_OVERRIDE_ZOOM else CaptureRequest.CONTROL_SETTINGS_OVERRIDE_OFF,
+            )
+        } catch (_: IllegalArgumentException) {
+            zoomOverrideArmed = false
+        }
+    }
+
+    /** Returns the override to OFF on the next repeating request once zoom has been idle. */
+    private fun releaseZoomOverrideIfIdle(result: TotalCaptureResult) {
+        if (!zoomOverrideArmed) return
+        val descriptor = activeDescriptor ?: return
+        val resultOverride = if (Build.VERSION.SDK_INT >= 34) {
+            result.get(android.hardware.camera2.CaptureResult.CONTROL_SETTINGS_OVERRIDE)
+        } else null
+        if (!ZoomSettingsOverride.shouldRelease(
+                armed = true,
+                nowMs = SystemClock.elapsedRealtime(),
+                lastChangeMs = lastZoomChangeAtMs,
+                resultZoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+                } else null,
+                requestedRatio = requestedZoomRatio,
+                resultOverrideIsOff = resultOverride == CaptureRequest.CONTROL_SETTINGS_OVERRIDE_OFF,
+            )) return
+        zoomOverrideArmed = false
+        val builder = repeatingBuilder ?: return
+        val configured = session ?: return
+        reissueRepeating(builder, configured, descriptor)
+    }
+
     private fun applyZoom(builder: CaptureRequest.Builder) {
         val descriptor = activeDescriptor ?: return
         val range = descriptor.effectiveZoomRange ?: return
+        applyZoomSettingsOverride(builder, descriptor)
         val ratio = requestedZoomRatio
         if (ratio <= range.start && range.start >= 1f) {
             // At or below the wide end: no crop needed.
@@ -3852,6 +3902,7 @@ class Camera2PreviewEngine(
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
+                    releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
@@ -4708,6 +4759,11 @@ class Camera2PreviewEngine(
                 }.getOrDefault(false),
                 zoomRatioRange = zoomRange,
                 supportsZoomRatioApi = supportsZoomRatioApi,
+                supportsZoomSettingsOverride = Build.VERSION.SDK_INT >= 34 && supportsZoomRatioApi && runCatching {
+                    CaptureRequest.CONTROL_SETTINGS_OVERRIDE in characteristics.availableCaptureRequestKeys &&
+                        characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_SETTINGS_OVERRIDES)
+                            ?.contains(CaptureRequest.CONTROL_SETTINGS_OVERRIDE_ZOOM) == true
+                }.getOrDefault(false),
                 digitalZoomMaxRatio = if (!supportsZoomRatioApi) zoomRange?.endInclusive else null,
                 opticalAnchors = anchors,
                 supportsHfrZoom = supportsHfrZoom,
@@ -4974,6 +5030,7 @@ class Camera2PreviewEngine(
         requestedWhiteBalance = WhiteBalanceSelection.Auto
         requestedZoomRatio = 1f
         lastAcceptedZoomRatio = 1f
+        zoomOverrideArmed = false
         effectiveZoomRatio = 1f
         aeLockActive = false
         afLockState = LockState.OFF
