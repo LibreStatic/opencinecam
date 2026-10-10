@@ -45,7 +45,6 @@ import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.monitoringPreviewScale
 import android.Manifest
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -1173,25 +1172,22 @@ private fun PreviewSurfaceView(
     }
     val currentTargetFps by rememberUpdatedState(targetFps)
     var surfaceGeneration by remember { mutableIntStateOf(0) }
+    // Vote on the viewfinder layer only. Pinning the window's preferredDisplayModeId to the
+    // camera rate held the whole UI at 30 Hz in photo and 24/30 fps video, so the chrome
+    // animations dropped frames. A FIXED_SOURCE vote lets SurfaceFlinger pick a multiple of the
+    // camera rate (120 Hz for 24 and 30 fps) and still raise the rate for touch and animation.
     fun voteForViewfinderRate() {
-        val display = view.display ?: return
-        val mode = display.supportedModes
-            .filter { it.refreshRate <= currentTargetFps.toFloat() + 0.5f }
-            .maxByOrNull { it.refreshRate }
-            ?: display.supportedModes.minByOrNull { kotlin.math.abs(it.refreshRate - currentTargetFps) }
-            ?: return
-        (context as? Activity)?.window?.let { window ->
-            window.attributes = window.attributes.apply { preferredDisplayModeId = mode.modeId }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && view.holder.surface.isValid) {
+        val fps = currentTargetFps.toFloat()
+        if (fps <= 0f || Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !view.holder.surface.isValid) return
+        runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 view.holder.surface.setFrameRate(
-                    mode.refreshRate,
+                    fps,
                     Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
                     Surface.CHANGE_FRAME_RATE_ALWAYS,
                 )
             } else {
-                view.holder.surface.setFrameRate(mode.refreshRate, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+                view.holder.surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
             }
         }
     }
@@ -1273,9 +1269,6 @@ private fun PreviewSurfaceView(
         displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
         if (view.holder.surface?.isValid == true) surfaceGeneration++
         onDispose {
-            (context as? Activity)?.window?.let { window ->
-                window.attributes = window.attributes.apply { preferredDisplayModeId = 0 }
-            }
             displayManager.unregisterDisplayListener(displayListener)
             view.holder.removeCallback(callback)
             binder.detachPreview(view.holder.surface)
