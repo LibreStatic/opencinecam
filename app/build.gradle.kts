@@ -55,6 +55,12 @@ android {
         }
     }
 
+    // Local builds get a red "DEBUG" launcher badge so they stand apart from the Play install.
+    sourceSets {
+        getByName("debug").res.srcDir("src/debugBadge/res")
+        getByName("benchmark").res.srcDir("src/debugBadge/res")
+    }
+
     buildFeatures {
         compose = true
     }
