@@ -79,8 +79,9 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
             }
             var flickerActions by remember { mutableStateOf(false) }
             val flickerTitle = stringResource(R.string.pro_flicker_suggestions)
-            SettingsValueRow(flickerTitle, null, Modifier.testTag("pro-flicker-row")) { flickerActions = true }
-            val flickerSuggestions = listOf(50 to 10_000_000L, 60 to 8_333_333L).map { (hz, time) ->
+            SettingsValueRow(flickerTitle, flickerSafeValue(exposure, available.appliesTime(exposure.mode)),
+                Modifier.testTag("pro-flicker-row")) { flickerActions = true }
+            val flickerSuggestions = FLICKER_SAFE_SHUTTERS.map { (hz, time) ->
                 SettingsAction(stringResource(R.string.pro_shutter_suggestion, hz), "pro-flicker-$hz") {
                     updateExposure(timed(exposure.copy(shutterUnit = ShutterUnit.TIME, timeNs = time)))
                 }
@@ -229,4 +230,19 @@ internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: Camer
             else -> R.string.pro_wb_prepare_failed
         }), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
     }
+}
+
+/** Mains frequency to the flicker-safe shutter time: one period of the light's 100 Hz or 120 Hz pulse. */
+internal val FLICKER_SAFE_SHUTTERS = listOf(50 to 10_000_000L, 60 to 8_333_333L)
+
+/**
+ * What the flicker-safe row shows: the suggestion in use when a timed mode applies it, else both
+ * mains frequencies, so the row never reads as empty.
+ */
+internal fun flickerSafeValue(exposure: ExposureSelection, timeApplied: Boolean): String {
+    val active = FLICKER_SAFE_SHUTTERS.firstOrNull { (_, time) ->
+        timeApplied && exposure.shutterUnit == ShutterUnit.TIME && exposure.timeNs == time
+    }
+    return active?.let { (hz, time) -> "${shutter(time)} · $hz Hz" }
+        ?: FLICKER_SAFE_SHUTTERS.joinToString(" · ") { (hz, _) -> "$hz Hz" }
 }

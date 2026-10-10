@@ -128,4 +128,14 @@ class LowLightBoostSettingsTest {
         assertEquals(8, pictureControlSelection(saturation, 8))
         assertEquals(3, pictureControlSelection(PictureControlRange(0, 6, 1, 3, false), 3))
     }
+
+    @Test fun anUnadvertisedDefaultRestsOnWhatTheCameraReports() {
+        val sharpness = PictureControlRange(0, 6, 1, 3, false)
+        assertEquals(2, pictureControlDeviceValue(sharpness, templateSharpness(PictureControlReadback(reportedSharpness = 2))))
+        // A frame that carried an explicit value says nothing about the template.
+        assertNull(templateSharpness(PictureControlReadback(submittedSharpness = 4, reportedSharpness = 4)))
+        assertEquals(3, pictureControlDeviceValue(sharpness, null))
+        assertEquals(3, pictureControlDeviceValue(sharpness, 9))
+        assertEquals(5, pictureControlDeviceValue(PictureControlRange(0, 10, 1, 5, true), 2))
+    }
 }
