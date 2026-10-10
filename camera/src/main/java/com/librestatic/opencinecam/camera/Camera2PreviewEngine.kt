@@ -409,6 +409,11 @@ class Camera2PreviewEngine(
     /** True once a rejected physical-still routing retired this graph's physical stills (OCC-PLAN-069). */
     private var physicalStillFallbackTaken = false
     private var repeatingBuilder: CaptureRequest.Builder? = null
+    private val instantAec = InstantAecMachine()
+    private var instantAecSession: CameraCaptureSession? = null
+    private var instantAecKey: CaptureRequest.Key<Int>? = null
+    private var instantAecModes: IntArray? = null
+    private var instantAecPhysicalId: String? = null
     private class RecorderRequest(val generation: Long, val device: CameraDevice) {
         val stopRequested = java.util.concurrent.atomic.AtomicBoolean(false)
     }
@@ -3948,6 +3953,86 @@ class Camera2PreviewEngine(
         }
     }
 
+    /**
+     * Qualcomm instant AEC: boost AE convergence when a preview session starts and when a logical
+     * camera switches its active physical lens (zoom crossing a switchover), then restore the normal
+     * mode on convergence or after the timeout. Inside a take only the fast mode is used and only
+     * for a lens switch; AE lock, manual exposure and constrained high-speed never boost. Silent
+     * no-op without the vendor request key and an advertised boost mode.
+     */
+    private fun driveInstantAec(armedSession: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+        runCatching {
+            val builder = repeatingBuilder ?: return
+            val eligible = InstantAec.eligible(
+                highSpeed = armedSession is CameraConstrainedHighSpeedCaptureSession,
+                manualExposure = request.get(CaptureRequest.CONTROL_AE_MODE) == CaptureRequest.CONTROL_AE_MODE_OFF,
+                aeLocked = request.get(CaptureRequest.CONTROL_AE_LOCK) == true,
+            )
+            val now = SystemClock.elapsedRealtime()
+            val physicalId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+            } else null
+            if (instantAecSession !== armedSession) {
+                instantAecSession = armedSession
+                instantAecPhysicalId = physicalId
+                instantAecKey = null
+                instantAecModes = null
+                instantAec.reset()
+                val descriptor = activeDescriptor ?: return
+                val characteristics = manager.getCameraCharacteristics(descriptor.cameraId)
+                val key = characteristics.availableCaptureRequestKeys.firstOrNull { it.name == InstantAec.MODE_KEY } ?: return
+                val modesKey = characteristics.keys.firstOrNull { it.name == InstantAec.AVAILABLE_MODES_KEY } ?: return
+                @Suppress("UNCHECKED_CAST")
+                instantAecModes = characteristics.get(modesKey as CameraCharacteristics.Key<IntArray>)
+                @Suppress("UNCHECKED_CAST")
+                instantAecKey = key as CaptureRequest.Key<Int>
+                // A session that starts mid-take (a recorder graph) is not boosted: only a lens switch is.
+                if (!recording) engageInstantAec(armedSession, builder, now, eligible, "session start")
+                return
+            }
+            val key = instantAecKey ?: return
+            val previousPhysicalId = instantAecPhysicalId
+            if (physicalId != null) instantAecPhysicalId = physicalId
+            if (!instantAec.active) {
+                if (InstantAec.physicalLensSwitched(previousPhysicalId, physicalId)) {
+                    engageInstantAec(armedSession, builder, now, eligible, "lens $previousPhysicalId->$physicalId")
+                }
+                return
+            }
+            val (release, elapsedMs) = instantAec.onResult(
+                now,
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE),
+                eligible,
+                recording,
+                boostApplied = request.get(key) == instantAec.mode,
+            ) ?: return
+            builder.set(key, InstantAec.MODE_NORMAL)
+            armedSession.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
+            Log.i(TAG, "Instant AEC released reason=$release timeToConvergeMs=$elapsedMs recording=$recording")
+        }.onFailure { Log.w(TAG, "Instant AEC skipped: ${it.message}") }
+    }
+
+    private fun engageInstantAec(
+        armedSession: CameraCaptureSession,
+        builder: CaptureRequest.Builder,
+        now: Long,
+        eligible: Boolean,
+        trigger: String,
+    ) {
+        val key = instantAecKey ?: return
+        val boost = InstantAec.boostMode(instantAecModes, recording) ?: return
+        if (!instantAec.begin(now, boost, eligible, recording)) return
+        try {
+            builder.set(key, boost)
+            armedSession.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(activeDescriptor, false))
+            Log.i(TAG, "Instant AEC engaged mode=$boost trigger=$trigger recording=$recording")
+        } catch (failure: Throwable) {
+            instantAec.reset()
+            runCatching { builder.set(key, InstantAec.MODE_NORMAL) }
+            throw failure
+        }
+    }
+
     private fun previewCaptureCallback(
         descriptor: Camera2CameraDescriptor?,
         notifyStarted: Boolean,
@@ -3985,6 +4070,7 @@ class Camera2PreviewEngine(
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     readIspHistogram(result)
+                    driveInstantAec(armedSession, request, result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
                         lastMetadataAtMs = now
