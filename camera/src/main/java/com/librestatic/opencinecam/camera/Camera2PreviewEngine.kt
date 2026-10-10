@@ -256,6 +256,8 @@ data class Camera2Analysis(
     val scopes: MonitoringScopeFrame? = null,
     /** In-focus edges; null while focus peaking is off, so the cost is only paid when shown. */
     val focusPeaking: FocusPeakingMask? = null,
+    /** Where [histogram] (luma only) came from; the red, green and blue ones are always the frame's. */
+    val histogramSource: HistogramSource = HistogramSource.FRAME,
 )
 
 data class Camera2EmbeddedAudioConfig(
@@ -585,7 +587,7 @@ class Camera2PreviewEngine(
         try { cameraExecutor.execute {
             val pipeline = owner()
             if (!disposed.get() && expectedGeneration == generation && pipeline != null && logPipeline === pipeline)
-                listener?.onAnalysis(analysis)
+                listener?.onAnalysis(ispHistogram.merge(analysis))
         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner, no sample delivery. */ }
     }
 
@@ -3810,7 +3812,7 @@ class Camera2PreviewEngine(
                     }
                     if (analysis != null && !disposed.get()) {
                         try { cameraExecutor.execute {
-                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) listener?.onAnalysis(analysis)
+                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) listener?.onAnalysis(ispHistogram.merge(analysis))
                         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner. */ }
                     }
                 }, imageHandler)
@@ -3980,6 +3982,7 @@ class Camera2PreviewEngine(
                     reportEffectiveZoom(result)
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
+                    readIspHistogram(result)
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastMetadataAtMs >= METADATA_PERIOD_MS) {
                         lastMetadataAtMs = now
@@ -4046,6 +4049,66 @@ class Camera2PreviewEngine(
                         faceDetectModeFor(activeDescriptor) != null && faceDetectGate.onCaptureFailed()) reissueFaceDetect()
                 }
             }
+    }
+
+    /** The ISP histogram gate for one camera: its enable key and bucket count, or null when it lacks either. */
+    private class IspHistogramSupport(val cameraId: String, val buckets: Int, val enableKey: CaptureRequest.Key<ByteArray>)
+
+    @Volatile private var ispSupport: Pair<String, IspHistogramSupport?>? = null
+    @Volatile private var ispStatsKey: android.hardware.camera2.CaptureResult.Key<*>? = null
+    @Volatile private var ispStatsTypeKey: android.hardware.camera2.CaptureResult.Key<*>? = null
+    private val ispHistogram = IspHistogramHold()
+    @Volatile private var ispHistogramLogged = false
+
+    /**
+     * Discovers the Qualcomm ISP histogram by name, as the Motorola session keys are: the enable
+     * key must be among the camera's advertised request keys and the static bucket count must be
+     * sane. Nothing is assumed; any failure leaves the frame histogram in charge.
+     */
+    private fun ispHistogramSupport(): IspHistogramSupport? {
+        val id = activeDescriptor?.cameraId ?: return null
+        ispSupport?.takeIf { it.first == id }?.let { return it.second }
+        val support = runCatching {
+            val characteristics = manager.getCameraCharacteristics(id)
+            val requestKeys = characteristics.availableCaptureRequestKeys
+            val buckets = characteristics.keys.firstOrNull { it.name == IspHistogramKeys.BUCKETS }
+                ?.let { characteristics.get(it) as? IntArray }?.firstOrNull()
+            val count = ispHistogramBuckets(requestKeys.map { it.name }, buckets)
+            val enable = requestKeys.firstOrNull { it.name == IspHistogramKeys.ENABLE }
+            @Suppress("UNCHECKED_CAST")
+            if (count != null && enable != null) IspHistogramSupport(id, count, enable as CaptureRequest.Key<ByteArray>) else null
+        }.getOrNull()
+        ispSupport = id to support
+        ispStatsKey = null
+        ispStatsTypeKey = null
+        ispHistogramLogged = false
+        ispHistogram.clear()
+        return support
+    }
+
+    private fun enableIspHistogram(builder: CaptureRequest.Builder) {
+        val support = ispHistogramSupport() ?: return
+        try { builder.set(support.enableKey, byteArrayOf(1)) } catch (_: IllegalArgumentException) { /* Frame histogram stays. */ }
+    }
+
+    /** cameraExecutor: keeps the latest ISP histogram of a delivered result for the next analysis frame. */
+    private fun readIspHistogram(result: TotalCaptureResult) {
+        val support = ispSupport?.second ?: return
+        try {
+            val statsKey = ispStatsKey ?: result.keys.firstOrNull { it.name == IspHistogramKeys.STATS }
+                ?.also { ispStatsKey = it } ?: return
+            val buckets = result.get(statsKey) as? IntArray ?: return
+            if (buckets.size != support.buckets) return
+            val typeKey = ispStatsTypeKey ?: result.keys.firstOrNull { it.name == IspHistogramKeys.STATS_TYPE }
+                ?.also { ispStatsTypeKey = it }
+            val statsType = typeKey?.let { (result.get(it) as? IntArray)?.firstOrNull() }
+            val source = ispHistogramSource(statsType)
+            if (!ispHistogramLogged) {
+                ispHistogramLogged = true
+                Log.i(TAG, "ISP histogram: ${buckets.size} buckets, stats_type=$statsType, source=$source")
+            }
+            ispHistogram.offer(buckets, source, SystemClock.elapsedRealtime())
+        } catch (_: RuntimeException) { /* A vendor read must never disturb the preview callback. */ }
     }
 
     /** Latest DIAGNOSTIC capture-result statistics of the current graph, or null before its first result. */
@@ -4150,6 +4213,7 @@ class Camera2PreviewEngine(
         defaultAfMode: Int = if (recording || logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null)
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
     ) {
+        if (!isHighSpeedSession()) enableIspHistogram(builder)
         val pro = professionalExposure?.resolve(
             if (isHighSpeedSession()) ExposureCapabilities() else activeDescriptor?.exposureCapabilities ?: ExposureCapabilities(),
             CaptureFrameRate(requestedTargetFps.coerceAtLeast(1)),

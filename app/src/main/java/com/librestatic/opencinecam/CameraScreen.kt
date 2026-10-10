@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.text.style.TextAlign
 import com.librestatic.opencinecam.camera.AnalysisSuspension
+import com.librestatic.opencinecam.camera.HistogramSource
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.monitoringSampleFresh
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
@@ -1127,7 +1128,8 @@ internal fun rememberScopeAnalysisFresh(state: CameraUiState, options: Monitorin
 internal fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, histogramMode: HistogramMode, modifier: Modifier = Modifier,
     tag: String = "histogram-graph") {
     val state = liveCameraState(state)
-    Canvas(modifier.testTag(tag)) {
+    Box(modifier.testTag(tag)) {
+    Canvas(Modifier.matchParentSize()) {
         drawRect(Color.Black.copy(alpha = .55f))
         if (histogramMode == HistogramMode.LUMA) {
             val peak = state.histogram.maxOrNull()?.coerceAtLeast(.001f) ?: 1f
@@ -1153,6 +1155,17 @@ internal fun HistogramGraph(state: CameraUiState, options: MonitoringOptions, hi
                 drawPath(path, color.copy(alpha = options.opacityPercent / 100f), style = Stroke(width = 1.5.dp.toPx()))
             }
         }
+    }
+    // Only the ISP sources are labelled: the frame histogram is the default and needs no badge.
+    // The RGB graph is always the frame's.
+    val sourceLabel = when {
+        histogramMode != HistogramMode.LUMA -> null
+        state.histogramSource == HistogramSource.ISP -> R.string.histogram_source_isp
+        state.histogramSource == HistogramSource.ISP_BAYER -> R.string.histogram_source_isp_raw
+        else -> null
+    }
+    if (sourceLabel != null) Text(stringResource(sourceLabel), color = Color.White.copy(alpha = .7f), fontSize = 8.sp,
+        modifier = Modifier.align(Alignment.TopEnd).padding(horizontal = 3.dp, vertical = 1.dp).testTag("$tag-source"))
     }
 }
 
