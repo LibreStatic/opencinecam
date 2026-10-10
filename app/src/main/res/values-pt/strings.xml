@@ -876,4 +876,7 @@
     <string name="night_photo_short">NOITE</string>
     <string name="night_photo_toggle_on">Foto noturna: ativada</string>
     <string name="night_photo_toggle_off">Foto noturna: desativada</string>
+    <string name="low_light_fps_title">Taxa de quadros automática com pouca luz</string>
+    <string name="low_light_fps_help">Reduz a taxa de quadros com pouca luz para obter uma imagem mais clara. Deixe desativada para gravação profissional: a cadência permanece fixa. Se ativada, os arquivos podem ter taxa de quadros variável. Somente VÍDEO normal; não usada em LOG, HLG, alta velocidade ou timelapse.</string>
+    <string name="low_light_fps_mode_note">Aplica-se apenas ao VÍDEO normal. Neste modo a taxa de quadros permanece fixa.</string>
 </resources>
