@@ -4076,6 +4076,9 @@ internal fun SettingsContent(
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
         }
+        if ("gyroflow-log" in visibleIds) settingsCard("gyroflow-log") {
+            GyroflowSettingsControls(settings, onSettingsChange)
+        }
         if ("camera-capabilities" in visibleIds && onOpenCapabilities != null) settingsCard("camera-capabilities") {
             SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
                 Modifier.testTag("settings-open-capabilities"))

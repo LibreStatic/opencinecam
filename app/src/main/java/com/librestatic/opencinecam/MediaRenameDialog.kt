@@ -41,7 +41,7 @@ private class RenameDialogOwner { var valid = true }
 @Composable
 internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Unit,
     onCompleted: () -> Unit, source: MediaRenameSource) {
-    val selected = remember(take) { take.copy(originals = take.originals.toList(), metadata = take.metadata.toList()) }
+    val selected = remember(take) { take.copy(originals = take.originals.toList(), metadata = take.metadata.toList(), attachments = take.attachments.toList()) }
     val owner = remember(selected, source) { RenameDialogOwner() }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -55,7 +55,7 @@ internal fun MediaRenameDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
     val preview = remember(selected, stem, excessiveInput) {
         if (excessiveInput) null else try { mediaRenamePreview(selected, stem) } catch (_: Exception) { null }
     }
-    val expected = selected.originals + selected.metadata
+    val expected = selected.originals + selected.metadata + selected.attachments
     DisposableEffect(owner) { onDispose { owner.valid = false } }
     fun dismiss() { if (!busy) { owner.valid = false; onDismiss() } }
     MediaDialogFrame("media-rename-dialog", ::dismiss) {

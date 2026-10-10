@@ -99,6 +99,8 @@ import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.afterSavedProductionSlate
 import com.librestatic.opencinecam.storage.StillImageSaver
+import com.librestatic.opencinecam.storage.MotionLogRecorder
+import com.librestatic.opencinecam.storage.MotionLogTarget
 import com.librestatic.opencinecam.storage.VideoOutput
 import com.librestatic.opencinecam.storage.finalizePreparedRecordingTake
 import com.librestatic.opencinecam.transfers.CapturePublicationJournal
@@ -173,6 +175,7 @@ class CaptureService : Service() {
     private val stillSaver by lazy { StillImageSaver(this) }
     // Take-owned fields are written on main before dispatch and detached by engine callbacks.
     @Volatile private var videoOutput: VideoOutput? = null
+    @Volatile private var latestRollingShutterSkewNs: Long? = null
     private val takeOwnershipLock = Any()
     private val recordingRecoveryGuards = java.util.concurrent.ConcurrentHashMap<VideoOutput, AutoCloseable>()
 
@@ -262,6 +265,22 @@ class CaptureService : Service() {
                 releaseTransferCapture(reservation) { startPreviewAudioMonitorIfEligible() }
             }
         }
+    }
+
+    /**
+     * Opt-in motion log for plain video, LOG and HLG takes (never high speed, slow motion or time-lapse).
+     * Silent by design: no gyroscope or no sensor access just means no log.
+     */
+    private fun attachMotionLog(output: VideoOutput, wanted: Boolean, descriptor: Camera2CameraDescriptor?, geometry: RecordingGeometry?) {
+        if (!wanted || descriptor == null || geometry == null) return
+        MotionLogRecorder.start(this, MotionLogTarget(
+            videoFileName = output.displayName,
+            sensorOrientationDegrees = descriptor.sensorOrientation,
+            frontFacing = descriptor.lensFacing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT,
+            storedPixelRotationDegrees = geometry.pixelRotationDegrees,
+            timestampsSynced = descriptor.timestampSourceRealtime,
+            rollingShutterSkewNs = latestRollingShutterSkewNs,
+        ))?.let(output::attachMotionRecorder)
     }
 
     private class DetachedTake(
@@ -881,7 +900,15 @@ class CaptureService : Service() {
             }
         }
 
+        override fun onRecordingFirstFrame(sensorTimestampNs: Long) {
+            synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.onFirstFrame(sensorTimestampNs)
+        }
+
         override fun onMetadata(metadata: Camera2PreviewMetadata) {
+            metadata.rollingShutterSkewNs?.let { skew ->
+                latestRollingShutterSkewNs = skew
+                synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.updateRollingShutterSkew(skew)
+            }
             cameraState.update { it.copy(
                 sensitivityIso = metadata.sensitivityIso,
                 exposureTimeNs = metadata.exposureTimeNs,
@@ -1312,7 +1339,10 @@ class CaptureService : Service() {
                     discardVideo = { output?.finish(false); Unit },
                     publishAudio = { _ -> audioOutput?.publishPrepared() },
                     publishVideo = { _ -> output?.publishPrepared() },
-                    prepareVideo = { output?.prepareCompletion(
+                    prepareVideo = {
+                        // A pause removes spans from the file timeline, so sensor time can no longer be mapped to it.
+                        output?.sealMotionLog(keep = finalizedSuccess && avTiming?.sharedPause?.windows.isNullOrEmpty())
+                        output?.prepareCompletion(
                         run {
                             val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
                                 ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
@@ -2785,6 +2815,8 @@ class CaptureService : Service() {
                         val projectFps = settings.videoProjectRate.let { rate ->
                             kotlin.math.round(rate.numerator.toDouble() / rate.denominator).toInt().coerceAtLeast(1)
                         }
+                        attachMotionLog(output, settings.gyroflowLogEnabled && !directHighSpeed && !settings.videoOffSpeed &&
+                            current.activeVideoProfile?.constrainedHighSpeed != true, descriptor, takeGeometry)
                         previewEngine.startVideo(
                             output.descriptor,
                             embeddedAudio,
@@ -2912,6 +2944,8 @@ class CaptureService : Service() {
                         ) }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
+                        attachMotionLog(output, settings.gyroflowLogEnabled && current.activeVideoProfile?.constrainedHighSpeed != true,
+                            descriptor, geometry)
                         previewEngine.startOpenCineLogVideo(
                             output.descriptor,
                             recordingGeometry = geometry,

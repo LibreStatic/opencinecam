@@ -207,7 +207,7 @@ private fun GallerySlate(take: LocalMediaTake) {
 @Composable
 private fun GalleryFiles(take: LocalMediaTake, technical: Boolean, onOpen: (LocalMediaArtifact) -> Unit) {
     var expanded by rememberSaveable(take.id) { mutableStateOf(false) }
-    val summary = stringResource(R.string.media_files_summary, take.originals.size, take.metadata.size)
+    val summary = stringResource(R.string.media_files_summary, take.originals.size, take.metadata.size + take.attachments.size)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             Modifier
@@ -232,6 +232,7 @@ private fun GalleryFiles(take: LocalMediaTake, technical: Boolean, onOpen: (Loca
         if (expanded) {
             take.originals.forEach { GalleryArtifact(it, false, technical, onOpen) }
             take.metadata.forEach { GalleryArtifact(it, true, technical, onOpen) }
+            take.attachments.forEach { GalleryArtifact(it, true, technical, onOpen) }
         }
     }
 }

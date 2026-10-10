@@ -206,6 +206,7 @@ object CameraPresetCodec {
     /** Preserve local routing and script content even when applying a complete portable snapshot. */
     fun mergeLocal(preset: CameraSettings, current: CameraSettings): CameraSettings = preset.copy(
         geotaggingEnabled = current.geotaggingEnabled,
+        gyroflowLogEnabled = current.gyroflowLogEnabled,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

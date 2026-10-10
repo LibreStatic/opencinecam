@@ -821,4 +821,7 @@
     <string name="lut_disable_title">Desativar LUTs</string>
     <string name="permission_open_settings">Abrir configurações</string>
     <string name="permission_blocked_explanation">O Android não mostra mais o pedido de permissão. Permita nas configurações do sistema do app.</string>
+    <string name="gyroflow_log_title">Dados de giroscópio para o Gyroflow</string>
+    <string name="gyroflow_log_enabled">Gravar dados de giroscópio para o Gyroflow</string>
+    <string name="gyroflow_log_help">Guarda o movimento do telefone (giroscópio e acelerómetro) junto a cada gravação de vídeo, LOG ou HLG num ficheiro .gcsv com o mesmo nome, para a estabilizar no Gyroflow. Os dados de movimento só são gravados enquanto esta opção estiver ativada e ficam nesse ficheiro no seu dispositivo. Não é usado em câmara lenta nem time-lapse. Desative a estabilização da própria câmara para um melhor resultado.</string>
 </resources>

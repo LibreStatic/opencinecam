@@ -89,7 +89,7 @@ class LocalMediaRepository(context: Context) {
     /** Targeted re-observation for sharing. It never searches the library or repairs capture state. */
     internal fun freshSnapshot(selected: LocalMediaTake): MediaShareSnapshot {
         checkShareRunning()
-        require(selected.originals.size in 1..32 && selected.metadata.size <= 4)
+        require(selected.originals.size in 1..32 && selected.metadata.size + selected.attachments.size <= 4)
         require(selected.originals.map { it.uri }.distinct().size == selected.originals.size)
         require(selected.primary in selected.originals)
         val candidates = selected.originals.map { artifact ->
@@ -221,11 +221,13 @@ class LocalMediaRepository(context: Context) {
         val metadata = namespaceRows(namespace, "Download",
             MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), null, METADATA_BOUND + 1)
         if (metadata.size > METADATA_BOUND) incomplete = true
-        val documents = metadata.take(METADATA_BOUND).map { row ->
+        val bounded = metadata.take(METADATA_BOUND)
+        val logs = if (namespace.recording) bounded.filter { isMotionLogAttachment(it.artifact) } else emptyList()
+        val documents = bounded.filter { it !in logs }.map { row ->
             if (row.artifact.mimeType == "application/json") readMetadata(row.artifact) else MetadataDocument(row.artifact, null)
         }
         captureDocuments?.invoke(documents)
-        return catalogTake(namespace, members, documents, incomplete, onEncoding)
+        return catalogTake(namespace, members, documents, incomplete, logs.map { it.artifact }, onEncoding)
     }
 
     private fun namespaceRows(namespace: MediaNamespace, root: String, uri: Uri,

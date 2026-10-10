@@ -15,7 +15,9 @@ data class LocalMediaArtifact(val uri: String, val name: String, val mimeType: S
     val sizeBytes: Long, val modifiedSeconds: Long)
 data class LocalMediaTake(val id: String, val primary: LocalMediaArtifact,
     val originals: List<LocalMediaArtifact>, val metadata: List<LocalMediaArtifact>,
-    val kind: LocalMediaKind, val slate: ProductionSlateSettings?, val relationStatus: LocalMediaRelationStatus)
+    val kind: LocalMediaKind, val slate: ProductionSlateSettings?, val relationStatus: LocalMediaRelationStatus,
+    /** Non-JSON files owned by the take, such as its Gyroflow `.gcsv` log. They are never relationship metadata. */
+    val attachments: List<LocalMediaArtifact> = emptyList())
 /** Codec facts a take's sidecars declare. They stay out of [LocalMediaTake], whose equality is the
  * identity check behind sharing, renaming and proxy jobs. */
 data class LocalMediaEncoding(val videoMime: String? = null, val videoProfile: String? = null,
@@ -34,6 +36,9 @@ internal data class MediaNamespace(val id: String, val recording: Boolean) {
 }
 internal data class CatalogRow(val artifact: LocalMediaArtifact, val id: Long,
     val kind: LocalMediaKind?, val namespace: MediaNamespace?, val eligible: Boolean = true)
+/** A take attachment is a plain-text motion log in the take's Download namespace, never a JSON sidecar. */
+internal fun isMotionLogAttachment(artifact: LocalMediaArtifact): Boolean =
+    artifact.name.endsWith("." + GyroflowLog.EXTENSION, ignoreCase = true) && artifact.mimeType != "application/json"
 internal data class MetadataDocument(val artifact: LocalMediaArtifact, val text: String?, val disappeared: Boolean = false)
 
 /** Only exact application roots and canonical UUID namespaces carry identity. Names never do. */
@@ -70,7 +75,7 @@ internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, que
     val needle = query.trim().lowercase(Locale.ROOT)
     if (needle.isEmpty()) return true
     val slate = take.slate
-    val fields = take.originals.map { it.name } + take.metadata.map { it.name } + listOf(take.id) +
+    val fields = take.originals.map { it.name } + take.metadata.map { it.name } + take.attachments.map { it.name } + listOf(take.id) +
         (slate?.let { listOf(it.project, it.camera, it.scene, it.reel, it.lens, it.takeNumber.toString()) } ?: emptyList())
     return fields.any { it.lowercase(Locale.ROOT).contains(needle) }
 }
@@ -80,6 +85,7 @@ internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, que
  * [onEncoding] receives the codec facts of a valid take, read from the same parse. */
 internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     documents: List<MetadataDocument>, incomplete: Boolean = false,
+    attachments: List<LocalMediaArtifact> = emptyList(),
     onEncoding: ((LocalMediaEncoding) -> Unit)? = null): LocalMediaTake? {
     val originals = members.filter { it.kind != null }
     val primary = catalogPrimary(originals) ?: return null
@@ -164,7 +170,8 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
         else -> LocalMediaRelationStatus.DECLARED
     }
     return LocalMediaTake(namespace.key, primary.artifact, originals.sortedWith(catalogComparator(false)).map { it.artifact },
-        documents.map { it.artifact }, requireNotNull(primary.kind), slates.singleOrNull().takeUnless { invalid }, status)
+        documents.map { it.artifact }, requireNotNull(primary.kind), slates.singleOrNull().takeUnless { invalid }, status,
+        attachments.sortedBy { it.uri })
 }
 /** A short string value; anything longer is no codec name and is dropped. */
 private fun JsonObject.label(key: String): String? =

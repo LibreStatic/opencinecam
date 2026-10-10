@@ -50,7 +50,9 @@ internal fun SettingsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     val category = selectedName?.let { SettingsCategory.valueOf(it) }
     val context = LocalContext.current
+    val hasGyroscope = remember(context) { deviceHasGyroscope(context) }
     val ids = SettingsCatalog.search(query, if (query.isBlank()) category else null, context::getString)
+        .let { if (hasGyroscope) it else it - "gyroflow-log" }
     val searching = query.isNotBlank()
     val open: (SettingsCategory) -> Unit = { selectedName = it.name; query = "" }
     HingeSafeSettingsPane(fold.hinge) {

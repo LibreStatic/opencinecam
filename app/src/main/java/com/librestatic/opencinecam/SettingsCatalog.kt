@@ -72,6 +72,7 @@ object SettingsCatalog {
         SettingEntry("focus-lock", SettingsCategory.CAPTURE, R.string.af_lock_behavior, "focus enfoque AF bloqueo lock"),
         SettingEntry("zoom-lens", SettingsCategory.CAPTURE, R.string.zoom_lens_switch_mode, "zoom lente lens cambio switch automatico automatic manual preajuste preset tele gran angular wide pellizco pinch"),
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),
+        SettingEntry("gyroflow-log", SettingsCategory.RECORDING, R.string.gyroflow_log_title, "gyroflow gyro gyroscope giroscopio acelerometro accelerometer gcsv movimiento motion estabilizacion stabilization sensor IMU video LOG HLG privacidad privacy"),
         SettingEntry("camera-capabilities", SettingsCategory.DIAGNOSTICS, R.string.caps_title, "capacidades capabilities parametros parameters caracteristicas characteristics camera2 camara camera sensor lente lens soporte support compatibilidad compatibility hardware nivel level ISO RAW HLG HDR fps alta velocidad high speed formatos formats informe report"),
         SettingEntry("hardware", SettingsCategory.DIAGNOSTICS, R.string.hardware_truth, "hardware capacidades capabilities camara camera LOG RAW"),
         SettingEntry("modes", SettingsCategory.DIAGNOSTICS, R.string.settings_mode_availability, "modo mode supported disponible experimental"),
@@ -95,6 +96,7 @@ object SettingsCatalog {
  * audio gain and requested AGC, remain pending until the next take. */
 fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings = copy(
     geotaggingEnabled = next.geotaggingEnabled,
+    gyroflowLogEnabled = next.gyroflowLogEnabled,
     audioListening = next.audioListening,
     audioMeter = next.audioMeter,
     gallery = next.gallery,

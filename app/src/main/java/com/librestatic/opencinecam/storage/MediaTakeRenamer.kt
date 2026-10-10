@@ -22,7 +22,7 @@ class MediaTakeRenamer internal constructor(private val access: MediaRenameAcces
     constructor(context: Context) : this(MediaStoreRenameAccess(context))
     fun rename(selected: LocalMediaTake, stem: String): MediaRenameResult {
         val preview = try { mediaRenamePreview(selected, stem) } catch (error: Exception) {
-            return MediaRenameResult((selected.originals + selected.metadata).map {
+            return MediaRenameResult((selected.originals + selected.metadata + selected.attachments).map {
                 MediaRenameFileResult(it, it.name, null, MediaRenameStatus.NOT_ATTEMPTED)
             }, error.message ?: "Invalid rename preview")
         }
@@ -168,7 +168,8 @@ internal class MediaStoreRenameAccess(context: Context) : MediaRenameAccess {
                 val identity = requireNotNull(mediaOriginalIdentity(row.artifact.uri))
                 CatalogRow(row.artifact, identity.second, identity.first, namespace)
             }
-            requireNotNull(catalogTake(namespace, rows, documents))
+            val attached = plan.selected.attachments.map { it.uri }.toSet()
+            requireNotNull(catalogTake(namespace, rows, documents, attachments = current.map { it.artifact }.filter { it.uri in attached }))
         } else plan.selected.copy(primary = primary.artifact, originals = listOf(primary.artifact))
         check(take.id == plan.selected.id && take.primary.uri == plan.selected.primary.uri && take.slate == plan.selected.slate && take.relationStatus == plan.selected.relationStatus) {
             "Renamed take relationships did not remain coherent"

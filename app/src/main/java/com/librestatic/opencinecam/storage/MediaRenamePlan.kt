@@ -21,8 +21,8 @@ fun validateMediaRenameStem(stem: String): String {
 }
 fun mediaRenamePreview(take: LocalMediaTake, stem: String): MediaRenamePreview {
     val normalized = validateMediaRenameStem(stem)
-    val all = take.originals + take.metadata
-    require(take.originals.size in 1..32 && take.metadata.size <= 4 && take.primary in take.originals)
+    val all = take.originals + take.metadata + take.attachments
+    require(take.originals.size in 1..32 && take.metadata.size + take.attachments.size <= 4 && take.primary in take.originals)
     require(all.map { it.uri }.distinct().size == all.size && all.all { mediaDeleteIdentity(it.uri) != null })
     val names = mutableMapOf(take.primary.uri to normalized + renameExtension(take.primary))
     val counts = mutableMapOf<String, Int>()
@@ -36,6 +36,10 @@ fun mediaRenamePreview(take: LocalMediaTake, stem: String): MediaRenamePreview {
     take.metadata.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }.forEachIndexed { index, artifact ->
         require(artifact.mimeType == "application/json") { "Only known JSON metadata can be renamed coherently" }
         names[artifact.uri] = "$normalized-metadata-${(index + 1).toString().padStart(2, '0')}" + renameExtension(artifact)
+    }
+    take.attachments.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }.forEachIndexed { index, artifact ->
+        require(isMotionLogAttachment(artifact)) { "Unknown attachment cannot be renamed coherently" }
+        names[artifact.uri] = "$normalized-motion-${(index + 1).toString().padStart(2, '0')}" + renameExtension(artifact)
     }
     val files = all.map { MediaRenameTarget(it, names.getValue(it.uri)) }
     requirePortableShareNames(files.map { it.newName })
@@ -54,6 +58,7 @@ private fun renameExtension(artifact: LocalMediaArtifact): String {
         "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave" -> listOf("wav")
         "audio/flac", "audio/x-flac" -> listOf("flac")
         "application/json" -> listOf("json")
+        GyroflowLog.MIME_TYPE -> listOf(GyroflowLog.EXTENSION)
         else -> error("Unsupported original MIME extension")
     }
     val existing = artifact.name.substringAfterLast('.', "")
@@ -112,10 +117,10 @@ internal fun mediaRenamePlan(selected: LocalMediaTake, preview: MediaRenamePrevi
             val identity = requireNotNull(mediaOriginalIdentity(row.artifact.uri))
             CatalogRow(row.artifact, identity.second, identity.first, scope.namespace)
         }
-        check(catalogTake(scope.namespace, sourceRows, documents) == selected) { "Rename metadata is corrupt, unknown or changed" }
+        check(catalogTake(scope.namespace, sourceRows, documents, attachments = selected.attachments) == selected) { "Rename metadata is corrupt, unknown or changed" }
         val rewrittenRows = sourceRows.map { it.copy(artifact = it.artifact.copy(name = names.getValue(it.artifact.uri))) }
         val rewrittenDocs = metadata.map { change -> MetadataDocument(change.artifact.copy(name = names.getValue(change.artifact.uri), sizeBytes = change.after.size.toLong()), change.after.toString(Charsets.UTF_8)) }
-        val after = requireNotNull(catalogTake(scope.namespace, rewrittenRows, rewrittenDocs))
+        val after = requireNotNull(catalogTake(scope.namespace, rewrittenRows, rewrittenDocs, attachments = selected.attachments))
         check(after.slate == selected.slate && after.relationStatus == selected.relationStatus) { "Rename would damage declared relationships" }
     } else require(documents.isEmpty())
     return MediaRenamePlan(selected, preview, rows.toList(), metadata)

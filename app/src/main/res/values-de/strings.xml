@@ -821,4 +821,7 @@
     <string name="lut_disable_title">LUTs deaktivieren</string>
     <string name="permission_open_settings">Einstellungen öffnen</string>
     <string name="permission_blocked_explanation">Android zeigt die Berechtigungsanfrage nicht mehr an. Erlaube sie in den Systemeinstellungen der App.</string>
+    <string name="gyroflow_log_title">Gyrodaten für Gyroflow</string>
+    <string name="gyroflow_log_enabled">Gyrodaten für Gyroflow aufzeichnen</string>
+    <string name="gyroflow_log_help">Speichert die Bewegung des Telefons (Gyroskop und Beschleunigungssensor) neben jeder Video-, LOG- oder HLG-Aufnahme als .gcsv-Datei mit demselben Namen, um sie in Gyroflow zu stabilisieren. Bewegungsdaten werden nur aufgezeichnet, solange dies aktiviert ist, und bleiben in dieser Datei auf Ihrem Gerät. Nicht für Zeitlupe oder Zeitraffer. Für die beste Übereinstimmung die kamerainterne Stabilisierung ausschalten.</string>
 </resources>
