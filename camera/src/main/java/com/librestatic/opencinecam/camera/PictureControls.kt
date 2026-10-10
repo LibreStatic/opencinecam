@@ -102,12 +102,13 @@ internal class PictureControlKeys(
 ) {
     companion object {
         @Suppress("UNCHECKED_CAST")
-        fun of(characteristics: CameraCharacteristics): PictureControlKeys {
-            val request = characteristics.availableCaptureRequestKeys.associateBy { it.name }
-            val result = characteristics.availableCaptureResultKeys.associateBy { it.name }
+        fun of(characteristics: CameraCharacteristics, cameraId: String? = null): PictureControlKeys {
+            val type = IntArray::class.java
             return PictureControlKeys(
-                request[SATURATION_REQUEST_KEY] as CaptureRequest.Key<IntArray>?, result[SATURATION_REQUEST_KEY] as CaptureResult.Key<IntArray>?,
-                request[SHARPNESS_REQUEST_KEY] as CaptureRequest.Key<IntArray>?, result[SHARPNESS_REQUEST_KEY] as CaptureResult.Key<IntArray>?)
+                VendorKeys.request(characteristics, cameraId, SATURATION_REQUEST_KEY, SATURATION_RANGE_KEY, type),
+                VendorKeys.result(characteristics, cameraId, SATURATION_REQUEST_KEY, SATURATION_RANGE_KEY, type),
+                VendorKeys.request(characteristics, cameraId, SHARPNESS_REQUEST_KEY, SHARPNESS_RANGE_KEY, type),
+                VendorKeys.result(characteristics, cameraId, SHARPNESS_REQUEST_KEY, SHARPNESS_RANGE_KEY, type))
         }
     }
 }
@@ -115,10 +116,9 @@ internal class PictureControlKeys(
 /** A control is offered only when both its request key and its range key exist and parse. */
 @Suppress("UNCHECKED_CAST")
 internal fun CameraCharacteristics.pictureControlCapabilities(): PictureControlCapabilities = runCatching {
-    val request = availableCaptureRequestKeys.mapTo(HashSet()) { it.name }
     val ranges = keys.associateBy { it.name }
     fun range(rangeKey: String, requestKey: String, parse: (IntArray?) -> PictureControlRange?): PictureControlRange? {
-        if (requestKey !in request) return null
+        if (VendorKeys.request(this, null, requestKey, rangeKey, IntArray::class.java) == null) return null
         val key = ranges[rangeKey] as CameraCharacteristics.Key<IntArray>? ?: return null
         return runCatching { parse(get(key)) }.getOrNull()
     }
