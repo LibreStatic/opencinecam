@@ -95,6 +95,29 @@ class SurfaceEncoderPolicyTest {
     }
 
     @Test
+    fun hdr10PolicyNeedsTheHdr10ProfileOnAHardwareEncoder() {
+        fun pick(list: List<SurfaceEncoderInfo>, width: Int = 3840, height: Int = 2160) = VideoEncoderSelector().selectSurfaceEncoder(
+            SurfaceEncoderPolicy.HEVC_HDR10_HARDWARE, width, height, 30, list.asSequence())
+        val plainMain10 = codec("a.hevc", hw = true, types = listOf(hevc),
+            profiles = listOf(pl(CodecProfileLevel.HEVCProfileMain10, 1), pl(CodecProfileLevel.HEVCProfileMain10HDR10Plus, 1)))
+        val hdr10 = codec("b.hevc", hw = true, types = listOf(hevc),
+            profiles = listOf(pl(CodecProfileLevel.HEVCProfileMain10, 1), pl(CodecProfileLevel.HEVCProfileMain10HDR10, 1)))
+        val software = codec("c.hevc", hw = false, types = listOf(hevc),
+            profiles = listOf(pl(CodecProfileLevel.HEVCProfileMain10HDR10, 1)))
+        val small = codec("d.hevc", hw = true, types = listOf(hevc), maxWidth = 1920,
+            profiles = listOf(pl(CodecProfileLevel.HEVCProfileMain10HDR10, 1)))
+        assertNull(pick(listOf(plainMain10)))
+        assertNull(pick(listOf(software)))
+        assertEquals(SurfaceEncoderPick("b.hevc", CodecProfileLevel.HEVCProfileMain10HDR10, true, null), pick(listOf(plainMain10, hdr10)))
+        // Size and rate are checked per encoder, so a smaller HDR10 encoder does not mask a capable one.
+        assertEquals("b.hevc", pick(listOf(small, hdr10))?.codecName)
+        assertNull(pick(listOf(small)))
+        assertEquals("d.hevc", pick(listOf(small), width = 1920, height = 1080)?.codecName)
+        // HLG recording keeps its own rule and still accepts the plain Main10 encoder.
+        assertEquals("a.hevc", selectHevc(listOf(plainMain10, hdr10))?.codecName)
+    }
+
+    @Test
     fun randomizedCodecListsMatchThePipelineOracles() {
         val random = Random(20260926)
         val names = listOf("c2.qti", "c2.exynos", "OMX.MTK", "c2.android", "OMX.google", "c2.mtk", "a", "z")

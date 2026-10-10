@@ -51,8 +51,10 @@ internal fun SettingsScreen(
     val category = selectedName?.let { SettingsCategory.valueOf(it) }
     val context = LocalContext.current
     val hasGyroscope = remember(context) { deviceHasGyroscope(context) }
+    // The HDR format row exists only where HLG mode can record HDR10, so it is never a search result elsewhere.
     val ids = SettingsCatalog.search(query, if (query.isBlank()) category else null, context::getString)
         .let { if (hasGyroscope) it else it - "gyroflow-log" }
+        .let { found -> if (state.descriptor.offersHdr10Video) found else found - HDR_FORMAT_SETTING_ID }
     val searching = query.isNotBlank()
     val open: (SettingsCategory) -> Unit = { selectedName = it.name; query = "" }
     HingeSafeSettingsPane(fold.hinge) {

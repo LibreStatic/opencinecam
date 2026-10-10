@@ -37,6 +37,13 @@ class CameraSettingsTest {
         assertEquals(before, before.withLivePreferencesFrom(next))
     }
 
+    @Test fun hdrVideoFormatDefaultsToHlgAndStaysPendingDuringRecording() {
+        val before = CameraSettings()
+        assertEquals(com.librestatic.opencinecam.camera.HdrVideoFormat.HLG, before.hdrVideoFormat)
+        val next = before.copy(hdrVideoFormat = com.librestatic.opencinecam.camera.HdrVideoFormat.HDR10)
+        assertEquals(before, before.withLivePreferencesFrom(next))
+    }
+
     @Test
     fun defaultsAreSafeForFoldedLogPreflight() {
         val settings = CameraSettings()

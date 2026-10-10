@@ -76,6 +76,8 @@ enum class EncoderProfileRule {
     HEVC_MAIN,
     /** AVC High when advertised, else the numerically highest advertised profile; reports that profile's highest level. */
     AVC_HIGH_ELSE_HIGHEST,
+    /** Only an advertised HEVC Main10 HDR10 profile: the encoder claims static HDR metadata support. No level is reported. */
+    HEVC_MAIN10_HDR10_ONLY,
 }
 
 data class SurfaceEncoderPolicy(
@@ -92,6 +94,11 @@ data class SurfaceEncoderPolicy(
         /** SDR/HEVC Main recording: hardware only, so a software HEVC encoder never replaces a working AVC one. */
         val HEVC_MAIN_HARDWARE = SurfaceEncoderPolicy(
             MediaFormat.MIMETYPE_VIDEO_HEVC, EncoderHardwarePolicy.REQUIRE_HARDWARE, EncoderProfileRule.HEVC_MAIN,
+        )
+
+        /** HDR10 (PQ) recording: hardware encoders that advertise HEVC Main10 HDR10 only. */
+        val HEVC_HDR10_HARDWARE = SurfaceEncoderPolicy(
+            MediaFormat.MIMETYPE_VIDEO_HEVC, EncoderHardwarePolicy.REQUIRE_HARDWARE, EncoderProfileRule.HEVC_MAIN10_HDR10_ONLY,
         )
 
         /** SDR/AVC recording; [allowSoftware] is true only for timelapse. */
@@ -178,6 +185,8 @@ class VideoEncoderSelector(private val correlationId: String = "video-encoder") 
                         it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
                 }
                 EncoderProfileRule.HEVC_MAIN -> profiles.firstOrNull { it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain }
+                EncoderProfileRule.HEVC_MAIN10_HDR10_ONLY ->
+                    profiles.firstOrNull { it == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 }
                 EncoderProfileRule.AVC_HIGH_ELSE_HIGHEST ->
                     profiles.firstOrNull { it == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh } ?: profiles.maxOrNull()
             } ?: return@mapNotNull null

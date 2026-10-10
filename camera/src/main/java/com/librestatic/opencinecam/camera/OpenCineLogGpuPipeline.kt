@@ -394,6 +394,8 @@ class OpenCineLogGpuPipeline(
     private var subjectLutFailure: OperatorLutStatus? = null
     private var operatorLutProgram = 0
     private var hlgSignalProgram = 0
+    /** Whether [hlgSignalProgram] converts to PQ; a program is rebuilt when the take's format differs. */
+    private var hlgSignalProgramPq = false
     private var operatorLutTexture = 0
     private var operatorLutTextureHash: String? = null
     private var failedOperatorLutHash: String? = null
@@ -588,7 +590,10 @@ class OpenCineLogGpuPipeline(
         hlgOutput: Boolean = false,
         /** Only the SDR passthrough route honours it; LOG and HLG always encode HEVC Main10. */
         videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
+        /** With [hlgOutput]: record HDR10 (PQ, HEVC Main10 HDR10) instead of HLG. */
+        hdr10Output: Boolean = false,
     ): Boolean {
+        require(!hdr10Output || hlgOutput) { "HDR10 output is a variant of the HDR graph." }
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
             separateAudioClock.cameraRealtime == cameraTimestampRealtime) { "Separate audio clock requires a matching regular capture route" }
         val preparation = RecordingPreparation()
@@ -631,10 +636,13 @@ class OpenCineLogGpuPipeline(
                     // aborts preparation before any native onStarted admission or file samples.
                     operatorProgram(recordingLut, forRecording = true)
                 }
-                if (hlgOutput && hlgSignalProgram == 0) {
+                if (hlgOutput && (hlgSignalProgram == 0 || hlgSignalProgramPq != hdr10Output)) {
                     check(makeCurrent(pbuffer)) { "HLG program context is unavailable." }
+                    if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
+                    hlgSignalProgram = 0
                     // Mandatory output processing, like a recording LUT: no fallback to OCLog2 pixels.
-                    hlgSignalProgram = linkProgram(VERTEX_SHADER, hlgSignalShader(shaderYcbcr))
+                    hlgSignalProgram = linkProgram(VERTEX_SHADER, if (hdr10Output) pqSignalShader(shaderYcbcr) else hlgSignalShader(shaderYcbcr))
+                    hlgSignalProgramPq = hdr10Output
                 }
                 val projectRate = timelapse?.projectRate ?: projectRateOverride ?: CaptureFrameRate(targetFps)
                 val projectFps = projectRate.numerator.toDouble() / projectRate.denominator
@@ -651,8 +659,8 @@ class OpenCineLogGpuPipeline(
                     ?: error("No ${if (timelapse == null) "hardware " else "advertised "}${MediaFormat.MIMETYPE_VIDEO_AVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
                 var candidate = if (useHevc) requireNotNull(hevcCandidate)
                     else if (passthroughSdr) avcCandidate()
-                    else findEncoder(platformEncodedSize, targetFps)
-                        ?: error("No hardware ${MediaFormat.MIMETYPE_VIDEO_HEVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
+                    else (if (hdr10Output) findHdr10Encoder(platformEncodedSize, targetFps) else findEncoder(platformEncodedSize, targetFps))
+                        ?: error("No hardware ${MediaFormat.MIMETYPE_VIDEO_HEVC}${if (hdr10Output) " HDR10" else ""} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
                 fun buildFormat(candidate: OpenCineLogEncoderCandidate) = MediaFormat.createVideoFormat(candidate.mime, encodedSize.width, encodedSize.height).apply {
                     setInteger(MediaFormat.KEY_PROFILE, candidate.profile)
                     // OMX AVC requires the advertised level whenever a profile is supplied.
@@ -668,7 +676,8 @@ class OpenCineLogGpuPipeline(
                     if (hlgOutput) {
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
                         setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
-                        setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_HLG)
+                        setInteger(MediaFormat.KEY_COLOR_TRANSFER, hdrFormat(hdr10Output).mediaFormatTransfer)
+                        if (hdr10Output) setByteBuffer(MediaFormat.KEY_HDR_STATIC_INFO, ByteBuffer.wrap(Hdr10Video.staticInfo()))
                     } else if (passthroughSdr || recordingLut != null) {
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
                         setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
@@ -725,7 +734,7 @@ class OpenCineLogGpuPipeline(
                     val eglSurface = createWindowSurface(
                         if (passthroughSdr) requireNotNull(config8) else requireNotNull(config10),
                         codecSurface,
-                        if (hlgOutput) hlgSurfaceAttributes()
+                        if (hlgOutput) hlgSurfaceAttributes(hdr10Output)
                         else if (passthroughSdr || recordingLut != null) intArrayOf(EGL14.EGL_NONE) else {
                             intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_LINEAR_EXT, EGL14.EGL_NONE)
                         },
@@ -736,11 +745,11 @@ class OpenCineLogGpuPipeline(
                     val active = Recording(requireNotNull(ownedOutput), codec, codecSurface, muxer, candidate, geometry, embeddedAac, captureEpoch, minimumSensorTimestampNs, timelapse?.let(::TimelapseTimeline), projectRateOverride?.let(::ProjectFrameTimeline), onTimelapseProgress, onTimelapsePauseChanged, onEncodedProgress, onStopped, fileRetirement, recordingLut, onRecordingLutApplied,
                         takeGreyReference, sceneGain(takeGreyReference),
                         vuiTransfer = when {
-                            hlgOutput -> HevcVuiTransfer.ARIB_STD_B67
+                            hlgOutput -> hdrFormat(hdr10Output).h273Transfer
                             !passthroughSdr && recordingLut == null -> HevcVuiTransfer.UNSPECIFIED
                             else -> null
                         },
-                        hlgOutput = hlgOutput)
+                        hlgOutput = hlgOutput, hdr10Output = hdr10Output)
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -936,9 +945,12 @@ class OpenCineLogGpuPipeline(
      * with the codec's colour keys. Without the extension the surface keeps the driver default; the
      * codec keys and the SPS rewrite still carry the HLG tag.
      */
-    private fun hlgSurfaceAttributes(): IntArray {
+    private fun hlgSurfaceAttributes(pq: Boolean = false): IntArray {
         val extensions = EGL14.eglQueryString(display, EGL14.EGL_EXTENSIONS).orEmpty().split(' ')
-        return if ("EGL_EXT_gl_colorspace_bt2020_hlg" in extensions) {
+        // The PQ variant asks for the BT.2020 PQ colourspace the same way; the shader writes the PQ code values.
+        return if (pq && "EGL_EXT_gl_colorspace_bt2020_pq" in extensions) {
+            intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_PQ_EXT, EGL14.EGL_NONE)
+        } else if (!pq && "EGL_EXT_gl_colorspace_bt2020_hlg" in extensions) {
             intArrayOf(EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_HLG_EXT, EGL14.EGL_NONE)
         } else intArrayOf(EGL14.EGL_NONE)
     }
@@ -1423,8 +1435,11 @@ class OpenCineLogGpuPipeline(
             if (active.containerVuiTransfer != forcedTransfer) return
             format.setByteBuffer("csd-0", ByteBuffer.wrap(cleared))
             // MediaMuxer writes the colr box from this key; without it the box says unspecified too.
-            if (active.hlgOutput) format.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_HLG)
-            else format.removeKey(MediaFormat.KEY_COLOR_TRANSFER)
+            if (active.hlgOutput) {
+                format.setInteger(MediaFormat.KEY_COLOR_TRANSFER, hdrFormat(active.hdr10Output).mediaFormatTransfer)
+                // The muxer's output format may not echo the static info the encoder was configured with.
+                if (active.hdr10Output) format.setByteBuffer(MediaFormat.KEY_HDR_STATIC_INFO, ByteBuffer.wrap(Hdr10Video.staticInfo()))
+            } else format.removeKey(MediaFormat.KEY_COLOR_TRANSFER)
         }
 
         fun drainOne(codec: MediaCodec, info: MediaCodec.BufferInfo, video: Boolean, timeoutUs: Long): Boolean {
@@ -1591,12 +1606,12 @@ class OpenCineLogGpuPipeline(
                     sourceTransfer = sourcePath.transfer,
                     sourcePrecision = sourcePath.sourcePrecision,
                     recordingLut = active.lutEvidence,
-                    curve = if (active.hlgOutput) "HLG" else if (active.recordingLut != null) "LUT_BAKED_SDR" else "OCLog2",
-                    curveVersion = if (active.hlgOutput) "ARIB STD-B67" else if (active.recordingLut != null) "1" else "2.0",
+                    curve = if (active.hlgOutput) hdrFormat(active.hdr10Output).curve else if (active.recordingLut != null) "LUT_BAKED_SDR" else "OCLog2",
+                    curveVersion = if (active.hlgOutput) hdrFormat(active.hdr10Output).curveVersion else if (active.recordingLut != null) "1" else "2.0",
                     gamut = if (active.recordingLut != null) "BT.709" else "BT.2020",
                     range = if (active.recordingLut != null || active.hlgOutput) "limited" else "full",
                     codecMime = if (passthroughSdr) active.candidate.mime else MediaFormat.MIMETYPE_VIDEO_HEVC,
-                    codecProfile = if (!passthroughSdr) "Main10"
+                    codecProfile = if (!passthroughSdr) (if (active.hdr10Output) "Main10HDR10" else "Main10")
                         else if (active.candidate.mime == MediaFormat.MIMETYPE_VIDEO_HEVC) "Main"
                         else "AVC_${active.candidate.profile}",
                     codecFallback = codecFallbackReason,
@@ -1606,7 +1621,7 @@ class OpenCineLogGpuPipeline(
                     sourceDataSpace = lastSourceDataSpace,
                     sourceDataSpaceMismatchedFrames = active.dataSpaceMismatchedFrames,
                     unexpectedSourceDataSpace = active.unexpectedDataSpace,
-                    transformSha256 = if (active.hlgOutput) hlgSignalSha256(shaderYcbcr) else transformSha256(sourcePath, shaderYcbcr),
+                    transformSha256 = if (active.hdr10Output) pqSignalSha256(shaderYcbcr) else if (active.hlgOutput) hlgSignalSha256(shaderYcbcr) else transformSha256(sourcePath, shaderYcbcr),
                     encodedFrames = active.frames,
                     firstPtsUs = active.firstPtsUs,
                     lastPtsUs = active.lastPtsUs,
@@ -2060,6 +2075,8 @@ class OpenCineLogGpuPipeline(
         val vuiTransfer: Int?,
         /** Records the camera's HLG signal (re-encoded to BT.2020 primaries) instead of OCLog2. */
         val hlgOutput: Boolean,
+        /** With [hlgOutput]: the signal is converted to PQ and the encoder runs in the HDR10 profile. */
+        val hdr10Output: Boolean = false,
     ) {
         val clearsVuiTransfer: Boolean get() = vuiTransfer != null
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
@@ -2159,11 +2176,20 @@ class OpenCineLogGpuPipeline(
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
         private const val EGL_GL_COLORSPACE_BT2020_LINEAR_EXT = 0x333F
         private const val EGL_GL_COLORSPACE_BT2020_HLG_EXT = 0x3540
+        private const val EGL_GL_COLORSPACE_BT2020_PQ_EXT = 0x3340
+
+        private fun hdrFormat(hdr10: Boolean) = if (hdr10) HdrVideoFormat.HDR10 else HdrVideoFormat.HLG
 
         /** HEVC Main10 hardware Surface encoder; rules live in [VideoEncoderSelector.selectSurfaceEncoder]. */
         fun findEncoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
             VideoEncoderSelector().selectSurfaceEncoder(
                 SurfaceEncoderPolicy.HEVC_MAIN10_HARDWARE, size.width, size.height, targetFps, platformSurfaceEncoders(),
+            )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
+
+        /** HEVC Main10 HDR10 hardware Surface encoder, the only kind HDR10 (PQ) takes may use. */
+        fun findHdr10Encoder(size: Size, targetFps: Int): OpenCineLogEncoderCandidate? =
+            VideoEncoderSelector().selectSurfaceEncoder(
+                SurfaceEncoderPolicy.HEVC_HDR10_HARDWARE, size.width, size.height, targetFps, platformSurfaceEncoders(),
             )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
 
         /** AVC High Surface encoder; software is admitted only when [allowSoftware] (timelapse). */
@@ -2336,6 +2362,33 @@ class OpenCineLogGpuPipeline(
             }
         """.trimIndent()
 
+        private val PQ_SIGNAL_FRAGMENT_SHADER = HLG_SIGNAL_FRAGMENT_SHADER
+            .replace(
+                "outColor = vec4(hlgOetf(sceneLinear), 1.0);",
+                "outColor = vec4(pqInverseEotf(hlgOotf(sceneLinear)), 1.0);",
+            )
+            .replace(
+                "void main() {",
+                """
+                const float PQ_M1 = 0.1593017578125;
+                const float PQ_M2 = 78.84375;
+                const float PQ_C1 = 0.8359375;
+                const float PQ_C2 = 18.8515625;
+                const float PQ_C3 = 18.6875;
+                // BT.2100 HLG OOTF for a 1000 cd/m2 display, in cd/m2.
+                vec3 hlgOotf(vec3 e) {
+                    e = clamp(e, 0.0, 1.0);
+                    float ys = dot(e, vec3(0.2627, 0.6780, 0.0593));
+                    return 1000.0 * pow(max(ys, 1e-6), 0.2) * e;
+                }
+                // ST 2084 inverse EOTF: cd/m2 to the PQ signal.
+                vec3 pqInverseEotf(vec3 nits) {
+                    vec3 y = pow(clamp(nits / 10000.0, 0.0, 1.0), vec3(PQ_M1));
+                    return pow((PQ_C1 + PQ_C2 * y) / (1.0 + PQ_C3 * y), vec3(PQ_M2));
+                }
+                void main() {""".trimIndent(),
+            )
+
         private val SDR_FRAGMENT_SHADER = """
             #version 300 es
             #extension GL_OES_EGL_image_external_essl3 : require
@@ -2422,6 +2475,13 @@ class OpenCineLogGpuPipeline(
         fun hlgSignalShader(shaderYcbcr: Boolean): String =
             if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
 
+        /**
+         * The HLG recording shader with a PQ output: HLG scene light through the 1000 cd/m2 HLG OOTF
+         * and the ST 2084 inverse EOTF. [HlgToPq] is its host-testable mirror.
+         */
+        fun pqSignalShader(shaderYcbcr: Boolean): String =
+            if (shaderYcbcr) ycbcrVariant(PQ_SIGNAL_FRAGMENT_SHADER) else PQ_SIGNAL_FRAGMENT_SHADER
+
         private fun ycbcrVariant(base: String): String {
             for (anchor in YCBCR_ANCHORS) check(base.split(anchor).size == 2) { "YCbCr shader anchor drifted: $anchor" }
             return base
@@ -2453,6 +2513,11 @@ class OpenCineLogGpuPipeline(
         /** Identity of the linked HLG recording shader. */
         fun hlgSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
             .digest(hlgSignalShader(shaderYcbcr).toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+        /** Identity of the linked PQ recording shader. */
+        fun pqSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
+            .digest(pqSignalShader(shaderYcbcr).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Backward-compatible identity of the qualified HLG transform. */

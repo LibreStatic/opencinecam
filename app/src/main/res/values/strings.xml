@@ -155,6 +155,11 @@
     <string name="log_grey_reference_native_detail">Each source keeps its own curve. No gain is applied.</string>
     <string name="log_grey_reference_match_hlg_detail">SDR clips are scaled down to the HLG grey. Lossless: nothing clips.</string>
     <string name="log_grey_reference_match_sdr_detail" formatted="false">HLG clips are scaled up to the SDR grey. Highlights above about 75% HLG signal clip.</string>
+    <string name="hdr_format">HDR format</string>
+    <string name="hdr_format_hlg">HLG</string>
+    <string name="hdr_format_hdr10">HDR10</string>
+    <string name="hdr_format_hlg_summary">HLG keeps the camera\'s own HDR signal. It plays well on most HDR screens and degrades gracefully on SDR ones.</string>
+    <string name="hdr_format_hdr10_summary">HDR10 (PQ) records absolute brightness for HDR10 screens and editing software. Applies to the next take.</string>
     <string name="capture_status_free">%1$s free</string>
     <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s free</string>
     <string name="camera_switch_timeout">Camera %1$s did not start; restored camera %2$s.</string>

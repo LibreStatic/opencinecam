@@ -64,6 +64,11 @@ data class Camera2LogProfile(
     val fps: Int,
     val sourcePath: OpenCineLogSourcePath,
     val constrainedHighSpeed: Boolean,
+    /**
+     * HLG mode can record HDR10 (PQ) at this size and rate: the camera advertises HDR10 and a hardware
+     * encoder advertises HEVC Main10 HDR10 ([Hdr10Video.isOffered]). Never set for the ISP-derived tier.
+     */
+    val hdr10: Boolean = false,
     val qualificationStage: OpenCineLogQualificationStage = OpenCineLogQualificationStage.EXPERIMENTAL,
     val qualificationReason: String = OpenCineLogQualificationPolicy.NOT_RUN_REASON,
     val qualificationEvidenceId: String? = null,
@@ -2945,6 +2950,8 @@ class Camera2PreviewEngine(
         recordingLut: MonitorLut? = null,
         /** Record the camera's HLG signal as BT.2020 HLG (HDR) instead of OCLog2. */
         hlgOutput: Boolean = false,
+        /** With [hlgOutput]: record HDR10 (PQ) instead of HLG; only honoured for a profile that offers it. */
+        hdr10Output: Boolean = false,
     ): Boolean {
         val pipeline = logPipeline ?: return false
         val descriptor = activeDescriptor ?: return false
@@ -2962,6 +2969,7 @@ class Camera2PreviewEngine(
             separateAudioClock = separateAudioClock,
             recordingLut = recordingLut,
             hlgOutput = hlgOutput,
+            hdr10Output = hdr10Output && hlgOutput && activeLogProfile?.hdr10 == true,
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },
@@ -4812,6 +4820,8 @@ class Camera2PreviewEngine(
                     ?.getSupportedColorSpacesForDynamicRange(ImageFormat.PRIVATE, DynamicRangeProfiles.HLG10)
                     ?.contains(ColorSpace.Named.BT2020_HLG) == true
             } else false
+            val hasHdr10 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                hlgProfiles?.supportedProfiles?.contains(DynamicRangeProfiles.HDR10) == true
             val regularLogProfiles = if (hasHlg10 && hasBt2020Hlg) {
                 videoSizes.flatMap { size ->
                     fixedFps.mapNotNull { fps ->
@@ -4820,6 +4830,9 @@ class Camera2PreviewEngine(
                             fps = fps,
                             sourcePath = OpenCineLogSourcePath.HLG10_BT2020,
                             constrainedHighSpeed = false,
+                            hdr10 = Hdr10Video.isOffered(
+                                Build.VERSION.SDK_INT, hasHdr10, hasHdr10 && OpenCineLogGpuPipeline.findHdr10Encoder(size, fps) != null,
+                            ),
                         ).takeIf {
                             streamCanReachFps(map, size, fps) &&
                                 OpenCineLogGpuPipeline.findEncoder(size, fps) != null

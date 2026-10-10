@@ -50,3 +50,18 @@ On the reference device, three separate process cold starts of the cadence-gated
 1920x1080@30 protocol each produced 961/961 frames over a 32-second PTS span. The encoder-side
 maximum interval was 33,334 µs and no interval exceeded 1.5× the target period. A pulled clip was
 also checked independently as HEVC Main10/yuv420p10le at 30/1 with a complete FFmpeg decode.
+
+## HDR10 (PQ) video in HLG mode
+
+HLG mode can record PQ instead of HLG when the camera advertises HDR10 and a hardware HEVC encoder
+advertises `HEVCProfileMain10HDR10` for the size and rate. The camera still delivers HLG10; the GPU
+graph converts it to BT.2020 PQ (HLG inverse OETF, 1000 cd/m2 OOTF, ST 2084 inverse EOTF) and the
+encoder runs in the HDR10 profile. `Hdr10Video.ENABLED` is the kill switch. Host tests cover the
+maths, gating, selection and tag plumbing only. On the Razr Fold, before trusting a clip, check:
+
+1. `ffprobe` shows HEVC Main 10, `bt2020nc`, `smpte2084`, `bt2020` and (when the muxer writes it) mastering display / content light level side data.
+2. The SPS VUI transfer is 16 (the take's sidecar records `encoderVuiTransfer` and `containerVuiTransfer`).
+3. A grey card at HLG 75% signal reads about 203 cd/m2 (PQ code about 580 of 1023 on a limited-range scope).
+4. The encoder accepts the HDR10 profile on a Surface input at every offered size and fps; if it throws, narrow the offer in `Camera2PreviewEngine` (the HDR10 flag of `Camera2LogProfile`).
+5. `EGL_EXT_gl_colorspace_bt2020_pq` is reported by the driver; without it the surface keeps the default colourspace and only the codec keys and SPS carry the PQ tag.
+6. Playback in the gallery and a PQ-capable external player tone maps sensibly; the viewfinder and view assist are unchanged because they read the HLG source, not the encoded output.
