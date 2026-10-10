@@ -4125,6 +4125,9 @@ internal fun SettingsContent(
         if ("zero-shutter-lag" in visibleIds) settingsCard("zero-shutter-lag") {
             ZeroShutterLagSettings(state, settings, onSettingsChange)
         }
+        if ("low-light-fps" in visibleIds && state.descriptor?.lowLightAutoFps == true) settingsCard("low-light-fps") {
+            LowLightFpsSettings(state, settings, onSettingsChange)
+        }
         if ("night-photo" in visibleIds && state.descriptor?.nightExtension != null) settingsCard("night-photo") {
             NightPhotoSettings(state, settings, onSettingsChange)
         }

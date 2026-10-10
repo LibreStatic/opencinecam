@@ -876,4 +876,7 @@
     <string name="night_photo_short">NUIT</string>
     <string name="night_photo_toggle_on">Photo de nuit : activée</string>
     <string name="night_photo_toggle_off">Photo de nuit : désactivée</string>
+    <string name="low_light_fps_title">Cadence automatique en basse lumière</string>
+    <string name="low_light_fps_help">Réduit la cadence d\'images en basse lumière pour obtenir une image plus lumineuse. Laissez-la désactivée pour l\'enregistrement professionnel : la cadence reste fixe. Activée, les fichiers peuvent avoir une cadence variable. VIDÉO normale uniquement ; non utilisée en LOG, HLG, haute vitesse ou accéléré.</string>
+    <string name="low_light_fps_mode_note">S\'applique uniquement à la VIDÉO normale. La cadence reste fixe dans ce mode.</string>
 </resources>

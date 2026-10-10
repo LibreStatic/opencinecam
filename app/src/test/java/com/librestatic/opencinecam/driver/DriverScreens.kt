@@ -252,6 +252,15 @@ fun Settings() = DriverTheme {
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
 }
 
+/** The settings hub on a camera that offers the low-light auto frame rate switch (Qualcomm/Motorola IQdynamicFPS). */
+@Composable
+fun SettingsLowLightFps() = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings()) }
+    val state = driverCaptureState(CaptureMode.VIDEO).copy(cameras = listOf(DriverCamera.copy(lowLightAutoFps = true)))
+    SettingsScreen(state, settings, audioPermissionGranted = false,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+}
+
 /** The settings hub while recording: changes that need a camera restart are locked. */
 @Composable
 fun SettingsRecording() = DriverTheme {

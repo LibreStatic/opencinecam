@@ -876,4 +876,7 @@
     <string name="night_photo_short">NOTTE</string>
     <string name="night_photo_toggle_on">Foto notturna: attiva</string>
     <string name="night_photo_toggle_off">Foto notturna: disattiva</string>
+    <string name="low_light_fps_title">Frame rate automatico con poca luce</string>
+    <string name="low_light_fps_help">Abbassa il frame rate con poca luce per ottenere un\'immagine più luminosa. Lascialo disattivato per la registrazione professionale: la cadenza resta fissa. Se attivo, i file possono avere frame rate variabile. Solo VIDEO normale; non usato in LOG, HLG, alta velocità o timelapse.</string>
+    <string name="low_light_fps_mode_note">Si applica solo al VIDEO normale. In questa modalità il frame rate resta fisso.</string>
 </resources>

@@ -53,6 +53,7 @@ object SettingsCatalog {
         SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
         SettingEntry("bitrate", SettingsCategory.RECORDING, R.string.video_bitrate, "video calidad quality Mbps"),
         SettingEntry("video-codec", SettingsCategory.RECORDING, R.string.video_codec, "video codec codificador H.264 AVC HEVC H.265 formato format tamaño size archivo file"),
+        SettingEntry("low-light-fps", SettingsCategory.RECORDING, R.string.low_light_fps_title, "low light fps frame rate auto automatic automatica poca luz cuadros fotogramas cadencia cadence variable VFR 60 30 dinamica dynamic IQ nocturno brillo brighter profesional professional"),
         SettingEntry("geometry", SettingsCategory.RECORDING, R.string.recording_geometry, "geometria orientacion rotation raster"),
         SettingEntry("anamorphic", SettingsCategory.RECORDING, R.string.anamorphic, "desqueeze lente squeeze"),
         SettingEntry("accumulation", SettingsCategory.RECORDING, R.string.accumulation_title, "light water stars bulb acumulacion accumulation exposicion larga pintura luz agua estrellas duracion intervalo memoria cancelar"),

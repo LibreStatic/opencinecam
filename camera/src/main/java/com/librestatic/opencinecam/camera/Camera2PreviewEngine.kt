@@ -149,6 +149,8 @@ data class Camera2CameraDescriptor(
     val zslSupported: Boolean = false,
     /** The camera's night CameraExtensionCharacteristics outputs (API 31+); null when it offers none. */
     val nightExtension: NightExtensionCapability? = null,
+    /** Qualcomm/Motorola auto frame rate (IQdynamicFPS) can be switched both ways; see [DynamicFps]. */
+    val lowLightAutoFps: Boolean = false,
 ) {
     /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
     fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
@@ -673,6 +675,8 @@ class Camera2PreviewEngine(
     private val faceDetectDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Int?>()
     private var professionalExposure: ExposureSelection? = null
     private var requestedTargetFps = DEFAULT_TARGET_FPS
+    /** Low-light auto frame rate is on for the active graph; every other graph sends an explicit 0. */
+    @Volatile private var dynamicFpsOn = false
     private var activeVideoProfile: Camera2VideoProfile? = null
     private var activeLogProfile: Camera2LogProfile? = null
     private var previousSensorTimestampNs: Long? = null
@@ -756,6 +760,7 @@ class Camera2PreviewEngine(
         gpuPhotoPreview: Boolean = false,
         stillSize: Size? = null,
         nightExtension: Boolean = false,
+        lowLightAutoFps: Boolean = false,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -814,6 +819,12 @@ class Camera2PreviewEngine(
                     ?: preferredTargetFps(supportedFps)
                 this.previousSensorTimestampNs = null
                 this.effectiveFps = null
+                this.dynamicFpsOn = DynamicFps.enabled(
+                    lowLightAutoFps && descriptor.lowLightAutoFps,
+                    // The service offers it for regular VIDEO only; LOG/HLG and constrained HFR are refused here too.
+                    DynamicFps.allowed(videoMode = true, logGraph = openCineLog,
+                        constrainedHighSpeed = activeVideoProfile?.constrainedHighSpeed == true),
+                )
                 this.gpuPreviewEnabled = gpuPreview && !openCineLog && !nightRequested
                 var analysisPipeline: OpenCineLogGpuPipeline? = null
                 if (openCineLog) {
@@ -4492,6 +4503,7 @@ class Camera2PreviewEngine(
     }
 
     private fun applyImageProcessing(builder: CaptureRequest.Builder) {
+        applyDynamicFps(builder)
         val caps = activeDescriptor?.imageProcessingCapabilities ?: return
         val defaults = processingDefaults.getOrPut(builder) {
             ImageProcessingDefaults(
@@ -4578,8 +4590,68 @@ class Camera2PreviewEngine(
     /** Supply advertised expensive controls up front; later between-take changes may reconfigure HAL. */
     private fun configureProcessingSession(configuration: SessionConfiguration, device: CameraDevice, template: Int) {
         if (configuration.sessionType == SessionConfiguration.SESSION_HIGH_SPEED || configuration.sessionParameters != null) return
-        if (activeDescriptor?.imageProcessingCapabilities?.sessionControls.isNullOrEmpty()) return
-        configuration.setSessionParameters(device.createCaptureRequest(template).apply { applyImageProcessing(this) }.build())
+        val dynamicFps = activeDescriptor?.lowLightAutoFps == true && !isHighSpeedSession()
+        if (!dynamicFps && activeDescriptor?.imageProcessingCapabilities?.sessionControls.isNullOrEmpty()) return
+        configuration.setSessionParameters(device.createCaptureRequest(template).apply {
+            applyImageProcessing(this)
+            applyDynamicFpsSession(this)
+        }.build())
+    }
+
+    private class DynamicFpsKeys(
+        val enable: CaptureRequest.Key<IntArray>? = null,
+        val legacyEnable: CaptureRequest.Key<IntArray>? = null,
+        val viull: CaptureRequest.Key<IntArray>? = null,
+        val config: CaptureRequest.Key<FloatArray>? = null,
+        val offered: Boolean = false,
+    )
+
+    private val dynamicFpsKeyCache = java.util.concurrent.ConcurrentHashMap<String, DynamicFpsKeys>()
+
+    /**
+     * The auto frame rate keys, resolved by name through [VendorKeys] (the Razr's HAL leaves them out
+     * of availableRequestKeys on some builds). Offered only when the static `IQdynamicFPS_support`
+     * is 1 and the enable key and both session keys resolve.
+     */
+    private fun dynamicFpsKeys(characteristics: CameraCharacteristics, cameraId: String): DynamicFpsKeys =
+        dynamicFpsKeyCache.getOrPut(cameraId) {
+            runCatching {
+                val support = DynamicFps.staticSupport(VendorKeys.staticInts(characteristics, DynamicFps.SUPPORT_KEY))
+                if (!support) return@runCatching DynamicFpsKeys()
+                val enable = VendorKeys.request(characteristics, cameraId, DynamicFps.ENABLE_KEY, DynamicFps.SUPPORT_KEY, IntArray::class.java)
+                val legacy = VendorKeys.request(characteristics, cameraId, DynamicFps.LEGACY_ENABLE_KEY, DynamicFps.SUPPORT_KEY, IntArray::class.java)
+                val viull = VendorKeys.request(characteristics, cameraId, DynamicFps.VIULL_KEY, DynamicFps.SUPPORT_KEY, IntArray::class.java)
+                val config = VendorKeys.request(characteristics, cameraId, DynamicFps.CONFIG_KEY, DynamicFps.SUPPORT_KEY, FloatArray::class.java)
+                DynamicFpsKeys(enable, legacy, viull, config,
+                    DynamicFps.offered(true, enable != null, viull != null, config != null))
+            }.getOrDefault(DynamicFpsKeys())
+        }
+
+    private fun activeDynamicFpsKeys(): DynamicFpsKeys? {
+        val id = activeDescriptor?.cameraId ?: return null
+        return dynamicFpsKeyCache[id] ?: runCatching { dynamicFpsKeys(manager.getCameraCharacteristics(id), id) }.getOrNull()
+    }
+
+    /**
+     * Auto frame rate on every request: an explicit 0 unless the operator turned it on for regular
+     * video, so the HAL never lowers the cadence on its own. Constrained high-speed sessions accept
+     * only a restricted key set and keep the template.
+     */
+    private fun applyDynamicFps(builder: CaptureRequest.Builder) {
+        if (isHighSpeedSession()) return
+        val keys = activeDynamicFpsKeys() ?: return
+        val value = intArrayOf(if (dynamicFpsOn) 1 else 0)
+        keys.enable?.let { key -> runCatching { builder.set(key, value) } }
+        // The older switch is never on: only the IQ one carries the operator's choice.
+        keys.legacyEnable?.let { key -> runCatching { builder.set(key, intArrayOf(0)) } }
+    }
+
+    /** Session-only half of the ON state, as the stock camera sends it: EnableVIULL and the rate window. */
+    private fun applyDynamicFpsSession(builder: CaptureRequest.Builder) {
+        if (!dynamicFpsOn || isHighSpeedSession()) return
+        val keys = activeDynamicFpsKeys() ?: return
+        keys.viull?.let { key -> runCatching { builder.set(key, intArrayOf(1)) } }
+        keys.config?.let { key -> runCatching { builder.set(key, DynamicFps.config(requestedTargetFps)) } }
     }
 
     /**
@@ -5295,6 +5367,7 @@ class Camera2PreviewEngine(
                 faceDetectModes = if (CaptureRequest.STATISTICS_FACE_DETECT_MODE in characteristics.availableCaptureRequestKeys)
                     characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES)?.toSet().orEmpty() else emptySet(),
                 nightExtension = nightExtensionFor(cameraId),
+                lowLightAutoFps = dynamicFpsKeys(characteristics, cameraId).offered,
                 imageProcessingCapabilities = ImageProcessingCapabilities(
                     opticalModes = if (CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.toSet().orEmpty() else emptySet(),

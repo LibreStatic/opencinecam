@@ -213,6 +213,7 @@ object CameraPresetCodec {
         gyroflowLogEnabled = current.gyroflowLogEnabled,
         zeroShutterLag = current.zeroShutterLag,
         nightPhotoMode = current.nightPhotoMode,
+        lowLightAutoFps = current.lowLightAutoFps,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

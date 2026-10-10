@@ -119,3 +119,21 @@ On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and t
 `org.codeaurora.qcamera3.instant_aec.instant_aec_mode` (request, int32) with static `instant_aec_available_modes` (0x80c90001, int32[3] = `[0 1 2]` on the Razr Fold, every camera id). Values follow the QTI enum: 0 normal, 1 aggressive, 2 fast. The engine boosts when a preview session starts (aggressive, else fast) and when `LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID` changes, i.e. zoom crossing a lens switchover. Inside a take only a lens switch boosts, only with fast, for at most 500 ms. It restores 0 on `CONTROL_AE_STATE` CONVERGED/LOCKED (counted only on a result whose request carried the boost) or on the timeout; never with AE lock, manual exposure or constrained high-speed. Check `adb logcat -s Camera2PreviewEngine` for `Instant AEC engaged ... trigger=` / `released ... timeToConvergeMs=`. To judge it in takes, record a zoom sweep across the switchover with and without the boost and compare the exposure step in both clips; if the HAL's own lens matching already hides it, keep the boost to the viewfinder.
 
 On the Razr Fold the Qualcomm vendor tags are in the vendor tag descriptor and the static metadata (`CameraCharacteristics.getKeys()`) but are NOT listed in `availableCaptureRequestKeys` / `availableCaptureResultKeys`. `VendorKeys.kt` therefore resolves them by name (`CaptureRequest.Key(name, type)`, API 29+) whenever the feature's static gate key (`instant_aec_available_modes`) is present, and logs `Vendor key <name> resolved by name (not advertised)` once per camera. Advertised keys still win, and a camera without the gate key is never touched.
+
+## Motorola auto frame rate (IQdynamicFPS)
+
+Measured on the Razr 2026-10-10 with `dumpsys media.camera` while the stock Motorola camera recorded 4K60 (aeTargetFpsRange [60,60]); its Settings > Videos switch is "Auto frame rate".
+
+- ON: request key `com.lenovo.moto.control.IQdynamicFPS_enable` (int32[1]) = 1; session parameters `org.codeaurora.qcamera3.sessionParameters.EnableVIULL` (int32[1]) = 1 and `org.codeaurora.qcamera3.sessionParameters.dynamicFPSConfig` (float[3]) = [2.0, 30.0, 60.0]. In a dim room the sensor ran 30 fps (frameDuration 33.3 ms) and the file was a true 30 fps.
+- OFF: `IQdynamicFPS_enable` = 0, no EnableVIULL, dynamicFPSConfig still [2, 30, 60]. True 60 fps.
+- The stock app also sends `com.lenovo.moto.control.dynamicFPS_enable` = 0 in both cases.
+- Camera 0 lists all four keys in availableRequestKeys, and `IQdynamicFPS_enable`, `dynamicFPSConfig`, `EnableVIULL` in availableSessionKeys. Static: `com.lenovo.moto.control.IQdynamicFPS_support` (int32[1]) and `org.codeaurora.qcamera3.platformCapabilities.EnableVIULL`.
+
+App behaviour (`DynamicFps.kt`, setting "Low-light auto frame rate", key `video-low-light-fps`, device-local, off by default):
+
+- Gate: static `IQdynamicFPS_support` == 1 and the enable, EnableVIULL and dynamicFPSConfig request keys all resolve through `VendorKeys` (by name on API 29+). Only then does the camera descriptor set `lowLightAutoFps` and the switch appear.
+- OFF (default): every request of a supporting camera, and the session parameters, carry `IQdynamicFPS_enable` = 0 and `dynamicFPS_enable` = 0 (photo, video, LOG, HLG). Constrained high-speed sessions are left untouched.
+- ON: allowed only in regular VIDEO (not LOG, HLG, RAW, HFR, timelapse, or off-speed project timing). Requests carry `IQdynamicFPS_enable` = 1; the session parameters add `EnableVIULL` = 1 and `dynamicFPSConfig` = [2, max(15, target/2), target] (60 gives [2, 30, 60]). Changing the switch reopens the preview, since these are session keys.
+- Cadence: the MediaRecorder and OCLog GPU paths stamp frames with the sensor timestamp, so a 30 fps stretch inside a 60 fps take is stored with real timestamps (variable frame rate). Diagnostics may report PTS gaps. Off-speed project timing (`ProjectFrameTimeline`) assigns a constant cadence per frame, which is why the switch is ignored there.
+
+Verify: record in a dim room with the switch on, then `adb shell dumpsys media.camera` and read "Last request sent" for the keys above; `android.sensor.frameDuration` should read ~33.3 ms in dim light and ~16.7 ms in bright light or with the switch off.

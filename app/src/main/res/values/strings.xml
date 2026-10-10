@@ -881,4 +881,7 @@
     <string name="night_photo_short">NIGHT</string>
     <string name="night_photo_toggle_on">Night photo: on</string>
     <string name="night_photo_toggle_off">Night photo: off</string>
+    <string name="low_light_fps_title">Low-light auto frame rate</string>
+    <string name="low_light_fps_help">Lowers the frame rate in low light so the image is brighter. Leave it off for professional recording: the cadence stays fixed. When it is on, files may become variable frame rate. Regular VIDEO only; not used for LOG, HLG, high-speed or timelapse.</string>
+    <string name="low_light_fps_mode_note">Only applies to regular VIDEO. The frame rate stays fixed in this mode.</string>
 </resources>

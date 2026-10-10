@@ -876,4 +876,7 @@
     <string name="night_photo_short">NACHT</string>
     <string name="night_photo_toggle_on">Nachtfoto: an</string>
     <string name="night_photo_toggle_off">Nachtfoto: aus</string>
+    <string name="low_light_fps_title">Automatische Bildrate bei wenig Licht</string>
+    <string name="low_light_fps_help">Senkt bei wenig Licht die Bildrate, damit das Bild heller wird. Für professionelle Aufnahmen ausgeschaltet lassen: Die Frequenz bleibt konstant. Ist die Option an, können Dateien eine variable Bildrate haben. Nur im normalen VIDEO-Modus; nicht bei LOG, HLG, Hochgeschwindigkeit oder Zeitraffer.</string>
+    <string name="low_light_fps_mode_note">Gilt nur für normales VIDEO. In diesem Modus bleibt die Bildrate konstant.</string>
 </resources>

@@ -12,6 +12,7 @@ import com.librestatic.opencinecam.camera.StillImageKind
 import com.librestatic.opencinecam.camera.TimelapseCapture
 import com.librestatic.opencinecam.camera.TimelapseProgress
 
+import com.librestatic.opencinecam.lowLightFpsActive
 import com.librestatic.opencinecam.recordingTimecodeJson
 import com.librestatic.opencinecam.camera.RecordingTimecodeReport
 import com.librestatic.opencinecam.captureEpochJson
@@ -762,7 +763,7 @@ class CaptureService : Service() {
         ?.activeStillSize?.let { (width, height) -> Size(width, height) }
 
     private fun previewKey(): List<Any?> = cameraState.value.let {
-        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive())
+        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive(), lowLightFpsActive(it, settings))
     }
 
     private fun updateSubjectTarget() {
@@ -1771,6 +1772,7 @@ class CaptureService : Service() {
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
                 nightExtension = nightExtensionActive(),
+                lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1910,6 +1912,7 @@ class CaptureService : Service() {
                 stillFormat = selectedStillPhotoFormat(),
                 stillSize = selectedStillSize(),
                 nightExtension = nightExtensionActive(),
+                lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1940,6 +1943,7 @@ class CaptureService : Service() {
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
+                        lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                         openCineLog = cameraState.value.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -2022,6 +2026,7 @@ class CaptureService : Service() {
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
+                        lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                         openCineLog = mode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !mode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(mode),
@@ -2096,6 +2101,7 @@ class CaptureService : Service() {
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
+                        lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                         openCineLog = current.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder(current.selectedMode) && !current.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(current.selectedMode),
@@ -2189,6 +2195,7 @@ class CaptureService : Service() {
                         stillFormat = selectedStillPhotoFormat(),
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
+                        lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
                         openCineLog = true,
                         viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = selectedFps,
@@ -2271,7 +2278,8 @@ class CaptureService : Service() {
                 if (settings.nightPhotoMode != com.librestatic.opencinecam.camera.NightPhotoMode.AUTO && nightTransientEngaged) clearNightTransient()
                 if (cameraState.value.gpuViewfinder != desiredGpuViewfinder() ||
                     (cameraState.value.selectedMode == CaptureMode.PHOTO &&
-                        (previous.photoFormat != settings.photoFormat || nightBefore != nightExtensionActive()))) {
+                        (previous.photoFormat != settings.photoFormat || nightBefore != nightExtensionActive())) ||
+                    (cameraState.value.selectedMode == CaptureMode.VIDEO && previous.lowLightAutoFps != settings.lowLightAutoFps)) {
                     attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                 }
                 val onlyAudioDisplayChanged = previous.copy(audioListening = settings.audioListening,
