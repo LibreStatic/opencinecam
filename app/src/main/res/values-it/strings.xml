@@ -337,6 +337,7 @@
     <string name="image_mode_off">Disattivato</string>
     <string name="image_mode_optical">OIS · ottica</string>
     <string name="image_mode_video">EIS · elettronica</string>
+    <string name="image_mode_preview">EIS · come anteprima</string>
     <string name="image_stabilization_help">OIS ed EIS si selezionano separatamente; il supporto simultaneo non è dedotto. L\'EIS può ritagliare o cambiare il campo visivo. Il funzionamento reale dipende da risoluzione, FPS e superfici di uscita; controlla i risultati segnalati, non solo le modalità dichiarate.</string>
     <string name="image_noise">Riduzione del rumore dell\'immagine</string>
     <string name="image_edge">Miglioramento dei bordi dell\'immagine</string>

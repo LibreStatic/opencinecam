@@ -109,6 +109,14 @@ class CaptureRequestCompositionTest {
         assertEquals(FailureCode.UNSUPPORTED_CAPABILITY, unsupported.failure.code)
     }
 
+    @Test fun previewMatchedUsesItsModeOnlyWhenKnownSupported() {
+        val intent = CaptureIntent(stabilization = StabilizationMode.PREVIEW)
+        val with = CaptureRequestComposer().compose(intent, capabilities().copy(previewStabilization = Knowledge.Known(true))) as CaptureRequestComposition.Accepted
+        assertEquals(RequestValue.TextValue("PREVIEW_STABILIZATION"), with.request.values["CONTROL_VIDEO_STABILIZATION_MODE"])
+        val without = CaptureRequestComposer().compose(intent, capabilities()) as CaptureRequestComposition.Accepted
+        assertEquals(RequestValue.TextValue("VIDEO"), without.request.values["CONTROL_VIDEO_STABILIZATION_MODE"])
+    }
+
     private fun capabilities() = CaptureRequestCapabilities(
         manualSensor = Knowledge.Known(true),
         manualPostProcessing = Knowledge.Known(true),

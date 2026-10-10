@@ -155,7 +155,7 @@ private fun readbackLabel(difference: ReadbackDifference): String = when (differ
 private fun stabilizationLabel(code: Int): String = when (code) {
     0 -> stringResource(R.string.image_mode_off)
     1 -> stringResource(R.string.readback_on)
-    2 -> stringResource(R.string.readback_preview_only)
+    2 -> stringResource(R.string.image_mode_preview)
     else -> stringResource(R.string.pro_unknown)
 }
 

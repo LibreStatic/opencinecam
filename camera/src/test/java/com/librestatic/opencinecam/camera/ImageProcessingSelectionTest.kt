@@ -59,4 +59,28 @@ class ImageProcessingSelectionTest {
         assertFalse(caps.copy(videoModes = setOf(0, 2)).supports(StabilizationMode.VIDEO))
         assertFalse(caps.copy(opticalModes = setOf(1)).supports(StabilizationMode.VIDEO))
     }
+    @Test fun previewMatchedRequestsModeTwoAndTurnsOpticalOff() {
+        val withPreview = caps.copy(videoModes = setOf(0, 1, 2))
+        assertTrue(withPreview.supports(StabilizationMode.PREVIEW))
+        val result = ImageProcessingSelection(StabilizationMode.PREVIEW).resolve(withPreview, defaults)
+        assertEquals(2, result.values.video)
+        assertEquals(0, result.values.optical)
+        assertTrue(result.unavailable.isEmpty())
+    }
+    @Test fun previewMatchedFallsBackToStandardWhenTheCameraLacksIt() {
+        assertFalse(caps.supports(StabilizationMode.PREVIEW))
+        val result = ImageProcessingSelection(StabilizationMode.PREVIEW).resolve(caps, defaults)
+        assertEquals(1, result.values.video)
+        assertTrue(result.unavailable.isEmpty())
+    }
+    @Test fun previewMatchedIsNeverAppliedInConstrainedHighSpeed() {
+        val withPreview = caps.copy(videoModes = setOf(0, 1, 2))
+        val result = ImageProcessingSelection(StabilizationMode.PREVIEW).resolve(withPreview, defaults, constrainedHfr = true)
+        assertEquals(defaults, result.values)
+        assertEquals(setOf(ImageProcessingControl.STABILIZATION), result.unavailable)
+    }
+    @Test fun previewMatchedFallbackIsUnavailableWhenStandardIsToo() {
+        val result = ImageProcessingSelection(StabilizationMode.PREVIEW).resolve(caps.copy(videoModes = setOf(0)), defaults)
+        assertEquals(setOf(ImageProcessingControl.STABILIZATION), result.unavailable)
+    }
 }

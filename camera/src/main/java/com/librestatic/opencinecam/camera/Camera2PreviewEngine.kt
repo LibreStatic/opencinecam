@@ -4708,7 +4708,8 @@ class Camera2PreviewEngine(
                     opticalModes = if (CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)?.toSet().orEmpty() else emptySet(),
                     videoModes = if (CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE in characteristics.availableCaptureRequestKeys)
-                        characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty() else emptySet(),
+                        characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)?.toSet().orEmpty()
+                            .let { modes -> if (Build.VERSION.SDK_INT >= 33) modes else modes - PREVIEW_STABILIZATION } else emptySet(),
                     noiseModes = if (CaptureRequest.NOISE_REDUCTION_MODE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES)?.toSet().orEmpty() else emptySet(),
                     edgeModes = if (CaptureRequest.EDGE_MODE in characteristics.availableCaptureRequestKeys)
