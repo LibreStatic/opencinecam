@@ -14,6 +14,9 @@ class CadenceGuardTest {
     private val darkIso = 12_000
     private val brightIso = 800
 
+    /** The settle window has its own tests; the rest model results that already come from the held request. */
+    private fun zeroSettle() = CadenceGuard(settleNs = 0)
+
     private fun CadenceGuard.feed(frameDurationNs: Long?, iso: Int?, fromMs: Long, toMs: Long, stepMs: Long = 16): Boolean {
         var result = engaged
         var t = fromMs
@@ -21,29 +24,29 @@ class CadenceGuardTest {
         return result
     }
 
-    private fun engagedGuard(): CadenceGuard = CadenceGuard().also {
+    private fun engagedGuard(): CadenceGuard = zeroSettle().also {
         assertTrue(it.feed(stretched, darkIso, 0, 300))
     }
 
     @Test fun startsDisengaged() {
-        assertFalse(CadenceGuard().engaged)
+        assertFalse(zeroSettle().engaged)
     }
 
     @Test fun engagesOnlyAfterTheStretchLastedLongEnough() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertFalse(guard.feed(stretched, darkIso, 0, 240))
         assertTrue(guard.feed(stretched, darkIso, 241, 270))
     }
 
     @Test fun engagesAtExactlyTheHoldTime() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertFalse(guard.update(0, fps, stretched, darkIso))
         assertFalse(guard.update(249 * ms, fps, stretched, darkIso))
         assertTrue(guard.update(250 * ms, fps, stretched, darkIso))
     }
 
     @Test fun aBriefStretchIsIgnored() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertFalse(guard.feed(stretched, darkIso, 0, 150))
         assertFalse(guard.feed(nominal, darkIso, 166, 200))
         // The timer restarted: another 150 ms of stretch is still not enough.
@@ -51,7 +54,7 @@ class CadenceGuardTest {
     }
 
     @Test fun nothingBelowEightPercentOverTheNominalFrameTime() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         val justUnder = (nominal * 1.079).toLong()
         assertFalse(guard.feed(justUnder, darkIso, 0, 3000))
         assertFalse(guard.feed(nominal, darkIso, 3016, 4000))
@@ -60,7 +63,7 @@ class CadenceGuardTest {
     }
 
     @Test fun usesTheTargetRateOfEachSample() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         // 33 ms frames are nominal at 30 fps.
         var t = 0L
         while (t <= 1000) { assertFalse(guard.update(t * ms, 30, 33_333_333L, darkIso)); t += 33 }
@@ -99,7 +102,7 @@ class CadenceGuardTest {
     }
 
     @Test fun theReferenceFollowsTheHighestIsoSeenWhileEngaged() {
-        val guard = CadenceGuard().also { assertTrue(it.feed(stretched, 6000, 0, 300)) }
+        val guard = zeroSettle().also { assertTrue(it.feed(stretched, 6000, 0, 300)) }
         // The scene darkens further under the held shutter: reference becomes 12000.
         assertTrue(guard.feed(nominal, darkIso, 316, 600))
         // 7000 is above half of 12000, so it is not "light to spare".
@@ -115,7 +118,7 @@ class CadenceGuardTest {
     }
 
     @Test fun invalidReadingsAreIgnored() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertFalse(guard.feed(null, darkIso, 0, 1000))
         assertFalse(guard.feed(stretched, null, 1016, 2000))
         assertFalse(guard.feed(0L, darkIso, 2016, 3000))
@@ -135,7 +138,7 @@ class CadenceGuardTest {
     }
 
     @Test fun aGapDropsThePendingEngageTimerButKeepsTheVerdict() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertFalse(guard.feed(stretched, darkIso, 0, 200))
         // 1.5 s without results (session restart): the 200 ms already counted are forgotten.
         assertFalse(guard.update(1700 * ms, fps, stretched, darkIso))
@@ -166,7 +169,7 @@ class CadenceGuardTest {
     }
 
     @Test fun resetClearsAPendingEngageTimer() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         guard.feed(stretched, darkIso, 0, 200)
         guard.reset()
         assertFalse(guard.update(210 * ms, fps, stretched, darkIso))
@@ -181,19 +184,65 @@ class CadenceGuardTest {
         assertTrue(guard.feed(nominal, 4000, 1316, 3000))
     }
 
-    @Test fun supportNeedsAndroid16AndShutterPriority() {
+    @Test fun nativePriorityNeedsAndroid16AndShutterPriority() {
         val priorities = setOf(ExposureMode.ISO_PRIORITY, ExposureMode.SHUTTER_PRIORITY)
-        assertTrue(CadenceGuard.supported(36, priorities))
-        assertTrue(CadenceGuard.supported(37, priorities))
-        assertFalse(CadenceGuard.supported(35, priorities))
-        assertFalse(CadenceGuard.supported(36, setOf(ExposureMode.ISO_PRIORITY)))
-        assertFalse(CadenceGuard.supported(36, emptySet()))
+        assertTrue(CadenceGuard.nativePriority(36, priorities))
+        assertTrue(CadenceGuard.nativePriority(37, priorities))
+        assertFalse(CadenceGuard.nativePriority(35, priorities))
+        assertFalse(CadenceGuard.nativePriority(36, setOf(ExposureMode.ISO_PRIORITY)))
+        assertFalse(CadenceGuard.nativePriority(36, emptySet()))
+    }
+
+    @Test fun supportIsNativePriorityOrUsableManualSensor() {
+        val native = ExposureCapabilities(priorities = setOf(ExposureMode.SHUTTER_PRIORITY))
+        assertTrue(CadenceGuard.supported(36, native))
+        assertFalse(CadenceGuard.supported(35, native))
+        val manual = ExposureCapabilities(manual = true, isoRange = 50..20_000, timeRangeNs = 100_000L..500_000_000L)
+        assertTrue(CadenceGuard.supported(36, manual))
+        assertTrue(CadenceGuard.supported(34, manual))
+        assertFalse(CadenceGuard.supported(36, manual.copy(manual = false)))
+        assertFalse(CadenceGuard.supported(36, manual.copy(isoRange = null)))
+        assertFalse(CadenceGuard.supported(36, manual.copy(timeRangeNs = null)))
+        assertFalse(CadenceGuard.supported(36, ExposureCapabilities(priorities = setOf(ExposureMode.ISO_PRIORITY))))
+    }
+
+    @Test fun anEmulatedHoldWhoseIsoFollowsTheSceneStillReleases() {
+        val guard = engagedGuard()                       // engaged at ISO 12000
+        // The software loop lowers the held ISO as the room gets brighter: below half for 1 s releases.
+        assertTrue(guard.feed(nominal, 9_000, 316, 1000))
+        assertTrue(guard.feed(nominal, 5_000, 1016, 2000))
+        assertFalse(guard.feed(nominal, 5_000, 2016, 2100))
     }
 
     @Test fun engagedReflectsLastVerdict() {
-        val guard = CadenceGuard()
+        val guard = zeroSettle()
         assertEquals(false, guard.engaged)
         guard.feed(stretched, darkIso, 0, 300)
         assertEquals(true, guard.engaged)
+    }
+
+    @Test fun theEngagingSampleDoesNotSeedTheReference() {
+        val guard = CadenceGuard()
+        // Automatic exposure stretches at ISO 25600; the hold then runs at 12800 under manual exposure.
+        assertTrue(guard.feed(stretched, 25_600, 0, 300))
+        assertTrue(guard.feed(nominal, 12_800, 316, 4000))
+    }
+
+    @Test fun resultsInTheSettleWindowAreIgnored() {
+        val guard = CadenceGuard()
+        assertTrue(guard.feed(stretched, 25_600, 0, 300))   // engaged at 256 ms
+        // In-flight automatic results (and a very low ISO) during the first 400 ms change nothing.
+        assertTrue(guard.feed(nominal, 100, 316, 650))
+        // The reference is the highest ISO after the window; a quarter of it for 1 s releases.
+        assertTrue(guard.feed(nominal, 12_800, 666, 1000))
+        assertTrue(guard.feed(nominal, 3_000, 1016, 2000))
+        assertFalse(guard.feed(nominal, 3_000, 2016, 2100))
+    }
+
+    @Test fun oscillationFromThePostEngageIsoDropIsGone() {
+        val guard = CadenceGuard()
+        assertTrue(guard.feed(stretched, 25_600, 0, 300))
+        // The held ISO sits at 12800, 50 % of the engaging sample: it must not release.
+        assertTrue(guard.feed(nominal, 12_800, 316, 10_000))
     }
 }

@@ -163,7 +163,7 @@ data class Camera2CameraDescriptor(
 
     /** FPS LOCK can hold the shutter at 1/fps through Android 16 exposure-time priority; see [CadenceGuard]. */
     val fpsLockSupported: Boolean
-        get() = CadenceGuard.supported(Build.VERSION.SDK_INT, exposureCapabilities.priorities)
+        get() = CadenceGuard.supported(Build.VERSION.SDK_INT, exposureCapabilities)
 
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
@@ -607,8 +607,10 @@ class Camera2PreviewEngine(
         if (disposed.get()) return
         try { cameraExecutor.execute {
             val pipeline = owner()
-            if (!disposed.get() && expectedGeneration == generation && pipeline != null && logPipeline === pipeline)
+            if (!disposed.get() && expectedGeneration == generation && pipeline != null && logPipeline === pipeline) {
+                observeCadenceLuma(analysis)
                 listener?.onAnalysis(ispHistogram.merge(analysis))
+            }
         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner, no sample delivery. */ }
     }
 
@@ -691,6 +693,10 @@ class Camera2PreviewEngine(
     /** A re-issue was refused: stay out of the way until the next session or toggle. */
     private var cadenceFaulted = false
     @Volatile private var timelapseTake = false
+    private val cadenceIsoLoop = CadenceIsoLoop()
+    /** ISO sent while the emulated hold (AE off) is engaged; null otherwise. Camera executor writes. */
+    @Volatile private var cadenceHeldIso: Int? = null
+    private var cadenceEvIndexAtEngage = 0
     private var activeVideoProfile: Camera2VideoProfile? = null
     private var activeLogProfile: Camera2LogProfile? = null
     private var previousSensorTimestampNs: Long? = null
@@ -2607,13 +2613,58 @@ class Camera2PreviewEngine(
         }
         if (cadenceFaulted || sensorTimestampNs == null) return
         val frameDuration = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
-        val iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+        var iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+        if (cadenceEngaged && cadenceHeldIso != null && iso != null) {
+            // The emulated hold may raise the ISO through the post-raw boost: judge the effective one.
+            val boost = result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100
+            iso = (iso.toLong() * boost / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
         val verdict = cadenceGuard.update(sensorTimestampNs, requestedTargetFps, frameDuration, iso)
-        if (verdict != cadenceEngaged) setCadenceEngaged(verdict, frameDuration, iso)
+        if (verdict != cadenceEngaged) {
+            setCadenceEngaged(verdict, frameDuration, iso, result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME))
+        }
     }
 
-    private fun setCadenceEngaged(engaged: Boolean, frameDurationNs: Long?, iso: Int?) {
+    /** No native exposure-time priority: hold with manual exposure and a software-steered ISO. */
+    private fun cadenceHoldEmulated(): Boolean {
+        val caps = activeDescriptor?.exposureCapabilities ?: return false
+        return !CadenceGuard.nativePriority(Build.VERSION.SDK_INT, caps.priorities)
+    }
+
+    private fun cadenceHeldExposureNs(): Long {
+        val frameDurationNs = 1_000_000_000L / requestedTargetFps.coerceAtLeast(1)
+        val range = activeDescriptor?.exposureCapabilities?.timeRangeNs
+        return (frameDurationNs - 100_000L).let { if (range != null) it.coerceIn(range.first, range.last) else it }
+    }
+
+    /** Analysis frame (camera executor, before the UI sees it): learns the luma, and steers the held ISO. */
+    private fun observeCadenceLuma(analysis: Camera2Analysis) {
+        // Always the frame's own histogram: the ISP one, when present, is a different domain than the target.
+        val luma = CadenceIsoLoop.meanLuma(analysis.histogram) ?: return
+        if (!cadenceEngaged || cadenceHeldIso == null) return
+        if (!cadenceHoldActive() || analysisSuspended) return
+        val descriptor = activeDescriptor
+        val evDelta = (requestedAeCompensationIndex ?: 0) - cadenceEvIndexAtEngage
+        val scale = if (descriptor != null && descriptor.aeCompensationStep > 0f && evDelta != 0)
+            CadenceIsoLoop.evScale(descriptor.aeCompensationStep, evDelta) else 1.0
+        val next = cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale) ?: return
+        cadenceHeldIso = next
+        reapplyRepeating()
+    }
+
+    private fun setCadenceEngaged(engaged: Boolean, frameDurationNs: Long?, iso: Int?, exposureNs: Long? = null) {
         if (cadenceEngaged == engaged) return
+        if (engaged && cadenceHoldEmulated()) {
+            val caps = activeDescriptor?.exposureCapabilities ?: return
+            val range = CadenceIsoLoop.extendedRange(caps.isoRange ?: return, caps.postRawBoostRange)
+            val initial = CadenceIsoLoop.initialIso(iso ?: return, exposureNs, cadenceHeldExposureNs(), range)
+            cadenceEvIndexAtEngage = requestedAeCompensationIndex ?: 0
+            cadenceIsoLoop.engage(initial, range, SystemClock.elapsedRealtimeNanos())
+            cadenceHeldIso = initial
+        } else if (!engaged) {
+            cadenceIsoLoop.release()
+            cadenceHeldIso = null
+        }
         cadenceEngaged = engaged
         Log.i(CADENCE_TAG, (if (engaged) "engaged" else "released") +
             ": frameDuration=${frameDurationNs?.let { "%.2f ms".format(it / 1e6) }} iso=$iso target=${requestedTargetFps}fps")
@@ -2621,6 +2672,7 @@ class Camera2PreviewEngine(
         if (!reapplyRepeating()) {
             // The session kept its previous request: report what is really in force and stop trying.
             cadenceEngaged = !engaged
+            if (engaged) { cadenceIsoLoop.release(); cadenceHeldIso = null }
             cadenceFaulted = true
             cadenceGuard.reset()
             listener?.onCadenceGuardChanged(cadenceEngaged)
@@ -3973,7 +4025,7 @@ class Camera2PreviewEngine(
                     }
                     if (analysis != null && !disposed.get()) {
                         try { cameraExecutor.execute {
-                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) listener?.onAnalysis(ispHistogram.merge(analysis))
+                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) { observeCadenceLuma(analysis); listener?.onAnalysis(ispHistogram.merge(analysis)) }
                         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner. */ }
                     }
                 }, imageHandler)
@@ -4252,7 +4304,7 @@ class Camera2PreviewEngine(
                                 awbLocked = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_LOCK),
                                 colorTint = if (Build.VERSION.SDK_INT >= 36) result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_COLOR_TINT) else null,
                                 exposureMode = when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)) {
-                                    CaptureRequest.CONTROL_AE_MODE_OFF -> ExposureMode.MANUAL
+                                    CaptureRequest.CONTROL_AE_MODE_OFF -> if (cadenceHoldActive()) ExposureMode.AUTO else ExposureMode.MANUAL
                                     null -> null
                                     else -> if (Build.VERSION.SDK_INT >= 36) when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_PRIORITY_MODE)) {
                                         CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_SENSITIVITY_PRIORITY -> ExposureMode.ISO_PRIORITY
@@ -4453,11 +4505,24 @@ class Camera2PreviewEngine(
      */
     private fun applyCadenceHold(builder: CaptureRequest.Builder) {
         val frameDurationNs = 1_000_000_000L / requestedTargetFps.coerceAtLeast(1)
-        val range = activeDescriptor?.exposureCapabilities?.timeRangeNs
-        val exposureNs = (frameDurationNs - 100_000L).let { if (range != null) it.coerceIn(range.first, range.last) else it }
-        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-        if (Build.VERSION.SDK_INT >= 36) {
-            builder.set(CaptureRequest.CONTROL_AE_PRIORITY_MODE, CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY)
+        val exposureNs = cadenceHeldExposureNs()
+        val heldIso = cadenceHeldIso
+        if (cadenceHoldEmulated() && heldIso != null) {
+            // Manual exposure at 1/fps; CONTROL_MODE stays whatever the auto branch set.
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            val caps = activeDescriptor?.exposureCapabilities
+            val sensorRange = caps?.isoRange
+            if (sensorRange != null) {
+                // Above the sensor maximum the rest comes from the post-raw boost, where the camera has one.
+                val (sensorIso, boost) = CadenceIsoLoop.split(heldIso, sensorRange, caps.postRawBoostRange)
+                builder.set(CaptureRequest.SENSOR_SENSITIVITY, sensorIso)
+                if (boost != null) builder.set(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, boost)
+            } else builder.set(CaptureRequest.SENSOR_SENSITIVITY, heldIso)
+        } else {
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            if (Build.VERSION.SDK_INT >= 36) {
+                builder.set(CaptureRequest.CONTROL_AE_PRIORITY_MODE, CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY)
+            }
         }
         builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposureNs)
         builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs)
@@ -4514,13 +4579,13 @@ class Camera2PreviewEngine(
                 }
             }
         }
-        if (cadenceHoldActive()) applyCadenceHold(builder)
         applyLowLightBoost(
             builder,
             pro?.mode ?: if (iso != null && exposure != null) ExposureMode.MANUAL else ExposureMode.AUTO,
             videoGraph = defaultAfMode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO,
         )
         applyVendorMetering(builder, pro?.metering)
+        if (cadenceHoldActive()) applyCadenceHold(builder)
         when {
             requestedFocusDiopters != null -> {
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -5495,6 +5560,8 @@ class Camera2PreviewEngine(
                             else -> null
                         } }?.toSet().orEmpty()
                     } else emptySet(),
+                    postRawBoostRange = characteristics.takeIf { CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST in it.availableCaptureRequestKeys }
+                        ?.get(CameraCharacteristics.CONTROL_POST_RAW_SENSITIVITY_BOOST_RANGE)?.let { it.lower..it.upper },
                     antibanding = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_ANTIBANDING_MODES)?.toList()?.mapNotNull { when (it) {
                         CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> Antibanding.AUTO
                         CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_OFF -> Antibanding.OFF
@@ -5679,6 +5746,8 @@ class Camera2PreviewEngine(
     private fun closeResources() {
         pendingPreviewStartedReceipt = null
         cadenceGuard.reset()
+        cadenceIsoLoop.reset()
+        cadenceHeldIso = null
         cadenceEngaged = false
         cadenceFaulted = false
         timelapseTake = false
