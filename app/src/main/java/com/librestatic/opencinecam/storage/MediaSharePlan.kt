@@ -58,7 +58,7 @@ internal fun mediaSharePlan(snapshot: MediaShareSnapshot, settings: MediaSharing
             val identity = requireNotNull(mediaOriginalIdentity(artifact.uri))
             CatalogRow(artifact, identity.second, identity.first, namespace)
         }
-        check(catalogTake(namespace, rows, snapshot.documents) == take) { "Share source declarations changed" }
+        check(catalogTake(namespace, rows, snapshot.documents, attachments = take.attachments) == take) { "Share source declarations changed" }
         if (settings.metadata != MediaShareMetadata.TECHNICAL) {
             val slate = take.slate
             val locations = sources.flatMapIndexed { index, source ->

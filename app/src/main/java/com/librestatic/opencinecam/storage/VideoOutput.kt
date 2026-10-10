@@ -14,6 +14,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import java.io.File
 import com.librestatic.opencinecam.camera.RecordingGeometry
 
 class VideoOutput private constructor(
@@ -27,12 +28,40 @@ class VideoOutput private constructor(
     private val recoveryMember: RecordingRecoveryMember,
 ) : AutoCloseable {
     private var sidecarUri: Uri? = null
+    private var motionRecorder: MotionLogRecorder? = null
+    private var motionLog: File? = null
+    private var motionLogUri: Uri? = null
     private var preparedOutput: PreparedVideoOutput? = null
     private var descriptorRetired = false
     private val transaction = PendingOutputTransaction(uri, {
         descriptor.close()
         descriptorRetired = true
     }, ::deleteOwned)
+
+    /** The optional Gyroflow log of this take. Best effort: it never fails or delays the take. */
+    @Synchronized
+    internal fun attachMotionRecorder(recorder: MotionLogRecorder) { motionRecorder = recorder }
+
+    @Synchronized
+    internal fun motionRecorder(): MotionLogRecorder? = motionRecorder
+
+    /** Stops the sensors and closes the local file; [keep] false (or an empty log) drops it. Idempotent. */
+    @Synchronized
+    internal fun sealMotionLog(keep: Boolean) {
+        val recorder = motionRecorder ?: return
+        motionRecorder = null
+        motionLog = try { recorder.finish(keep) } catch (problem: Exception) {
+            android.util.Log.w("VideoOutput", "Gyroflow log could not be closed", problem)
+            null
+        }
+    }
+
+    @Synchronized
+    private fun discardMotionLog() {
+        sealMotionLog(false)
+        motionLog?.delete()
+        motionLog = null
+    }
 
     /** Freeze all owned identities after closing/writing; every row remains pending. */
     @Synchronized
@@ -56,6 +85,7 @@ class VideoOutput private constructor(
         }, publish = ::publishOwned)
 
     private fun prepareOwned(sidecarJson: String?, expectedGeometry: RecordingGeometry?, timingSidecar: Boolean) {
+        sealMotionLog(true)
         expectedGeometry?.let { expected ->
             val validation = VideoFileGeometryValidator(context).validate(uri, expected)
             check(validation.valid) { validation.message }
@@ -70,6 +100,7 @@ class VideoOutput private constructor(
                 .put("videoUri", uri.toString()).put("bundleId", recoveryGroup.id).toString(2)
         } ?: sidecarJson
         metadata?.let { writePendingSidecar(it, timingSidecar || sidecarJson == null, videoName) }
+        attachMotionLogRow(videoName)
         val artifacts = mutableListOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, uri.toString(), videoName))
         sidecarUri?.let { sidecar ->
             artifacts += PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, sidecar.toString(), ownedDisplayName(sidecar))
@@ -77,6 +108,29 @@ class VideoOutput private constructor(
         check(descriptorRetired)
         recoveryMember.prepared(artifacts)
         preparedOutput = PreparedVideoOutput(uri, java.util.Collections.unmodifiableList(artifacts.toList()))
+    }
+
+    /** The log is an attachment, not a prepared artifact: a provider refusing it costs only the log. */
+    private fun attachMotionLogRow(videoName: String) {
+        val file = motionLog ?: return
+        motionLog = null
+        try {
+            if (!file.isFile || file.length() == 0L) return
+            val uri = recoveryMember.insertAuxiliary(videoName.removeSuffix(".mp4") + "." + GyroflowLog.EXTENSION, GyroflowLog.MIME_TYPE)
+            try {
+                requireNotNull(context.contentResolver.openOutputStream(uri, "w")).use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                }
+                motionLogUri = uri
+            } catch (failure: Throwable) {
+                recoveryMember.removeAuxiliary()
+                throw failure
+            }
+        } catch (failure: Exception) {
+            android.util.Log.w("VideoOutput", "Gyroflow log skipped", failure)
+        } finally {
+            file.delete()
+        }
     }
 
     private fun ownedDisplayName(owned: Uri): String = requireNotNull(context.contentResolver.query(
@@ -91,6 +145,11 @@ class VideoOutput private constructor(
     private fun publishOwned() {
         check(preparedOutput != null) { "Output identities must be prepared before publication" }
         val resolver = context.contentResolver
+        motionLogUri?.let { log ->
+            check(resolver.update(log, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
+                "Motion log publication did not update its owned row"
+            }
+        }
         sidecarUri?.let { sidecar ->
             check(resolver.update(sidecar, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
                 "Sidecar publication did not update its owned row"
@@ -106,6 +165,7 @@ class VideoOutput private constructor(
 
     private fun deleteOwned() {
         check(descriptorRetired) { "Video descriptor retirement is incomplete" }
+        discardMotionLog()
         // The group waits for the separate native engine guard and any audio worker.
         recoveryMember.abort()
     }

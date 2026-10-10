@@ -221,6 +221,8 @@ data class Camera2PreviewMetadata(
     val afMode: Int? = null,
     val submittedAfMode: Int? = null,
     val submittedFocusDistanceDiopters: Float? = null,
+    /** Time the sensor takes to read the frame out, from first to last row; null when not reported. */
+    val rollingShutterSkewNs: Long? = null,
 )
 
 data class Camera2Analysis(
@@ -286,6 +288,8 @@ interface Camera2PreviewListener {
     fun onAnalysis(analysis: Camera2Analysis)
     fun onRecordingLutApplied(evidence: BakedLutEvidence) { }
     fun onRecordingStarted(width: Int, height: Int)
+    /** The sensor timestamp of the first frame that went into the recorded file (GL thread). */
+    fun onRecordingFirstFrame(sensorTimestampNs: Long) = Unit
     fun onRecordingStopped(success: Boolean)
     fun onFailure(code: String, message: String, recoverable: Boolean)
     /**
@@ -1028,6 +1032,9 @@ class Camera2PreviewEngine(
         val pipeline = logPipeline ?: return false
         if (recording || session == null || !gpuPreviewEnabled) return false
         val cameraGeneration = generation
+        pipeline.onFirstRecordedFrame = { timestampNs ->
+            if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
+        }
         return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
             timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
             recordingLut = recordingLut, videoCodec = videoCodec,
@@ -2766,6 +2773,9 @@ class Camera2PreviewEngine(
                 analysisPipeline = pipeline
                 synchronizeSubjectOutput()
                 passthroughVideoPipeline = true
+                pipeline.onFirstRecordedFrame = { timestampNs ->
+                    if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
+                }
                 val accepted = pipeline.startRecording(
                     output = output,
                     bitrate = videoBitrate,
@@ -2855,6 +2865,9 @@ class Camera2PreviewEngine(
         if (!logPreviewEnabled || recording) return false
         val cameraGeneration = generation
         lastLogRecordingEvidence = null
+        pipeline.onFirstRecordedFrame = { timestampNs ->
+            if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
+        }
         val accepted = pipeline.startRecording(
             output = output,
             bitrate = videoBitrate,
@@ -3865,6 +3878,7 @@ class Camera2PreviewEngine(
                                 afMode = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_MODE),
                                 submittedAfMode = request.get(CaptureRequest.CONTROL_AF_MODE),
                                 submittedFocusDistanceDiopters = request.get(CaptureRequest.LENS_FOCUS_DISTANCE),
+                                rollingShutterSkewNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_ROLLING_SHUTTER_SKEW),
                                 awbLocked = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_LOCK),
                                 colorTint = if (Build.VERSION.SDK_INT >= 36) result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_COLOR_TINT) else null,
                                 exposureMode = when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)) {

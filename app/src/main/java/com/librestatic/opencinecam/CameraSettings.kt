@@ -85,6 +85,8 @@ data class CameraSettings(
     val audioMeter: AudioMeterSettings = AudioMeterSettings(),
     /** Local explicit consent; never portable through presets or inferred from permission. */
     val geotaggingEnabled: Boolean = false,
+    /** Local explicit consent to log device motion beside video takes; never portable through presets. */
+    val gyroflowLogEnabled: Boolean = false,
     val productionSlate: ProductionSlateSettings = ProductionSlateSettings(),
     val gallery: GallerySettings = GallerySettings(),
     val mediaSharing: MediaSharingSettings = MediaSharingSettings(),
@@ -369,6 +371,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         audioListening = loadAudioListening(),
         audioMeter = loadAudioMeter(),
         geotaggingEnabled = preferences.getBoolean("geotagging-enabled", false),
+        gyroflowLogEnabled = preferences.getBoolean("gyroflow-log-enabled", false),
         productionSlate = loadProductionSlate(),
         gallery = loadGallery(),
         mediaSharing = loadMediaSharing(),
@@ -529,6 +532,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("review-log-view", settings.playback.logView.name)
             .putBoolean("review-native-surface", settings.playback.nativeSurfaceFrames)
             .putBoolean("geotagging-enabled", settings.geotaggingEnabled)
+            .putBoolean("gyroflow-log-enabled", settings.gyroflowLogEnabled)
             .putBoolean("capture-naming-enabled", settings.captureNaming.enabled)
             .putString("capture-naming-template", settings.captureNaming.template)
             .putString("media-share-content", settings.mediaSharing.content.name)

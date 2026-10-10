@@ -41,14 +41,14 @@ private class DeleteDialogOwner { var valid = true }
 internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Unit,
     onCompleted: () -> Unit, source: MediaDeleteSource) {
     // Never rebind a confirmed operation to a later gallery item or mutable caller list.
-    val selected = remember(take) { take.copy(originals = take.originals.toList(), metadata = take.metadata.toList()) }
+    val selected = remember(take) { take.copy(originals = take.originals.toList(), metadata = take.metadata.toList(), attachments = take.attachments.toList()) }
     val owner = remember(selected, source) { DeleteDialogOwner() }
     val scope = rememberCoroutineScope()
     var acknowledged by remember(owner) { mutableStateOf(false) }
     var busy by remember(owner) { mutableStateOf(false) }
     var finished by remember(owner) { mutableStateOf(false) }
     var result by remember(owner) { mutableStateOf<MediaDeleteResult?>(null) }
-    val expected = selected.originals + selected.metadata
+    val expected = selected.originals + selected.metadata + selected.attachments
     val canDelete = selected.originals.isNotEmpty() && expected.map { it.uri }.distinct().size == expected.size
     DisposableEffect(owner) { onDispose { owner.valid = false } }
     fun dismiss() { if (!busy) { owner.valid = false; onDismiss() } }
@@ -58,7 +58,7 @@ internal fun MediaDeleteDialogContent(take: LocalMediaTake, onDismiss: () -> Uni
                     Text(stringResource(R.string.media_delete_title), Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleLarge)
                     MediaDialogTake(selected, "media-delete-take")
                     Text(stringResource(R.string.media_delete_help), Modifier.fillMaxWidth().testTag("media-delete-help"))
-                    Text(stringResource(R.string.media_delete_sources, selected.originals.size, selected.metadata.size), Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.media_delete_sources, selected.originals.size, selected.metadata.size + selected.attachments.size), Modifier.fillMaxWidth())
                     val observed = result
                     val exact = observed != null && observed.files.size == expected.size &&
                         observed.files.map { it.artifact }.toSet() == expected.toSet() &&

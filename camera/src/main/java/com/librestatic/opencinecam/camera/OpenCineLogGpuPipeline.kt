@@ -441,6 +441,8 @@ class OpenCineLogGpuPipeline(
     @Volatile private var previewSqueezeFactor = 1f
     @Volatile private var previewDisplayRotationDegrees = displayRotationDegrees
     @Volatile private var recording: Recording? = null
+    /** Called once per recording, on the GL thread, with the sensor timestamp of the first frame sent to the encoder. */
+    @Volatile var onFirstRecordedFrame: ((Long) -> Unit)? = null
     private val recordingPreparation = java.util.concurrent.atomic.AtomicReference<RecordingPreparation?>()
     @Volatile private var lastSourceDataSpace: Int? = null
     private var lastAnalysisAtMs = 0L
@@ -1033,6 +1035,14 @@ class OpenCineLogGpuPipeline(
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_SWAP)
+                    if (!active.firstFrameReported) {
+                        active.firstFrameReported = true
+                        onFirstRecordedFrame?.let { report ->
+                            try { report(timestampNs) } catch (problem: Exception) {
+                                android.util.Log.w(LOG_TAG, "First recorded frame listener failed", problem)
+                            }
+                        }
+                    }
                     if (!active.lutApplied && active.recordingLut != null) {
                         active.lutApplied = true
                         active.onRecordingLutApplied?.invoke(requireNotNull(active.lutEvidence))
@@ -2082,6 +2092,7 @@ class OpenCineLogGpuPipeline(
         }
         @Volatile var drainThread: Thread? = null
         @Volatile var frames = 0L
+        var firstFrameReported = false
         var audioPackets = 0L
         var firstPtsUs: Long? = null
         var lastPtsUs: Long? = null

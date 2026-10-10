@@ -824,4 +824,7 @@
     <string name="lut_disable_title">Disable LUTs</string>
     <string name="permission_open_settings">Open settings</string>
     <string name="permission_blocked_explanation">Android no longer shows the permission prompt. Allow it in the app\'s system settings.</string>
+    <string name="gyroflow_log_title">Gyro data for Gyroflow</string>
+    <string name="gyroflow_log_enabled">Record gyro data for Gyroflow</string>
+    <string name="gyroflow_log_help">Saves the phone\'s motion (gyroscope and accelerometer) next to each video, LOG or HLG take as a .gcsv file with the same name, for stabilizing it in Gyroflow. Motion data is recorded only while this is on and stays in that file on your device. Not used for slow motion or time-lapse. Turn off the camera\'s own stabilization for the best match.</string>
 </resources>

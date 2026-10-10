@@ -98,8 +98,8 @@ class ProxyJobStore(directory: File) {
             val take = job.take
             require(take.id == "legacy:${take.primary.uri}" ||
                 (take.id.startsWith("take:") || take.id.startsWith("still:")) && canonicalMediaId(take.id.substringAfter(':')))
-            require(take.originals.size in 1..32 && take.metadata.size <= 4 && take.primary in take.originals)
-            val members = take.originals + take.metadata
+            require(take.originals.size in 1..32 && take.metadata.size + take.attachments.size <= 4 && take.primary in take.originals)
+            val members = take.originals + take.metadata + take.attachments
             require(members.map { it.uri }.distinct().size == members.size)
             for (artifact in members) {
                 require(mediaDeleteIdentity(artifact.uri) != null) { "Invalid persisted MediaStore URI" }
@@ -110,7 +110,7 @@ class ProxyJobStore(directory: File) {
             }
             require(mediaOriginalIdentity(take.primary.uri)?.first == take.kind)
             require(take.originals.all { mediaOriginalIdentity(it.uri) != null })
-            require(take.metadata.all { mediaDeleteIdentity(it.uri)?.collection == MediaDeleteCollection.METADATA })
+            require((take.metadata + take.attachments).all { mediaDeleteIdentity(it.uri)?.collection == MediaDeleteCollection.METADATA })
         }
     }
 
@@ -128,6 +128,8 @@ class ProxyJobStore(directory: File) {
                 put("id", job.take.id); put("primary", artifact(job.take.primary))
                 put("originals", JsonArray(job.take.originals.map(::artifact)))
                 put("metadata", JsonArray(job.take.metadata.map(::artifact)))
+                // Written only when present, so queues without attachments keep their exact format.
+                if (job.take.attachments.isNotEmpty()) put("attachments", JsonArray(job.take.attachments.map(::artifact)))
                 put("kind", job.take.kind.name); put("relationStatus", job.take.relationStatus.name)
                 put("slate", job.take.slate?.let(::productionSlateJson) ?: JsonNull)
             })
@@ -155,14 +157,16 @@ class ProxyJobStore(directory: File) {
         return rows.map { node ->
             val obj = node.jsonObject; obj.keys("id", "take", "settings", "status", "attempts", "error")
             val take = obj.getValue("take").jsonObject
-            take.keys("id", "primary", "originals", "metadata", "kind", "slate", "relationStatus")
+            val baseKeys = arrayOf("id", "primary", "originals", "metadata", "kind", "slate", "relationStatus")
+            take.keys(*if ("attachments" in take) baseKeys + "attachments" else baseKeys)
             val originals = take.getValue("originals").jsonArray; val metadata = take.getValue("metadata").jsonArray
             require(originals.size in 1..32 && metadata.size <= 4)
             val settings = obj.getValue("settings").jsonObject; settings.keys("maxLongEdge", "videoBitrateMbps")
             ProxyJob(obj.string("id"), LocalMediaTake(take.string("id"), readArtifact(take.getValue("primary")),
                 originals.map(::readArtifact), metadata.map(::readArtifact), LocalMediaKind.valueOf(take.string("kind")),
                 take.getValue("slate").let { if (it == JsonNull) null else requireNotNull(parseProductionSlateJson(it.jsonObject)) },
-                LocalMediaRelationStatus.valueOf(take.string("relationStatus"))),
+                LocalMediaRelationStatus.valueOf(take.string("relationStatus")),
+                    take["attachments"]?.jsonArray?.also { require(it.size in 1..4) }?.map(::readArtifact) ?: emptyList()),
                 ProxySettings(settings.integer("maxLongEdge"), settings.integer("videoBitrateMbps")),
                 ProxyJobStatus.valueOf(obj.string("status")), obj.integer("attempts"),
                 if (obj.getValue("error") == JsonNull) null else obj.string("error"))

@@ -22,8 +22,8 @@ internal fun mediaDeleteIdentity(uri: String): MediaDeleteIdentity? {
 
 /** Every member comes from actual provider enumeration, never from relationship JSON references. */
 internal fun mediaDeletePlan(selected: LocalMediaTake, observed: List<MediaDeleteRow>, owner: String): MediaDeletePlan {
-    require(selected.originals.size in 1..32 && selected.metadata.size <= 4 && selected.primary in selected.originals)
-    val confirmed = selected.originals + selected.metadata
+    require(selected.originals.size in 1..32 && selected.metadata.size + selected.attachments.size <= 4 && selected.primary in selected.originals)
+    val confirmed = selected.originals + selected.metadata + selected.attachments
     require(confirmed.map { it.uri }.distinct().size == confirmed.size) { "Duplicate confirmed deletion member" }
     require(observed.size == confirmed.size && observed.map { it.artifact.uri }.distinct().size == observed.size) { "Deletion membership changed or enumeration was incomplete" }
     require(observed.map { it.artifact }.toSet() == confirmed.toSet()) { "Deletion selection changed; refresh gallery" }
@@ -41,7 +41,7 @@ internal fun mediaDeletePlan(selected: LocalMediaTake, observed: List<MediaDelet
         require(row.artifact.sizeBytes >= 0 && row.artifact.modifiedSeconds >= 0)
         require(row.artifact.name.isNotEmpty() && row.artifact.mimeType.isNotEmpty())
         require(mediaNamespace(row.relativePath) == namespace) { "Deletion rows span namespaces" }
-        if (row.artifact in selected.metadata) require(identity.collection == MediaDeleteCollection.METADATA)
+        if (row.artifact in selected.metadata || row.artifact in selected.attachments) require(identity.collection == MediaDeleteCollection.METADATA)
         else require(identity.collection != MediaDeleteCollection.METADATA)
         val expectedRoot = when (identity.collection) { MediaDeleteCollection.PHOTO, MediaDeleteCollection.VIDEO -> "DCIM"; MediaDeleteCollection.AUDIO -> "Music"; MediaDeleteCollection.METADATA -> "Download" }
         require(row.relativePath.startsWith("$expectedRoot/OpenCineCam/"))
@@ -53,10 +53,10 @@ internal fun mediaDeletePlan(selected: LocalMediaTake, observed: List<MediaDelet
         }
         require(compatible) { "Deletion collection/type mismatch" }
     }
-    if (namespace == null) require(confirmed.size == 1 && selected.metadata.isEmpty() && selected.id == "legacy:${primary.artifact.uri}")
+    if (namespace == null) require(confirmed.size == 1 && selected.metadata.isEmpty() && selected.attachments.isEmpty() && selected.id == "legacy:${primary.artifact.uri}")
     else require(selected.id == namespace.key)
     val byUri = observed.associateBy { it.artifact.uri }
-    val order = selected.originals.filter { it != selected.primary } + selected.metadata + selected.primary
+    val order = selected.originals.filter { it != selected.primary } + selected.metadata + selected.attachments + selected.primary
     return MediaDeletePlan(selected, order.map { byUri.getValue(it.uri) }, namespace)
 }
 
@@ -82,7 +82,7 @@ internal interface MediaDeleteAccess {
 }
 
 internal fun executeMediaDelete(selected: LocalMediaTake, access: MediaDeleteAccess): MediaDeleteResult {
-    val confirmed = selected.originals + selected.metadata
+    val confirmed = selected.originals + selected.metadata + selected.attachments
     val results = confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }.toMutableList()
     fun outcome(error: String? = null) = MediaDeleteResult(results.toList(), error)
     fun record(row: MediaDeleteRow, status: MediaDeleteStatus, detail: String? = null) {
@@ -96,7 +96,7 @@ internal fun executeMediaDelete(selected: LocalMediaTake, access: MediaDeleteAcc
     try {
         reservation = access.reserve()
         val plan = access.preflight(selected)
-        val expectedOrder = selected.originals.filter { it != selected.primary } + selected.metadata + selected.primary
+        val expectedOrder = selected.originals.filter { it != selected.primary } + selected.metadata + selected.attachments + selected.primary
         require(plan.selected == selected && plan.ordered.map { it.artifact } == expectedOrder &&
             plan.ordered.map { it.artifact }.toSet() == confirmed.toSet() && plan.ordered.size == confirmed.size)
         access.beginDeletion(plan)
