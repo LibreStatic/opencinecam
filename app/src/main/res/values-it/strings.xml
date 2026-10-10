@@ -345,6 +345,11 @@
     <string name="image_mode_hq">Alta qualità</string>
     <string name="image_processing_unavailable">Una modalità richiesta non è dichiarata qui. Il valore corrispondente del modello viene mantenuto; la preferenza è preservata.</string>
     <string name="image_session_keys">Questa fotocamera applica alcune scelte di elaborazione all\'avvio. Cambiarle tra una ripresa e l\'altra può aggiungere una breve pausa prima della ripresa successiva.</string>
+    <string name="image_picture_profile">Profilo immagine</string>
+    <string name="image_profile_standard">Standard</string>
+    <string name="image_profile_flat">Piatto</string>
+    <string name="image_profile_cine">Cine</string>
+    <string name="image_picture_profile_help">Curva tonale applicata dal processore d\'immagine della fotocamera, senza costi aggiuntivi. Standard mantiene l\'aspetto della fotocamera; Piatto alza le ombre e addolcisce le luci per il grading; Cine è una curva a S morbida con una lunga spalla sulle alte luci. Vale per video SDR, time-lapse e foto JPEG/HEIC, non per LOG, HLG, RAW o riprese ad alta velocità.</string>
     <string name="image_reset">Ripristina modello della fotocamera</string>
     <string name="pro_wb_record_policy">Bilanciamento del bianco all\'avvio della registrazione</string>
     <string name="pro_wb_continuous">WB continuo / live</string>

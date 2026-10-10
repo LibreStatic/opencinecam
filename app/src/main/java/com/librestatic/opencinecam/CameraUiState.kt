@@ -88,6 +88,8 @@ data class CameraUiState(
     val reportedVideoStabilization: Int? = null,
     val reportedNoiseReduction: Int? = null,
     val reportedEdgeEnhancement: Int? = null,
+    val reportedToneMapMode: Int? = null,
+    val submittedToneMapMode: Int? = null,
     val reportedCropRegion: List<Int>? = null,
     val submittedImageProcessing: com.librestatic.opencinecam.camera.ImageProcessingDefaults? = null,
     val reportedExposureMode: com.librestatic.opencinecam.camera.ExposureMode? = null,

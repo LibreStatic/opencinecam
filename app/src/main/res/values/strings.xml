@@ -348,6 +348,11 @@
     <string name="image_mode_hq">High quality</string>
     <string name="image_processing_unavailable">A requested mode is not advertised here. The corresponding template value is retained; the preference is preserved.</string>
     <string name="image_session_keys">This camera applies some processing choices when it starts. Changing them between takes can add a short pause before the next take.</string>
+    <string name="image_picture_profile">Picture profile</string>
+    <string name="image_profile_standard">Standard</string>
+    <string name="image_profile_flat">Flat</string>
+    <string name="image_profile_cine">Cine</string>
+    <string name="image_picture_profile_help">Tone curve applied by the camera\'s image processor at no extra cost. Standard keeps the camera\'s own look; Flat lifts shadows and softens highlights for grading; Cine is a soft S-curve with a long highlight shoulder. Applies to SDR video, time-lapse and JPEG/HEIC photos, not to LOG, HLG, RAW or high-speed takes.</string>
     <string name="image_reset">Restore camera template</string>
     <string name="pro_wb_record_policy">White balance at recording start</string>
     <string name="pro_wb_continuous">Continuous / live WB</string>

@@ -924,6 +924,8 @@ class CaptureService : Service() {
                 reportedVideoStabilization = metadata.videoStabilization,
                 reportedNoiseReduction = metadata.noiseReduction,
                 reportedEdgeEnhancement = metadata.edgeEnhancement,
+                reportedToneMapMode = metadata.toneMapMode,
+                submittedToneMapMode = metadata.submittedToneMapMode,
                 reportedCropRegion = metadata.cropRegion,
                 submittedImageProcessing = metadata.submittedImageProcessing,
                 reportedExposureMode = metadata.exposureMode,

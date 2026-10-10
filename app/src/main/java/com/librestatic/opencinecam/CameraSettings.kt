@@ -11,6 +11,7 @@ import com.librestatic.opencinecam.camera.MonitorAspectGuide
 import com.librestatic.opencinecam.camera.ImageProcessingSelection
 import com.librestatic.opencinecam.camera.StabilizationMode
 import com.librestatic.opencinecam.camera.IspMode
+import com.librestatic.opencinecam.camera.PictureProfile
 import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ShutterUnit
@@ -303,6 +304,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             stabilization = preferences.getString("image-stabilization", "DEFAULT")?.let { runCatching { StabilizationMode.valueOf(it) }.getOrNull() },
             noiseReduction = enumPreference("image-noise-reduction", IspMode.DEFAULT),
             edge = enumPreference("image-edge-enhancement", IspMode.DEFAULT),
+            pictureProfile = enumPreference("image-picture-profile", PictureProfile.STANDARD),
         ),
         exposure = ExposureSelection(
             mode = enumPreference("exposure-mode", ExposureMode.AUTO),
@@ -500,6 +502,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("image-stabilization", settings.imageProcessing.stabilization?.name ?: "DEFAULT")
             .putString("image-noise-reduction", settings.imageProcessing.noiseReduction.name)
             .putString("image-edge-enhancement", settings.imageProcessing.edge.name)
+            .putString("image-picture-profile", settings.imageProcessing.pictureProfile.name)
             .putString("exposure-mode", settings.exposure.mode.name)
             .putInt("exposure-iso", settings.exposure.iso)
             .putLong("exposure-time-ns", settings.exposure.timeNs)

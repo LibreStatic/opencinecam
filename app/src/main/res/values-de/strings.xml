@@ -345,6 +345,11 @@
     <string name="image_mode_hq">Hohe Qualität</string>
     <string name="image_processing_unavailable">Ein angeforderter Modus wird hier nicht angeboten. Der entsprechende Vorlagenwert bleibt erhalten; die Einstellung bleibt bewahrt.</string>
     <string name="image_session_keys">Diese Kamera übernimmt manche Verarbeitungsoptionen beim Start. Änderungen zwischen Takes können eine kurze Pause vor dem nächsten Take verursachen.</string>
+    <string name="image_picture_profile">Bildprofil</string>
+    <string name="image_profile_standard">Standard</string>
+    <string name="image_profile_flat">Flach</string>
+    <string name="image_profile_cine">Cine</string>
+    <string name="image_picture_profile_help">Tonkurve des Bildprozessors der Kamera, ohne Zusatzlast. Standard behält den Look der Kamera; Flach hebt Schatten an und mildert Lichter fürs Grading; Cine ist eine weiche S-Kurve mit langer Lichterschulter. Gilt für SDR-Video, Zeitraffer und JPEG/HEIC-Fotos, nicht für LOG, HLG, RAW oder Hochgeschwindigkeitsaufnahmen.</string>
     <string name="image_reset">Kameravorlage wiederherstellen</string>
     <string name="pro_wb_record_policy">Weißabgleich bei Aufnahmestart</string>
     <string name="pro_wb_continuous">Kontinuierlicher / Live-WB</string>
