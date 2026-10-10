@@ -6,6 +6,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -54,9 +58,11 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
                 SettingsHelp(stringResource(R.string.image_picture_profile_help))
             }
         }
+        PictureControls(state, caps.pictureControls, selected, hfr, selected.resolve(caps, reported, hfr).values.edge) { onChange(settings.copy(imageProcessing = it)) }
         if (unavailable.isNotEmpty()) Text(stringResource(R.string.image_processing_unavailable), color = LocalCineColors.current.pending, fontSize = 16.sp)
         if (caps.sessionControls.isNotEmpty()) Text(stringResource(R.string.image_session_keys), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-        CameraReportsLine(imageProcessingReadbackDifferences(state.submittedImageProcessing, reported))
+        CameraReportsLine(imageProcessingReadbackDifferences(state.submittedImageProcessing, reported) +
+            pictureControlReadbackDifferences(state.pictureControlReadback))
         OutlinedButton({ onChange(settings.copy(imageProcessing = ImageProcessingSelection())) }, modifier = Modifier.heightIn(min = 48.dp).testTag("image-reset")) {
             Text(stringResource(R.string.image_reset), fontSize = 16.sp)
         }
@@ -80,3 +86,56 @@ internal fun IspMode.titleResource(): Int = when (this) {
     IspMode.FAST -> R.string.image_mode_fast
     IspMode.HIGH_QUALITY -> R.string.image_mode_hq
 }
+
+/** Saturation and sharpness, offered only for the vendor controls this camera advertises. */
+@Composable
+private fun PictureControls(state: CameraUiState, caps: PictureControlCapabilities, selected: ImageProcessingSelection, hfr: Boolean,
+    edgeMode: Int?, onChange: (ImageProcessingSelection) -> Unit) {
+    if (!caps.any) return
+    Column(Modifier.testTag("picture-controls"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.picture_controls_title), color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+        caps.saturation?.let { range ->
+            PictureControlSlider(stringResource(R.string.picture_saturation), "picture-saturation", range, selected.saturation,
+                pictureControlBlock(false, state.selectedMode, hfr, edgeMode)) { onChange(selected.copy(saturation = it)) }
+        }
+        caps.sharpness?.let { range ->
+            PictureControlSlider(stringResource(R.string.picture_sharpness), "picture-sharpness", range, selected.sharpness,
+                pictureControlBlock(true, state.selectedMode, hfr, edgeMode)) { onChange(selected.copy(sharpness = it)) }
+        }
+        SettingsHelp(stringResource(R.string.picture_help))
+    }
+}
+
+@Composable
+private fun PictureControlSlider(title: String, tag: String, range: PictureControlRange, value: Int?, block: PictureControlBlock, onChange: (Int?) -> Unit) {
+    val shown = range.snap(value ?: range.default)
+    var draft by remember(shown, range) { mutableFloatStateOf(shown.toFloat()) }
+    val current = range.snap(draft.toInt())
+    val label = when {
+        value == null && current == range.default -> stringResource(
+            if (range.defaultAdvertised) R.string.picture_value_default else R.string.picture_value_device, title, current)
+        else -> stringResource(R.string.picture_value, title, current)
+    }
+    SettingsSliderRow(label, draft, { draft = it }, range.min.toFloat()..range.top.toFloat(), steps = range.sliderSteps,
+        enabled = block == PictureControlBlock.NONE, sliderModifier = Modifier.testTag(tag),
+        onValueChangeFinished = { onChange(pictureControlSelection(range, range.snap(draft.toInt()))) })
+    when (block) {
+        PictureControlBlock.NONE -> Unit
+        PictureControlBlock.NEUTRAL -> SettingsHelp(stringResource(R.string.picture_blocked_neutral))
+        PictureControlBlock.EDGE_OFF -> SettingsHelp(stringResource(R.string.picture_blocked_edge_off))
+    }
+}
+
+/** Why a picture control cannot act right now; the stored value is preserved either way. */
+internal enum class PictureControlBlock { NONE, NEUTRAL, EDGE_OFF }
+
+/** LOG, HLG, RAW and constrained HFR need neutral processing; sharpness also needs an edge stage. */
+internal fun pictureControlBlock(sharpness: Boolean, mode: CaptureMode, hfr: Boolean, edgeMode: Int?): PictureControlBlock = when {
+    hfr || mode == CaptureMode.LOG || mode == CaptureMode.HLG || mode == CaptureMode.RAW_PHOTO -> PictureControlBlock.NEUTRAL
+    sharpness && !sharpnessEffective(edgeMode) -> PictureControlBlock.EDGE_OFF
+    else -> PictureControlBlock.NONE
+}
+
+/** The stored value for a slider position: the advertised device default clears the override. */
+internal fun pictureControlSelection(range: PictureControlRange, position: Int): Int? =
+    range.snap(position).takeUnless { range.defaultAdvertised && it == range.snap(range.default) }

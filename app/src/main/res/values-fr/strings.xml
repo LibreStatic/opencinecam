@@ -371,6 +371,15 @@
     <string name="image_profile_cine">Ciné</string>
     <string name="image_picture_profile_help">Courbe de tons appliquée par le processeur d\'image de la caméra, sans surcoût. Standard conserve le rendu propre à la caméra ; Plat relève les ombres et adoucit les hautes lumières pour l\'étalonnage ; Ciné est une courbe en S douce avec une longue épaule dans les hautes lumières. S\'applique à la vidéo SDR, au time-lapse et aux photos JPEG/HEIC, pas au LOG, HLG, RAW ni aux prises haute vitesse.</string>
     <string name="image_reset">Restaurer le modèle de la caméra</string>
+    <string name="picture_controls_title">Réglages d\'image</string>
+    <string name="picture_saturation">Saturation</string>
+    <string name="picture_sharpness">Netteté</string>
+    <string name="picture_value">%1$s : %2$d</string>
+    <string name="picture_value_default">%1$s : %2$d · défaut de l\'appareil</string>
+    <string name="picture_value_device">%1$s : %2$d · appareil</string>
+    <string name="picture_help">Réglages propres à la caméra, proposés uniquement dans la plage qu\'elle annonce. Remettre un curseur à la valeur par défaut de l\'appareil rétablit le modèle de la caméra.</string>
+    <string name="picture_blocked_neutral">Non appliqués en LOG, HLG, RAW ni en vidéo haute vitesse contrainte, qui conservent un traitement neutre.</string>
+    <string name="picture_blocked_edge_off">La netteté n\'a aucun effet tant que l\'accentuation des contours est désactivée. Choisissez un autre mode de contours pour l\'utiliser.</string>
     <string name="pro_wb_record_policy">Balance des blancs au début de l\'enregistrement</string>
     <string name="pro_wb_continuous">WB continue / en direct</string>
     <string name="pro_wb_lock_record">Verrouiller la WB pour la prise</string>

@@ -371,6 +371,15 @@
     <string name="image_profile_cine">Cine</string>
     <string name="image_picture_profile_help">Curva tonale applicata dal processore d\'immagine della fotocamera, senza costi aggiuntivi. Standard mantiene l\'aspetto della fotocamera; Piatto alza le ombre e addolcisce le luci per il grading; Cine è una curva a S morbida con una lunga spalla sulle alte luci. Vale per video SDR, time-lapse e foto JPEG/HEIC, non per LOG, HLG, RAW o riprese ad alta velocità.</string>
     <string name="image_reset">Ripristina modello della fotocamera</string>
+    <string name="picture_controls_title">Controlli immagine</string>
+    <string name="picture_saturation">Saturazione</string>
+    <string name="picture_sharpness">Nitidezza</string>
+    <string name="picture_value">%1$s: %2$d</string>
+    <string name="picture_value_default">%1$s: %2$d · predefinito del dispositivo</string>
+    <string name="picture_value_device">%1$s: %2$d · dispositivo</string>
+    <string name="picture_help">Controlli specifici della fotocamera, offerti solo nell\'intervallo che questa fotocamera dichiara. Riportando un cursore al valore predefinito del dispositivo si ripristina il modello della fotocamera.</string>
+    <string name="picture_blocked_neutral">Non applicati in LOG, HLG, RAW o video ad alta velocità vincolato, che mantengono un\'elaborazione neutra.</string>
+    <string name="picture_blocked_edge_off">La nitidezza non ha effetto finché il miglioramento dei bordi è disattivato. Scegli un\'altra modalità dei bordi per usarla.</string>
     <string name="pro_wb_record_policy">Bilanciamento del bianco all\'avvio della registrazione</string>
     <string name="pro_wb_continuous">WB continuo / live</string>
     <string name="pro_wb_lock_record">Mantieni WB per la ripresa</string>

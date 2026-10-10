@@ -95,3 +95,14 @@ ISP result is older than 500 ms. `stats_type` 1 (YUV) is labelled `ISP`; 0 or ab
 `ISP RAW`, because the Bayer-domain statistics are pre tone map and do not match the display.
 Which channel(s) `stats` holds is not documented by the device. Check logcat for
 `ISP histogram: N buckets, stats_type=…` on a device that advertises the keys.
+
+## Qualcomm picture controls (saturation, sharpness)
+
+Evidence from `dumpsys media.camera` on the Razr Fold, camera 0 (the code finds every key by exact name and clamps to the advertised range):
+
+| Static range key | Type and values | Request key (also reported in results) | Template result |
+|---|---|---|---|
+| `org.codeaurora.qcamera3.saturation.range` | int32[4] = min, max, default, step = `[0 10 5 1]` | `...saturation.use_saturation` int32[1] | 5 |
+| `org.codeaurora.qcamera3.sharpness.range` | int32[2] = min, max = `[0 6]` | `...sharpness.strength` int32[1] | 2 |
+
+Saturation advertises its default, so moving the slider back to it clears the override. Sharpness advertises none (the template reported 2 here, but that is device-specific), so the slider marks the midpoint as "device" and an explicit value is always sent. The controls are not applied in LOG, HLG, RAW or constrained HFR, and sharpness is skipped while `EDGE_MODE` is OFF. Verify on the device: both sliders appear in Settings > Image processing, the capabilities page lists both keys under requested/reported, and neither appears on a camera without the keys.

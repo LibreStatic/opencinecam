@@ -371,6 +371,15 @@
     <string name="image_profile_cine">Cine</string>
     <string name="image_picture_profile_help">Curva de tons aplicada pelo processador de imagem da câmera, sem custo extra. Padrão mantém o visual da própria câmera; Plano eleva as sombras e suaviza as altas luzes para a correção de cor; Cine é uma curva em S suave com um ombro longo nas altas luzes. Vale para vídeo SDR, time-lapse e fotos JPEG/HEIC, não para LOG, HLG, RAW ou gravações de alta velocidade.</string>
     <string name="image_reset">Restaurar modelo da câmera</string>
+    <string name="picture_controls_title">Controles de imagem</string>
+    <string name="picture_saturation">Saturação</string>
+    <string name="picture_sharpness">Nitidez</string>
+    <string name="picture_value">%1$s: %2$d</string>
+    <string name="picture_value_default">%1$s: %2$d · padrão do dispositivo</string>
+    <string name="picture_value_device">%1$s: %2$d · dispositivo</string>
+    <string name="picture_help">Controles específicos da câmera, oferecidos apenas na faixa que esta câmera informa. Voltar um controle ao padrão do dispositivo restaura o modelo da câmera.</string>
+    <string name="picture_blocked_neutral">Não são aplicados em LOG, HLG, RAW nem em vídeo de alta velocidade restrito, que mantêm processamento neutro.</string>
+    <string name="picture_blocked_edge_off">A nitidez não tem efeito enquanto o realce de bordas estiver desligado. Escolha outro modo de bordas para usá-la.</string>
     <string name="pro_wb_record_policy">Balanço de branco ao iniciar a gravação</string>
     <string name="pro_wb_continuous">WB contínuo / ao vivo</string>
     <string name="pro_wb_lock_record">Manter WB durante a tomada</string>

@@ -309,6 +309,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             noiseReduction = enumPreference("image-noise-reduction", IspMode.DEFAULT),
             edge = enumPreference("image-edge-enhancement", IspMode.DEFAULT),
             pictureProfile = enumPreference("image-picture-profile", PictureProfile.STANDARD),
+            saturation = preferences.getInt("image-saturation", NO_DEVICE).takeUnless { it == NO_DEVICE },
+            sharpness = preferences.getInt("image-sharpness", NO_DEVICE).takeUnless { it == NO_DEVICE },
         ),
         exposure = ExposureSelection(
             mode = enumPreference("exposure-mode", ExposureMode.AUTO),
@@ -510,6 +512,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString("image-noise-reduction", settings.imageProcessing.noiseReduction.name)
             .putString("image-edge-enhancement", settings.imageProcessing.edge.name)
             .putString("image-picture-profile", settings.imageProcessing.pictureProfile.name)
+            .putInt("image-saturation", settings.imageProcessing.saturation ?: NO_DEVICE)
+            .putInt("image-sharpness", settings.imageProcessing.sharpness ?: NO_DEVICE)
             .putString("exposure-mode", settings.exposure.mode.name)
             .putInt("exposure-iso", settings.exposure.iso)
             .putLong("exposure-time-ns", settings.exposure.timeNs)

@@ -92,6 +92,7 @@ data class CameraUiState(
     val submittedToneMapMode: Int? = null,
     val reportedCropRegion: List<Int>? = null,
     val submittedImageProcessing: com.librestatic.opencinecam.camera.ImageProcessingDefaults? = null,
+    val pictureControlReadback: com.librestatic.opencinecam.camera.PictureControlReadback? = null,
     val reportedExposureMode: com.librestatic.opencinecam.camera.ExposureMode? = null,
     val reportedAntibanding: Int? = null,
     /** Null unless the low-light boost AE mode was submitted and the camera reported its state. */

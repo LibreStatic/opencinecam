@@ -236,6 +236,7 @@ data class Camera2PreviewMetadata(
     val submittedToneMapMode: Int? = null,
     val cropRegion: List<Int>? = null,
     val submittedImageProcessing: ImageProcessingDefaults? = null,
+    val pictureControls: PictureControlReadback? = null,
     val awbLocked: Boolean? = null,
     val afMode: Int? = null,
     val submittedAfMode: Int? = null,
@@ -652,6 +653,7 @@ class Camera2PreviewEngine(
     private var imageProcessing = ImageProcessingSelection()
     private val processingDefaults = java.util.WeakHashMap<CaptureRequest.Builder, ImageProcessingDefaults>()
     private val toneMapDefaults = java.util.WeakHashMap<CaptureRequest.Builder, Pair<Int?, android.hardware.camera2.params.TonemapCurve?>>()
+    private val pictureKeyCache = java.util.concurrent.ConcurrentHashMap<String, PictureControlKeys>()
     // OCC-PLAN-068 U7 (cameraExecutor-confined): optional face statistics for the out-of-frame warning.
     @Volatile private var subjectFramingRequested = false
     private val faceDetectGate = FaceDetectGraphGate()
@@ -4036,6 +4038,7 @@ class Camera2PreviewEngine(
                                 submittedImageProcessing = ImageProcessingDefaults(
                                     request.get(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE), request.get(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE),
                                     request.get(CaptureRequest.NOISE_REDUCTION_MODE), request.get(CaptureRequest.EDGE_MODE)),
+                                pictureControls = pictureControlReadback(request, result),
                             ),
                         )
                     }
@@ -4356,6 +4359,7 @@ class Camera2PreviewEngine(
         if (caps.noiseModes.isNotEmpty()) builder.set(CaptureRequest.NOISE_REDUCTION_MODE, resolved.noise)
         if (caps.edgeModes.isNotEmpty()) builder.set(CaptureRequest.EDGE_MODE, resolved.edge)
         applyPictureProfile(builder, caps)
+        applyPictureControls(builder, caps.pictureControls, resolved.edge)
     }
 
     /**
@@ -4391,6 +4395,36 @@ class Camera2PreviewEngine(
             builder.set(CaptureRequest.TONEMAP_MODE, defaults.first)
             builder.set(CaptureRequest.TONEMAP_CURVE, defaults.second)
         }
+    }
+
+    private fun pictureKeys(): PictureControlKeys? {
+        val id = activeDescriptor?.cameraId ?: return null
+        return pictureKeyCache.getOrPut(id) {
+            runCatching { PictureControlKeys.of(manager.getCameraCharacteristics(id)) }.getOrDefault(PictureControlKeys())
+        }
+    }
+
+    /**
+     * Qualcomm saturation and sharpness. LOG, HLG, RAW and constrained HFR keep neutral template
+     * processing; a null value clears the key so a reused builder returns to the template.
+     */
+    private fun applyPictureControls(builder: CaptureRequest.Builder, caps: PictureControlCapabilities, edgeMode: Int?) {
+        if (!caps.any) return
+        val keys = pictureKeys() ?: return
+        val neutral = isHighSpeedSession() || logPreviewEnabled || activeLogProfile != null || activeStillFormat == StillPhotoFormat.DNG
+        val resolved = imageProcessing.resolvePictureControls(caps, edgeMode, neutral)
+        keys.saturationRequest?.let { key -> runCatching { builder.set(key, resolved.saturation?.let { intArrayOf(it) }) } }
+        keys.sharpnessRequest?.let { key -> runCatching { builder.set(key, resolved.sharpness?.let { intArrayOf(it) }) } }
+    }
+
+    private fun pictureControlReadback(request: CaptureRequest, result: android.hardware.camera2.CaptureResult): PictureControlReadback? {
+        val keys = pictureKeys() ?: return null
+        fun read(key: CaptureRequest.Key<IntArray>?, reported: android.hardware.camera2.CaptureResult.Key<IntArray>?): Pair<Int?, Int?> =
+            runCatching { (key?.let { request.get(it) }?.firstOrNull()) to (reported?.let { result.get(it) }?.firstOrNull()) }.getOrDefault(null to null)
+        val (sentSaturation, gotSaturation) = read(keys.saturationRequest, keys.saturationResult)
+        val (sentSharpness, gotSharpness) = read(keys.sharpnessRequest, keys.sharpnessResult)
+        if (gotSaturation == null && gotSharpness == null) return null
+        return PictureControlReadback(sentSaturation, gotSaturation, sentSharpness, gotSharpness)
     }
 
     /** Supply advertised expensive controls up front; later between-take changes may reconfigure HAL. */
@@ -5131,6 +5165,7 @@ class Camera2PreviewEngine(
                         CaptureRequest.TONEMAP_CURVE in characteristics.availableCaptureRequestKeys)
                         characteristics.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)?.toSet().orEmpty() else emptySet(),
                     maxCurvePoints = characteristics.get(CameraCharacteristics.TONEMAP_MAX_CURVE_POINTS) ?: 0,
+                    pictureControls = characteristics.pictureControlCapabilities(),
                 ),
                 exposureCapabilities = ExposureCapabilities(
                     manual = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) == true,
