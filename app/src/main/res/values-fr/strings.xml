@@ -803,6 +803,8 @@
     <string name="caps_usage_flash">Modes de flash photo et, si disponible, puissance du flash.</string>
     <string name="caps_feature_sensor_clock">Horloge du capteur</string>
     <string name="caps_usage_sensor_clock">Aligne les fichiers audio WAV/FLAC séparés sur la vidéo grâce à l\'horloge du capteur.</string>
+    <string name="caps_feature_stream_use_cases">Cas d\'usage des flux</string>
+    <string name="caps_usage_stream_use_cases">Indique à la caméra à quoi sert chaque flux (aperçu, photo, vidéo) pour que le HAL ajuste son pipeline. Revient aux valeurs par défaut en cas de refus.</string>
     <string name="settings_mode">Mode</string>
     <string name="photo_format_label">Format</string>
     <string name="pro_shutter_unit">Unité d’obturation</string>

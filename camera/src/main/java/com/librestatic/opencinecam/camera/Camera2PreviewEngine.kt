@@ -34,6 +34,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.Build
+import com.librestatic.opencinecam.core.model.Knowledge
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -123,6 +124,8 @@ data class Camera2CameraDescriptor(
     val timestampSourceRealtime: Boolean = false,
     val photoFlashCapabilities: PhotoFlashCapabilities = PhotoFlashCapabilities(),
     val heicSize: Size? = null,
+    /** Standard `SCALER_AVAILABLE_STREAM_USE_CASES`; empty below API 33 or without the STREAM_USE_CASE capability. */
+    val streamUseCases: Set<Long> = emptySet(),
     /** Every advertised JPEG output, largest first; [jpegSize] is its head. */
     val jpegSizes: List<Size> = listOfNotNull(jpegSize),
     /** Every advertised HEIC output, largest first; [heicSize] is its head. */
@@ -989,6 +992,7 @@ class Camera2PreviewEngine(
             listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
+        if (!constrained) applyStreamUse(output, descriptor, StreamRole.PREVIEW_AND_RECORDING)
         val configuration = SessionConfiguration(
             if (constrained) SessionConfiguration.SESSION_HIGH_SPEED else SessionConfiguration.SESSION_REGULAR,
             listOf(output), cameraExecutor,
@@ -1024,7 +1028,7 @@ class Camera2PreviewEngine(
         )
         try {
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
-            device.createCaptureSession(configuration)
+            createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
         } catch (failure: Exception) {
             sessionException(failure)
         }
@@ -3161,9 +3165,11 @@ class Camera2PreviewEngine(
         val input = pipeline.cameraInputSurface
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
         val currentGeneration = generation
+        val inputOutput = OutputConfiguration(input)
+        if (!constrained) applyStreamUse(inputOutput, descriptor, StreamRole.PREVIEW_AND_RECORDING)
         val configuration = SessionConfiguration(
             if (constrained) SessionConfiguration.SESSION_HIGH_SPEED else SessionConfiguration.SESSION_REGULAR,
-            listOf(OutputConfiguration(input)),
+            listOf(inputOutput),
             cameraExecutor,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
@@ -3219,7 +3225,7 @@ class Camera2PreviewEngine(
             },
         )
         configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
-        device.createCaptureSession(configuration)
+        createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
     }
 
     private fun configureRecordingSession(
@@ -3244,7 +3250,11 @@ class Camera2PreviewEngine(
         try {
             val configuration = SessionConfiguration(
                 SessionConfiguration.SESSION_REGULAR,
-                surfaces.map(::OutputConfiguration),
+                surfaces.map { surface ->
+                    OutputConfiguration(surface).also {
+                        applyStreamUse(it, descriptor, if (surface === recordingSurface) StreamRole.RECORDING else StreamRole.PREVIEW)
+                    }
+                },
                 cameraExecutor,
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(configured: CameraCaptureSession) {
@@ -3297,7 +3307,7 @@ class Camera2PreviewEngine(
             )
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
             recordingSessionObserver?.invoke(configuration)
-            device.createCaptureSession(configuration)
+            createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
         } catch (failure: Exception) {
             if (!ownsConfiguration()) return
             if (startRecorder) {
@@ -3495,6 +3505,7 @@ class Camera2PreviewEngine(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             output.setDynamicRangeProfile(DynamicRangeProfiles.HLG10)
         }
+        applyStreamUse(output, descriptor, StreamRole.PREVIEW_AND_RECORDING)
         val configuration = SessionConfiguration(
             SessionConfiguration.SESSION_REGULAR,
             listOf(output),
@@ -3537,7 +3548,7 @@ class Camera2PreviewEngine(
         }
         try {
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
-            device.createCaptureSession(configuration)
+            createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
         } catch (failure: Throwable) {
             sessionException(failure)
         }
@@ -3638,6 +3649,7 @@ class Camera2PreviewEngine(
         val previewOutput = sessionOutput(surface) { failure ->
             listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
         } ?: return
+        applyStreamUse(previewOutput, descriptor, StreamRole.PREVIEW)
         val outputs = mutableListOf(previewOutput)
         var stillOutput: OutputConfiguration? = null
         var rawOutput: OutputConfiguration? = null
@@ -3705,6 +3717,7 @@ class Camera2PreviewEngine(
                 // OCC-PLAN-069: a size only a public physical camera advertises rides that
                 // physical's stream; the preview and analysis keep flowing from the logical device.
                 compressedPlan?.physicalId?.let(output::setPhysicalCameraId)
+                applyStreamUse(output, descriptor, StreamRole.STILL)
                 outputs += output
             }
         }
@@ -3751,7 +3764,10 @@ class Camera2PreviewEngine(
                     }
                 }, imageHandler)
             }
-            analysisOutput = OutputConfiguration(requireNotNull(analysisReader).surface).also { outputs += it }
+            analysisOutput = OutputConfiguration(requireNotNull(analysisReader).surface).also {
+                applyStreamUse(it, descriptor, StreamRole.PREVIEW)
+                outputs += it
+            }
         }
         fun ownsGraph(): Boolean = currentGeneration == generation &&
             (photoPipeline == null || !disposed.get() && logPipeline === photoPipeline)
@@ -3815,7 +3831,9 @@ class Camera2PreviewEngine(
             // The first attempt uses the original configurations; retries get fresh ones. Wrapping
             // a surface again throws once the UI abandoned it, so this stays inside the attempt.
             val sessionOutputs = if (index == 0) ids.map(configs::getValue)
-                else ids.mapNotNull { configs.getValue(it).surface }.map(::OutputConfiguration)
+                else ids.mapNotNull { id -> configs.getValue(id).surface?.let { OutputConfiguration(it) }?.also { copy ->
+                    previewGraphRole(id)?.let { applyStreamUse(copy, descriptor, it) }
+                } }
             val configuration = SessionConfiguration(
                 SessionConfiguration.SESSION_REGULAR,
                 sessionOutputs,
@@ -3838,10 +3856,17 @@ class Camera2PreviewEngine(
                 },
             )
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_PREVIEW)
-            if (skipBySessionPreCheck(sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }, hasFallback(index))) {
+            var support = sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }
+            if ((support as? Knowledge.Known)?.value == false && clearStreamUse(configuration)) {
+                // The query rejected the use cases, not necessarily the graph: ask again on DEFAULT.
+                StreamUseCaseRejections.reject(descriptor.cameraId)
+                Log.w(TAG, "Camera ${descriptor.cameraId} rejected stream use cases in isSessionConfigurationSupported; using DEFAULT.")
+                support = sessionConfigurationSupport { device.isSessionConfigurationSupported(configuration) }
+            }
+            if (skipBySessionPreCheck(support, hasFallback(index))) {
                 return@PreviewGraphFallback false
             }
-            device.createCaptureSession(configuration)
+            createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
             true
         }.start()
     }
@@ -4195,6 +4220,87 @@ class Camera2PreviewEngine(
      */
     private inline fun sessionOutput(surface: Surface, onFailure: (Exception) -> Unit): OutputConfiguration? =
         try { OutputConfiguration(surface) } catch (failure: Exception) { onFailure(failure); null }
+
+    private fun previewGraphRole(id: String): StreamRole? = when (id) {
+        PREVIEW_GRAPH_PREVIEW, PREVIEW_GRAPH_ANALYSIS -> StreamRole.PREVIEW
+        PREVIEW_GRAPH_STILL -> StreamRole.STILL
+        else -> null
+    }
+
+    /**
+     * Tags [output] with the stream use case for [role] when the camera advertises it (API 33+),
+     * unless this camera already refused a session carrying them. Never called for constrained
+     * high-speed sessions. Any failure leaves the output on DEFAULT.
+     */
+    private fun applyStreamUse(output: OutputConfiguration, descriptor: Camera2CameraDescriptor, role: StreamRole) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || StreamUseCaseRejections.isRejected(descriptor.cameraId)) return
+        val useCase = streamUseCaseFor(role, descriptor.streamUseCases) ?: return
+        try {
+            output.streamUseCase = useCase
+            StreamUseCaseRejections.markApplied(descriptor.cameraId)
+        } catch (failure: RuntimeException) {
+            Log.w(TAG, "Stream use case ${StreamUseCase.label(useCase)} could not be set for $role.", failure)
+        }
+    }
+
+    /** Puts every output of [configuration] back on DEFAULT; true when any carried a use case. */
+    private fun clearStreamUse(configuration: SessionConfiguration): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        var cleared = false
+        configuration.outputConfigurations.forEach { output ->
+            if (output.streamUseCase != StreamUseCase.DEFAULT) {
+                output.streamUseCase = StreamUseCase.DEFAULT
+                cleared = true
+            }
+        }
+        return cleared
+    }
+
+    /**
+     * createCaptureSession that survives a HAL refusing the stream use cases: when a session whose
+     * outputs carry them fails to configure, the same configuration is resubmitted once on DEFAULT
+     * and the camera id is remembered for the process. The caller's callback only hears about a
+     * failure of that second attempt (or of a session that never carried use cases).
+     */
+    private fun createSessionRetryingWithoutStreamUse(device: CameraDevice, descriptor: Camera2CameraDescriptor, configuration: SessionConfiguration) {
+        val carries = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            configuration.outputConfigurations.any { it.streamUseCase != StreamUseCase.DEFAULT }
+        if (!carries) {
+            device.createCaptureSession(configuration)
+            return
+        }
+        Log.i(TAG, "Camera ${descriptor.cameraId} session uses stream use cases " +
+            configuration.outputConfigurations.joinToString { StreamUseCase.label(it.streamUseCase) })
+        val delegate = configuration.stateCallback
+        val wrapped = SessionConfiguration(configuration.sessionType, configuration.outputConfigurations, configuration.executor,
+            object : CameraCaptureSession.StateCallback() {
+                override fun onConfigured(session: CameraCaptureSession) = delegate.onConfigured(session)
+                override fun onReady(session: CameraCaptureSession) = delegate.onReady(session)
+                override fun onActive(session: CameraCaptureSession) = delegate.onActive(session)
+                override fun onCaptureQueueEmpty(session: CameraCaptureSession) = delegate.onCaptureQueueEmpty(session)
+                override fun onClosed(session: CameraCaptureSession) = delegate.onClosed(session)
+                override fun onSurfacePrepared(session: CameraCaptureSession, surface: Surface) = delegate.onSurfacePrepared(session, surface)
+                override fun onConfigureFailed(session: CameraCaptureSession) {
+                    if (!clearStreamUse(configuration)) { delegate.onConfigureFailed(session); return }
+                    StreamUseCaseRejections.reject(descriptor.cameraId)
+                    Log.w(TAG, "Camera ${descriptor.cameraId} rejected a session with stream use cases; retrying on DEFAULT.")
+                    runCatching { session.close() }
+                    try {
+                        // The original configuration owns the caller's callback, so this is the only retry.
+                        device.createCaptureSession(configuration)
+                    } catch (failure: Throwable) {
+                        Log.w(TAG, "Session retry without stream use cases failed.", failure)
+                        delegate.onConfigureFailed(session)
+                    }
+                }
+            })
+        configuration.sessionParameters?.let(wrapped::setSessionParameters)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) configuration.colorSpace?.let { space ->
+            // getColorSpace returns the ColorSpace instance; setColorSpace takes its Named id.
+            ColorSpace.Named.entries.firstOrNull { ColorSpace.get(it) == space }?.let(wrapped::setColorSpace)
+        }
+        device.createCaptureSession(wrapped)
+    }
 
     private fun reportTapFocusResult(request: CaptureRequest, result: TotalCaptureResult) {
         val token = activeTapFocusToken ?: return
@@ -4743,6 +4849,7 @@ class Camera2PreviewEngine(
                 aeCompensationStepDenominator = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.denominator ?: 1,
                 minimumFocusDistance = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE),
                 supportsRaw = CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW in capabilities,
+                streamUseCases = advertisedStreamUseCases(characteristics, capabilities),
                 flashAvailable = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true,
                 targetFpsRanges = targetFpsRanges,
                 availableFixedFps = fixedFps,
@@ -5279,6 +5386,16 @@ class Camera2PreviewEngine(
 
     companion object {
         const val FOCUS_PULL_TICK_MS = 33L
+        /** The standard stream use cases the camera advertises, or empty without API 33 and the STREAM_USE_CASE capability. */
+        internal fun advertisedStreamUseCases(characteristics: CameraCharacteristics, capabilities: IntArray): Set<Long> {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || StreamUseCase.CAPABILITY !in capabilities) return emptySet()
+            val advertised = runCatching { characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_STREAM_USE_CASES)?.toSet() }
+                .getOrNull().orEmpty()
+            return if (streamUseCasesApplicable(Build.VERSION.SDK_INT, capabilities.toSet(), advertised, highSpeed = false)) {
+                advertised.filterTo(HashSet()) { it < StreamUseCase.VENDOR_BASE }
+            } else emptySet()
+        }
+
         const val DEFAULT_TARGET_FPS = 30
         private const val RECORDER_LEVEL_INTERVAL_MS = 100L
         internal const val MIME_AVC = "video/avc"

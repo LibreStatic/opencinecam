@@ -48,6 +48,19 @@ class CameraCapabilityAuditTest {
         assertEquals(AppFeatureStatus.PARTIAL, audit.of(AppFeature.SENSOR_CLOCK).status)
     }
 
+    @Test fun streamUseCasesReportAdvertisedAppliedAndRefused() {
+        val bare = camera()
+        assertEquals(AppFeatureStatus.UNAVAILABLE, auditCameraCapabilities(bare).of(AppFeature.STREAM_USE_CASES).status)
+        val razr = bare.copy(streamUseCases = setOf(0L, 1L, 2L, 3L, 4L, 5L, 65536L))
+        assertEquals(AppFeatureFinding(AppFeature.STREAM_USE_CASES, AppFeatureStatus.ACTIVE,
+            "PREVIEW · STILL_CAPTURE · VIDEO_RECORD · PREVIEW_VIDEO_STILL · VIDEO_CALL"),
+            streamUseCaseFinding(AppFeature.STREAM_USE_CASES, razr, rejected = false, applied = false))
+        assertTrue(streamUseCaseFinding(AppFeature.STREAM_USE_CASES, razr, rejected = false, applied = true).detail.endsWith("· applied"))
+        val refused = streamUseCaseFinding(AppFeature.STREAM_USE_CASES, razr, rejected = true, applied = false)
+        assertEquals(AppFeatureStatus.PARTIAL, refused.status)
+        assertTrue(refused.detail.endsWith("DEFAULT (refused)"))
+    }
+
     @Test fun manualSensorReportsItsRanges() {
         val audit = auditCameraCapabilities(camera(exposure = ExposureCapabilities(
             manual = true, isoRange = 50..6400, timeRangeNs = 125_000L..30_000_000_000L,

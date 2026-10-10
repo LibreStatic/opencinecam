@@ -806,6 +806,8 @@
     <string name="caps_usage_flash">Photo flash modes and, where available, flash strength.</string>
     <string name="caps_feature_sensor_clock">Sensor clock</string>
     <string name="caps_usage_sensor_clock">Aligns separate WAV/FLAC audio files with the video through the sensor clock.</string>
+    <string name="caps_feature_stream_use_cases">Stream use cases</string>
+    <string name="caps_usage_stream_use_cases">Tells the camera what each stream is for (preview, still, video), so the HAL can tune its pipeline. Falls back to defaults if refused.</string>
     <string name="settings_mode">Mode</string>
     <string name="photo_format_label">Format</string>
     <string name="pro_shutter_unit">Shutter unit</string>
