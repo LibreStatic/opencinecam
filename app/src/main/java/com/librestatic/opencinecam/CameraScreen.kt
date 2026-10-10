@@ -299,11 +299,11 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
     val settingsStateHolder = rememberSaveableStateHolder()
 
-    BackHandler(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN) {
+    val sectionBack = rememberPredictiveBack(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN) {
         section = AppSection.CAPTURE
     }
 
-    BackHandler(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
+    val pageBack = rememberPredictiveBack(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
         settingsPage = SettingsPage.MAIN
     }
 
@@ -371,6 +371,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             )
             }
         } else {
+            // The capture surface binds the camera, so it is not composed under the gesture: the shrinking shell reveals the background.
+            Box(Modifier.fillMaxSize().predictiveBackPreview(sectionBack).background(MaterialTheme.colorScheme.background)) {
             AppShell(section, foldState.hinge, onSelect = {
                 settingsPage = SettingsPage.MAIN
                 section = it
@@ -385,6 +387,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                         playbackSettings = settings.playback,
                         onPlaybackSettings = { playback -> settingsRepository.update { it.copy(playback = playback) } })
                     AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
                         AboutScreen(
                             onBack = { settingsPage = SettingsPage.MAIN },
                             onReplayTour = {
@@ -396,13 +399,16 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                                 onboardingDone = false
                             },
                         )
+                        }
                     } else if (settingsPage == SettingsPage.CAPABILITIES) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
                         CameraCapabilitiesScreen(
                             cameras = state.cameras,
                             activeCameraId = state.selectedCameraId,
                             onBack = { settingsPage = SettingsPage.MAIN },
                             liveState = state,
                         )
+                        }
                     } else {
                         settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsScreen(
@@ -420,6 +426,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                     }
                     AppSection.CAPTURE -> Unit
                 }
+            }
             }
         }
     }
