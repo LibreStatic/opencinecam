@@ -877,6 +877,11 @@
     <string name="night_photo_toggle_on">Foto nocturna: activada</string>
     <string name="night_photo_toggle_off">Foto nocturna: desactivada</string>
     <string name="low_light_fps_title">Tasa de cuadros automática con poca luz</string>
-    <string name="low_light_fps_help">Baja la tasa de cuadros con poca luz para lograr una imagen más brillante. Déjala desactivada para grabación profesional: la cadencia se mantiene fija. Si la activas, los archivos pueden tener una tasa de cuadros variable. Solo en VIDEO normal; no se usa en LOG, HLG, alta velocidad ni timelapse.</string>
+    <string name="low_light_fps_help">Baja la tasa de cuadros con poca luz para lograr una imagen más brillante. Déjala desactivada para grabación profesional: la cadencia se mantiene fija. Si la activas, los archivos pueden tener una tasa de cuadros variable. Solo en VIDEO normal; no se usa en LOG, HLG, alta velocidad ni timelapse. Si la activas, tiene prioridad sobre FPS LOCK.</string>
     <string name="low_light_fps_mode_note">Solo se aplica a VIDEO normal. En este modo la tasa de cuadros se mantiene fija.</string>
+    <string name="fps_lock_title">Bloqueo de cadencia (FPS LOCK)</string>
+    <string name="fps_lock_help">Con poca luz mantiene la tasa de cuadros fijando el obturador en 1/fps: la imagen se oscurece en lugar de que baje la tasa de cuadros. Si lo desactivas, la cámara puede bajar la tasa de cuadros en la oscuridad. Solo en VIDEO, LOG y HLG, con exposición automática; la tasa de cuadros automática con poca luz tiene prioridad si está activada.</string>
+    <string name="fps_lock_toggle_on">Bloqueo de FPS: activado</string>
+    <string name="fps_lock_toggle_off">Bloqueo de FPS: desactivado</string>
+    <string name="fps_lock_toggle_holding">Bloqueo de FPS: activado, obturador fijo en 1/fps</string>
 </resources>

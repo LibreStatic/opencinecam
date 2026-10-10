@@ -93,6 +93,7 @@ Outputs and logs:
 |---|---|---|
 | `CapturePortrait` | `AdaptiveCaptureChrome` | photo, previewing, with the histogram |
 | `CaptureNightSuggested` / `CaptureNightOn` | `AdaptiveCaptureChrome` | photo in Auto on a camera with the night extension, the scene dark: the quick toggle (`capture-night-toggle`) offered beside the lock keys, or engaged (highlighted) |
+| `CaptureFpsLock` / `CaptureFpsLockHolding` | `AdaptiveCaptureChrome` | video on a camera with exposure-time priority: the FPS LOCK key (`capture-fps-lock`) beside the lock keys, on, or amber while it is holding the shutter at 1/fps |
 | `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23; `click tag=recording-reveal-surface` reveals the chrome |
 | `CaptureLandscape` | `AdaptiveCaptureChrome` | video, previewing (use `--device landscape` for the side rails) |
 | `CaptureSheetWb` / `CaptureSheetFocus` | `AdaptiveCaptureChrome` | the white balance or focus panel open (focus marks A and B) |

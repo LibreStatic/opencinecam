@@ -116,6 +116,8 @@ data class CameraSettings(
     val nightPhotoMode: com.librestatic.opencinecam.camera.NightPhotoMode = com.librestatic.opencinecam.camera.NightPhotoMode.AUTO,
     /** Device-local: lets the camera HAL lower the frame rate in low light (regular VIDEO only). Off keeps a fixed cadence. */
     val lowLightAutoFps: Boolean = false,
+    /** Device-local FPS LOCK: in VIDEO, LOG and HLG hold the shutter at 1/fps when auto exposure would stretch the frame time. */
+    val fpsLock: Boolean = true,
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
     /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
     val zeroShutterLag: Boolean = true,
@@ -433,6 +435,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             else com.librestatic.opencinecam.camera.NightPhotoMode.AUTO,
         ),
         lowLightAutoFps = preferences.getBoolean(KEY_LOW_LIGHT_FPS, false),
+        fpsLock = preferences.getBoolean(KEY_FPS_LOCK, true),
         torchStrengthLevel = preferences.getInt(KEY_TORCH_STRENGTH, 0).takeIf { it > 0 },
         zebraEnabled = preferences.getBoolean("zebra-enabled", false),
         peakingEnabled = preferences.getBoolean("peaking-enabled", false),
@@ -633,6 +636,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putInt(KEY_PHOTO_QUALITY, settings.photoQuality)
             .putString(KEY_NIGHT_PHOTO_MODE, settings.nightPhotoMode.name)
             .putBoolean(KEY_LOW_LIGHT_FPS, settings.lowLightAutoFps)
+            .putBoolean(KEY_FPS_LOCK, settings.fpsLock)
             .putString(KEY_PHOTO_FLASH, settings.photoFlash.mode.name)
             .putInt(KEY_PHOTO_FLASH_STRENGTH, settings.photoFlash.strength ?: 0)
             .putInt(KEY_TORCH_STRENGTH, settings.torchStrengthLevel ?: 0)
@@ -878,6 +882,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_NIGHT_PHOTO = "night-photo"
         const val KEY_NIGHT_PHOTO_MODE = "night-photo-mode"
         const val KEY_LOW_LIGHT_FPS = "video-low-light-fps"
+        const val KEY_FPS_LOCK = "video-fps-lock"
         const val KEY_PHOTO_FLASH = "photo-flash-mode"
         const val KEY_PHOTO_FLASH_STRENGTH = "photo-flash-strength"
         const val KEY_TORCH_STRENGTH = "torch-strength-level"

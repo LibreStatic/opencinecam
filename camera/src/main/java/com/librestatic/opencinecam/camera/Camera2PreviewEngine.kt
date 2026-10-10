@@ -161,6 +161,10 @@ data class Camera2CameraDescriptor(
         return physical.values.any { size in it }
     }
 
+    /** FPS LOCK can hold the shutter at 1/fps through Android 16 exposure-time priority; see [CadenceGuard]. */
+    val fpsLockSupported: Boolean
+        get() = CadenceGuard.supported(Build.VERSION.SDK_INT, exposureCapabilities.priorities)
+
     val supportsOpenCineLog: Boolean
         get() = logProfiles.isNotEmpty()
 
@@ -332,6 +336,8 @@ interface Camera2PreviewListener {
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
+    /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
+    fun onCadenceGuardChanged(engaged: Boolean) = Unit
     fun onAfLockChanged(state: LockState) = Unit
     fun onFocusPullFinished() = Unit
     fun onFocusPullStarted(targetDiopters: Float) = Unit
@@ -677,6 +683,14 @@ class Camera2PreviewEngine(
     private var requestedTargetFps = DEFAULT_TARGET_FPS
     /** Low-light auto frame rate is on for the active graph; every other graph sends an explicit 0. */
     @Volatile private var dynamicFpsOn = false
+    /** FPS LOCK is wanted for the active graph (the service only asks in VIDEO, LOG and HLG). */
+    @Volatile private var fpsLockRequested = false
+    private val cadenceGuard = CadenceGuard()
+    /** The guard's verdict as applied to the repeating request; written on the camera executor only. */
+    @Volatile private var cadenceEngaged = false
+    /** A re-issue was refused: stay out of the way until the next session or toggle. */
+    private var cadenceFaulted = false
+    @Volatile private var timelapseTake = false
     private var activeVideoProfile: Camera2VideoProfile? = null
     private var activeLogProfile: Camera2LogProfile? = null
     private var previousSensorTimestampNs: Long? = null
@@ -761,6 +775,7 @@ class Camera2PreviewEngine(
         stillSize: Size? = null,
         nightExtension: Boolean = false,
         lowLightAutoFps: Boolean = false,
+        fpsLock: Boolean = false,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -776,6 +791,7 @@ class Camera2PreviewEngine(
             this.listener = listener
             // closeResources released both locks; a UI still showing them would toggle a no-op.
             listener.onAeLockChanged(false)
+            listener.onCadenceGuardChanged(false)
             listener.onAfLockChanged(LockState.OFF)
             // A listener that joins while the scopes are suspended (or missed a resume) learns it once.
             notifyAnalysisSuspension(listener)
@@ -819,6 +835,7 @@ class Camera2PreviewEngine(
                     ?: preferredTargetFps(supportedFps)
                 this.previousSensorTimestampNs = null
                 this.effectiveFps = null
+                this.fpsLockRequested = fpsLock
                 this.dynamicFpsOn = DynamicFps.enabled(
                     lowLightAutoFps && descriptor.lowLightAutoFps,
                     // The service offers it for regular VIDEO only; LOG/HLG and constrained HFR are refused here too.
@@ -1093,6 +1110,7 @@ class Camera2PreviewEngine(
         val pipeline = logPipeline ?: return false
         if (recording || session == null || !gpuPreviewEnabled) return false
         val cameraGeneration = generation
+        timelapseTake = timelapse != null
         pipeline.onFirstRecordedFrame = { timestampNs ->
             if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingFirstFrame(timestampNs)
         }
@@ -1125,6 +1143,7 @@ class Camera2PreviewEngine(
                     lastCaptureEpochReport = evidence?.avTiming
                     lastRecordingLutEvidence = evidence?.recordingLut
                     recording = false
+                    timelapseTake = false
                     reportRecordingStopped(success, pipeline.recordingFileRetirement())
                 }
             })
@@ -2549,6 +2568,62 @@ class Camera2PreviewEngine(
                     listener?.onAeLockChanged(false)
                     listener?.onControlRejected("ae-lock-failed", it.message ?: "AE lock update failed.")
                 }
+        }
+    }
+
+    /**
+     * Turns FPS LOCK on or off for the live graph without restarting the session. The service only
+     * asks for it in VIDEO, LOG and HLG. Turning it off while the shutter is held puts the
+     * request back to plain automatic exposure; a take in progress keeps recording.
+     */
+    fun setFpsLock(enabled: Boolean) {
+        cameraExecutor.execute {
+            if (fpsLockRequested == enabled) return@execute
+            fpsLockRequested = enabled
+            cadenceGuard.reset()
+            cadenceFaulted = false
+            if (!enabled && cadenceEngaged) setCadenceEngaged(false, null, null)
+        }
+    }
+
+    /** True when the held shutter would be sent now: wanted, engaged and every precondition still true. */
+    private fun cadenceHoldActive(): Boolean = cadenceEngaged && cadenceGuardEligible()
+
+    private fun cadenceGuardEligible(): Boolean {
+        val descriptor = activeDescriptor ?: return false
+        val videoGraph = logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null
+        val autoExposure = requestedIso == null && requestedExposureNs == null &&
+            (professionalExposure?.mode ?: ExposureMode.AUTO) == ExposureMode.AUTO
+        return fpsLockRequested && descriptor.fpsLockSupported && videoGraph && autoExposure && !aeLockActive &&
+            !dynamicFpsOn && !isHighSpeedSession() && !timelapseTake && nightSession == null
+    }
+
+    /** Feeds the cadence guard from a repeating-request result; re-issues the request when the verdict flips. */
+    private fun driveCadenceGuard(result: TotalCaptureResult, sensorTimestampNs: Long?) {
+        if (!cadenceGuardEligible()) {
+            if (cadenceEngaged) setCadenceEngaged(false, null, null)
+            cadenceGuard.reset()
+            return
+        }
+        if (cadenceFaulted || sensorTimestampNs == null) return
+        val frameDuration = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
+        val iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+        val verdict = cadenceGuard.update(sensorTimestampNs, requestedTargetFps, frameDuration, iso)
+        if (verdict != cadenceEngaged) setCadenceEngaged(verdict, frameDuration, iso)
+    }
+
+    private fun setCadenceEngaged(engaged: Boolean, frameDurationNs: Long?, iso: Int?) {
+        if (cadenceEngaged == engaged) return
+        cadenceEngaged = engaged
+        Log.i(CADENCE_TAG, (if (engaged) "engaged" else "released") +
+            ": frameDuration=${frameDurationNs?.let { "%.2f ms".format(it / 1e6) }} iso=$iso target=${requestedTargetFps}fps")
+        listener?.onCadenceGuardChanged(engaged)
+        if (!reapplyRepeating()) {
+            // The session kept its previous request: report what is really in force and stop trying.
+            cadenceEngaged = !engaged
+            cadenceFaulted = true
+            cadenceGuard.reset()
+            listener?.onCadenceGuardChanged(cadenceEngaged)
         }
     }
 
@@ -4139,6 +4214,7 @@ class Camera2PreviewEngine(
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
                     auditCaptureResult(armedSession, result, sensorTimestamp)
+                    driveCadenceGuard(result, sensorTimestamp)
                     reportTapFocusResult(request, result)
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
@@ -4180,7 +4256,8 @@ class Camera2PreviewEngine(
                                     null -> null
                                     else -> if (Build.VERSION.SDK_INT >= 36) when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_PRIORITY_MODE)) {
                                         CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_SENSITIVITY_PRIORITY -> ExposureMode.ISO_PRIORITY
-                                        CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY -> ExposureMode.SHUTTER_PRIORITY
+                                        CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY ->
+                                            if (cadenceHoldActive()) ExposureMode.AUTO else ExposureMode.SHUTTER_PRIORITY
                                         CaptureRequest.CONTROL_AE_PRIORITY_MODE_OFF -> ExposureMode.AUTO
                                         else -> if (professionalExposure?.mode in setOf(ExposureMode.ISO_PRIORITY, ExposureMode.SHUTTER_PRIORITY)) null else ExposureMode.AUTO
                                     } else ExposureMode.AUTO
@@ -4370,6 +4447,22 @@ class Camera2PreviewEngine(
         }
     }
 
+    /**
+     * FPS LOCK engaged: AE stays on and still picks the ISO, but the shutter is held a hair under the
+     * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
+     */
+    private fun applyCadenceHold(builder: CaptureRequest.Builder) {
+        val frameDurationNs = 1_000_000_000L / requestedTargetFps.coerceAtLeast(1)
+        val range = activeDescriptor?.exposureCapabilities?.timeRangeNs
+        val exposureNs = (frameDurationNs - 100_000L).let { if (range != null) it.coerceIn(range.first, range.last) else it }
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        if (Build.VERSION.SDK_INT >= 36) {
+            builder.set(CaptureRequest.CONTROL_AE_PRIORITY_MODE, CaptureRequest.CONTROL_AE_PRIORITY_MODE_SENSOR_EXPOSURE_TIME_PRIORITY)
+        }
+        builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposureNs)
+        builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs)
+    }
+
     private fun applyManualControls(
         builder: CaptureRequest.Builder,
         defaultAfMode: Int = if (recording || logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null)
@@ -4421,6 +4514,7 @@ class Camera2PreviewEngine(
                 }
             }
         }
+        if (cadenceHoldActive()) applyCadenceHold(builder)
         applyLowLightBoost(
             builder,
             pro?.mode ?: if (iso != null && exposure != null) ExposureMode.MANUAL else ExposureMode.AUTO,
@@ -5584,6 +5678,10 @@ class Camera2PreviewEngine(
 
     private fun closeResources() {
         pendingPreviewStartedReceipt = null
+        cadenceGuard.reset()
+        cadenceEngaged = false
+        cadenceFaulted = false
+        timelapseTake = false
         nightSession?.close()
         nightSession = null
         retireGraphAudit()
@@ -5907,6 +6005,7 @@ class Camera2PreviewEngine(
         private const val MOTOROLA_CURRENT_MODE_KEY = "com.lenovo.moto.clientapp.current_mode"
         private const val MOTOROLA_SLOW_MOTION_MODE = 3
         private const val TAG = "Camera2PreviewEngine"
+        private const val CADENCE_TAG = "CadenceGuard"
     }
 }
 

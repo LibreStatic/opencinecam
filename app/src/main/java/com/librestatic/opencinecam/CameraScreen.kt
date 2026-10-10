@@ -2803,6 +2803,24 @@ private fun LockToggles(
                 )
             } else Spacer(Modifier.size(48.dp))
         }
+        // FPS LOCK (video modes): lock closed while on; amber while it is actually holding the shutter at 1/fps.
+        if (fpsLockKeyVisible(state)) {
+            val on = settings.fpsLock
+            val holding = on && state.fpsLockHolding
+            LockButton(
+                label = stringResource(when { holding -> R.string.fps_lock_toggle_holding; on -> R.string.fps_lock_toggle_on; else -> R.string.fps_lock_toggle_off }),
+                shortLabel = stringResource(R.string.fps_lock_short),
+                active = on && !holding,
+                pending = holding,
+                enabled = !state.captureControlsLocked,
+                testTag = "capture-fps-lock",
+                glyph = if (on) CineIcon.LOCK else CineIcon.UNLOCK,
+                onClick = {
+                    haptics.perform(if (on) HapticEvent.LockOff else HapticEvent.LockOn)
+                    onSettingsChanged(settings.copy(fpsLock = !on))
+                },
+            )
+        }
         if (state.aeLockSupported) {
             LockButton(
                 label = stringResource(R.string.ae_lock),
@@ -4127,6 +4145,9 @@ internal fun SettingsContent(
         }
         if ("low-light-fps" in visibleIds && state.descriptor?.lowLightAutoFps == true) settingsCard("low-light-fps") {
             LowLightFpsSettings(state, settings, onSettingsChange)
+        }
+        if ("fps-lock" in visibleIds && state.descriptor?.fpsLockSupported == true) settingsCard("fps-lock") {
+            FpsLockSettings(settings, onSettingsChange)
         }
         if ("night-photo" in visibleIds && state.descriptor?.nightExtension != null) settingsCard("night-photo") {
             NightPhotoSettings(state, settings, onSettingsChange)

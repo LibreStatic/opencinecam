@@ -877,6 +877,11 @@
     <string name="night_photo_toggle_on">Photo de nuit : activée</string>
     <string name="night_photo_toggle_off">Photo de nuit : désactivée</string>
     <string name="low_light_fps_title">Cadence automatique en basse lumière</string>
-    <string name="low_light_fps_help">Réduit la cadence d\'images en basse lumière pour obtenir une image plus lumineuse. Laissez-la désactivée pour l\'enregistrement professionnel : la cadence reste fixe. Activée, les fichiers peuvent avoir une cadence variable. VIDÉO normale uniquement ; non utilisée en LOG, HLG, haute vitesse ou accéléré.</string>
+    <string name="low_light_fps_help">Réduit la cadence d\'images en basse lumière pour obtenir une image plus lumineuse. Laissez-la désactivée pour l\'enregistrement professionnel : la cadence reste fixe. Activée, les fichiers peuvent avoir une cadence variable. VIDÉO normale uniquement ; non utilisée en LOG, HLG, haute vitesse ou accéléré. Si elle est activée, elle l\'emporte sur FPS LOCK.</string>
     <string name="low_light_fps_mode_note">S\'applique uniquement à la VIDÉO normale. La cadence reste fixe dans ce mode.</string>
+    <string name="fps_lock_title">Verrouillage de cadence (FPS LOCK)</string>
+    <string name="fps_lock_help">Avec peu de lumière, conserve la cadence en maintenant l\'obturateur à 1/fps : l\'image s\'assombrit au lieu que la cadence baisse. Désactivé, la caméra peut baisser la cadence dans l\'obscurité. Seulement en VIDEO, LOG et HLG, avec exposition automatique ; la cadence automatique en basse lumière l\'emporte si elle est activée.</string>
+    <string name="fps_lock_toggle_on">Verrouillage FPS : activé</string>
+    <string name="fps_lock_toggle_off">Verrouillage FPS : désactivé</string>
+    <string name="fps_lock_toggle_holding">Verrouillage FPS : activé, obturateur maintenu à 1/fps</string>
 </resources>

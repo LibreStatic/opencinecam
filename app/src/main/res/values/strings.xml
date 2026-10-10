@@ -882,6 +882,12 @@
     <string name="night_photo_toggle_on">Night photo: on</string>
     <string name="night_photo_toggle_off">Night photo: off</string>
     <string name="low_light_fps_title">Low-light auto frame rate</string>
-    <string name="low_light_fps_help">Lowers the frame rate in low light so the image is brighter. Leave it off for professional recording: the cadence stays fixed. When it is on, files may become variable frame rate. Regular VIDEO only; not used for LOG, HLG, high-speed or timelapse.</string>
+    <string name="low_light_fps_help">Lowers the frame rate in low light so the image is brighter. Leave it off for professional recording: the cadence stays fixed. When it is on, files may become variable frame rate. Regular VIDEO only; not used for LOG, HLG, high-speed or timelapse. When it is on, it overrides FPS LOCK.</string>
     <string name="low_light_fps_mode_note">Only applies to regular VIDEO. The frame rate stays fixed in this mode.</string>
+    <string name="fps_lock_title">FPS LOCK (cadence lock)</string>
+    <string name="fps_lock_help">With little light, keeps the frame rate by holding the shutter at 1/fps: the image gets darker instead of the frame rate dropping. Turn it off to let the camera lower the frame rate in the dark. Only in VIDEO, LOG and HLG, with automatic exposure; the low-light auto frame rate overrides it when on.</string>
+    <string name="fps_lock_toggle_on">FPS lock: on</string>
+    <string name="fps_lock_toggle_off">FPS lock: off</string>
+    <string name="fps_lock_toggle_holding">FPS lock: on, holding the shutter at 1/fps</string>
+    <string name="fps_lock_short" translatable="false">FPS</string>
 </resources>

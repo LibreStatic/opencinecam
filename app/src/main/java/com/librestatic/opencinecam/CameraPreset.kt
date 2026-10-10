@@ -214,6 +214,7 @@ object CameraPresetCodec {
         zeroShutterLag = current.zeroShutterLag,
         nightPhotoMode = current.nightPhotoMode,
         lowLightAutoFps = current.lowLightAutoFps,
+        fpsLock = current.fpsLock,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

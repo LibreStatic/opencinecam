@@ -141,6 +141,21 @@ fun CaptureNightSuggested() = CaptureChrome(driverNightState(dark = true, engage
 @Composable
 fun CaptureNightOn() = CaptureChrome(driverNightState(dark = true, engaged = true))
 
+/** A back camera whose HAL honours exposure-time priority (Android 16), so the FPS LOCK key can exist. */
+private fun driverFpsLockState(holding: Boolean): CameraUiState {
+    val camera = DriverCamera.copy(exposureCapabilities = DriverCamera.exposureCapabilities.copy(
+        priorities = setOf(com.librestatic.opencinecam.camera.ExposureMode.ISO_PRIORITY, com.librestatic.opencinecam.camera.ExposureMode.SHUTTER_PRIORITY)))
+    return driverCaptureState(CaptureMode.VIDEO).copy(cameras = listOf(camera), fpsLockHolding = holding)
+}
+
+/** Video with FPS LOCK on and the frame rate healthy: the key (`capture-fps-lock`) sits beside AE/AF. */
+@Composable
+fun CaptureFpsLock() = CaptureChrome(driverFpsLockState(holding = false))
+
+/** Video with FPS LOCK holding the shutter at 1/fps in the dark: the key is amber. */
+@Composable
+fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
+
 /** Capture chrome while a video take is recording at 01:23. */
 @Composable
 fun CaptureRecording() = CaptureChrome(
