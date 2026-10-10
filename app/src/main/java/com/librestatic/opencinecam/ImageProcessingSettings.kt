@@ -100,19 +100,22 @@ private fun PictureControls(state: CameraUiState, caps: PictureControlCapabiliti
         }
         caps.sharpness?.let { range ->
             PictureControlSlider(stringResource(R.string.picture_sharpness), "picture-sharpness", range, selected.sharpness,
-                pictureControlBlock(true, state.selectedMode, hfr, edgeMode)) { onChange(selected.copy(sharpness = it)) }
+                pictureControlBlock(true, state.selectedMode, hfr, edgeMode),
+                reportedDefault = templateSharpness(state.pictureControlReadback)) { onChange(selected.copy(sharpness = it)) }
         }
         SettingsHelp(stringResource(R.string.picture_help))
     }
 }
 
 @Composable
-private fun PictureControlSlider(title: String, tag: String, range: PictureControlRange, value: Int?, block: PictureControlBlock, onChange: (Int?) -> Unit) {
-    val shown = range.snap(value ?: range.default)
+private fun PictureControlSlider(title: String, tag: String, range: PictureControlRange, value: Int?, block: PictureControlBlock,
+    reportedDefault: Int? = null, onChange: (Int?) -> Unit) {
+    val deviceValue = pictureControlDeviceValue(range, reportedDefault)
+    val shown = range.snap(value ?: deviceValue)
     var draft by remember(shown, range) { mutableFloatStateOf(shown.toFloat()) }
     val current = range.snap(draft.toInt())
     val label = when {
-        value == null && current == range.default -> stringResource(
+        value == null && current == deviceValue -> stringResource(
             if (range.defaultAdvertised) R.string.picture_value_default else R.string.picture_value_device, title, current)
         else -> stringResource(R.string.picture_value, title, current)
     }
@@ -135,6 +138,17 @@ internal fun pictureControlBlock(sharpness: Boolean, mode: CaptureMode, hfr: Boo
     sharpness && !sharpnessEffective(edgeMode) -> PictureControlBlock.EDGE_OFF
     else -> PictureControlBlock.NONE
 }
+
+/**
+ * The value the slider rests on with no selection: the advertised default, else what the camera
+ * reports while nothing is submitted (the Razr's template sharpness is 2, not the range midpoint).
+ */
+internal fun pictureControlDeviceValue(range: PictureControlRange, reported: Int?): Int =
+    if (range.defaultAdvertised) range.default else reported?.takeIf { it in range.min..range.max }?.let(range::snap) ?: range.default
+
+/** Sharpness the template applies: the reported value of a frame whose request carried none. */
+internal fun templateSharpness(readback: PictureControlReadback?): Int? =
+    readback?.takeIf { it.submittedSharpness == null }?.reportedSharpness
 
 /** The stored value for a slider position: the advertised device default clears the override. */
 internal fun pictureControlSelection(range: PictureControlRange, position: Int): Int? =
