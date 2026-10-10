@@ -22,9 +22,11 @@ class CadenceGuard(
     private val releaseIsoFraction: Double = DEFAULT_RELEASE_ISO_FRACTION,
     private val releaseNs: Long = DEFAULT_RELEASE_NS,
     private val maxGapNs: Long = DEFAULT_MAX_GAP_NS,
+    private val settleNs: Long = DEFAULT_SETTLE_NS,
 ) {
     private var engagedState = false
     private var referenceIso = 0
+    private var engagedAtNs = 0L
     private var pendingSinceNs: Long? = null
     private var lastSampleNs: Long? = null
 
@@ -38,6 +40,12 @@ class CadenceGuard(
         lastSampleNs = nowNs
         if (last != null && nowNs - last > maxGapNs) pendingSinceNs = null
         if (engagedState) {
+            // The first results after engaging still come from requests sent before the hold: they say
+            // nothing about the held ISO, so they neither seed the reference nor count towards release.
+            if (nowNs - engagedAtNs < settleNs) {
+                pendingSinceNs = null
+                return true
+            }
             if (iso > referenceIso) referenceIso = iso
             if (iso.toDouble() > referenceIso * releaseIsoFraction) {
                 pendingSinceNs = null
@@ -57,7 +65,9 @@ class CadenceGuard(
             val since = pendingSinceNs ?: nowNs.also { pendingSinceNs = it }
             if (nowNs - since >= engageNs) {
                 engagedState = true
-                referenceIso = iso
+                // Not seeded from this sample: it is the automatic exposure's ISO, not the held one.
+                referenceIso = 0
+                engagedAtNs = nowNs
                 pendingSinceNs = null
             }
         }
@@ -79,9 +89,17 @@ class CadenceGuard(
         const val DEFAULT_RELEASE_ISO_FRACTION = 0.5
         const val DEFAULT_RELEASE_NS = 1_000_000_000L
         const val DEFAULT_MAX_GAP_NS = 1_000_000_000L
+        const val DEFAULT_SETTLE_NS = 400_000_000L
 
         /** Android 16 exposure-time priority is what lets AE pick the ISO while the shutter is held. */
-        fun supported(sdkInt: Int, priorities: Set<ExposureMode>): Boolean =
+        fun nativePriority(sdkInt: Int, priorities: Set<ExposureMode>): Boolean =
             sdkInt >= 36 && ExposureMode.SHUTTER_PRIORITY in priorities
+
+        /**
+         * Without native priority the hold is emulated: manual exposure at 1/fps with an ISO a software
+         * loop steers (see [CadenceIsoLoop]). That needs manual sensor control with valid ranges.
+         */
+        fun supported(sdkInt: Int, caps: ExposureCapabilities): Boolean =
+            nativePriority(sdkInt, caps.priorities) || caps.supports(ExposureMode.MANUAL)
     }
 }

@@ -55,6 +55,8 @@ data class ExposureCapabilities(
     val priorities: Set<ExposureMode> = emptySet(),
     val antibanding: Set<Antibanding> = emptySet(),
     val meteringModes: Set<ExposureMetering> = emptySet(),
+    /** CONTROL_POST_RAW_SENSITIVITY_BOOST range when the request key is available (100 = no boost). */
+    val postRawBoostRange: IntRange? = null,
 ) {
     private val validIso get() = isoRange?.let { it.first > 0 && it.last >= it.first } == true
     private val validTime get() = timeRangeNs?.let { it.first > 0 && it.last >= it.first } == true
