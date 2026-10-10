@@ -119,6 +119,17 @@ internal fun stackedPaneDock(paneWidth: Float, paneHeight: Float, endWidth: Floa
     return if (under.width * under.height > beside.width * beside.height) PaneDock.BOTTOM else PaneDock.END
 }
 
+/**
+ * Height cap of the stacked F-key column, or null for none. A column whose natural height fits
+ * [availableDp] (within 1 dp of rounding) is left alone and shows no scroll arrow; one that does
+ * not is cut to whole [pitchDp] keys under the [lockRowDp] row, so no key shows half.
+ */
+internal fun keyColumnCapDp(naturalDp: Float, availableDp: Float, pitchDp: Float, lockRowDp: Float): Float? {
+    if (naturalDp <= availableDp + 1f) return null
+    val whole = ((availableDp - lockRowDp) / pitchDp).toInt().coerceAtLeast(0)
+    return lockRowDp + pitchDp * whole
+}
+
 /** Width of a stacked side pane in a window [windowWidth] wide. */
 internal fun stackedSidePaneWidth(windowWidth: Float): Float =
     minOf(SIDE_PANE_MAX_WIDTH_DP, windowWidth * SIDE_PANE_MAX_FRACTION)
