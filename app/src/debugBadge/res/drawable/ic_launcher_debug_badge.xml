@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Local/debug-only launcher badge: red banner with white "DEBUG" so sideloaded builds
+     are distinguishable from the Play Store install. Never packaged in release. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFD32F2F"
+        android:pathData="M29.5,59.5H78.5A2.5,2.5 0,0 1,81,62.0V74.0A2.5,2.5 0,0 1,78.5,76.5H29.5A2.5,2.5 0,0 1,27,74.0V62.0A2.5,2.5 0,0 1,29.5,59.5Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30.34,62.80H32.42V73.20H30.34ZM32.42,62.80H36.06V64.88H32.42ZM32.42,71.12H36.06V73.20H32.42ZM36.06,64.36H38.14V71.64H36.06ZM40.22,62.80H42.30V73.20H40.22ZM42.30,62.80H48.02V64.88H42.30ZM42.30,66.96H46.98V69.04H42.30ZM42.30,71.12H48.02V73.20H42.30ZM50.10,62.80H52.18V73.20H50.10ZM52.18,62.80H55.82V64.88H52.18ZM52.18,66.96H55.82V69.04H52.18ZM52.18,71.12H55.82V73.20H52.18ZM55.82,64.36H57.90V67.22H55.82ZM55.82,68.78H57.90V71.64H55.82ZM59.98,62.80H62.06V73.20H59.98ZM65.70,62.80H67.78V73.20H65.70ZM62.06,71.12H65.70V73.20H62.06ZM69.86,64.36H71.94V71.64H69.86ZM71.94,62.80H77.66V64.88H71.94ZM71.94,71.12H75.58V73.20H71.94ZM75.58,66.96H77.66V71.64H75.58ZM73.76,66.96H75.58V69.04H73.76Z" />
+</vector>
