@@ -139,3 +139,19 @@ App behaviour (`DynamicFps.kt`, setting "Low-light auto frame rate", key `video-
 Verify: record in a dim room with the switch on, then `adb shell dumpsys media.camera` and read "Last request sent" for the keys above; `android.sensor.frameDuration` should read ~33.3 ms in dim light and ~16.7 ms in bright light or with the switch off.
 
 Razr result 2026-10-10 with the switch off: `IQdynamicFPS_enable` = 0 reaches the HAL, but in a very dark room (ISO ~12000) the app still records ~33 fps at 4K60 in VIDEO, HLG and HDR10. The capture result reads exposureTime 30.0 ms and frameDuration 30.18 ms although aeTargetFpsRange is [60,60]: the HAL's auto exposure stretches the exposure past the frame time instead of raising the gain further. This is not the dynamic FPS feature. The following did not change it: sending `dynamicFPSConfig` = [2, 60, 60] per request, `com.lenovo.moto.clientapp.is_motcamera2` = 1 with `current_mode` = 1, and an exposure-time hint. Shutter priority (the app's manual-AE emulation, 1/183) held 16.67 ms frames, so true 60 fps. In comparable light the stock camera ran 15.6 ms at ISO 13653.
+
+### FPS LOCK (cadence lock)
+
+Setting "FPS LOCK" (`video-fps-lock`, device-local, on by default) plus a quick key beside AE/AF (`capture-fps-lock`, label FPS) in VIDEO, LOG and HLG. It answers the stretch above without fixing the shutter permanently, which would overexpose in bright light.
+
+- Needs Android 16 (API 36) and `SHUTTER_PRIORITY` in the camera's advertised `CONTROL_AE_AVAILABLE_PRIORITY_MODES` (`Camera2CameraDescriptor.fpsLockSupported`); otherwise the key and the setting are hidden.
+- `CadenceGuard` (pure, in `:camera`) reads every repeating-request result: SENSOR_FRAME_DURATION and SENSOR_SENSITIVITY. It engages when the frame duration has exceeded 1.08 x (1e9 / target fps) continuously for 250 ms. While engaged it tracks the highest ISO seen and releases when the ISO has stayed at or below 50 % of that for 1 s (light to spare). A gap over 1 s between results drops the pending timers and keeps the verdict. The guard is reset on a camera change, a target fps change, a session restart and when the lock is turned off.
+- It runs only for a video graph (regular VIDEO, or the OCLog LOG/HLG graph, preview and recording) with automatic exposure (no manual ISO/shutter, `professionalExposure` AUTO or none), AE not locked, the low-light auto frame rate off (that setting wins), not constrained high-speed, not a timelapse take.
+- Engaged, the engine re-issues the repeating request on the camera executor without restarting the session (a take keeps recording): `CONTROL_AE_MODE_ON`, `CONTROL_AE_PRIORITY_MODE` = `SENSOR_EXPOSURE_TIME_PRIORITY`, `SENSOR_EXPOSURE_TIME` = frame time - 0.1 ms, `SENSOR_FRAME_DURATION` = 1e9 / target fps. The HAL still picks the ISO, so the image darkens instead of the rate dropping. AE compensation and antibanding are unchanged. Released, the requests are exactly the normal automatic ones. The key turns amber while it is holding.
+
+Verify: record 4K60 in a very dark room with FPS LOCK on, then:
+
+- `adb logcat -s CadenceGuard` shows `engaged: frameDuration=30.xx ms iso=1xxxx target=60fps` once the stretch is seen, and `released: ...` after the room is lit.
+- `adb shell dumpsys media.camera`, "Last request sent": `android.control.aePriorityMode` is exposure-time priority and `android.sensor.exposureTime` ~16.57 ms; the latest result's `android.sensor.frameDuration` is ~16.67 ms.
+- The file is a true 60 fps (no ~33 fps stretch). With the setting off the same scene should show the 30 ms frame duration again.
+- In bright light the key stays white (on, not holding) and no `engaged` line appears.

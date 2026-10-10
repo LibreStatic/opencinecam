@@ -172,6 +172,8 @@ data class CameraUiState(
     val nightExtensionRunning: Boolean = false,
     /** The scene has been dark long enough to offer Night photo (a light index from the capture results). */
     val nightSuggested: Boolean = false,
+    /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. */
+    val fpsLockHolding: Boolean = false,
     /** The operator switched Night on from the capture screen for now (AUTO mode); never persisted. */
     val nightTransientEngaged: Boolean = false,
     /** Night extension processing progress 0..100 while a night still is held; null when unknown or idle. */

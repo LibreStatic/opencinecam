@@ -877,6 +877,11 @@
     <string name="night_photo_toggle_on">Foto notturna: attiva</string>
     <string name="night_photo_toggle_off">Foto notturna: disattiva</string>
     <string name="low_light_fps_title">Frame rate automatico con poca luce</string>
-    <string name="low_light_fps_help">Abbassa il frame rate con poca luce per ottenere un\'immagine più luminosa. Lascialo disattivato per la registrazione professionale: la cadenza resta fissa. Se attivo, i file possono avere frame rate variabile. Solo VIDEO normale; non usato in LOG, HLG, alta velocità o timelapse.</string>
+    <string name="low_light_fps_help">Abbassa il frame rate con poca luce per ottenere un\'immagine più luminosa. Lascialo disattivato per la registrazione professionale: la cadenza resta fissa. Se attivo, i file possono avere frame rate variabile. Solo VIDEO normale; non usato in LOG, HLG, alta velocità o timelapse. Se è attiva, ha la precedenza su FPS LOCK.</string>
     <string name="low_light_fps_mode_note">Si applica solo al VIDEO normale. In questa modalità il frame rate resta fisso.</string>
+    <string name="fps_lock_title">Blocco della cadenza (FPS LOCK)</string>
+    <string name="fps_lock_help">Con poca luce mantiene la frequenza dei fotogrammi tenendo l\'otturatore a 1/fps: l\'immagine si scurisce invece di far scendere la frequenza. Disattivato, la fotocamera può abbassare la frequenza al buio. Solo in VIDEO, LOG e HLG, con esposizione automatica; la frequenza automatica con poca luce ha la precedenza se è attiva.</string>
+    <string name="fps_lock_toggle_on">Blocco FPS: attivo</string>
+    <string name="fps_lock_toggle_off">Blocco FPS: disattivo</string>
+    <string name="fps_lock_toggle_holding">Blocco FPS: attivo, otturatore tenuto a 1/fps</string>
 </resources>

@@ -12,6 +12,7 @@ import com.librestatic.opencinecam.camera.StillImageKind
 import com.librestatic.opencinecam.camera.TimelapseCapture
 import com.librestatic.opencinecam.camera.TimelapseProgress
 
+import com.librestatic.opencinecam.fpsLockActive
 import com.librestatic.opencinecam.lowLightFpsActive
 import com.librestatic.opencinecam.recordingTimecodeJson
 import com.librestatic.opencinecam.camera.RecordingTimecodeReport
@@ -1482,6 +1483,10 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(tapFocusState = state)
         }
 
+        override fun onCadenceGuardChanged(engaged: Boolean) {
+            if (cameraState.value.fpsLockHolding != engaged) cameraState.value = cameraState.value.copy(fpsLockHolding = engaged)
+        }
+
         override fun onAeLockChanged(active: Boolean) {
             cameraState.value = cameraState.value.copy(aeLockActive = active)
         }
@@ -1773,6 +1778,7 @@ class CaptureService : Service() {
                 stillSize = selectedStillSize(),
                 nightExtension = nightExtensionActive(),
                 lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                fpsLock = fpsLockActive(cameraState.value, settings),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1913,6 +1919,7 @@ class CaptureService : Service() {
                 stillSize = selectedStillSize(),
                 nightExtension = nightExtensionActive(),
                 lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                fpsLock = fpsLockActive(cameraState.value, settings),
                 openCineLog = cameraState.value.selectedMode.usesLogGraph,
                 gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                 gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -1944,6 +1951,7 @@ class CaptureService : Service() {
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
                         lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                        fpsLock = fpsLockActive(cameraState.value, settings),
                         openCineLog = cameraState.value.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !cameraState.value.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(cameraState.value.selectedMode),
@@ -2027,6 +2035,7 @@ class CaptureService : Service() {
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
                         lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                        fpsLock = fpsLockActive(cameraState.value, settings),
                         openCineLog = mode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder() && !mode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(mode),
@@ -2102,6 +2111,7 @@ class CaptureService : Service() {
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
                         lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                        fpsLock = fpsLockActive(cameraState.value, settings),
                         openCineLog = current.selectedMode.usesLogGraph,
                         gpuPreview = desiredGpuViewfinder(current.selectedMode) && !current.selectedMode.usesLogGraph,
                         gpuPhotoPreview = photoPreviewMode(current.selectedMode),
@@ -2196,6 +2206,7 @@ class CaptureService : Service() {
                         stillSize = selectedStillSize(),
                         nightExtension = nightExtensionActive(),
                         lowLightAutoFps = lowLightFpsActive(cameraState.value, settings),
+                        fpsLock = fpsLockActive(cameraState.value, settings),
                         openCineLog = true,
                         viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = selectedFps,
@@ -2260,6 +2271,8 @@ class CaptureService : Service() {
             if (timecodeTracker.continuationStorageFailed) cameraState.value = cameraState.value.copy(
                 message = getString(R.string.timecode_continuity_failed), messageTransient = true)
             updateSubjectTarget()
+            // FPS LOCK follows the setting on the live graph, even mid-take: no session restart.
+            if (previous.fpsLock != settings.fpsLock) previewEngine.setFpsLock(fpsLockActive(cameraState.value, settings))
             if (!cameraState.value.structuralSettingsFrozen) {
                 if (cameraState.value.selectedMode == CaptureMode.TIME_LAPSE &&
                     (previous.timelapseWidth != settings.timelapseWidth || previous.timelapseHeight != settings.timelapseHeight)) {

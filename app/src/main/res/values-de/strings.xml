@@ -877,6 +877,11 @@
     <string name="night_photo_toggle_on">Nachtfoto: an</string>
     <string name="night_photo_toggle_off">Nachtfoto: aus</string>
     <string name="low_light_fps_title">Automatische Bildrate bei wenig Licht</string>
-    <string name="low_light_fps_help">Senkt bei wenig Licht die Bildrate, damit das Bild heller wird. Für professionelle Aufnahmen ausgeschaltet lassen: Die Frequenz bleibt konstant. Ist die Option an, können Dateien eine variable Bildrate haben. Nur im normalen VIDEO-Modus; nicht bei LOG, HLG, Hochgeschwindigkeit oder Zeitraffer.</string>
+    <string name="low_light_fps_help">Senkt bei wenig Licht die Bildrate, damit das Bild heller wird. Für professionelle Aufnahmen ausgeschaltet lassen: Die Frequenz bleibt konstant. Ist die Option an, können Dateien eine variable Bildrate haben. Nur im normalen VIDEO-Modus; nicht bei LOG, HLG, Hochgeschwindigkeit oder Zeitraffer. Wenn sie aktiv ist, hat sie Vorrang vor FPS LOCK.</string>
     <string name="low_light_fps_mode_note">Gilt nur für normales VIDEO. In diesem Modus bleibt die Bildrate konstant.</string>
+    <string name="fps_lock_title">Kadenzsperre (FPS LOCK)</string>
+    <string name="fps_lock_help">Bei wenig Licht bleibt die Bildrate erhalten, indem der Verschluss auf 1/fps gehalten wird: Das Bild wird dunkler, statt dass die Bildrate sinkt. Ausgeschaltet darf die Kamera die Bildrate im Dunkeln senken. Nur in VIDEO, LOG und HLG mit automatischer Belichtung; die automatische Bildrate bei wenig Licht hat Vorrang, wenn sie aktiv ist.</string>
+    <string name="fps_lock_toggle_on">FPS-Sperre: ein</string>
+    <string name="fps_lock_toggle_off">FPS-Sperre: aus</string>
+    <string name="fps_lock_toggle_holding">FPS-Sperre: ein, Verschluss auf 1/fps gehalten</string>
 </resources>
