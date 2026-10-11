@@ -22,6 +22,9 @@ coreSplashscreen = "1.2.0-alpha02"
 # Host-test-only agent tooling: Compose Driver renders composables under Robolectric (see AGENTS.md).
 composeDriver = "0.5.0"
 robolectric = "4.17"
+profileinstaller = "1.4.1"
+benchmarkMacro = "1.5.0"
+uiautomator = "2.4.0"
 
 [libraries]
 androidx-media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "media3" }
@@ -45,7 +48,12 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
+androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmarkMacro" }
+androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-test = { id = "com.android.test", version.ref = "agp" }
+androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmarkMacro" }

@@ -148,6 +148,16 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
 - Fonts, shadows and blur come from Robolectric's native graphics. They are close to a device but not pixel-identical, so do final visual sign-off on a device.
 
+## Baseline profile and startup benchmarks
+
+- Why: Compose is unbundled, so a fresh install runs interpreted until ART compiles it; the baseline profile (`app/src/main/generated/baselineProfiles/`, merged into `:app`) precompiles startup, the capture chrome, the mode sheet and the gallery. Debug is interpreted and has Live Literals, so never judge performance on a debug build. Android Studio and `adb install` skip profiles, so measure with the benchmark tasks below or `adb shell cmd package compile -m speed-profile -f <pkg>`.
+- Module `:baselineprofile` (`com.android.test`, UiAutomator, Macrobenchmark) targets the `benchmarkRelease` (R8, profileable) and `nonMinifiedRelease` variants of `:app`. Both use the app id `com.librestatic.opencinecam.benchmark`, debug signing and x86_64 libs, so they coexist with the Play install. Release builds never run generation and never need a device.
+- Generate: `./gradlew :app:generateBaselineProfile` writes `baseline-prof.txt` and `startup-prof.txt` under `app/src/main/generated/baselineProfiles/`; commit both. Regenerate after UI changes that alter startup, the capture chrome, the mode sheet or the gallery.
+- Benchmark: `./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest` runs `StartupBenchmarks` (cold start with `CompilationMode.None` against `Partial(BaselineProfileMode.Require)`, plus gallery frame timing).
+- Both need one connected device or emulator on API 33 or newer (rooted or userdebug below that); `ANDROID_SERIAL` picks it. The journeys grant camera, audio and notification permissions with `pm grant`.
+- Only Razr numbers count; emulator numbers are smoke checks. Macrobenchmark refuses emulators unless you add `-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR`. Generation works on emulators without it.
+- Run nothing else heavy meanwhile: under host load the emulator hangs, and ddmlib then drops it with "Unknown API Level". The benchmarks find views through `testTagsAsResourceId` set on the root in `MainActivity`.
+
 ## Versioning
 
 - Bump `versionName` in `app/build.gradle.kts` in its own commit before every store release; never upload a new build under the previous version. Patch (`x.y.Z`) for fixes and small, self-contained changes (including a single small feature), minor (`x.Y.0`) for medium changes (several features, a reworked screen or flow), major (`X.0.0`) for a large overhaul; keep the pre-release suffix (e.g. `-beta`). The `versionCode` must also be higher than the last uploaded one.
