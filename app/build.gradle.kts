@@ -4,7 +4,10 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.androidx.baselineprofile)
 }
+
+val profileBuildTypes = setOf("benchmarkRelease", "nonMinifiedRelease")
 
 android {
     namespace = "com.librestatic.opencinecam"
@@ -48,17 +51,13 @@ android {
                 "proguard-rules.pro",
             )
         }
-        create("benchmark") {
-            initWith(getByName("release"))
-            matchingFallbacks += listOf("release")
-            isDebuggable = false
-        }
     }
 
     // Local builds get a red "DEBUG" launcher badge so they stand apart from the Play install.
     sourceSets {
         getByName("debug").res.srcDir("src/debugBadge/res")
-        getByName("benchmark").res.srcDir("src/debugBadge/res")
+        // The plugin-created variants below get the same badge.
+        matching { it.name in profileBuildTypes }.configureEach { res.srcDir("src/debugBadge/res") }
     }
 
     buildFeatures {
@@ -72,6 +71,20 @@ android {
     // Robolectric host tests (the Compose Driver server) resolve strings, fonts and drawables.
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// Plugin-created variants for :baselineprofile. A distinct id lets them sit beside the Play
+// release on a phone; debug signing and x86_64 let them install on an emulator.
+androidComponents {
+    finalizeDsl { extension ->
+        extension.buildTypes.matching { it.name in profileBuildTypes }.configureEach {
+            applicationIdSuffix = ".benchmark"
+            signingConfig = extension.signingConfigs.getByName("debug")
+            ndk {
+                abiFilters += listOf("x86_64")
+            }
+        }
     }
 }
 
@@ -103,6 +116,12 @@ tasks.withType<Test>().configureEach {
             "--enable-native-access=ALL-UNNAMED",
         )
     }
+}
+
+// Release builds never need a device: profiles are generated on demand and committed.
+baselineProfile {
+    mergeIntoMain = true
+    automaticGenerationDuringBuild = false
 }
 
 dependencyLocking {
@@ -144,6 +163,8 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.window)
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)

@@ -742,7 +742,7 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "profileinstaller",
-      "version": "1.4.0"
+      "version": "1.4.1"
     },
     {
       "group": "androidx.savedstate",
