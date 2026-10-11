@@ -278,9 +278,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     val state by remember(liveState) { derivedStateOf(structuralEqualityPolicy()) { liveState.value.withoutLiveSamples() } }
     val settingsRepository = remember(context) { SettingsRepositories.get(context) }
     val settings by settingsRepository.states.collectAsStateWithLifecycle()
-    // A normal start keeps the splash until this: the camera has opened (or failed), or there is a
-    // screen other than the viewfinder to show first.
-    val readyForSplash = !permissionGranted || !onboardingDone || state.phase != CameraUiPhase.PREPARING
+    // A normal start keeps the splash until this: the viewfinder shows its first frame (or the
+    // camera failed), or there is a screen other than the viewfinder to show first.
+    val readyForSplash = !permissionGranted || !onboardingDone ||
+        state.phase !in setOf(CameraUiPhase.PREPARING, CameraUiPhase.OPENING, CameraUiPhase.READY)
     LaunchedEffect(readyForSplash) { if (readyForSplash) onReady() }
     val foldDisplays = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }

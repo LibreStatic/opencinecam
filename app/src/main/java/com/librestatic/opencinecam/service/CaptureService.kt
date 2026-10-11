@@ -175,7 +175,7 @@ class CaptureService : Service() {
     private val cameraState = MutableStateFlow(CameraUiState())
     private val localBinder = LocalBinder()
     private val foreground = RecordingForegroundController(this)
-    private val previewEngine by lazy { Camera2PreviewEngine(this) }
+    private val previewEngine by lazy { CaptureStartup.adoptEngine(this) }
     private val stillSaver by lazy { StillImageSaver(this) }
     // Take-owned fields are written on main before dispatch and detached by engine callbacks.
     @Volatile private var videoOutput: VideoOutput? = null
@@ -882,6 +882,7 @@ class CaptureService : Service() {
         }
 
         override fun onPreviewStarted(descriptor: Camera2CameraDescriptor) {
+            CaptureStartup.previewStarted()
             activePreviewKey = previewKey()
             // A preview (re)started outside CAPTURING means a never-started take already failed
             // (fail() left CAPTURING) and the engine drops its stale-generation start silently.
@@ -1626,7 +1627,8 @@ class CaptureService : Service() {
         fun prepare(targetWidth: Int, targetHeight: Int) {
             if (stillOwner.get() != null) return
             cameraState.value = cameraState.value.copy(phase = CameraUiPhase.PREPARING, message = null)
-            val descriptors = previewEngine.descriptors(targetWidth, targetHeight)
+            val descriptors = CaptureStartup.descriptors(previewEngine, targetWidth, targetHeight)
+                ?: previewEngine.descriptors(targetWidth, targetHeight)
             val preferred = descriptors.firstOrNull()
             cameraState.value = if (preferred == null) {
                 cameraState.value.copy(
@@ -3210,6 +3212,7 @@ class CaptureService : Service() {
         runCatching { take.video?.finish(false) }
         abortTransferPublication(take.publication)
         val retired = previewEngine.closeAsync()
+        CaptureStartup.released(previewEngine)
         retireRecordingRecoveryGuards(retired)
         retired.whenComplete { _, failure ->
             if (failure == null) releaseTransferCapture(transferReservation)

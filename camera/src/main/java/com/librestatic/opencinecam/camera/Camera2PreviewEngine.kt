@@ -785,6 +785,16 @@ class Camera2PreviewEngine(
     fun preferredDescriptor(targetWidth: Int, targetHeight: Int): Camera2CameraDescriptor? =
         descriptors(targetWidth, targetHeight).firstOrNull()
 
+    /**
+     * The camera [descriptors] would most likely list first, from the lens facing alone. It skips
+     * the stream and encoder checks, so a start can open the camera while those run.
+     */
+    fun likelyPreferredCameraId(): String? = runCatching {
+        manager.cameraIdList.sortedWith(compareBy<String> { cameraId ->
+            lensOrder(manager.getCameraCharacteristics(cameraId).get(CameraCharacteristics.LENS_FACING) ?: -1)
+        }.thenBy { it }).firstOrNull()
+    }.getOrNull()
+
     /** Selected session path; readiness is reported separately by onPreviewStarted. */
     fun usesGpuViewfinder(): Boolean = logPreviewEnabled || gpuPreviewEnabled
 
@@ -817,7 +827,8 @@ class Camera2PreviewEngine(
             acquireOwnerIfNeeded()
             val currentGeneration = ++generation
             pendingPreviewStart = null
-            closeResources()
+            // An early open that is already under way or done is kept for adoption below.
+            closeResources(keepWarm = warmOpen?.started == true)
             this.listener = listener
             // closeResources released both locks; a UI still showing them would toggle a no-op.
             listener.onAeLockChanged(false)
@@ -831,7 +842,8 @@ class Camera2PreviewEngine(
             }
             listener.onFocusSelectionChanged(requestedFocusDiopters)
             listener.onOpening(descriptor)
-            pendingPreviewStart = Runnable {
+            lateinit var start: Runnable
+            start = Runnable {
                 if (disposed.get() || currentGeneration != generation || !surface.isValid) return@Runnable
                 this.listener = listener
                 if (stillFormat == StillPhotoFormat.HEIC && descriptor.heicSize == null) {
@@ -863,6 +875,22 @@ class Camera2PreviewEngine(
                     ?: descriptor.availableFixedFps
                 this.requestedTargetFps = targetFps.takeIf { it in supportedFps }
                     ?: preferredTargetFps(supportedFps)
+                val highSpeedProfile = activeLogProfile?.takeIf { it.constrainedHighSpeed }?.let {
+                    Camera2VideoProfile(it.size, it.fps, true)
+                } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
+                val cameraIdToOpen = if (highSpeedProfile != null) {
+                    if (Build.MANUFACTURER.equals("motorola", ignoreCase = true)) {
+                        preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
+                            ?: descriptor.cameraId
+                    } else descriptor.cameraId
+                } else descriptor.cameraId
+                // An early open of another camera is closed first; this start runs again once it has.
+                if (warmOpen != null && warmOpen?.cameraId != cameraIdToOpen) {
+                    retireWarm("the preview needs camera $cameraIdToOpen")
+                    pendingPreviewStart = start
+                    runPendingPreviewStart()
+                    return@Runnable
+                }
                 this.previousSensorTimestampNs = null
                 this.effectiveFps = null
                 this.fpsLockRequested = fpsLock
@@ -925,17 +953,7 @@ class Camera2PreviewEngine(
                 analysisPipeline = logPipeline
                 synchronizeSubjectOutput()
                 try {
-                    val highSpeedProfile = activeLogProfile?.takeIf { it.constrainedHighSpeed }?.let {
-                        Camera2VideoProfile(it.size, it.fps, true)
-                    } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
-                    val cameraIdToOpen = if (highSpeedProfile != null) {
-                        if (Build.MANUFACTURER.equals("motorola", ignoreCase = true)) {
-                            preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
-                                ?: descriptor.cameraId
-                        } else descriptor.cameraId
-                    } else descriptor.cameraId
-                    cameraOpening = true
-                    manager.openCamera(cameraIdToOpen, cameraExecutor, object : CameraDevice.StateCallback() {
+                    val callback = object : CameraDevice.StateCallback() {
                         override fun onOpened(device: CameraDevice) {
                             cameraOpening = false
                             if (disposed.get() || currentGeneration != generation) {
@@ -981,13 +999,25 @@ class Camera2PreviewEngine(
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
                         }
-                    })
+                    }
+                    val warmDevice = warmOpen?.device
+                    if (warmDevice != null) {
+                        // The camera opened early for this start; from here it behaves as if this call opened it.
+                        requireNotNull(warmOpen).delegate = callback
+                        warmOpen = null
+                        Log.i(TAG, "Preview adopted camera $cameraIdToOpen, opened at startup")
+                        callback.onOpened(warmDevice)
+                    } else {
+                        cameraOpening = true
+                        manager.openCamera(cameraIdToOpen, cameraExecutor, callback)
+                    }
                 } catch (failure: Exception) {
                     cameraOpening = false
                     listener.onFailure("camera-open-exception", failure.message ?: "Camera open failed.", true)
                     finishCloseIfIdle()
                 }
             }
+            pendingPreviewStart = start
             runPendingPreviewStart()
         }
     }
@@ -1015,9 +1045,110 @@ class Camera2PreviewEngine(
     private fun runPendingPreviewStart() {
         if (disposed.get() || !ownerReady || retirementFailure != null || cameraOpening || closingCamera != null ||
             retiringPipelines.isNotEmpty() || initializationRetirements.isNotEmpty()) return
-        val action = pendingPreviewStart ?: return
+        val action = pendingPreviewStart
+        if (action == null) {
+            warmOpen?.takeIf { !it.started }?.let(::openWarm)
+            return
+        }
         pendingPreviewStart = null
         action.run()
+    }
+
+    /**
+     * Starts opening [cameraId] before there is a preview surface, so a cold start overlaps the open
+     * with the UI's first frames. The next [startPreview] for that camera adopts the device; any
+     * other start, [stopPreview] or [close] closes it, and so does nobody claiming it in time.
+     */
+    fun preopen(cameraId: String) {
+        if (disposed.get() || appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
+        cameraExecutor.execute {
+            if (disposed.get() || camera != null || cameraOpening || pendingPreviewStart != null || warmOpen != null) return@execute
+            acquireOwnerIfNeeded()
+            warmOpen = WarmOpen(cameraId)
+            runPendingPreviewStart()
+        }
+    }
+
+    /** Closes a [preopen] camera no preview has adopted yet; an adopted one is left alone. */
+    fun dropPreopen(reason: String) {
+        cameraExecutor.execute { retireWarm(reason) }
+    }
+
+    /** A camera opened ahead of its preview. cameraExecutor-confined, like every device callback. */
+    private inner class WarmOpen(val cameraId: String) : CameraDevice.StateCallback() {
+        var started = false
+        var device: CameraDevice? = null
+        var retired = false
+        /** The adopting start's callback, which receives every later event of the device. */
+        var delegate: CameraDevice.StateCallback? = null
+
+        override fun onOpened(device: CameraDevice) {
+            delegate?.let { return it.onOpened(device) }
+            cameraOpening = false
+            if (retired || disposed.get()) {
+                closeCameraDevice(device)
+                finishCloseIfIdle()
+                return
+            }
+            this.device = device
+            imageHandler.postDelayed({
+                cameraExecutor.execute { if (warmOpen === this && delegate == null) retireWarm("no preview claimed it") }
+            }, WARM_OPEN_UNCLAIMED_MS)
+            runPendingPreviewStart()
+        }
+
+        override fun onClosed(device: CameraDevice) {
+            delegate?.let { return it.onClosed(device) }
+            if (closingCamera === device) closingCamera = null
+            runPendingPreviewStart()
+            finishCloseIfIdle()
+        }
+
+        override fun onDisconnected(device: CameraDevice) {
+            delegate?.let { return it.onDisconnected(device) }
+            failed(device)
+        }
+
+        override fun onError(device: CameraDevice, error: Int) {
+            delegate?.let { return it.onError(device, error) }
+            failed(device)
+        }
+
+        /** A failed early open is dropped; a waiting start then opens the camera itself and reports any error. */
+        private fun failed(device: CameraDevice) {
+            cameraOpening = false
+            if (warmOpen === this) warmOpen = null
+            this.device = null
+            closeCameraDevice(device)
+        }
+    }
+
+    // cameraExecutor-confined: the early open waiting for adoption, if any.
+    private var warmOpen: WarmOpen? = null
+
+    @SuppressLint("MissingPermission")
+    private fun openWarm(warm: WarmOpen) {
+        warm.started = true
+        try {
+            cameraOpening = true
+            manager.openCamera(warm.cameraId, cameraExecutor, warm)
+        } catch (_: Exception) {
+            cameraOpening = false
+            if (warmOpen === warm) warmOpen = null
+            finishCloseIfIdle()
+        }
+    }
+
+    /** Drops the early open: closes its device, or lets it close itself if it is still opening. */
+    private fun retireWarm(reason: String) {
+        val warm = warmOpen ?: return
+        warmOpen = null
+        Log.i(TAG, "Closing camera ${warm.cameraId}, opened at startup: $reason")
+        warm.retired = true
+        warm.device?.let { device ->
+            warm.device = null
+            closeCameraDevice(device)
+        }
     }
 
     fun attachSubjectPreview(token: Long, surface: Surface, options: SubjectPreviewOptions, onStatus: (SubjectPreviewStatus) -> Unit) {
@@ -5920,7 +6051,8 @@ class Camera2PreviewEngine(
         closeAnalysisReader()
     }
 
-    private fun closeResources() {
+    private fun closeResources(keepWarm: Boolean = false) {
+        if (!keepWarm) retireWarm("the camera was released")
         pendingPreviewStartedReceipt = null
         cadenceGuard.reset()
         cadenceIsoLoop.reset()
@@ -6228,6 +6360,8 @@ class Camera2PreviewEngine(
     }
 
     companion object {
+        /** An early open nobody adopts within this long is closed, so it never holds the camera. */
+        const val WARM_OPEN_UNCLAIMED_MS = 30_000L
         const val FOCUS_PULL_TICK_MS = 33L
         /** The standard stream use cases the camera advertises, or empty without API 33 and the STREAM_USE_CASE capability. */
         internal fun advertisedStreamUseCases(characteristics: CameraCharacteristics, capabilities: IntArray): Set<Long> {
