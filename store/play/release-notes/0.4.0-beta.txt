@@ -1,0 +1,72 @@
+<en-US>
+- FPS LOCK keeps video at its frame rate in low light
+- HEVC video, HDR10 and gyro data for Gyroflow
+- Night photo, Zero shutter lag and picture profiles
+- Metering, saturation and Low-light boost
+- Configurable haptic feedback and back gesture previews
+- AF lock works during a take; smoother UI while recording
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- FPS LOCK mantiene los fps del video con poca luz
+- Video HEVC, HDR10 y datos de giroscopio para Gyroflow
+- Foto nocturna, retardo cero del obturador y perfiles de imagen
+- Medición, saturación y refuerzo con poca luz
+- Vibración configurable y vista previa del gesto atrás
+- El bloqueo de AF funciona durante la toma; interfaz más fluida al grabar
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- FPS LOCK mantiene los fps del vídeo con poca luz
+- Vídeo HEVC, HDR10 y datos de giroscopio para Gyroflow
+- Foto nocturna, retardo cero del obturador y perfiles de imagen
+- Medición, saturación y refuerzo con poca luz
+- Vibración configurable y vista previa del gesto atrás
+- El bloqueo de AF funciona durante la toma; interfaz más fluida al grabar
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- FPS LOCK mantém os fps do vídeo com pouca luz
+- Vídeo HEVC, HDR10 e dados de giroscópio para o Gyroflow
+- Foto noturna, atraso zero do obturador e perfis de imagem
+- Medição, saturação e reforço com pouca luz
+- Vibração configurável e prévia do gesto voltar
+- O bloqueio de AF funciona durante a gravação; interface mais fluida ao gravar
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- FPS LOCK mantém os fps do vídeo com pouca luz
+- Vídeo HEVC, HDR10 e dados de giroscópio para o Gyroflow
+- Foto noturna, atraso zero do obturador e perfis de imagem
+- Medição, saturação e reforço com pouca luz
+- Vibração configurável e pré-visualização do gesto voltar
+- O bloqueio de AF funciona durante a gravação; interface mais fluida ao gravar
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- FPS LOCK garde la cadence vidéo en basse lumière
+- Vidéo HEVC, HDR10 et données gyroscopiques pour Gyroflow
+- Photo de nuit, zéro délai au déclenchement et profils d'image
+- Mesure, saturation et boost en basse lumière
+- Retour haptique réglable et aperçu du geste retour
+- Le verrouillage AF fonctionne pendant la prise ; interface plus fluide en enregistrement
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- FPS LOCK hält die Bildrate bei wenig Licht
+- HEVC-Video, HDR10 und Gyrodaten für Gyroflow
+- Nachtfoto, Zero Shutter Lag und Bildprofile
+- Messung, Sättigung und Low-Light-Boost
+- Einstellbares haptisches Feedback und Vorschau der Zurück-Geste
+- AF-Sperre funktioniert während der Aufnahme; flüssigere Oberfläche beim Aufnehmen
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- FPS LOCK mantiene la cadenza video con poca luce
+- Video HEVC, HDR10 e dati giroscopio per Gyroflow
+- Foto notturna, zero shutter lag e profili immagine
+- Misurazione, saturazione e boost con poca luce
+- Feedback aptico regolabile e anteprima del gesto indietro
+- Il blocco AF funziona durante la ripresa; interfaccia più fluida in registrazione
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
