@@ -21,8 +21,8 @@ android {
             ?: System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let {
                 it + (providers.gradleProperty("opencinecam.versionCodeOffset").orNull?.toInt() ?: 100)
             }
-            ?: 116
-        versionName = "0.4.0-beta"
+            ?: 117
+        versionName = "0.4.1-beta"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
