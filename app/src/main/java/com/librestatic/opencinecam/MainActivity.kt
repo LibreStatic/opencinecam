@@ -12,6 +12,7 @@ import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,6 +26,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.WindowCompat
@@ -147,7 +150,10 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays, LocalShortcutDispatcher provides shortcuts) {
-                OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true; releaseSplash() })
+                // Exposes testTags as resource ids so the UiAutomator benchmarks (:baselineprofile) can find them.
+                Box(Modifier.semantics { testTagsAsResourceId = true }) {
+                    OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true; releaseSplash() })
+                }
             }
         }
     }
