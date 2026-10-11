@@ -61,6 +61,24 @@ internal object VendorKeys {
         key?.let(characteristics::get)
     }.getOrNull()
 
+    /** An int64[] static vendor tag by name (see [staticInts]). */
+    @Suppress("UNCHECKED_CAST")
+    fun staticLongs(characteristics: CameraCharacteristics, name: String): LongArray? = runCatching {
+        val listed = characteristics.keys.firstOrNull { it.name == name } as CameraCharacteristics.Key<LongArray>?
+        val key = listed ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) CameraCharacteristics.Key(name, LongArray::class.java) else null
+        key?.let(characteristics::get)
+    }.getOrNull()
+
+    /** A request key whose gate is already known to exist (any static type): advertised, else built by name on API 29+. */
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Any> requestGated(
+        characteristics: CameraCharacteristics, cameraId: String?, name: String, gatePresent: Boolean, type: Class<T>,
+    ): CaptureRequest.Key<T>? {
+        characteristics.availableCaptureRequestKeys.firstOrNull { it.name == name }?.let { return it as CaptureRequest.Key<T> }
+        if (!gatePresent || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        return runCatching { CaptureRequest.Key(name, type) }.getOrNull()?.also { noteByName(cameraId, name) }
+    }
+
     private fun noteByName(cameraId: String?, name: String) {
         if (logged.add("$cameraId/$name")) {
             Log.i(TAG, "Vendor key $name resolved by name (not advertised) camera=$cameraId")

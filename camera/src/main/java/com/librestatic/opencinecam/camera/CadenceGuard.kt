@@ -23,21 +23,28 @@ class CadenceGuard(
     private val releaseNs: Long = DEFAULT_RELEASE_NS,
     private val maxGapNs: Long = DEFAULT_MAX_GAP_NS,
     private val settleNs: Long = DEFAULT_SETTLE_NS,
+    private val stableCapNs: Long = DEFAULT_STABLE_CAP_NS,
 ) {
     private var engagedState = false
     private var referenceIso = 0
     private var engagedAtNs = 0L
     private var pendingSinceNs: Long? = null
     private var lastSampleNs: Long? = null
+    private val recentIso = ArrayDeque<Int>()
 
     val engaged: Boolean @Synchronized get() = engagedState
 
+    /** True while a stretch is being timed towards engaging: the frames now are the automatic exposure's own. */
+    val pending: Boolean @Synchronized get() = !engagedState && pendingSinceNs != null
+
     /** Feeds one capture result and returns the verdict. */
     @Synchronized
-    fun update(nowNs: Long, targetFps: Int, frameDurationNs: Long?, iso: Int?): Boolean {
+    fun update(nowNs: Long, targetFps: Int, frameDurationNs: Long?, iso: Int?, aeConverged: Boolean = false): Boolean {
         if (targetFps <= 0 || frameDurationNs == null || iso == null || frameDurationNs <= 0L || iso <= 0) return engagedState
         val last = lastSampleNs
         lastSampleNs = nowNs
+        recentIso.addLast(iso)
+        while (recentIso.size > STABLE_SAMPLES) recentIso.removeFirst()
         if (last != null && nowNs - last > maxGapNs) pendingSinceNs = null
         if (engagedState) {
             // The first results after engaging still come from requests sent before the hold: they say
@@ -63,8 +70,11 @@ class CadenceGuard(
                 return false
             }
             val since = pendingSinceNs ?: nowNs.also { pendingSinceNs = it }
-            if (nowNs - since >= engageNs) {
+            // Engage once AE has settled (the held look is matched to it); a hard cap engages anyway.
+            val settled = aeConverged || isoStable(recentIso)
+            if (nowNs - since >= engageNs && (settled || nowNs - since >= stableCapNs)) {
                 engagedState = true
+                recentIso.clear()
                 // Not seeded from this sample: it is the automatic exposure's ISO, not the held one.
                 referenceIso = 0
                 engagedAtNs = nowNs
@@ -81,6 +91,7 @@ class CadenceGuard(
         referenceIso = 0
         pendingSinceNs = null
         lastSampleNs = null
+        recentIso.clear()
     }
 
     companion object {
@@ -90,6 +101,16 @@ class CadenceGuard(
         const val DEFAULT_RELEASE_NS = 1_000_000_000L
         const val DEFAULT_MAX_GAP_NS = 1_000_000_000L
         const val DEFAULT_SETTLE_NS = 400_000_000L
+        const val DEFAULT_STABLE_CAP_NS = 1_000_000_000L
+        const val STABLE_SAMPLES = 4
+        const val STABLE_TOLERANCE = 0.08
+
+        /** AE is steady when the last [STABLE_SAMPLES] ISOs all lie within +-8 % of their median. */
+        fun isoStable(isos: Collection<Int>): Boolean {
+            if (isos.size < STABLE_SAMPLES) return false
+            val median = isos.sorted().let { (it[it.size / 2 - 1] + it[it.size / 2]) / 2.0 }
+            return isos.all { kotlin.math.abs(it - median) <= median * STABLE_TOLERANCE }
+        }
 
         /** Android 16 exposure-time priority is what lets AE pick the ISO while the shutter is held. */
         fun nativePriority(sdkInt: Int, priorities: Set<ExposureMode>): Boolean =
@@ -100,6 +121,6 @@ class CadenceGuard(
          * loop steers (see [CadenceIsoLoop]). That needs manual sensor control with valid ranges.
          */
         fun supported(sdkInt: Int, caps: ExposureCapabilities): Boolean =
-            nativePriority(sdkInt, caps.priorities) || caps.supports(ExposureMode.MANUAL)
+            nativePriority(sdkInt, caps.priorities) || caps.qcomExposureRangeNs != null || caps.supports(ExposureMode.MANUAL)
     }
 }

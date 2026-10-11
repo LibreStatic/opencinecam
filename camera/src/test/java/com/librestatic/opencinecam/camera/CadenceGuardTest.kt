@@ -42,7 +42,7 @@ class CadenceGuardTest {
         val guard = zeroSettle()
         assertFalse(guard.update(0, fps, stretched, darkIso))
         assertFalse(guard.update(249 * ms, fps, stretched, darkIso))
-        assertTrue(guard.update(250 * ms, fps, stretched, darkIso))
+        assertTrue(guard.update(250 * ms, fps, stretched, darkIso, aeConverged = true))
     }
 
     @Test fun aBriefStretchIsIgnored() {
@@ -165,7 +165,7 @@ class CadenceGuardTest {
         assertFalse(guard.engaged)
         assertFalse(guard.update(400 * ms, fps, stretched, darkIso))
         assertFalse(guard.update(500 * ms, fps, stretched, darkIso))
-        assertTrue(guard.update(650 * ms, fps, stretched, darkIso))
+        assertTrue(guard.update(650 * ms, fps, stretched, darkIso, aeConverged = true))
     }
 
     @Test fun resetClearsAPendingEngageTimer() {
@@ -244,5 +244,57 @@ class CadenceGuardTest {
         assertTrue(guard.feed(stretched, 25_600, 0, 300))
         // The held ISO sits at 12800, 50 % of the engaging sample: it must not release.
         assertTrue(guard.feed(nominal, 12_800, 316, 10_000))
+    }
+
+    @Test fun pendingIsTrueOnlyWhileAStretchIsBeingTimed() {
+        val guard = CadenceGuard()
+        assertFalse(guard.pending)
+        guard.update(0, fps, stretched, darkIso)
+        assertTrue(guard.pending)
+        guard.update(100 * ms, fps, nominal, darkIso)
+        assertFalse(guard.pending)
+        guard.update(200 * ms, fps, stretched, darkIso)
+        assertTrue(guard.pending)
+        guard.update(450 * ms, fps, stretched, darkIso)
+        assertTrue(guard.engaged)
+        assertFalse(guard.pending)
+        guard.reset()
+        assertFalse(guard.pending)
+    }
+
+    @Test fun doesNotEngageWhileAeIsStillMovingTheIso() {
+        val guard = zeroSettle()
+        var iso = 1000
+        var t = 0L
+        while (t <= 900) { assertFalse("t=$t", guard.update(t * ms, fps, stretched, iso)); iso = (iso * 1.2).toInt(); t += 33 }
+    }
+
+    @Test fun engagesOnceTheLastFourIsosAreWithinEightPercent() {
+        val guard = zeroSettle()
+        listOf(500, 800, 1200).forEachIndexed { i, iso -> assertFalse(guard.update(i * 100L * ms, fps, stretched, iso)) }
+        assertFalse(guard.update(300 * ms, fps, stretched, 1600))          // still climbing
+        assertFalse(guard.update(400 * ms, fps, stretched, 1620))
+        assertFalse(guard.update(500 * ms, fps, stretched, 1610))
+        assertTrue(guard.update(600 * ms, fps, stretched, 1630))           // 1600..1630 steady
+    }
+
+    @Test fun aeConvergedAloneIsEnoughAfterTheStretch() {
+        val guard = zeroSettle()
+        assertFalse(guard.update(0, fps, stretched, 1000, aeConverged = true))
+        assertTrue(guard.update(250 * ms, fps, stretched, 5000, aeConverged = true))
+    }
+
+    @Test fun aHardCapEngagesAfterOneSecondEvenIfAeNeverSettles() {
+        val guard = zeroSettle()
+        var iso = 1000
+        var t = 0L
+        while (t < 1000) { assertFalse(guard.update(t * ms, fps, stretched, iso)); iso = (iso * 1.2).toInt(); t += 50 }
+        assertTrue(guard.update(1000 * ms, fps, stretched, iso))
+    }
+
+    @Test fun isoStableNeedsFourSamples() {
+        assertFalse(CadenceGuard.isoStable(listOf(1000, 1000, 1000)))
+        assertTrue(CadenceGuard.isoStable(listOf(1000, 1010, 990, 1005)))
+        assertFalse(CadenceGuard.isoStable(listOf(1000, 1000, 1000, 1200)))
     }
 }

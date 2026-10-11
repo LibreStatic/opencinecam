@@ -582,6 +582,7 @@ class Camera2PreviewEngine(
             value?.setOperatorLut(operatorLutSelection)
             value?.setSubjectLut(subjectLutSelection)
             value?.setAnalysisSuspended(analysisSuspended)
+            value?.setAnalysisBurst(analysisBurst)
         }
 
     fun setOperatorLut(lut: MonitorLut?) {
@@ -602,14 +603,22 @@ class Camera2PreviewEngine(
         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Owner retired. */ }
     }
 
+    /** Burst frames only feed the cadence loop; the UI and scopes keep their normal rate. */
+    private fun deliverAnalysisToListener(analysis: Camera2Analysis) {
+        val now = SystemClock.elapsedRealtime()
+        if (analysisBurst && now - lastListenerAnalysisMs < monitoringOptions.periodMs) return
+        lastListenerAnalysisMs = now
+        listener?.onAnalysis(ispHistogram.merge(analysis))
+    }
+
     private fun deliverGpuAnalysis(expectedGeneration: Long, owner: () -> OpenCineLogGpuPipeline?, analysis: Camera2Analysis) {
         // Queue behind open/close so a check cannot race a new descriptor or a cleared UI sample.
         if (disposed.get()) return
         try { cameraExecutor.execute {
             val pipeline = owner()
             if (!disposed.get() && expectedGeneration == generation && pipeline != null && logPipeline === pipeline) {
-                observeCadenceLuma(analysis)
-                listener?.onAnalysis(ispHistogram.merge(analysis))
+                observeCadenceLuma(analysis, "gpu")
+                deliverAnalysisToListener(analysis)
             }
         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner, no sample delivery. */ }
     }
@@ -650,6 +659,10 @@ class Camera2PreviewEngine(
     // the governor, the active pipeline and the listener; the image thread only reads the flag.
     private val thermalGovernor = ThermalAnalysisGovernor()
     @Volatile private var analysisSuspended = false
+    /** Fast analysis around the emulated hold's handoff; frames still reach the UI only at the normal period. */
+    @Volatile private var analysisBurst = false
+    private var lastListenerAnalysisMs = 0L
+    private var cadenceEngagedAtNs = 0L
     private var suspensionNotified: Pair<Camera2PreviewListener, AnalysisSuspension>? = null
     // cameraExecutor: DIAGNOSTIC-only capture-result audit of the current graph.
     private var graphAudit: Pair<CameraCaptureSession, CaptureResultAuditor>? = null
@@ -694,9 +707,19 @@ class Camera2PreviewEngine(
     private var cadenceFaulted = false
     @Volatile private var timelapseTake = false
     private val cadenceIsoLoop = CadenceIsoLoop()
+    private val cadenceExposureRamp = CadenceExposureRamp()
+    private var cadenceRampStartedNs = 0L
+    /** CONTROL_AE_MODE of the latest capture result, and what the hidden-gain measurement has seen since engage. */
+    @Volatile private var lastResultAeMode: Int? = null
+    private val cadenceAeLumas = ArrayDeque<Double>()
+    private var cadenceSawManual = false
+    private var cadenceManualFrames = 0
+    private var cadenceGainMeasured = true
+    private var cadenceQcomLogged = true
     /** ISO sent while the emulated hold (AE off) is engaged; null otherwise. Camera executor writes. */
     @Volatile private var cadenceHeldIso: Int? = null
     private var cadenceEvIndexAtEngage = 0
+    private var cadenceFirstFrameLogged = true
     private var activeVideoProfile: Camera2VideoProfile? = null
     private var activeLogProfile: Camera2LogProfile? = null
     private var previousSensorTimestampNs: Long? = null
@@ -2606,30 +2629,105 @@ class Camera2PreviewEngine(
 
     /** Feeds the cadence guard from a repeating-request result; re-issues the request when the verdict flips. */
     private fun driveCadenceGuard(result: TotalCaptureResult, sensorTimestampNs: Long?) {
+        val aeMode = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)
+        lastResultAeMode = aeMode
+        if (cadenceEngaged && cadenceHeldIso != null && !cadenceSawManual && aeMode == CaptureRequest.CONTROL_AE_MODE_OFF) {
+            // The first result that really is manual: the AE frames still in the analysis pipe are AE's final state.
+            cadenceSawManual = true
+            cadenceManualFrames = 0
+            val last = cadenceAeLumas.toList().sorted()
+            if (last.isNotEmpty()) cadenceIsoLoop.setTarget(last[last.size / 2])
+            Log.i(CADENCE_TAG, "hidden gain: first manual result; target=${cadenceIsoLoop.target?.let { "%.4f".format(it) }} from ${last.size} AE frames")
+        }
         if (!cadenceGuardEligible()) {
             if (cadenceEngaged) setCadenceEngaged(false, null, null)
             cadenceGuard.reset()
+            updateAnalysisBurst()
             return
+        }
+        if (cadenceEngaged && cadenceHeldIso != null) {
+            // Walk the planned ISO ramp: one small step per due capture result.
+            val nowNs = SystemClock.elapsedRealtimeNanos()
+            if (cadenceExposureRamp.active) {
+                // Exposure handoff: AE's own exposure walks down to 1/fps with the ISO compensating.
+                cadenceExposureRamp.tick(nowNs)?.let { step ->
+                    cadenceHeldIso = step.iso
+                    if (step.done) {
+                        cadenceIsoLoop.resume(step.iso, nowNs)
+                        Log.i(CADENCE_TAG, "exposure ramp complete: exposure=${"%.2f ms".format(step.exposureNs / 1e6)} iso=${step.iso} " +
+                            "after ${(nowNs - cadenceRampStartedNs) / 1_000_000} ms")
+                        listener?.onCadenceGuardChanged(true)
+                    }
+                    reapplyRepeating()
+                }
+            } else cadenceIsoLoop.tick(nowNs)?.let { cadenceHeldIso = it; reapplyRepeating() }
         }
         if (cadenceFaulted || sensorTimestampNs == null) return
         val frameDuration = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
         var iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
-        if (cadenceEngaged && cadenceHeldIso != null && iso != null) {
-            // The emulated hold may raise the ISO through the post-raw boost: judge the effective one.
+        if (cadenceEngaged && cadenceHoldPath() == CadenceHoldPath.QCOM) checkQcomHold(result)
+        if (cadenceEngaged && iso != null) {
+            // A hold may raise the ISO through the post-raw boost: judge the effective one.
             val boost = result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100
             iso = (iso.toLong() * boost / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         }
-        val verdict = cadenceGuard.update(sensorTimestampNs, requestedTargetFps, frameDuration, iso)
+        // The guard does not judge frames while the exposure ramp is still walking to 1/fps.
+        val verdict = if (cadenceExposureRamp.active) cadenceEngaged
+            else cadenceGuard.update(sensorTimestampNs, requestedTargetFps, frameDuration, iso,
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE) == android.hardware.camera2.CaptureResult.CONTROL_AE_STATE_CONVERGED)
         if (verdict != cadenceEngaged) {
-            setCadenceEngaged(verdict, frameDuration, iso, result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME))
+            setCadenceEngaged(verdict, frameDuration, iso, result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100)
+        }
+        updateAnalysisBurst()
+    }
+
+    /** Native priority, else the Qualcomm exposure priority, else the emulated hold (manual exposure and a software ISO). */
+    private fun cadenceHoldPath(): CadenceHoldPath? {
+        val descriptor = activeDescriptor ?: return null
+        return cadenceHoldPath(Build.VERSION.SDK_INT, descriptor.exposureCapabilities, cadenceHeldExposureNs(),
+            descriptor.cameraId in qcomExposurePriorityUnusable)
+    }
+
+    private fun cadenceHoldEmulated(): Boolean = cadenceHoldPath() == CadenceHoldPath.EMULATED
+
+    private class QcomPriorityKeys(val select: CaptureRequest.Key<Int>, val use: CaptureRequest.Key<Long>)
+    private val qcomPriorityKeyCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<QcomPriorityKeys>>()
+
+    private fun qcomPriorityKeys(): QcomPriorityKeys? {
+        val id = activeDescriptor?.cameraId ?: return null
+        return qcomPriorityKeyCache.getOrPut(id) {
+            val characteristics = runCatching { manager.getCameraCharacteristics(id) }.getOrNull()
+            val gate = characteristics != null && QcomExposurePriority.parseRange(VendorKeys.staticLongs(characteristics, QcomExposurePriority.RANGE_KEY)) != null
+            val select = characteristics?.let { VendorKeys.requestGated(it, id, QcomExposurePriority.SELECT_KEY, gate, Int::class.javaObjectType) }
+            val use = characteristics?.let { VendorKeys.requestGated(it, id, QcomExposurePriority.USE_KEY, gate, Long::class.javaObjectType) }
+            java.util.Optional.ofNullable(if (select != null && use != null) QcomPriorityKeys(select, use) else null)
+        }.orElse(null)
+    }
+
+    /** Qualcomm hold self-check: log the result at 300 ms, and fall back to the emulated hold if the HAL ignored the request. */
+    private fun checkQcomHold(result: TotalCaptureResult) {
+        val sinceMs = (SystemClock.elapsedRealtimeNanos() - cadenceEngagedAtNs) / 1_000_000
+        val exposure = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)
+        val iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+        if (sinceMs >= 300 && !cadenceQcomLogged) {
+            cadenceQcomLogged = true
+            Log.i(CADENCE_TAG, "qcom hold at ${sinceMs} ms: exposure=${exposure?.let { "%.2f ms".format(it / 1e6) }} iso=$iso " +
+                "boost=${result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}")
+        }
+        if (sinceMs >= 600 && qcomHoldIgnored(exposure, cadenceHeldExposureNs())) {
+            val id = activeDescriptor?.cameraId ?: return
+            Log.w(CADENCE_TAG, "qcom exposure priority ignored by the HAL (exposure=${exposure?.let { "%.2f ms".format(it / 1e6) }} after $sinceMs ms): " +
+                "using the emulated hold for camera $id")
+            qcomExposurePriorityUnusable.add(id)
+            setCadenceEngaged(false, null, null)
+            cadenceGuard.reset()
         }
     }
 
-    /** No native exposure-time priority: hold with manual exposure and a software-steered ISO. */
-    private fun cadenceHoldEmulated(): Boolean {
-        val caps = activeDescriptor?.exposureCapabilities ?: return false
-        return !CadenceGuard.nativePriority(Build.VERSION.SDK_INT, caps.priorities)
-    }
+    /** The exposure in force for the hold: the ramp's while it walks down, else 1/fps. */
+    private fun cadenceHoldExposureNs(): Long =
+        if (cadenceHoldEmulated() && cadenceExposureRamp.active) cadenceExposureRamp.exposureNs else cadenceHeldExposureNs()
 
     private fun cadenceHeldExposureNs(): Long {
         val frameDurationNs = 1_000_000_000L / requestedTargetFps.coerceAtLeast(1)
@@ -2638,41 +2736,111 @@ class Camera2PreviewEngine(
     }
 
     /** Analysis frame (camera executor, before the UI sees it): learns the luma, and steers the held ISO. */
-    private fun observeCadenceLuma(analysis: Camera2Analysis) {
+    private fun observeCadenceLuma(analysis: Camera2Analysis, producer: String) {
         // Always the frame's own histogram: the ISP one, when present, is a different domain than the target.
         val luma = CadenceIsoLoop.meanLuma(analysis.histogram) ?: return
+        // One producer only: the GPU readback and the YUV reader are in different luma domains.
+        if (!cadenceLumaProducerAccepted(logPipeline != null, producer)) return
+        // AE's own final brightness: the last frames analysed while the results still said AE was on.
+        if (lastResultAeMode != null && lastResultAeMode != CaptureRequest.CONTROL_AE_MODE_OFF && cadenceGuardEligible() && cadenceHoldEmulated()) {
+            cadenceAeLumas.addLast(luma)
+            while (cadenceAeLumas.size > 3) cadenceAeLumas.removeFirst()
+        }
         if (!cadenceEngaged || cadenceHeldIso == null) return
+        if (!cadenceSawManual) return
+        cadenceManualFrames++
+        // The first manual frame plus one more of margin: compare it with AE's brightness to learn the hidden gain.
+        if (!cadenceGainMeasured && cadenceManualFrames >= 2) {
+            cadenceGainMeasured = true
+            val goal = cadenceIsoLoop.target
+            val cameraId = activeDescriptor?.cameraId
+            if (goal != null && cameraId != null && cadenceIsoLoop.targetSource == "ae") {
+                val old = processHiddenAeGain.gain(cameraId)
+                val updated = processHiddenAeGain.update(cameraId, goal, luma)
+                Log.i(CADENCE_TAG, "hidden gain: target=${"%.4f".format(goal)} manual luma=${"%.4f".format(luma)} G ${"%.2f".format(old)} -> ${"%.2f".format(updated)}")
+            }
+        }
+        if (!cadenceFirstFrameLogged && cadenceIsoLoop.isSettled(SystemClock.elapsedRealtimeNanos())) {
+            cadenceFirstFrameLogged = true
+            Log.i(CADENCE_TAG, "first settled held frame: luma=${"%.4f".format(luma)} target=${cadenceIsoLoop.target?.let { "%.4f".format(it) }}")
+        }
+        // During the exposure ramp the loop only learns a target if none was measured; it plans once the ramp has landed.
+        if (cadenceExposureRamp.active && cadenceIsoLoop.hasTarget) return
         if (!cadenceHoldActive() || analysisSuspended) return
         val descriptor = activeDescriptor
         val evDelta = (requestedAeCompensationIndex ?: 0) - cadenceEvIndexAtEngage
         val scale = if (descriptor != null && descriptor.aeCompensationStep > 0f && evDelta != 0)
             CadenceIsoLoop.evScale(descriptor.aeCompensationStep, evDelta) else 1.0
-        val next = cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale) ?: return
-        cadenceHeldIso = next
-        reapplyRepeating()
+        cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale)
+        updateAnalysisBurst()
     }
 
-    private fun setCadenceEngaged(engaged: Boolean, frameDurationNs: Long?, iso: Int?, exposureNs: Long? = null) {
+    /** Turns the fast analysis on around the handoff of the emulated hold, off otherwise. */
+    private fun updateAnalysisBurst() {
+        val wanted = cadenceBurstWanted(
+            emulatedEligible = cadenceGuardEligible() && cadenceHoldEmulated(),
+            suspended = analysisSuspended,
+            engaged = cadenceEngaged && cadenceHeldIso != null,
+            guardPending = cadenceGuard.pending,
+            sinceEngageNs = SystemClock.elapsedRealtimeNanos() - cadenceEngagedAtNs,
+            loopLearning = !cadenceIsoLoop.hasTarget,
+            loopRamping = cadenceIsoLoop.ramping,
+        )
+        if (wanted == analysisBurst) return
+        analysisBurst = wanted
+        logPipeline?.setAnalysisBurst(wanted)
+    }
+
+    private fun setCadenceEngaged(engaged: Boolean, frameDurationNs: Long?, iso: Int?, exposureNs: Long? = null, aeBoost: Int = 100) {
         if (cadenceEngaged == engaged) return
+        if (engaged) {
+            val path = cadenceHoldPath()
+            Log.i(CADENCE_TAG, "hold path: ${path?.name?.lowercase() ?: "none"}")
+            cadenceEngagedAtNs = SystemClock.elapsedRealtimeNanos()
+            cadenceQcomLogged = path != CadenceHoldPath.QCOM
+        }
         if (engaged && cadenceHoldEmulated()) {
             val caps = activeDescriptor?.exposureCapabilities ?: return
             val range = CadenceIsoLoop.extendedRange(caps.isoRange ?: return, caps.postRawBoostRange)
-            val initial = CadenceIsoLoop.initialIso(iso ?: return, exposureNs, cadenceHeldExposureNs(), range)
+            val nowNs = SystemClock.elapsedRealtimeNanos()
+            val aeIso = iso ?: return
+            val heldExposure = cadenceHeldExposureNs()
+            val timeRange = caps.timeRangeNs
+            val aeExposure = exposureNs?.let { if (timeRange != null) it.coerceIn(timeRange.first, timeRange.last) else it }
+            val rawEffectiveIso = (aeIso.toLong() * aeBoost.coerceAtLeast(100) / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            // AE ON applies an ISP gain AE OFF loses: start with that much more ISO.
+            val hiddenGain = activeDescriptor?.cameraId?.let { processHiddenAeGain.gain(it) } ?: HiddenAeGain.HIDDEN_AE_GAIN_PRIOR
+            val aeEffectiveIso = HiddenAeGain.startIso(rawEffectiveIso, hiddenGain, range)
+            // Start where AE is (its exposure and total gain), so the first held frames match it by construction.
+            val ramping = aeExposure != null && cadenceExposureRamp.start(aeExposure, aeEffectiveIso, heldExposure, range, nowNs)
+            val initial = if (ramping) aeEffectiveIso else HiddenAeGain.startIso(CadenceIsoLoop.initialIso(aeIso, exposureNs, heldExposure, range, aeBoost), hiddenGain, range)
+            cadenceRampStartedNs = nowNs
+            cadenceEngagedAtNs = nowNs
             cadenceEvIndexAtEngage = requestedAeCompensationIndex ?: 0
-            cadenceIsoLoop.engage(initial, range, SystemClock.elapsedRealtimeNanos())
+            cadenceIsoLoop.engage(initial, range, nowNs)
+            cadenceFirstFrameLogged = false
+            cadenceSawManual = false
+            cadenceManualFrames = 0
+            cadenceGainMeasured = false
+            Log.i(CADENCE_TAG, "handoff: aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
+                "heldExposure=${"%.2f ms".format(heldExposure / 1e6)} startExposure=${"%.2f ms".format(cadenceHoldExposureNs() / 1e6)} startIso=$initial " +
+                "exposureRamp=${if (ramping) "${cadenceExposureRamp.totalSteps} steps ~400 ms" else "none"}")
             cadenceHeldIso = initial
         } else if (!engaged) {
+            cadenceExposureRamp.stop()
             cadenceIsoLoop.release()
+            cadenceAeLumas.clear()
             cadenceHeldIso = null
         }
         cadenceEngaged = engaged
         Log.i(CADENCE_TAG, (if (engaged) "engaged" else "released") +
             ": frameDuration=${frameDurationNs?.let { "%.2f ms".format(it / 1e6) }} iso=$iso target=${requestedTargetFps}fps")
-        listener?.onCadenceGuardChanged(engaged)
+        // The hold delivers the target fps only once the exposure ramp has landed (reported then).
+        if (!engaged || !cadenceExposureRamp.active) listener?.onCadenceGuardChanged(engaged)
         if (!reapplyRepeating()) {
             // The session kept its previous request: report what is really in force and stop trying.
             cadenceEngaged = !engaged
-            if (engaged) { cadenceIsoLoop.release(); cadenceHeldIso = null }
+            if (engaged) { cadenceExposureRamp.stop(); cadenceIsoLoop.release(); cadenceHeldIso = null }
             cadenceFaulted = true
             cadenceGuard.reset()
             listener?.onCadenceGuardChanged(cadenceEngaged)
@@ -4016,7 +4184,7 @@ class Camera2PreviewEngine(
                             .getOrNull()
                         image?.use {
                             val now = SystemClock.elapsedRealtime()
-                            if (now - lastAnalysisAtMs >= monitoringOptions.periodMs) {
+                            if (now - lastAnalysisAtMs >= analysisPeriodMs(monitoringOptions.periodMs, analysisBurst)) {
                                 lastAnalysisAtMs = now
                                 // Suspended scopes still acquire and close frames; only analysis stops.
                                 if (!analysisSuspended) analyzeImage(it) else null
@@ -4025,7 +4193,7 @@ class Camera2PreviewEngine(
                     }
                     if (analysis != null && !disposed.get()) {
                         try { cameraExecutor.execute {
-                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) { observeCadenceLuma(analysis); listener?.onAnalysis(ispHistogram.merge(analysis)) }
+                            if (!disposed.get() && currentGeneration == generation && analysisReaderLease === lease) { observeCadenceLuma(analysis, "yuv"); deliverAnalysisToListener(analysis) }
                         } } catch (_: java.util.concurrent.RejectedExecutionException) { /* Terminal owner. */ }
                     }
                 }, imageHandler)
@@ -4504,9 +4672,9 @@ class Camera2PreviewEngine(
      * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
      */
     private fun applyCadenceHold(builder: CaptureRequest.Builder) {
-        val frameDurationNs = 1_000_000_000L / requestedTargetFps.coerceAtLeast(1)
-        val exposureNs = cadenceHeldExposureNs()
         val heldIso = cadenceHeldIso
+        val exposureNs = cadenceHoldExposureNs()
+        val frameDurationNs = CadenceExposureRamp.frameDurationNs(exposureNs, requestedTargetFps)
         if (cadenceHoldEmulated() && heldIso != null) {
             // Manual exposure at 1/fps; CONTROL_MODE stays whatever the auto branch set.
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
@@ -4518,6 +4686,13 @@ class Camera2PreviewEngine(
                 builder.set(CaptureRequest.SENSOR_SENSITIVITY, sensorIso)
                 if (boost != null) builder.set(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, boost)
             } else builder.set(CaptureRequest.SENSOR_SENSITIVITY, heldIso)
+        } else if (cadenceHoldPath() == CadenceHoldPath.QCOM && qcomPriorityKeys() != null) {
+            // AE stays on and keeps this exposure; the HAL steers the ISO and its ISP gain. No manual sensor values.
+            val keys = qcomPriorityKeys()!!
+            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            builder.set(keys.select, QcomExposurePriority.SELECT_EXPOSURE_PRIORITY)
+            builder.set(keys.use, cadenceHeldExposureNs())
+            return
         } else {
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             if (Build.VERSION.SDK_INT >= 36) {
@@ -5570,6 +5745,7 @@ class Camera2PreviewEngine(
                         else -> null
                     } }?.toSet().orEmpty(),
                     meteringModes = vendorMeteringModes(characteristics),
+                    qcomExposureRangeNs = QcomExposurePriority.parseRange(VendorKeys.staticLongs(characteristics, QcomExposurePriority.RANGE_KEY)),
                 ),
                 photoFlashCapabilities = run {
                     val available = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
@@ -5747,6 +5923,10 @@ class Camera2PreviewEngine(
         pendingPreviewStartedReceipt = null
         cadenceGuard.reset()
         cadenceIsoLoop.reset()
+        cadenceExposureRamp.stop()
+        cadenceAeLumas.clear()
+        analysisBurst = false
+        logPipeline?.setAnalysisBurst(false)
         cadenceHeldIso = null
         cadenceEngaged = false
         cadenceFaulted = false
