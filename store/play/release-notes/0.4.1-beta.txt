@@ -1,0 +1,40 @@
+<en-US>
+- The camera opens faster at launch, and the splash goes away as soon as the viewfinder is live
+- RAW (DNG) photos keep the digital zoom
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- La cámara abre más rápido al iniciar y el splash se va apenas el visor está en vivo
+- Las fotos RAW (DNG) conservan el zoom digital
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- La cámara se abre más rápido al iniciar y la pantalla de inicio desaparece en cuanto el visor está en directo
+- Las fotos RAW (DNG) conservan el zoom digital
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- A câmera abre mais rápido ao iniciar e a tela de abertura some assim que o visor está ao vivo
+- Fotos RAW (DNG) mantêm o zoom digital
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- A câmara abre mais depressa ao iniciar e o ecrã de abertura desaparece assim que o visor está em direto
+- As fotos RAW (DNG) mantêm o zoom digital
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- La caméra s'ouvre plus vite au lancement et l'écran de démarrage disparaît dès que le viseur est en direct
+- Les photos RAW (DNG) conservent le zoom numérique
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Die Kamera öffnet beim Start schneller, und der Startbildschirm verschwindet, sobald der Sucher live ist
+- RAW-Fotos (DNG) behalten den Digitalzoom
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- La fotocamera si apre più velocemente all'avvio e la schermata iniziale sparisce appena il mirino è attivo
+- Le foto RAW (DNG) mantengono lo zoom digitale
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
