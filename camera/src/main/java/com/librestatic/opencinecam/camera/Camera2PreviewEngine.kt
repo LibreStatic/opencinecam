@@ -15,6 +15,7 @@ import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
@@ -2932,7 +2933,7 @@ class Camera2PreviewEngine(
 
     /** Asks the HAL to apply zoom ahead of other settings while zoom is moving; OFF otherwise. */
     private fun applyZoomSettingsOverride(builder: CaptureRequest.Builder, descriptor: Camera2CameraDescriptor) {
-        if (!zoomOverrideEligible(descriptor)) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || !zoomOverrideEligible(descriptor)) return
         try {
             builder.set(
                 CaptureRequest.CONTROL_SETTINGS_OVERRIDE,
@@ -3981,7 +3982,7 @@ class Camera2PreviewEngine(
             configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
             createSessionRetryingWithoutStreamUse(
                 device, descriptor, configuration,
-                ColorSpace.Named.BT2020_HLG.takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE },
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ColorSpace.Named.BT2020_HLG else null,
             )
         } catch (failure: Throwable) {
             sessionException(failure)
@@ -5025,7 +5026,7 @@ class Camera2PreviewEngine(
         var cleared = false
         configuration.outputConfigurations.forEach { output ->
             if (output.streamUseCase != StreamUseCase.DEFAULT) {
-                output.streamUseCase = StreamUseCase.DEFAULT
+                output.streamUseCase = CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_DEFAULT.toLong()
                 cleared = true
             }
         }
@@ -5044,9 +5045,9 @@ class Camera2PreviewEngine(
         configuration: SessionConfiguration,
         colorSpace: ColorSpace.Named? = null,
     ) {
-        val carries = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            configuration.outputConfigurations.any { it.streamUseCase != StreamUseCase.DEFAULT }
-        if (!carries) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            configuration.outputConfigurations.none { it.streamUseCase != StreamUseCase.DEFAULT }
+        ) {
             device.createCaptureSession(configuration)
             return
         }
