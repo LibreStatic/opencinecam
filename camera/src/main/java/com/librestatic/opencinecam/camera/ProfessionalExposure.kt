@@ -57,6 +57,8 @@ data class ExposureCapabilities(
     val meteringModes: Set<ExposureMetering> = emptySet(),
     /** CONTROL_POST_RAW_SENSITIVITY_BOOST range when the request key is available (100 = no boost). */
     val postRawBoostRange: IntRange? = null,
+    /** Qualcomm exposure-time priority range in ns (vendor characteristics key), when the camera has it. */
+    val qcomExposureRangeNs: LongRange? = null,
 ) {
     private val validIso get() = isoRange?.let { it.first > 0 && it.last >= it.first } == true
     private val validTime get() = timeRangeNs?.let { it.first > 0 && it.last >= it.first } == true

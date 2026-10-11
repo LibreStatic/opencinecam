@@ -454,6 +454,9 @@ class OpenCineLogGpuPipeline(
     /** While on, the analysis readback doubles its resolution for the edge mask; scopes keep theirs. */
     fun setFocusPeakingEnabled(enabled: Boolean) { focusPeakingEnabled = enabled }
     @Volatile private var analysisSuspended = false
+    @Volatile private var analysisBurst = false
+    /** Runs the scope readback at the burst period; the owner decides what reaches the UI. */
+    fun setAnalysisBurst(burst: Boolean) { analysisBurst = burst }
     /** Thermal governor seam: skips the scope readback and [onAnalysis]; preview and recording are unaffected. */
     fun setAnalysisSuspended(suspended: Boolean) { analysisSuspended = suspended }
     private val closed = AtomicBoolean(false)
@@ -1107,7 +1110,7 @@ class OpenCineLogGpuPipeline(
         val callback = onAnalysis ?: return
         val now = android.os.SystemClock.elapsedRealtime()
         val options = monitoringOptions
-        if (!scopeAnalysisDue(analysisSuspended, now, lastAnalysisAtMs, options.periodMs)) return
+        if (!scopeAnalysisDue(analysisSuspended, now, lastAnalysisAtMs, analysisPeriodMs(options.periodMs, analysisBurst))) return
         lastAnalysisAtMs = now
         val peaking = focusPeakingEnabled
         val scale = if (peaking) PEAKING_ANALYSIS_SCALE else 1
