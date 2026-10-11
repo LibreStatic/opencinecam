@@ -3,7 +3,9 @@
 
 package com.librestatic.opencinecam
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
@@ -24,9 +26,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.key.Key
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.librestatic.opencinecam.service.CaptureStartup
 import com.librestatic.opencinecam.ui.theme.AppTheme
 import com.librestatic.opencinecam.ui.theme.AppThemeStore
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
@@ -52,6 +56,7 @@ class MainActivity : ComponentActivity() {
         if (!hasFocus) operatorKeys.clear()
     }
     override fun onResume() { super.onResume(); CaptureLocations.get(this).setForeground(locationOwner, true) }
+    override fun onStop() { CaptureStartup.stopped(); super.onStop() }
     override fun onPause() { CaptureLocations.get(this).setForeground(locationOwner, false); operatorKeys.clear(); super.onPause() }
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean =
         handleOperatorKey(keyCode, event, down = true) || handleShortcut(keyCode, event) || super.onKeyDown(keyCode, event)
@@ -75,7 +80,8 @@ class MainActivity : ComponentActivity() {
     }
     private lateinit var foldDisplays: FoldDisplayCoordinator
     private val splashHandoff = mutableStateOf(SplashHandoff(onScreen = true))
-    @Volatile private var contentReady = false
+    private var contentReady = false
+    private var heldSplash: SplashScreenViewProvider? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -83,6 +89,13 @@ class MainActivity : ComponentActivity() {
         val theme = AppThemeStore(this).load()
         setTheme(windowThemeFor(theme))
         super.onCreate(savedInstanceState)
+        val onboardingDone = OnboardingStore(this).isCompleted()
+        // The camera starts opening now, while the splash is up and Compose builds the first frame.
+        // The wizard comes first on a first run, so the camera can wait for it there.
+        if (onboardingDone && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            val window = viewfinderWindowSize()
+            CaptureStartup.begin(this, window.width, window.height)
+        }
         applySplashTheme(this, theme)
         com.librestatic.opencinecam.storage.MediaProxyQueue.get(this).start()
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -103,14 +116,21 @@ class MainActivity : ComponentActivity() {
         foldDisplays = FoldDisplayCoordinator(this)
 
         // The logo intro plays once per process, on a start from scratch that lands on the wizard.
-        val playIntro = savedInstanceState == null && !introPlayed && !OnboardingStore(this).isCompleted()
+        val playIntro = savedInstanceState == null && !introPlayed && !onboardingDone
         introPlayed = true
         splashHandoff.value = SplashHandoff(onScreen = savedInstanceState == null, playIntro = playIntro)
-        // A normal start holds the splash while the camera opens, so "Preparing camera" never flashes
-        // by; never for long, so a slow or failing camera does not trap the user on the logo.
         val start = SystemClock.uptimeMillis()
-        splashScreen.setKeepOnScreenCondition { !contentReady && SystemClock.uptimeMillis() - start < KeepSplashMaxMillis }
         splashScreen.setOnExitAnimationListener { provider ->
+            if (!playIntro) {
+                // A normal start keeps the splash on top until the viewfinder shows its first frame,
+                // so "Preparing camera" never flashes by. The window keeps drawing underneath (a
+                // keep-on-screen condition would stop it), so lifting the splash shows a finished
+                // frame at once. Never for long: a slow or failing camera must not trap the user.
+                heldSplash = provider
+                if (contentReady) releaseSplash()
+                else window.decorView.postDelayed(::releaseSplash, (KeepSplashMaxMillis - (SystemClock.uptimeMillis() - start)).coerceAtLeast(0))
+                return@setOnExitAnimationListener
+            }
             val bounds = runCatching {
                 val icon = provider.iconView
                 // An icon-less splash hands back a detached, empty stand-in view; its zero bounds
@@ -127,9 +147,20 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             CompositionLocalProvider(LocalFoldDisplayCoordinator provides foldDisplays, LocalShortcutDispatcher provides shortcuts) {
-                OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true })
+                OpenCineCamApp(splash = splashHandoff.value, onReady = { contentReady = true; releaseSplash() })
             }
         }
+    }
+
+    /**
+     * Lifts a held splash, showing the live viewfinder and handing over the controls. A very short
+     * fade keeps a fast camera from snapping the logo away.
+     */
+    private fun releaseSplash() {
+        val provider = heldSplash ?: return
+        heldSplash = null
+        splashHandoff.value = splashHandoff.value.copy(onScreen = false)
+        provider.view.animate().alpha(0f).setDuration(SplashReleaseFadeMillis).withEndAction(provider::remove).start()
     }
 
     override fun onDestroy() {
@@ -142,9 +173,19 @@ class MainActivity : ComponentActivity() {
         var introPlayed = false
         const val SplashFadeMillis = 200L
         const val SplashFadeDelayMillis = 34L
-        const val KeepSplashMaxMillis = 800L
+        const val KeepSplashMaxMillis = 2_000L
+        const val SplashReleaseFadeMillis = 120L
     }
 }
+
+/** The window the viewfinder fills: the app draws edge to edge, cutout included. */
+private fun Activity.viewfinderWindowSize(): android.util.Size =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        windowManager.currentWindowMetrics.bounds.let { android.util.Size(it.width(), it.height()) }
+    } else {
+        @Suppress("DEPRECATION")
+        android.graphics.Point().also { windowManager.defaultDisplay.getRealSize(it) }.let { android.util.Size(it.x, it.y) }
+    }
 
 internal fun windowThemeFor(theme: AppTheme): Int =
     if (theme == AppTheme.YOU) R.style.Theme_OpenCineCam_You else R.style.Theme_OpenCineCam
