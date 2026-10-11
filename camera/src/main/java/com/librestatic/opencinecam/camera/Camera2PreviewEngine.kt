@@ -1729,12 +1729,16 @@ class Camera2PreviewEngine(
                         val orientation = if (owner.aspect.enabled) owner.desiredOrientationDegrees
                             else requireNotNull(owner.still).get(CaptureRequest.JPEG_ORIENTATION) ?: 0
                         val output = BoundedDngOutput()
-                        val creator = DngCreator(manager.getCameraCharacteristics(owner.descriptor.cameraId), requireNotNull(owner.result))
+                        val characteristics = manager.getCameraCharacteristics(owner.descriptor.cameraId)
+                        val creator = DngCreator(characteristics, requireNotNull(owner.result))
                         try {
                             creator.setOrientation(when (orientation) { 90 -> 6; 180 -> 3; 270 -> 8; else -> 1 })
                             creator.writeImage(output, image)
                         } finally { creator.close() }
-                        add(StillImagePayload.owned(StillImageKind.DNG, output.toByteArray(), width, height,
+                        val dng = output.toByteArray()
+                        // Camera2 never crops RAW_SENSOR, so record the digital zoom as DefaultCrop.
+                        runCatching { rawZoomCrop(owner, characteristics)?.let { DngDefaultCrop.apply(dng, it) } }
+                        add(StillImagePayload.owned(StillImageKind.DNG, dng, width, height,
                             owner.aspect.takeIf { it.enabled }?.rawReport(width, height, orientation)))
                     } finally { image.close() }
                 }
@@ -3138,6 +3142,36 @@ class Camera2PreviewEngine(
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
         }
+    }
+
+    /** The framing the user saw through digital zoom, in RAW frame fractions; null when it is the full frame. */
+    private fun rawZoomCrop(owner: PhotoRequest, characteristics: CameraCharacteristics): NormRect? {
+        val result = owner.result ?: return null
+        val active = owner.descriptor.sensorActiveArray ?: return null
+        val zoomRatio = if (owner.descriptor.supportsZoomRatioApi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+        } else null
+        val region = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
+            ?.let { CropRect(it.left, it.top, it.right, it.bottom) }
+        val fov = RawZoomCrop.processedFieldOfView(active.width(), active.height(), region, zoomRatio)
+        var scale = 1.0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+            if (physicalId != null) {
+                val physical = runCatching { manager.getCameraCharacteristics(physicalId) }.getOrNull()
+                if (physical != null) scale = RawZoomCrop.rawLensScale(fovWidth(characteristics), fovWidth(physical))
+            }
+        }
+        return RawZoomCrop.rawCrop(fov, scale)
+    }
+
+    private fun fovWidth(c: CameraCharacteristics): Double? {
+        val active = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return null
+        return RawZoomCrop.fovWidth(
+            c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.width, active.width(),
+            c.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)?.width ?: return null,
+            c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull(),
+        )
     }
 
     private fun reportEffectiveZoom(result: TotalCaptureResult) {
