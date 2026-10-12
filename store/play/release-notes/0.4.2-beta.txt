@@ -1,0 +1,32 @@
+<en-US>
+- Faster start after installing or updating: the app ships precompiled code for launch, the capture screen, the mode sheet and the gallery, so it opens about a third quicker and scrolls more smoothly from the first run
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Arranque más rápido después de instalar o actualizar: la app trae precompilado el inicio, la pantalla de captura, el selector de modos y la galería, así que abre cerca de un tercio más rápido y se desplaza con más fluidez desde el primer uso
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Arranque más rápido tras instalar o actualizar: la app incluye precompilados el inicio, la pantalla de captura, el selector de modos y la galería, así que se abre cerca de un tercio más rápido y se desplaza con más fluidez desde el primer uso
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Abertura mais rápida após instalar ou atualizar: o app traz pré-compilados o início, a tela de captura, o seletor de modos e a galeria, então abre cerca de um terço mais rápido e rola com mais fluidez desde o primeiro uso
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Arranque mais rápido após instalar ou atualizar: a app inclui pré-compilados o início, o ecrã de captura, o seletor de modos e a galeria, por isso abre cerca de um terço mais depressa e desliza com mais fluidez desde a primeira utilização
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Démarrage plus rapide après installation ou mise à jour : l'app embarque précompilés le lancement, l'écran de capture, le sélecteur de modes et la galerie ; elle s'ouvre environ un tiers plus vite et défile plus fluidement dès la première utilisation
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Schnellerer Start nach Installation oder Update: Die App bringt Start, Aufnahmebildschirm, Modusauswahl und Galerie vorkompiliert mit, öffnet dadurch etwa ein Drittel schneller und scrollt schon beim ersten Mal flüssiger
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Avvio più rapido dopo l'installazione o l'aggiornamento: l'app include precompilati l'avvio, la schermata di acquisizione, il selettore delle modalità e la galleria, quindi si apre circa un terzo più velocemente e scorre in modo più fluido fin dal primo utilizzo
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
