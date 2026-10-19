@@ -46,6 +46,12 @@ class RecordingStoragePlanTest {
         assertEquals(80_000_000L / 8 * 60, projectedTakeBytesPerMinute(CaptureMode.VIDEO, settings, 120, true, false))
     }
 
+    @Test fun constrainedHighSpeedOffSpeedProjectsTheCaptureRateRecorderBitrate() {
+        val settings = CameraSettings(videoBitrateMbps = 20, videoOffSpeed = true)
+        val perMinute = projectedTakeBytesPerMinute(CaptureMode.VIDEO, settings, 240, constrainedHighSpeed = true, audioRequested = false)
+        assertEquals(1_200_000_000.0, perMinute.toDouble(), 1_200_000_000.0 * 0.02) // 160 Mbps
+    }
+
     @Test fun timelapseAndOffSpeedTakesCarryNoAudio() {
         val settings = CameraSettings(videoBitrateMbps = 20, videoOffSpeed = true)
         assertEquals(projectedTakeBytesPerMinute(CaptureMode.TIME_LAPSE, settings, 30, false, false),

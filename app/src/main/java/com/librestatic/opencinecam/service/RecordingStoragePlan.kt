@@ -38,12 +38,13 @@ internal fun projectedTakeBytesPerMinute(
             val rate = settings.timelapseProjectRate
             RecordingDataRate.timelapseVideoBps(nominal, rate.numerator.toDouble() / rate.denominator, settings.timelapseIntervalMs)
         }
+        // Constrained high-speed runs the direct recorder at the capture rate, off-speed or not.
+        mode == CaptureMode.VIDEO && constrainedHighSpeed -> maxOf(
+            RecordingDataRate.recorderVideoBps(nominal, targetFps), RecordingDataRate.gpuVideoBps(nominal, targetFps)).toLong()
         mode == CaptureMode.VIDEO && settings.videoOffSpeed -> {
             val rate = settings.videoProjectRate
             RecordingDataRate.gpuVideoBps(nominal, kotlin.math.ceil(rate.numerator.toDouble() / rate.denominator).toInt().coerceAtLeast(1)).toLong()
         }
-        mode == CaptureMode.VIDEO && constrainedHighSpeed -> maxOf(
-            RecordingDataRate.recorderVideoBps(nominal, targetFps), RecordingDataRate.gpuVideoBps(nominal, targetFps)).toLong()
         else -> RecordingDataRate.gpuVideoBps(nominal, targetFps).toLong()
     }
     val audio = if (mode == CaptureMode.TIME_LAPSE || (mode == CaptureMode.VIDEO && settings.videoOffSpeed)) 0L
