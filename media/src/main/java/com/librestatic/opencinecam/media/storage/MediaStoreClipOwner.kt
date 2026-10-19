@@ -51,7 +51,7 @@ sealed interface ClipFinalizationResult {
 }
 
 /** Row operations [finalizeClip] needs; the production implementation is backed by a ContentResolver. */
-internal interface ClipRows<U> {
+interface ClipRows<U> {
     fun delete(uri: U)
     fun publish(uri: U)
     fun writeSidecar(uri: U, bytes: ByteArray)
@@ -68,7 +68,26 @@ internal fun <U, D> openInsertedOnce(insert: () -> U, open: (U) -> D?, delete: (
     }
 }
 
-internal fun <U> finalizeClip(
+/** [ClipRows] over a [ContentResolver]: rows are published by clearing IS_PENDING, whatever their collection. */
+class ContentResolverClipRows(private val resolver: ContentResolver) : ClipRows<Uri> {
+    override fun delete(uri: Uri) { resolver.delete(uri, null, null) }
+    override fun publish(uri: Uri) {
+        val updated = resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        check(updated == 1) { "Publication did not update its owned row" }
+    }
+    override fun writeSidecar(uri: Uri, bytes: ByteArray) {
+        (resolver.openOutputStream(uri, "wt") ?: error("Clip sidecar could not be opened.")).use { it.write(bytes) }
+    }
+}
+
+/**
+ * Decides with [decideClipRecovery] and applies the decision. A clip with bytes is published (marked
+ * incomplete when the muxer did not finalize) and is never deleted because metadata failed; only an
+ * empty clip is removed. [sidecarBytes] null means the sidecar was written earlier and is only published.
+ * [attachments] are optional rows (such as a motion log) that travel with the clip: published with it,
+ * deleted with an empty clip, and left alone when finalization fails.
+ */
+fun <U> finalizeClip(
     rows: ClipRows<U>,
     clipUri: U,
     sidecarUri: U?,
@@ -76,6 +95,7 @@ internal fun <U> finalizeClip(
     bytesWritten: Long,
     sidecarBytes: (() -> ByteArray)?,
     correlationId: String,
+    attachments: List<U> = emptyList(),
 ): ClipFinalizationResult {
     val decision = decideClipRecovery(muxerFinalized, bytesWritten)
     return try {
@@ -83,12 +103,15 @@ internal fun <U> finalizeClip(
             ClipRecoveryDecision.DELETE -> {
                 rows.delete(clipUri)
                 sidecarUri?.let(rows::delete)
+                attachments.forEach(rows::delete)
                 ClipFinalizationResult.Deleted
             }
             ClipRecoveryDecision.PUBLISH_COMPLETE,
             ClipRecoveryDecision.PUBLISH_INCOMPLETE,
             -> {
                 if (sidecarUri != null && sidecarBytes != null) rows.writeSidecar(sidecarUri, sidecarBytes())
+                attachments.forEach(rows::publish)
+                sidecarUri?.let(rows::publish)
                 rows.publish(clipUri)
                 ClipFinalizationResult.Published(muxerFinalized.not())
             }
@@ -119,15 +142,7 @@ class MediaStoreClipOwner(
     private val resolver: ContentResolver,
     private val correlationId: String = "clip-storage",
 ) {
-    private val rows = object : ClipRows<Uri> {
-        override fun delete(uri: Uri) { resolver.delete(uri, null, null) }
-        override fun publish(uri: Uri) {
-            resolver.update(uri, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null)
-        }
-        override fun writeSidecar(uri: Uri, bytes: ByteArray) {
-            (resolver.openOutputStream(uri) ?: error("Clip sidecar could not be opened.")).use { it.write(bytes) }
-        }
-    }
+    private val rows = ContentResolverClipRows(resolver)
 
     fun createPending(request: ClipOutputRequest): OwnedClipDescriptor {
         val values = ContentValues().apply {
