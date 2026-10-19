@@ -918,4 +918,20 @@
     <string name="caps_export_saved">Relatório salvo</string>
     <string name="caps_export_failed">Não foi possível exportar o relatório</string>
     <string name="caps_export_chooser">Compartilhar relatório de capacidades</string>
+    <string name="bench_title">Teste de armazenamento</string>
+    <string name="bench_settings_summary">Verifique se uma unidade acompanha suas configurações de gravação atuais</string>
+    <string name="bench_intro">Grava dados de teste por alguns segundos no local que você escolher e mede se ele sustenta a taxa de dados das suas configurações atuais. O arquivo de teste é apagado depois.</string>
+    <string name="bench_required">Taxa necessária</string>
+    <string name="bench_required_help">O vídeo e o áudio que seu modo e configurações atuais gravam, por segundo.</string>
+    <string name="bench_run">Escolher destino e iniciar</string>
+    <string name="bench_running">Medindo a velocidade de gravação…</string>
+    <string name="bench_no_result">Nenhum teste foi executado ainda.</string>
+    <string name="bench_last">Último resultado</string>
+    <string name="bench_margin">Margem sobre a taxa necessária: %1$s</string>
+    <string name="bench_window">Janela %1$d</string>
+    <string name="bench_outcome_qualified">Qualificado: sustenta a taxa necessária em todas as janelas</string>
+    <string name="bench_outcome_not_qualified">Não qualificado: pelo menos uma janela ficou abaixo da taxa necessária</string>
+    <string name="bench_outcome_cancelled">Cancelado antes de terminar</string>
+    <string name="bench_outcome_unsupported">Este destino não oferece suporte ao teste</string>
+    <string name="bench_outcome_failed">O teste não conseguiu gravar no destino</string>
 </resources>

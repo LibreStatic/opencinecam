@@ -81,6 +81,7 @@ object SettingsCatalog {
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),
         SettingEntry("gyroflow-log", SettingsCategory.RECORDING, R.string.gyroflow_log_title, "gyroflow gyro gyroscope giroscopio acelerometro accelerometer gcsv movimiento motion estabilizacion stabilization sensor IMU video LOG HLG privacidad privacy"),
         SettingEntry("camera-capabilities", SettingsCategory.DIAGNOSTICS, R.string.caps_title, "capacidades capabilities parametros parameters caracteristicas characteristics camera2 camara camera sensor lente lens soporte support compatibilidad compatibility hardware nivel level ISO RAW HLG HDR fps alta velocidad high speed formatos formats informe report"),
+        SettingEntry("storage-benchmark", SettingsCategory.DIAGNOSTICS, R.string.bench_title, "almacenamiento storage velocidad speed escritura write benchmark prueba test tarjeta card sd disco disk bitrate"),
         SettingEntry("hardware", SettingsCategory.DIAGNOSTICS, R.string.hardware_truth, "hardware capacidades capabilities camara camera LOG RAW"),
         SettingEntry("modes", SettingsCategory.DIAGNOSTICS, R.string.settings_mode_availability, "modo mode supported disponible experimental"),
         SettingEntry("about", SettingsCategory.DIAGNOSTICS, R.string.about_title, "about acerca licencia license version ayuda help"),

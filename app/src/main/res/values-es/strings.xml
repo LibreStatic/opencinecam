@@ -918,4 +918,20 @@
     <string name="caps_export_saved">Informe guardado</string>
     <string name="caps_export_failed">No se pudo exportar el informe</string>
     <string name="caps_export_chooser">Compartir informe de capacidades</string>
+    <string name="bench_title">Prueba de almacenamiento</string>
+    <string name="bench_settings_summary">Comprueba que una unidad aguanta tus ajustes de grabación actuales</string>
+    <string name="bench_intro">Escribe datos de prueba unos segundos en el lugar que elijas y mide si sostiene la tasa de datos de tus ajustes actuales. El archivo de prueba se borra después.</string>
+    <string name="bench_required">Tasa necesaria</string>
+    <string name="bench_required_help">El vídeo y el audio que escriben tu modo y ajustes actuales, por segundo.</string>
+    <string name="bench_run">Elegir destino y empezar</string>
+    <string name="bench_running">Midiendo la velocidad de escritura…</string>
+    <string name="bench_no_result">Todavía no se ha hecho ninguna prueba.</string>
+    <string name="bench_last">Último resultado</string>
+    <string name="bench_margin">Margen sobre la tasa necesaria: %1$s</string>
+    <string name="bench_window">Ventana %1$d</string>
+    <string name="bench_outcome_qualified">Apto: sostiene la tasa necesaria en todas las ventanas</string>
+    <string name="bench_outcome_not_qualified">No apto: al menos una ventana quedó por debajo de la tasa necesaria</string>
+    <string name="bench_outcome_cancelled">Cancelada antes de terminar</string>
+    <string name="bench_outcome_unsupported">Este destino no admite la prueba</string>
+    <string name="bench_outcome_failed">La prueba no pudo escribir en el destino</string>
 </resources>

@@ -415,6 +415,14 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             liveState = state,
                         )
                         }
+                    } else if (settingsPage == SettingsPage.STORAGE_BENCHMARK) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
+                        StorageBenchmarkScreen(
+                            requiredBytesPerSecond = benchmarkRequiredBytesPerSecond(state.selectedMode, settings, state.targetFps,
+                                state.activeVideoProfile?.constrainedHighSpeed == true),
+                            onBack = { settingsPage = SettingsPage.MAIN },
+                        )
+                        }
                     } else {
                         settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsScreen(
@@ -427,6 +435,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onSettingsChange = settingsRepository::set,
                             onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
+                            onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
                         )
                         }
                     }
@@ -3932,6 +3941,7 @@ internal fun SettingsContent(
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
     onOpenCapabilities: (() -> Unit)? = null,
     audioPermissionBlocked: Boolean = false,
+    onOpenStorageBenchmark: (() -> Unit)? = null,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
@@ -4244,6 +4254,10 @@ internal fun SettingsContent(
         if ("camera-capabilities" in visibleIds && onOpenCapabilities != null) settingsCard("camera-capabilities") {
             SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
                 Modifier.testTag("settings-open-capabilities"))
+        }
+        if ("storage-benchmark" in visibleIds && onOpenStorageBenchmark != null) settingsCard("storage-benchmark") {
+            SettingsLinkRow(stringResource(R.string.bench_title), stringResource(R.string.bench_settings_summary), onOpenStorageBenchmark,
+                Modifier.testTag("settings-open-storage-benchmark"))
         }
         if ("hardware" in visibleIds) settingsCard("hardware") { HardwareSettingsSummary(state.descriptor) }
         if ("modes" in visibleIds) settingsCard("modes") {
