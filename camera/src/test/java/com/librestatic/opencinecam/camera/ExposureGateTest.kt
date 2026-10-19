@@ -42,6 +42,16 @@ class ExposureGateTest {
         assertTrue(adaptive.message!!.startsWith("Exposure time 1/10 s clamped to"))
         assertTrue(adaptive.exposure.timeNs!! < 33_333_333L)
     }
+    @Test fun aFullFrameShutterIsHonouredDespiteTheReadoutMargin() {
+        val fullFrame = inRange.copy(timeNs = rate.frameDurationNs)
+        for (p in PolicyMode.entries) {
+            val g = fullFrame.gate(caps, rate, p)
+            assertNull(g.code); assertFalse(g.rejected)
+            assertEquals(ExposureMode.MANUAL, g.exposure.mode); assertEquals(rate.frameDurationNs - 100_000L, g.exposure.timeNs)
+        }
+        val shortLens = caps.copy(timeRangeNs = 100_000L..20_000_000L)
+        assertEquals(ExposureGateCode.OUT_OF_RANGE, fullFrame.gate(shortLens, rate, PolicyMode.STRICT).code)
+    }
     @Test fun unsupportedModeIsRejectedInStrictAndFallsBackInAdaptive() {
         val shutter = ExposureSelection(ExposureMode.SHUTTER_PRIORITY)
         val strict = shutter.gate(caps, rate, PolicyMode.STRICT)

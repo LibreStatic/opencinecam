@@ -144,7 +144,7 @@ fun ExposureSelection.gate(caps: ExposureCapabilities, rate: CaptureFrameRate, p
             "This lens does not support $name exposure",
             "This lens does not support $name exposure; using auto exposure")
     }
-    if (!resolved.clamped) return ExposureGate(resolved)
+    if (!resolved.clamped || resolved.marginOnly(this, rate)) return ExposureGate(resolved)
     val parts = mutableListOf<Pair<String, String>>()
     val iso = resolved.iso
     if (iso != null && iso != this.iso) parts += "ISO ${this.iso} outside ${caps.isoRange?.first}-${caps.isoRange?.last} on this lens" to "ISO ${this.iso} clamped to $iso on this lens"
@@ -156,6 +156,16 @@ fun ExposureSelection.gate(caps: ExposureCapabilities, rate: CaptureFrameRate, p
             "Exposure time ${formatTime(asked)} clamped to ${formatTime(time)} on this lens"
     }
     return outcome(ExposureGateCode.OUT_OF_RANGE, parts.joinToString("; ") { it.first }, parts.joinToString("; ") { it.second })
+}
+
+/**
+ * The only coercion is the internal readout margin below the frame interval (e.g. a 360-degree shutter), which the
+ * lens range does not set: an honoured request, not an out-of-range one.
+ */
+private fun ResolvedExposure.marginOnly(selection: ExposureSelection, rate: CaptureFrameRate): Boolean {
+    val asked = selection.requestedTimeNs(rate)
+    val isoHonoured = iso == null || iso == selection.iso
+    return isoHonoured && timeNs != null && timeNs != asked && asked <= rate.frameDurationNs && timeNs == rate.frameDurationNs - 100_000L
 }
 
 private fun formatTime(ns: Long?): String = when {
