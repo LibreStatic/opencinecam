@@ -68,6 +68,7 @@ class WavAudioSidecarRecorder private constructor(
     private val running = AtomicBoolean(false)
     private val capturedSampleRateHz = audioRecord.sampleRate
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
+    override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
     private var deferredFileCleanup = false
     @Volatile private var nativeRetired = false
     private val effects = mutableListOf<AudioEffect>()
@@ -540,6 +541,8 @@ class WavAudioSidecarRecorder private constructor(
 interface AudioSidecarRecorder : AutoCloseable {
     val displayName: String
     val captureClock: com.librestatic.opencinecam.camera.CaptureEpochClock? get() = null
+    /** A thread-safe look at the capture clocks while the take runs; null before any timestamp or when unsupported. */
+    fun liveCaptureTiming(): com.librestatic.opencinecam.camera.PcmSourceTimingReport? = null
     fun start()
     /** Seal native output and metadata, returning stable identities that are still pending. */
     fun prepareCompletion(): PreparedAudioSidecar?

@@ -893,4 +893,15 @@
     <string name="storage_reserve_insufficient">Pas assez d’espace libre pour démarrer : cette prise demande %1$s libres et %2$s sont disponibles.</string>
     <string name="storage_unknown_refused">L’espace libre n’a pas pu être lu, la prise n’a donc pas démarré. Choisissez la politique d’enregistrement adaptative pour enregistrer sans vérification d’espace.</string>
     <string name="storage_unknown_warning">Espace libre illisible ; enregistrement sans vérification d’espace</string>
+    <string name="take_stopped_reason">Prise arrêtée : %1$s · %2$s</string>
+    <string name="stop_reason_thermal">l’appareil est trop chaud</string>
+    <string name="stop_reason_storage">l’espace de stockage libre est presque épuisé</string>
+    <string name="stop_reason_state_unknown">la température ou le stockage n’a pas pu être lu</string>
+    <string name="stop_reason_av_drift">l’audio et la vidéo se sont décalés</string>
+    <string name="stop_reason_cadence">la cadence des images a été perdue</string>
+    <string name="stop_reason_audio_input">l’entrée audio a été déconnectée</string>
+    <string name="stop_reason_other">une limite de sécurité a été atteinte</string>
+    <string name="runtime_notice_monitoring_reduced">Chaleur ou stockage faible : monitoring réduit</string>
+    <string name="runtime_notice_state_unknown">Température ou stockage illisible</string>
+    <string name="runtime_notice_av_drift">L’audio et la vidéo se décalent</string>
 </resources>

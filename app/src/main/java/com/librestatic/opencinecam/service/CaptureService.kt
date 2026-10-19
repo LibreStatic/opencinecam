@@ -98,6 +98,8 @@ import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.core.model.CaptureCommand
 import com.librestatic.opencinecam.core.model.CaptureState
+import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
 import com.librestatic.opencinecam.CaptureNameSnapshot
@@ -410,18 +412,64 @@ class CaptureService : Service() {
 
     /** Set when Adaptive admitted a take it could not size; shown for the whole take. */
     @Volatile private var admissionWarning: String? = null
+    /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
+    @Volatile private var takeProjectedBytesPerMinute = 0L
+    /** The policy the running take started under; a setting changed mid-take stays pending. */
+    private var activeRecordingPolicy = PolicyMode.STRICT
+    private var lastKnownFreeBytes: Long? = null
+    private var runtimeNotice: RuntimeNotice? = null
+    /** Why the running take is being stopped; the final message names it, and the file is still saved. */
+    @Volatile private var pendingStopReason: StableFailure? = null
 
     private val recordingTicker = object : Runnable {
         override fun run() {
             if (cameraState.value.phase != CameraUiPhase.RECORDING) return
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
+            val free = recordingVolumeFreeBytes()
             cameraState.value = cameraState.value.copy(
                 recordingElapsedMs = activeRecordingElapsedMs(),
-                availableStorageBytes = recordingVolumeFreeBytes(),
+                availableStorageBytes = free,
                 timecodeDisplay = timecodeTracker.currentDisplayTc()?.format(),
             )
+            enforceRuntimePolicy(free)
             mainHandler.postDelayed(this, RECORDING_TICK_MS)
         }
+    }
+
+    /**
+     * Live thermal and storage policy (ADR-0016) for the running take. A stop verdict ends the take
+     * with its reason; a notice stays on screen. A one-off unreadable free-space sample reuses the
+     * last good one, so a StatFs hiccup cannot stop a take in Strict.
+     */
+    private fun enforceRuntimePolicy(free: Long?) {
+        if (pendingStopReason != null) return
+        if (free != null) lastKnownFreeBytes = free
+        val thermal = runCatching { getSystemService(android.os.PowerManager::class.java).currentThermalStatus }.getOrNull()
+        val verdict = evaluateRuntimePolicy(activeRecordingPolicy, thermal, free ?: lastKnownFreeBytes, takeProjectedBytesPerMinute)
+        verdict.stop?.let { localBinder.stopRecording(it); return }
+        runtimeNotice = verdict.notice
+        publishRecordingWarning()
+    }
+
+    private fun publishRecordingWarning() {
+        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
+        if (cameraState.value.recordingWarning != text) cameraState.update { it.copy(recordingWarning = text) }
+    }
+
+    private fun runtimeNoticeText(notice: RuntimeNotice): Int = when (notice) {
+        RuntimeNotice.MONITORING_REDUCED -> R.string.runtime_notice_monitoring_reduced
+        RuntimeNotice.STATE_UNKNOWN -> R.string.runtime_notice_state_unknown
+        RuntimeNotice.AV_DRIFT -> R.string.runtime_notice_av_drift
+    }
+
+    private fun stopReasonText(failure: StableFailure): String = when (takeStopReason(failure)) {
+        TakeStopReason.THERMAL -> getString(R.string.stop_reason_thermal)
+        TakeStopReason.STORAGE -> getString(R.string.stop_reason_storage)
+        TakeStopReason.STATE_UNKNOWN -> getString(R.string.stop_reason_state_unknown)
+        TakeStopReason.AV_DRIFT -> getString(R.string.stop_reason_av_drift)
+        TakeStopReason.CADENCE -> getString(R.string.stop_reason_cadence)
+        TakeStopReason.AUDIO_INPUT_LOST -> getString(R.string.stop_reason_audio_input)
+        TakeStopReason.OTHER -> getString(R.string.stop_reason_other)
     }
 
     /** Last geometry the user chose per profile mode, seeded from persisted settings. */
@@ -1315,6 +1363,10 @@ class CaptureService : Service() {
                 recordingWarning = admissionWarning,
                 errorCode = null,
             )
+            activeRecordingPolicy = settings.recordingPolicy
+            lastKnownFreeBytes = cameraState.value.availableStorageBytes
+            runtimeNotice = null
+            pendingStopReason = null
             scheduleTimelapseAutoStop()
             mainHandler.post(recordingTicker)
         }
@@ -1322,6 +1374,8 @@ class CaptureService : Service() {
         override fun onRecordingStopped(success: Boolean) {
             android.util.Log.i("CaptureService", "Recording stopped: success=$success mode=${cameraState.value.selectedMode} fps=${cameraState.value.targetFps}")
             retireAudioLevelConsumer()
+            val stopReason = pendingStopReason
+            pendingStopReason = null
             val recordingGain = activeRecordingGain
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
@@ -1448,12 +1502,13 @@ class CaptureService : Service() {
                 cameraState.update { current -> current.copy(
                     phase = if (finalizedSuccess) CameraUiPhase.SAVED else CameraUiPhase.ERROR,
                     recordingFinalizing = false,
+                    recordingWarning = null,
                     recordingPauseStatus = timing,
                     recordingAvTiming = avTiming,
                     recordingPausePending = false,
                     recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,
                     lastSavedUri = uri?.toString(),
-                    message = (if (finalizedSuccess) {
+                    message = ((if (finalizedSuccess) {
                         val audioSaved = savedAudioSuffix(
                             sidecarResult?.let { SavedSidecarAudio(it.bitDepth.bits, it.container, it.sampleRateHz) },
                             activeRecordingAudioLabel,
@@ -1468,7 +1523,8 @@ class CaptureService : Service() {
                             "$outputColor Main10 saved · $source + provenance$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
                         }
                         else "Video saved$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
-                    } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice,
+                    } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice)
+                        .let { outcome -> if (stopReason == null) outcome else getString(R.string.take_stopped_reason, stopReasonText(stopReason), outcome) },
                     errorCode = if (finalizedSuccess) null else if (requestedAudioFailure != null) "audio-start-failed" else "video-finalize-failed",
                     recordingElapsedMs = durationMs,
                 ) }
@@ -2570,15 +2626,22 @@ class CaptureService : Service() {
             return accepted
         }
 
-        fun stopRecording(): Boolean {
+        /** [reason] is the policy failure that ends the take; the take is still finalized and saved. */
+        fun stopRecording(reason: StableFailure? = null): Boolean {
             cancelCountdown()
             if (cancelRecordingWhiteBalancePreparation()) return true
             if (cameraState.value.phase != CameraUiPhase.RECORDING || cameraState.value.recordingFinalizing) return false
             // Publish before dispatch: a fast finalization callback must not be overwritten as pending.
             cameraState.value = cameraState.value.copy(recordingFinalizing = true)
+            if (reason != null) {
+                android.util.Log.w("CaptureService", "Stopping take: ${reason.code} (${reason.component}) ${reason.userMessage}")
+                pendingStopReason = reason
+            }
             val accepted = previewEngine.stopVideo()
-            if (!accepted) cameraState.value = cameraState.value.copy(recordingFinalizing = false)
-            else submitCaptureState(stateCommands.takeStopRequested())
+            if (!accepted) {
+                cameraState.value = cameraState.value.copy(recordingFinalizing = false)
+                if (reason != null) pendingStopReason = null
+            } else submitCaptureState(stateCommands.takeStopRequested())
             return accepted
         }
 
@@ -2671,6 +2734,7 @@ class CaptureService : Service() {
             val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
             admissionWarning = null
+            takeProjectedBytesPerMinute = projectedBytesPerMinute
             when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, recordingVolumeFreeBytes())) {
                 StorageAdmission.Admit -> Unit
                 StorageAdmission.AdmitUnread -> admissionWarning = getString(R.string.storage_unknown_warning)
@@ -3354,7 +3418,7 @@ class CaptureService : Service() {
     /** A loss can arrive while the take is still starting; stopRecording only accepts a RECORDING take. */
     private fun stopTakeForLostInput(guard: AudioInputRouteGuard, attemptsLeft: Int) {
         if (serviceDestroyed || audioRouteOwner !== guard || !takeInProgress()) return
-        if (localBinder.stopRecording()) {
+        if (localBinder.stopRecording(audioInputLostFailure())) {
             cameraState.update { it.copy(message = getString(R.string.audio_input_lost_stopped)) }
         } else if (attemptsLeft > 0) {
             mainHandler.postDelayed({ stopTakeForLostInput(guard, attemptsLeft - 1) }, LOST_INPUT_STOP_RETRY_MS)

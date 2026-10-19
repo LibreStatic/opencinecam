@@ -68,6 +68,7 @@ class FlacAudioSidecarRecorder private constructor(
     private val running = AtomicBoolean(false)
     private val capturedSampleRateHz = audioRecord.sampleRate
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
+    override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
     private var deferredFileCleanup = false
     @Volatile private var nativeRetired = false
     private val effects = mutableListOf<AudioEffect>()

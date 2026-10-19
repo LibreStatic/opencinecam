@@ -893,4 +893,15 @@
     <string name="storage_reserve_insufficient">Não há espaço livre suficiente para começar: esta gravação precisa de %1$s livres e há %2$s disponíveis.</string>
     <string name="storage_unknown_refused">Não foi possível ler o espaço livre, então a gravação não começou. Escolha a política de gravação adaptativa para gravar sem verificar o espaço.</string>
     <string name="storage_unknown_warning">Espaço livre ilegível; gravando sem verificar o espaço</string>
+    <string name="take_stopped_reason">Gravação interrompida: %1$s · %2$s</string>
+    <string name="stop_reason_thermal">o dispositivo está quente demais</string>
+    <string name="stop_reason_storage">o armazenamento livre acabou</string>
+    <string name="stop_reason_state_unknown">não foi possível ler a temperatura ou o armazenamento</string>
+    <string name="stop_reason_av_drift">o áudio e o vídeo se dessincronizaram</string>
+    <string name="stop_reason_cadence">a cadência dos quadros foi perdida</string>
+    <string name="stop_reason_audio_input">a entrada de áudio foi desconectada</string>
+    <string name="stop_reason_other">um limite de segurança foi atingido</string>
+    <string name="runtime_notice_monitoring_reduced">Calor ou pouco armazenamento: monitoramento reduzido</string>
+    <string name="runtime_notice_state_unknown">Temperatura ou armazenamento ilegíveis</string>
+    <string name="runtime_notice_av_drift">O áudio e o vídeo estão se dessincronizando</string>
 </resources>

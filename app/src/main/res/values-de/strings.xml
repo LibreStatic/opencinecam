@@ -893,4 +893,15 @@
     <string name="storage_reserve_insufficient">Nicht genug freier Speicher zum Start: Diese Aufnahme braucht %1$s frei, verfügbar sind %2$s.</string>
     <string name="storage_unknown_refused">Der freie Speicher konnte nicht gelesen werden, daher wurde die Aufnahme nicht gestartet. Wähle die adaptive Aufnahmerichtlinie, um ohne Speicherprüfung aufzunehmen.</string>
     <string name="storage_unknown_warning">Freier Speicher nicht lesbar; Aufnahme ohne Speicherprüfung</string>
+    <string name="take_stopped_reason">Aufnahme beendet: %1$s · %2$s</string>
+    <string name="stop_reason_thermal">das Gerät ist zu heiß</string>
+    <string name="stop_reason_storage">der freie Speicher wurde knapp</string>
+    <string name="stop_reason_state_unknown">Temperatur oder Speicher konnten nicht gelesen werden</string>
+    <string name="stop_reason_av_drift">Audio und Video liefen auseinander</string>
+    <string name="stop_reason_cadence">der Bildtakt ging verloren</string>
+    <string name="stop_reason_audio_input">der Audioeingang wurde getrennt</string>
+    <string name="stop_reason_other">eine Sicherheitsgrenze wurde erreicht</string>
+    <string name="runtime_notice_monitoring_reduced">Hitze oder wenig Speicher: Überwachung reduziert</string>
+    <string name="runtime_notice_state_unknown">Temperatur oder Speicher nicht lesbar</string>
+    <string name="runtime_notice_av_drift">Audio und Video laufen auseinander</string>
 </resources>

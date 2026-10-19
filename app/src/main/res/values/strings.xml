@@ -899,4 +899,15 @@
     <string name="storage_reserve_insufficient">Not enough free space to start: this take needs %1$s free and %2$s is available.</string>
     <string name="storage_unknown_refused">Free space could not be read, so the take was not started. Choose the Adaptive recording policy to record without a space check.</string>
     <string name="storage_unknown_warning">Free space could not be read; recording without a space check</string>
+    <string name="take_stopped_reason">Take stopped: %1$s · %2$s</string>
+    <string name="stop_reason_thermal">the device is too hot</string>
+    <string name="stop_reason_storage">free storage ran low</string>
+    <string name="stop_reason_state_unknown">temperature or storage could not be read</string>
+    <string name="stop_reason_av_drift">audio and video drifted apart</string>
+    <string name="stop_reason_cadence">frame timing was lost</string>
+    <string name="stop_reason_audio_input">the audio input was disconnected</string>
+    <string name="stop_reason_other">a safety limit was reached</string>
+    <string name="runtime_notice_monitoring_reduced">Heat or low storage: monitoring reduced</string>
+    <string name="runtime_notice_state_unknown">Temperature or storage unreadable</string>
+    <string name="runtime_notice_av_drift">Audio and video are drifting apart</string>
 </resources>
