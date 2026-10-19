@@ -33,6 +33,8 @@ class CapturePublicationOutboxBridge(
     private val enrollments: CaptureTransferEnrollmentStore,
     private val outbox: WebDavOutboxStore,
     private val probe: PreparedArtifactProbe,
+    /** Called once per bundle this bridge seals for an automatic-upload enrollment. Failures are logged, never raised. */
+    private val onAutoUploadRegistered: (String) -> Unit = {},
 ) : CapturePublicationObserver {
     init { requirePublicationUuid(bundleId) }
     private var prepared: List<PreparedCaptureArtifact>? = null
@@ -184,7 +186,13 @@ class CapturePublicationOutboxBridge(
             requirePlan(sealed, expected)
             require(sealed.sealed)
             requirePublicationTimes(sealed, publications)
-            return CaptureOutboxRegistration(CaptureOutboxRegistrationStatus.REGISTERED).also { lastRegistration = it; publicationObserved = true }
+            return CaptureOutboxRegistration(CaptureOutboxRegistrationStatus.REGISTERED).also {
+                lastRegistration = it; publicationObserved = true
+                if (enrollment.autoUpload) {
+                    // The default callback already logs; a failure here must stay invisible to publication.
+                    try { onAutoUploadRegistered(bundleId) } catch (_: Exception) { }
+                }
+            }
         }
         // A competing identical seal may win; never retry/rewrite a newer artifact lease or state.
         val raced = outbox.load(bundleId) ?: throw Blocked(CaptureOutboxBlockReason.STATE_CHANGED)

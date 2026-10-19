@@ -542,6 +542,10 @@
     <string name="webdav_queue_enabled">Registrar nuevas tomas para WebDAV</string>
     <string name="webdav_queue_cellular">Permitir datos móviles y redes medidas para transferencias</string>
     <string name="webdav_queue_future_takes">Desactivado inicialmente. Sólo Wi-Fi salvo activación de datos móviles. Los cambios de destino se aplican a nuevas tomas; los destinos anteriores quedan vinculados.</string>
+    <string name="webdav_auto_upload_label">Subir tomas nuevas automáticamente</string>
+    <string name="webdav_auto_upload_help">Sólo se suben las tomas grabadas después de activar esto. Sólo Wi-Fi, salvo que arriba se permitan datos móviles y redes medidas. Las subidas se pausan mientras se graba.</string>
+    <string name="transfers_channel">Transferencias</string>
+    <string name="transfers_uploading_take">Subiendo toma</string>
     <string name="webdav_queue_settings_failed">Los ajustes no se aplicaron. Revisá la dirección HTTPS y el almacenamiento local de ajustes.</string>
     <string name="webdav_queue_registered">Toma completa registrada en la cola WebDAV</string>
     <string name="webdav_queue_registration_failed">Guardado localmente; el registro WebDAV necesita recuperación</string>

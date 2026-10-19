@@ -12,7 +12,11 @@ import kotlinx.coroutines.flow.asStateFlow
 data class WebDavQueueSettingsState(val preferences: WebDavQueuePreferences, val storageFailed: Boolean = false)
 
 /** Separate device-local settings: no credential material and no portable preset merge. */
-class WebDavQueueSettings internal constructor(private val file: File) {
+class WebDavQueueSettings internal constructor(
+    private val file: File,
+    /** Runs after a durable change, inside the save lock; a failure never undoes the save. */
+    private val onSaved: ((old: WebDavQueuePreferences, new: WebDavQueuePreferences) -> Unit)? = null,
+) {
     private val atomic = AtomicFile(file)
     private val mutable = MutableStateFlow(synchronized(processLock) { readState() })
     val states: StateFlow<WebDavQueueSettingsState> = mutable.asStateFlow()
@@ -20,7 +24,7 @@ class WebDavQueueSettings internal constructor(private val file: File) {
     @Synchronized fun snapshotForAdmission(): WebDavQueueSettingsState = synchronized(processLock) {
         readState().also { mutable.value = it }
     }
-    @Synchronized fun save(url: String, enabled: Boolean, allowCellular: Boolean, ignoreTlsErrors: Boolean? = null): WebDavQueuePreferences = synchronized(processLock) {
+    @Synchronized fun save(url: String, enabled: Boolean, allowCellular: Boolean, ignoreTlsErrors: Boolean? = null, autoUpload: Boolean? = null): WebDavQueuePreferences = synchronized(processLock) {
         check(!mutable.value.storageFailed) { "Queue settings require recovery" }
         try {
             check((readBytes()?.let(WebDavQueuePreferencesCodec::decode) ?: WebDavQueuePreferences()) == mutable.value.preferences) { "Queue settings changed on disk" }
@@ -28,7 +32,7 @@ class WebDavQueueSettings internal constructor(private val file: File) {
             mutable.value = mutable.value.copy(storageFailed = true)
             throw failure
         }
-        val next = mutable.value.preferences.updated(url, enabled, allowCellular, ignoreTlsErrors)
+        val next = mutable.value.preferences.updated(url, enabled, allowCellular, ignoreTlsErrors, autoUpload ?: mutable.value.preferences.autoUpload)
         if (next == mutable.value.preferences) return next
         var stream: java.io.FileOutputStream? = null
         try {
@@ -42,7 +46,9 @@ class WebDavQueueSettings internal constructor(private val file: File) {
             try { stream?.let(atomic::failWrite) } catch (cleanup: Exception) { problem.addSuppressed(cleanup) }
             throw problem
         }
+        val previous = mutable.value.preferences
         mutable.value = WebDavQueueSettingsState(next)
+        try { onSaved?.invoke(previous, next) } catch (failure: Exception) { android.util.Log.w("WebDavQueueSettings", "Post-save hook failed", failure) }
         return next
     }
     private fun readState(): WebDavQueueSettingsState = try {
@@ -70,6 +76,7 @@ class WebDavQueueSettings internal constructor(private val file: File) {
         private var instance: WebDavQueueSettings? = null
         @Synchronized fun get(context: Context): WebDavQueueSettings = instance ?: WebDavQueueSettings(
             File(context.applicationContext.noBackupFilesDir, "webdav-queue-settings.json"),
+            onSaved = { old, new -> applyAutoUploadSettingsChange(old, new, WebDavAutoUploadScheduler.get(context)) },
         ).also { instance = it }
     }
 }
