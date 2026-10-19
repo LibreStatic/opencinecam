@@ -904,4 +904,5 @@
     <string name="runtime_notice_monitoring_reduced">Calor ou pouco armazenamento: monitoramento reduzido</string>
     <string name="runtime_notice_state_unknown">Temperatura ou armazenamento ilegíveis</string>
     <string name="runtime_notice_av_drift">O áudio e o vídeo estão se dessincronizando</string>
+    <string name="runtime_notice_cadence">Quadros estão sendo perdidos</string>
 </resources>

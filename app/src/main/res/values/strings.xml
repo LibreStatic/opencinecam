@@ -910,4 +910,5 @@
     <string name="runtime_notice_monitoring_reduced">Heat or low storage: monitoring reduced</string>
     <string name="runtime_notice_state_unknown">Temperature or storage unreadable</string>
     <string name="runtime_notice_av_drift">Audio and video are drifting apart</string>
+    <string name="runtime_notice_cadence">Frames are being dropped</string>
 </resources>

@@ -904,4 +904,5 @@
     <string name="runtime_notice_monitoring_reduced">Hitze oder wenig Speicher: Überwachung reduziert</string>
     <string name="runtime_notice_state_unknown">Temperatur oder Speicher nicht lesbar</string>
     <string name="runtime_notice_av_drift">Audio und Video laufen auseinander</string>
+    <string name="runtime_notice_cadence">Es gehen Bilder verloren</string>
 </resources>

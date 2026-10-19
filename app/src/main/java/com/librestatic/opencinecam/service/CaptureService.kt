@@ -420,6 +420,7 @@ class CaptureService : Service() {
     private var lastKnownFreeBytes: Long? = null
     private var runtimeNotice: RuntimeNotice? = null
     private var avNotice: RuntimeNotice? = null
+    private var cadenceNotice: RuntimeNotice? = null
     /** Live A/V drift of a take whose audio is a separate WAV/FLAC file (PLAN-023); embedded AAC exposes no observable audio PTS. */
     private var avDiagnostics: AvClockDiagnostics? = null
     /** Why the running take is being stopped; the final message names it, and the file is still saved. */
@@ -463,7 +464,7 @@ class CaptureService : Service() {
     }
 
     private fun publishRecordingWarning() {
-        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
+        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }, cadenceNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
         if (cameraState.value.recordingWarning != text) cameraState.update { it.copy(recordingWarning = text) }
     }
 
@@ -471,6 +472,7 @@ class CaptureService : Service() {
         RuntimeNotice.MONITORING_REDUCED -> R.string.runtime_notice_monitoring_reduced
         RuntimeNotice.STATE_UNKNOWN -> R.string.runtime_notice_state_unknown
         RuntimeNotice.AV_DRIFT -> R.string.runtime_notice_av_drift
+        RuntimeNotice.CADENCE -> R.string.runtime_notice_cadence
     }
 
     private fun stopReasonText(failure: StableFailure): String = when (takeStopReason(failure)) {
@@ -1378,6 +1380,8 @@ class CaptureService : Service() {
             lastKnownFreeBytes = cameraState.value.availableStorageBytes
             runtimeNotice = null
             avNotice = null
+            cadenceNotice = null
+            previewEngine.setRecordingCadencePolicy(activeRecordingPolicy)
             avDiagnostics?.close()
             avDiagnostics = if (audioSidecarRecorder != null) AvClockDiagnostics(activeRecordingPolicy, correlationId = "recording-av-drift") else null
             pendingStopReason = null
@@ -1390,6 +1394,7 @@ class CaptureService : Service() {
             retireAudioLevelConsumer()
             val stopReason = pendingStopReason
             pendingStopReason = null
+            previewEngine.setRecordingCadencePolicy(null)
             avDiagnostics?.close()
             avDiagnostics = null
             val recordingGain = activeRecordingGain
@@ -1565,6 +1570,14 @@ class CaptureService : Service() {
 
         override fun onTapFocusState(state: TapFocusState) {
             cameraState.value = cameraState.value.copy(tapFocusState = state)
+        }
+
+        override fun onSustainedCadenceLoss(action: com.librestatic.opencinecam.camera.CaptureAuditAction, detail: String) {
+            mainHandler.post {
+                if (serviceDestroyed || cameraState.value.phase != CameraUiPhase.RECORDING) return@post
+                if (action == com.librestatic.opencinecam.camera.CaptureAuditAction.STOP) localBinder.stopRecording(cadenceStopFailure(detail))
+                else { cadenceNotice = RuntimeNotice.CADENCE; publishRecordingWarning() }
+            }
         }
 
         override fun onCadenceGuardChanged(engaged: Boolean) {

@@ -904,4 +904,5 @@
     <string name="runtime_notice_monitoring_reduced">Chaleur ou stockage faible : monitoring réduit</string>
     <string name="runtime_notice_state_unknown">Température ou stockage illisible</string>
     <string name="runtime_notice_av_drift">L’audio et la vidéo se décalent</string>
+    <string name="runtime_notice_cadence">Des images sont perdues</string>
 </resources>
