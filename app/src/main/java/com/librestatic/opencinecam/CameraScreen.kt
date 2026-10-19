@@ -3383,6 +3383,7 @@ private fun RecordingOverlay(
         // A phone-width strip drops the frame size and the monitoring shortcut to keep REC, the
         // meter and stop on one row.
         val compact = windowWidthClass(maxWidth.value) == WindowWidthClass.COMPACT
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -3412,6 +3413,21 @@ private fun RecordingOverlay(
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
             }
+        }
+        // The Adaptive policy's live warning, on every layout: CaptureStatus is hidden while a take runs.
+        state.recordingWarning?.let { warning ->
+            Text(
+                warning,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("recording-warning")
+                    .background(Panel, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
         }
     }
     if (showMonitors) {
@@ -3559,7 +3575,7 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     val recordingRecoveryNotice = state.recordingRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
         stringResource(R.string.recording_recovery_notice, it.discardedGroups, it.unresolvedGroups)
     }
-    val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, state.recordingWarning?.takeIf { state.phase == CameraUiPhase.RECORDING }, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
+    val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
     Text(
         status,
         color = if (state.errorCode == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
