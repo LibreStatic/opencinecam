@@ -51,6 +51,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
+import com.librestatic.opencinecam.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.StorageBenchmarkContent
+import com.librestatic.opencinecam.camera.CameraInventory
+import com.librestatic.opencinecam.camera.CharacteristicEntry
+import com.librestatic.opencinecam.core.model.BenchmarkResultDocument
+import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.core.model.StorageBenchmarkOutcome
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
@@ -281,6 +290,40 @@ fun SettingsLowLightFps() = DriverTheme {
 fun SettingsRecording() = DriverTheme {
     SettingsScreen(CameraUiState(phase = CameraUiPhase.RECORDING, settingsPending = true), CameraSettings(),
         audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
+}
+
+/** The settings hub on an Adaptive recording policy; `click tag=settings-category-RECORDING` shows the policy row. */
+@Composable
+fun SettingsRecordingPolicy() = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(recordingPolicy = PolicyMode.ADAPTIVE)) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+}
+
+private val FakeInventory = listOf(
+    CameraInventory("0", null, listOf(CharacteristicEntry("android.lens.facing", "BACK"),
+        CharacteristicEntry("android.sensor.info.sensitivityRange", "[50, 6400]")), lensFacing = 1, focalLengthsMm = listOf(6.9f)),
+)
+
+/** Capabilities with the export dialog open: redacted by default, consent not yet given, so the actions are off. */
+@Composable
+fun CapabilitiesExport() = DriverTheme {
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory },
+        initialExportOpen = true, loadCodecAudio = { _, _ -> null })
+}
+
+/** The storage benchmark page with a finished, qualified result (three windows). */
+@Composable
+fun StorageBenchmark() = DriverTheme {
+    val window = { index: Int, rate: Long -> buildJsonObject { put("index", index); put("bytesPerSecond", rate) } }
+    val result = BenchmarkResultDocument(
+        schemaVersion = "1.0.0", benchmarkId = "driver-benchmark", createdAt = "2026-10-19T12:00:00Z",
+        destination = buildJsonObject { put("kind", "saf-destination") }, bytesWritten = 3L * 1024 * 1024 * 1024,
+        windows = listOf(window(0, 410_000_000L), window(1, 395_000_000L), window(2, 402_000_000L)),
+        requiredBytesPerSecond = 37_500_000L, qualificationMarginBytesPerSecond = 357_500_000L,
+        outcome = "pass", outcomeDetail = StorageBenchmarkOutcome.QUALIFIED.name,
+    )
+    StorageBenchmarkContent(37_500_000L, running = false, last = result, onBack = {}, onChoose = {}, onCancel = {})
 }
 
 /** The media catalog with a mix of video, photo and audio takes; take 1's proxy is ready, take 2's is being made. */

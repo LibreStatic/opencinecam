@@ -107,6 +107,9 @@ Outputs and logs:
 | `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |
 | `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes |
 | `SettingsRecording` | `SettingsScreen` | locked while recording |
+| `SettingsRecordingPolicy` | `SettingsScreen` | the Adaptive recording policy; `textInput policy tag=settings-search` shows the Strict/Adaptive row (`recording-policy-*`) |
+| `CapabilitiesExport` | `CameraCapabilitiesScreen` | the report export dialog open (`capabilities-export-*` tags): redacted or full, consent gate, Save/Share/Copy |
+| `StorageBenchmark` | `StorageBenchmarkContent` | a finished qualified benchmark: outcome, margin and three windows |
 | `Gallery` | `MediaCatalogContent` | seven takes (two LOG videos, DNG, legacy JPEG, AAC and WAV audio, a plain video) with gradient thumbnails, codec badges, one proxy ready and one being made |
 | `GalleryInspector` | `MediaCatalogContent` | the same takes with take 1's details open in a sheet: at the bottom on `phone` and `compact`, at the side on the others. Screenshot it with `tag=gallery-info-sheet`. The docked side pane needs a large or expanded landscape window, e.g. `--device w1280dp-h800dp-land-mdpi` |
 | `GalleryInspectorProbed` | `MediaCatalogContent` | take 7's details: a plain video whose codec chip comes from a fake file probe (its card has no codec badge) |
