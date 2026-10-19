@@ -934,4 +934,13 @@
     <string name="bench_outcome_cancelled">Vor dem Ende abgebrochen</string>
     <string name="bench_outcome_unsupported">Dieses Ziel unterstützt den Test nicht</string>
     <string name="bench_outcome_failed">Der Test konnte nicht ins Ziel schreiben</string>
+    <string name="caps_section_codecs">Codecs und Audio</string>
+    <string name="caps_codecs_summary">%1$d Encoder, %2$d Hardware</string>
+    <string name="caps_audio_unprocessed">Unverarbeitete Audioquelle</string>
+    <string name="caps_audio_noise_suppressor">Rauschunterdrückung</string>
+    <string name="caps_audio_agc">Automatische Verstärkungsregelung</string>
+    <string name="caps_audio_echo_canceler">Echounterdrückung</string>
+    <string name="caps_yes">Ja</string>
+    <string name="caps_no">Nein</string>
+    <string name="caps_unknown">Unbekannt</string>
 </resources>

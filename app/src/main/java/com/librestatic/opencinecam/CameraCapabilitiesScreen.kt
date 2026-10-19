@@ -60,6 +60,8 @@ import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2CapabilityInventory
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
+import com.librestatic.opencinecam.camera.CodecAudioMetadata
+import com.librestatic.opencinecam.camera.CodecAudioReportJson
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
 import com.librestatic.opencinecam.storage.prepareCapabilityReportShare
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -94,6 +96,7 @@ internal fun CameraCapabilitiesScreen(
     loadInventory: ((Context) -> List<CameraInventory>)? = null,
     liveState: CameraUiState? = null,
     initialExportOpen: Boolean = false,
+    loadCodecAudio: ((Context, List<CameraInventory>) -> CodecAudioMetadata?)? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -102,6 +105,13 @@ internal fun CameraCapabilitiesScreen(
                 loadInventory?.invoke(context)
                     ?: Camera2CapabilityInventory(context.getSystemService(CameraManager::class.java)).read()
             }.getOrDefault(emptyList())
+        }
+    }
+    // Probed once per build and characteristics, then read back from filesDir (PLAN-009).
+    val codecAudio by produceState<CodecAudioMetadata?>(null, context, inventory) {
+        val list = inventory ?: return@produceState
+        value = withContext(Dispatchers.IO) {
+            runCatching { loadCodecAudio?.invoke(context, list) ?: probeCodecAudio(context, list) }.getOrNull()
         }
     }
     var selectedId by rememberSaveable { mutableStateOf(activeCameraId) }
@@ -122,7 +132,9 @@ internal fun CameraCapabilitiesScreen(
     // The mode chosen in the dialog survives the trip through the system file picker.
     var pendingSave by remember { mutableStateOf<Pair<ReportExportMode, Boolean>?>(null) }
     fun reportJson(list: List<CameraInventory>): JsonElement = capabilityReportJson(
-        buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState),
+        buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState,
+            codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(),
+            audio = codecAudio?.let(CodecAudioReportJson::audio) ?: unknownAudioReport()),
     )
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val choice = pendingSave; pendingSave = null
@@ -199,6 +211,7 @@ internal fun CameraCapabilitiesScreen(
                 }
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
+                item(key = "codecs") { CodecAudioCard(codecAudio) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
                 val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
                 if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live)) }
@@ -279,6 +292,52 @@ private fun AppUsageCard(camera: CameraInventory, findings: List<AppFeatureFindi
             CineIcon.CHECK,
         )
         findings.forEach { finding -> FeatureRow(finding) }
+    }
+}
+
+@Composable
+private fun CodecAudioCard(metadata: CodecAudioMetadata?) {
+    SettingsCard(Modifier.testTag("capabilities-codecs")) {
+        if (metadata == null) {
+            SettingsHeading(stringResource(R.string.caps_section_codecs), icon = CineIcon.INFO)
+            Text(stringResource(R.string.caps_loading), color = SettingsMuted, fontSize = 13.sp)
+            return@SettingsCard
+        }
+        SettingsHeading(
+            stringResource(R.string.caps_section_codecs),
+            stringResource(R.string.caps_codecs_summary, metadata.codecs.size, metadata.codecs.count { it.hardwareAccelerated == true }),
+            CineIcon.INFO,
+        )
+        val audio = metadata.audio
+        listOf(
+            R.string.caps_audio_unprocessed to audio.unprocessedSource,
+            R.string.caps_audio_noise_suppressor to audio.noiseSuppressorAvailable,
+            R.string.caps_audio_agc to audio.automaticGainControlAvailable,
+            R.string.caps_audio_echo_canceler to audio.acousticEchoCancelerAvailable,
+        ).forEach { (label, value) ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(label), color = SettingsMuted, fontSize = 13.sp, modifier = Modifier.weight(0.62f))
+                Text(stringResource(when (value) {
+                    true -> R.string.caps_yes
+                    false -> R.string.caps_no
+                    null -> R.string.caps_unknown
+                }), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, modifier = Modifier.weight(0.38f))
+            }
+        }
+        metadata.codecs.groupBy { it.mime }.forEach { (mime, codecs) ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(mime, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                SelectionContainer {
+                    Text(codecs.joinToString("\n") { codec ->
+                        codec.name + when (codec.hardwareAccelerated) {
+                            true -> " · HW"
+                            false -> " · SW"
+                            null -> ""
+                        }
+                    }, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
     }
 }
 

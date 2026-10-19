@@ -18,5 +18,6 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":media"))
     implementation(libs.androidx.exifinterface)
+    implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
 }
