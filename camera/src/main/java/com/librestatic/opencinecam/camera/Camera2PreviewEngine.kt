@@ -124,6 +124,8 @@ data class Camera2CameraDescriptor(
     val opticalAnchors: List<ZoomAnchor> = emptyList(),
     val supportsHfrZoom: Boolean = false,
     val kelvinRange: IntRange? = null,
+    /** SENSOR_INFO_PHYSICAL_SIZE in mm (width, height), when advertised. */
+    val sensorSizeMm: Pair<Float, Float>? = null,
     val tintSupported: Boolean = false,
     val availableAwbModes: Set<Int> = emptySet(),
     val exposureCapabilities: ExposureCapabilities = ExposureCapabilities(),
@@ -154,6 +156,9 @@ data class Camera2CameraDescriptor(
     /** Qualcomm/Motorola auto frame rate (IQdynamicFPS) can be switched both ways; see [DynamicFps]. */
     val lowLightAutoFps: Boolean = false,
 ) {
+    /** The first focal length as a 35 mm equivalent; inferred from the sensor size, null without it. */
+    val equivalentFocalLengthMm: Float? get() = focalLengthsMm.firstOrNull()?.let { equivalentFocalLengthMm(it, sensorSizeMm?.first, sensorSizeMm?.second) }
+
     /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
     fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
         val size = Size(width, height)
@@ -5912,6 +5917,7 @@ class Camera2PreviewEngine(
                 timestampSourceRealtime = characteristics.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME,
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
                 focalLengthsMm = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList().orEmpty(),
+                sensorSizeMm = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { it.width to it.height },
                 previewSize = previewSize,
                 jpegSize = map.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height },
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)

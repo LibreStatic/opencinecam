@@ -309,7 +309,7 @@ fun SettingsRecordingPolicy() = DriverTheme {
 
 private val FakeInventory = listOf(
     CameraInventory("0", null, listOf(CharacteristicEntry("android.lens.facing", "BACK"),
-        CharacteristicEntry("android.sensor.info.sensitivityRange", "[50, 6400]")), lensFacing = 1, focalLengthsMm = listOf(6.9f)),
+        CharacteristicEntry("android.sensor.info.sensitivityRange", "[50, 6400]")), lensFacing = 1, focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f),
 )
 
 /** Capabilities with the export dialog open: redacted by default, consent not yet given, so the actions are off. */

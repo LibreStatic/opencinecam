@@ -422,9 +422,18 @@ private fun CharacteristicRow(entry: CharacteristicEntry, expanded: Boolean, onT
     }
 }
 
+/**
+ * " · 26 mm eq. · 6.3 mm": the inferred 35 mm equivalent ([equivalentFormat] holds one %s for the number) ahead of
+ * the native focal length, or just what is known; empty with neither.
+ */
+internal fun lensFocalSuffix(nativeMm: Float?, equivalentMm: Float?, equivalentFormat: String): String = buildString {
+    equivalentMm?.let { append(" · ").append(equivalentFormat.format(java.util.Locale.ROOT, "%.0f".format(java.util.Locale.ROOT, it))) }
+    nativeMm?.let { append(" · ").append("%.1f".format(java.util.Locale.ROOT, it)).append(" mm") }
+}
+
 @Composable
 private fun cameraChipLabel(camera: CameraInventory, active: Boolean): String {
-    val focal = camera.focalLengthsMm.firstOrNull()?.let { " · ${"%.1f".format(java.util.Locale.ROOT, it)} mm" }.orEmpty()
+    val focal = lensFocalSuffix(camera.focalLengthsMm.firstOrNull(), camera.equivalentFocalLengthMm, stringResource(R.string.lens_focal_equivalent, "%s"))
     val kind = camera.logicalParentId?.let { "⊂ $it" } ?: facingLabel(camera.lensFacing)
     return (if (active) "● " else "") + "${camera.cameraId} · $kind$focal"
 }

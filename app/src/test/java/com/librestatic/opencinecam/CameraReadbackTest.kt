@@ -184,4 +184,10 @@ class LowLightBoostSettingsTest {
         assertEquals("24 fps", off.getValue("opencinecam.frameRate").requested)
         assertNull(readbackSamples(state.copy(requestedFocusDiopters = null)).firstOrNull { it.key == "android.lens.focusDistance" })
     }
+
+    @Test fun lensLabelsPutTheInferredEquivalentAheadOfTheNativeFocalLength() {
+        assertEquals(" · 25 mm eq. · 6.9 mm", lensFocalSuffix(6.9f, 24.9f, "%s mm eq."))
+        assertEquals(" · 6.9 mm", lensFocalSuffix(6.9f, null, "%s mm eq."))
+        assertEquals("", lensFocalSuffix(null, null, "%s mm eq."))
+    }
 }
