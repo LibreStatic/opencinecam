@@ -95,6 +95,7 @@ Outputs and logs:
 | `CaptureNightSuggested` / `CaptureNightOn` | `AdaptiveCaptureChrome` | photo in Auto on a camera with the night extension, the scene dark: the quick toggle (`capture-night-toggle`) offered beside the lock keys, or engaged (highlighted) |
 | `CaptureFpsLock` / `CaptureFpsLockHolding` | `AdaptiveCaptureChrome` | video on a camera with exposure-time priority: the FPS LOCK key (`capture-fps-lock`) beside the lock keys, on, or amber while it is holding the shutter at 1/fps |
 | `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23; `click tag=recording-reveal-surface` reveals the chrome |
+| `CaptureRecordingWarning` | `AdaptiveCaptureChrome` | the same take with the Adaptive policy's live warning (`recording-warning`) under the REC strip; check it on `phone` and `inner` |
 | `CaptureLandscape` | `AdaptiveCaptureChrome` | video, previewing (use `--device landscape` for the side rails) |
 | `CaptureSheetWb` / `CaptureSheetFocus` | `AdaptiveCaptureChrome` | the white balance or focus panel open (focus marks A and B) |
 | `CaptureModeSheet` | `AdaptiveCaptureChrome` | the phone's modal mode sheet open (a dialog: use `tree`) |

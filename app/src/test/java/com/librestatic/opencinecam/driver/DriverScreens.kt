@@ -171,6 +171,13 @@ fun CaptureRecording() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L),
 )
 
+/** Recording under the Adaptive policy with a live warning: it must show in every layout while the take runs. */
+@Composable
+fun CaptureRecordingWarning() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        recordingWarning = "Storage is running low · Audio is drifting from the picture"),
+)
+
 /** Recording through a confirmed USB lavalier: the meter shows a USB badge. */
 @Composable
 fun CaptureRecordingUsb() = CaptureChrome(
