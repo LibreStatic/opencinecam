@@ -64,5 +64,9 @@
             android:exported="false"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+        <!-- Debug-only WorkManager diagnostics broadcast: no need to ship an exported receiver. -->
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            tools:node="remove" />
     </application>
 </manifest>
