@@ -547,6 +547,10 @@
     <string name="webdav_queue_enabled">Register new takes for WebDAV</string>
     <string name="webdav_queue_cellular">Allow cellular and metered networks for transfers</string>
     <string name="webdav_queue_future_takes">Off by default. Wi-Fi only unless cellular is enabled. Destination changes apply to new takes; previously registered destinations stay bound.</string>
+    <string name="webdav_auto_upload_label">Upload new takes automatically</string>
+    <string name="webdav_auto_upload_help">Only takes recorded after you turn this on are uploaded. Wi-Fi only unless cellular and metered networks are allowed above. Uploads pause while recording.</string>
+    <string name="transfers_channel">Transfers</string>
+    <string name="transfers_uploading_take">Uploading take</string>
     <string name="webdav_queue_settings_failed">Settings were not applied. Check the HTTPS address and local settings storage.</string>
     <string name="webdav_queue_registered">Complete take registered in the WebDAV queue</string>
     <string name="webdav_queue_registration_failed">Saved locally; WebDAV registration needs recovery</string>

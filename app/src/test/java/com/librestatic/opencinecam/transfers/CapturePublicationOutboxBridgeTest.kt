@@ -51,6 +51,44 @@ class CapturePublicationOutboxBridgeTest {
         assertEquals(1, f.store.sealCalls)
     }
 
+    @Test fun automaticUploadIsScheduledOnlyAfterARealSealForAnAutomaticEnrollment() {
+        val f = Fixture(autoUpload = true)
+        f.bridge.onPrepared(f.artifacts)
+        assertTrue(f.scheduled.isEmpty()) // Staged, unsealed: nothing to upload yet.
+        f.bridge.onPublished(f.artifacts)
+        assertEquals(CaptureOutboxRegistrationStatus.REGISTERED, f.bridge.lastRegistration?.status)
+        assertEquals(listOf(id(1)), f.scheduled)
+        assertEquals(CaptureOutboxRegistrationStatus.ALREADY_REGISTERED, f.reopen().registerCommitted().status)
+        assertEquals(listOf(id(1)), f.scheduled) // A replay of an existing seal does not enqueue again.
+    }
+
+    @Test fun manualEnrollmentAndUnenrolledCapturesNeverScheduleAutomaticUpload() {
+        for (f in listOf(Fixture(autoUpload = false), Fixture(enrolled = false))) {
+            f.bridge.onPrepared(f.artifacts)
+            f.bridge.onPublished(f.artifacts)
+            assertTrue(f.scheduled.isEmpty())
+        }
+    }
+
+    @Test fun anUnsealedBlockedRegistrationDoesNotScheduleAutomaticUpload() {
+        val f = Fixture(autoUpload = true)
+        f.failProbeRole = CaptureArtifactRole.VIDEO_METADATA
+        assertThrows(CapturePublicationOutboxFailure::class.java) { f.bridge.onPrepared(f.artifacts) }
+        assertThrows(CapturePublicationOutboxFailure::class.java) { f.bridge.onPublished(f.artifacts) }
+        assertTrue(f.scheduled.isEmpty())
+    }
+
+    @Test fun aSchedulingFailureNeverFailsPublicationOrUnsealsTheBundle() {
+        val f = Fixture(autoUpload = true)
+        f.scheduleFailure = true
+        f.bridge.onPrepared(f.artifacts)
+        f.bridge.onPublished(f.artifacts)
+        assertEquals(CaptureOutboxRegistrationStatus.REGISTERED, f.bridge.lastRegistration?.status)
+        assertTrue(requireNotNull(f.store.value).sealed)
+        assertTrue(f.bridge.issues.isEmpty())
+        assertEquals(listOf(id(1)), f.scheduled)
+    }
+
     @Test fun journalPrepareFailureDoesNotPreventStageOrLiveFinalizerSeal() {
         val f = Fixture()
         f.journal.failPrepare = true
@@ -302,14 +340,16 @@ class CapturePublicationOutboxBridgeTest {
         assertEquals(CapturePublicationState.PREPARED, f.journal.value?.state)
     }
 
-    private class Fixture(enrolled: Boolean = true) {
+    private class Fixture(enrolled: Boolean = true, autoUpload: Boolean = false) {
         val artifacts = listOf(
             PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, "content://media/external/video/media/1", "take.mp4"),
             PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, "content://media/external/downloads/2", "take.timing.json"),
         )
         val journal = Journal()
         val store = Outbox()
-        val enrollments = Enrollments(if (enrolled) enrollment() else null)
+        val enrollments = Enrollments(if (enrolled) enrollment().copy(autoUpload = autoUpload) else null)
+        val scheduled = mutableListOf<String>()
+        var scheduleFailure = false
         var probeCalls = 0
         val pendingRequests = mutableListOf<Boolean>()
         var failProbeRole: CaptureArtifactRole? = null
@@ -321,7 +361,7 @@ class CapturePublicationOutboxBridgeTest {
                 if (artifact.role == failProbeRole) throw IOException("Fixture source missing")
                 WebDavClipSnapshot(artifact.uri, artifact.displayName, if (artifact.role == CaptureArtifactRole.VIDEO) 100 else 50, 10, !pending)
                     .let { if (pending) it else publishedTransform(it) }
-            })
+            }, { bundleId -> scheduled.add(bundleId); if (scheduleFailure) throw IllegalStateException("WorkManager unavailable") })
     }
 
     private class Enrollments(var value: CaptureTransferEnrollment?) : CaptureTransferEnrollmentStore {

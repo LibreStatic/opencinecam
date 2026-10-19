@@ -542,6 +542,10 @@
     <string name="webdav_queue_enabled">Registrar novas tomadas para WebDAV</string>
     <string name="webdav_queue_cellular">Permitir redes celulares e com franquia nas transferências</string>
     <string name="webdav_queue_future_takes">Desativado por padrão. Somente Wi-Fi, a menos que o celular seja permitido. As alterações de destino valem para as novas tomadas; destinos já registrados continuam vinculados.</string>
+    <string name="webdav_auto_upload_label">Enviar novas tomadas automaticamente</string>
+    <string name="webdav_auto_upload_help">Somente as tomadas gravadas depois de ativar esta opção são enviadas. Somente Wi-Fi, a menos que redes celulares e com franquia estejam permitidas acima. Os envios são pausados durante a gravação.</string>
+    <string name="transfers_channel">Transferências</string>
+    <string name="transfers_uploading_take">Enviando tomada</string>
     <string name="webdav_queue_settings_failed">As configurações não foram aplicadas. Verifique o endereço HTTPS e o armazenamento local das configurações.</string>
     <string name="webdav_queue_registered">Tomada completa registrada na fila WebDAV</string>
     <string name="webdav_queue_registration_failed">Salvo localmente; o registro WebDAV precisa de recuperação</string>

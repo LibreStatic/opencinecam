@@ -542,6 +542,10 @@
     <string name="webdav_queue_enabled">Registra le nuove riprese per WebDAV</string>
     <string name="webdav_queue_cellular">Consenti reti cellulari e a consumo per i trasferimenti</string>
     <string name="webdav_queue_future_takes">Disattivato per impostazione predefinita. Solo Wi-Fi a meno che il cellulare sia consentito. Le modifiche alla destinazione valgono per le nuove riprese; le destinazioni già registrate restano vincolate.</string>
+    <string name="webdav_auto_upload_label">Carica automaticamente le nuove riprese</string>
+    <string name="webdav_auto_upload_help">Vengono caricate solo le riprese registrate dopo l\'attivazione. Solo Wi-Fi, a meno che sopra siano consentite le reti cellulari e a consumo. I caricamenti restano in pausa durante la registrazione.</string>
+    <string name="transfers_channel">Trasferimenti</string>
+    <string name="transfers_uploading_take">Caricamento della ripresa</string>
     <string name="webdav_queue_settings_failed">Le impostazioni non sono state applicate. Controlla l\'indirizzo HTTPS e l\'archiviazione locale delle impostazioni.</string>
     <string name="webdav_queue_registered">Ripresa completa registrata nella coda WebDAV</string>
     <string name="webdav_queue_registration_failed">Salvato localmente; la registrazione WebDAV richiede un recupero</string>

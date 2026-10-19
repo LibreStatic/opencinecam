@@ -542,6 +542,10 @@
     <string name="webdav_queue_enabled">Neue Takes für WebDAV registrieren</string>
     <string name="webdav_queue_cellular">Mobilfunk und getaktete Netzwerke für Übertragungen erlauben</string>
     <string name="webdav_queue_future_takes">Standardmäßig aus. Nur WLAN, sofern Mobilfunk nicht aktiviert ist. Zieländerungen gelten für neue Takes; bereits registrierte Ziele bleiben gebunden.</string>
+    <string name="webdav_auto_upload_label">Neue Takes automatisch hochladen</string>
+    <string name="webdav_auto_upload_help">Es werden nur Takes hochgeladen, die nach dem Einschalten aufgenommen wurden. Nur WLAN, sofern oben nicht Mobilfunk und getaktete Netzwerke erlaubt sind. Uploads pausieren während der Aufnahme.</string>
+    <string name="transfers_channel">Übertragungen</string>
+    <string name="transfers_uploading_take">Take wird hochgeladen</string>
     <string name="webdav_queue_settings_failed">Die Einstellungen wurden nicht angewendet. Prüfe die HTTPS-Adresse und den lokalen Einstellungsspeicher.</string>
     <string name="webdav_queue_registered">Vollständiger Take in der WebDAV-Warteschlange registriert</string>
     <string name="webdav_queue_registration_failed">Lokal gespeichert; die WebDAV-Registrierung erfordert eine Wiederherstellung</string>

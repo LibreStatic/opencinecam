@@ -542,6 +542,10 @@
     <string name="webdav_queue_enabled">Enregistrer les nouvelles prises pour WebDAV</string>
     <string name="webdav_queue_cellular">Autoriser les réseaux mobiles et à usage limité pour les transferts</string>
     <string name="webdav_queue_future_takes">Désactivé par défaut. Wi-Fi uniquement sauf si le mobile est autorisé. Les changements de destination s\'appliquent aux nouvelles prises ; les destinations déjà enregistrées restent liées.</string>
+    <string name="webdav_auto_upload_label">Téléverser automatiquement les nouvelles prises</string>
+    <string name="webdav_auto_upload_help">Seules les prises enregistrées après l\'activation sont téléversées. Wi-Fi uniquement, sauf si les réseaux mobiles et à usage limité sont autorisés ci-dessus. Les envois sont suspendus pendant l\'enregistrement.</string>
+    <string name="transfers_channel">Transferts</string>
+    <string name="transfers_uploading_take">Téléversement de la prise</string>
     <string name="webdav_queue_settings_failed">Les réglages n\'ont pas été appliqués. Vérifiez l\'adresse HTTPS et le stockage local des réglages.</string>
     <string name="webdav_queue_registered">Prise complète enregistrée dans la file WebDAV</string>
     <string name="webdav_queue_registration_failed">Enregistré localement ; l\'enregistrement WebDAV nécessite une récupération</string>
