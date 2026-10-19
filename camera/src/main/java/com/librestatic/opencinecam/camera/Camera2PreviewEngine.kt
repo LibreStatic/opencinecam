@@ -349,6 +349,8 @@ interface Camera2PreviewListener {
      * zoom and is never a discrepancy. Only on change, camera thread.
      */
     fun onActiveLens(physicalId: String?) = Unit
+    /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
+    fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
     fun onCadenceGuardChanged(engaged: Boolean) = Unit
     /** Frame delivery broke down for several seconds of the take (see [SustainedCadenceGuard]); [action] follows the recording policy. Camera thread. */
@@ -4831,6 +4833,7 @@ class Camera2PreviewEngine(
             }
             val droppedBefore = auditor.diagnostics().droppedFrames
             auditor.auditResult(CaptureResultSample(result.frameNumber, sensorTimestamp?.takeIf { it >= 0 }, metadata))
+                .forEach { event -> auditWarningText(event)?.let { listener?.onAuditWarning(it) } }
             val stats = auditor.diagnostics()
             checkSustainedCadence(sensorTimestamp, stats.droppedFrames - droppedBefore, stats)
             latestCaptureDiagnostics = stats

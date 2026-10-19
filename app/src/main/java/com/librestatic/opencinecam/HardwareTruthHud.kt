@@ -56,6 +56,18 @@ const val ACTIVE_LENS_KEY = "activeLens"
 /** Oldest discrepancies fall off, so a long session cannot grow the state (or the published UI state) without bound. */
 const val MAX_DISCREPANCY_HISTORY = 20
 
+/** Oldest warnings fall off too; the list is also deduplicated, so a repeating condition takes one slot. */
+const val MAX_HUD_WARNINGS = 10
+
+/** One requested/reported pair a control can be judged on; [withinTolerance] is the control's own verdict. */
+data class ReadbackSample(
+    val key: String,
+    val requested: String,
+    val reported: String,
+    val withinTolerance: Boolean,
+    val explanation: String = "Requested and reported values differ.",
+)
+
 /**
  * What the engine asked for against what the camera reported. No physical request is the logical
  * route; a physical request nobody reported on stays unconfirmed rather than assumed.
@@ -74,20 +86,52 @@ data class HardwareTruthHudState(
     val warnings: List<String> = emptyList(),
     val lockedControls: Set<String> = emptySet(),
     val discrepancyHistory: List<HudDiscrepancy> = emptyList(),
+    /** Keys whose requested and reported values differ right now; history grows only when a key enters this set. */
+    val openDiscrepancies: Set<String> = emptySet(),
 ) {
     init {
         require(requested.keys.none { it.isBlank() } && reported.keys.none { it.isBlank() })
         require(warnings.none { it.isBlank() } && lockedControls.none { it.isBlank() })
     }
 
+    /**
+     * Records one reported value against its request. A mismatch adds a history entry only when it
+     * opens (the key was not already differing), and a matching report closes it, so a value that
+     * stays wrong for a thousand frames is one entry, not a thousand.
+     */
     fun withReport(key: String, value: String, explanation: String = "Requested and reported values differ."): HardwareTruthHudState {
         require(key.isNotBlank() && value.isNotBlank())
-        val nextReported = reported + (key to value)
         val requestedValue = requested[key]
-        val nextHistory = if (requestedValue != null && requestedValue != value) {
-            (discrepancyHistory + HudDiscrepancy(key, requestedValue, value, explanation)).takeLast(MAX_DISCREPANCY_HISTORY)
+        val mismatch = requestedValue != null && requestedValue != value
+        val nextHistory = if (mismatch && key !in openDiscrepancies) {
+            (discrepancyHistory + HudDiscrepancy(key, requestedValue.orEmpty(), value, explanation)).takeLast(MAX_DISCREPANCY_HISTORY)
         } else discrepancyHistory
-        return copy(reported = nextReported, discrepancyHistory = nextHistory)
+        return copy(
+            reported = reported + (key to value),
+            discrepancyHistory = nextHistory,
+            openDiscrepancies = if (mismatch) openDiscrepancies + key else openDiscrepancies - key,
+        )
+    }
+
+    /**
+     * Folds the current requested-versus-reported pairs into the state. A pair within its tolerance
+     * counts as the requested value; a control with no pair any more (request cleared, no report)
+     * closes its discrepancy.
+     */
+    fun withReadback(samples: List<ReadbackSample>): HardwareTruthHudState {
+        var next = this
+        samples.forEach { sample ->
+            next = next.copy(requested = next.requested + (sample.key to sample.requested))
+                .withReport(sample.key, if (sample.withinTolerance) sample.requested else sample.reported, sample.explanation)
+        }
+        val gone = openDiscrepancies - samples.map { it.key }.toSet()
+        return next.copy(openDiscrepancies = next.openDiscrepancies - gone)
+    }
+
+    /** One auditor warning, bounded and deduplicated; the same text again changes nothing. */
+    fun withWarning(message: String): HardwareTruthHudState {
+        if (message.isBlank() || message in warnings) return this
+        return copy(warnings = (warnings + message).takeLast(MAX_HUD_WARNINGS))
     }
 
     /**

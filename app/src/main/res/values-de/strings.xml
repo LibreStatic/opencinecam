@@ -946,4 +946,5 @@
     <string name="caps_discrepancies">Angefordert und gemeldet weichen ab</string>
     <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
     <string name="caps_usage_apv">Nicht unterstützt: Die App hat keinen APV-Aufnahmepfad. Zeigt, was dieses Telefon bietet und warum es nicht genutzt wird.</string>
+    <string name="caps_warnings">Aufnahmewarnungen</string>
 </resources>
