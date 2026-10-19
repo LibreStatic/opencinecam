@@ -50,3 +50,31 @@ OCC-PLAN-007, OCC-PLAN-015, OCC-PLAN-025
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRIV-006 (amended 2026-10-19)
+- Related ADRs: None
+
+### Context
+
+The original decision rejects "vendor tags". Some capabilities (documented in `docs/device-validation.md`) are only reachable through Camera2 vendor tags, and the shipped code already reads them through `resolveVendorKey` in `camera/src/main/java/com/librestatic/opencinecam/camera/VendorKeys.kt`.
+
+### Decision
+
+Camera2 vendor tags may be used only when resolved by name against a static gate key the HAL reports: `resolveVendorKey` returns ADVERTISED when the key is in the public key list, BY_NAME when it is not listed but the gate key is present, and ABSENT otherwise (including below API 29). An ABSENT tag is never requested, and every use has a public-API fallback. Root, privileged permissions and OEM libraries stay outside portable OSS. Enumeration and physical routing still use public IDs and `OutputConfiguration` only.
+
+### Alternatives considered
+
+- Keep the blanket ban on vendor tags: rejected because it would remove capabilities that degrade safely on devices without the tag.
+- Allow vendor tags by device model: rejected because it is not portable and hides the evidence that the HAL supports the tag.
+
+### Consequences
+
+- Positive: vendor tags are opt-in per device through a HAL-reported gate and cannot break other devices.
+- Negative: each tag needs a documented gate key and a fallback path.
+- Operational: `VendorKeysTest` covers the ABSENT case when the gate key is missing; new tags are documented in `docs/device-validation.md`.
+
+The original decision above is retained as history; this amendment governs where they differ.
