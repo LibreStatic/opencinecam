@@ -5,6 +5,7 @@ package com.librestatic.opencinecam.storage
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.provider.DocumentsContract
 import com.librestatic.opencinecam.core.model.BenchmarkResultRepository
 import com.librestatic.opencinecam.core.model.BenchmarkSink
 import com.librestatic.opencinecam.core.model.BenchmarkPersistenceOutcome
@@ -21,8 +22,11 @@ class ContentResolverBenchmarkDestination(
     override fun openSink(): BenchmarkSink = resolver.openOutputStream(uri)?.let(::OutputStreamBenchmarkSink)
         ?: error("The selected storage destination could not be opened.")
 
+    /** A SAF document is deleted through its provider; ContentResolver.delete rejects document URIs. */
     override fun cleanup() {
-        resolver.delete(uri, null, null)
+        val deleted = runCatching { DocumentsContract.deleteDocument(resolver, uri) }.getOrDefault(false) ||
+            resolver.delete(uri, null, null) > 0
+        check(deleted) { "The benchmark file could not be deleted." }
     }
 }
 
