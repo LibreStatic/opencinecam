@@ -65,4 +65,15 @@ class HardwareTruthHudTest {
         repeat(MAX_DISCREPANCY_HISTORY * 2) { reports = reports.withReport("iso", "${200 + it}") }
         assertEquals(MAX_DISCREPANCY_HISTORY, reports.discrepancyHistory.size)
     }
+
+    @Test
+    fun activeLensFollowsZoomWithoutEverBeingADiscrepancy() {
+        val routed = HardwareTruthHudState().withRoute("2", "2")
+        val zoomed = routed.withActiveLens("3")
+        assertEquals("3", zoomed.reported[ACTIVE_LENS_KEY])
+        assertEquals(RouteTruth.PHYSICAL_CONFIRMED, zoomed.routeTruth)
+        assertEquals(emptyList<HudDiscrepancy>(), zoomed.discrepancyHistory)
+        assertEquals(zoomed, zoomed.withActiveLens("3"))
+        assertEquals(null, zoomed.withActiveLens(null).reported[ACTIVE_LENS_KEY])
+    }
 }

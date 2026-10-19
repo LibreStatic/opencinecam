@@ -149,7 +149,8 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.edge.mode" to readback(code(sent?.edge, PROCESSING_MODES), code(state.reportedEdgeEnhancement, PROCESSING_MODES)),
         "android.tonemap.mode" to readback(code(state.submittedToneMapMode, TONEMAP_MODES), code(state.reportedToneMapMode, TONEMAP_MODES)),
         "android.scaler.cropRegion" to readback(null, state.reportedCropRegion?.joinToString(", ", "[", "]")),
-        "android.logicalMultiCamera.activePhysicalId" to routeLine(state.hardwareTruth),
+        "opencinecam.stillPhysicalRoute" to routeLine(state.hardwareTruth),
+        "android.logicalMultiCamera.activePhysicalId" to readback(null, state.hardwareTruth.reported[ACTIVE_LENS_KEY]),
     ) + listOfNotNull(
         picture?.takeIf { it.reportedSaturation != null }?.let {
             "org.codeaurora.qcamera3.saturation.use_saturation" to readback(it.submittedSaturation?.toString(), it.reportedSaturation?.toString()) },
@@ -158,7 +159,7 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
     )
 }
 
-/** The still's physical route against the active physical id the camera reports, with the verdict. */
+/** The still's physical route against the camera its own result names, with the verdict (the preview's active lens is a separate line). */
 internal fun routeLine(hud: HardwareTruthHudState): String =
     "${readback(hud.requested[ROUTE_KEY] ?: "logical", hud.reported[ROUTE_KEY])} · ${hud.routeTruth.name}"
 

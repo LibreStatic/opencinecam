@@ -340,9 +340,15 @@ interface Camera2PreviewListener {
     fun onAeLockChanged(active: Boolean) = Unit
     /**
      * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
-     * logical route) next to the one the logical camera reports active. Only on change, camera thread.
+     * logical route) against the one the still's own result confirms ([reportedPhysicalId], null when
+     * the result carries no physical results). At configuration (unconfirmed) and once per still. Camera thread.
      */
     fun onPhysicalRoute(requestedPhysicalId: String?, reportedPhysicalId: String?) = Unit
+    /**
+     * The physical lens serving the logical streams, from the preview results. Informational: it follows
+     * zoom and is never a discrepancy. Only on change, camera thread.
+     */
+    fun onActiveLens(physicalId: String?) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
     fun onCadenceGuardChanged(engaged: Boolean) = Unit
     /** Frame delivery broke down for several seconds of the take (see [SustainedCadenceGuard]); [action] follows the recording policy. Camera thread. */
@@ -434,7 +440,7 @@ class Camera2PreviewEngine(
     private var physicalStillFallbackTaken = false
     /** The physical camera the current graph routes the compressed still to; null on the logical route. */
     @Volatile private var routedStillPhysicalId: String? = null
-    private var lastRouteReport: Pair<String?, String?>? = null
+    private var lastActiveLensReport: Pair<Boolean, String?>? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private val instantAec = InstantAecMachine()
     private var instantAecSession: CameraCaptureSession? = null
@@ -1675,6 +1681,7 @@ class Camera2PreviewEngine(
                             return
                         }
                         owner.result = result
+                        reportStillRoute(result)
                         purgeUnmatchedRaw(owner, timestamp)
                         owner.report = PhotoFlashReport(owner.selection, request.get(CaptureRequest.CONTROL_AE_MODE),
                             requireNotNull(request.get(CaptureRequest.FLASH_MODE)), owner.plan?.strength,
@@ -3196,15 +3203,29 @@ class Camera2PreviewEngine(
         )
     }
 
-    /** Tells the listener which physical lens was requested and which one is reported, when that pair changes. */
-    private fun reportPhysicalRoute(result: TotalCaptureResult) {
-        val reported = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+    /** Tells the listener which physical lens serves the logical preview streams, when that changes. */
+    private fun reportActiveLens(result: TotalCaptureResult) {
+        val active = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
         } else null
-        val route = routedStillPhysicalId to reported
-        if (route == lastRouteReport) return
-        lastRouteReport = route
-        listener?.onPhysicalRoute(route.first, route.second)
+        val report = true to active
+        if (report == lastActiveLensReport) return
+        lastActiveLensReport = report
+        listener?.onActiveLens(active)
+    }
+
+    /**
+     * Confirms the still route from the still's own result: a still on a physical output stream always
+     * comes from that camera, so its physical results name the camera that produced it.
+     */
+    private fun reportStillRoute(result: TotalCaptureResult) {
+        val requested = routedStillPhysicalId ?: return
+        val ids = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            result.physicalCameraTotalResults?.keys
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            @Suppress("DEPRECATION") result.physicalCameraResults?.keys
+        } else null
+        listener?.onPhysicalRoute(requested, stillRouteReportedId(requested, ids.orEmpty()))
     }
 
     private fun reportEffectiveZoom(result: TotalCaptureResult) {
@@ -4291,7 +4312,8 @@ class Camera2PreviewEngine(
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
         compressedPlan = compressedStillPlan(descriptor)
         routedStillPhysicalId = compressedPlan?.physicalId
-        lastRouteReport = null
+        lastActiveLensReport = null
+        compressedPlan?.physicalId?.let { listener?.onPhysicalRoute(it, null) }
         val compressedSize = compressedPlan?.size
         compressedSize?.let { size ->
             jpegReader = ImageReader.newInstance(size.width, size.height, compressedFormat, MAX_BURST_IMAGES + 2).apply {
@@ -4639,7 +4661,7 @@ class Camera2PreviewEngine(
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
-                    reportPhysicalRoute(result)
+                    reportActiveLens(result)
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     readIspHistogram(result)

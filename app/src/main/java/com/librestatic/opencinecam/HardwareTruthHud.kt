@@ -50,6 +50,9 @@ data class HudDiscrepancy(
 /** The key under which the physical camera id travels through [HardwareTruthHudState.requested] and `reported`. */
 const val ROUTE_KEY = "physicalCameraId"
 
+/** The physical lens serving the logical preview streams; informational, it follows zoom. */
+const val ACTIVE_LENS_KEY = "activeLens"
+
 /** Oldest discrepancies fall off, so a long session cannot grow the state (or the published UI state) without bound. */
 const val MAX_DISCREPANCY_HISTORY = 20
 
@@ -88,7 +91,7 @@ data class HardwareTruthHudState(
     }
 
     /**
-     * Records the physical camera the engine routed to and the one the camera reported active. The
+     * Records the physical camera the engine routed the still to and the one the still's own result confirms. The
      * same pair twice changes nothing, so a stream of identical results adds no history; a mismatch
      * adds one entry.
      */
@@ -99,12 +102,18 @@ data class HardwareTruthHudState(
         if (nextRequested == requested && nextReported == reported && truth == routeTruth) return this
         val entry = HudDiscrepancy(
             ROUTE_KEY, requestedPhysicalId.orEmpty(), reportedPhysicalId.orEmpty(),
-            "The camera reports a different physical lens than the one the still was routed to.",
+            "The still's result names a different physical camera than the one it was routed to.",
         )
         val nextHistory = if (truth == RouteTruth.MISMATCH && entry != discrepancyHistory.lastOrNull()) {
             (discrepancyHistory + entry).takeLast(MAX_DISCREPANCY_HISTORY)
         } else discrepancyHistory
         return copy(requested = nextRequested, reported = nextReported, routeTruth = truth, discrepancyHistory = nextHistory)
+    }
+
+    /** The preview's active lens, reported only: it legitimately follows zoom, so it never makes a discrepancy. */
+    fun withActiveLens(physicalId: String?): HardwareTruthHudState {
+        val next = if (physicalId == null) reported - ACTIVE_LENS_KEY else reported + (ACTIVE_LENS_KEY to physicalId)
+        return if (next == reported) this else copy(reported = next)
     }
 
     fun lock(key: String): HardwareTruthHudState = copy(lockedControls = lockedControls + key)

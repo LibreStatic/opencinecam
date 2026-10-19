@@ -75,9 +75,9 @@ class CameraReadbackTest {
 
     @Test fun routeLineAndDiscrepancyHistoryComeFromTheHardwareTruth() {
         val logical = CameraUiState()
-        assertEquals("logical → — · LOGICAL", requestedReportedLines(logical).toMap()["android.logicalMultiCamera.activePhysicalId"])
+        assertEquals("logical → — · LOGICAL", requestedReportedLines(logical).toMap()["opencinecam.stillPhysicalRoute"])
         val mismatched = CameraUiState(hardwareTruth = HardwareTruthHudState().withRoute("2", "3"))
-        assertEquals("2 → 3 · MISMATCH", requestedReportedLines(mismatched).toMap()["android.logicalMultiCamera.activePhysicalId"])
+        assertEquals("2 → 3 · MISMATCH", requestedReportedLines(mismatched).toMap()["opencinecam.stillPhysicalRoute"])
         val lines = discrepancyLines(mismatched.hardwareTruth)
         assertEquals(1, lines.size)
         assertEquals("physicalCameraId", lines.single().first)
