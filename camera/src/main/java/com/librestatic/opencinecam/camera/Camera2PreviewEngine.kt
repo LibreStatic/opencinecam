@@ -442,6 +442,8 @@ class Camera2PreviewEngine(
     private var physicalStillFallbackTaken = false
     /** The physical camera the current graph routes the compressed still to; null on the logical route. */
     @Volatile private var routedStillPhysicalId: String? = null
+    /** Audit warnings already forwarded for the current graph; cameraExecutor only, so a warning repeating every frame reaches the listener once. */
+    private val forwardedAuditWarnings = HashSet<String>()
     private var lastActiveLensReport: Pair<Boolean, String?>? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private val instantAec = InstantAecMachine()
@@ -4314,6 +4316,7 @@ class Camera2PreviewEngine(
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
         compressedPlan = compressedStillPlan(descriptor)
         routedStillPhysicalId = compressedPlan?.physicalId
+        forwardedAuditWarnings.clear()
         lastActiveLensReport = null
         compressedPlan?.physicalId?.let { listener?.onPhysicalRoute(it, null) }
         val compressedSize = compressedPlan?.size
@@ -4833,7 +4836,7 @@ class Camera2PreviewEngine(
             }
             val droppedBefore = auditor.diagnostics().droppedFrames
             auditor.auditResult(CaptureResultSample(result.frameNumber, sensorTimestamp?.takeIf { it >= 0 }, metadata))
-                .forEach { event -> auditWarningText(event)?.let { listener?.onAuditWarning(it) } }
+                .forEach { event -> auditWarningText(event)?.takeIf(forwardedAuditWarnings::add)?.let { listener?.onAuditWarning(it) } }
             val stats = auditor.diagnostics()
             checkSustainedCadence(sensorTimestamp, stats.droppedFrames - droppedBefore, stats)
             latestCaptureDiagnostics = stats
