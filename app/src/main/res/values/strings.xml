@@ -924,4 +924,20 @@
     <string name="caps_export_saved">Report saved</string>
     <string name="caps_export_failed">The report could not be exported</string>
     <string name="caps_export_chooser">Share capability report</string>
+    <string name="bench_title">Storage benchmark</string>
+    <string name="bench_settings_summary">Check that a drive keeps up with your current recording settings</string>
+    <string name="bench_intro">Writes test data to a place you choose for a few seconds, then measures whether it sustains the data rate of your current settings. The test file is deleted afterwards.</string>
+    <string name="bench_required">Required rate</string>
+    <string name="bench_required_help">The video and audio your current mode and settings write, per second.</string>
+    <string name="bench_run">Choose a destination and start</string>
+    <string name="bench_running">Measuring write speed…</string>
+    <string name="bench_no_result">No benchmark has been run yet.</string>
+    <string name="bench_last">Last result</string>
+    <string name="bench_margin">Margin over the required rate: %1$s</string>
+    <string name="bench_window">Window %1$d</string>
+    <string name="bench_outcome_qualified">Qualified: it sustains the required rate in every window</string>
+    <string name="bench_outcome_not_qualified">Not qualified: at least one window fell below the required rate</string>
+    <string name="bench_outcome_cancelled">Cancelled before it finished</string>
+    <string name="bench_outcome_unsupported">This destination does not support the test</string>
+    <string name="bench_outcome_failed">The test could not write to the destination</string>
 </resources>

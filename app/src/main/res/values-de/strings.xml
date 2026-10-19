@@ -918,4 +918,20 @@
     <string name="caps_export_saved">Bericht gespeichert</string>
     <string name="caps_export_failed">Der Bericht konnte nicht exportiert werden</string>
     <string name="caps_export_chooser">Fähigkeitsbericht teilen</string>
+    <string name="bench_title">Speicher-Benchmark</string>
+    <string name="bench_settings_summary">Prüfen, ob ein Laufwerk mit Ihren Aufnahmeeinstellungen mithält</string>
+    <string name="bench_intro">Schreibt einige Sekunden lang Testdaten an einen Ort Ihrer Wahl und misst, ob er die Datenrate Ihrer aktuellen Einstellungen durchhält. Die Testdatei wird danach gelöscht.</string>
+    <string name="bench_required">Benötigte Rate</string>
+    <string name="bench_required_help">Das Video und Audio, das Ihr aktueller Modus und Ihre Einstellungen pro Sekunde schreiben.</string>
+    <string name="bench_run">Ziel wählen und starten</string>
+    <string name="bench_running">Schreibgeschwindigkeit wird gemessen…</string>
+    <string name="bench_no_result">Es wurde noch kein Benchmark ausgeführt.</string>
+    <string name="bench_last">Letztes Ergebnis</string>
+    <string name="bench_margin">Reserve über der benötigten Rate: %1$s</string>
+    <string name="bench_window">Fenster %1$d</string>
+    <string name="bench_outcome_qualified">Qualifiziert: hält die benötigte Rate in jedem Fenster</string>
+    <string name="bench_outcome_not_qualified">Nicht qualifiziert: mindestens ein Fenster lag unter der benötigten Rate</string>
+    <string name="bench_outcome_cancelled">Vor dem Ende abgebrochen</string>
+    <string name="bench_outcome_unsupported">Dieses Ziel unterstützt den Test nicht</string>
+    <string name="bench_outcome_failed">Der Test konnte nicht ins Ziel schreiben</string>
 </resources>

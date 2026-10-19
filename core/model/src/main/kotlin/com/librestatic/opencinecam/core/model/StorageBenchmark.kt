@@ -6,6 +6,7 @@ package com.librestatic.opencinecam.core.model
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.OutputStream
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A destination is opened, measured, closed, and cleaned before the next one starts. */
@@ -273,13 +274,24 @@ class StorageBenchmarkRunner(
     )
 }
 
-/** Serializes a result with the accepted BenchmarkResultDocument schema. */
-class JsonBenchmarkResultRepository(private val output: OutputStream) : BenchmarkResultRepository {
+/** The schema's outcome vocabulary (`pass`, `fail`, `cancelled`, `error`); [StorageBenchmarkOutcome.name] rides along as detail. */
+fun StorageBenchmarkOutcome.schemaOutcome(): String = when (this) {
+    StorageBenchmarkOutcome.QUALIFIED -> "pass"
+    StorageBenchmarkOutcome.NOT_QUALIFIED -> "fail"
+    StorageBenchmarkOutcome.CANCELLED -> "cancelled"
+    StorageBenchmarkOutcome.UNSUPPORTED, StorageBenchmarkOutcome.FAILED -> "error"
+}
+
+/** Serializes a result with the accepted BenchmarkResultDocument schema; `createdAt` is an ISO-8601 instant. */
+class JsonBenchmarkResultRepository(
+    private val output: OutputStream,
+    private val now: () -> Instant = Instant::now,
+) : BenchmarkResultRepository {
     override fun persist(result: StorageBenchmarkResult): BenchmarkPersistenceOutcome = runCatching {
         val document = BenchmarkResultDocument(
             schemaVersion = "1.0.0",
             benchmarkId = result.benchmarkId,
-            createdAt = "${result.benchmarkId}:${result.destinationId}",
+            createdAt = now().toString(),
             destination = buildJsonObject {
                 put("id", result.destinationId)
             },
@@ -294,7 +306,9 @@ class JsonBenchmarkResultRepository(private val output: OutputStream) : Benchmar
                 }
             },
             requiredBytesPerSecond = result.requiredBytesPerSecond,
-            outcome = result.outcome.name,
+            qualificationMarginBytesPerSecond = result.qualificationMarginBytesPerSecond,
+            outcome = result.outcome.schemaOutcome(),
+            outcomeDetail = result.outcome.name,
         )
         output.write(encodeCanonical(document).toByteArray())
         output.flush()

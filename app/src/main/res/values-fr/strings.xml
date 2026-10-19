@@ -918,4 +918,20 @@
     <string name="caps_export_saved">Rapport enregistré</string>
     <string name="caps_export_failed">Le rapport n\'a pas pu être exporté</string>
     <string name="caps_export_chooser">Partager le rapport de capacités</string>
+    <string name="bench_title">Test de stockage</string>
+    <string name="bench_settings_summary">Vérifiez qu\'un support suit vos réglages d\'enregistrement actuels</string>
+    <string name="bench_intro">Écrit des données de test pendant quelques secondes à l\'endroit de votre choix, puis mesure si le débit de vos réglages actuels est soutenu. Le fichier de test est ensuite supprimé.</string>
+    <string name="bench_required">Débit requis</string>
+    <string name="bench_required_help">La vidéo et l\'audio que votre mode et vos réglages actuels écrivent, par seconde.</string>
+    <string name="bench_run">Choisir une destination et démarrer</string>
+    <string name="bench_running">Mesure de la vitesse d\'écriture…</string>
+    <string name="bench_no_result">Aucun test n\'a encore été exécuté.</string>
+    <string name="bench_last">Dernier résultat</string>
+    <string name="bench_margin">Marge par rapport au débit requis : %1$s</string>
+    <string name="bench_window">Fenêtre %1$d</string>
+    <string name="bench_outcome_qualified">Qualifié : il soutient le débit requis dans chaque fenêtre</string>
+    <string name="bench_outcome_not_qualified">Non qualifié : au moins une fenêtre est restée sous le débit requis</string>
+    <string name="bench_outcome_cancelled">Annulé avant la fin</string>
+    <string name="bench_outcome_unsupported">Cette destination ne prend pas en charge le test</string>
+    <string name="bench_outcome_failed">Le test n\'a pas pu écrire vers la destination</string>
 </resources>

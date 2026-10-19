@@ -72,7 +72,9 @@ data class BenchmarkResultDocument(
     val bytesWritten: Long,
     val windows: List<JsonObject>,
     val requiredBytesPerSecond: Long? = null,
+    val qualificationMarginBytesPerSecond: Long? = null,
     val outcome: String,
+    val outcomeDetail: String? = null,
 )
 
 @Serializable

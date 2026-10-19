@@ -918,4 +918,20 @@
     <string name="caps_export_saved">Rapporto salvato</string>
     <string name="caps_export_failed">Impossibile esportare il rapporto</string>
     <string name="caps_export_chooser">Condividi il rapporto sulle capacità</string>
+    <string name="bench_title">Test di archiviazione</string>
+    <string name="bench_settings_summary">Verifica che un\'unità regga le tue impostazioni di registrazione attuali</string>
+    <string name="bench_intro">Scrive dati di prova per qualche secondo nel luogo che scegli e misura se regge il flusso dati delle tue impostazioni attuali. Il file di prova viene poi eliminato.</string>
+    <string name="bench_required">Velocità richiesta</string>
+    <string name="bench_required_help">Il video e l\'audio che la modalità e le impostazioni attuali scrivono, al secondo.</string>
+    <string name="bench_run">Scegli la destinazione e avvia</string>
+    <string name="bench_running">Misurazione della velocità di scrittura…</string>
+    <string name="bench_no_result">Nessun test è stato ancora eseguito.</string>
+    <string name="bench_last">Ultimo risultato</string>
+    <string name="bench_margin">Margine rispetto alla velocità richiesta: %1$s</string>
+    <string name="bench_window">Finestra %1$d</string>
+    <string name="bench_outcome_qualified">Idoneo: regge la velocità richiesta in ogni finestra</string>
+    <string name="bench_outcome_not_qualified">Non idoneo: almeno una finestra è scesa sotto la velocità richiesta</string>
+    <string name="bench_outcome_cancelled">Annullato prima della fine</string>
+    <string name="bench_outcome_unsupported">Questa destinazione non supporta il test</string>
+    <string name="bench_outcome_failed">Il test non è riuscito a scrivere nella destinazione</string>
 </resources>
