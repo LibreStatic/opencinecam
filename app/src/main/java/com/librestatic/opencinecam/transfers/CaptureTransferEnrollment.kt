@@ -14,6 +14,8 @@ data class CaptureTransferEnrollment(
     val endpointId: String,
     val endpointRevision: Long,
     val consentRevision: Long,
+    /** Frozen at REC admission: only takes recorded while automatic upload was on are eligible. */
+    val autoUpload: Boolean = false,
 ) {
     init {
         requireEnrollmentUuid(bundleId)
@@ -40,11 +42,13 @@ internal object CaptureTransferEnrollmentCodec {
     const val MAX_BYTES = 1024
 
     fun encode(value: CaptureTransferEnrollment): ByteArray = buildJsonObject {
-        put("version", 1)
+        put("version", if (value.autoUpload) 2 else 1)
         put("bundleId", value.bundleId)
         put("endpointId", value.endpointId)
         put("endpointRevision", value.endpointRevision)
         put("consentRevision", value.consentRevision)
+        // Version 1 files (no automatic upload) keep their exact bytes; version 2 only ever records true.
+        if (value.autoUpload) put("autoUpload", true)
     }.toString().toByteArray(Charsets.UTF_8).also { require(it.size <= MAX_BYTES) }
 
     fun decode(bytes: ByteArray): CaptureTransferEnrollment = try {
@@ -52,15 +56,20 @@ internal object CaptureTransferEnrollmentCodec {
         val document = bytes.decodeToString(throwOnInvalidSequence = true)
         requireFlatJson(document)
         val json = Json.parseToJsonElement(document).jsonObject
-        require(json.keys == setOf("version", "bundleId", "endpointId", "endpointRevision", "consentRevision"))
         val version = json.getValue("version").jsonPrimitive
-        require(!version.isString && version.content == "1")
+        require(!version.isString && version.content in setOf("1", "2"))
+        val base = setOf("version", "bundleId", "endpointId", "endpointRevision", "consentRevision")
+        require(json.keys == if (version.content == "2") base + "autoUpload" else base)
+        val automatic = version.content == "2" && json.getValue("autoUpload").jsonPrimitive.let {
+            require(!it.isString && it.content == "true")
+            true
+        }
         fun text(key: String): String = json.getValue(key).jsonPrimitive.also { require(it.isString) }.content
         fun revision(key: String): Long = json.getValue(key).jsonPrimitive.let {
             require(!it.isString)
             requireNotNull(it.content.toLongOrNull())
         }
-        val value = CaptureTransferEnrollment(text("bundleId"), text("endpointId"), revision("endpointRevision"), revision("consentRevision"))
+        val value = CaptureTransferEnrollment(text("bundleId"), text("endpointId"), revision("endpointRevision"), revision("consentRevision"), automatic)
         // Parsing alone can discard duplicate keys; byte equality enforces a single canonical form.
         require(bytes.contentEquals(encode(value)))
         value

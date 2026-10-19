@@ -21,6 +21,8 @@ class WebDavQueuePreferences(
     val allowCellular: Boolean = false,
     val activeEndpointId: String? = null,
     endpoints: List<WebDavQueueEndpoint> = emptyList(),
+    /** Opt-in automatic upload of takes recorded after activation. Device-local, never in presets. */
+    val autoUpload: Boolean = false,
 ) {
     val endpoints: List<WebDavQueueEndpoint> = Collections.unmodifiableList(endpoints.sortedBy { it.id })
     val activeEndpoint: WebDavQueueEndpoint? get() = endpoints.singleOrNull { it.id == activeEndpointId }
@@ -30,15 +32,18 @@ class WebDavQueuePreferences(
         require(this.endpoints.map { it.url }.toSet().size == this.endpoints.size)
         require(activeEndpointId == null || activeEndpoint != null)
         require(!enabled || activeEndpoint != null)
+        require(!autoUpload || enabled)
     }
     fun updated(
         url: String,
         enabled: Boolean,
         allowCellular: Boolean,
         ignoreTlsErrors: Boolean? = null,
+        autoUpload: Boolean = this.autoUpload,
     ): WebDavQueuePreferences {
         val address = url.trim().takeIf { it.isNotEmpty() }?.let(::normalizeQueueEndpoint)
         require(!enabled || address != null)
+        val automatic = autoUpload && enabled
         require(ignoreTlsErrors != true || address != null)
         // A policy belongs to its immutable URL/id binding, not the currently selected draft.
         val endpoint = address?.let { value ->
@@ -47,17 +52,18 @@ class WebDavQueuePreferences(
             if (ignoreTlsErrors == null || existing.ignoreTlsErrors == ignoreTlsErrors) existing
             else existing.copy(ignoreTlsErrors = ignoreTlsErrors)
         }
-        if (activeEndpoint == endpoint && this.enabled == enabled && this.allowCellular == allowCellular) return this
+        if (activeEndpoint == endpoint && this.enabled == enabled && this.allowCellular == allowCellular &&
+            this.autoUpload == automatic) return this
         val all = when {
             endpoint == null -> endpoints
             endpoints.any { it.id == endpoint.id } -> endpoints.map { if (it.id == endpoint.id) endpoint else it }
             else -> endpoints + endpoint
         }
-        return WebDavQueuePreferences(Math.addExact(revision, 1), enabled, allowCellular, endpoint?.id, all)
+        return WebDavQueuePreferences(Math.addExact(revision, 1), enabled, allowCellular, endpoint?.id, all, automatic)
     }
     override fun equals(other: Any?): Boolean = other is WebDavQueuePreferences && revision == other.revision && enabled == other.enabled &&
-        allowCellular == other.allowCellular && activeEndpointId == other.activeEndpointId && endpoints == other.endpoints
-    override fun hashCode(): Int = listOf(revision, enabled, allowCellular, activeEndpointId, endpoints).hashCode()
+        allowCellular == other.allowCellular && autoUpload == other.autoUpload && activeEndpointId == other.activeEndpointId && endpoints == other.endpoints
+    override fun hashCode(): Int = listOf(revision, enabled, allowCellular, autoUpload, activeEndpointId, endpoints).hashCode()
 }
 
 internal fun normalizeQueueEndpoint(value: String): String {
@@ -70,14 +76,15 @@ internal fun normalizeQueueEndpoint(value: String): String {
 
 internal object WebDavQueuePreferencesCodec {
     const val MAX_BYTES = 80_000
-    fun encode(value: WebDavQueuePreferences): ByteArray = encodeVersion(value, 2)
+    fun encode(value: WebDavQueuePreferences): ByteArray = encodeVersion(value, 3)
     private fun encodeVersion(value: WebDavQueuePreferences, version: Int): ByteArray = buildJsonObject {
         put("version", version); put("revision", value.revision); put("enabled", value.enabled); put("allowCellular", value.allowCellular)
+        if (version == 3) put("autoUpload", value.autoUpload)
         put("activeEndpointId", value.activeEndpointId?.let(::JsonPrimitive) ?: JsonNull)
         put("endpoints", buildJsonArray {
             value.endpoints.forEach { endpoint -> add(buildJsonObject {
                 put("id", endpoint.id); put("url", endpoint.url)
-                if (version == 2) put("ignoreTlsErrors", endpoint.ignoreTlsErrors)
+                if (version >= 2) put("ignoreTlsErrors", endpoint.ignoreTlsErrors)
             }) }
         })
     }.toString().toByteArray(Charsets.UTF_8).also { require(it.size <= MAX_BYTES) }
@@ -91,10 +98,13 @@ internal object WebDavQueuePreferencesCodec {
         }
         require(depth == 0 && !quoted)
         val root = Json.parseToJsonElement(text).jsonObject
-        require(root.keys == setOf("version", "revision", "enabled", "allowCellular", "activeEndpointId", "endpoints"))
+        val versionNumber = root.getValue("version").jsonPrimitive.also { require(!it.isString) }.content
+        require(versionNumber in setOf("1", "2", "3"))
+        val baseKeys = setOf("version", "revision", "enabled", "allowCellular", "activeEndpointId", "endpoints")
+        require(root.keys == if (versionNumber == "3") baseKeys + "autoUpload" else baseKeys)
         fun string(value: JsonElement) = value.jsonPrimitive.also { require(it.isString) }.content
         fun bool(name: String) = root.getValue(name).jsonPrimitive.also { require(!it.isString) }.boolean
-        val version = root.getValue("version").jsonPrimitive; require(!version.isString && version.content in setOf("1", "2"))
+        val version = root.getValue("version").jsonPrimitive; require(!version.isString)
         val revision = root.getValue("revision").jsonPrimitive; require(!revision.isString)
         val values = root.getValue("endpoints").jsonArray; require(values.size <= 32)
         val decoded = WebDavQueuePreferences(revision.long, bool("enabled"), bool("allowCellular"),
@@ -105,7 +115,7 @@ internal object WebDavQueuePreferencesCodec {
                 val ignoreTlsErrors = if (version.content == "1") false else item.getValue("ignoreTlsErrors")
                     .jsonPrimitive.also { require(!it.isString) }.boolean
                 WebDavQueueEndpoint(string(item.getValue("id")), string(item.getValue("url")), ignoreTlsErrors)
-            })
+            }, if (version.content == "3") bool("autoUpload") else false)
         // Validate the original schema before migrating: v1 stays canonical, never lenient.
         require(bytes.contentEquals(encodeVersion(decoded, version.int)))
         return decoded

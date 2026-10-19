@@ -22,6 +22,33 @@ class CaptureTransferEnrollmentTest {
         }
     }
 
+    @Test fun enrollmentsWithoutAutomaticUploadKeepTheirExactVersionOneBytes() {
+        assertFalse(value.autoUpload)
+        assertFalse(encoded.contains("autoUpload"))
+        val stored = "{\"version\":1,\"bundleId\":\"${value.bundleId}\",\"endpointId\":\"${value.endpointId}\",\"endpointRevision\":3,\"consentRevision\":7}"
+        assertEquals(value, CaptureTransferEnrollmentCodec.decode(stored.toByteArray()))
+        assertEquals(stored, encoded)
+    }
+
+    @Test fun automaticUploadIsFrozenInAVersionTwoRecordThatRoundTripsCanonically() {
+        val automatic = value.copy(autoUpload = true)
+        val text = CaptureTransferEnrollmentCodec.encode(automatic).toString(Charsets.UTF_8)
+        assertEquals("{\"version\":2,\"bundleId\":\"${value.bundleId}\",\"endpointId\":\"${value.endpointId}\",\"endpointRevision\":3,\"consentRevision\":7,\"autoUpload\":true}", text)
+        val decoded = CaptureTransferEnrollmentCodec.decode(text.toByteArray())
+        assertEquals(automatic, decoded)
+        assertTrue(decoded.autoUpload)
+        assertNotEquals(value, decoded)
+    }
+
+    @Test fun versionTwoRejectsAFalseMissingStringOrDuplicatedAutomaticUploadAndVersionOneRejectsTheKey() {
+        val text = CaptureTransferEnrollmentCodec.encode(value.copy(autoUpload = true)).toString(Charsets.UTF_8)
+        for (flag in listOf("false", "\"true\"", "1", "null")) reject(text.replace("\"autoUpload\":true", "\"autoUpload\":$flag"))
+        reject(text.replace(",\"autoUpload\":true", ""))
+        reject(text.replace("\"autoUpload\":true", "\"autoUpload\":true,\"autoUpload\":true"))
+        reject(text.replace("\"version\":2", "\"version\":1"))
+        reject(text.replace("\"version\":2", "\"version\":3"))
+    }
+
     @Test fun identifiersMustBeCanonicalUuids() {
         for (invalid in listOf("", "../enrollment", "1-1-1-1-1", value.endpointId.uppercase(), " ${value.bundleId}")) {
             assertThrows(IllegalArgumentException::class.java) { value.copy(bundleId = invalid) }
