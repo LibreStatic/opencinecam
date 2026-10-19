@@ -117,4 +117,24 @@ class CameraCapabilityAuditTest {
             assertTrue(query, "camera-capabilities" in SettingsCatalog.search(query, null) { "" })
         }
     }
+
+    private fun encoder(hw: Boolean = true, surface: Boolean = true, ok: Boolean = true) = ApvEncoderFacts("c2.test.apv.encoder", hw, surface, ok)
+
+    @Test fun apvIsAlwaysUnsupportedAndNotIntegrated() {
+        val finding = auditCameraCapabilities(camera()).of(AppFeature.APV)
+        assertEquals(AppFeatureStatus.UNAVAILABLE, finding.status)
+        assertEquals(APV_REASON_NOT_INTEGRATED, finding.detail)
+        val probed = auditCameraCapabilities(camera(), listOf(APV_REASON_API_BELOW_36, APV_REASON_NOT_INTEGRATED)).of(AppFeature.APV)
+        assertEquals("api-level-below-36 · apv-not-integrated", probed.detail)
+    }
+
+    @Test fun apvReasonsFollowTheDeviceTestLadder() {
+        val notIntegrated = APV_REASON_NOT_INTEGRATED
+        assertEquals(listOf(APV_REASON_API_BELOW_36, notIntegrated), apvUnsupportedReasons(35, listOf(encoder())))
+        assertEquals(listOf(APV_REASON_MIME_UNAVAILABLE, notIntegrated), apvUnsupportedReasons(36, emptyList()))
+        assertEquals(listOf(APV_REASON_SURFACE_CONFIGURATION_FAILED, notIntegrated), apvUnsupportedReasons(36, listOf(encoder(ok = false))))
+        assertEquals(listOf(APV_REASON_SURFACE_CONFIGURATION_FAILED, notIntegrated), apvUnsupportedReasons(36, listOf(encoder(surface = false))))
+        assertEquals(listOf(APV_REASON_HARDWARE_ENCODER_UNAVAILABLE, notIntegrated), apvUnsupportedReasons(36, listOf(encoder(hw = false))))
+        assertEquals(listOf(notIntegrated), apvUnsupportedReasons(36, listOf(encoder(hw = false), encoder())))
+    }
 }

@@ -120,7 +120,8 @@ internal fun CameraCapabilitiesScreen(
     val loaded = inventory
     val selected = loaded?.firstOrNull { it.cameraId == selectedId } ?: loaded?.firstOrNull()
     val descriptor = selected?.let { inv -> cameras.firstOrNull { it.cameraId == inv.cameraId } }
-    val findings = remember(descriptor) { descriptor?.let(::auditCameraCapabilities).orEmpty() }
+    val apvReasons by produceState(APV_UNPROBED_REASONS) { value = withContext(Dispatchers.IO) { runCatching(::probeApvReasons).getOrDefault(APV_UNPROBED_REASONS) } }
+    val findings = remember(descriptor, apvReasons) { descriptor?.let { auditCameraCapabilities(it, apvReasons) }.orEmpty() }
     val copied = stringResource(R.string.caps_copied)
     val copyFailed = stringResource(R.string.caps_copy_failed)
     val clipLabel = stringResource(R.string.caps_title)
@@ -132,7 +133,7 @@ internal fun CameraCapabilitiesScreen(
     // The mode chosen in the dialog survives the trip through the system file picker.
     var pendingSave by remember { mutableStateOf<Pair<ReportExportMode, Boolean>?>(null) }
     fun reportJson(list: List<CameraInventory>): JsonElement = capabilityReportJson(
-        buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState,
+        buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState, apvReasons = apvReasons,
             codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(),
             audio = codecAudio?.let(CodecAudioReportJson::audio) ?: unknownAudioReport()),
     )
@@ -167,7 +168,7 @@ internal fun CameraCapabilitiesScreen(
             ReportExportAction.COPY -> {
                 // The plain-text report names the phone on its first line; the redacted copy hides it.
                 val text = capabilityReportText(if (mode == ReportExportMode.FULL) deviceLine() else JsonReportRedactor.REDACTED,
-                    list, cameras, context::getString, liveState)
+                    list, cameras, context::getString, liveState, apvReasons)
                 val ok = runCatching {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(clipLabel, text))
                 }.isSuccess
@@ -466,6 +467,7 @@ internal fun capabilityReportText(
     cameras: List<Camera2CameraDescriptor>,
     label: (Int) -> String,
     live: CameraUiState? = null,
+    apvReasons: List<String> = APV_UNPROBED_REASONS,
 ): String = buildString {
     appendLine("OpenCineCam · ${label(R.string.caps_title)}")
     appendLine(device)
@@ -475,7 +477,7 @@ internal fun capabilityReportText(
         camera.logicalParentId?.let { append(" ⊂ $it") }
         appendLine(" ==")
         camera.error?.let { appendLine("! $it") }
-        cameras.firstOrNull { it.cameraId == camera.cameraId }?.let(::auditCameraCapabilities)?.forEach { finding ->
+        cameras.firstOrNull { it.cameraId == camera.cameraId }?.let { auditCameraCapabilities(it, apvReasons) }?.forEach { finding ->
             append("[${label(statusLabel(finding.status))}] ${label(finding.feature.title)}")
             if (finding.detail.isNotEmpty()) append(": ${finding.detail}")
             appendLine()

@@ -40,6 +40,7 @@ enum class AppFeature(val title: Int, val usage: Int) {
     PHOTO_FLASH(R.string.caps_feature_flash, R.string.caps_usage_flash),
     SENSOR_CLOCK(R.string.caps_feature_sensor_clock, R.string.caps_usage_sensor_clock),
     STREAM_USE_CASES(R.string.caps_feature_stream_use_cases, R.string.caps_usage_stream_use_cases),
+    APV(R.string.caps_feature_apv, R.string.caps_usage_apv),
 }
 
 /** [detail] holds only numbers, units and API names, so it reads the same in every language. */
@@ -49,8 +50,10 @@ data class AppFeatureFinding(val feature: AppFeature, val status: AppFeatureStat
  * Maps the descriptor the capture engine negotiated (not the raw characteristics) onto app
  * features, so the page shows exactly what OpenCineCam will offer for this camera.
  */
-fun auditCameraCapabilities(d: Camera2CameraDescriptor): List<AppFeatureFinding> = AppFeature.entries.map { feature ->
+fun auditCameraCapabilities(d: Camera2CameraDescriptor, apvReasons: List<String> = APV_UNPROBED_REASONS): List<AppFeatureFinding> = AppFeature.entries.map { feature ->
     when (feature) {
+        // Unsupported whatever the camera says: the app has no APV pipeline, so the reasons are the device's own.
+        AppFeature.APV -> feature.unavailable(apvReasons.joinToString(" · "))
         AppFeature.VIDEO -> {
             val regular = d.videoProfiles.filterNot { it.constrainedHighSpeed }
             val largest = regular.maxByOrNull { it.size.width.toLong() * it.size.height }
