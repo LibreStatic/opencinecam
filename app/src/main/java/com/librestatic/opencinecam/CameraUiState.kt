@@ -37,8 +37,8 @@ enum class CaptureMode(val experimental: Boolean = false) {
     TIME_LAPSE,
     BRACKET,
     LIGHT_TRAIL,
-    LOG,
-    HLG,
+    LOG(true),
+    HLG(true),
     APV(true),
     RAW_VIDEO(true),
 }
