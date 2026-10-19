@@ -36,11 +36,11 @@ import kotlinx.coroutines.withContext
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    fun save(url: String, enabled: Boolean, cellular: Boolean, ignoreTlsErrors: Boolean? = null) {
+    fun save(url: String, enabled: Boolean, cellular: Boolean, ignoreTlsErrors: Boolean? = null, autoUpload: Boolean? = null) {
         if (busy) return
         busy = true; failed = false
         scope.launch {
-            try { withContext(Dispatchers.IO) { repository.save(url, enabled, cellular, ignoreTlsErrors) } }
+            try { withContext(Dispatchers.IO) { repository.save(url, enabled, cellular, ignoreTlsErrors, autoUpload) } }
             catch (_: Exception) { failed = true }
             finally { busy = false }
         }
@@ -66,6 +66,11 @@ import kotlinx.coroutines.withContext
             !busy && !state.storageFailed) {
             save(preferences.activeEndpoint?.url.orEmpty(), preferences.enabled, it)
         }
+        QueueToggle(stringResource(R.string.webdav_auto_upload_label), "webdav-auto-upload", preferences.autoUpload,
+            !busy && !state.storageFailed && preferences.enabled && preferences.activeEndpoint != null) {
+            save(preferences.activeEndpoint?.url.orEmpty(), preferences.enabled, preferences.allowCellular, autoUpload = it)
+        }
+        Text(stringResource(R.string.webdav_auto_upload_help), color = MaterialTheme.colorScheme.onSurfaceVariant)
         QueueToggle(stringResource(R.string.webdav_queue_ignore_tls_label), "webdav-queue-ignore-tls",
             preferences.activeEndpoint?.ignoreTlsErrors == true,
             !busy && !state.storageFailed && preferences.activeEndpoint?.let { WebDavLanTls.isLocalAddress(URI(it.url)) } == true) {
