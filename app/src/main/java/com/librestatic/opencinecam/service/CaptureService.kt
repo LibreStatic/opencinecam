@@ -1683,7 +1683,9 @@ class CaptureService : Service() {
         override fun onControlRejected(code: String, message: String) {
             // The session kept its previous request: a refused control must never end or discard a take.
             android.util.Log.w("CaptureService", "Control rejected ($code): $message")
-            cameraState.update { it.copy(message = getString(R.string.control_rejected, message), messageTransient = true) }
+            // A Strict exposure gate falls back to auto exposure instead of keeping the previous request.
+            val text = if (com.librestatic.opencinecam.camera.ExposureGateCode.entries.any { it.code == code }) R.string.control_rejected_auto else R.string.control_rejected
+            cameraState.update { it.copy(message = getString(text, message), messageTransient = true) }
         }
 
         override fun onControlAdapted(code: String, message: String) {

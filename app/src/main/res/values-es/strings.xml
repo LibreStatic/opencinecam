@@ -216,6 +216,7 @@
     <string name="settings_torch_rejected">Solicitud de luz rechazada; se conserva el ajuste anterior: %1$s</string>
     <string name="control_rejected">La cámara rechazó el cambio; se conserva el ajuste anterior: %1$s</string>
     <string name="control_adapted">Adaptado a esta cámara: %1$s</string>
+    <string name="control_rejected_auto">No se aplicó la exposición manual; la exposición sigue automática: %1$s</string>
     <string name="lens_focal_equivalent">%1$s mm equiv.</string>
     <string name="fold_settings_title">Pantallas y plegables</string>
     <string name="fold_posture">Postura reportada: %1$s</string>
