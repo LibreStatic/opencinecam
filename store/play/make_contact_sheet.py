@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Build store/play/raw/contact-sheet.png (gitignored): phone rows and tablet rows for every locale + feature graphics."""
 import pathlib
 from PIL import Image, ImageDraw
