@@ -19,6 +19,14 @@ enum class EvidenceStage(val ordinalValue: Int) {
     FAILED(-1),
 }
 
+/** Where an observation was made. Only a physical device can certify a capability (ADR-0026). */
+enum class EvidenceOrigin {
+    PHYSICAL_DEVICE,
+    EMULATOR,
+    HOST,
+    UNKNOWN,
+}
+
 enum class EvidenceStatus {
     PASS,
     FAIL,
@@ -100,6 +108,7 @@ data class CapabilityEvidence<T>(
     val validityKey: CacheValidityKey,
     val value: Knowledge<T>,
     val details: Map<String, String> = emptyMap(),
+    val origin: EvidenceOrigin = EvidenceOrigin.UNKNOWN,
 ) {
     init {
         require(source.isNotBlank()) { "evidence source must not be blank" }
@@ -139,9 +148,11 @@ data class EvidenceTrail<T>(val entries: List<CapabilityEvidence<T>> = emptyList
         require(entries.zipWithNext().none { (a, b) -> a.observedAt.isAfter(b.observedAt) }) {
             "evidence entries must be ordered by observation time"
         }
+        entries.forEach(::requirePhysicalOriginForCertifyingPass)
     }
 
     fun append(next: CapabilityEvidence<T>): EvidenceTrail<T> {
+        requirePhysicalOriginForCertifyingPass(next)
         val previous = entries.lastOrNull { it.graphId == next.graphId && it.validityKey == next.validityKey }
         if (previous != null && previous.status == EvidenceStatus.PASS && next.status == EvidenceStatus.PASS) {
             require(
@@ -150,5 +161,14 @@ data class EvidenceTrail<T>(val entries: List<CapabilityEvidence<T>> = emptyList
             ) { "evidence stage cannot move backwards for an unchanged graph" }
         }
         return copy(entries = entries + next)
+    }
+}
+
+/** ADR-0026: an emulator, host run or unknown origin cannot pass the empirical or certified stages. */
+private fun requirePhysicalOriginForCertifyingPass(evidence: CapabilityEvidence<*>) {
+    if (evidence.status != EvidenceStatus.PASS) return
+    if (evidence.stage != EvidenceStage.EMPIRICALLY_VERIFIED && evidence.stage != EvidenceStage.CERTIFIED) return
+    require(evidence.origin == EvidenceOrigin.PHYSICAL_DEVICE) {
+        "${evidence.stage} PASS evidence requires a physical device origin, not ${evidence.origin}"
     }
 }
