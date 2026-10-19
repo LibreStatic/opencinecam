@@ -18,7 +18,7 @@ import com.librestatic.opencinecam.media.storage.calculateStorageReserve
 /** What a recording-ticker pass decided: stop the take, and/or keep a persistent notice on screen. */
 internal data class RuntimeVerdict(val stop: StableFailure?, val notice: RuntimeNotice?)
 
-internal enum class RuntimeNotice { MONITORING_REDUCED, STATE_UNKNOWN, AV_DRIFT }
+internal enum class RuntimeNotice { MONITORING_REDUCED, STATE_UNKNOWN, AV_DRIFT, CADENCE }
 
 /**
  * One pass of the live thermal and storage policy (ADR-0016). [platformThermal] is

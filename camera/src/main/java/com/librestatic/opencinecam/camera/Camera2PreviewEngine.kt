@@ -36,6 +36,7 @@ import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.Build
 import com.librestatic.opencinecam.core.model.Knowledge
+import com.librestatic.opencinecam.core.model.PolicyMode
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -339,6 +340,8 @@ interface Camera2PreviewListener {
     fun onAeLockChanged(active: Boolean) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
     fun onCadenceGuardChanged(engaged: Boolean) = Unit
+    /** Frame delivery broke down for several seconds of the take (see [SustainedCadenceGuard]); [action] follows the recording policy. Camera thread. */
+    fun onSustainedCadenceLoss(action: CaptureAuditAction, detail: String) = Unit
     fun onAfLockChanged(state: LockState) = Unit
     fun onFocusPullFinished() = Unit
     fun onFocusPullStarted(targetDiopters: Float) = Unit
@@ -667,6 +670,17 @@ class Camera2PreviewEngine(
     private var suspensionNotified: Pair<Camera2PreviewListener, AnalysisSuspension>? = null
     // cameraExecutor: DIAGNOSTIC-only capture-result audit of the current graph.
     private var graphAudit: Pair<CameraCaptureSession, CaptureResultAuditor>? = null
+    /** Set by the service for the length of a take; null (preview, photo) leaves the audit diagnostic only. */
+    @Volatile private var cadenceLossGuard: Pair<PolicyMode, SustainedCadenceGuard>? = null
+
+    /**
+     * Arms the sustained-cadence check for a take under [policy], or disarms it with null. The
+     * auditor itself stays DIAGNOSTIC: its STRICT mode demands a request correlation a repeating
+     * request does not have and stops on a single outlier, which would end ordinary takes.
+     */
+    fun setRecordingCadencePolicy(policy: PolicyMode?) {
+        cadenceLossGuard = policy?.let { it to SustainedCadenceGuard() }
+    }
     private var lastCaptureAuditSummaryAtMs = 0L
     @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
     @Volatile private var latestStillShutterLatency: StillShutterLatency? = null
@@ -4771,8 +4785,10 @@ class Camera2PreviewEngine(
                 }
                 result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)?.let { put(AUDIT_AF_STATE, it.toString()) }
             }
+            val droppedBefore = auditor.diagnostics().droppedFrames
             auditor.auditResult(CaptureResultSample(result.frameNumber, sensorTimestamp?.takeIf { it >= 0 }, metadata))
             val stats = auditor.diagnostics()
+            checkSustainedCadence(sensorTimestamp, stats.droppedFrames - droppedBefore, stats)
             latestCaptureDiagnostics = stats
             val now = SystemClock.elapsedRealtime()
             if (now - lastCaptureAuditSummaryAtMs >= CAPTURE_AUDIT_SUMMARY_MS) {
@@ -4780,6 +4796,21 @@ class Camera2PreviewEngine(
                 Log.i(TAG, "Capture audit: $stats")
             }
         }.onFailure { Log.w(TAG, "Capture audit skipped a result.", it) }
+    }
+
+    /**
+     * cameraExecutor: feeds the take's [SustainedCadenceGuard]. Constrained high-speed sessions
+     * (results arrive per batch) and time-lapse takes (frames are taken at the interval, not the
+     * stream rate) are not judged.
+     */
+    private fun checkSustainedCadence(sensorTimestamp: Long?, droppedFrames: Long, stats: CaptureAuditStats) {
+        val (policy, guard) = cadenceLossGuard ?: return
+        if (sensorTimestamp == null || sensorTimestamp < 0 || guard.tripped || isHighSpeedSession() || timelapseTake) return
+        if (guard.observe(sensorTimestamp, droppedFrames)) {
+            val action = cadenceLossAction(policy)
+            Log.w(TAG, "Sustained cadence loss ($action): $stats")
+            listener?.onSustainedCadenceLoss(action, "droppedFrames=${stats.droppedFrames} results=${stats.results}")
+        }
     }
 
     private fun recordingCaptureCallback(

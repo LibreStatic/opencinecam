@@ -904,4 +904,5 @@
     <string name="runtime_notice_monitoring_reduced">Calore o poco spazio: monitoraggio ridotto</string>
     <string name="runtime_notice_state_unknown">Temperatura o archiviazione non leggibili</string>
     <string name="runtime_notice_av_drift">Audio e video si stanno sfasando</string>
+    <string name="runtime_notice_cadence">Si stanno perdendo dei fotogrammi</string>
 </resources>
