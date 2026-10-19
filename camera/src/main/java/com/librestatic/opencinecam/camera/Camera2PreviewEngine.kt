@@ -331,6 +331,8 @@ interface Camera2PreviewListener {
      * kept running on its previous request. Never a reason to finalize or discard a running take.
      */
     fun onControlRejected(code: String, message: String) = onFailure(code, message, true)
+    /** Adaptive policy applied a control other than requested (clamped, or fell back to auto); a transient disclosure, never a failure. */
+    fun onControlAdapted(code: String, message: String) = Unit
     fun onTorchRejected(message: String) = Unit
     fun onPreviewSurfaceLost(message: String) = Unit
     fun onTapFocusState(state: TapFocusState) = Unit
@@ -698,6 +700,15 @@ class Camera2PreviewEngine(
      */
     fun setRecordingCadencePolicy(policy: PolicyMode?) {
         cadenceLossGuard = policy?.let { it to SustainedCadenceGuard() }
+    }
+    /** Strict (default) rejects out-of-range professional controls; Adaptive clamps and discloses. Camera-thread owned. */
+    private var controlPolicy = PolicyMode.STRICT
+    /** The last (selection, camera, policy, outcome) reported, so request rebuilds do not repeat a notice. */
+    private var lastExposureGateKey: Any? = null
+
+    /** Sets the policy for professional controls; call before [setProfessionalControls] so the next request honours it. */
+    fun setControlPolicy(policy: PolicyMode) {
+        cameraExecutor.execute { controlPolicy = policy }
     }
     private var lastCaptureAuditSummaryAtMs = 0L
     @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
@@ -4949,16 +4960,29 @@ class Camera2PreviewEngine(
         builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs)
     }
 
+    private fun reportExposureGate(selection: ExposureSelection, gate: ExposureGate) {
+        val key = if (gate.code == null) null else listOf(selection, activeDescriptor?.cameraId, controlPolicy, gate.code)
+        if (key == lastExposureGateKey) return
+        lastExposureGateKey = key
+        val message = gate.message ?: return
+        val code = gate.code?.code ?: return
+        if (gate.rejected) listener?.onControlRejected(code, message) else listener?.onControlAdapted(code, message)
+    }
+
     private fun applyManualControls(
         builder: CaptureRequest.Builder,
         defaultAfMode: Int = if (recording || logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null)
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
     ) {
         if (!isHighSpeedSession()) enableIspHistogram(builder)
-        val pro = professionalExposure?.resolve(
-            if (isHighSpeedSession()) ExposureCapabilities() else activeDescriptor?.exposureCapabilities ?: ExposureCapabilities(),
-            CaptureFrameRate(requestedTargetFps.coerceAtLeast(1)),
-        )
+        val pro = professionalExposure?.let { selection ->
+            val rate = CaptureFrameRate(requestedTargetFps.coerceAtLeast(1))
+            // High-speed sessions pass empty capabilities on purpose: they fall back to auto without a notice.
+            if (isHighSpeedSession()) return@let selection.resolve(ExposureCapabilities(), rate)
+            val gate = selection.gate(activeDescriptor?.exposureCapabilities ?: ExposureCapabilities(), rate, controlPolicy)
+            reportExposureGate(selection, gate)
+            gate.exposure
+        }
         val iso = if (pro != null) pro.iso else requestedIso
         val exposure = if (pro != null) pro.timeNs else requestedExposureNs
         if (pro == null && Build.VERSION.SDK_INT >= 36 && activeDescriptor?.exposureCapabilities?.priorities?.isNotEmpty() == true) {
