@@ -890,4 +890,7 @@
     <string name="recording_policy_adaptive">Adaptativa</string>
     <string name="recording_policy_strict_summary">A estrita interrompe a gravação e indica o motivo quando armazenamento, calor ou cadência saem da faixa segura. O arquivo é salvo. Vale a partir da próxima gravação.</string>
     <string name="recording_policy_adaptive_summary">A adaptativa continua gravando, reduz o trabalho de monitoramento e mostra um aviso em vez de parar. Vale a partir da próxima gravação.</string>
+    <string name="storage_reserve_insufficient">Não há espaço livre suficiente para começar: esta gravação precisa de %1$s livres e há %2$s disponíveis.</string>
+    <string name="storage_unknown_refused">Não foi possível ler o espaço livre, então a gravação não começou. Escolha a política de gravação adaptativa para gravar sem verificar o espaço.</string>
+    <string name="storage_unknown_warning">Espaço livre ilegível; gravando sem verificar o espaço</string>
 </resources>

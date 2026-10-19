@@ -896,4 +896,7 @@
     <string name="recording_policy_adaptive">Adaptive</string>
     <string name="recording_policy_strict_summary">Strict stops the take and states the reason when storage, heat or frame timing leaves the safe range. The file is saved. Applies to the next take.</string>
     <string name="recording_policy_adaptive_summary">Adaptive keeps recording, reduces monitoring work and shows a warning instead of stopping. Applies to the next take.</string>
+    <string name="storage_reserve_insufficient">Not enough free space to start: this take needs %1$s free and %2$s is available.</string>
+    <string name="storage_unknown_refused">Free space could not be read, so the take was not started. Choose the Adaptive recording policy to record without a space check.</string>
+    <string name="storage_unknown_warning">Free space could not be read; recording without a space check</string>
 </resources>

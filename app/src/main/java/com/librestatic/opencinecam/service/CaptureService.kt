@@ -46,6 +46,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Environment
 import android.os.StatFs
 import android.util.Size
 import android.view.Surface
@@ -403,13 +404,20 @@ class CaptureService : Service() {
         ArrayBlockingQueue(16),
         ThreadPoolExecutor.AbortPolicy(),
     )
+    /** Free bytes on the primary external volume MediaStore writes takes to (not the app's private files). */
+    @Suppress("DEPRECATION")
+    private fun recordingVolumeFreeBytes(): Long? = runCatching { StatFs(Environment.getExternalStorageDirectory().absolutePath).availableBytes }.getOrNull()
+
+    /** Set when Adaptive admitted a take it could not size; shown for the whole take. */
+    @Volatile private var admissionWarning: String? = null
+
     private val recordingTicker = object : Runnable {
         override fun run() {
             if (cameraState.value.phase != CameraUiPhase.RECORDING) return
             previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
             cameraState.value = cameraState.value.copy(
                 recordingElapsedMs = activeRecordingElapsedMs(),
-                availableStorageBytes = runCatching { StatFs(filesDir.absolutePath).availableBytes }.getOrNull(),
+                availableStorageBytes = recordingVolumeFreeBytes(),
                 timecodeDisplay = timecodeTracker.currentDisplayTc()?.format(),
             )
             mainHandler.postDelayed(this, RECORDING_TICK_MS)
@@ -1303,7 +1311,8 @@ class CaptureService : Service() {
                 recordingPausePending = false,
                 recordingWidth = width,
                 recordingHeight = height,
-                availableStorageBytes = runCatching { StatFs(filesDir.absolutePath).availableBytes }.getOrNull(),
+                availableStorageBytes = recordingVolumeFreeBytes(),
+                recordingWarning = admissionWarning,
                 errorCode = null,
             )
             scheduleTimelapseAutoStop()
@@ -2657,6 +2666,22 @@ class CaptureService : Service() {
                     OperatorLutState.INCOMPATIBLE_DOMAIN, selectionId = monitorLutIdentity(lut)),
                     message = getString(R.string.lut_recording_domain_mismatch), errorCode = "recording-lut-domain") }
                 return false
+            }
+            val admissionAudio = current.selectedMode != CaptureMode.TIME_LAPSE && (audioForThisTake ?: settings.audioEnabled)
+            val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
+                current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
+            admissionWarning = null
+            when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, recordingVolumeFreeBytes())) {
+                StorageAdmission.Admit -> Unit
+                StorageAdmission.AdmitUnread -> admissionWarning = getString(R.string.storage_unknown_warning)
+                is StorageAdmission.Refuse -> {
+                    val needed = android.text.format.Formatter.formatFileSize(this@CaptureService, admission.requiredBytes)
+                    val message = if (admission.availableBytes == null) getString(R.string.storage_unknown_refused)
+                        else getString(R.string.storage_reserve_insufficient,
+                            needed, android.text.format.Formatter.formatFileSize(this@CaptureService, admission.availableBytes))
+                    cameraState.update { it.copy(message = message, errorCode = admission.errorCode) }
+                    return false
+                }
             }
             val reservation = transferCoordinator().reserveCapture()
             check(transferCapture.compareAndSet(null, reservation))
