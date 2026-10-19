@@ -905,6 +905,7 @@ class CaptureService : Service() {
             exposureClamped = resolved.clamped,
             requestedWhiteBalance = wb,
         ) }
+        previewEngine.setControlPolicy(settings.recordingPolicy)
         previewEngine.setProfessionalControls(settings.exposure, settings.whiteBalance, settings.imageProcessing)
     }
 
@@ -1676,6 +1677,11 @@ class CaptureService : Service() {
             // The session kept its previous request: a refused control must never end or discard a take.
             android.util.Log.w("CaptureService", "Control rejected ($code): $message")
             cameraState.update { it.copy(message = getString(R.string.control_rejected, message), messageTransient = true) }
+        }
+
+        override fun onControlAdapted(code: String, message: String) {
+            android.util.Log.i("CaptureService", "Control adapted ($code): $message")
+            cameraState.update { it.copy(message = getString(R.string.control_adapted, message), messageTransient = true) }
         }
 
         override fun onTorchRejected(message: String) {
