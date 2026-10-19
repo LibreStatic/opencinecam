@@ -163,6 +163,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.window)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.profileinstaller)
     baselineProfile(project(":baselineprofile"))
     implementation(platform(libs.androidx.compose.bom))
@@ -176,6 +177,7 @@ dependencies {
     // Agent visual feedback (AGENTS.md): host-test classpath only, never packaged.
     testImplementation(libs.compose.driver)
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.junit)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)

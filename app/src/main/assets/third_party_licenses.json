@@ -409,6 +409,14 @@
       "version": "1.2.0"
     },
     {
+      "group": "androidx.concurrent",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "concurrent-futures-ktx",
+      "version": "1.2.0"
+    },
+    {
       "group": "androidx.core",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
@@ -525,7 +533,23 @@
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "lifecycle-livedata",
+      "version": "2.11.0"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "lifecycle-livedata-core",
+      "version": "2.11.0"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "lifecycle-livedata-core-ktx",
       "version": "2.11.0"
     },
     {
@@ -582,6 +606,14 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "lifecycle-runtime-ktx-android",
+      "version": "2.11.0"
+    },
+    {
+      "group": "androidx.lifecycle",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "lifecycle-service",
       "version": "2.11.0"
     },
     {
@@ -745,6 +777,38 @@
       "version": "1.4.1"
     },
     {
+      "group": "androidx.room",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "room-common",
+      "version": "2.7.0"
+    },
+    {
+      "group": "androidx.room",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "room-common-jvm",
+      "version": "2.7.0"
+    },
+    {
+      "group": "androidx.room",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "room-runtime",
+      "version": "2.7.0"
+    },
+    {
+      "group": "androidx.room",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "room-runtime-android",
+      "version": "2.7.0"
+    },
+    {
       "group": "androidx.savedstate",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
@@ -785,6 +849,38 @@
       "version": "1.4.0"
     },
     {
+      "group": "androidx.sqlite",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "sqlite",
+      "version": "2.5.0"
+    },
+    {
+      "group": "androidx.sqlite",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "sqlite-android",
+      "version": "2.5.0"
+    },
+    {
+      "group": "androidx.sqlite",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "sqlite-framework",
+      "version": "2.5.0"
+    },
+    {
+      "group": "androidx.sqlite",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "sqlite-framework-android",
+      "version": "2.5.0"
+    },
+    {
       "group": "androidx.startup",
       "licenseId": "Apache-2.0",
       "licenseName": "Apache License 2.0",
@@ -798,6 +894,14 @@
       "licenseName": "Apache License 2.0",
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "tracing",
+      "version": "1.2.0"
+    },
+    {
+      "group": "androidx.tracing",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "tracing-ktx",
       "version": "1.2.0"
     },
     {
@@ -847,6 +951,22 @@
       "licenseTextAsset": "licenses/Apache-2.0.txt",
       "name": "window-core-android",
       "version": "1.5.1"
+    },
+    {
+      "group": "androidx.work",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "work-runtime",
+      "version": "2.12.0"
+    },
+    {
+      "group": "androidx.work",
+      "licenseId": "Apache-2.0",
+      "licenseName": "Apache License 2.0",
+      "licenseTextAsset": "licenses/Apache-2.0.txt",
+      "name": "work-runtime-ktx",
+      "version": "2.12.0"
     },
     {
       "group": "com.google.code.findbugs",
