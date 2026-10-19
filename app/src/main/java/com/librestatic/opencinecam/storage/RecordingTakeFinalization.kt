@@ -46,10 +46,30 @@ internal class OwnedOutputRows<T : Any>(private val delete: (T) -> Unit) {
     }
 }
 
+/**
+ * ADR-0011: a take that is not fully successful keeps every output that holds bytes and publishes it
+ * marked incomplete; only zero-length outputs are deleted. Both callbacks receive the final stable
+ * failure reasons, return the prepared output (still pending) or null when nothing with bytes remained
+ * (the output has then been removed), and must never delete an output that holds bytes.
+ */
+internal class IncompleteTakeSalvage<PV : Any, PA : Any>(
+    val reasons: List<String>,
+    val prepareAudio: ((List<String>) -> PA?)?,
+    val prepareVideo: (List<String>) -> PV?,
+)
+
+internal const val PUBLICATION_FAILED_REASON = "publication-failed"
+
 /** Optional registration errors are data, never capture-compensation triggers. */
 internal data class PreparedTakeResult<V : Any, A : Any>(
     val outputs: Pair<V, A?>?,
     val registrationFailures: List<Throwable>,
+    /** True when [outputs] and/or [salvagedAudio] were published as an incomplete take. */
+    val incomplete: Boolean = false,
+    val incompleteReasons: List<String> = emptyList(),
+    val salvagedAudio: A? = null,
+    /** Failures of individual salvage steps; the affected rows stay pending for crash recovery. */
+    val incompleteFailures: List<Throwable> = emptyList(),
 )
 
 /**
@@ -69,6 +89,7 @@ internal fun <PV : Any, PA : Any, V : Any, A : Any> finalizePreparedRecordingTak
     onPrepared: (PV, PA?) -> Unit = { _, _ -> },
     onPublished: (PV, PA?) -> Unit = { _, _ -> },
     onAborted: () -> Unit = {},
+    salvage: IncompleteTakeSalvage<PV, PA>? = null,
 ): PreparedTakeResult<V, A> {
     val registrationFailures = mutableListOf<Throwable>()
     fun register(action: () -> Unit) {
@@ -90,7 +111,36 @@ internal fun <PV : Any, PA : Any, V : Any, A : Any> finalizePreparedRecordingTak
             throw primaryFailure
         }
     }
+    /**
+     * Incomplete publication. Transfers never see an incomplete take (the journal has no incomplete
+     * state), so the optional registration is aborted. Rows that could not be handled stay pending.
+     */
+    fun salvageTake(reasons: List<String>, primary: Throwable?): PreparedTakeResult<V, A> {
+        val plan = requireNotNull(salvage)
+        val problems = mutableListOf<Throwable>()
+        fun <T> attempt(action: () -> T?): T? = try { action() } catch (problem: Throwable) {
+            if (problem !== primary) problems.add(problem)
+            null
+        }
+        val preparedAudio = plan.prepareAudio?.let { prepare -> attempt { prepare(reasons) } }
+        val preparedVideo = attempt { plan.prepareVideo(reasons) }
+        val audio = preparedAudio?.let { prepared -> attempt { publishAudio(prepared) } }
+        val video = preparedVideo?.let { prepared -> attempt { publishVideo(prepared) } }
+        register(onAborted)
+        val kept = video != null || audio != null
+        val first = primary ?: problems.firstOrNull()
+        if (!kept && first != null) {
+            (problems + registrationFailures).forEach { if (it !== first && first.suppressed.none { s -> s === it }) first.addSuppressed(it) }
+            throw first
+        }
+        return PreparedTakeResult(
+            video?.let { it to audio }, registrationFailures.toList(),
+            incomplete = kept, incompleteReasons = if (kept) reasons else emptyList(),
+            salvagedAudio = audio, incompleteFailures = (listOfNotNull(primary) + problems).distinct(),
+        )
+    }
     if (!success) {
+        if (salvage != null) return salvageTake(salvage.reasons, null)
         compensate()
         return PreparedTakeResult(null, registrationFailures.toList())
     }
@@ -107,6 +157,7 @@ internal fun <PV : Any, PA : Any, V : Any, A : Any> finalizePreparedRecordingTak
         val video = requireNotNull(publishVideo(preparedVideo)) { "A successful take has no published video" }
         outputs = video to audio
     } catch (failure: Throwable) {
+        if (salvage != null) return salvageTake(salvage.reasons + PUBLICATION_FAILED_REASON, failure)
         compensate(failure)
         throw failure
     }

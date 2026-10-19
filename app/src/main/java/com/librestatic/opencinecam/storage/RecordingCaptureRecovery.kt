@@ -201,6 +201,19 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     private var committed = false
     private var discarded = false
     private var nativeWriters = 0
+    private var salvaging = false
+
+    /**
+     * ADR-0011 incomplete publication: from here a member's abort withdraws only that member (its rows
+     * are deleted) instead of discarding the whole take, and a member that [keepBytes] never deletes.
+     */
+    internal fun beginSalvage() = synchronized(recordingRecoveryLock) {
+        check(!committed && !discarded) { "Take has already terminated" }
+        salvaging = true
+    }
+
+    /** The member holds bytes that must not be deleted by any later compensation; [published] still needs the real publication. */
+    internal fun keepBytes(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) { member.keepBytes = true }
 
     internal fun member(kind: RecordingMemberKind): RecordingRecoveryMember = synchronized(recordingRecoveryLock) {
         check(!preparationStarted && !aborted && !committed && kind !in members) { "Take enrolment is closed or duplicate" }
@@ -284,6 +297,23 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     internal fun abort(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
         member.retired = true
         if (committed || discarded) return@synchronized
+        if (member.keepBytes) {
+            android.util.Log.w("RecordingRecovery", "Take $id keeps ${member.kind} bytes for incomplete publication or recovery")
+            return@synchronized
+        }
+        if (salvaging) {
+            // Only this member is empty or failed: remove its rows, the rest of the take survives.
+            var failure: Throwable? = null
+            for (row in member.rows.toList()) {
+                try { journal.delete(row.uri); member.rows.remove(row) } catch (problem: Throwable) {
+                    if (failure == null) failure = problem else if (failure !== problem) failure.addSuppressed(problem)
+                }
+            }
+            failure?.let { throw it }
+            member.withdrawn = true
+            finishIfReady()
+            return@synchronized
+        }
         aborted = true
         finishIfReady()
     }
@@ -295,8 +325,13 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
             liveRecordingGroups.remove(journal.key(id))
             journal.discard(id)
             discarded = true
-        } else if (members.isNotEmpty() && members.values.all { it.prepared && it.published }) {
-            val rows = members.values.flatMap { it.rows }
+        } else if (members.isNotEmpty() && members.values.all { it.withdrawn }) {
+            // Every output was empty and has been removed: nothing is left to publish.
+            liveRecordingGroups.remove(journal.key(id))
+            journal.discard(id)
+            discarded = true
+        } else if (members.isNotEmpty() && members.values.filter { !it.withdrawn }.all { it.prepared && it.published }) {
+            val rows = members.values.filter { !it.withdrawn }.flatMap { it.rows }
             check(journal.allRows(id) == rows.map { it.uri }.toSet()) { "Take membership changed before commit" }
             rows.forEach { journal.verify(id, it, 0) }
             journal.commit(id)
@@ -311,6 +346,10 @@ internal class RecordingRecoveryMember(internal val group: RecordingRecoveryGrou
     internal var retired = false
     internal var prepared = false
     internal var published = false
+    internal var withdrawn = false
+    internal var keepBytes = false
+    fun beginSalvage() = group.beginSalvage()
+    fun keepBytes() = group.keepBytes(this)
     fun insert(displayName: String, mimeType: String, metadata: Boolean): Uri = group.insert(this, displayName, mimeType, metadata)
     fun insertAuxiliary(displayName: String, mimeType: String): Uri = group.insertAuxiliary(this, displayName, mimeType)
     fun removeAuxiliary() = group.removeAuxiliary(this)

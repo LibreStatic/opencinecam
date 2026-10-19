@@ -101,6 +101,8 @@ class WavAudioSidecarRecorder private constructor(
     private var softAgc: SoftAgc? = null
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
 
+    private var salvaging = false
+
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
         check(!finished && !startAttempted) { "WAV recorder cannot be started twice." }
@@ -135,6 +137,16 @@ class WavAudioSidecarRecorder private constructor(
             abortAfterFailure(failure)
             throw failure
         }
+    }
+
+    /**
+     * ADR-0011: seal whatever was captured, even after a writer failure or with incomplete timing, and
+     * keep it. Empty audio is removed without discarding the rest of the take.
+     */
+    @Synchronized override fun prepareIncompleteCompletion(): PreparedAudioSidecar? {
+        recoveryMember.beginSalvage()
+        salvaging = true
+        return prepareCompletion()?.also { recoveryMember.keepBytes() }
     }
 
     /** Publish exactly the prepared identities; retries never allocate replacement rows. */
@@ -247,9 +259,9 @@ class WavAudioSidecarRecorder private constructor(
         retirement.failure?.let { throw it }
         stoppedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
         val capturedResult = result()
-        writerFailure?.let { if (success) throw it }
-        if (!success || writerFailure != null || dataBytes == 0L) return null
-        captureTiming.requireComplete(capturedResult.frames)
+        writerFailure?.let { if (success && !salvaging) throw it }
+        if (!success || (writerFailure != null && !salvaging) || dataBytes == 0L) return null
+        if (salvaging) runCatching { captureTiming.requireComplete(capturedResult.frames) } else captureTiming.requireComplete(capturedResult.frames)
         output.channel.position(0)
         val header = createWavHeader(dataBytes, settings.audioSampleRateHz, settings.audioBitDepth.bits, settings.audioChannels, settings.audioBitDepth == AudioBitDepth.PCM_FLOAT)
         while (header.hasRemaining()) output.channel.write(header)
@@ -546,6 +558,11 @@ interface AudioSidecarRecorder : AutoCloseable {
     fun start()
     /** Seal native output and metadata, returning stable identities that are still pending. */
     fun prepareCompletion(): PreparedAudioSidecar?
+    /**
+     * ADR-0011: like [prepareCompletion] for a take that is not fully successful. Audio that holds
+     * bytes is sealed and kept (null when it holds none and has been removed).
+     */
+    fun prepareIncompleteCompletion(): PreparedAudioSidecar? = prepareCompletion()
     /** Publish only a previously prepared output; return null after abort or before prepare. */
     fun publishPrepared(): AudioSidecarRecordingResult?
     fun finish(success: Boolean): AudioSidecarRecordingResult?

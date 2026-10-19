@@ -105,6 +105,8 @@ class FlacAudioSidecarRecorder private constructor(
     }.apply { add(uri) }
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
 
+    private var salvaging = false
+
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
         check(!finished && !started) { "FLAC recorder cannot be started twice." }
@@ -142,6 +144,13 @@ class FlacAudioSidecarRecorder private constructor(
             abortAfterFailure(failure)
             throw failure
         }
+    }
+
+    /** ADR-0011: seal whatever was captured and keep it; see [AudioSidecarRecorder.prepareIncompleteCompletion]. */
+    @Synchronized override fun prepareIncompleteCompletion(): PreparedAudioSidecar? {
+        recoveryMember.beginSalvage()
+        salvaging = true
+        return prepareCompletion()?.also { recoveryMember.keepBytes() }
     }
 
     /** Publish exactly the prepared identities; retries never allocate replacement rows. */
@@ -255,10 +264,11 @@ class FlacAudioSidecarRecorder private constructor(
         retirement.failure?.let { throw it }
         stoppedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
         val capturedResult = result()
-        failure?.let { if (success) throw it }
-        if (!success || failure != null || inputBytes == 0L || encodedBytes == 0L) return null
-        captureTiming.requireComplete(capturedResult.frames)
-        patchTotalSamples(inputBytes / (settings.audioChannels * settings.audioBitDepth.bits / 8))
+        failure?.let { if (success && !salvaging) throw it }
+        if (!success || (failure != null && !salvaging) || inputBytes == 0L || encodedBytes == 0L) return null
+        if (salvaging) runCatching { captureTiming.requireComplete(capturedResult.frames) } else captureTiming.requireComplete(capturedResult.frames)
+        // A failed encoder leaves a truncated stream: its STREAMINFO sample count would be wrong.
+        if (failure == null) patchTotalSamples(inputBytes / (settings.audioChannels * settings.audioBitDepth.bits / 8))
         output.channel.force(true)
         output.close()
         descriptor.close()

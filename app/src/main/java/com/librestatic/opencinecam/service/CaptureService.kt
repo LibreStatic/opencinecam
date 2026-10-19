@@ -118,6 +118,7 @@ import com.librestatic.opencinecam.storage.StillImageSaver
 import com.librestatic.opencinecam.storage.MotionLogRecorder
 import com.librestatic.opencinecam.storage.MotionLogTarget
 import com.librestatic.opencinecam.storage.VideoOutput
+import com.librestatic.opencinecam.storage.IncompleteTake
 import com.librestatic.opencinecam.storage.finalizePreparedRecordingTake
 import com.librestatic.opencinecam.transfers.CapturePublicationJournal
 import com.librestatic.opencinecam.transfers.CaptureTransferReservation
@@ -1463,8 +1464,17 @@ class CaptureService : Service() {
                 val logEvidence = graphEvidence?.takeUnless { HdrVideoFormat.fromCurve(it.curve) != null }
                 val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
                 val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
-                val finalizedSuccess = success && nativeRetired && requestedAudioFailure == null && bakingVerified &&
-                    (!cameraState.value.selectedMode.usesLogGraph || graphEvidence != null)
+                // ADR-0011: stable reasons a take is not fully successful; any of them makes it incomplete.
+                val muxerFinalized = success && nativeRetired
+                val incompleteReasons = buildList {
+                    if (requestedAudioFailure != null) add(IncompleteTake.AUDIO_START_FAILED)
+                    if (!success) add(IncompleteTake.ENCODER_FAILED)
+                    if (!nativeRetired) add(IncompleteTake.NATIVE_RETIREMENT_PENDING)
+                    if (!muxerFinalized) add(IncompleteTake.MUXER_NOT_FINALIZED)
+                    if (!bakingVerified) add(IncompleteTake.RECORDING_LUT_UNVERIFIED)
+                    if (cameraState.value.selectedMode.usesLogGraph && graphEvidence == null) add(IncompleteTake.LOG_EVIDENCE_MISSING)
+                }
+                val finalizedSuccess = incompleteReasons.isEmpty()
                 val geometry = take.geometry
                 var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
                 val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
@@ -1473,23 +1483,57 @@ class CaptureService : Service() {
                         android.util.Log.e("CapturePublication", "Publication journal creation failed; capture remains independent", problem)
                         null
                     }
-                val finalization = finalizePreparedRecordingTake<
+                fun noteAudioPrepared(sidecar: AudioSidecarRecorder, prepared: com.librestatic.opencinecam.storage.PreparedAudioSidecar?):
+                    com.librestatic.opencinecam.storage.PreparedAudioSidecar? {
+                    val result = prepared?.result
+                    if (result != null) avTiming = sidecar.captureClock?.report(avTiming?.videoEncoderFirstPtsUs, null, null)
+                        ?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_${result.container}") ?: avTiming
+                    lastSeparateAudioAvDrift = result?.let {
+                        separateAudioAvDrift(sidecar.captureClock?.cameraRealtime == true, it.captureTiming, it.displayName)
+                    }?.also { android.util.Log.i("AvClockDiagnostics", separateAudioAvDriftLog(it)) }
+                    return prepared
+                }
+                fun buildSidecarJson(): String? {
+                    val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
+                        ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
+                        ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
+                        ?: timing?.let { timelapseTimingJson(it, requireNotNull(cameraState.value.recordingProjectRate)) }
+                    val withBaking = if (bakedEvidence != null) {
+                        (metadata?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                            .put("recordingLut", recordingLutJson(bakedEvidence)).toString(2)
+                    } else metadata
+                    val withGain = if (recordingGain?.enabled == true) {
+                        (withBaking?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-audio.v1"))
+                            .put("recordingGain", recordingGainJson(recordingGain)).toString(2)
+                    } else withBaking
+                    val withTimecode = if (timecodeReport?.config?.enabled == true) {
+                        (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
+                            .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
+                    } else withGain
+                    val withMarker = subjectSyncMarker?.let { marker ->
+                        (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
+                            .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
+                                JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
+                    } ?: withTimecode
+                    return withHardwareTruth(withMarker, hardwareTruth)
+                }
+                fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                val finalization = if (!nativeRetired) {
+                    // Never publish, and never delete, under a possibly live native writer. Rows stay pending
+                    // and journalled: crash recovery publishes them as incomplete (ADR-0011).
+                    runCatching { audioOutput?.prepareIncompleteCompletion() }.onFailure {
+                        android.util.Log.e("RecordingRecovery", "Audio of an unretired take could not be sealed", it)
+                    }
+                    runCatching { publicationObserver?.onAborted() }
+                    com.librestatic.opencinecam.storage.PreparedTakeResult<android.net.Uri, com.librestatic.opencinecam.storage.AudioSidecarRecordingResult>(null, emptyList())
+                } else finalizePreparedRecordingTake<
                     com.librestatic.opencinecam.storage.PreparedVideoOutput,
                     com.librestatic.opencinecam.storage.PreparedAudioSidecar,
                     android.net.Uri,
                     com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
                 >(
                     success = finalizedSuccess,
-                    prepareAudio = audioOutput?.let { sidecar -> {
-                        sidecar.prepareCompletion().also { prepared ->
-                            val result = prepared?.result
-                            if (result != null) avTiming = sidecar.captureClock?.report(avTiming?.videoEncoderFirstPtsUs, null, null)
-                                ?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_${result.container}") ?: avTiming
-                            lastSeparateAudioAvDrift = result?.let {
-                                separateAudioAvDrift(sidecar.captureClock?.cameraRealtime == true, it.captureTiming, it.displayName)
-                            }?.also { android.util.Log.i("AvClockDiagnostics", separateAudioAvDriftLog(it)) }
-                        }
-                    } },
+                    prepareAudio = audioOutput?.let { sidecar -> { noteAudioPrepared(sidecar, sidecar.prepareCompletion()) } },
                     discardAudio = { audioOutput?.finish(false); Unit },
                     discardVideo = { output?.finish(false); Unit },
                     publishAudio = { _ -> audioOutput?.publishPrepared() },
@@ -1498,38 +1542,27 @@ class CaptureService : Service() {
                         // A pause removes spans from the file timeline, so sensor time can no longer be mapped to it.
                         output?.sealMotionLog(keep = finalizedSuccess && avTiming?.sharedPause?.windows.isNullOrEmpty())
                         output?.prepareCompletion(
-                        run {
-                            val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
-                                ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
-                                ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
-                                ?: timing?.let { timelapseTimingJson(it, requireNotNull(cameraState.value.recordingProjectRate)) }
-                            val withBaking = if (bakedEvidence != null) {
-                                (metadata?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
-                                    .put("recordingLut", recordingLutJson(bakedEvidence)).toString(2)
-                            } else metadata
-                            val withGain = if (recordingGain?.enabled == true) {
-                                (withBaking?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-audio.v1"))
-                                    .put("recordingGain", recordingGainJson(recordingGain)).toString(2)
-                            } else withBaking
-                            val withTimecode = if (timecodeReport?.config?.enabled == true) {
-                                (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
-                                    .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
-                            } else withGain
-                            val withMarker = subjectSyncMarker?.let { marker ->
-                                (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
-                                    .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
-                                        JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
-                            } ?: withTimecode
-                            withHardwareTruth(withMarker, hardwareTruth)
-                        },
+                        buildSidecarJson(),
                         expectedGeometry = geometry,
-                        timingSidecar = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null),
+                        timingSidecar = timingSidecarFlag(),
                     ) },
                     onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onAborted = { publicationObserver?.onAborted(); Unit },
+                    salvage = com.librestatic.opencinecam.storage.IncompleteTakeSalvage(
+                        reasons = incompleteReasons,
+                        prepareAudio = audioOutput?.let { sidecar -> { _ -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion()) } },
+                        prepareVideo = { reasons ->
+                            output?.sealMotionLog(keep = false)
+                            output?.prepareIncomplete(reasons, buildSidecarJson(), timingSidecarFlag(), muxerFinalized)
+                        },
+                    ),
                 )
                 val completedTake = finalization.outputs
+                finalization.incompleteFailures.forEach { problem ->
+                    android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; affected outputs stay pending for recovery", problem)
+                }
+                val savedIncomplete = finalization.incomplete || !nativeRetired
                 finalization.registrationFailures.forEach { problem ->
                     android.util.Log.e("CapturePublication", "Publication journal update failed; originals retained", problem)
                 }
@@ -1537,14 +1570,14 @@ class CaptureService : Service() {
                 timecodeReport?.let { timecodeTracker.onRecordingStopped(completedTake != null, it.lifecycleToken) }
                 val uri = completedTake?.first
                 val sidecarResult = completedTake?.second
-                val registrationNotice = if (completedTake == null) "" else buildString {
+                val registrationNotice = if (completedTake == null || finalization.incomplete) "" else buildString {
                     if (transferPublication?.registered == true) append(" · " + getString(R.string.webdav_queue_registered))
                     if (registrationFailed) append(" · " + getString(if (transferPublication?.registrationFailed == true)
                         R.string.webdav_queue_registration_failed else R.string.capture_publication_registration_failed))
                 }
                 if (uri != null) output?.productionSlate?.let(::incrementSavedSlate)
                 // PLAN-036: judge the published Main10 file's signalling off every service thread; evidence only.
-                if (uri != null) {
+                if (uri != null && !finalization.incomplete) {
                     val checkKind = if (hlgEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.HLG
                         else if (logEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.LOG else null
                     if (checkKind != null) com.librestatic.opencinecam.Main10FileCheckScheduler.schedule(this@CaptureService, uri.toString(), checkKind, output?.displayName)
@@ -1574,13 +1607,18 @@ class CaptureService : Service() {
                             "$outputColor Main10 saved · $source + provenance$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
                         }
                         else "Video saved$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                    } else if (savedIncomplete) {
+                        getString(R.string.take_saved_incomplete,
+                            requestedAudioFailure ?: (finalization.incompleteReasons.ifEmpty { incompleteReasons }).joinToString(", "))
                     } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice)
                         .let { outcome -> if (stopReason == null) outcome else getString(R.string.take_stopped_reason, stopReasonText(stopReason), outcome) },
-                    errorCode = if (finalizedSuccess) null else if (requestedAudioFailure != null) "audio-start-failed" else "video-finalize-failed",
+                    errorCode = if (finalizedSuccess) null else incompleteReasons.first(),
                     recordingElapsedMs = durationMs,
                 ) }
             } catch (failure: Throwable) {
-                runCatching { take.audio?.finish(false) }
+                // ADR-0011: nothing that holds bytes is deleted here; it stays pending for crash recovery.
+                runCatching { output?.recoveryGroup?.beginSalvage() }
+                runCatching { take.audio?.prepareIncompleteCompletion() }
                 runCatching { output?.finish(false) }
                 fail("video-save-failed", failure.message ?: "Video could not be saved.")
             } finally {
