@@ -18,9 +18,17 @@ data class AuditFinding(
  * is only acceptable when its feature is declared in the audit input.
  */
 enum class OptInFeature(val justifiedPermissions: Set<String>) {
-    /** OCC-PLAN-067 / ADR-0034: user-started HTTPS WebDAV transfers of finalized captures. */
+    /**
+     * OCC-PLAN-067 / ADR-0034: user-started HTTPS WebDAV transfers of finalized captures, and
+     * the opt-in automatic upload of new takes (amendment 2026-10-19). The dataSync foreground
+     * type keeps that upload visible to the user while it runs.
+     */
     WEBDAV_TRANSFER(
-        setOf("android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"),
+        setOf(
+            "android.permission.INTERNET",
+            "android.permission.ACCESS_NETWORK_STATE",
+            "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        ),
     ),
 
     /** OCC-PLAN-066: photo/take geotagging, requested while the activity is resumed. */
