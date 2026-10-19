@@ -319,6 +319,14 @@ fun CapabilitiesExport() = DriverTheme {
         initialExportOpen = true, loadCodecAudio = { _, _ -> null })
 }
 
+/** Capabilities with the latest Main10 file check: HLG signalling passed, effective precision needs a controlled capture. */
+@Composable
+fun CapabilitiesMain10() = DriverTheme {
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
+        loadMain10Check = { com.librestatic.opencinecam.camera.Main10FileChecks.evaluate(com.librestatic.opencinecam.camera.Main10TakeKind.HLG,
+            com.librestatic.opencinecam.camera.Main10FileSignal("video/hevc", "Main10", "BT.2020", "HLG", 10), "OCC_20261019_120000.mp4", 1_792_000_000_000L) })
+}
+
 /** The storage benchmark page with a finished, qualified result (three windows). */
 @Composable
 fun StorageBenchmark() = DriverTheme {

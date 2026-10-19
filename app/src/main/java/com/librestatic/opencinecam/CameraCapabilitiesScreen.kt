@@ -62,6 +62,9 @@ import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
 import com.librestatic.opencinecam.camera.CodecAudioMetadata
 import com.librestatic.opencinecam.camera.CodecAudioReportJson
+import com.librestatic.opencinecam.camera.Main10FileCheck
+import com.librestatic.opencinecam.camera.PRECISION_REQUIRES_CONTROLLED_CAPTURE
+import com.librestatic.opencinecam.camera.QualificationStatus
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
 import com.librestatic.opencinecam.storage.prepareCapabilityReportShare
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -97,6 +100,7 @@ internal fun CameraCapabilitiesScreen(
     liveState: CameraUiState? = null,
     initialExportOpen: Boolean = false,
     loadCodecAudio: ((Context, List<CameraInventory>) -> CodecAudioMetadata?)? = null,
+    loadMain10Check: ((Context) -> Main10FileCheck?)? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -112,6 +116,12 @@ internal fun CameraCapabilitiesScreen(
         val list = inventory ?: return@produceState
         value = withContext(Dispatchers.IO) {
             runCatching { loadCodecAudio?.invoke(context, list) ?: probeCodecAudio(context, list) }.getOrNull()
+        }
+    }
+    // The newest HLG or LOG take's file check, written after publication (PLAN-036); read back from filesDir.
+    val main10Check by produceState<Main10FileCheck?>(null, context) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { loadMain10Check?.invoke(context) ?: AtomicFileMain10FileCheckStore.forContext(context).load() }.getOrNull()
         }
     }
     var selectedId by rememberSaveable { mutableStateOf(activeCameraId) }
@@ -213,6 +223,7 @@ internal fun CameraCapabilitiesScreen(
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
                 item(key = "codecs") { CodecAudioCard(codecAudio) }
+                item(key = "main10-check") { Main10FileCheckCard(main10Check) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
                 val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
                 if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live), discrepancyLines(live.hardwareTruth), live.hardwareTruth.warnings) }
@@ -338,6 +349,47 @@ private fun CodecAudioCard(metadata: CodecAudioMetadata?) {
                     }, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                 }
             }
+        }
+    }
+}
+
+/** The latest Main10 file check: signalling and effective precision are reported separately and never merged. */
+@Composable
+private fun Main10FileCheckCard(check: Main10FileCheck?) {
+    SettingsCard(Modifier.testTag("capabilities-main10-check")) {
+        if (check == null) {
+            SettingsHeading(stringResource(R.string.caps_section_main10), icon = CineIcon.INFO)
+            Text(stringResource(R.string.caps_main10_none), color = SettingsMuted, fontSize = 13.sp)
+            return@SettingsCard
+        }
+        val checked = remember(check.checkedAtMs) {
+            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(check.checkedAtMs))
+        }
+        SettingsHeading(stringResource(R.string.caps_section_main10), stringResource(R.string.caps_main10_summary, check.kind.name, checked), CineIcon.INFO)
+        check.takeName?.let { Text(it, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace) }
+        fun status(value: QualificationStatus) = when (value) {
+            QualificationStatus.PASS -> R.string.caps_main10_pass
+            QualificationStatus.FAIL -> R.string.caps_main10_fail
+            QualificationStatus.UNKNOWN -> R.string.caps_unknown
+        }
+        Row(Modifier.fillMaxWidth().testTag("capabilities-main10-signal"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.caps_main10_signalling), color = SettingsMuted, fontSize = 13.sp, modifier = Modifier.weight(0.62f))
+            Column(Modifier.weight(0.38f)) {
+                Text(stringResource(status(check.fileSignal.status)), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
+                Text(check.fileSignal.reasonCode, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Row(Modifier.fillMaxWidth().testTag("capabilities-main10-precision"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.caps_main10_precision), color = SettingsMuted, fontSize = 13.sp, modifier = Modifier.weight(0.62f))
+            val precision = check.effectivePrecision
+            Text(
+                when {
+                    precision.reasonCode == PRECISION_REQUIRES_CONTROLLED_CAPTURE -> stringResource(R.string.caps_main10_precision_controlled)
+                    precision.measuredBits != null -> stringResource(R.string.caps_main10_precision_bits, stringResource(status(precision.status)), precision.measuredBits!!)
+                    else -> stringResource(status(precision.status))
+                },
+                color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, modifier = Modifier.weight(0.38f),
+            )
         }
     }
 }

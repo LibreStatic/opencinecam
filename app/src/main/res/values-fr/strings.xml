@@ -940,6 +940,15 @@
     <string name="bench_outcome_unsupported">Cette destination ne prend pas en charge le test</string>
     <string name="bench_outcome_failed">Le test n\'a pas pu écrire vers la destination</string>
     <string name="caps_section_codecs">Codecs et audio</string>
+    <string name="caps_section_main10">Dernier contrôle de fichier Main10</string>
+    <string name="caps_main10_none">Aucune prise HLG ou LOG n’a encore été contrôlée.</string>
+    <string name="caps_main10_summary">Prise %1$s, contrôlée %2$s</string>
+    <string name="caps_main10_signalling">Signalisation du fichier</string>
+    <string name="caps_main10_precision">Précision effective</string>
+    <string name="caps_main10_pass">Réussi</string>
+    <string name="caps_main10_fail">Échec</string>
+    <string name="caps_main10_precision_controlled">Non mesurable : nécessite une capture contrôlée</string>
+    <string name="caps_main10_precision_bits">%1$s, %2$d bits</string>
     <string name="caps_codecs_summary">%1$d encodeurs, %2$d matériels</string>
     <string name="caps_audio_unprocessed">Source audio brute</string>
     <string name="caps_audio_noise_suppressor">Suppression du bruit</string>

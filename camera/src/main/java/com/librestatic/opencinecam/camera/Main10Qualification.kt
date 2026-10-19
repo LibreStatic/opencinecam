@@ -68,6 +68,23 @@ object Main10FileQualifier {
         return QualificationResult(QualificationStatus.PASS, "main10-hlg-signal-pass", "Main10 and HLG signaling match")
     }
 
+    /** Container facts of a Main10 take whose transfer is not HLG (LOG): HEVC Main10 at 10 bits; colour tags are not asserted. */
+    fun validateMain10Profile(signal: Main10FileSignal): QualificationResult {
+        if (signal.mime == null || signal.profile == null || signal.bitDepth == null) {
+            return QualificationResult(QualificationStatus.UNKNOWN, "file-signal-unknown", "file metadata is incomplete")
+        }
+        if (signal.mime != "video/hevc") {
+            return QualificationResult(QualificationStatus.FAIL, "mime-not-hevc", "file MIME is not video/hevc")
+        }
+        if (signal.profile != "Main10") {
+            return QualificationResult(QualificationStatus.FAIL, "profile-not-main10", "file profile is not Main10")
+        }
+        if (signal.bitDepth < 10) {
+            return QualificationResult(QualificationStatus.FAIL, "effective-bit-depth-below-10", "file bit depth is below 10")
+        }
+        return QualificationResult(QualificationStatus.PASS, "main10-signal-pass", "HEVC Main10 signaling matches")
+    }
+
     fun measureEffectivePrecision(samples: IntArray?, declaredBits: Int?): EffectivePrecisionReport {
         if (samples == null || declaredBits == null) {
             return EffectivePrecisionReport(QualificationStatus.UNKNOWN, null, 0, "precision-evidence-unknown")
