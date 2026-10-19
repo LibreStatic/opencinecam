@@ -160,4 +160,12 @@ class HardwareTruthSidecarTest {
         assertEquals(listOf("w"), fields["warnings"])
         assertEquals("opencinecam.hardware-truth.v1", HARDWARE_TRUTH_SCHEMA)
     }
+
+    @Test fun aSoftwareEncoderTakeRecordsTheCodecAsNotHardwareAcceleratedEvenWhenOtherwiseClean() {
+        assertNull(hardwareTruthTake(cleanTake, cleanTake))
+        val take = hardwareTruthTake(cleanTake, cleanTake, TakeVideoEncoder("c2.android.avc.encoder"))!!
+        val fields = hardwareTruthFields(take)
+        assertEquals(mapOf("codecName" to "c2.android.avc.encoder", "hardwareAccelerated" to false), fields["videoEncoder"])
+        assertFalse(hardwareTruthFields(hardwareTruthTake(cleanTake, HardwareTruthHudState().withWarning("w"))!!).containsKey("videoEncoder"))
+    }
 }

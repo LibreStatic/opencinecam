@@ -65,7 +65,7 @@ sealed interface VideoEncoderSelection {
     data class Rejected(val failure: StableFailure) : VideoEncoderSelection
 }
 
-/** Whether a production Surface pick may fall back to a software codec (timelapse AVC only). */
+/** Whether a production Surface pick may fall back to a software codec (SDR AVC only: timelapse, and VIDEO under Adaptive). */
 enum class EncoderHardwarePolicy { REQUIRE_HARDWARE, ALLOW_SOFTWARE }
 
 /** Profile rule of a production Surface pick; both reproduce the OpenCineLog GPU pipeline exactly. */
@@ -101,7 +101,7 @@ data class SurfaceEncoderPolicy(
             MediaFormat.MIMETYPE_VIDEO_HEVC, EncoderHardwarePolicy.REQUIRE_HARDWARE, EncoderProfileRule.HEVC_MAIN10_HDR10_ONLY,
         )
 
-        /** SDR/AVC recording; [allowSoftware] is true only for timelapse. */
+        /** SDR/AVC recording; [allowSoftware] is true only for SDR AVC, where the caller then applies the recording policy. */
         fun avcHigh(allowSoftware: Boolean) = SurfaceEncoderPolicy(
             MediaFormat.MIMETYPE_VIDEO_AVC,
             if (allowSoftware) EncoderHardwarePolicy.ALLOW_SOFTWARE else EncoderHardwarePolicy.REQUIRE_HARDWARE,

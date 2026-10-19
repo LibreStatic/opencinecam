@@ -58,6 +58,7 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.HardwareTruthHudState
 import com.librestatic.opencinecam.hardwareTruthTake
+import com.librestatic.opencinecam.TakeVideoEncoder
 import com.librestatic.opencinecam.withHardwareTruth
 import com.librestatic.opencinecam.RouteTruth
 import com.librestatic.opencinecam.routeTruthOf
@@ -106,6 +107,7 @@ import com.librestatic.opencinecam.core.model.CaptureCommand
 import com.librestatic.opencinecam.core.model.CaptureState
 import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.media.audio.AvClockDiagnostics
+import com.librestatic.opencinecam.media.video.softwareVideoEncoderDisclosure
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
@@ -421,6 +423,10 @@ class CaptureService : Service() {
 
     /** Set when Adaptive admitted a take it could not size; shown for the whole take. */
     @Volatile private var admissionWarning: String? = null
+    /** Codec of the software AVC encoder the running Adaptive take records with; null for a hardware take. */
+    @Volatile private var takeSoftwareEncoder: String? = null
+    /** Stable code of a Strict encoder refusal reported by the engine, consumed by the failed-start branch. */
+    @Volatile private var pendingStartRefusal: String? = null
     /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
     @Volatile private var takeProjectedBytesPerMinute = 0L
     /** The policy the running take started under; a setting changed mid-take stays pending. */
@@ -472,8 +478,12 @@ class CaptureService : Service() {
     }
 
     private fun publishRecordingWarning() {
-        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }, cadenceNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
+        val text = recordingWarningText()
         if (cameraState.value.recordingWarning != text) cameraState.update { it.copy(recordingWarning = text) }
+    }
+
+    private fun recordingWarningText(): String? {
+        return listOfNotNull(admissionWarning, takeSoftwareEncoder?.let { getString(R.string.software_video_encoder_warning, it) }, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }, cadenceNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
     }
 
     private fun runtimeNoticeText(notice: RuntimeNotice): Int = when (notice) {
@@ -1383,7 +1393,7 @@ class CaptureService : Service() {
                 recordingWidth = width,
                 recordingHeight = height,
                 availableStorageBytes = recordingVolumeFreeBytes(),
-                recordingWarning = admissionWarning,
+                recordingWarning = recordingWarningText(),
                 errorCode = null,
             )
             activeRecordingPolicy = settings.recordingPolicy
@@ -1410,7 +1420,7 @@ class CaptureService : Service() {
             avDiagnostics = null
             if (finishedDiagnostics != null) mainHandler.post { finishedDiagnostics.close() }
             val recordingGain = activeRecordingGain
-            val hardwareTruth = hardwareTruthTake(takeStartHardwareTruth, cameraState.value.hardwareTruth)
+            val hardwareTruth = hardwareTruthTake(takeStartHardwareTruth, cameraState.value.hardwareTruth, takeSoftwareEncoder?.let { TakeVideoEncoder(it) })
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
             submitCaptureState(stateCommands.takeEnded())
@@ -1692,6 +1702,18 @@ class CaptureService : Service() {
             android.util.Log.i("CaptureService", "Control adapted ($code): $message")
             // Recorded as a hardware-truth warning too, so the take sidecar keeps the disclosure.
             cameraState.update { it.copy(message = getString(R.string.control_adapted, message), messageTransient = true, hardwareTruth = it.hardwareTruth.withWarning(message)) }
+        }
+
+        override fun onSoftwareVideoEncoder(codecName: String) {
+            android.util.Log.w("CaptureService", "Software video encoder in use: $codecName")
+            takeSoftwareEncoder = codecName
+            // Recorded as a hardware-truth warning, so the take sidecar keeps the disclosure; never hardware evidence.
+            cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withWarning(softwareVideoEncoderDisclosure(codecName))) }
+        }
+
+        override fun onRecordingStartRefused(code: String, message: String) {
+            android.util.Log.w("CaptureService", "Take start refused ($code): $message")
+            pendingStartRefusal = code
         }
 
         override fun onTorchRejected(message: String) {
@@ -2802,6 +2824,8 @@ class CaptureService : Service() {
             val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
             admissionWarning = null
+            takeSoftwareEncoder = null
+            pendingStartRefusal = null
             takeProjectedBytesPerMinute = projectedBytesPerMinute
             when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, recordingVolumeFreeBytes())) {
                 StorageAdmission.Admit -> Unit
@@ -3103,7 +3127,11 @@ class CaptureService : Service() {
                                 audioSidecarRecorder = null
                                 output.finish(false)
                                 foreground.stop()
-                                if (cameraState.value.phase != CameraUiPhase.ERROR) fail("video-capture-not-ready", "The video surface is not ready.")
+                                val refusal = pendingStartRefusal
+                                pendingStartRefusal = null
+                                // A policy refusal is a soft one: the preview keeps running and the user can change the policy.
+                                if (refusal != null) refuseTakeStart(refusal, getString(R.string.video_hardware_encoder_unavailable))
+                                else if (cameraState.value.phase != CameraUiPhase.ERROR) fail("video-capture-not-ready", "The video surface is not ready.")
                             }
                         }
                     } catch (failure: Throwable) {
@@ -3514,6 +3542,26 @@ class CaptureService : Service() {
         val label = choice.label.ifBlank { getString(audioInputTypeLabel(audioInputKind(choice.type))) }
         cameraState.update { it.copy(message = getString(R.string.audio_input_auto_using,
             getString(audioInputTypeLabel(audioInputKind(choice.type))), label)) }
+    }
+
+    /** A start refusal that is not a failure (ADR-0016): back to previewing with the reason, like the storage reserve refusal. */
+    private fun refuseTakeStart(code: String, message: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { if (!serviceDestroyed) refuseTakeStart(code, message) }
+            return
+        }
+        val wasFrozen = cameraState.value.structuralSettingsFrozen || cameraState.value.captureControlsLocked
+        cameraState.update {
+            it.copy(phase = CameraUiPhase.PREVIEWING, transferRetirementPending = false, audioRetirementPending = false,
+                recordingFinalizing = false, errorCode = code, message = message, messageTransient = false)
+        }
+        mainHandler.post {
+            recordingWbGeneration++
+            recordingWbPreparing = false
+            previewEngine.releaseRecordingWhiteBalance()
+            cancelCountdown()
+            if (wasFrozen) localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value)
+        }
     }
 
     private fun fail(code: String, message: String) {

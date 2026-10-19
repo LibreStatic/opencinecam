@@ -338,6 +338,16 @@ interface Camera2PreviewListener {
     fun onControlRejected(code: String, message: String) = onFailure(code, message, true)
     /** Adaptive policy applied a control other than requested (clamped, or fell back to auto); a transient disclosure, never a failure. */
     fun onControlAdapted(code: String, message: String) = Unit
+    /**
+     * Adaptive recorded a normal SDR take with a software AVC encoder because no hardware encoder fits
+     * (before [onRecordingStarted]); a persistent disclosure for the take, never a failure.
+     */
+    fun onSoftwareVideoEncoder(codecName: String) = Unit
+    /**
+     * Strict refused to start a take (stable [code], e.g. `video-hardware-encoder-unavailable`). The session
+     * and preview are unaffected, so the default is not an error.
+     */
+    fun onRecordingStartRefused(code: String, message: String) = onFailure(code, message, true)
     fun onTorchRejected(message: String) = Unit
     fun onPreviewSurfaceLost(message: String) = Unit
     fun onTapFocusState(state: TapFocusState) = Unit
@@ -713,8 +723,10 @@ class Camera2PreviewEngine(
 
     /** Sets the policy for professional controls; call before [setProfessionalControls] so the next request honours it. */
     fun setControlPolicy(policy: PolicyMode) {
-        cameraExecutor.execute { controlPolicy = policy }
+        cameraExecutor.execute { controlPolicy = policy; encoderPolicy = policy }
     }
+    /** Set with [controlPolicy] on the camera thread; read by [startExistingGpuVideo] for the encoder gate. */
+    @Volatile private var encoderPolicy = PolicyMode.STRICT
     private var lastCaptureAuditSummaryAtMs = 0L
     @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
     @Volatile private var latestStillShutterLatency: StillShutterLatency? = null
@@ -1326,6 +1338,13 @@ class Camera2PreviewEngine(
         return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
             timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
             recordingLut = recordingLut, videoCodec = videoCodec,
+            encoderPolicy = encoderPolicy,
+            onSoftwareEncoder = { name ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onSoftwareVideoEncoder(name)
+            },
+            onStartRefused = { code, message ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingStartRefused(code, message)
+            },
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },
