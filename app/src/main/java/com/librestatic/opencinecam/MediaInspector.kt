@@ -126,7 +126,10 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                 Text(stringResource(relationLabel(take.relationStatus)), Modifier.weight(1f).testTag("gallery-relation-${take.id}"),
                     color = tint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
-            Text(stringResource(integrityExplanation(take.relationStatus)), Modifier.fillMaxWidth(), color = SettingsMuted,
+            Text(
+                if (badges.incompleteReasons.isEmpty()) stringResource(integrityExplanation(take.relationStatus))
+                else stringResource(R.string.take_saved_incomplete, badges.incompleteReasons.joinToString(", ")),
+                Modifier.fillMaxWidth().testTag("gallery-integrity-${take.id}"), color = SettingsMuted,
                 fontSize = 12.sp, lineHeight = 16.sp)
         }
         if (settings.showSlate) DetailSection(R.string.media_section_slate) { GallerySlate(take) }
