@@ -33,6 +33,17 @@ for file in "${files[@]}"; do
   fi
 done
 
+# Every tracked source script must carry an SPDX header within its first lines (PLAN-003).
+while IFS= read -r file; do
+  if ! head -n 20 "$file" | grep -q 'SPDX-License-Identifier'; then
+    echo "format: missing SPDX-License-Identifier header: $file" >&2
+    status=1
+  fi
+done < <(
+  git ls-files -- app camera media core tools store baselineprofile desktop-tools native-pipeline \
+    | grep -E '\.(kt|kts|py|sh)$' || true
+)
+
 if [[ "$status" -ne 0 ]]; then
   echo "format: checks failed" >&2
   exit "$status"

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 OpenCineCam contributors */
+
 package com.librestatic.opencinecam.camera
 
 import org.junit.Assert.assertEquals

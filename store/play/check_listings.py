@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Validate Google Play listing text limits for every locale under listings/.
 
 Exit code is 1 when any locale violates a limit or misses a required file.

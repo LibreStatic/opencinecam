@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Compose Google Play store graphics for OpenCineCam: framed screenshots with localized captions,
 1024x500 feature graphics and the 512x512 icon (rendered from the launcher icon resources).
 
