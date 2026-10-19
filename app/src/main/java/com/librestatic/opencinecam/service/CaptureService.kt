@@ -1543,6 +1543,12 @@ class CaptureService : Service() {
                         R.string.webdav_queue_registration_failed else R.string.capture_publication_registration_failed))
                 }
                 if (uri != null) output?.productionSlate?.let(::incrementSavedSlate)
+                // PLAN-036: judge the published Main10 file's signalling off every service thread; evidence only.
+                if (uri != null) {
+                    val checkKind = if (hlgEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.HLG
+                        else if (logEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.LOG else null
+                    if (checkKind != null) com.librestatic.opencinecam.Main10FileCheckScheduler.schedule(this@CaptureService, uri.toString(), checkKind, output?.displayName)
+                }
                 // A SAVED observer must see the registration outcome in the same state emission.
                 cameraState.update { current -> current.copy(
                     phase = if (finalizedSuccess) CameraUiPhase.SAVED else CameraUiPhase.ERROR,

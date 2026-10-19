@@ -940,6 +940,15 @@
     <string name="bench_outcome_unsupported">Este destino não oferece suporte ao teste</string>
     <string name="bench_outcome_failed">O teste não conseguiu gravar no destino</string>
     <string name="caps_section_codecs">Codecs e áudio</string>
+    <string name="caps_section_main10">Última verificação de ficheiro Main10</string>
+    <string name="caps_main10_none">Ainda não foi verificada nenhuma gravação HLG ou LOG.</string>
+    <string name="caps_main10_summary">Gravação %1$s, verificada %2$s</string>
+    <string name="caps_main10_signalling">Sinalização do ficheiro</string>
+    <string name="caps_main10_precision">Precisão efetiva</string>
+    <string name="caps_main10_pass">Aprovado</string>
+    <string name="caps_main10_fail">Reprovado</string>
+    <string name="caps_main10_precision_controlled">Não mensurável: requer uma captura controlada</string>
+    <string name="caps_main10_precision_bits">%1$s, %2$d bits</string>
     <string name="caps_codecs_summary">%1$d codificadores, %2$d por hardware</string>
     <string name="caps_audio_unprocessed">Fonte de áudio sem processamento</string>
     <string name="caps_audio_noise_suppressor">Supressor de ruído</string>

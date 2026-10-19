@@ -946,6 +946,15 @@
     <string name="bench_outcome_unsupported">This destination does not support the test</string>
     <string name="bench_outcome_failed">The test could not write to the destination</string>
     <string name="caps_section_codecs">Codecs and audio</string>
+    <string name="caps_section_main10">Latest Main10 file check</string>
+    <string name="caps_main10_none">No HLG or LOG take has been checked yet.</string>
+    <string name="caps_main10_summary">%1$s take, checked %2$s</string>
+    <string name="caps_main10_signalling">File signalling</string>
+    <string name="caps_main10_precision">Effective precision</string>
+    <string name="caps_main10_pass">Pass</string>
+    <string name="caps_main10_fail">Fail</string>
+    <string name="caps_main10_precision_controlled">Not measurable: needs a controlled capture</string>
+    <string name="caps_main10_precision_bits">%1$s, %2$d bits</string>
     <string name="caps_codecs_summary">%1$d encoders, %2$d hardware</string>
     <string name="caps_audio_unprocessed">Unprocessed audio source</string>
     <string name="caps_audio_noise_suppressor">Noise suppressor</string>
