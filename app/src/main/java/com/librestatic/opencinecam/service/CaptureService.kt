@@ -99,6 +99,7 @@ import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.core.model.CaptureCommand
 import com.librestatic.opencinecam.core.model.CaptureState
 import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.media.audio.AvClockDiagnostics
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
@@ -418,6 +419,9 @@ class CaptureService : Service() {
     private var activeRecordingPolicy = PolicyMode.STRICT
     private var lastKnownFreeBytes: Long? = null
     private var runtimeNotice: RuntimeNotice? = null
+    private var avNotice: RuntimeNotice? = null
+    /** Live A/V drift of a take whose audio is a separate WAV/FLAC file (PLAN-023); embedded AAC exposes no observable audio PTS. */
+    private var avDiagnostics: AvClockDiagnostics? = null
     /** Why the running take is being stopped; the final message names it, and the file is still saved. */
     @Volatile private var pendingStopReason: StableFailure? = null
 
@@ -447,12 +451,19 @@ class CaptureService : Service() {
         val thermal = runCatching { getSystemService(android.os.PowerManager::class.java).currentThermalStatus }.getOrNull()
         val verdict = evaluateRuntimePolicy(activeRecordingPolicy, thermal, free ?: lastKnownFreeBytes, takeProjectedBytesPerMinute)
         verdict.stop?.let { localBinder.stopRecording(it); return }
+        val drift = avDiagnostics?.let { diagnostics ->
+            val sidecar = audioSidecarRecorder ?: return@let null
+            avClockSample(sidecar.captureClock?.cameraRealtime == true, sidecar.liveCaptureTiming())
+                ?.let { (videoClockUs, audioClockUs) -> avDriftVerdict(diagnostics.observe(videoClockUs, audioClockUs, videoClockUs)) }
+        }
+        drift?.stop?.let { localBinder.stopRecording(it); return }
         runtimeNotice = verdict.notice
+        avNotice = drift?.notice ?: avNotice
         publishRecordingWarning()
     }
 
     private fun publishRecordingWarning() {
-        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
+        val text = listOfNotNull(admissionWarning, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
         if (cameraState.value.recordingWarning != text) cameraState.update { it.copy(recordingWarning = text) }
     }
 
@@ -1366,6 +1377,9 @@ class CaptureService : Service() {
             activeRecordingPolicy = settings.recordingPolicy
             lastKnownFreeBytes = cameraState.value.availableStorageBytes
             runtimeNotice = null
+            avNotice = null
+            avDiagnostics?.close()
+            avDiagnostics = if (audioSidecarRecorder != null) AvClockDiagnostics(activeRecordingPolicy, correlationId = "recording-av-drift") else null
             pendingStopReason = null
             scheduleTimelapseAutoStop()
             mainHandler.post(recordingTicker)
@@ -1376,6 +1390,8 @@ class CaptureService : Service() {
             retireAudioLevelConsumer()
             val stopReason = pendingStopReason
             pendingStopReason = null
+            avDiagnostics?.close()
+            avDiagnostics = null
             val recordingGain = activeRecordingGain
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
