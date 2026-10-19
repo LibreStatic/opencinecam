@@ -225,4 +225,29 @@ class LocalMediaCatalogTest {
             catalogTake(still, images, listOf(document(stillJson(images))))?.relationStatus)
     }
 
+
+    @Test fun aSidecarMarkedIncompleteSurfacesAsIncompleteWithItsReasons() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        val slate = ProductionSlateSettings(project = "Feature")
+        val marked = IncompleteTake.mark(recordingJson(video, slate), listOf("audio-start-failed", "muxer-not-finalized"))
+        var encoding: LocalMediaEncoding? = null
+        val take = requireNotNull(catalogTake(recording, listOf(video), listOf(document(marked))) { encoding = it })
+        assertEquals(LocalMediaRelationStatus.INCOMPLETE, take.relationStatus)
+        assertEquals(listOf("audio-start-failed", "muxer-not-finalized"), encoding?.incompleteReasons)
+        // A complete take carries neither field and stays DECLARED.
+        val complete = requireNotNull(catalogTake(recording, listOf(video), listOf(document(recordingJson(video, slate)))))
+        assertEquals(LocalMediaRelationStatus.DECLARED, complete.relationStatus)
+    }
+    @Test fun anIncompleteMarkerNeverHidesInvalidMetadataOrSurvivesAnUnreadableSidecar() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        val slate = ProductionSlateSettings(project = "Feature")
+        val marked = IncompleteTake.mark(recordingJson(video, slate), listOf("encoder-failed"))
+        val conflicting = marked.replace("\"videoUri\"", "\"videoUri\": \"x\", \"videoUri\"")
+        assertEquals(LocalMediaRelationStatus.INVALID_METADATA,
+            catalogTake(recording, listOf(video), listOf(document(conflicting)))?.relationStatus)
+        val oversize = IncompleteTake.mark(recordingJson(video, slate), listOf("x".repeat(49), "ok"))
+        var encoding: LocalMediaEncoding? = null
+        catalogTake(recording, listOf(video), listOf(document(oversize))) { encoding = it }
+        assertEquals(listOf("ok"), encoding?.incompleteReasons)
+    }
 }

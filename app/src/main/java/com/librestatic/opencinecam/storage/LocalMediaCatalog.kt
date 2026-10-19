@@ -21,7 +21,9 @@ data class LocalMediaTake(val id: String, val primary: LocalMediaArtifact,
 /** Codec facts a take's sidecars declare. They stay out of [LocalMediaTake], whose equality is the
  * identity check behind sharing, renaming and proxy jobs. */
 data class LocalMediaEncoding(val videoMime: String? = null, val videoProfile: String? = null,
-    val audioContainer: String? = null, val audioSamples: String? = null)
+    val audioContainer: String? = null, val audioSamples: String? = null,
+    /** Stable failure reasons of a take whose sidecar says `takeStatus: incomplete` (ADR-0011); empty otherwise. */
+    val incompleteReasons: List<String> = emptyList())
 /** [encodings] holds, by take id, what the page's sidecars declared; takes without one are absent. */
 data class LocalMediaPage(val takes: List<LocalMediaTake>, val next: LocalMediaCursor?,
     val encodings: Map<String, LocalMediaEncoding> = emptyMap())
@@ -96,6 +98,8 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     val slates = mutableSetOf<ProductionSlateSettings>()
     var slateAbsent = false
     var encoding = LocalMediaEncoding()
+    var markedIncomplete = false
+    val incompleteReasons = linkedSetOf<String>()
     for (document in documents) {
         if (document.disappeared) { missing = true; continue }
         try {
@@ -148,6 +152,14 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
                     details?.get("bytes")?.let { require((it as? JsonPrimitive)?.let { v -> !v.isString && v.longOrNull == existing.artifact.sizeBytes } == true) }
                 }
             }
+            // ADR-0011: a take kept after a failure says so in its sidecar. It surfaces as INCOMPLETE and is
+            // never an authority to delete anything (deletion enumerates the provider itself).
+            if (!still && (obj[IncompleteTake.STATUS_KEY] as? JsonPrimitive)?.takeIf { it.isString }?.content == IncompleteTake.STATUS_INCOMPLETE) {
+                markedIncomplete = true
+                (obj[IncompleteTake.REASONS_KEY] as? JsonArray)?.take(8)?.forEach { reason ->
+                    (reason as? JsonPrimitive)?.takeIf { it.isString && it.content.length in 1..48 }?.let { incompleteReasons += it.content }
+                }
+            }
             val node = obj["productionSlate"]
             val slate = if (node == null) null else requireNotNull(parseProductionSlateJson(node as? JsonObject ?: error("Slate object required")))
             if (slate == null) slateAbsent = true else slates += slate
@@ -161,6 +173,10 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
         } catch (_: Exception) { invalid = true }
     }
     if (slates.size > 1 || slates.isNotEmpty() && slateAbsent) invalid = true
+    if (markedIncomplete) {
+        missing = true
+        encoding = encoding.copy(incompleteReasons = incompleteReasons.toList())
+    }
     if (documents.isNotEmpty() && known.keys.any { it !in references }) missing = true
     if (!invalid && encoding != LocalMediaEncoding()) onEncoding?.invoke(encoding)
     val status = when {
