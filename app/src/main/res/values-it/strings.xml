@@ -770,7 +770,6 @@
     <string name="caps_intro">Cosa dichiara ad Android ogni fotocamera del telefono e quali funzioni di OpenCineCam sblocca. Scegli una fotocamera; ● indica quella in uso.</string>
     <string name="caps_loading">Lettura delle fotocamere…</string>
     <string name="caps_empty">Non è stato possibile leggere nessuna fotocamera su questo dispositivo.</string>
-    <string name="caps_copy">Copia report</string>
     <string name="caps_copied">Report copiato negli appunti</string>
     <string name="caps_copy_failed">Impossibile copiare il report</string>
     <string name="caps_camera">Fotocamera</string>
@@ -905,4 +904,18 @@
     <string name="runtime_notice_state_unknown">Temperatura o archiviazione non leggibili</string>
     <string name="runtime_notice_av_drift">Audio e video si stanno sfasando</string>
     <string name="runtime_notice_cadence">Si stanno perdendo dei fotogrammi</string>
+    <string name="caps_export">Esporta rapporto</string>
+    <string name="caps_export_title">Esporta il rapporto sulle capacità</string>
+    <string name="caps_export_help">Scegli cosa esce dall\'app. Non viene inviato nulla finché non scegli un\'azione qui sotto.</string>
+    <string name="caps_export_redacted">Oscurato (predefinito)</string>
+    <string name="caps_export_redacted_help">L\'impronta della build, il modello e il produttore sono sostituiti da [redacted]. Le caratteristiche delle fotocamere vengono mantenute.</string>
+    <string name="caps_export_full">Completo</string>
+    <string name="caps_export_full_help">Include l\'impronta della build, il modello del dispositivo e il produttore.</string>
+    <string name="caps_export_consent">Capisco che questo rapporto contiene impronte e identificatori che possono identificare il mio telefono e scelgo di esportarlo.</string>
+    <string name="caps_export_save">Salva come file</string>
+    <string name="caps_export_share">Condividi</string>
+    <string name="caps_export_copy">Copia come testo</string>
+    <string name="caps_export_saved">Rapporto salvato</string>
+    <string name="caps_export_failed">Impossibile esportare il rapporto</string>
+    <string name="caps_export_chooser">Condividi il rapporto sulle capacità</string>
 </resources>

@@ -770,7 +770,6 @@
     <string name="caps_intro">Lo que cada cámara del teléfono informa a Android y qué funciones de OpenCineCam habilita. Elegí una cámara; ● marca la que está en uso.</string>
     <string name="caps_loading">Leyendo cámaras…</string>
     <string name="caps_empty">No se pudo leer ninguna cámara en este dispositivo.</string>
-    <string name="caps_copy">Copiar informe</string>
     <string name="caps_copied">Informe copiado al portapapeles</string>
     <string name="caps_copy_failed">No se pudo copiar el informe</string>
     <string name="caps_camera">Cámara</string>
@@ -905,4 +904,18 @@
     <string name="runtime_notice_state_unknown">Temperatura o almacenamiento ilegibles</string>
     <string name="runtime_notice_av_drift">El audio y el video se están desfasando</string>
     <string name="runtime_notice_cadence">Se están perdiendo fotogramas</string>
+    <string name="caps_export">Exportar informe</string>
+    <string name="caps_export_title">Exportar informe de capacidades</string>
+    <string name="caps_export_help">Elige qué sale de la app. No se envía nada hasta que elijas una acción abajo.</string>
+    <string name="caps_export_redacted">Redactado (predeterminado)</string>
+    <string name="caps_export_redacted_help">La huella de la compilación, el modelo y el fabricante se sustituyen por [redacted]. Se conservan las características de las cámaras.</string>
+    <string name="caps_export_full">Completo</string>
+    <string name="caps_export_full_help">Incluye la huella de la compilación, el modelo del dispositivo y el fabricante.</string>
+    <string name="caps_export_consent">Entiendo que este informe contiene huellas e identificadores que pueden identificar mi teléfono y elijo exportarlo.</string>
+    <string name="caps_export_save">Guardar como archivo</string>
+    <string name="caps_export_share">Compartir</string>
+    <string name="caps_export_copy">Copiar como texto</string>
+    <string name="caps_export_saved">Informe guardado</string>
+    <string name="caps_export_failed">No se pudo exportar el informe</string>
+    <string name="caps_export_chooser">Compartir informe de capacidades</string>
 </resources>

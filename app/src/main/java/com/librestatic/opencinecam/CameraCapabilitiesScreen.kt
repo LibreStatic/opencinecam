@@ -6,10 +6,13 @@ package com.librestatic.opencinecam
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +42,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -56,9 +60,14 @@ import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2CapabilityInventory
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
+import com.librestatic.opencinecam.core.model.JsonReportRedactor
+import com.librestatic.opencinecam.storage.prepareCapabilityReportShare
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /** Headline characteristics for the summary card, in reading order. */
 private val SUMMARY_FACTS = listOf(
@@ -84,6 +93,7 @@ internal fun CameraCapabilitiesScreen(
     onBack: () -> Unit,
     loadInventory: ((Context) -> List<CameraInventory>)? = null,
     liveState: CameraUiState? = null,
+    initialExportOpen: Boolean = false,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -104,6 +114,56 @@ internal fun CameraCapabilitiesScreen(
     val copied = stringResource(R.string.caps_copied)
     val copyFailed = stringResource(R.string.caps_copy_failed)
     val clipLabel = stringResource(R.string.caps_title)
+    val exported = stringResource(R.string.caps_export_saved)
+    val exportFailed = stringResource(R.string.caps_export_failed)
+    val chooserTitle = stringResource(R.string.caps_export_chooser)
+    val scope = rememberCoroutineScope()
+    var exportOpen by rememberSaveable { mutableStateOf(initialExportOpen) }
+    // The mode chosen in the dialog survives the trip through the system file picker.
+    var pendingSave by remember { mutableStateOf<Pair<ReportExportMode, Boolean>?>(null) }
+    fun reportJson(list: List<CameraInventory>): JsonElement = capabilityReportJson(
+        buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState),
+    )
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val choice = pendingSave; pendingSave = null
+        val list = loaded
+        if (uri != null && choice != null && list != null) scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                ReportExporter(context.contentResolver).export(uri, reportJson(list), choice.first, choice.second)
+            }
+            Toast.makeText(context, if (outcome == ReportExportOutcome.Written) exported else exportFailed, Toast.LENGTH_SHORT).show()
+        }
+    }
+    fun runExport(action: ReportExportAction, mode: ReportExportMode, consent: Boolean, list: List<CameraInventory>) {
+        if (!canExport(mode, consent)) return
+        when (action) {
+            ReportExportAction.SAVE -> {
+                pendingSave = mode to consent
+                saver.launch("opencinecam-capabilities.json")
+            }
+            ReportExportAction.SHARE -> scope.launch {
+                val intent = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val payload = if (mode == ReportExportMode.FULL) reportJson(list) else JsonReportRedactor.redact(reportJson(list))
+                        val uri = prepareCapabilityReportShare(context, Json { prettyPrint = true }.encodeToString(JsonElement.serializer(), payload))
+                        ReportExporter(context.contentResolver).shareIntent(uri, mode, consent)
+                    }
+                }.getOrNull()
+                if (intent == null) Toast.makeText(context, exportFailed, Toast.LENGTH_SHORT).show()
+                else context.startActivity(Intent.createChooser(intent, chooserTitle).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            ReportExportAction.COPY -> {
+                // The plain-text report names the phone on its first line; the redacted copy hides it.
+                val text = capabilityReportText(if (mode == ReportExportMode.FULL) deviceLine() else JsonReportRedactor.REDACTED,
+                    list, cameras, context::getString, liveState)
+                val ok = runCatching {
+                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(clipLabel, text))
+                }.isSuccess
+                Toast.makeText(context, if (ok) copied else copyFailed, Toast.LENGTH_SHORT).show()
+            }
+        }
+        exportOpen = false
+    }
 
     // Same width rules as the settings list: capped and centred on tablets and desktops.
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -115,18 +175,11 @@ internal fun CameraCapabilitiesScreen(
     ) {
         item(key = "header") {
             val report = loaded?.takeIf { it.isNotEmpty() }
-            SettingsTopBar(stringResource(R.string.caps_title), onBack, backTag = "capabilities-back", subtitle = deviceLine(), action = report?.let { list -> {
+            SettingsTopBar(stringResource(R.string.caps_title), onBack, backTag = "capabilities-back", subtitle = deviceLine(), action = report?.let { _ -> {
                 TextButton(
-                    onClick = {
-                        val text = capabilityReportText(deviceLine(), list, cameras, context::getString, liveState)
-                        val ok = runCatching {
-                            context.getSystemService(ClipboardManager::class.java)
-                                .setPrimaryClip(ClipData.newPlainText(clipLabel, text))
-                        }.isSuccess
-                        Toast.makeText(context, if (ok) copied else copyFailed, Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("capabilities-copy"),
-                ) { Text(stringResource(R.string.caps_copy), color = SettingsAccent) }
+                    onClick = { exportOpen = true },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("capabilities-export"),
+                ) { Text(stringResource(R.string.caps_export), color = SettingsAccent) }
             } })
         }
         when {
@@ -182,6 +235,10 @@ internal fun CameraCapabilitiesScreen(
         }
     }
     }
+    if (exportOpen && loaded != null) ReportExportDialog(
+        onDismiss = { exportOpen = false },
+        onAction = { action, mode, consent -> runExport(action, mode, consent, loaded) },
+    )
 }
 
 @Composable
@@ -315,6 +372,8 @@ private fun statusLabel(status: AppFeatureStatus): Int = when (status) {
     AppFeatureStatus.PARTIAL -> R.string.caps_status_partial
     AppFeatureStatus.UNAVAILABLE -> R.string.caps_status_unavailable
 }
+
+private fun reportDeviceFacts() = ReportDeviceFacts(Build.FINGERPRINT, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE, Build.VERSION.SDK_INT)
 
 private fun deviceLine(): String =
     "${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"

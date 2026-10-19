@@ -775,7 +775,6 @@
     <string name="caps_intro">What each camera on this phone reports to Android, and which OpenCineCam features it unlocks. Pick a camera; ● marks the one in use.</string>
     <string name="caps_loading">Reading cameras…</string>
     <string name="caps_empty">No camera could be read on this device.</string>
-    <string name="caps_copy">Copy report</string>
     <string name="caps_copied">Report copied to the clipboard</string>
     <string name="caps_copy_failed">The report could not be copied</string>
     <string name="caps_camera">Camera</string>
@@ -911,4 +910,18 @@
     <string name="runtime_notice_state_unknown">Temperature or storage unreadable</string>
     <string name="runtime_notice_av_drift">Audio and video are drifting apart</string>
     <string name="runtime_notice_cadence">Frames are being dropped</string>
+    <string name="caps_export">Export report</string>
+    <string name="caps_export_title">Export capability report</string>
+    <string name="caps_export_help">Choose what leaves the app. Nothing is sent anywhere until you pick an action below.</string>
+    <string name="caps_export_redacted">Redacted (default)</string>
+    <string name="caps_export_redacted_help">The build fingerprint, model and manufacturer are replaced with [redacted]. The camera characteristics are kept.</string>
+    <string name="caps_export_full">Full</string>
+    <string name="caps_export_full_help">Includes the build fingerprint, device model and manufacturer.</string>
+    <string name="caps_export_consent">I understand this report contains fingerprints and identifiers that can identify my phone, and I choose to export it.</string>
+    <string name="caps_export_save">Save as file</string>
+    <string name="caps_export_share">Share</string>
+    <string name="caps_export_copy">Copy as text</string>
+    <string name="caps_export_saved">Report saved</string>
+    <string name="caps_export_failed">The report could not be exported</string>
+    <string name="caps_export_chooser">Share capability report</string>
 </resources>
