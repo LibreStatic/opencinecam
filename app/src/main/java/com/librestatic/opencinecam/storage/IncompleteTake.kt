@@ -63,3 +63,8 @@ internal fun ContentResolver.ownedRowBytes(uri: Uri): Long = try {
 
 /** An unreadable size never authorizes deleting media: treat it as holding bytes. */
 internal fun bytesForDecision(measured: Long): Long = if (measured < 0L) 1L else measured
+
+/** Adds the ADR-0011 incomplete marker to a metadata document built with org.json (device code only). */
+internal fun org.json.JSONObject.putIncompleteMarker(reasons: List<String>): org.json.JSONObject =
+    put(IncompleteTake.STATUS_KEY, IncompleteTake.STATUS_INCOMPLETE)
+        .put(IncompleteTake.REASONS_KEY, org.json.JSONArray(reasons.distinct()))
