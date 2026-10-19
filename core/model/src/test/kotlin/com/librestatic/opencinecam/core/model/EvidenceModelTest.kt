@@ -22,7 +22,12 @@ class EvidenceModelTest {
         graphId = GraphId("graph-001"),
     )
 
-    private fun evidence(stage: EvidenceStage, at: String, status: EvidenceStatus = EvidenceStatus.PASS) =
+    private fun evidence(
+        stage: EvidenceStage,
+        at: String,
+        status: EvidenceStatus = EvidenceStatus.PASS,
+        origin: EvidenceOrigin = EvidenceOrigin.UNKNOWN,
+    ) =
         CapabilityEvidence(
             id = EvidenceId("evidence-${stage.name}"),
             stage = stage,
@@ -33,6 +38,7 @@ class EvidenceModelTest {
             graphId = GraphId("graph-001"),
             validityKey = key,
             value = Knowledge.Known(true),
+            origin = origin,
         )
 
     @Test
@@ -61,5 +67,32 @@ class EvidenceModelTest {
         val updated = trail.append(second)
         assertEquals(1, trail.entries.size)
         assertEquals(2, updated.entries.size)
+    }
+
+    @Test
+    fun onlyAPhysicalDeviceCanPassTheEmpiricalAndCertifiedStages() {
+        for (stage in listOf(EvidenceStage.EMPIRICALLY_VERIFIED, EvidenceStage.CERTIFIED)) {
+            for (origin in listOf(EvidenceOrigin.EMULATOR, EvidenceOrigin.HOST, EvidenceOrigin.UNKNOWN)) {
+                assertThrows(IllegalArgumentException::class.java) {
+                    EvidenceTrail<Boolean>().append(evidence(stage, "2026-08-20T00:00:00Z", origin = origin))
+                }
+            }
+            val trail = EvidenceTrail<Boolean>()
+                .append(evidence(stage, "2026-08-20T00:00:00Z", origin = EvidenceOrigin.PHYSICAL_DEVICE))
+            assertEquals(1, trail.entries.size)
+        }
+    }
+
+    @Test
+    fun emulatorEvidenceStillCountsBelowTheEmpiricalStageAndWhenNotPassing() {
+        val trail = EvidenceTrail<Boolean>()
+            .append(evidence(EvidenceStage.SUSTAINED, "2026-08-20T00:00:00Z", origin = EvidenceOrigin.EMULATOR))
+            .append(
+                evidence(
+                    EvidenceStage.EMPIRICALLY_VERIFIED, "2026-08-20T00:00:01Z",
+                    status = EvidenceStatus.FAIL, origin = EvidenceOrigin.EMULATOR,
+                ),
+            )
+        assertEquals(2, trail.entries.size)
     }
 }
