@@ -276,3 +276,34 @@ ADR-0010 and `docs/architecture.md` govern; the VIDEO half of the sentence above
 - Operational: validate on a device with no fitting hardware encoder (the emulator's software AVC is the available stand-in).
 
 The original decision above is retained as history; this amendment governs where they differ.
+
+## Amendment (2026-10-19): failed takes are kept as incomplete
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRO-001
+- Related ADRs: ADR-0011
+
+### Context
+
+Revisions 4, 5 and 6 above say that missing requested audio is a failed take and that a publication failure discards audio and video. ADR-0011 and `docs/architecture.md` give the muxer actor "graceful incomplete publication" and the deletion of "unfinalizable zero-length files" only. The two statements disagree about what a failed take leaves behind.
+
+### Decision
+
+ADR-0011 governs; the discarding sentences above are replaced.
+
+- A take that is not fully successful keeps every output that holds bytes and publishes it (`IS_PENDING=0`). Only zero-length outputs are deleted. Not fully successful means: requested audio failed to start, the encoder failed, the recording LUT could not be verified, LOG evidence is missing, the muxer was not finalized, or a publication step failed.
+- The take's metadata sidecar (forced when the take would otherwise have none) carries `"takeStatus": "incomplete"` and `"failureReasons"`, a list of stable codes: `audio-start-failed`, `encoder-failed`, `muxer-not-finalized`, `native-retirement-pending`, `recording-lut-unverified`, `log-evidence-missing`, `publication-failed`, `process-death`. Complete takes carry neither field. The service reports `Take saved as incomplete: <reason>` and keeps the first stable code as `errorCode`.
+- The decision for each output is `decideClipRecovery` and its publication is `finalizeClip` (`:media`), so no output with bytes is deleted because a sidecar failed.
+- No output is published or deleted under a live native writer. When the video writer has not retired, the rows stay pending and journalled, and crash recovery publishes them as incomplete at the next process start.
+- Crash recovery publishes an uncommitted take that no process owns any more the same way: outputs with bytes are published with an incomplete sidecar (`process-death`, a note that the container may need repair), empty ones are deleted, and the journal entry ends committed so no later recovery deletes the take. Stills are unchanged.
+- The gallery lists a take with the incomplete marker as incomplete and shows the reasons in the inspector. An incomplete marker never authorizes deleting a truncated set: deletion still enumerates the provider itself. Sharing and proxy jobs still require a declared, complete take.
+- Incomplete takes stay out of the transfer journal, which has no incomplete state.
+
+### Consequences
+
+- Positive: media captured before a failure is never lost to cleanup; the reason is on the take.
+- Negative: an incomplete MP4 may be unplayable until repaired; the gallery says so but does not repair it.
+- Operational: validate on a device by failing audio start and by killing the process while recording.
+
+The original decisions above are retained as history; this amendment governs where they differ.
