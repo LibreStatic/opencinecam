@@ -238,4 +238,19 @@ class ZoomMathTest {
         ZoomAnchor(1f, 6.57f, "2"),
         ZoomAnchor(2f, 13.3f, "5"),
     )
+
+    @Test fun equivalentFocalLengthScalesByTheSensorDiagonal() {
+        // A full-frame sensor is its own equivalent; a 9.6 x 7.2 mm sensor (12 mm diagonal) is a 3.6x crop.
+        assertEquals(50f, equivalentFocalLengthMm(50f, 36f, 24f)!!, 0.05f)
+        assertEquals(24.9f, equivalentFocalLengthMm(6.9f, 9.6f, 7.2f)!!, 0.05f)
+    }
+
+    @Test fun equivalentFocalLengthIsNullWithoutAUsableSensorSize() {
+        assertNull(equivalentFocalLengthMm(6.9f, null, 7.2f))
+        assertNull(equivalentFocalLengthMm(6.9f, 9.6f, null))
+        assertNull(equivalentFocalLengthMm(6.9f, 0f, 7.2f))
+        assertNull(equivalentFocalLengthMm(0f, 9.6f, 7.2f))
+        assertNull(CameraInventory("0", null, emptyList(), focalLengthsMm = listOf(6.9f)).equivalentFocalLengthMm)
+        assertEquals(24.9f, CameraInventory("0", null, emptyList(), focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f).equivalentFocalLengthMm!!, 0.05f)
+    }
 }

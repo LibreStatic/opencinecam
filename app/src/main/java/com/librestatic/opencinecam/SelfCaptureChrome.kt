@@ -124,7 +124,7 @@ private fun SelfCameraKey(state: CameraUiState, binder: CaptureService.LocalBind
     val current = cameras.firstOrNull { it.cameraId == state.selectedCameraId }
     val name = current?.let { camera ->
         val facing = facingLabel(camera.lensFacing)
-        camera.focalLengthsMm.firstOrNull()?.let { String.format(Locale.ROOT, "%s · %.1f mm", facing, it) } ?: facing
+        facing + lensFocalSuffix(camera.focalLengthsMm.firstOrNull(), camera.equivalentFocalLengthMm, stringResource(R.string.lens_focal_equivalent, "%s"))
     } ?: "—"
     val switchable = enabled && cameras.size > 1
     // Dimmed only while locked: a single camera is not "disabled", there is just nothing to switch to.
