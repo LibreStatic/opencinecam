@@ -952,4 +952,5 @@
     <string name="caps_discrepancies">Requested and reported differ</string>
     <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
     <string name="caps_usage_apv">Unsupported: the app has no APV recording path. Shows what this phone offers and why it is not used.</string>
+    <string name="caps_warnings">Capture warnings</string>
 </resources>

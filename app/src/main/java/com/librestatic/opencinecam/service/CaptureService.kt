@@ -59,6 +59,7 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.HardwareTruthHudState
 import com.librestatic.opencinecam.RouteTruth
 import com.librestatic.opencinecam.routeTruthOf
+import com.librestatic.opencinecam.readbackSamples
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
@@ -1045,7 +1046,7 @@ class CaptureService : Service() {
                 torchReported = metadata.torchEnabled,
                 torchStrengthReported = metadata.torchStrengthLevel,
                 effectiveFps = metadata.effectiveFps,
-            ) }
+            ).let { next -> next.copy(hardwareTruth = next.hardwareTruth.withReadback(readbackSamples(next))) } }
         }
 
         override fun onPhotoFlashResult(report: com.librestatic.opencinecam.camera.PhotoFlashReport) {
@@ -1584,6 +1585,10 @@ class CaptureService : Service() {
                 android.util.Log.w("PhysicalRoute", "evidence=physical-route-mismatch requested=$requestedPhysicalId reported=$reportedPhysicalId")
             }
             cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withRoute(requestedPhysicalId, reportedPhysicalId)) }
+        }
+
+        override fun onAuditWarning(message: String) {
+            cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withWarning(message)) }
         }
 
         override fun onActiveLens(physicalId: String?) {

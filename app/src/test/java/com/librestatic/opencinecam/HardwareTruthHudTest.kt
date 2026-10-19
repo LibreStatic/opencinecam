@@ -61,8 +61,8 @@ class HardwareTruthHudTest {
         repeat(MAX_DISCREPANCY_HISTORY * 3) { index -> hud = hud.withRoute("2", "other-$index") }
         assertEquals(MAX_DISCREPANCY_HISTORY, hud.discrepancyHistory.size)
         assertEquals("other-${MAX_DISCREPANCY_HISTORY * 3 - 1}", hud.discrepancyHistory.last().reported)
-        var reports = HardwareTruthHudState(requested = mapOf("iso" to "100"))
-        repeat(MAX_DISCREPANCY_HISTORY * 2) { reports = reports.withReport("iso", "${200 + it}") }
+        var reports = HardwareTruthHudState(requested = (0 until MAX_DISCREPANCY_HISTORY * 2).associate { "k$it" to "a" })
+        repeat(MAX_DISCREPANCY_HISTORY * 2) { reports = reports.withReport("k$it", "b") }
         assertEquals(MAX_DISCREPANCY_HISTORY, reports.discrepancyHistory.size)
     }
 
@@ -75,5 +75,40 @@ class HardwareTruthHudTest {
         assertEquals(emptyList<HudDiscrepancy>(), zoomed.discrepancyHistory)
         assertEquals(zoomed, zoomed.withActiveLens("3"))
         assertEquals(null, zoomed.withActiveLens(null).reported[ACTIVE_LENS_KEY])
+    }
+
+    private fun sample(reported: String, within: Boolean = false) = ReadbackSample("android.sensor.sensitivity", "100", reported, within)
+
+    @Test
+    fun aWrongValueIsOneHistoryEntryUntilItMatchesAgain() {
+        var hud = HardwareTruthHudState()
+        repeat(500) { hud = hud.withReadback(listOf(sample("${200 + it % 3}"))) }
+        assertEquals(1, hud.discrepancyHistory.size)
+        assertEquals(setOf("android.sensor.sensitivity"), hud.openDiscrepancies)
+        hud = hud.withReadback(listOf(sample("100", within = true)))
+        assertTrue(hud.openDiscrepancies.isEmpty())
+        hud = hud.withReadback(listOf(sample("400")))
+        assertEquals(2, hud.discrepancyHistory.size)
+        assertEquals("400", hud.discrepancyHistory.last().reported)
+    }
+
+    @Test
+    fun aValueWithinToleranceIsNotADiscrepancyAndAClearedRequestClosesOne() {
+        val near = HardwareTruthHudState().withReadback(listOf(sample("101", within = true)))
+        assertTrue(near.discrepancyHistory.isEmpty())
+        assertEquals("100", near.reported["android.sensor.sensitivity"])
+        val open = HardwareTruthHudState().withReadback(listOf(sample("300")))
+        assertTrue(open.withReadback(emptyList()).openDiscrepancies.isEmpty())
+    }
+
+    @Test
+    fun warningsAreDeduplicatedAndBounded() {
+        var hud = HardwareTruthHudState()
+        repeat(5) { hud = hud.withWarning("CADENCE_DISCONTINUITY: cadence") }
+        assertEquals(listOf("CADENCE_DISCONTINUITY: cadence"), hud.warnings)
+        repeat(MAX_HUD_WARNINGS * 2) { hud = hud.withWarning("w$it") }
+        assertEquals(MAX_HUD_WARNINGS, hud.warnings.size)
+        assertEquals("w${MAX_HUD_WARNINGS * 2 - 1}", hud.warnings.last())
+        assertEquals(hud, hud.withWarning(" "))
     }
 }

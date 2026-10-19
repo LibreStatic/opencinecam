@@ -149,4 +149,23 @@ class LowLightBoostSettingsTest {
         assertEquals(3, pictureControlDeviceValue(sharpness, 9))
         assertEquals(5, pictureControlDeviceValue(PictureControlRange(0, 10, 1, 5, true), 2))
     }
+
+    @Test fun readbackSamplesJudgeOnlyRequestedValuesWithTheirTolerances() {
+        assertEquals(emptyList<ReadbackSample>(), readbackSamples(CameraUiState()))
+        val state = CameraUiState(
+            requestedExposureMode = com.librestatic.opencinecam.camera.ExposureMode.MANUAL,
+            reportedExposureMode = com.librestatic.opencinecam.camera.ExposureMode.MANUAL,
+            requestedIso = 100, sensitivityIso = 125,
+            requestedExposureTimeNs = 10_000_000L, exposureTimeNs = 10_050_000L,
+            requestedWhiteBalance = com.librestatic.opencinecam.camera.WhiteBalanceSelection.Kelvin(5600), reportedColorTemperatureK = 5850,
+        )
+        val byKey = readbackSamples(state).associateBy { it.key }
+        assertEquals(true, byKey.getValue("android.control.aeMode").withinTolerance)
+        assertEquals(false, byKey.getValue("android.sensor.sensitivity").withinTolerance)
+        assertEquals(true, byKey.getValue("android.sensor.exposureTime").withinTolerance)
+        assertEquals(false, byKey.getValue("android.colorCorrection.colorTemperature").withinTolerance)
+        val auto = readbackSamples(state.copy(requestedIso = null, requestedExposureTimeNs = null))
+        assertEquals(setOf("android.control.aeMode", "android.colorCorrection.colorTemperature"), auto.map { it.key }.toSet())
+        assertEquals(true, readbackSamples(state.copy(reportedColorTemperatureK = 5650)).first { it.key.endsWith("colorTemperature") }.withinTolerance)
+    }
 }

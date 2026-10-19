@@ -946,4 +946,5 @@
     <string name="caps_discrepancies">Demandé et signalé diffèrent</string>
     <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
     <string name="caps_usage_apv">Non pris en charge : l\'app n\'a pas de chaîne d\'enregistrement APV. Indique ce que propose ce téléphone et pourquoi il n\'est pas utilisé.</string>
+    <string name="caps_warnings">Avertissements de capture</string>
 </resources>

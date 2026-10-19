@@ -105,6 +105,44 @@ internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?
     )
 }
 
+/**
+ * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO and time
+ * (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
+ * [TEMPERATURE_TOLERANCE_K]), the processing modes actually submitted, and the vendor picture
+ * controls. Automatic values, unknown reports and cleared requests produce no pair.
+ */
+internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = buildList {
+    fun add(key: String, requested: Any?, reported: Any?, within: Boolean) {
+        if (requested != null && reported != null) add(ReadbackSample(key, requested.toString(), reported.toString(), within))
+    }
+    state.reportedExposureMode?.let { add("android.control.aeMode", state.requestedExposureMode.name, it.name, it == state.requestedExposureMode) }
+    add("android.sensor.sensitivity", state.requestedIso, state.sensitivityIso, state.requestedIso == state.sensitivityIso)
+    val time = state.requestedExposureTimeNs
+    val reportedTime = state.exposureTimeNs
+    if (time != null && reportedTime != null) add("android.sensor.exposureTime", "$time ns", "$reportedTime ns", abs(reportedTime - time) <= time * TIME_TOLERANCE)
+    val exposure = state.effectiveSettings?.exposure
+    val band = exposure?.antibanding
+    val reportedBand = state.reportedAntibanding
+    if (band != null && reportedBand != null) add("android.control.aeAntibandingMode", band.name, antibandingOf(reportedBand)?.name ?: "#$reportedBand", antibandingOf(reportedBand) == band)
+    val metering = exposure?.metering
+    val reportedMetering = state.reportedMeteringMode
+    if (metering != null && reportedMetering != null) add("org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode",
+        metering.name, ExposureMetering.fromVendor(reportedMetering)?.name ?: "#$reportedMetering", reportedMetering == metering.vendorValue)
+    val wb = state.requestedWhiteBalance
+    val reportedK = state.reportedColorTemperatureK
+    if (wb is WhiteBalanceSelection.Kelvin && reportedK != null) add("android.colorCorrection.colorTemperature", "${wb.kelvin} K", "$reportedK K", abs(reportedK - wb.kelvin) <= TEMPERATURE_TOLERANCE_K)
+    state.submittedImageProcessing?.let { sent ->
+        add("android.lens.opticalStabilizationMode", sent.optical, state.reportedOpticalStabilization, sent.optical == state.reportedOpticalStabilization)
+        add("android.control.videoStabilizationMode", sent.video, state.reportedVideoStabilization, sent.video == state.reportedVideoStabilization)
+        add("android.noiseReduction.mode", sent.noise, state.reportedNoiseReduction, sent.noise == state.reportedNoiseReduction)
+        add("android.edge.mode", sent.edge, state.reportedEdgeEnhancement, sent.edge == state.reportedEdgeEnhancement)
+    }
+    state.pictureControlReadback?.let { picture ->
+        add("org.codeaurora.qcamera3.saturation.use_saturation", picture.submittedSaturation, picture.reportedSaturation, picture.submittedSaturation == picture.reportedSaturation)
+        add("org.codeaurora.qcamera3.sharpness.strength", picture.submittedSharpness, picture.reportedSharpness, picture.submittedSharpness == picture.reportedSharpness)
+    }
+}
+
 private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
 private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
 private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
