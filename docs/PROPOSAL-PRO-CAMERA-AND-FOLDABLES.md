@@ -343,7 +343,7 @@ Windows own their presentation; `CaptureService` keeps the capture. Decouple the
 - Avoid automatic brightness adjustment that causes unexpected lighting changes on the subject. Dimming and timeout are configurable.
 - Reduce the outer preview's resolution/frequency under an explicit policy before harming the encoder; indicate the degradation. Strict may reject the combination before recording.
 - Keep buttons away from the hinge/cutouts and lock the subject's touches; self-recording enables only its own set of commands.
-- Using the outer screen as a fill light is not included in the first delivery: it is evaluated later to see whether it provides enough light without affecting legibility, temperature, or exposure.
+- Using the outer screen as a fill light is not included in the first delivery: it is evaluated later to see whether it provides enough light without affecting legibility, temperature, or exposure. *Update 2026-10-19: PLAN-068 U3 (user selection, 2026-10-02) later adopted it as the `FILL_LIGHT` subject mode, with colour/brightness requests, thermal dimming and a timeout.*
 
 ## 10. Architecture, persistence, and documentation changes
 
