@@ -242,3 +242,37 @@ The first full regression passed148 existing native cases but lint correctly rej
 
 
 Final frozen-source regression completed successfully in9m5s:506 Android unit tests (165 app +341 camera),150 instrumented cases including both new API30 timecode executions, and app/camera lint without errors or new warnings. The independent11535-vector oracle remains byte-identical, and the reference tmcd samples retain107892/215784 at the one-hour DF labels. The failed original inverse regression and failed API31-only lint run remain preserved. Byte-for-byte rollback of all516 original files and separate original/modified/restored test results are recorded in build/implementation-h4-timecode-arithmetic/VERIFICATION.txt. Full H1–H5 stays ACTIVE. Next timecode work must connect actual encoded-frame progress and per-take lifecycle/configuration to RECORD_RUN/REGEN and final file metadata/tracks; the corrected arithmetic alone does not complete that integration. No final APK.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRO-001, OCC-PRO-007
+- Related ADRs: ADR-0010, ADR-0016
+
+### Context
+
+The timelapse paragraph above says normal VIDEO and LOG retain their hardware-only encoder gates. ADR-0010 and `docs/architecture.md` ("Qualifying hardware codecs precede software codecs") order encoders hardware first and allow a software codec when no hardware codec fits. The two statements disagree for normal SDR VIDEO.
+
+### Decision
+
+ADR-0010 and `docs/architecture.md` govern; the VIDEO half of the sentence above is replaced.
+
+- Normal SDR VIDEO (including recording-LUT SDR video and off-speed project rates) may use an advertised software AVC Surface encoder, and only when no hardware encoder fits the encoded size and rate. `selectSurfaceEncoder` sorts hardware first, so a software pick means none did. If HEVC was requested and no hardware HEVC encoder exists, the existing fallback to AVC applies first, and that AVC encoder may then be software.
+- Strict (the recording policy, ADR-0016) refuses the start with the stable code `video-hardware-encoder-unavailable` and a message that Adaptive allows a software encoder. The refusal is soft: the preview keeps running, the phase returns to previewing, and nothing is recorded.
+- Adaptive records with the software encoder and shows a persistent warning for the whole take ("Software video encoder: <codec>; frames may drop"). The take's hardware-truth sidecar carries the same warning plus a `videoEncoder` object with the codec name and `hardwareAccelerated: false`.
+- LOG (HEVC Main10), HLG, HDR10 and SDR HEVC stay hardware-only. Timelapse is unchanged: software remains allowed in both policies and is exposed through its progress.
+- Software encoding is never hardware qualification evidence: a take recorded with a software encoder qualifies nothing about hardware codecs.
+
+### Alternatives considered
+
+- Keep VIDEO hardware-only: rejected by the owner decision that ADR-0010 and the architecture document win.
+- Allow software silently in both policies: rejected because dropped frames must be disclosed, and Strict exists to refuse unqualified paths.
+
+### Consequences
+
+- Positive: a device whose hardware AVC encoder cannot take the requested size or rate can still record under Adaptive, with the cost disclosed.
+- Negative: software takes can drop frames; the warning and sidecar say so.
+- Operational: validate on a device with no fitting hardware encoder (the emulator's software AVC is the available stand-in).
+
+The original decision above is retained as history; this amendment governs where they differ.
