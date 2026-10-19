@@ -52,3 +52,31 @@ OCC-PLAN-014-016, OCC-PLAN-028
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-UI-001, OCC-LIFE-001, OCC-CAM-001
+- Related ADRs: ADR-0031
+
+### Context
+
+The original decision lists "GPU preview from M4" among the rejected alternatives. ADR-0031 later routes Video with the preview role (and LOG) through a persistent single-input GPU graph whose output feeds the operator SurfaceView, so that exterior sessions can share the same camera frames. The code does this: `Camera2PreviewEngine` enables the GPU viewfinder for VIDEO and LOG (`gpuPreviewEnabled`, `startExistingGpuVideo`).
+
+### Decision
+
+ADR-0031 replaces the rejection of GPU preview. The operator preview is still a `SurfaceView` embedded in Compose, aspect-fit by default, with preview rotation and mirror separate from recording orientation, WindowManager only for fold information, and no sensor switch mid-clip. The GPU graph renders into that SurfaceView; it does not replace it with a `TextureView`. Direct camera preview remains the route for modes that do not use the GPU graph.
+
+### Alternatives considered
+
+- Keep the rejection of GPU preview: rejected because ADR-0031 needs one persistent graph whose frames reach both the operator and the exterior outputs.
+- Use a `TextureView` for the GPU output: rejected because the SurfaceView contract above still holds.
+
+### Consequences
+
+- Positive: the ADR no longer contradicts the shipped preview graph.
+- Negative: the GPU path adds a producer transition (direct to GPU and back) documented in ADR-0031.
+- Operational: none; no code change.
+
+The original decision above is retained as history; this amendment governs where they differ.
