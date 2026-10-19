@@ -40,8 +40,8 @@ while IFS= read -r file; do
     status=1
   fi
 done < <(
-  git ls-files -- app camera media core tools store baselineprofile desktop-tools native-pipeline \
-    | grep -E '\.(kt|kts|py|sh)$' || true
+  git ls-files -- app camera media core tools store baselineprofile desktop-tools native-pipeline docs \
+    | grep -E '\.(kt|kts|py|sh|gradle|cmake|cpp|cc|c|h|hpp|glsl|frag|vert)$|(^|/)CMakeLists\.txt$' || true
 )
 
 if [[ "$status" -ne 0 ]]; then

@@ -8,9 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DIRECTORIES = [
     "app", "camera", "media", "core", "tools", "store",
-    "baselineprofile", "desktop-tools", "native-pipeline",
+    "baselineprofile", "desktop-tools", "native-pipeline", "docs",
 ]
-SUFFIXES = (".kt", ".kts", ".py", ".sh")
+SUFFIXES = (".kt", ".kts", ".py", ".sh", ".gradle", ".cmake", ".cpp", ".cc", ".c", ".h", ".hpp", ".glsl", ".frag", ".vert")
+NAMES = ("CMakeLists.txt",)
 HEADER_LINES = 20
 
 
@@ -22,7 +23,7 @@ class SpdxHeaderTest(unittest.TestCase):
         ).stdout.splitlines()
         missing = []
         for name in listing:
-            if not name.endswith(SUFFIXES):
+            if not (name.endswith(SUFFIXES) or Path(name).name in NAMES):
                 continue
             head = (ROOT / name).read_text(encoding="utf-8").splitlines()[:HEADER_LINES]
             if not any("SPDX-License-Identifier" in line for line in head):
