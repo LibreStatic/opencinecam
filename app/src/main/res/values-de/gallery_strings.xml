@@ -27,6 +27,7 @@
     <string name="gallery_missing">Take-Eintrag fehlt</string>
     <string name="gallery_invalid">Take-Eintrag nicht lesbar</string>
     <string name="gallery_incomplete">Einige Dateien fehlen</string>
+    <string name="gallery_incomplete_take">Unvollständige Aufnahme</string>
     <string name="gallery_original">Original: %1$s</string>
     <string name="gallery_metadata">Metadaten: %1$s</string>
     <string name="gallery_open_failed">Die gewählte Datei konnte nicht geöffnet werden. Sie ist möglicherweise nicht verfügbar oder es ist keine kompatible App installiert.</string>

@@ -27,6 +27,7 @@
     <string name="gallery_missing">Falta el registro de la toma</string>
     <string name="gallery_invalid">Registro de la toma ilegible</string>
     <string name="gallery_incomplete">Faltan algunos archivos</string>
+    <string name="gallery_incomplete_take">Toma incompleta</string>
     <string name="gallery_original">Original: %1$s</string>
     <string name="gallery_metadata">Metadatos: %1$s</string>
     <string name="gallery_open_failed">No se pudo abrir el archivo seleccionado. Puede no estar disponible o faltar una app compatible.</string>

@@ -27,6 +27,7 @@
     <string name="gallery_missing">Take record missing</string>
     <string name="gallery_invalid">Take record unreadable</string>
     <string name="gallery_incomplete">Some files missing</string>
+    <string name="gallery_incomplete_take">Incomplete take</string>
     <string name="gallery_original">Original: %1$s</string>
     <string name="gallery_metadata">Metadata: %1$s</string>
     <string name="gallery_open_failed">The selected file could not be opened. It may be unavailable or no compatible app is installed.</string>
