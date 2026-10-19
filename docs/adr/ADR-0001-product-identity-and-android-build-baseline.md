@@ -53,3 +53,30 @@ OCC-PLAN-001-003
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRIV-001 (amended 2026-09-26)
+- Related ADRs: ADR-0027 (amended 2026-09-26), ADR-0034
+
+### Context
+
+The original decision lists "no Internet permission" as part of the build baseline. The shipped manifest declares `INTERNET` and `ACCESS_NETWORK_STATE` (`app/src/main/AndroidManifest.xml`) for opt-in WebDAV transfers, a change that ADR-0027 already accepted in its amendment of 2026-09-26.
+
+### Decision
+
+The identity, SDK levels and toolchain above are unchanged. The "no Internet permission" clause is governed by ADR-0027 as amended on 2026-09-26: `INTERNET` and `ACCESS_NETWORK_STATE` are allowed only for the named opt-in WebDAV transfers, which are off by default and started by explicit user action. Any other network permission is still rejected.
+
+### Alternatives considered
+
+- Restate the network rules here: rejected because ADR-0027 owns them and a second copy would drift.
+
+### Consequences
+
+- Positive: the baseline no longer contradicts the manifest or ADR-0027.
+- Negative: readers of this ADR must follow the reference to ADR-0027 for the network rule.
+- Operational: none; no code or manifest change.
+
+The original decision above is retained as history; this amendment governs where they differ.

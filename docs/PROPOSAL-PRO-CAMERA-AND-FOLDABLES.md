@@ -36,7 +36,7 @@ This audit is static: local sources and documentation were reviewed, and no new 
 | Files | Saving and local gallery; sidecars and technical reports. | Linked proxies, clapperboard, search by take, and more complete review. |
 | Settings | `SettingsScreen` gathers controls in a `LazyColumn`; there are 12 sp titles, 10 sp descriptions, and compact options. | Navigation by category, search, and more legible typography; centralize configuration and sync it with the viewfinder. |
 | Foldables | Continuity, preview reconnection, geometry, and adaptive components. | Verified outer-screen capability, dual presentation, roles, and per-posture layouts. |
-| Network/accessories | The product declares local operation and the absence of the Internet permission. | Remote control, streaming, and cloud require a prior product decision/ADR. |
+| Network/accessories | The product declares local operation. The original baseline had no Internet permission; ADR-0027 (amended 2026-09-26) now allows `INTERNET` and `ACCESS_NETWORK_STATE` only for opt-in WebDAV transfers (PLAN-067, ADR-0034). | Remote control, streaming, and cloud require a prior product decision/ADR. |
 
 ### 2.1 Local sources to pick the work back up
 
@@ -458,7 +458,7 @@ Before each release, test turning the new paths on/off and going back to the pre
 
 ### Technical open items, with no new scope decision
 
-DEC-01/04: physical inventory and qualification of the multi-output graph. DEC-07/08/09: color, audio, and rational-time contracts. DEC-11: demonstrate physical thresholds. The network ADRs will be updated before transports are incorporated; the current manifest still has no Internet. Effective support is determined per device and path, not by this approval.
+DEC-01/04: physical inventory and qualification of the multi-output graph. DEC-07/08/09: color, audio, and rational-time contracts. DEC-11: demonstrate physical thresholds. The network ADRs will be updated before transports are incorporated; the manifest declared no Internet when this proposal was written. Since 2026-09-26 it declares `INTERNET` and `ACCESS_NETWORK_STATE` for opt-in WebDAV transfers only, as allowed by ADR-0027 (amended 2026-09-26); other transports still need their own ADR. Effective support is determined per device and path, not by this approval.
 
 ### Current execution
 
