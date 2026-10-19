@@ -92,4 +92,11 @@ class TakeLabelTest {
         for (status in listOf(LocalMediaRelationStatus.MISSING_METADATA, LocalMediaRelationStatus.INVALID_METADATA,
             LocalMediaRelationStatus.INCOMPLETE)) assertTrue(takeNeedsAttention(status))
     }
+
+    @Test
+    fun aTakeMarkedIncompleteBySidecarHasItsOwnLabel() {
+        assertEquals(R.string.gallery_incomplete, relationLabel(LocalMediaRelationStatus.INCOMPLETE))
+        assertEquals(R.string.gallery_incomplete_take, relationLabel(LocalMediaRelationStatus.INCOMPLETE, markedIncomplete = true))
+        assertEquals(R.string.gallery_declared, relationLabel(LocalMediaRelationStatus.DECLARED, markedIncomplete = true))
+    }
 }

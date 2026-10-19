@@ -123,7 +123,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             val tint = if (attention) GalleryWarning else LocalCineColors.current.ok
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CineGlyph(if (attention) CineIcon.WARNING else CineIcon.CHECK, tint, Modifier.size(18.dp))
-                Text(stringResource(relationLabel(take.relationStatus)), Modifier.weight(1f).testTag("gallery-relation-${take.id}"),
+                Text(stringResource(relationLabel(take.relationStatus, badges.incompleteReasons.isNotEmpty())), Modifier.weight(1f).testTag("gallery-relation-${take.id}"),
                     color = tint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             Text(

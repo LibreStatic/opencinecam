@@ -27,6 +27,7 @@
     <string name="gallery_missing">Fiche de prise absente</string>
     <string name="gallery_invalid">Fiche de prise illisible</string>
     <string name="gallery_incomplete">Fichiers manquants</string>
+    <string name="gallery_incomplete_take">Prise incomplète</string>
     <string name="gallery_original">Original : %1$s</string>
     <string name="gallery_metadata">Métadonnées : %1$s</string>
     <string name="gallery_open_failed">Le fichier sélectionné n\'a pas pu être ouvert. Il est peut-être indisponible ou aucune app compatible n\'est installée.</string>

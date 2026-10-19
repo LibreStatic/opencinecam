@@ -27,6 +27,7 @@
     <string name="gallery_missing">Registro da tomada ausente</string>
     <string name="gallery_invalid">Registro da tomada ilegível</string>
     <string name="gallery_incomplete">Alguns arquivos ausentes</string>
+    <string name="gallery_incomplete_take">Gravação incompleta</string>
     <string name="gallery_original">Original: %1$s</string>
     <string name="gallery_metadata">Metadados: %1$s</string>
     <string name="gallery_open_failed">Não foi possível abrir o arquivo selecionado. Ele pode estar indisponível ou não há app compatível instalado.</string>

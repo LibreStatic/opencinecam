@@ -220,18 +220,19 @@ internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, so
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CineGlyph(CineIcon.WARNING, GalleryWarning, Modifier.size(14.dp))
-            Text(stringResource(relationLabel(take.relationStatus)), color = GalleryWarning, fontSize = 12.sp, maxLines = 2,
+            Text(stringResource(relationLabel(take.relationStatus, badges.incompleteReasons.isNotEmpty())), color = GalleryWarning, fontSize = 12.sp, maxLines = 2,
                 overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
-internal fun relationLabel(status: LocalMediaRelationStatus): Int = when (status) {
+/** [markedIncomplete]: the take's own sidecar says it was kept after a failure, which is not a missing file. */
+internal fun relationLabel(status: LocalMediaRelationStatus, markedIncomplete: Boolean = false): Int = when (status) {
     LocalMediaRelationStatus.DECLARED -> R.string.gallery_declared
     LocalMediaRelationStatus.LEGACY -> R.string.gallery_legacy
     LocalMediaRelationStatus.MISSING_METADATA -> R.string.gallery_missing
     LocalMediaRelationStatus.INVALID_METADATA -> R.string.gallery_invalid
-    LocalMediaRelationStatus.INCOMPLETE -> R.string.gallery_incomplete
+    LocalMediaRelationStatus.INCOMPLETE -> if (markedIncomplete) R.string.gallery_incomplete_take else R.string.gallery_incomplete
 }
 
 internal val GalleryWarning: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.pending
