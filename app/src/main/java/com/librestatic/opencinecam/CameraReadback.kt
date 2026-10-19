@@ -40,6 +40,10 @@ internal sealed interface ReadbackDifference {
 private const val TIME_TOLERANCE = 0.01
 /** The reported colour temperature is an estimate; this close it matches the request. */
 private const val TEMPERATURE_TOLERANCE_K = 100
+/** The lens settles on a manual focus distance over several frames; this close (in diopters) it is the requested focus. */
+private const val FOCUS_TOLERANCE_DIOPTERS = 0.3f
+/** The measured frame rate is a smoothed estimate from sensor timestamps; this close (relative) it is the requested rate. */
+private const val FPS_TOLERANCE = 0.05
 
 internal fun antibandingOf(code: Int?): Antibanding? = when (code) {
     CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> Antibanding.AUTO
@@ -108,7 +112,8 @@ internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?
 /**
  * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO and time
  * (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
- * [TEMPERATURE_TOLERANCE_K]), the processing modes actually submitted, and the vendor picture
+ * [TEMPERATURE_TOLERANCE_K]), the AF mode and, under manual focus, the focus distance (within
+ * [FOCUS_TOLERANCE_DIOPTERS]), the frame rate (within [FPS_TOLERANCE]), the processing modes actually submitted, and the vendor picture
  * controls. Automatic values, unknown reports and cleared requests produce no pair.
  */
 internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = buildList {
@@ -131,6 +136,12 @@ internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = build
     val wb = state.requestedWhiteBalance
     val reportedK = state.reportedColorTemperatureK
     if (wb is WhiteBalanceSelection.Kelvin && reportedK != null) add("android.colorCorrection.colorTemperature", "${wb.kelvin} K", "$reportedK K", abs(reportedK - wb.kelvin) <= TEMPERATURE_TOLERANCE_K)
+    add("android.control.afMode", state.submittedAfMode, state.reportedAfMode, state.submittedAfMode == state.reportedAfMode)
+    val focus = state.requestedFocusDiopters
+    val reportedFocus = state.focusDistanceDiopters
+    if (focus != null && reportedFocus != null) add("android.lens.focusDistance", "$focus dpt", "$reportedFocus dpt", abs(reportedFocus - focus) <= FOCUS_TOLERANCE_DIOPTERS)
+    // Dynamic range has no reported side in the UI state (only the requested profile), so it has no pair.
+    state.effectiveFps?.let { fps -> add("opencinecam.frameRate", "${state.targetFps} fps", "%.2f fps".format(java.util.Locale.ROOT, fps), abs(fps - state.targetFps) <= state.targetFps * FPS_TOLERANCE) }
     state.submittedImageProcessing?.let { sent ->
         add("android.lens.opticalStabilizationMode", sent.optical, state.reportedOpticalStabilization, sent.optical == state.reportedOpticalStabilization)
         add("android.control.videoStabilizationMode", sent.video, state.reportedVideoStabilization, sent.video == state.reportedVideoStabilization)

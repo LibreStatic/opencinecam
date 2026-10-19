@@ -57,6 +57,8 @@ import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.HardwareTruthHudState
+import com.librestatic.opencinecam.hardwareTruthTake
+import com.librestatic.opencinecam.withHardwareTruth
 import com.librestatic.opencinecam.RouteTruth
 import com.librestatic.opencinecam.routeTruthOf
 import com.librestatic.opencinecam.readbackSamples
@@ -359,6 +361,8 @@ class CaptureService : Service() {
     @Volatile private var audioStartFailure: String? = null
     private var activeRecordingAudioLabel: String = "no audio"
     private var activeRecordingGain: DigitalRecordingGain? = null
+    /** The HUD state when the take began, so the sidecar lists only what the take itself saw. */
+    @Volatile private var takeStartHardwareTruth = HardwareTruthHudState()
     private val audioLevelEpoch = java.util.concurrent.atomic.AtomicLong()
     @Volatile private var recordingStartedAtMs = 0L
     /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
@@ -1383,6 +1387,7 @@ class CaptureService : Service() {
                 errorCode = null,
             )
             activeRecordingPolicy = settings.recordingPolicy
+            takeStartHardwareTruth = cameraState.value.hardwareTruth
             lastKnownFreeBytes = cameraState.value.availableStorageBytes
             runtimeNotice = null
             avNotice = null
@@ -1405,6 +1410,7 @@ class CaptureService : Service() {
             avDiagnostics = null
             if (finishedDiagnostics != null) mainHandler.post { finishedDiagnostics.close() }
             val recordingGain = activeRecordingGain
+            val hardwareTruth = hardwareTruthTake(takeStartHardwareTruth, cameraState.value.hardwareTruth)
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
             submitCaptureState(stateCommands.takeEnded())
@@ -1499,14 +1505,15 @@ class CaptureService : Service() {
                                 (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
                                     .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
                             } else withGain
-                            subjectSyncMarker?.let { marker ->
+                            val withMarker = subjectSyncMarker?.let { marker ->
                                 (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
                                     .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
                                         JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
                             } ?: withTimecode
+                            withHardwareTruth(withMarker, hardwareTruth)
                         },
                         expectedGeometry = geometry,
-                        timingSidecar = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null),
+                        timingSidecar = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null),
                     ) },
                     onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
