@@ -891,4 +891,9 @@
     <string name="fps_lock_toggle_off">FPS lock: off</string>
     <string name="fps_lock_toggle_holding">FPS lock: on, holding the shutter at 1/fps</string>
     <string name="fps_lock_short" translatable="false">FPS</string>
+    <string name="recording_policy_title">Recording policy</string>
+    <string name="recording_policy_strict">Strict</string>
+    <string name="recording_policy_adaptive">Adaptive</string>
+    <string name="recording_policy_strict_summary">Strict stops the take and states the reason when storage, heat or frame timing leaves the safe range. The file is saved. Applies to the next take.</string>
+    <string name="recording_policy_adaptive_summary">Adaptive keeps recording, reduces monitoring work and shows a warning instead of stopping. Applies to the next take.</string>
 </resources>

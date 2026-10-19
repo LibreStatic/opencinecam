@@ -4145,6 +4145,9 @@ internal fun SettingsContent(
         if ("zero-shutter-lag" in visibleIds) settingsCard("zero-shutter-lag") {
             ZeroShutterLagSettings(state, settings, onSettingsChange)
         }
+        if (RECORDING_POLICY_SETTING_ID in visibleIds) settingsCard(RECORDING_POLICY_SETTING_ID) {
+            RecordingPolicySettings(settings, onSettingsChange)
+        }
         if ("low-light-fps" in visibleIds && state.descriptor?.lowLightAutoFps == true) settingsCard("low-light-fps") {
             LowLightFpsSettings(state, settings, onSettingsChange)
         }

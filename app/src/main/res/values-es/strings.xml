@@ -885,4 +885,9 @@
     <string name="fps_lock_toggle_on">Bloqueo de FPS: activado</string>
     <string name="fps_lock_toggle_off">Bloqueo de FPS: desactivado</string>
     <string name="fps_lock_toggle_holding">Bloqueo de FPS: activado, obturador fijo en 1/fps</string>
+    <string name="recording_policy_title">Política de grabación</string>
+    <string name="recording_policy_strict">Estricta</string>
+    <string name="recording_policy_adaptive">Adaptativa</string>
+    <string name="recording_policy_strict_summary">Estricta detiene la toma e indica el motivo cuando el almacenamiento, el calor o la cadencia salen del rango seguro. El archivo se guarda. Se aplica a partir de la próxima toma.</string>
+    <string name="recording_policy_adaptive_summary">Adaptativa sigue grabando, reduce el trabajo de monitoreo y muestra un aviso en lugar de detenerse. Se aplica a partir de la próxima toma.</string>
 </resources>

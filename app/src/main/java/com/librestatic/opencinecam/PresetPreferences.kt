@@ -8,6 +8,7 @@ internal class PresetPreferences(initial: Map<String, Any> = emptyMap()) : Share
     private val values = initial.toMutableMap().apply {
         put("audio-aac-log-migrated-v1", true)
         put("mode-selector-carousel-migrated-v1", true)
+        put("recording-policy-migrated-v1", true)
     }
     override fun getAll(): MutableMap<String, *> = values.toMutableMap()
     override fun contains(key: String?) = values.containsKey(key)
