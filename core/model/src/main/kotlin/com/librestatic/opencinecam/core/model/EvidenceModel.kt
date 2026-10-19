@@ -17,6 +17,14 @@ enum class EvidenceStage(val ordinalValue: Int) {
     EMPIRICALLY_VERIFIED(7),
     CERTIFIED(8),
     FAILED(-1),
+    ;
+
+    /**
+     * ADR-0026 and testing-strategy.md: only advertised and candidate claims are contract-level, where
+     * host and emulator runs are orchestration evidence. Everything from a created Camera2 session
+     * upward is Camera2, codec, storage or soak behavior that physical-device suites alone establish.
+     */
+    val requiresPhysicalDevice: Boolean get() = ordinalValue >= SESSION_CREATED.ordinalValue
 }
 
 /** Where an observation was made. Only a physical device can certify a capability (ADR-0026). */
@@ -164,10 +172,10 @@ data class EvidenceTrail<T>(val entries: List<CapabilityEvidence<T>> = emptyList
     }
 }
 
-/** ADR-0026: an emulator, host run or unknown origin cannot pass the empirical or certified stages. */
+/** ADR-0026: an emulator, host run or unknown origin cannot pass a stage beyond the contract level; unknown fails closed. */
 private fun requirePhysicalOriginForCertifyingPass(evidence: CapabilityEvidence<*>) {
     if (evidence.status != EvidenceStatus.PASS) return
-    if (evidence.stage != EvidenceStage.EMPIRICALLY_VERIFIED && evidence.stage != EvidenceStage.CERTIFIED) return
+    if (!evidence.stage.requiresPhysicalDevice) return
     require(evidence.origin == EvidenceOrigin.PHYSICAL_DEVICE) {
         "${evidence.stage} PASS evidence requires a physical device origin, not ${evidence.origin}"
     }
