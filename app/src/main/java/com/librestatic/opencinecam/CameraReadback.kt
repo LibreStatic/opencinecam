@@ -149,6 +149,7 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.edge.mode" to readback(code(sent?.edge, PROCESSING_MODES), code(state.reportedEdgeEnhancement, PROCESSING_MODES)),
         "android.tonemap.mode" to readback(code(state.submittedToneMapMode, TONEMAP_MODES), code(state.reportedToneMapMode, TONEMAP_MODES)),
         "android.scaler.cropRegion" to readback(null, state.reportedCropRegion?.joinToString(", ", "[", "]")),
+        "android.logicalMultiCamera.activePhysicalId" to routeLine(state.hardwareTruth),
     ) + listOfNotNull(
         picture?.takeIf { it.reportedSaturation != null }?.let {
             "org.codeaurora.qcamera3.saturation.use_saturation" to readback(it.submittedSaturation?.toString(), it.reportedSaturation?.toString()) },
@@ -156,6 +157,14 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
             "org.codeaurora.qcamera3.sharpness.strength" to readback(it.submittedSharpness?.toString(), it.reportedSharpness?.toString()) },
     )
 }
+
+/** The still's physical route against the active physical id the camera reports, with the verdict. */
+internal fun routeLine(hud: HardwareTruthHudState): String =
+    "${readback(hud.requested[ROUTE_KEY] ?: "logical", hud.reported[ROUTE_KEY])} · ${hud.routeTruth.name}"
+
+/** One line per recorded requested/reported mismatch, oldest first. */
+internal fun discrepancyLines(hud: HardwareTruthHudState): List<Pair<String, String>> =
+    hud.discrepancyHistory.map { it.key to "${readback(it.requested, it.reported)} · ${it.explanation}" }
 
 private fun readback(requested: String?, reported: String?): String = "${requested ?: "—"} → ${reported ?: "—"}"
 
