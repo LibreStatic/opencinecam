@@ -1445,8 +1445,10 @@ class CaptureService : Service() {
                     recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,
                     lastSavedUri = uri?.toString(),
                     message = (if (finalizedSuccess) {
-                        val audioSaved = sidecarResult?.let { " + ${it.bitDepth.bits}-bit ${it.container} ${it.sampleRateHz / 1000.0} kHz" }
-                            ?: if (activeRecordingAudioLabel.startsWith("AAC")) " + $activeRecordingAudioLabel" else ""
+                        val audioSaved = savedAudioSuffix(
+                            sidecarResult?.let { SavedSidecarAudio(it.bitDepth.bits, it.container, it.sampleRateHz) },
+                            activeRecordingAudioLabel,
+                        )
                         if (hlgEvidence != null) {
                             "${HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG"} HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
                         } else if (logEvidence != null) {
@@ -2739,6 +2741,8 @@ class CaptureService : Service() {
                 return stopRecording()
             }
             if (current.phase != CameraUiPhase.PREVIEWING && current.phase != CameraUiPhase.SAVED && !(whiteBalancePrepared && current.phase == CameraUiPhase.CAPTURING)) return false
+            // Every branch below starts clean; time-lapse never sets a label and must not inherit the last take's.
+            activeRecordingAudioLabel = "no audio"
             if (settings.operation.lockDuringTake) previewEngine.cancelFocusPull()
             if (!whiteBalancePrepared && settings.recordingWhiteBalance == RecordingWhiteBalancePolicy.LOCK_ON_RECORD &&
                 current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE)) {
