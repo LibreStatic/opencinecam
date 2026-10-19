@@ -335,7 +335,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
             android.util.Log.w("RecordingRecovery", "Take $id keeps ${member.kind} bytes for incomplete publication or recovery")
             return@synchronized
         }
-        if (salvaging) {
+        if (salvaging || members.values.any { it.keepBytes }) {
             // Only this member is empty or failed: remove its rows, the rest of the take survives.
             var failure: Throwable? = null
             for (row in member.rows.toList()) {

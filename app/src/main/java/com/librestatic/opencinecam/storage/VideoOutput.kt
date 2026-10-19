@@ -42,6 +42,7 @@ class VideoOutput private constructor(
     private var incompleteMuxerFinalized = false
     private var incompleteBytes = 0L
     private var retainedBytes = false
+    private var neverRecorded = false
     private var writtenSidecarJson: String? = null
     private val transaction = PendingOutputTransaction(uri, {
         descriptor.close()
@@ -96,12 +97,14 @@ class VideoOutput private constructor(
         sidecarJson: String? = null,
         timingSidecar: Boolean = false,
         muxerFinalized: Boolean = false,
+        encodedFrames: Long? = null,
     ): PreparedVideoOutput? {
         recoveryMember.beginSalvage()
         val measured = runCatching { descriptor.statSize }.getOrNull()?.takeIf { it >= 0L }
             ?: context.contentResolver.ownedRowBytes(uri)
         val bytes = bytesForDecision(measured)
-        if (decideClipRecovery(muxerFinalized, bytes) == ClipRecoveryDecision.DELETE) {
+        if (decideIncompleteVideo(muxerFinalized, bytes, encodedFrames) == ClipRecoveryDecision.DELETE) {
+            neverRecorded = true
             transaction.finish(false)
             return null
         }
@@ -244,12 +247,22 @@ class VideoOutput private constructor(
 
     override fun close() { finish(false) }
 
+    /**
+     * The take never encoded a sample (a refused or failed start): whatever the muxer left behind,
+     * even a bare container header, is deleted rather than kept as an incomplete take.
+     */
+    @Synchronized
+    fun discardNeverRecorded() {
+        neverRecorded = true
+        finish(false)
+    }
+
     private fun deleteOwned() {
         check(descriptorRetired) { "Video descriptor retirement is incomplete" }
         discardMotionLog()
         // ADR-0011: only a zero-length file is deleted. A file with bytes stays pending, owned by the
         // recovery journal, which publishes it as incomplete if the process dies before a retry.
-        if (retainedBytes || context.contentResolver.ownedRowBytes(uri) != 0L) {
+        if (!neverRecorded && (retainedBytes || context.contentResolver.ownedRowBytes(uri) != 0L)) {
             android.util.Log.w("VideoOutput", "Keeping $displayName: it holds bytes")
             recoveryMember.keepBytes()
             return
