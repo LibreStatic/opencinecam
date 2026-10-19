@@ -934,4 +934,13 @@
     <string name="bench_outcome_cancelled">Cancelada antes de terminar</string>
     <string name="bench_outcome_unsupported">Este destino no admite la prueba</string>
     <string name="bench_outcome_failed">La prueba no pudo escribir en el destino</string>
+    <string name="caps_section_codecs">Códecs y audio</string>
+    <string name="caps_codecs_summary">%1$d codificadores, %2$d por hardware</string>
+    <string name="caps_audio_unprocessed">Fuente de audio sin procesar</string>
+    <string name="caps_audio_noise_suppressor">Supresor de ruido</string>
+    <string name="caps_audio_agc">Control automático de ganancia</string>
+    <string name="caps_audio_echo_canceler">Cancelador de eco</string>
+    <string name="caps_yes">Sí</string>
+    <string name="caps_no">No</string>
+    <string name="caps_unknown">Desconocido</string>
 </resources>

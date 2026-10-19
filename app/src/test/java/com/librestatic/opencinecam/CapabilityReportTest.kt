@@ -4,11 +4,16 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.CameraInventory
+import com.librestatic.opencinecam.camera.AudioMetadata
 import com.librestatic.opencinecam.camera.CharacteristicEntry
+import com.librestatic.opencinecam.camera.CodecAudioMetadata
+import com.librestatic.opencinecam.camera.CodecAudioReportJson
+import com.librestatic.opencinecam.camera.CodecMetadata
 import com.librestatic.opencinecam.core.model.CapabilityReportDocument
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
 import java.time.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -37,6 +42,18 @@ class CapabilityReportTest {
         assertEquals("boom", (document.cameras[1]["error"] as JsonPrimitive).content)
         assertEquals("Advertised", document.evidence.single().stage)
         Instant.parse(document.createdAt)
+    }
+
+    @Test fun codecAndAudioProbeFillTheirSections() {
+        val probe = CodecAudioMetadata(
+            listOf(CodecMetadata("c2.hevc.encoder", "video/hevc", true, listOf("1:256"), listOf(21))),
+            AudioMetadata(unprocessedSource = true, noiseSuppressorAvailable = null, automaticGainControlAvailable = false, acousticEchoCancelerAvailable = false),
+        )
+        val document = buildCapabilityReport(facts, inventory(), emptyList(), codecs = CodecAudioReportJson.codecs(probe), audio = CodecAudioReportJson.audio(probe))
+        assertEquals("video/hevc", (document.codecs.single()["mime"] as JsonPrimitive).content)
+        assertEquals("known", ((document.audio["unprocessed"] as JsonObject)["knowledge"] as JsonPrimitive).content)
+        assertEquals("unknown", ((document.audio["noiseSuppressor"] as JsonObject)["knowledge"] as JsonPrimitive).content)
+        assertEquals(probe, CodecAudioReportJson.decode(document.codecs, document.audio))
     }
 
     @Test fun digestFollowsTheCharacteristicsNotTheOrder() {

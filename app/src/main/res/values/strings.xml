@@ -940,4 +940,13 @@
     <string name="bench_outcome_cancelled">Cancelled before it finished</string>
     <string name="bench_outcome_unsupported">This destination does not support the test</string>
     <string name="bench_outcome_failed">The test could not write to the destination</string>
+    <string name="caps_section_codecs">Codecs and audio</string>
+    <string name="caps_codecs_summary">%1$d encoders, %2$d hardware</string>
+    <string name="caps_audio_unprocessed">Unprocessed audio source</string>
+    <string name="caps_audio_noise_suppressor">Noise suppressor</string>
+    <string name="caps_audio_agc">Automatic gain control</string>
+    <string name="caps_audio_echo_canceler">Echo canceler</string>
+    <string name="caps_yes">Yes</string>
+    <string name="caps_no">No</string>
+    <string name="caps_unknown">Unknown</string>
 </resources>

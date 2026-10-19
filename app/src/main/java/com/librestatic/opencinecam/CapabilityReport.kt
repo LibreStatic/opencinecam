@@ -27,6 +27,9 @@ data class ReportDeviceFacts(
     val sdkInt: Int,
 )
 
+/** The audio section before (or without) a probe: nothing is claimed. */
+internal fun unknownAudioReport(): JsonObject = buildJsonObject { put("unprocessed", buildJsonObject { put("knowledge", "unknown") }) }
+
 /** Digest of every characteristic read, so two reports from the same firmware compare equal. */
 internal fun characteristicsDigest(inventory: List<CameraInventory>): String {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -47,7 +50,7 @@ internal fun buildCapabilityReport(
     descriptors: List<Camera2CameraDescriptor>,
     live: CameraUiState? = null,
     codecs: List<JsonObject> = emptyList(),
-    audio: JsonObject = buildJsonObject { put("unprocessed", buildJsonObject { put("knowledge", "unknown") }) },
+    audio: JsonObject = unknownAudioReport(),
     reportId: String = UUID.randomUUID().toString(),
     createdAt: String = Instant.now().toString(),
 ): CapabilityReportDocument = CapabilityReportDocument(
