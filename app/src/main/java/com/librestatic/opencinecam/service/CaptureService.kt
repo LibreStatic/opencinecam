@@ -1551,7 +1551,7 @@ class CaptureService : Service() {
                     onAborted = { publicationObserver?.onAborted(); Unit },
                     salvage = com.librestatic.opencinecam.storage.IncompleteTakeSalvage(
                         reasons = incompleteReasons,
-                        prepareAudio = audioOutput?.let { sidecar -> { _ -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion()) } },
+                        prepareAudio = audioOutput?.let { sidecar -> { reasons -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(reasons)) } },
                         prepareVideo = { reasons ->
                             output?.sealMotionLog(keep = false)
                             output?.prepareIncomplete(reasons, buildSidecarJson(), timingSidecarFlag(), muxerFinalized)

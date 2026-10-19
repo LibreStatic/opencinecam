@@ -102,6 +102,7 @@ class WavAudioSidecarRecorder private constructor(
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
 
     private var salvaging = false
+    private var incompleteReasons: List<String>? = null
 
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
@@ -143,10 +144,29 @@ class WavAudioSidecarRecorder private constructor(
      * ADR-0011: seal whatever was captured, even after a writer failure or with incomplete timing, and
      * keep it. Empty audio is removed without discarding the rest of the take.
      */
-    @Synchronized override fun prepareIncompleteCompletion(): PreparedAudioSidecar? {
+    @Synchronized override fun prepareIncompleteCompletion(reasons: List<String>): PreparedAudioSidecar? {
         recoveryMember.beginSalvage()
         salvaging = true
-        return prepareCompletion()?.also { recoveryMember.keepBytes() }
+        incompleteReasons = reasons
+        val alreadyPrepared = preparedOutput != null
+        return prepareCompletion()?.also {
+            recoveryMember.keepBytes()
+            if (alreadyPrepared) markPreparedMetadataIncomplete(reasons)
+        }
+    }
+
+    /** The metadata of an output prepared as complete is rewritten when the take turns out incomplete. */
+    private fun markPreparedMetadataIncomplete(reasons: List<String>) {
+        val metadata = preparedMetadataUri ?: return
+        try {
+            val resolver = context.contentResolver
+            val document = requireNotNull(resolver.openInputStream(metadata)).use { JSONObject(String(it.readBytes())) }
+            requireNotNull(resolver.openOutputStream(metadata, "wt")).use {
+                it.write(document.putIncompleteMarker(reasons).toString(2).toByteArray())
+            }
+        } catch (failure: Exception) {
+            android.util.Log.w("AudioSidecar", "Incomplete marker could not be written to the audio metadata", failure)
+        }
     }
 
     /** Publish exactly the prepared identities; retries never allocate replacement rows. */
@@ -447,6 +467,7 @@ class WavAudioSidecarRecorder private constructor(
             .put("audioEffects", result.audioEffects?.let { audioEffectsJson(it, requireNotNull(result.audioEffectsObservedAtElapsedRealtimeMs)) } ?: JSONObject.NULL)
             .put("acousticEchoCancelerEnabled", result.acousticEchoCancelerEnabled)
             .put("disclosure", "Public AudioRecord state; OEM signal processing outside public APIs may still exist.")
+        incompleteReasons?.let { json.putIncompleteMarker(it) }
         val metadataName = displayName.removeSuffix(".wav") + ".audio.json"
         val resolver = context.contentResolver
         val metadataUri = recoveryMember.insert(metadataName, "application/json", metadata = true)
@@ -562,7 +583,7 @@ interface AudioSidecarRecorder : AutoCloseable {
      * ADR-0011: like [prepareCompletion] for a take that is not fully successful. Audio that holds
      * bytes is sealed and kept (null when it holds none and has been removed).
      */
-    fun prepareIncompleteCompletion(): PreparedAudioSidecar? = prepareCompletion()
+    fun prepareIncompleteCompletion(reasons: List<String> = emptyList()): PreparedAudioSidecar? = prepareCompletion()
     /** Publish only a previously prepared output; return null after abort or before prepare. */
     fun publishPrepared(): AudioSidecarRecordingResult?
     fun finish(success: Boolean): AudioSidecarRecordingResult?
