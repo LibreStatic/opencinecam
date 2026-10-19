@@ -5712,13 +5712,13 @@ class Camera2PreviewEngine(
         val keys = runCatching {
             manager.getCameraCharacteristics(descriptor.cameraId).availableCaptureRequestKeys
         }.getOrNull().orEmpty()
-        keys.firstOrNull { it.name == MOTOROLA_IS_CAMERA2_KEY }?.let { key ->
+        for (control in MotorolaHighSpeed.sessionValues(keys.map { it.name })) {
+            val key = keys.first { it.name == control.keyName }
             @Suppress("UNCHECKED_CAST")
-            builder.set(key as CaptureRequest.Key<ByteArray>, byteArrayOf(1))
-        }
-        keys.firstOrNull { it.name == MOTOROLA_CURRENT_MODE_KEY }?.let { key ->
-            @Suppress("UNCHECKED_CAST")
-            builder.set(key as CaptureRequest.Key<IntArray>, intArrayOf(MOTOROLA_SLOW_MOTION_MODE))
+            when (control) {
+                is HighSpeedSessionValue.Bytes -> builder.set(key as CaptureRequest.Key<ByteArray>, control.value)
+                is HighSpeedSessionValue.Ints -> builder.set(key as CaptureRequest.Key<IntArray>, control.value)
+            }
         }
     }
 
@@ -5729,8 +5729,7 @@ class Camera2PreviewEngine(
     ): String? {
         val logical = runCatching { manager.getCameraCharacteristics(descriptor.cameraId) }.getOrNull()
             ?: return null
-        val targetFocal = descriptor.focalLengthsMm.firstOrNull()
-        return logical.physicalCameraIds.mapNotNull { id ->
+        val candidates = logical.physicalCameraIds.mapNotNull { id ->
             val physical = runCatching { manager.getCameraCharacteristics(id) }.getOrNull()
                 ?: return@mapNotNull null
             val map = physical.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -5742,10 +5741,12 @@ class Camera2PreviewEngine(
                     }
             }.getOrDefault(false)
             if (!supportsProfile) return@mapNotNull null
-            val focal = physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                ?.firstOrNull()
-            id to if (targetFocal != null && focal != null) abs(targetFocal - focal) else Float.MAX_VALUE
-        }.minByOrNull { it.second }?.first
+            PhysicalHighSpeedCandidate(
+                id,
+                physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull(),
+            )
+        }
+        return MotorolaHighSpeed.closestFocalPhysicalId(candidates, descriptor.focalLengthsMm.firstOrNull())
     }
 
     private fun updateEffectiveFps(sensorTimestampNs: Long?) {
@@ -6548,9 +6549,6 @@ class Camera2PreviewEngine(
         private const val TAP_FOCUS_HOLD_MS = 3_000L
         internal const val SCOPE_HISTOGRAM_BINS = 64
         private const val MAX_BURST_IMAGES = 10
-        private const val MOTOROLA_IS_CAMERA2_KEY = "com.lenovo.moto.clientapp.is_motcamera2"
-        private const val MOTOROLA_CURRENT_MODE_KEY = "com.lenovo.moto.clientapp.current_mode"
-        private const val MOTOROLA_SLOW_MOTION_MODE = 3
         private const val TAG = "Camera2PreviewEngine"
         private const val CADENCE_TAG = "CadenceGuard"
     }
