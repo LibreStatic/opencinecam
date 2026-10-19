@@ -58,7 +58,9 @@ class WebDavAutoUploadWorker(context: Context, params: WorkerParameters) : Corou
             host.cancel(bundleId) // Stopping the worker must only stop this bundle's own batch.
             throw failure
         }
-        return when (autoUploadOutcome(sent.message, sent.artifacts, runAttemptCount, sent.busy)) {
+        val outcome = autoUploadOutcome(sent.message, sent.artifacts, runAttemptCount, sent.busy)
+        Log.i(LOG_TAG, "Automatic upload run $runAttemptCount ended with ${sent.message} (busy=${sent.busy}): $outcome")
+        return when (outcome) {
             AutoUploadOutcome.SUCCESS -> Result.success()
             AutoUploadOutcome.RETRY -> Result.retry()
             AutoUploadOutcome.STOP -> Result.failure()
