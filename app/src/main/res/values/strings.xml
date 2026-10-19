@@ -37,6 +37,7 @@
     <string name="raw_video_mode">RAW video</string>
     <string name="available">Available</string>
     <string name="candidate">Candidate</string>
+    <string name="gate_experimental">Experimental</string>
     <string name="unsupported">Unsupported</string>
     <string name="failed">Failed</string>
     <string name="capture_photo">Capture photo</string>

@@ -1455,11 +1455,12 @@ internal fun AdaptiveCaptureChrome(
         val displayedMode = modeSelection.displayed
         val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
             val gate = state.modeGates.getValue(mode)
+            val experimental = showsExperimentalGate(mode, gate, state.descriptor?.hasVerifiedOpenCineLog == true)
             CaptureModeChoice(
                 mode = mode,
                 label = modeLabel(mode),
-                gateLabel = if (gate != ModeGateState.AVAILABLE) gateLabel(gate) else null,
-                gateColor = gateColor(gate),
+                gateLabel = if (gate != ModeGateState.AVAILABLE || experimental) gateLabel(gate, experimental) else null,
+                gateColor = gateColor(gate, experimental),
                 enabled = CameraUiState.isModeSelectable(gate),
                 selected = mode == displayedMode,
             )
@@ -4246,9 +4247,10 @@ internal fun SettingsContent(
             SettingsSectionTitle(stringResource(R.string.settings_mode_availability))
             CaptureMode.entries.forEach { mode ->
                 val gate = state.modeGates.getValue(mode)
+                val experimental = showsExperimentalGate(mode, gate, state.descriptor?.hasVerifiedOpenCineLog == true)
                 Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(modeLabel(mode), Modifier.weight(1f).padding(end = 16.dp), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-                    Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(gateLabel(gate, experimental), color = gateColor(gate, experimental), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -4832,6 +4834,19 @@ internal fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.RAW_VIDEO -> stringResource(R.string.raw_video_mode)
 }
 
+/**
+ * An AVAILABLE gate on an experimental mode is shown as "Experimental" rather than as ready. LOG and
+ * HLG leave that state once the camera has an OpenCineLog profile backed by accepted evidence.
+ */
+internal fun showsExperimentalGate(mode: CaptureMode, gate: ModeGateState, hasVerifiedOpenCineLog: Boolean): Boolean =
+    gate == ModeGateState.AVAILABLE && mode.experimental && !(mode.usesLogGraph && hasVerifiedOpenCineLog)
+
+@Composable
+private fun gateLabel(gate: ModeGateState, experimental: Boolean = false): String = when {
+    experimental -> stringResource(R.string.gate_experimental)
+    else -> gateLabel(gate)
+}
+
 @Composable
 private fun gateLabel(gate: ModeGateState): String = when (gate) {
     ModeGateState.AVAILABLE -> stringResource(R.string.available)
@@ -4839,6 +4854,11 @@ private fun gateLabel(gate: ModeGateState): String = when (gate) {
     ModeGateState.UNSUPPORTED -> stringResource(R.string.unsupported)
     ModeGateState.FAILED -> stringResource(R.string.failed)
 }
+
+@Composable
+@ReadOnlyComposable
+private fun gateColor(gate: ModeGateState, experimental: Boolean): Color =
+    if (experimental) MaterialTheme.colorScheme.onSurface else gateColor(gate)
 
 @Composable
 @ReadOnlyComposable
