@@ -893,6 +893,8 @@
     <string name="recording_policy_strict_summary">Streng beendet die Aufnahme mit Begründung, wenn Speicher, Hitze oder Bildtakt den sicheren Bereich verlassen. Die Datei wird gespeichert. Gilt ab der nächsten Aufnahme.</string>
     <string name="recording_policy_adaptive_summary">Adaptiv nimmt weiter auf, reduziert die Überwachung und zeigt statt eines Stopps eine Warnung. Gilt ab der nächsten Aufnahme.</string>
     <string name="storage_reserve_insufficient">Nicht genug freier Speicher zum Start: Diese Aufnahme braucht %1$s frei, verfügbar sind %2$s.</string>
+    <string name="video_hardware_encoder_unavailable">Für diese Aufnahme passt nur ein Software-Videoencoder. Streng verlangt einen Hardware-Encoder; Adaptiv erlaubt einen Software-Encoder.</string>
+    <string name="software_video_encoder_warning">Software-Videoencoder: %1$s; Bilder können ausfallen</string>
     <string name="storage_unknown_refused">Der freie Speicher konnte nicht gelesen werden, daher wurde die Aufnahme nicht gestartet. Wähle die adaptive Aufnahmerichtlinie, um ohne Speicherprüfung aufzunehmen.</string>
     <string name="storage_unknown_warning">Freier Speicher nicht lesbar; Aufnahme ohne Speicherprüfung</string>
     <string name="take_stopped_reason">Aufnahme beendet: %1$s · %2$s</string>

@@ -893,6 +893,8 @@
     <string name="recording_policy_strict_summary">Estricta detiene la toma e indica el motivo cuando el almacenamiento, el calor o la cadencia salen del rango seguro. El archivo se guarda. Se aplica a partir de la próxima toma.</string>
     <string name="recording_policy_adaptive_summary">Adaptativa sigue grabando, reduce el trabajo de monitoreo y muestra un aviso en lugar de detenerse. Se aplica a partir de la próxima toma.</string>
     <string name="storage_reserve_insufficient">No hay espacio libre suficiente para empezar: esta toma necesita %1$s libres y hay %2$s disponibles.</string>
+    <string name="video_hardware_encoder_unavailable">Solo cabe un codificador de vídeo por software en esta toma. Estricta exige uno por hardware; Adaptativa permite uno por software.</string>
+    <string name="software_video_encoder_warning">Codificador de vídeo por software: %1$s; pueden perderse fotogramas</string>
     <string name="storage_unknown_refused">No se pudo leer el espacio libre, así que la toma no empezó. Elige la política de grabación adaptativa para grabar sin comprobar el espacio.</string>
     <string name="storage_unknown_warning">No se pudo leer el espacio libre; grabando sin comprobar el espacio</string>
     <string name="take_stopped_reason">Toma detenida: %1$s · %2$s</string>
