@@ -1690,7 +1690,8 @@ class CaptureService : Service() {
 
         override fun onControlAdapted(code: String, message: String) {
             android.util.Log.i("CaptureService", "Control adapted ($code): $message")
-            cameraState.update { it.copy(message = getString(R.string.control_adapted, message), messageTransient = true) }
+            // Recorded as a hardware-truth warning too, so the take sidecar keeps the disclosure.
+            cameraState.update { it.copy(message = getString(R.string.control_adapted, message), messageTransient = true, hardwareTruth = it.hardwareTruth.withWarning(message)) }
         }
 
         override fun onTorchRejected(message: String) {
