@@ -419,13 +419,13 @@ class CaptureService : Service() {
     /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
     @Volatile private var takeProjectedBytesPerMinute = 0L
     /** The policy the running take started under; a setting changed mid-take stays pending. */
-    private var activeRecordingPolicy = PolicyMode.STRICT
-    private var lastKnownFreeBytes: Long? = null
-    private var runtimeNotice: RuntimeNotice? = null
-    private var avNotice: RuntimeNotice? = null
-    private var cadenceNotice: RuntimeNotice? = null
+    @Volatile private var activeRecordingPolicy = PolicyMode.STRICT
+    @Volatile private var lastKnownFreeBytes: Long? = null
+    @Volatile private var runtimeNotice: RuntimeNotice? = null
+    @Volatile private var avNotice: RuntimeNotice? = null
+    @Volatile private var cadenceNotice: RuntimeNotice? = null
     /** Live A/V drift of a take whose audio is a separate WAV/FLAC file (PLAN-023); embedded AAC exposes no observable audio PTS. */
-    private var avDiagnostics: AvClockDiagnostics? = null
+    @Volatile private var avDiagnostics: AvClockDiagnostics? = null
     /** Why the running take is being stopped; the final message names it, and the file is still saved. */
     @Volatile private var pendingStopReason: StableFailure? = null
 
@@ -1386,7 +1386,6 @@ class CaptureService : Service() {
             avNotice = null
             cadenceNotice = null
             previewEngine.setRecordingCadencePolicy(activeRecordingPolicy)
-            avDiagnostics?.close()
             avDiagnostics = if (audioSidecarRecorder != null) AvClockDiagnostics(activeRecordingPolicy, correlationId = "recording-av-drift") else null
             pendingStopReason = null
             scheduleTimelapseAutoStop()
@@ -1399,8 +1398,10 @@ class CaptureService : Service() {
             val stopReason = pendingStopReason
             pendingStopReason = null
             previewEngine.setRecordingCadencePolicy(null)
-            avDiagnostics?.close()
+            // The main-thread ticker may be mid-observe on this instance: close it on main, after that tick.
+            val finishedDiagnostics = avDiagnostics
             avDiagnostics = null
+            if (finishedDiagnostics != null) mainHandler.post { finishedDiagnostics.close() }
             val recordingGain = activeRecordingGain
             // Only the exact dispatched admission; a failed start may already have released it.
             val transferReservation = dispatchedTake.claimStopped()
