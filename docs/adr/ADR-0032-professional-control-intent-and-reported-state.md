@@ -78,3 +78,30 @@ Preset schema V3 explicitly adds those nine scalar preferences to the unchanged 
 Finalization or failed preparation releases the started-service lifetime, while active bindings keep the service alive. Unbinding an idle service also releases that lifetime; unbinding during a take does not stop the take. This permits startup policy to run on the next actual service creation without resetting an active fold/window session.
 
 Visual inspection also found default light-theme control labels on the dark settings background. The app now declares a coherent dark Material color scheme with amber/cyan actions, white on-surface text and dark modal surfaces; this fixes mapping choices, unselected chips and search fields rather than painting isolated labels.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRO-001, OCC-PRO-005, OCC-PRO-006
+- Related ADRs: ADR-0033
+
+### Context
+
+The decision defines preset schema V3 (the 80 V2 keys plus nine operator preferences) as the export format. ADR-0033 later introduced version 4 with 93 portable keys (rational timelapse and off-speed), and the registry has kept growing: `CameraPresetCodec.VERSION` in `app/src/main/java/com/librestatic/opencinecam/CameraPreset.kt` is now 23.
+
+### Decision
+
+The preset schema statements in this ADR are superseded by ADR-0033 (V4) and by the code. The current export version and the portable key registry per version are the ones in `CameraPresetCodec`; V1-V3 stay as exact validated migrations. The control-intent and reported-state rules of this ADR are unchanged.
+
+### Alternatives considered
+
+- Restate each later version here: rejected because the code and ADR-0033 own the registry and a copy would drift.
+
+### Consequences
+
+- Positive: no document claims V3 is the current export format.
+- Negative: readers need `CameraPresetCodec` for the exact version.
+- Operational: none; no code change.
+
+The original decision above is retained as history; this amendment governs where they differ.
