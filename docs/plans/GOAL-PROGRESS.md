@@ -2,6 +2,14 @@
 
 User instruction: continue in a goal until H1–H5 are completed or a genuine blocker is demonstrated. Goal created 2026-09-05; no explicit token budget. Do not reset/recreate it on continuation and do not mark it complete for a partial milestone.
 
+## Status synchronisation (2026-10-19)
+
+This file is an append-only execution log. Where it disagrees with [EXECUTION-ORDER.md](EXECUTION-ORDER.md), EXECUTION-ORDER.md and the revisions of each plan prevail. The sections "Current work" and "Remaining acceptance and implementation" below are snapshots from September 2026 and are kept as history. Their current state is:
+
+- **Active deliverable.** The single active functional deliverable is E17 MED-02 (linked proxies, PLAN-066 Revision51-68), not OCC-PLAN-064. PLAN-064 (fold display sessions) keeps its implemented and tested connections and its pending physical acceptance, and is no longer the item being worked.
+- **Photographic flash and expanded photo.** E4 (flash OFF/AUTO/ON and intensity by capability) and E5-E9 (still formats, bracket, accumulation, custom aspect, burst, HEIC crop, recovery) are implemented with local acceptance under PLAN-066 Revision23-32. Their physical light, exposure and sync acceptance stays pending. They are no longer unimplemented H4 work.
+- **H5 WebDAV network transfer.** The "pending" notes about the selected-network worker, real TLS and the live consent/REC coordinator are historical. A new take now goes through enrollment, the send button and HTTPS over a real Network with both files VERIFIED, and E1 LAN is closed locally (PLAN-067, EXECUTION-ORDER section 1). Scheduling and resumption, retention, pagination, crash behaviour, budgets, authenticated remote, RTMP/SRT, accessories and physical acceptance remain open.
+
 ## Preserved state
 
 - Initial HEAD: 1110b20. User-visible changes remain uncommitted in the workspace.
