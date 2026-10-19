@@ -5,6 +5,7 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -110,5 +111,53 @@ class HardwareTruthHudTest {
         assertEquals(MAX_HUD_WARNINGS, hud.warnings.size)
         assertEquals("w${MAX_HUD_WARNINGS * 2 - 1}", hud.warnings.last())
         assertEquals(hud, hud.withWarning(" "))
+    }
+}
+
+class HardwareTruthSidecarTest {
+    private val cleanTake = HardwareTruthHudState(requested = mapOf("iso" to "100")).withReport("iso", "100")
+
+    @Test fun aCleanTakeForcesNoSidecar() {
+        assertNull(hardwareTruthTake(cleanTake, cleanTake))
+        assertEquals("{\"a\":1}", withHardwareTruth("{\"a\":1}", null))
+        assertNull(withHardwareTruth(null, null))
+    }
+
+    @Test fun onlyDiscrepanciesAndWarningsOfTheTakeAreListed() {
+        val before = HardwareTruthHudState(requested = mapOf("old" to "1")).withReport("old", "2").withReport("old", "1").withWarning("old warning")
+        val after = before.copy(requested = before.requested + ("iso" to "100")).withReport("iso", "800").withWarning("cadence drift").withWarning("old warning")
+        val take = hardwareTruthTake(before, after)!!
+        assertEquals(listOf("iso"), take.discrepancies.map { it.field })
+        assertEquals("100", take.discrepancies.single().requested)
+        assertEquals("800", take.discrepancies.single().reported)
+        assertTrue(take.discrepancies.single().open)
+        assertEquals(listOf("cadence drift"), take.warnings)
+    }
+
+    @Test fun aDiscrepancyOpenAtTheStartStaysInAndRecordsWhetherItClosed() {
+        val open = HardwareTruthHudState(requested = mapOf("iso" to "100")).withReport("iso", "800")
+        assertTrue(hardwareTruthTake(open, open)!!.discrepancies.single().open)
+        val closed = open.withReport("iso", "100")
+        assertFalse(hardwareTruthTake(open, closed)!!.discrepancies.single().open)
+    }
+
+    @Test fun historyThatShiftedAtTheBoundIsStillDiffedCorrectly() {
+        var start = HardwareTruthHudState()
+        repeat(MAX_DISCREPANCY_HISTORY) { i -> start = start.copy(requested = start.requested + ("k$i" to "a")).withReport("k$i", "b") }
+        val end = start.copy(requested = start.requested + ("new" to "a")).withReport("new", "b")
+        assertEquals(MAX_DISCREPANCY_HISTORY, end.discrepancyHistory.size)
+        val take = hardwareTruthTake(start.copy(openDiscrepancies = emptySet()), end)!!
+        assertEquals(listOf("new"), take.discrepancies.map { it.field })
+    }
+
+    @Test fun fieldsCarryRouteDiscrepanciesAndWarnings() {
+        val hud = HardwareTruthHudState().withRoute("3", "2").withWarning("w")
+        val fields = hardwareTruthFields(hardwareTruthTake(HardwareTruthHudState(), hud)!!)
+        assertEquals(mapOf("truth" to "MISMATCH", "requested" to "3", "reported" to "2"), fields["route"])
+        val discrepancy = (fields["discrepancies"] as List<*>).single() as Map<*, *>
+        assertEquals("physicalCameraId", discrepancy["field"])
+        assertEquals(false, discrepancy["open"])
+        assertEquals(listOf("w"), fields["warnings"])
+        assertEquals("opencinecam.hardware-truth.v1", HARDWARE_TRUTH_SCHEMA)
     }
 }

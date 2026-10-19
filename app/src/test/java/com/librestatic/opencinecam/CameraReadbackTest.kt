@@ -168,4 +168,20 @@ class LowLightBoostSettingsTest {
         assertEquals(setOf("android.control.aeMode", "android.colorCorrection.colorTemperature"), auto.map { it.key }.toSet())
         assertEquals(true, readbackSamples(state.copy(reportedColorTemperatureK = 5650)).first { it.key.endsWith("colorTemperature") }.withinTolerance)
     }
+
+    @Test fun focusAndCadenceSamplesNeedBothSides() {
+        assertEquals(emptyList<ReadbackSample>(), readbackSamples(CameraUiState(submittedAfMode = 3, requestedFocusDiopters = 2f, targetFps = 24)))
+        val state = CameraUiState(submittedAfMode = 0, reportedAfMode = 0, requestedFocusDiopters = 2f, focusDistanceDiopters = 2.1f, targetFps = 24, effectiveFps = 23.98)
+        val byKey = readbackSamples(state).associateBy { it.key }
+        assertEquals(setOf("android.control.afMode", "android.lens.focusDistance", "opencinecam.frameRate"), byKey.keys)
+        assertTrue(byKey.getValue("android.control.afMode").withinTolerance)
+        assertTrue(byKey.getValue("android.lens.focusDistance").withinTolerance)
+        assertTrue(byKey.getValue("opencinecam.frameRate").withinTolerance)
+        val off = readbackSamples(state.copy(reportedAfMode = 4, focusDistanceDiopters = 4f, effectiveFps = 20.0)).associateBy { it.key }
+        assertFalse(off.getValue("android.control.afMode").withinTolerance)
+        assertFalse(off.getValue("android.lens.focusDistance").withinTolerance)
+        assertFalse(off.getValue("opencinecam.frameRate").withinTolerance)
+        assertEquals("24 fps", off.getValue("opencinecam.frameRate").requested)
+        assertNull(readbackSamples(state.copy(requestedFocusDiopters = null)).firstOrNull { it.key == "android.lens.focusDistance" })
+    }
 }
