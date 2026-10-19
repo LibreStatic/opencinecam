@@ -98,6 +98,8 @@ data class CameraUiState(
     /** Null unless the low-light boost AE mode was submitted and the camera reported its state. */
     val reportedLowLightBoost: Boolean? = null,
     val reportedMeteringMode: Int? = null,
+    /** Requested against reported physical lens and the bounded history of mismatches (PLAN-015, PLAN-026). */
+    val hardwareTruth: HardwareTruthHudState = HardwareTruthHudState(),
     val requestedExposureMode: com.librestatic.opencinecam.camera.ExposureMode = com.librestatic.opencinecam.camera.ExposureMode.AUTO,
     val exposureControlUnavailable: Boolean = false,
     val exposureClamped: Boolean = false,

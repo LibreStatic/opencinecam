@@ -943,4 +943,5 @@
     <string name="caps_yes">Ja</string>
     <string name="caps_no">Nein</string>
     <string name="caps_unknown">Unbekannt</string>
+    <string name="caps_discrepancies">Angefordert und gemeldet weichen ab</string>
 </resources>

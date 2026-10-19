@@ -73,6 +73,17 @@ class CameraReadbackTest {
         assertEquals("— → SPOT (2)", metered["org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode"])
     }
 
+    @Test fun routeLineAndDiscrepancyHistoryComeFromTheHardwareTruth() {
+        val logical = CameraUiState()
+        assertEquals("logical → — · LOGICAL", requestedReportedLines(logical).toMap()["android.logicalMultiCamera.activePhysicalId"])
+        val mismatched = CameraUiState(hardwareTruth = HardwareTruthHudState().withRoute("2", "3"))
+        assertEquals("2 → 3 · MISMATCH", requestedReportedLines(mismatched).toMap()["android.logicalMultiCamera.activePhysicalId"])
+        val lines = discrepancyLines(mismatched.hardwareTruth)
+        assertEquals(1, lines.size)
+        assertEquals("physicalCameraId", lines.single().first)
+        assertEquals(emptyList<Pair<String, String>>(), discrepancyLines(logical.hardwareTruth))
+    }
+
     @Test fun lowLightBoostStateIsReportedOnlyWhenTheCameraSaidSo() {
         fun line(state: CameraUiState) = requestedReportedLines(state).toMap()["android.control.lowLightBoostState"]
         assertEquals("— → —", line(CameraUiState()))

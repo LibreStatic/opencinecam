@@ -214,7 +214,7 @@ internal fun CameraCapabilitiesScreen(
                 item(key = "codecs") { CodecAudioCard(codecAudio) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
                 val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
-                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live)) }
+                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live), discrepancyLines(live.hardwareTruth)) }
                 item(key = "raw-header-${selected.cameraId}") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         SettingsHeading(stringResource(R.string.caps_section_raw, selected.entries.size), stringResource(R.string.caps_section_raw_summary))
@@ -342,13 +342,23 @@ private fun CodecAudioCard(metadata: CodecAudioMetadata?) {
 }
 
 @Composable
-private fun ReadbackCard(lines: List<Pair<String, String>>) {
+private fun ReadbackCard(lines: List<Pair<String, String>>, discrepancies: List<Pair<String, String>> = emptyList()) {
     SettingsCard(Modifier.testTag("capabilities-readback")) {
         SettingsHeading(stringResource(R.string.caps_section_readback), stringResource(R.string.caps_section_readback_summary), CineIcon.INFO)
         lines.forEach { (key, value) ->
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(key, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 SelectionContainer { Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
+            }
+        }
+        if (discrepancies.isNotEmpty()) {
+            Text(stringResource(R.string.caps_discrepancies), color = SettingsAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp))
+            discrepancies.forEach { (key, value) ->
+                Column(Modifier.fillMaxWidth().testTag("capabilities-discrepancy"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(key, color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text(value, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                }
             }
         }
     }

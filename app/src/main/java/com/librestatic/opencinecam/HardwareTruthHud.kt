@@ -47,6 +47,23 @@ data class HudDiscrepancy(
     val explanation: String,
 )
 
+/** The key under which the physical camera id travels through [HardwareTruthHudState.requested] and `reported`. */
+const val ROUTE_KEY = "physicalCameraId"
+
+/** Oldest discrepancies fall off, so a long session cannot grow the state (or the published UI state) without bound. */
+const val MAX_DISCREPANCY_HISTORY = 20
+
+/**
+ * What the engine asked for against what the camera reported. No physical request is the logical
+ * route; a physical request nobody reported on stays unconfirmed rather than assumed.
+ */
+fun routeTruthOf(requestedPhysicalId: String?, reportedPhysicalId: String?): RouteTruth = when {
+    requestedPhysicalId == null -> RouteTruth.LOGICAL
+    reportedPhysicalId == null -> RouteTruth.PHYSICAL_UNKNOWN
+    requestedPhysicalId == reportedPhysicalId -> RouteTruth.PHYSICAL_CONFIRMED
+    else -> RouteTruth.MISMATCH
+}
+
 data class HardwareTruthHudState(
     val requested: Map<String, String> = emptyMap(),
     val reported: Map<String, String> = emptyMap(),
@@ -65,9 +82,29 @@ data class HardwareTruthHudState(
         val nextReported = reported + (key to value)
         val requestedValue = requested[key]
         val nextHistory = if (requestedValue != null && requestedValue != value) {
-            discrepancyHistory + HudDiscrepancy(key, requestedValue, value, explanation)
+            (discrepancyHistory + HudDiscrepancy(key, requestedValue, value, explanation)).takeLast(MAX_DISCREPANCY_HISTORY)
         } else discrepancyHistory
         return copy(reported = nextReported, discrepancyHistory = nextHistory)
+    }
+
+    /**
+     * Records the physical camera the engine routed to and the one the camera reported active. The
+     * same pair twice changes nothing, so a stream of identical results adds no history; a mismatch
+     * adds one entry.
+     */
+    fun withRoute(requestedPhysicalId: String?, reportedPhysicalId: String?): HardwareTruthHudState {
+        val truth = routeTruthOf(requestedPhysicalId, reportedPhysicalId)
+        val nextRequested = if (requestedPhysicalId == null) requested - ROUTE_KEY else requested + (ROUTE_KEY to requestedPhysicalId)
+        val nextReported = if (reportedPhysicalId == null) reported - ROUTE_KEY else reported + (ROUTE_KEY to reportedPhysicalId)
+        if (nextRequested == requested && nextReported == reported && truth == routeTruth) return this
+        val entry = HudDiscrepancy(
+            ROUTE_KEY, requestedPhysicalId.orEmpty(), reportedPhysicalId.orEmpty(),
+            "The camera reports a different physical lens than the one the still was routed to.",
+        )
+        val nextHistory = if (truth == RouteTruth.MISMATCH && entry != discrepancyHistory.lastOrNull()) {
+            (discrepancyHistory + entry).takeLast(MAX_DISCREPANCY_HISTORY)
+        } else discrepancyHistory
+        return copy(requested = nextRequested, reported = nextReported, routeTruth = truth, discrepancyHistory = nextHistory)
     }
 
     fun lock(key: String): HardwareTruthHudState = copy(lockedControls = lockedControls + key)

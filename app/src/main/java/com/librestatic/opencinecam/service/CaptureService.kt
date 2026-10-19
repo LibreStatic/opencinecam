@@ -56,6 +56,9 @@ import com.librestatic.opencinecam.projectLabel
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
+import com.librestatic.opencinecam.HardwareTruthHudState
+import com.librestatic.opencinecam.RouteTruth
+import com.librestatic.opencinecam.routeTruthOf
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
@@ -922,6 +925,7 @@ class CaptureService : Service() {
             stopPreviewAudioMonitor(clearLevels = true)
             cameraState.update { it.copy(
                 phase = CameraUiPhase.OPENING,
+                hardwareTruth = HardwareTruthHudState(),
                 gpuViewfinder = desiredGpuViewfinder(),
                 nightExtensionRunning = false,
                 nightProgressPercent = null,
@@ -1570,6 +1574,15 @@ class CaptureService : Service() {
 
         override fun onTapFocusState(state: TapFocusState) {
             cameraState.value = cameraState.value.copy(tapFocusState = state)
+        }
+
+        override fun onPhysicalRoute(requestedPhysicalId: String?, reportedPhysicalId: String?) {
+            val truth = routeTruthOf(requestedPhysicalId, reportedPhysicalId)
+            // The engine reports on change only, so a mismatch is logged once per change, never per frame.
+            if (truth == RouteTruth.MISMATCH) {
+                android.util.Log.w("PhysicalRoute", "evidence=physical-route-mismatch requested=$requestedPhysicalId reported=$reportedPhysicalId")
+            }
+            cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withRoute(requestedPhysicalId, reportedPhysicalId)) }
         }
 
         override fun onSustainedCadenceLoss(action: com.librestatic.opencinecam.camera.CaptureAuditAction, detail: String) {
