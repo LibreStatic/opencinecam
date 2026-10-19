@@ -893,4 +893,15 @@
     <string name="storage_reserve_insufficient">No hay espacio libre suficiente para empezar: esta toma necesita %1$s libres y hay %2$s disponibles.</string>
     <string name="storage_unknown_refused">No se pudo leer el espacio libre, así que la toma no empezó. Elige la política de grabación adaptativa para grabar sin comprobar el espacio.</string>
     <string name="storage_unknown_warning">No se pudo leer el espacio libre; grabando sin comprobar el espacio</string>
+    <string name="take_stopped_reason">Toma detenida: %1$s · %2$s</string>
+    <string name="stop_reason_thermal">el dispositivo está demasiado caliente</string>
+    <string name="stop_reason_storage">quedó poco almacenamiento libre</string>
+    <string name="stop_reason_state_unknown">no se pudo leer la temperatura o el almacenamiento</string>
+    <string name="stop_reason_av_drift">el audio y el video se desfasaron</string>
+    <string name="stop_reason_cadence">se perdió la cadencia de fotogramas</string>
+    <string name="stop_reason_audio_input">se desconectó la entrada de audio</string>
+    <string name="stop_reason_other">se alcanzó un límite de seguridad</string>
+    <string name="runtime_notice_monitoring_reduced">Calor o poco almacenamiento: monitoreo reducido</string>
+    <string name="runtime_notice_state_unknown">Temperatura o almacenamiento ilegibles</string>
+    <string name="runtime_notice_av_drift">El audio y el video se están desfasando</string>
 </resources>

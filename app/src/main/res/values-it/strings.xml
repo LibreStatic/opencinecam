@@ -893,4 +893,15 @@
     <string name="storage_reserve_insufficient">Spazio libero insufficiente per iniziare: questa ripresa richiede %1$s liberi e ne sono disponibili %2$s.</string>
     <string name="storage_unknown_refused">Non è stato possibile leggere lo spazio libero, quindi la ripresa non è iniziata. Scegli il criterio di registrazione adattivo per registrare senza controllo dello spazio.</string>
     <string name="storage_unknown_warning">Spazio libero non leggibile; registrazione senza controllo dello spazio</string>
+    <string name="take_stopped_reason">Ripresa interrotta: %1$s · %2$s</string>
+    <string name="stop_reason_thermal">il dispositivo è troppo caldo</string>
+    <string name="stop_reason_storage">lo spazio libero è quasi esaurito</string>
+    <string name="stop_reason_state_unknown">temperatura o archiviazione non leggibili</string>
+    <string name="stop_reason_av_drift">audio e video si sono sfasati</string>
+    <string name="stop_reason_cadence">la cadenza dei fotogrammi è andata persa</string>
+    <string name="stop_reason_audio_input">l’ingresso audio è stato scollegato</string>
+    <string name="stop_reason_other">è stato raggiunto un limite di sicurezza</string>
+    <string name="runtime_notice_monitoring_reduced">Calore o poco spazio: monitoraggio ridotto</string>
+    <string name="runtime_notice_state_unknown">Temperatura o archiviazione non leggibili</string>
+    <string name="runtime_notice_av_drift">Audio e video si stanno sfasando</string>
 </resources>
