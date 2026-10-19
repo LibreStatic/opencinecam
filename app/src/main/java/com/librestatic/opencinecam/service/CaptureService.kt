@@ -1578,11 +1578,15 @@ class CaptureService : Service() {
 
         override fun onPhysicalRoute(requestedPhysicalId: String?, reportedPhysicalId: String?) {
             val truth = routeTruthOf(requestedPhysicalId, reportedPhysicalId)
-            // The engine reports on change only, so a mismatch is logged once per change, never per frame.
+            // Reported once per still, so a mismatch is logged once per still, never per preview frame.
             if (truth == RouteTruth.MISMATCH) {
                 android.util.Log.w("PhysicalRoute", "evidence=physical-route-mismatch requested=$requestedPhysicalId reported=$reportedPhysicalId")
             }
             cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withRoute(requestedPhysicalId, reportedPhysicalId)) }
+        }
+
+        override fun onActiveLens(physicalId: String?) {
+            cameraState.update { it.copy(hardwareTruth = it.hardwareTruth.withActiveLens(physicalId)) }
         }
 
         override fun onSustainedCadenceLoss(action: com.librestatic.opencinecam.camera.CaptureAuditAction, detail: String) {
