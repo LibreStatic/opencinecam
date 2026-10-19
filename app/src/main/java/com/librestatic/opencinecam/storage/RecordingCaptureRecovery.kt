@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.database.sqlite.transaction
+import com.librestatic.opencinecam.media.storage.ContentResolverClipRows
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -17,11 +18,13 @@ private val recordingRecoveryLock = Any()
 // IDs only: the registry must not retain a service/context. A process restart starts empty.
 private val liveRecordingGroups = mutableSetOf<String>()
 internal enum class RecordingMemberKind { VIDEO, AUDIO }
-data class RecordingRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0)
+/** [incompleteGroups] interrupted takes were kept: their outputs with bytes were published as incomplete (ADR-0011). */
+data class RecordingRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0, val incompleteGroups: Int = 0)
 
 /** A take spans asynchronous native writers; unlike a still it cannot hold a thread monitor
  * throughout capture. This registry protects the exact take until its real writers retire.
- * Recovery discards only durable uncommitted namespaces, never infers a commit from visible rows. */
+ * Recovery handles only durable uncommitted namespaces, never infers a commit from visible rows:
+ * outputs with bytes are published as incomplete, empty ones are deleted (ADR-0011). */
 internal class RecordingCaptureRecovery(context: Context) {
     internal val context = context.applicationContext
     private val resolver = this.context.contentResolver
@@ -64,12 +67,13 @@ internal class RecordingCaptureRecovery(context: Context) {
                 buildList { while (c.moveToNext()) add(Triple(c.getString(0), c.getType(1), c.getLong(1))) }
             }
             check(records.size <= 128)
-            var discarded = 0; var unresolved = 0
+            var discarded = 0; var unresolved = 0; var incomplete = 0
             records.forEach { (id, type, state) ->
                 try {
                     requireId(id); check(type == Cursor.FIELD_TYPE_INTEGER && state in 0L..1L)
                     if (key(id) !in liveRecordingGroups) {
                         if (state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
+                        else if (publishIncomplete(db, id) > 0) incomplete++
                         else { discardRows(db, id); discarded++ }
                     }
                 } catch (failure: Exception) {
@@ -77,8 +81,38 @@ internal class RecordingCaptureRecovery(context: Context) {
                     android.util.Log.e("RecordingRecovery", "Retained unresolved take $id", failure)
                 }
             }
-            RecordingRecoveryReport(discarded, unresolved)
+            if (discarded + unresolved + incomplete > 0) {
+                android.util.Log.i("RecordingRecovery", "Recovered interrupted takes: publishedIncomplete=$incomplete discarded=$discarded unresolved=$unresolved")
+            }
+            RecordingRecoveryReport(discarded, unresolved, incomplete)
         }
+    }
+
+    /**
+     * Publishes the outputs with bytes of an interrupted take as incomplete and deletes the empty ones,
+     * then marks the journal entry committed so no later recovery deletes what was kept. Returns the
+     * number of rows published; when 0 the entry is untouched and the caller discards it.
+     */
+    private fun publishIncomplete(db: SQLiteDatabase, id: String): Int {
+        requireId(id)
+        check(state(db, id) == 0L) { "Only an uncommitted take can be recovered" }
+        val found = collections.flatMap { root ->
+            rows(id, root, true).map { uri ->
+                val (name, mime) = requireNotNull(resolver.query(uri,
+                    arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE), null, null, null)).use {
+                    check(it.moveToFirst()) { "Interrupted take row disappeared" }
+                    requireNotNull(it.getString(0)) to requireNotNull(it.getString(1))
+                }
+                RecoveredRow(root, uri, name, mime, resolver.ownedRowBytes(uri), uri.toString())
+            }
+        }
+        val published = recoverIncompleteTake(id, found, ContentResolverClipRows(resolver),
+            insertSidecar = { name -> insert(id, "Download", name, "application/json") },
+            readText = { uri -> runCatching { resolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull() })
+        if (published == 0) return 0
+        check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
+        runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
+        return published
     }
 
     internal fun commit(id: String) = open().use { db ->
