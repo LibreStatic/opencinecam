@@ -944,4 +944,6 @@
     <string name="caps_no">No</string>
     <string name="caps_unknown">Sconosciuto</string>
     <string name="caps_discrepancies">Richiesto e riportato differiscono</string>
+    <string name="caps_feature_apv">APV (Advanced Professional Video)</string>
+    <string name="caps_usage_apv">Non supportato: l\'app non ha un percorso di registrazione APV. Mostra cosa offre questo telefono e perché non viene usato.</string>
 </resources>

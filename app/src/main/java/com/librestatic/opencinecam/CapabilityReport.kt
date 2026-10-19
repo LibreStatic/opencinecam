@@ -51,6 +51,7 @@ internal fun buildCapabilityReport(
     live: CameraUiState? = null,
     codecs: List<JsonObject> = emptyList(),
     audio: JsonObject = unknownAudioReport(),
+    apvReasons: List<String> = APV_UNPROBED_REASONS,
     reportId: String = UUID.randomUUID().toString(),
     createdAt: String = Instant.now().toString(),
 ): CapabilityReportDocument = CapabilityReportDocument(
@@ -73,7 +74,7 @@ internal fun buildCapabilityReport(
             camera.error?.let { put("error", it) }
             put("characteristics", JsonObject(camera.entries.associate { it.key to JsonPrimitive(it.value) }))
             descriptors.firstOrNull { it.cameraId == camera.cameraId }?.let { descriptor ->
-                put("features", JsonArray(auditCameraCapabilities(descriptor).map { finding ->
+                put("features", JsonArray(auditCameraCapabilities(descriptor, apvReasons).map { finding ->
                     buildJsonObject {
                         put("feature", finding.feature.name)
                         put("status", finding.status.name)
