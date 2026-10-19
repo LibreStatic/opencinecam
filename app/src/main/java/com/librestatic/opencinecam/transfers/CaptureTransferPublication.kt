@@ -46,7 +46,7 @@ class CaptureTransferPublication private constructor(
                 val endpoint = requireNotNull(preferences.activeEndpoint)
                 val enrollments = CaptureTransferEnrollmentFile(context)
                 // An endpoint's URL never mutates: a different URL receives a different UUID.
-                enrollments.enroll(CaptureTransferEnrollment(bundleId, endpoint.id, 0L, preferences.revision))
+                enrollments.enroll(CaptureTransferEnrollment(bundleId, endpoint.id, 0L, preferences.revision, preferences.autoUpload))
                 store = WebDavSqliteOutbox(context, databaseName)
                 val bridge = CapturePublicationOutboxBridge(bundleId, journal,
                     { CapturePublicationJournal.load(context, it) }, enrollments, store,
