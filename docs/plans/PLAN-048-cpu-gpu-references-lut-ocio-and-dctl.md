@@ -31,6 +31,8 @@ created_by: GPT-5.6 Sol
 ---
 # OCC-PLAN-048: CPU GPU references LUT OCIO and DCTL
 
+> **Superseded by OCC-PLAN-061 (2026-10-19 note).** This plan specifies OpenCine Log v1 (OCLog1) and is kept as the historical host record. Live capture targets OCLog2 under OCC-PLAN-061, which does not revive OCLog1.
+
 ## 1. Objective
 
 Implement reference CPU/GPU transforms, inverse, LUTs, OCIO, and DCTL with version/hash metadata and numeric tolerances. The observable outcome is a buildable repository with passing automated checks and versioned evidence.

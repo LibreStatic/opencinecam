@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-059
 title: "F-Droid direct Google Play release and SBOM"
 status: Done
-revision: 1
+revision: 2
 milestone: M17
 intended_executor: GPT-5.6 Luna
 execution_mode: implementation
@@ -153,3 +153,4 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 - Deviations: F-Droid server build and Google Play upload were not performed; signing handoff, metadata, and track policy are documented without storing keys or credentials. Debug and unsigned release APKs build reproducibly and identical-artifact comparisons pass.
 - 2026-08-26 release reconciliation: GitHub Actions release.yml now performs direct signing of tagged releases with the RSA-4096 keystore reconstructed from the repository secret. Tag v0.3.3 (versionName 0.3.3, versionCode 8) was pushed, producing a GitHub Release with signed ARM64 debug/release APKs, and metadata/com.librestatic.opencinecam.yml was synced from 0.1.0/1 to 0.3.3/8.
 - Follow-up plans: OCC-PLAN-062 owns F-Droid/Google Play external activation; OCC-PLAN-060 remains conditional on complete certification inputs.
+- Amendment (2026-10-19): the version recorded above (0.3.3, versionCode 8) was current on 2026-08-26 only. The app is now 0.4.2-beta (`app/build.gradle.kts`), and Play versionCodes follow AGENTS.md. `metadata/com.librestatic.opencinecam.yml` still lists the 0.3.3 build and has not been resynchronised by this documentation change.
