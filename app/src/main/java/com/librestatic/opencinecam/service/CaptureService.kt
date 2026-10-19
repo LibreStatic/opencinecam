@@ -319,6 +319,99 @@ class CaptureService : Service() {
         }
     }
 
+    /** Stable failure codes pass through as incomplete reasons; anything else is an encoder failure. */
+    private fun failureReason(code: String): String =
+        code.takeIf { it.length in 1..48 && it.all { c -> c in 'a'..'z' || c in '0'..'9' || c == '-' } } ?: IncompleteTake.ENCODER_FAILED
+
+    /**
+     * ADR-0011 for a take that recorded and then ended abnormally (engine failure, preview recovery, a
+     * native writer that is not yet retired). Nothing that holds bytes is deleted. The audio is sealed
+     * at once so no microphone keeps running; once the engine proves native retirement the retained
+     * members are published as incomplete on the storage executor and the group is committed. Until
+     * then the rows stay pending and journalled, so a process death is covered by crash recovery.
+     * [run] does the MediaStore work; [onSaved] is called on main only after something was published.
+     */
+    private fun salvageAfterRetirement(
+        output: VideoOutput?,
+        audio: AudioSidecarRecorder?,
+        retirement: CompletableFuture<Unit>,
+        earlyReasons: List<String>,
+        run: () -> com.librestatic.opencinecam.storage.PreparedTakeResult<android.net.Uri, com.librestatic.opencinecam.storage.AudioSidecarRecordingResult>,
+        onSaved: (List<String>) -> Unit,
+    ) {
+        if (output == null && audio == null) return
+        runCatching { output?.recoveryGroup?.beginSalvage() }
+        if (audio != null) try {
+            storageExecutor.execute {
+                runCatching { audio.prepareIncompleteCompletion(earlyReasons) }
+                    .onFailure { android.util.Log.e("RecordingRecovery", "Audio of an interrupted take could not be sealed", it) }
+            }
+        } catch (_: RejectedExecutionException) {
+            runCatching { audio.prepareIncompleteCompletion(earlyReasons) }
+        }
+        retirement.whenComplete { _, failure ->
+            if (failure != null) {
+                android.util.Log.e("RecordingRecovery", "Native retirement failed; the interrupted take stays pending for recovery", failure)
+                return@whenComplete
+            }
+            // Explicit, so the publication below never depends on the order of the future's dependents.
+            runCatching { releaseRecordingRecoveryGuard(output) }
+            try {
+                storageExecutor.execute {
+                    val result = try { run() } catch (problem: Throwable) {
+                        android.util.Log.e("RecordingRecovery", "Incomplete publication failed; rows stay pending for recovery", problem)
+                        return@execute
+                    }
+                    result.incompleteFailures.forEach {
+                        android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; rows stay pending for recovery", it)
+                    }
+                    if (result.incomplete) mainHandler.post { if (!serviceDestroyed) onSaved(result.incompleteReasons) }
+                }
+            } catch (_: RejectedExecutionException) {
+                android.util.Log.w("RecordingRecovery", "Storage executor is closed; the interrupted take stays pending for recovery")
+            }
+        }
+    }
+
+    /** The Take-saved-as-incomplete message, once published, replaces only the failure message still on screen. */
+    private fun announceIncompleteSaved(expected: String?, reasons: List<String>) {
+        cameraState.update { current ->
+            if (current.message != expected) current else current.copy(
+                message = getString(R.string.take_saved_incomplete, reasons.joinToString(", ")), messageTransient = false)
+        }
+    }
+
+    /** [salvageAfterRetirement] for a take with nothing but what the outputs hold: no sidecar from the engine's evidence. */
+    private fun salvageInterruptedTake(take: DetachedTake, retirement: CompletableFuture<Unit>, reasons: List<String>,
+        encodedFrames: Long?, expectedMessage: String?) {
+        val output = take.video
+        val audio = take.audio
+        salvageAfterRetirement(output, audio, retirement, reasons, run = {
+            finalizePreparedRecordingTake<
+                com.librestatic.opencinecam.storage.PreparedVideoOutput,
+                com.librestatic.opencinecam.storage.PreparedAudioSidecar,
+                android.net.Uri,
+                com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
+            >(
+                success = false,
+                prepareAudio = null,
+                prepareVideo = { null },
+                publishAudio = { _ -> audio?.publishPrepared() },
+                publishVideo = { _ -> output?.publishPrepared() },
+                discardAudio = { audio?.finish(false); Unit },
+                discardVideo = { output?.finish(false); Unit },
+                salvage = com.librestatic.opencinecam.storage.IncompleteTakeSalvage(
+                    reasons = reasons,
+                    prepareAudio = audio?.let { sidecar -> { r -> sidecar.prepareIncompleteCompletion(r) } },
+                    prepareVideo = { r ->
+                        output?.sealMotionLog(keep = false)
+                        output?.prepareIncomplete(r, null, false, false, encodedFrames)
+                    },
+                ),
+            )
+        }, onSaved = { announceIncompleteSaved(expectedMessage, it) })
+    }
+
     private fun cancelTransferPreparation(): Boolean {
         if (!transferWaiting) return false
         transferWaiting = false
@@ -1452,7 +1545,12 @@ class CaptureService : Service() {
             lastSeparateAudioAvDrift = null
             val timing = previewEngine.consumeTimelapsePauseStatus()
             val durationMs = timing?.activeElapsedMs ?: activeRecordingElapsedMs()
-            previewEngine.encodedRecordingProgress()?.let(timecodeTracker::observeEncodedProgress)
+            val encodedProgress = previewEngine.encodedRecordingProgress()
+            encodedProgress?.let(timecodeTracker::observeEncodedProgress)
+            // Read now: a later take resets the engine's progress before a deferred salvage can look at it.
+            val encodedFrames = encodedProgress?.frameCount
+            val projectRateAtStop = cameraState.value.recordingProjectRate
+            var startDeferredSalvage: (() -> Unit)? = null
             val timecodeReport = timecodeTracker.recordingReport()
             val subjectSyncMarker = subjectSyncMarkers.consume()
             try {
@@ -1497,7 +1595,7 @@ class CaptureService : Service() {
                     val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
                         ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
                         ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
-                        ?: timing?.let { timelapseTimingJson(it, requireNotNull(cameraState.value.recordingProjectRate)) }
+                        ?: timing?.let { timelapseTimingJson(it, requireNotNull(projectRateAtStop)) }
                     val withBaking = if (bakedEvidence != null) {
                         (metadata?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
                             .put("recordingLut", recordingLutJson(bakedEvidence)).toString(2)
@@ -1518,13 +1616,41 @@ class CaptureService : Service() {
                     return withHardwareTruth(withMarker, hardwareTruth)
                 }
                 fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                fun salvagePlan(reasons: List<String>) = com.librestatic.opencinecam.storage.IncompleteTakeSalvage<
+                    com.librestatic.opencinecam.storage.PreparedVideoOutput, com.librestatic.opencinecam.storage.PreparedAudioSidecar>(
+                    reasons = reasons,
+                    prepareAudio = audioOutput?.let { sidecar -> { r -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(r)) } },
+                    prepareVideo = { r ->
+                        output?.sealMotionLog(keep = false)
+                        output?.prepareIncomplete(r, buildSidecarJson(), timingSidecarFlag(), muxerFinalized, encodedFrames)
+                    },
+                )
                 val finalization = if (!nativeRetired) {
-                    // Never publish, and never delete, under a possibly live native writer. Rows stay pending
-                    // and journalled: crash recovery publishes them as incomplete (ADR-0011).
-                    runCatching { audioOutput?.prepareIncompleteCompletion() }.onFailure {
-                        android.util.Log.e("RecordingRecovery", "Audio of an unretired take could not be sealed", it)
-                    }
+                    // Never publish, and never delete, under a possibly live native writer. Rows stay pending and
+                    // journalled; once retirement is proven they are published as incomplete (ADR-0011), and a
+                    // process death before that is covered by crash recovery.
                     runCatching { publicationObserver?.onAborted() }
+                    val published = incompleteReasons.filter { it != IncompleteTake.NATIVE_RETIREMENT_PENDING }
+                    startDeferredSalvage = {
+                        val expected = cameraState.value.message
+                        salvageAfterRetirement(output, audioOutput, retirement, incompleteReasons, run = {
+                            finalizePreparedRecordingTake<
+                                com.librestatic.opencinecam.storage.PreparedVideoOutput,
+                                com.librestatic.opencinecam.storage.PreparedAudioSidecar,
+                                android.net.Uri,
+                                com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
+                            >(
+                                success = false,
+                                prepareAudio = null,
+                                prepareVideo = { null },
+                                publishAudio = { _ -> audioOutput?.publishPrepared() },
+                                publishVideo = { _ -> output?.publishPrepared() },
+                                discardAudio = { audioOutput?.finish(false); Unit },
+                                discardVideo = { output?.finish(false); Unit },
+                                salvage = salvagePlan(published),
+                            )
+                        }, onSaved = { announceIncompleteSaved(expected, it) })
+                    }
                     com.librestatic.opencinecam.storage.PreparedTakeResult<android.net.Uri, com.librestatic.opencinecam.storage.AudioSidecarRecordingResult>(null, emptyList())
                 } else finalizePreparedRecordingTake<
                     com.librestatic.opencinecam.storage.PreparedVideoOutput,
@@ -1549,20 +1675,13 @@ class CaptureService : Service() {
                     onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
                     onAborted = { publicationObserver?.onAborted(); Unit },
-                    salvage = com.librestatic.opencinecam.storage.IncompleteTakeSalvage(
-                        reasons = incompleteReasons,
-                        prepareAudio = audioOutput?.let { sidecar -> { reasons -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(reasons)) } },
-                        prepareVideo = { reasons ->
-                            output?.sealMotionLog(keep = false)
-                            output?.prepareIncomplete(reasons, buildSidecarJson(), timingSidecarFlag(), muxerFinalized)
-                        },
-                    ),
+                    salvage = salvagePlan(incompleteReasons),
                 )
                 val completedTake = finalization.outputs
                 finalization.incompleteFailures.forEach { problem ->
                     android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; affected outputs stay pending for recovery", problem)
                 }
-                val savedIncomplete = finalization.incomplete || !nativeRetired
+                val savedIncomplete = finalization.incomplete
                 finalization.registrationFailures.forEach { problem ->
                     android.util.Log.e("CapturePublication", "Publication journal update failed; originals retained", problem)
                 }
@@ -1615,10 +1734,12 @@ class CaptureService : Service() {
                     errorCode = if (finalizedSuccess) null else incompleteReasons.first(),
                     recordingElapsedMs = durationMs,
                 ) }
+                // After the state above, so a publication that completes at once finds the message to replace.
+                startDeferredSalvage?.invoke()
             } catch (failure: Throwable) {
                 // ADR-0011: nothing that holds bytes is deleted here; it stays pending for crash recovery.
                 runCatching { output?.recoveryGroup?.beginSalvage() }
-                runCatching { take.audio?.prepareIncompleteCompletion() }
+                runCatching { take.audio?.prepareIncompleteCompletion(listOf(com.librestatic.opencinecam.storage.PUBLICATION_FAILED_REASON)) }
                 runCatching { output?.finish(false) }
                 fail("video-save-failed", failure.message ?: "Video could not be saved.")
             } finally {
@@ -1786,11 +1907,12 @@ class CaptureService : Service() {
                 mainHandler.removeCallbacks(recordingTicker)
                 cancelTimelapseAutoStop()
                 val take = detachTake()
-                take.video?.finish(false)
+                val encodedFrames = previewEngine.encodedRecordingProgress()?.frameCount
                 abortTransferPublication(take.publication)
-                runCatching { take.audio?.finish(false) }
                 foreground.stop()
                 fail(code, message)
+                // ADR-0011: what the take recorded is published as incomplete once native retirement is proven.
+                salvageInterruptedTake(take, retirement, listOf(failureReason(code)), encodedFrames, cameraState.value.message)
                 retireRecordingRecoveryGuards(retirement)
                 stopSelf()
             }
@@ -1901,13 +2023,14 @@ class CaptureService : Service() {
             val token = ++recoveryGeneration
             mainHandler.removeCallbacks(recordingTicker)
             val take = detachTake()
-            runCatching { take.audio?.finish(false) }
-            runCatching { take.video?.finish(false) }
+            val encodedFrames = previewEngine.encodedRecordingProgress()?.frameCount
             abortTransferPublication(take.publication)
             foreground.stop()
             previewEngine.stopPreview()
             submitCaptureState(stateCommands.takeEnded() + stateCommands.previewStopped())
             val retirement = previewEngine.recordingOutputRetirement()
+            // ADR-0011: a take cut short by the recovery keeps what it recorded, published once retired.
+            salvageInterruptedTake(take, retirement, listOf(IncompleteTake.RECORDING_INTERRUPTED), encodedFrames, null)
             retireRecordingRecoveryGuards(retirement)
             releaseFailedTakeStart(retirement)
             prepare(targetWidth, targetHeight)
@@ -3169,7 +3292,7 @@ class CaptureService : Service() {
                                 abortTransferPublication()
                                 audioSidecarRecorder?.finish(false)
                                 audioSidecarRecorder = null
-                                output.finish(false)
+                                output.discardNeverRecorded()
                                 foreground.stop()
                                 val refusal = pendingStartRefusal
                                 pendingStartRefusal = null
@@ -3181,7 +3304,7 @@ class CaptureService : Service() {
                     } catch (failure: Throwable) {
                         runCatching { audioSidecarRecorder?.finish(false) }
                         audioSidecarRecorder = null
-                        runCatching { videoOutput?.finish(false) }
+                        runCatching { videoOutput?.discardNeverRecorded() }
                         videoOutput = null
                         abortTransferPublication()
                         foreground.stop()
@@ -3302,7 +3425,7 @@ class CaptureService : Service() {
                                 abortTransferPublication()
                                 audioSidecarRecorder?.finish(false)
                                 audioSidecarRecorder = null
-                                output.finish(false)
+                                output.discardNeverRecorded()
                                 foreground.stop()
                                 if (cameraState.value.phase != CameraUiPhase.ERROR) {
                                     fail("log-capture-not-ready", "The experimental OCLog2 pipeline is not ready.")
@@ -3312,7 +3435,7 @@ class CaptureService : Service() {
                     } catch (failure: Throwable) {
                         runCatching { audioSidecarRecorder?.finish(false) }
                         audioSidecarRecorder = null
-                        runCatching { videoOutput?.finish(false) }
+                        runCatching { videoOutput?.discardNeverRecorded() }
                         videoOutput = null
                         abortTransferPublication()
                         foreground.stop()
@@ -3375,13 +3498,13 @@ class CaptureService : Service() {
                                 retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
                                 videoOutput = null
                                 abortTransferPublication()
-                                output.finish(false)
+                                output.discardNeverRecorded()
                                 foreground.stop()
                                 fail("timelapse-not-ready", "The timelapse surface is not ready.")
                             }
                         }
                     } catch (failure: Throwable) {
-                        runCatching { videoOutput?.finish(false) }
+                        runCatching { videoOutput?.discardNeverRecorded() }
                         videoOutput = null
                         abortTransferPublication()
                         foreground.stop()
@@ -3441,7 +3564,10 @@ class CaptureService : Service() {
         audioListeningController?.let { audioListeningRetirement = it.closeAsync() }
         foreground.stop()
         val take = detachTake()
-        runCatching { take.audio?.finish(false) }
+        // ADR-0011: nothing that holds bytes is deleted. The storage executor closes with the service,
+        // so what the take recorded stays pending and journalled for crash recovery to publish.
+        runCatching { take.video?.recoveryGroup?.beginSalvage() }
+        runCatching { take.audio?.prepareIncompleteCompletion(listOf(IncompleteTake.RECORDING_INTERRUPTED)) }
         runCatching { take.video?.finish(false) }
         abortTransferPublication(take.publication)
         val retired = previewEngine.closeAsync()

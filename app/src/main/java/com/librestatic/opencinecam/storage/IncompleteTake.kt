@@ -3,6 +3,8 @@ package com.librestatic.opencinecam.storage
 
 import android.content.ContentResolver
 import android.net.Uri
+import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
+import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import java.io.FileNotFoundException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -30,6 +32,7 @@ internal object IncompleteTake {
     const val ENCODER_FAILED = "encoder-failed"
     const val MUXER_NOT_FINALIZED = "muxer-not-finalized"
     const val PROCESS_DEATH = "process-death"
+    const val RECORDING_INTERRUPTED = "recording-interrupted"
 
     /** Adds the incomplete marker to [json] (or to a minimal recording document when there is none). */
     fun mark(json: String?, reasons: List<String>, note: String? = null): String {
@@ -51,6 +54,15 @@ internal object IncompleteTake {
 
     private val PRETTY = Json { prettyPrint = true; prettyPrintIndent = "  " }
 }
+
+/**
+ * What to do with a take's video file once the take ended abnormally. A muxer may leave a container
+ * header behind without a single sample, so "no encoded video sample was written" deletes the file
+ * whatever its size; an unknown count (null) leaves the decision to the byte count.
+ */
+internal fun decideIncompleteVideo(muxerFinalized: Boolean, bytes: Long, encodedFrames: Long?): ClipRecoveryDecision =
+    if (encodedFrames != null && encodedFrames <= 0L) ClipRecoveryDecision.DELETE
+    else decideClipRecovery(muxerFinalized, bytes)
 
 /** Bytes of an owned, possibly pending, row read from its file: 0 when the row is gone, -1 when unreadable. */
 internal fun ContentResolver.ownedRowBytes(uri: Uri): Long = try {
