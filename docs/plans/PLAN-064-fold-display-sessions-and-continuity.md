@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-064
 title: "Fold display sessions, roles and continuity"
 status: InProgress
-revision: 6
+revision: 7
 milestone: H2
 intended_executor: Codex
 execution_mode: implementation
@@ -146,3 +146,5 @@ Verification in progress: deterministic pure owner queue tests, actual engines w
 
 
 The final central API30 regression passed all202 selected native tests, including four owner-admission cases and both same-Surface service continuations. Queued close is checked after its own native cleanup finishes but before predecessor release; an actual held GL queue delays handoff while UI stays responsive. Failed EGL initialization retains a native cleanup receipt and leaves the original occupant delivering fresh GPU analysis as well as capture metadata. Service reuse checks unchanged SurfaceHolder create/destroy counts, not only Java Surface identity. These are emulator integration results; physical fold/exterior qualification remains pending.
+
+Amendment (2026-10-19): the statements that no final APK or publication happens before the whole H1-H5 program completes are superseded by AGENTS.md. Store releases ship incrementally, each with a `versionName` bump (`tools/play-publish.py`, closed `alpha` track), and releases up to 0.4.2-beta have shipped. The acceptance criteria of this plan are unchanged.

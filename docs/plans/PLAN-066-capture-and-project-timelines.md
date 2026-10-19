@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-066
 title: "Capture and project timelines"
 status: InProgress
-revision: 35
+revision: 68
 milestone: H4
 intended_executor: Codex
 execution_mode: implementation
@@ -52,6 +52,8 @@ Full H4 timeline scope: interval selection, rational capture/project clocks, off
 ## 8. Out of Scope
 
 This plan alone does not complete H4 photography/media library work, remaining H3 monitors/audio or H5. No final APK before the entire goal passes.
+
+Amendment (2026-10-19, revision 68): Revisions 23-66 implemented inside this plan the H4 photo features E4-E9, the E16 media library (MED-01) and the E17 proxies (MED-02), each with local acceptance only. They are in scope as implemented; their physical, editorial and external acceptance, the remaining H3 monitors/audio (PLAN-065) and H5 (PLAN-067) stay open. "No final APK before the entire goal passes" is superseded by AGENTS.md: store releases ship incrementally with a `versionName` bump.
 
 ## 9. Architecture
 
@@ -1006,6 +1008,8 @@ New cells: 44.1 kHz stereo WAV/FLAC, 48 kHz mono WAV/FLAC, 1 s gap in both direc
 Independent oracle: lag 0 and correlation ≥0.999983 throughout; raw decoder surplus measured (805/165/991 depending on the cell); AAC priming 2048 measured in all; the elst declares exactly the source frames; the assisted trim derived from the elst produces an exact count in sample-aligned gaps. Findings: (1) a 125 ms gap at 44.1 kHz equals 5512.5 samples — the presentation start is intra-sample and the assisted trim yields declared−1 with documented edge quantization; (2) `ffmpeg -c copy` rewrites the edit lists (different timescale and windows) — the windows do NOT survive an apparently lossless remux, so the original proxy is the interoperable artifact. No gapless claim without assistance; editorial interoperability with real editors remains pending.
 
 Rollback validated only in isolated /dev/shm copies (restores Rev63 bytes). No final APK; physical/editorial H1–H5 pending items intact; simultaneous graph with proxy and other cells keep their place. Local closure identified by `FINAL_E17_SIDECAR_INTEROP_REOPEN_FIELDS` and `FINAL_E17_SIDECAR_INTEROP_STATE.json`.
+
+Note (2026-10-19, see Revision 68): "no production changes" holds for the Rev64 cells only, not for the worktree, which had accumulated unreviewed production changes. The two "PRE-EXISTING host failures" were in the tests (`OperatorPreferencesTest`, `ProjectTimingTest` assumed a fixed key list), not in the schema, and they pass now.
 
 
 ### Revision 65 — E17/MED-02: complete graph of simultaneous capture with proxy

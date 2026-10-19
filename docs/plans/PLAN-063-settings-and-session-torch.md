@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-063
 title: "Shared settings and session torch"
 status: InProgress
-revision: 2
+revision: 3
 milestone: H1
 intended_executor: Codex
 execution_mode: implementation
@@ -124,3 +124,5 @@ Revision2 parallel accessibility integration: named slider level/action semantic
 
 
 Final shared acceptance:566 unit and179 native cases pass; app/camera lint has zero errors or new warnings. Exact commands, retained failures, native media inspection, original/modified/rollback results and source hashes: build/implementation-h4-timecode-continuity/VERIFICATION.txt. Full plan remains InProgress; this checkpoint does not close physical/editor or outstanding application-integration gates.
+
+Amendment (2026-10-19): the statements that no final APK or publication happens before the whole H1-H5 program completes are superseded by AGENTS.md. Store releases ship incrementally, each with a `versionName` bump (`tools/play-publish.py`, closed `alpha` track), and releases up to 0.4.2-beta have shipped. The acceptance criteria of this plan are unchanged.
