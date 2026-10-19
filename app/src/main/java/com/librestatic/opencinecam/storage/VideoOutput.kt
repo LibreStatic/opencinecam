@@ -16,6 +16,11 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import java.io.File
 import com.librestatic.opencinecam.camera.RecordingGeometry
+import com.librestatic.opencinecam.media.storage.ClipFinalizationResult
+import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
+import com.librestatic.opencinecam.media.storage.ContentResolverClipRows
+import com.librestatic.opencinecam.media.storage.decideClipRecovery
+import com.librestatic.opencinecam.media.storage.finalizeClip
 
 class VideoOutput private constructor(
     private val context: Context,
@@ -33,6 +38,11 @@ class VideoOutput private constructor(
     private var motionLogUri: Uri? = null
     private var preparedOutput: PreparedVideoOutput? = null
     private var descriptorRetired = false
+    private var incompleteReasons: List<String>? = null
+    private var incompleteMuxerFinalized = false
+    private var incompleteBytes = 0L
+    private var retainedBytes = false
+    private var writtenSidecarJson: String? = null
     private val transaction = PendingOutputTransaction(uri, {
         descriptor.close()
         descriptorRetired = true
@@ -73,6 +83,57 @@ class VideoOutput private constructor(
         prepareOwned(sidecarJson, expectedGeometry, timingSidecar)
     }?.let { requireNotNull(preparedOutput) }
 
+    /**
+     * ADR-0011 for a take that is not fully successful: decide with [decideClipRecovery] whether the
+     * file holds bytes. An empty file is deleted (null). Otherwise it is sealed without geometry
+     * validation, its sidecar is forced and carries the incomplete marker, and it is never deleted
+     * again by this output; [publishPrepared] then publishes it as incomplete. Callable after a
+     * normal [prepareCompletion] too (publication failed): the sidecar is then re-marked.
+     */
+    @Synchronized
+    fun prepareIncomplete(
+        reasons: List<String>,
+        sidecarJson: String? = null,
+        timingSidecar: Boolean = false,
+        muxerFinalized: Boolean = false,
+    ): PreparedVideoOutput? {
+        recoveryMember.beginSalvage()
+        val measured = runCatching { descriptor.statSize }.getOrNull()?.takeIf { it >= 0L }
+            ?: context.contentResolver.ownedRowBytes(uri)
+        val bytes = bytesForDecision(measured)
+        if (decideClipRecovery(muxerFinalized, bytes) == ClipRecoveryDecision.DELETE) {
+            transaction.finish(false)
+            return null
+        }
+        retainedBytes = true
+        recoveryMember.keepBytes()
+        incompleteReasons = reasons
+        incompleteMuxerFinalized = muxerFinalized
+        incompleteBytes = bytes
+        transaction.resumeAfterRetainedAbort(preparedOutput != null)
+        preparedOutput?.let { prepared ->
+            markPreparedSidecarIncomplete(reasons)
+            return prepared
+        }
+        return transaction.prepare {
+            prepareOwned(sidecarJson, null, timingSidecar, reasons)
+        }?.let { requireNotNull(preparedOutput) }
+    }
+
+    private fun markPreparedSidecarIncomplete(reasons: List<String>) {
+        val sidecar = sidecarUri ?: run {
+            android.util.Log.w("VideoOutput", "Prepared take has no sidecar to carry the incomplete marker")
+            return
+        }
+        try {
+            val marked = IncompleteTake.mark(writtenSidecarJson, reasons)
+            requireNotNull(context.contentResolver.openOutputStream(sidecar, "wt")).use { it.write(marked.toByteArray()) }
+            writtenSidecarJson = marked
+        } catch (failure: Exception) {
+            android.util.Log.w("VideoOutput", "Incomplete marker could not be written; the take is still kept", failure)
+        }
+    }
+
     /** Publication never creates another row or writes new metadata. */
     @Synchronized
     fun publishPrepared(): Uri? = transaction.publish(::publishOwned)
@@ -84,9 +145,14 @@ class VideoOutput private constructor(
             prepareOwned(sidecarJson, expectedGeometry, timingSidecar)
         }, publish = ::publishOwned)
 
-    private fun prepareOwned(sidecarJson: String?, expectedGeometry: RecordingGeometry?, timingSidecar: Boolean) {
+    private fun prepareOwned(
+        sidecarJson: String?,
+        expectedGeometry: RecordingGeometry?,
+        timingSidecar: Boolean,
+        incomplete: List<String>? = null,
+    ) {
         sealMotionLog(true)
-        expectedGeometry?.let { expected ->
+        expectedGeometry?.takeIf { incomplete == null }?.let { expected ->
             val validation = VideoFileGeometryValidator(context).validate(uri, expected)
             check(validation.valid) { validation.message }
         }
@@ -99,7 +165,8 @@ class VideoOutput private constructor(
                 .put("productionSlate", JSONObject(productionSlateJson(slate).toString()))
                 .put("videoUri", uri.toString()).put("bundleId", recoveryGroup.id).toString(2)
         } ?: sidecarJson
-        metadata?.let { writePendingSidecar(it, timingSidecar || sidecarJson == null, videoName) }
+        val published = if (incomplete != null) IncompleteTake.mark(metadata, incomplete) else metadata
+        published?.let { writePendingSidecar(it, timingSidecar || sidecarJson == null, videoName) }
         attachMotionLogRow(videoName)
         val artifacts = mutableListOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, uri.toString(), videoName))
         sidecarUri?.let { sidecar ->
@@ -142,8 +209,22 @@ class VideoOutput private constructor(
         }.also { check(it.isNotBlank()) { "Owned output row has an empty display name" } }
     }
 
+    private fun publishIncompleteOwned() {
+        val result = finalizeClip(
+            ContentResolverClipRows(context.contentResolver), uri, sidecarUri,
+            muxerFinalized = incompleteMuxerFinalized, bytesWritten = incompleteBytes,
+            sidecarBytes = null, correlationId = recoveryGroup.id, attachments = listOfNotNull(motionLogUri),
+        )
+        when (result) {
+            is ClipFinalizationResult.Published -> recoveryMember.published()
+            ClipFinalizationResult.Deleted -> error("A clip that holds bytes was deleted during incomplete publication")
+            is ClipFinalizationResult.Failed -> throw (result.cause ?: IllegalStateException(result.failure.userMessage))
+        }
+    }
+
     private fun publishOwned() {
         check(preparedOutput != null) { "Output identities must be prepared before publication" }
+        if (incompleteReasons != null) return publishIncompleteOwned()
         val resolver = context.contentResolver
         motionLogUri?.let { log ->
             check(resolver.update(log, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
@@ -166,6 +247,13 @@ class VideoOutput private constructor(
     private fun deleteOwned() {
         check(descriptorRetired) { "Video descriptor retirement is incomplete" }
         discardMotionLog()
+        // ADR-0011: only a zero-length file is deleted. A file with bytes stays pending, owned by the
+        // recovery journal, which publishes it as incomplete if the process dies before a retry.
+        if (retainedBytes || context.contentResolver.ownedRowBytes(uri) != 0L) {
+            android.util.Log.w("VideoOutput", "Keeping $displayName: it holds bytes")
+            recoveryMember.keepBytes()
+            return
+        }
         // The group waits for the separate native engine guard and any audio worker.
         recoveryMember.abort()
     }
@@ -176,6 +264,7 @@ class VideoOutput private constructor(
         val sidecar = recoveryMember.insert(sidecarName, "application/json", metadata = true)
         sidecarUri = sidecar
         requireNotNull(resolver.openOutputStream(sidecar, "w")).use { it.write(json.toByteArray()) }
+        writtenSidecarJson = json
     }
 
     companion object {

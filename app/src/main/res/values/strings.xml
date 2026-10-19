@@ -904,6 +904,7 @@
     <string name="storage_unknown_refused">Free space could not be read, so the take was not started. Choose the Adaptive recording policy to record without a space check.</string>
     <string name="storage_unknown_warning">Free space could not be read; recording without a space check</string>
     <string name="take_stopped_reason">Take stopped: %1$s · %2$s</string>
+    <string name="take_saved_incomplete">Take saved as incomplete: %1$s</string>
     <string name="stop_reason_thermal">the device is too hot</string>
     <string name="stop_reason_storage">free storage ran low</string>
     <string name="stop_reason_state_unknown">temperature or storage could not be read</string>

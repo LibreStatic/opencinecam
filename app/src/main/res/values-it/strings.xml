@@ -898,6 +898,7 @@
     <string name="storage_unknown_refused">Non è stato possibile leggere lo spazio libero, quindi la ripresa non è iniziata. Scegli il criterio di registrazione adattivo per registrare senza controllo dello spazio.</string>
     <string name="storage_unknown_warning">Spazio libero non leggibile; registrazione senza controllo dello spazio</string>
     <string name="take_stopped_reason">Ripresa interrotta: %1$s · %2$s</string>
+    <string name="take_saved_incomplete">Ripresa salvata come incompleta: %1$s</string>
     <string name="stop_reason_thermal">il dispositivo è troppo caldo</string>
     <string name="stop_reason_storage">lo spazio libero è quasi esaurito</string>
     <string name="stop_reason_state_unknown">temperatura o archiviazione non leggibili</string>
