@@ -770,7 +770,6 @@
     <string name="caps_intro">Ce que chaque caméra du téléphone signale à Android et les fonctions d\'OpenCineCam qu\'elle débloque. Choisissez une caméra ; ● marque celle en cours d\'utilisation.</string>
     <string name="caps_loading">Lecture des caméras…</string>
     <string name="caps_empty">Aucune caméra n\'a pu être lue sur cet appareil.</string>
-    <string name="caps_copy">Copier le rapport</string>
     <string name="caps_copied">Rapport copié dans le presse-papiers</string>
     <string name="caps_copy_failed">Le rapport n\'a pas pu être copié</string>
     <string name="caps_camera">Caméra</string>
@@ -905,4 +904,18 @@
     <string name="runtime_notice_state_unknown">Température ou stockage illisible</string>
     <string name="runtime_notice_av_drift">L’audio et la vidéo se décalent</string>
     <string name="runtime_notice_cadence">Des images sont perdues</string>
+    <string name="caps_export">Exporter le rapport</string>
+    <string name="caps_export_title">Exporter le rapport de capacités</string>
+    <string name="caps_export_help">Choisissez ce qui quitte l\'appli. Rien n\'est envoyé tant que vous n\'avez pas choisi une action ci-dessous.</string>
+    <string name="caps_export_redacted">Expurgé (par défaut)</string>
+    <string name="caps_export_redacted_help">L\'empreinte de build, le modèle et le fabricant sont remplacés par [redacted]. Les caractéristiques des caméras sont conservées.</string>
+    <string name="caps_export_full">Complet</string>
+    <string name="caps_export_full_help">Inclut l\'empreinte de build, le modèle de l\'appareil et le fabricant.</string>
+    <string name="caps_export_consent">Je comprends que ce rapport contient des empreintes et des identifiants qui peuvent identifier mon téléphone, et je choisis de l\'exporter.</string>
+    <string name="caps_export_save">Enregistrer dans un fichier</string>
+    <string name="caps_export_share">Partager</string>
+    <string name="caps_export_copy">Copier en texte</string>
+    <string name="caps_export_saved">Rapport enregistré</string>
+    <string name="caps_export_failed">Le rapport n\'a pas pu être exporté</string>
+    <string name="caps_export_chooser">Partager le rapport de capacités</string>
 </resources>

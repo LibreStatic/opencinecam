@@ -122,7 +122,37 @@ class MediaShareExporter(context: Context) {
     }
 }
 
-private fun ownedShareFilename(name: String): Boolean = name in setOf("relationships.json", "take.production.json", "take.technical.json") ||
+/** The capability report shares through the same cache and provider, as a one-file session. */
+internal const val CAPABILITY_REPORT_SHARE_NAME = "capability-report.json"
+
+/** Writes [json] to its own session under `media-exports` and returns the FileProvider uri to share. */
+fun prepareCapabilityReportShare(context: Context, json: String): android.net.Uri = synchronized(mediaExportLock) {
+    val app = context.applicationContext
+    val now = System.currentTimeMillis()
+    val root = File(app.cacheDir.canonicalFile, "media-exports")
+    check(root.canonicalFile == root.absoluteFile) { "Unexpected export cache location" }
+    check(root.isDirectory || root.mkdir()) { "Export cache unavailable" }
+    boundedChildren(root, MEDIA_SHARE_MAX_SESSIONS).forEach { session ->
+        requireOwnMediaShareSession(session)
+        if (mediaShareSessionExpired(session.name, session.lastModified(), now)) deleteOwnMediaShareSession(session)
+    }
+    check(boundedChildren(root, MEDIA_SHARE_MAX_SESSIONS).size < MEDIA_SHARE_MAX_SESSIONS) {
+        "Export cache session capacity reached; retained sessions expire after 24 hours"
+    }
+    val session = File(root, UUID.randomUUID().toString())
+    check(session.mkdir()) { "Export session allocation failed" }
+    try {
+        val output = File(session, CAPABILITY_REPORT_SHARE_NAME)
+        output.writeBytes(json.toByteArray(Charsets.UTF_8))
+        check(session.setLastModified(now))
+        FileProvider.getUriForFile(app, "${app.packageName}.mediaexports", output)
+    } catch (failure: Throwable) {
+        try { deleteOwnMediaShareSession(session) } catch (cleanup: Exception) { failure.addSuppressed(cleanup) }
+        throw failure
+    }
+}
+
+private fun ownedShareFilename(name: String): Boolean = name in setOf("relationships.json", "take.production.json", "take.technical.json", CAPABILITY_REPORT_SHARE_NAME) ||
     name.matches(Regex("[0-9a-f]{64}\\.cube"))
 private fun boundedChildren(directory: File, limit: Int): List<File> = buildList {
     Files.newDirectoryStream(directory.toPath()).use { entries ->

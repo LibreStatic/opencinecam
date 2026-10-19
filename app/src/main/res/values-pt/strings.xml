@@ -770,7 +770,6 @@
     <string name="caps_intro">O que cada câmera do telefone informa ao Android e quais recursos do OpenCineCam ela libera. Escolha uma câmera; ● marca a que está em uso.</string>
     <string name="caps_loading">Lendo câmeras…</string>
     <string name="caps_empty">Nenhuma câmera pôde ser lida neste dispositivo.</string>
-    <string name="caps_copy">Copiar relatório</string>
     <string name="caps_copied">Relatório copiado para a área de transferência</string>
     <string name="caps_copy_failed">Não foi possível copiar o relatório</string>
     <string name="caps_camera">Câmera</string>
@@ -905,4 +904,18 @@
     <string name="runtime_notice_state_unknown">Temperatura ou armazenamento ilegíveis</string>
     <string name="runtime_notice_av_drift">O áudio e o vídeo estão se dessincronizando</string>
     <string name="runtime_notice_cadence">Quadros estão sendo perdidos</string>
+    <string name="caps_export">Exportar relatório</string>
+    <string name="caps_export_title">Exportar relatório de capacidades</string>
+    <string name="caps_export_help">Escolha o que sai da app. Nada é enviado até você escolher uma ação abaixo.</string>
+    <string name="caps_export_redacted">Redigido (padrão)</string>
+    <string name="caps_export_redacted_help">A impressão digital da build, o modelo e o fabricante são substituídos por [redacted]. As características das câmeras são mantidas.</string>
+    <string name="caps_export_full">Completo</string>
+    <string name="caps_export_full_help">Inclui a impressão digital da build, o modelo do dispositivo e o fabricante.</string>
+    <string name="caps_export_consent">Entendo que este relatório contém impressões digitais e identificadores que podem identificar meu telefone e escolho exportá-lo.</string>
+    <string name="caps_export_save">Salvar como arquivo</string>
+    <string name="caps_export_share">Compartilhar</string>
+    <string name="caps_export_copy">Copiar como texto</string>
+    <string name="caps_export_saved">Relatório salvo</string>
+    <string name="caps_export_failed">Não foi possível exportar o relatório</string>
+    <string name="caps_export_chooser">Compartilhar relatório de capacidades</string>
 </resources>
