@@ -1,6 +1,6 @@
 # Requirements Baseline
 
-IDs are permanent. All current requirements are Accepted and priority Must.
+IDs are permanent. Every requirement is Accepted except OCC-AUDIO-011, which is Conditional. Priority is given per row; the default is Must, and OCC-AUDIO-011, OCC-PRO-009 and OCC-UI-HAPTICS-001 are Should.
 
 | ID | Statement | Rationale | Priority | Verification | Milestone | Dependencies | Source | Status |
 |---|---|---|---|---|---|---|---|---|
