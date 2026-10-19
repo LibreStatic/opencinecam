@@ -3550,7 +3550,7 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
     val recordingRecoveryNotice = state.recordingRecovery?.takeIf { it.discardedGroups > 0 || it.unresolvedGroups > 0 }?.let {
         stringResource(R.string.recording_recovery_notice, it.discardedGroups, it.unresolvedGroups)
     }
-    val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
+    val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, state.recordingWarning?.takeIf { state.phase == CameraUiPhase.RECORDING }, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
     Text(
         status,
         color = if (state.errorCode == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,

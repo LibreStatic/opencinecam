@@ -890,4 +890,7 @@
     <string name="recording_policy_adaptive">Adaptative</string>
     <string name="recording_policy_strict_summary">Stricte arrête la prise et en indique la raison quand le stockage, la chaleur ou la cadence sortent de la plage sûre. Le fichier est conservé. S’applique à partir de la prochaine prise.</string>
     <string name="recording_policy_adaptive_summary">Adaptative continue d’enregistrer, réduit le travail de monitoring et affiche un avertissement au lieu de s’arrêter. S’applique à partir de la prochaine prise.</string>
+    <string name="storage_reserve_insufficient">Pas assez d’espace libre pour démarrer : cette prise demande %1$s libres et %2$s sont disponibles.</string>
+    <string name="storage_unknown_refused">L’espace libre n’a pas pu être lu, la prise n’a donc pas démarré. Choisissez la politique d’enregistrement adaptative pour enregistrer sans vérification d’espace.</string>
+    <string name="storage_unknown_warning">Espace libre illisible ; enregistrement sans vérification d’espace</string>
 </resources>

@@ -669,8 +669,7 @@ class OpenCineLogGpuPipeline(
                     // OMX AVC requires the advertised level whenever a profile is supplied.
                     candidate.level?.let { setInteger(MediaFormat.KEY_LEVEL, it) }
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    val rateScaledBitrate = bitrate.toLong() * encoderRate / 30
-                    setInteger(MediaFormat.KEY_BIT_RATE, rateScaledBitrate.coerceIn(12_000_000L, 200_000_000L).toInt())
+                    setInteger(MediaFormat.KEY_BIT_RATE, RecordingDataRate.gpuVideoBps(bitrate, encoderRate))
                     if (timelapse == null && projectRateOverride == null) setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
                     else setFloat(MediaFormat.KEY_FRAME_RATE, projectFps.toFloat())
                     if (timelapse != null || projectRateOverride != null) setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)

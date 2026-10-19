@@ -890,4 +890,7 @@
     <string name="recording_policy_adaptive">Adattivo</string>
     <string name="recording_policy_strict_summary">Rigoroso interrompe la ripresa e ne indica il motivo quando archiviazione, calore o cadenza escono dall’intervallo sicuro. Il file viene salvato. Vale dalla prossima ripresa.</string>
     <string name="recording_policy_adaptive_summary">Adattivo continua a registrare, riduce il lavoro di monitoraggio e mostra un avviso invece di fermarsi. Vale dalla prossima ripresa.</string>
+    <string name="storage_reserve_insufficient">Spazio libero insufficiente per iniziare: questa ripresa richiede %1$s liberi e ne sono disponibili %2$s.</string>
+    <string name="storage_unknown_refused">Non è stato possibile leggere lo spazio libero, quindi la ripresa non è iniziata. Scegli il criterio di registrazione adattivo per registrare senza controllo dello spazio.</string>
+    <string name="storage_unknown_warning">Spazio libero non leggibile; registrazione senza controllo dello spazio</string>
 </resources>

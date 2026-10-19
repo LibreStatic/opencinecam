@@ -3307,8 +3307,7 @@ class Camera2PreviewEngine(
                     setVideoSize(size.width, size.height)
                     setVideoFrameRate(outputFrameRate ?: requestedTargetFps)
                     captureRate?.let { setCaptureRate(it) }
-                    val rateScaledBitrate = videoBitrate.toLong() * requestedTargetFps / DEFAULT_TARGET_FPS
-                    setVideoEncodingBitRate(rateScaledBitrate.coerceIn(8_000_000L, 200_000_000L).toInt())
+                    setVideoEncodingBitRate(RecordingDataRate.recorderVideoBps(videoBitrate, requestedTargetFps))
                     // The encoder receives raw sensor frames here (no GPU pass bakes rotation into
                     // pixels), so the container carries the whole content rotation.
                     setOrientationHint(recordingGeometry?.containerRotationDegrees ?: jpegOrientation(descriptor))
