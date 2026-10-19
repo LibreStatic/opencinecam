@@ -885,4 +885,9 @@
     <string name="fps_lock_toggle_on">Blocco FPS: attivo</string>
     <string name="fps_lock_toggle_off">Blocco FPS: disattivo</string>
     <string name="fps_lock_toggle_holding">Blocco FPS: attivo, otturatore tenuto a 1/fps</string>
+    <string name="recording_policy_title">Criterio di registrazione</string>
+    <string name="recording_policy_strict">Rigoroso</string>
+    <string name="recording_policy_adaptive">Adattivo</string>
+    <string name="recording_policy_strict_summary">Rigoroso interrompe la ripresa e ne indica il motivo quando archiviazione, calore o cadenza escono dall’intervallo sicuro. Il file viene salvato. Vale dalla prossima ripresa.</string>
+    <string name="recording_policy_adaptive_summary">Adattivo continua a registrare, riduce il lavoro di monitoraggio e mostra un avviso invece di fermarsi. Vale dalla prossima ripresa.</string>
 </resources>

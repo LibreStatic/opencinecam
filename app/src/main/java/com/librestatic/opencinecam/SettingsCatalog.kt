@@ -51,6 +51,7 @@ object SettingsCatalog {
         SettingEntry("audio-permission", SettingsCategory.AUDIO, R.string.grant_microphone, "mic microphone microfono permiso permission"),
         SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
         SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
+        SettingEntry("recording-policy", SettingsCategory.RECORDING, R.string.recording_policy_title, "strict estricto adaptive adaptativo politica policy detener stop degradar degrade aviso warning termico thermal almacenamiento storage espacio space deriva drift cadencia cadence toma take"),
         SettingEntry("bitrate", SettingsCategory.RECORDING, R.string.video_bitrate, "video calidad quality Mbps"),
         SettingEntry("video-codec", SettingsCategory.RECORDING, R.string.video_codec, "video codec codificador H.264 AVC HEVC H.265 formato format tamaño size archivo file"),
         SettingEntry("low-light-fps", SettingsCategory.RECORDING, R.string.low_light_fps_title, "low light fps frame rate auto automatic automatica poca luz cuadros fotogramas cadencia cadence variable VFR 60 30 dinamica dynamic IQ nocturno brillo brighter profesional professional"),

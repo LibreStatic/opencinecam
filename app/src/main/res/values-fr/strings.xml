@@ -885,4 +885,9 @@
     <string name="fps_lock_toggle_on">Verrouillage FPS : activé</string>
     <string name="fps_lock_toggle_off">Verrouillage FPS : désactivé</string>
     <string name="fps_lock_toggle_holding">Verrouillage FPS : activé, obturateur maintenu à 1/fps</string>
+    <string name="recording_policy_title">Politique d’enregistrement</string>
+    <string name="recording_policy_strict">Stricte</string>
+    <string name="recording_policy_adaptive">Adaptative</string>
+    <string name="recording_policy_strict_summary">Stricte arrête la prise et en indique la raison quand le stockage, la chaleur ou la cadence sortent de la plage sûre. Le fichier est conservé. S’applique à partir de la prochaine prise.</string>
+    <string name="recording_policy_adaptive_summary">Adaptative continue d’enregistrer, réduit le travail de monitoring et affiche un avertissement au lieu de s’arrêter. S’applique à partir de la prochaine prise.</string>
 </resources>

@@ -885,4 +885,9 @@
     <string name="fps_lock_toggle_on">FPS-Sperre: ein</string>
     <string name="fps_lock_toggle_off">FPS-Sperre: aus</string>
     <string name="fps_lock_toggle_holding">FPS-Sperre: ein, Verschluss auf 1/fps gehalten</string>
+    <string name="recording_policy_title">Aufnahmerichtlinie</string>
+    <string name="recording_policy_strict">Streng</string>
+    <string name="recording_policy_adaptive">Adaptiv</string>
+    <string name="recording_policy_strict_summary">Streng beendet die Aufnahme mit Begründung, wenn Speicher, Hitze oder Bildtakt den sicheren Bereich verlassen. Die Datei wird gespeichert. Gilt ab der nächsten Aufnahme.</string>
+    <string name="recording_policy_adaptive_summary">Adaptiv nimmt weiter auf, reduziert die Überwachung und zeigt statt eines Stopps eine Warnung. Gilt ab der nächsten Aufnahme.</string>
 </resources>

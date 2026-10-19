@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam
 
 import android.content.Context
+import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitorColor
 import com.librestatic.opencinecam.camera.FalseColorPalette
@@ -135,6 +136,8 @@ data class CameraSettings(
     val logGreyReference: OpenCineLogGreyReference = OpenCineLogGreyReference.NATIVE,
     /** Transfer of an HLG-mode take; HDR10 applies only where the profile offers it (see [com.librestatic.opencinecam.camera.Hdr10Video]). Structural, so pending during a take. */
     val hdrVideoFormat: HdrVideoFormat = HdrVideoFormat.HLG,
+    /** Local-only: whether a runtime failure stops the take (Strict) or degrades with a warning (Adaptive); structural, so pending during a take. */
+    val recordingPolicy: PolicyMode = PolicyMode.STRICT,
     val modeSelectorStyle: ModeSelectorStyle = ModeSelectorStyle.DIAL,
     /** Viewfinder spans the whole screen and the chrome floats over it with translucent panels. */
     val translucentChrome: Boolean = false,
@@ -299,7 +302,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         return if (validProjectRate(n, d)) n to d else 30 to 1
     }
 
-    override fun load(): CameraSettings = CameraSettings(
+    /** The policy is settled first: the other migrations write keys, which would make a fresh install look used. */
+    override fun load(): CameraSettings = loadStored(migratedRecordingPolicy())
+
+    private fun loadStored(recordingPolicy: PolicyMode): CameraSettings = CameraSettings(
         haptics = HapticPreferences(
             level = enumPreference(KEY_HAPTIC_LEVEL, HapticLevel.SUBTLE),
             capture = preferences.getBoolean(KEY_HAPTIC_CAPTURE, true),
@@ -448,6 +454,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         logViewAssistEnabled = preferences.getBoolean(KEY_LOG_VIEW_ASSIST, false),
         logGreyReference = enumPreference(KEY_LOG_GREY_REFERENCE, OpenCineLogGreyReference.NATIVE),
         hdrVideoFormat = enumPreference(KEY_HDR_VIDEO_FORMAT, HdrVideoFormat.HLG),
+        recordingPolicy = recordingPolicy,
         modeSelectorStyle = migratedModeSelectorStyle(),
         translucentChrome = preferences.getBoolean(KEY_TRANSLUCENT_CHROME, false),
         viewfinderScale = enumPreference(KEY_VIEWFINDER_SCALE, ViewfinderScale.FIT),
@@ -671,6 +678,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_LOG_VIEW_ASSIST, settings.logViewAssistEnabled)
             .putString(KEY_LOG_GREY_REFERENCE, settings.logGreyReference.name)
             .putString(KEY_HDR_VIDEO_FORMAT, settings.hdrVideoFormat.name)
+            .putString(KEY_RECORDING_POLICY, settings.recordingPolicy.name)
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
             .putBoolean(KEY_TRANSLUCENT_CHROME, settings.translucentChrome)
             .putString(KEY_VIEWFINDER_SCALE, settings.viewfinderScale.name)
@@ -839,6 +847,23 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         return enumPreference(KEY_MODE_SELECTOR_STYLE, ModeSelectorStyle.DIAL)
     }
 
+    /**
+     * Strict is the default of a fresh install; an install that already holds settings keeps the
+     * behaviour it had, which is Adaptive. Decided once, before any other migration writes a key.
+     */
+    private fun migratedRecordingPolicy(): PolicyMode {
+        if (!preferences.getBoolean(KEY_RECORDING_POLICY_MIGRATED, false)) {
+            val policy = if (preferences.contains(KEY_RECORDING_POLICY)) enumPreference(KEY_RECORDING_POLICY, PolicyMode.STRICT)
+            else if (preferences.all.keys.any { it != KEY_RECORDING_POLICY_MIGRATED }) PolicyMode.ADAPTIVE else PolicyMode.STRICT
+            preferences.edit()
+                .putBoolean(KEY_RECORDING_POLICY_MIGRATED, true)
+                .putString(KEY_RECORDING_POLICY, policy.name)
+                .apply()
+            return policy
+        }
+        return enumPreference(KEY_RECORDING_POLICY, PolicyMode.STRICT)
+    }
+
     /** Repairs the WAV-only LOG workaround shipped before AAC could be embedded. */
     private fun migratedAudioOutputFormat(): AudioOutputFormat {
         if (!preferences.getBoolean(KEY_AUDIO_AAC_LOG_MIGRATED, false)) {
@@ -895,6 +920,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_LOG_VIEW_ASSIST = "log-view-assist-enabled"
         const val KEY_LOG_GREY_REFERENCE = "log-grey-reference"
         const val KEY_HDR_VIDEO_FORMAT = "hdr-video-format"
+        const val KEY_RECORDING_POLICY = "recording-policy"
+        const val KEY_RECORDING_POLICY_MIGRATED = "recording-policy-migrated-v1"
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
