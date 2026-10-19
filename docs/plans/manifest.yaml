@@ -690,7 +690,7 @@ plans:
   - id: OCC-PLAN-053
     title: "APV UI fallback and APV RAW verdict"
     status: Done
-    revision: 1
+    revision: 2
     milestone: M15
     path: docs/plans/PLAN-053-apv-ui-fallback-and-apv-raw-verdict.md
     depends_on: [OCC-PLAN-011, OCC-PLAN-052]
