@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import com.librestatic.opencinecam.DeviceQuirksProvider
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
 import java.util.concurrent.FutureTask
@@ -42,7 +43,7 @@ internal object CaptureStartup {
         if (liveEngine != null || widthPx <= 0 || heightPx <= 0) return
         // A head start no service took (the activity went away first) is stale: start over.
         pending?.engine?.close()
-        val engine = Camera2PreviewEngine(context.applicationContext)
+        val engine = Camera2PreviewEngine(context.applicationContext, deviceQuirks = DeviceQuirksProvider.lazy(context))
         val task = FutureTask {
             // The service starts on the first descriptor (selectedCameraId is not kept across
             // processes). Its likely id is cheap to find, so the open runs alongside the full
@@ -62,7 +63,7 @@ internal object CaptureStartup {
         pending = null
         adopted = head
         Log.i(Tag, if (head != null) "Service adopted the startup engine" else "No startup engine; starting cold")
-        return (head?.engine ?: Camera2PreviewEngine(context)).also { liveEngine = it }
+        return (head?.engine ?: Camera2PreviewEngine(context, deviceQuirks = DeviceQuirksProvider.lazy(context))).also { liveEngine = it }
     }
 
     /**
