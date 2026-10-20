@@ -12,7 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ContributionWorkflowTest {
-    private val scope = DeviceProfileScope("fp", "0", null, "hevc", "p1", "digest")
+    private val scope = DeviceProfileScope("blanc", "fp", "0", null, "hevc", "p1", "digest")
 
     private fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes).joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
