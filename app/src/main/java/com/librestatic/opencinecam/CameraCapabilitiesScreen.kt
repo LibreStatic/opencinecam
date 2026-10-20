@@ -235,8 +235,8 @@ internal fun CameraCapabilitiesScreen(
                     )
                 }
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
-                item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
                 item(key = "profile-${selected.cameraId}") { DeviceProfileCard(deviceProfiles[selected.cameraId]) }
+                item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
                 item(key = "codecs") { CodecAudioCard(codecAudio) }
                 item(key = "main10-check") { Main10FileCheckCard(main10Check) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
