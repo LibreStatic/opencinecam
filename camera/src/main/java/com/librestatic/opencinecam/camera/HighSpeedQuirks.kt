@@ -3,7 +3,21 @@
 
 package com.librestatic.opencinecam.camera
 
+import com.librestatic.opencinecam.core.model.QuirkResolution
 import kotlin.math.abs
+
+/**
+ * The device profile verdict for one camera. The engine asks this instead of reading `Build`, so
+ * a quirk applies to the device and camera a profile names and to nothing else.
+ */
+fun interface DeviceQuirks {
+    fun resolve(cameraId: String): QuirkResolution
+
+    companion object {
+        /** No profile for any camera: every quirk is off. */
+        val None = DeviceQuirks { QuirkResolution.NONE }
+    }
+}
 
 /** One vendor request value the high-speed session needs, in the order it is applied. */
 internal sealed interface HighSpeedSessionValue {

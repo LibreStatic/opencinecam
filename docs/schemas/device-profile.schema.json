@@ -65,6 +65,34 @@
           "type": "string"
         }
       }
+    },
+    "effectId": {
+      "description": "Closed quirk effect vocabulary; an id this build does not know is ignored with a warning, never applied.",
+      "type": "string",
+      "enum": [
+        "high-speed-prefer-physical-camera",
+        "moto-high-speed-session-keys"
+      ]
+    },
+    "profileQuirk": {
+      "type": "object",
+      "required": [
+        "quirkId",
+        "effect",
+        "enabled"
+      ],
+      "properties": {
+        "quirkId": {
+          "type": "string",
+          "pattern": "^OCC-QUIRK-[0-9]{4}$"
+        },
+        "effect": {
+          "$ref": "#/$defs/effectId"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "$id": "https://opencinecam.org/schema/device-profile.schema.json",
@@ -74,9 +102,12 @@
     "schemaVersion",
     "profileId",
     "createdAt",
+    "source",
+    "trust",
     "scope",
     "validity",
-    "configurations"
+    "configurations",
+    "quirks"
   ],
   "properties": {
     "schemaVersion": {
@@ -90,23 +121,99 @@
       "type": "string",
       "format": "date-time"
     },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust": {
+      "enum": [
+        "BUNDLED_TRUSTED",
+        "IMPORTED_UNTRUSTED",
+        "USER_OVERRIDE"
+      ]
+    },
     "scope": {
       "type": "object",
       "required": [
+        "device",
         "buildFingerprint",
         "cameraId"
-      ]
+      ],
+      "properties": {
+        "device": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Device codename (Build.DEVICE, ro.product.device), e.g. blanc. Never a manufacturer, never a wildcard."
+        },
+        "buildFingerprint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The build the profile was verified on. Recorded, not matched."
+        },
+        "cameraId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "physicalCameraId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Narrows the match only when present."
+        },
+        "codecName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Narrows the match only when present."
+        }
+      }
     },
     "validity": {
       "type": "object",
       "required": [
-        "protocolVersion",
-        "characteristicsDigest"
-      ]
+        "protocolVersion"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characteristicsDigest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Recorded evidence when known. Not matched."
+        }
+      }
     },
     "configurations": {
       "type": "array"
+    },
+    "signature": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "keyId",
+        "digest"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "SHA-256"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    },
+    "quirks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileQuirk"
+      }
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "description": "A device profile is scoped to one device model (the codename, Build.DEVICE) and one camera. The build fingerprint is recorded as the build the profile was verified on; a different running fingerprint keeps the profile active with a 'not verified on this build' warning. A manufacturer-wide scope is not a profile."
 }

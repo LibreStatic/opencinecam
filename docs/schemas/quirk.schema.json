@@ -65,6 +65,14 @@
           "type": "string"
         }
       }
+    },
+    "effectId": {
+      "description": "Closed quirk effect vocabulary; an id this build does not know is ignored with a warning, never applied.",
+      "type": "string",
+      "enum": [
+        "high-speed-prefer-physical-camera",
+        "moto-high-speed-session-keys"
+      ]
     }
   },
   "$id": "https://opencinecam.org/schema/quirk.schema.json",
@@ -88,14 +96,34 @@
     "scope": {
       "type": "object",
       "required": [
-        "buildFingerprintPattern"
-      ]
+        "device",
+        "cameraId"
+      ],
+      "properties": {
+        "device": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cameraId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "buildFingerprint": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "effect": {
       "type": "object",
       "required": [
         "kind"
-      ]
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/effectId"
+        }
+      }
     },
     "evidence": {
       "type": "array",
@@ -105,5 +133,6 @@
       }
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "description": "A quirk record with its evidence. It is scoped to a device codename (Build.DEVICE) and a camera, never to a manufacturer. The build fingerprint is the build the evidence was gathered on; another running build keeps the quirk active with a warning."
 }

@@ -37,6 +37,7 @@ import android.os.PowerManager
 import android.os.Build
 import com.librestatic.opencinecam.core.model.Knowledge
 import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.core.model.QuirkEffect
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -419,6 +420,7 @@ private data class TapFocusRequestTag(val token: Long)
 class Camera2PreviewEngine(
     context: Context,
     private val ownerAdmission: CaptureOwnerAdmission = CaptureOwnerAdmission.processGlobal,
+    private val deviceQuirks: DeviceQuirks = DeviceQuirks.None,
 ) : AutoCloseable {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val appContext = context.applicationContext
@@ -939,7 +941,7 @@ class Camera2PreviewEngine(
                     Camera2VideoProfile(it.size, it.fps, true)
                 } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
                 val cameraIdToOpen = if (highSpeedProfile != null) {
-                    if (Build.MANUFACTURER.equals("motorola", ignoreCase = true)) {
+                    if (deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
                         preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
                             ?: descriptor.cameraId
                     } else descriptor.cameraId
@@ -5707,8 +5709,8 @@ class Camera2PreviewEngine(
      * the device advertises and configures 120/240 fps but its Qualcomm HAL rejects request zero.
      */
     private fun applyMotorolaHighSpeedSessionControls(builder: CaptureRequest.Builder) {
-        if (!Build.MANUFACTURER.equals("motorola", ignoreCase = true)) return
         val descriptor = activeDescriptor ?: return
+        if (!deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
         val keys = runCatching {
             manager.getCameraCharacteristics(descriptor.cameraId).availableCaptureRequestKeys
         }.getOrNull().orEmpty()

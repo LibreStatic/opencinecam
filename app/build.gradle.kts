@@ -55,6 +55,8 @@ android {
 
     // Local builds get a red "DEBUG" launcher badge so they stand apart from the Play install.
     sourceSets {
+        // Bundled device profiles (src/main/profiles/device-profiles) ship as assets.
+        getByName("main").assets.srcDir("src/main/profiles")
         getByName("debug").res.srcDir("src/debugBadge/res")
         // The plugin-created variants below get the same badge.
         matching { it.name in profileBuildTypes }.configureEach { res.srcDir("src/debugBadge/res") }
