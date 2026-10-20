@@ -11,6 +11,12 @@ import com.librestatic.opencinecam.camera.CodecAudioReportJson
 import com.librestatic.opencinecam.camera.CodecMetadata
 import com.librestatic.opencinecam.core.model.CapabilityReportDocument
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
+import com.librestatic.opencinecam.core.model.ProfileBuildCheck
+import com.librestatic.opencinecam.core.model.ProfileStatus
+import com.librestatic.opencinecam.core.model.ProfileTrust
+import com.librestatic.opencinecam.core.model.QuirkEffect
+import com.librestatic.opencinecam.core.model.QuirkResolution
+import com.librestatic.opencinecam.core.model.EffectiveQuirk
 import java.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -78,5 +84,34 @@ class CapabilityReportTest {
         // Going back to the redacted choice drops a consent given for the full one.
         assertFalse(consentAfterModeChange(ReportExportMode.REDACTED, consent = true))
         assertTrue(consentAfterModeChange(ReportExportMode.FULL, consent = true))
+    }
+
+    private val driftedProfile = QuirkResolution(
+        ProfileStatus.ACTIVE,
+        listOf(EffectiveQuirk("OCC-QUIRK-0001", QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA, true, ProfileTrust.BUNDLED_TRUSTED)),
+        listOf("not verified on this build: the profile was recorded for another build fingerprint"),
+        "3f6c2a9e-7d41-4b58-9c0e-5a1d8e2b7f04",
+        ProfileBuildCheck.NOT_VERIFIED_ON_THIS_BUILD,
+    )
+
+    @Test fun deviceProfileSectionNamesTheStatusAndQuirksButNoFingerprint() {
+        val document = buildCapabilityReport(facts, inventory(), emptyList(), deviceProfiles = mapOf("0" to driftedProfile),
+            reportId = "123e4567-e89b-42d3-a456-426614174000", createdAt = "2026-10-19T10:00:00Z")
+        val section = document.cameras[0]["deviceProfile"]!!.jsonObject
+        assertEquals("ACTIVE_NOT_VERIFIED_ON_THIS_BUILD", (section["state"] as JsonPrimitive).content)
+        assertEquals("3f6c2a9e-7d41-4b58-9c0e-5a1d8e2b7f04", (section["profileId"] as JsonPrimitive).content)
+        assertTrue(section.toString().contains("high-speed-prefer-physical-camera"))
+        assertFalse(section.toString().contains("fp:secret"))
+        assertEquals(null, document.cameras[1]["deviceProfile"])
+        // The redactor leaves the section intact: nothing in it identifies the phone.
+        val redacted = JsonReportRedactor.redact(capabilityReportJson(document)).toString()
+        assertTrue(redacted.contains("ACTIVE_NOT_VERIFIED_ON_THIS_BUILD"))
+        assertFalse(redacted.contains("secret"))
+    }
+
+    @Test fun noProfileIsReportedAsNone() {
+        val section = deviceProfileJson(QuirkResolution.NONE)
+        assertEquals("NONE", (section["state"] as JsonPrimitive).content)
+        assertEquals(null, section["profileId"])
     }
 }
