@@ -6,6 +6,7 @@ package com.librestatic.opencinecam
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.core.model.CapabilityReportDocument
+import com.librestatic.opencinecam.core.model.QuirkResolution
 import com.librestatic.opencinecam.core.model.SchemaEvidence
 import java.security.MessageDigest
 import java.time.Instant
@@ -52,6 +53,7 @@ internal fun buildCapabilityReport(
     codecs: List<JsonObject> = emptyList(),
     audio: JsonObject = unknownAudioReport(),
     apvReasons: List<String> = APV_UNPROBED_REASONS,
+    deviceProfiles: Map<String, QuirkResolution> = emptyMap(),
     reportId: String = UUID.randomUUID().toString(),
     createdAt: String = Instant.now().toString(),
 ): CapabilityReportDocument = CapabilityReportDocument(
@@ -73,6 +75,7 @@ internal fun buildCapabilityReport(
             camera.lensFacing?.let { put("lensFacing", it) }
             camera.error?.let { put("error", it) }
             put("characteristics", JsonObject(camera.entries.associate { it.key to JsonPrimitive(it.value) }))
+            deviceProfiles[camera.cameraId]?.let { put("deviceProfile", deviceProfileJson(it)) }
             descriptors.firstOrNull { it.cameraId == camera.cameraId }?.let { descriptor ->
                 put("features", JsonArray(auditCameraCapabilities(descriptor, apvReasons).map { finding ->
                     buildJsonObject {

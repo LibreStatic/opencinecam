@@ -327,6 +327,19 @@ fun CapabilitiesMain10() = DriverTheme {
             com.librestatic.opencinecam.camera.Main10FileSignal("video/hevc", "Main10", "BT.2020", "HLG", 10), "OCC_20261019_120000.mp4", 1_792_000_000_000L) })
 }
 
+/**
+ * Capabilities with the Razr's bundled device profile on a build other than the one it was recorded
+ * on: active, the two high-speed quirks listed, and the "not verified on this build" notice.
+ */
+@Composable
+fun CapabilitiesDeviceProfile() = DriverTheme {
+    val documents = java.io.File("src/main/profiles/device-profiles").listFiles { file -> file.extension == "json" }
+        .orEmpty().sortedBy { it.name }.associate { it.name to it.readText() }
+    val quirks = com.librestatic.opencinecam.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
+        loadMain10Check = { null }, loadDeviceProfile = { _, cameraId -> quirks.resolve(cameraId) })
+}
+
 /** The storage benchmark page with a finished, qualified result (three windows). */
 @Composable
 fun StorageBenchmark() = DriverTheme {

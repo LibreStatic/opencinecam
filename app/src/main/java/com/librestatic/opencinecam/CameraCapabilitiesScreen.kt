@@ -66,6 +66,7 @@ import com.librestatic.opencinecam.camera.Main10FileCheck
 import com.librestatic.opencinecam.camera.PRECISION_REQUIRES_CONTROLLED_CAPTURE
 import com.librestatic.opencinecam.camera.QualificationStatus
 import com.librestatic.opencinecam.core.model.JsonReportRedactor
+import com.librestatic.opencinecam.core.model.QuirkResolution
 import com.librestatic.opencinecam.storage.prepareCapabilityReportShare
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,7 @@ internal fun CameraCapabilitiesScreen(
     initialExportOpen: Boolean = false,
     loadCodecAudio: ((Context, List<CameraInventory>) -> CodecAudioMetadata?)? = null,
     loadMain10Check: ((Context) -> Main10FileCheck?)? = null,
+    loadDeviceProfile: ((Context, String) -> QuirkResolution)? = null,
 ) {
     val context = LocalContext.current
     val inventory by produceState<List<CameraInventory>?>(null, context) {
@@ -124,6 +126,18 @@ internal fun CameraCapabilitiesScreen(
             runCatching { loadMain10Check?.invoke(context) ?: AtomicFileMain10FileCheckStore.forContext(context).load() }.getOrNull()
         }
     }
+    // The bundled profiles are read once per process; each camera's verdict is a map lookup.
+    val deviceProfiles by produceState<Map<String, QuirkResolution>>(emptyMap(), context, inventory) {
+        val list = inventory ?: return@produceState
+        value = withContext(Dispatchers.IO) {
+            list.associate { camera ->
+                camera.cameraId to (
+                    runCatching { loadDeviceProfile?.invoke(context, camera.cameraId) ?: DeviceQuirksProvider.get(context).resolve(camera.cameraId) }
+                        .getOrDefault(QuirkResolution.NONE)
+                    )
+            }
+        }
+    }
     var selectedId by rememberSaveable { mutableStateOf(activeCameraId) }
     var filter by rememberSaveable { mutableStateOf("") }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
@@ -144,7 +158,7 @@ internal fun CameraCapabilitiesScreen(
     var pendingSave by remember { mutableStateOf<Pair<ReportExportMode, Boolean>?>(null) }
     fun reportJson(list: List<CameraInventory>): JsonElement = capabilityReportJson(
         buildCapabilityReport(reportDeviceFacts(), list, cameras, liveState, apvReasons = apvReasons,
-            codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(),
+            codecs = codecAudio?.let(CodecAudioReportJson::codecs).orEmpty(), deviceProfiles = deviceProfiles,
             audio = codecAudio?.let(CodecAudioReportJson::audio) ?: unknownAudioReport()),
     )
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -178,7 +192,7 @@ internal fun CameraCapabilitiesScreen(
             ReportExportAction.COPY -> {
                 // The plain-text report names the phone on its first line; the redacted copy hides it.
                 val text = capabilityReportText(if (mode == ReportExportMode.FULL) deviceLine() else JsonReportRedactor.REDACTED,
-                    list, cameras, context::getString, liveState, apvReasons)
+                    list, cameras, context::getString, liveState, apvReasons, deviceProfiles)
                 val ok = runCatching {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(clipLabel, text))
                 }.isSuccess
@@ -222,6 +236,7 @@ internal fun CameraCapabilitiesScreen(
                 }
                 item(key = "summary-${selected.cameraId}") { CameraSummaryCard(selected) }
                 item(key = "app-${selected.cameraId}") { AppUsageCard(selected, findings) }
+                item(key = "profile-${selected.cameraId}") { DeviceProfileCard(deviceProfiles[selected.cameraId]) }
                 item(key = "codecs") { CodecAudioCard(codecAudio) }
                 item(key = "main10-check") { Main10FileCheckCard(main10Check) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
@@ -304,6 +319,45 @@ private fun AppUsageCard(camera: CameraInventory, findings: List<AppFeatureFindi
             CineIcon.CHECK,
         )
         findings.forEach { finding -> FeatureRow(finding) }
+    }
+}
+
+/** The device profile for the camera on show: its status on this build and the quirks it switches on. */
+@Composable
+private fun DeviceProfileCard(resolution: QuirkResolution?) {
+    SettingsCard(Modifier.testTag("capabilities-device-profile")) {
+        if (resolution == null) {
+            SettingsHeading(stringResource(R.string.caps_section_profile), icon = CineIcon.INFO)
+            Text(stringResource(R.string.caps_loading), color = SettingsMuted, fontSize = 13.sp)
+            return@SettingsCard
+        }
+        val state = resolution.profileState()
+        SettingsHeading(stringResource(R.string.caps_section_profile), stringResource(state.label()), CineIcon.INFO)
+        resolution.profileId?.let {
+            Text(stringResource(R.string.caps_profile_id, it), color = SettingsMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        }
+        when (state) {
+            DeviceProfileState.NONE -> Text(stringResource(R.string.caps_profile_none_detail), color = SettingsMuted, fontSize = 13.sp)
+            DeviceProfileState.ACTIVE_NOT_VERIFIED_ON_THIS_BUILD ->
+                Text(stringResource(R.string.caps_profile_unverified_detail), color = LocalCineColors.current.pending, fontSize = 13.sp)
+            DeviceProfileState.REJECTED ->
+                resolution.warnings.forEach { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+            DeviceProfileState.ACTIVE -> Unit
+        }
+        if (state == DeviceProfileState.ACTIVE || state == DeviceProfileState.ACTIVE_NOT_VERIFIED_ON_THIS_BUILD) {
+            Text(stringResource(R.string.caps_profile_quirks), color = SettingsAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 6.dp))
+            if (resolution.quirks.isEmpty()) Text(stringResource(R.string.caps_profile_quirks_none), color = SettingsMuted, fontSize = 13.sp)
+            resolution.quirks.forEach { quirk ->
+                val name = stringResource(quirk.effect.label())
+                Text(
+                    if (quirk.enabled) name else stringResource(R.string.caps_profile_quirk_off, name),
+                    color = if (quirk.enabled) MaterialTheme.colorScheme.onSurface else SettingsMuted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.testTag("capabilities-quirk-${quirk.quirkId}"),
+                )
+            }
+        }
     }
 }
 
@@ -537,6 +591,7 @@ internal fun capabilityReportText(
     label: (Int) -> String,
     live: CameraUiState? = null,
     apvReasons: List<String> = APV_UNPROBED_REASONS,
+    deviceProfiles: Map<String, QuirkResolution> = emptyMap(),
 ): String = buildString {
     appendLine("OpenCineCam · ${label(R.string.caps_title)}")
     appendLine(device)
@@ -550,6 +605,11 @@ internal fun capabilityReportText(
             append("[${label(statusLabel(finding.status))}] ${label(finding.feature.title)}")
             if (finding.detail.isNotEmpty()) append(": ${finding.detail}")
             appendLine()
+        }
+        deviceProfiles[camera.cameraId]?.let { resolution ->
+            appendLine("-- ${label(R.string.caps_section_profile)}: ${label(resolution.profileState().label())} --")
+            resolution.profileId?.let { appendLine(label(R.string.caps_profile_id).format(it)) }
+            resolution.quirks.forEach { quirk -> appendLine("${quirk.quirkId} ${quirk.effect.id} enabled=${quirk.enabled}") }
         }
         live?.takeIf { it.selectedCameraId == camera.cameraId }?.let { state ->
             appendLine("-- ${label(R.string.caps_section_readback)} --")

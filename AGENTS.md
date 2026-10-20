@@ -111,6 +111,7 @@ Outputs and logs:
 | `SettingsRecordingPolicy` | `SettingsScreen` | the Adaptive recording policy; `textInput policy tag=settings-search` shows the Strict/Adaptive row (`recording-policy-*`) |
 | `CapabilitiesExport` | `CameraCapabilitiesScreen` | the report export dialog open (`capabilities-export-*` tags): redacted or full, consent gate, Save/Share/Copy |
 | `CapabilitiesMain10` | `CameraCapabilitiesScreen` | the latest Main10 file check card (`capabilities-main10-check`): HLG signalling passed, effective precision "needs a controlled capture" |
+| `CapabilitiesDeviceProfile` | `CameraCapabilitiesScreen` | the device profile card (`capabilities-device-profile`): the Razr's bundled `blanc` profile read on another build, so "Active, not verified on this build" with the two high-speed quirks (`capabilities-quirk-*`) |
 | `StorageBenchmark` | `StorageBenchmarkContent` | a finished qualified benchmark: outcome, margin and three windows |
 | `Gallery` | `MediaCatalogContent` | seven takes (two LOG videos, DNG, legacy JPEG, AAC and WAV audio, a plain video) with gradient thumbnails, codec badges, one proxy ready and one being made |
 | `GalleryInspector` | `MediaCatalogContent` | the same takes with take 1's details open in a sheet: at the bottom on `phone` and `compact`, at the side on the others. Screenshot it with `tag=gallery-info-sheet`. The docked side pane needs a large or expanded landscape window, e.g. `--device w1280dp-h800dp-land-mdpi` |
