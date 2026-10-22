@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-062
 title: "F-Droid and Google Play channel activation"
 status: ConditionalReady
-revision: 1
+revision: 2
 milestone: M17
 intended_executor: GPT-5.6 Luna
 execution_mode: implementation
@@ -145,3 +145,4 @@ Mark criteria only from external build/upload results, update `manifest.yaml`, `
 - Evidence:
 - Deviations: Tag v0.3.3 and the signed ARM64 GitHub Release are operational inputs. F-Droid build-server acceptance and Google Play upload have not been executed.
 - Follow-up plans: OCC-PLAN-060 consumes exact external channel state and certifies only available artifact/fingerprint tuples.
+- Amendment (2026-10-19): Google Play publication is operational and does not use fastlane or the `internal` track. `tools/play-publish.py` (see AGENTS.md) publishes through the Play Developer API to the closed `alpha` track, with the R8 mapping and the release notes in `store/play/release-notes/<versionName>.txt`, and a `versionName` bump per release (latest in the repository: 0.4.2-beta). No `fastlane/` directory exists. The "not executed" statements above describe the 2026-08-26 state. F-Droid build-server acceptance is not recorded here and stays open under this plan.

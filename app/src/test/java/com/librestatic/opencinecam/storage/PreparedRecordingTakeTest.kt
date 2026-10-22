@@ -94,4 +94,89 @@ class PreparedRecordingTakeTest {
         assertSame(f.captureFailure, assertThrows(IllegalStateException::class.java) { f.run(success = false) })
         assertEquals(listOf("discardAudio", "discardVideo", "aborted"), f.calls)
     }
+
+    // ADR-0011: a take that is not fully successful keeps outputs with bytes, as incomplete.
+    private class SalvageFixture(val reasons: List<String> = listOf("audio-start-failed")) {
+        val calls = mutableListOf<String>()
+        var audioBytes = true
+        var videoBytes = true
+        var failAt: String? = null
+        val failure = IllegalStateException("salvage")
+        val seenReasons = mutableListOf<List<String>>()
+        private fun step(name: String): String? {
+            calls += name
+            if (name == failAt) throw failure
+            return name
+        }
+        fun salvage(audio: Boolean = true) = IncompleteTakeSalvage(
+            reasons = reasons,
+            prepareAudio = if (audio) ({ r: List<String> -> seenReasons += r; calls += "salvageAudio"; if (audioBytes) step("preparedAudio") else null }) else null,
+            prepareVideo = { r: List<String> -> seenReasons += r; calls += "salvageVideo"; if (videoBytes) step("preparedVideo") else null },
+        )
+        fun run(success: Boolean, audio: Boolean = true, failPublish: String? = null) = finalizePreparedRecordingTake(
+            success = success,
+            prepareAudio = if (audio) ({ "preparedAudio" }) else null,
+            prepareVideo = { "preparedVideo" },
+            publishAudio = { prepared: String -> calls += "publish:$prepared"; if (failPublish == "audio") throw failure; "audio" },
+            publishVideo = { prepared: String -> calls += "publish:$prepared"; if (failPublish == "video") throw failure; "video" },
+            discardAudio = { calls += "discardAudio" },
+            discardVideo = { calls += "discardVideo" },
+            onPrepared = { _, _ -> calls += "prepared" },
+            onPublished = { _, _ -> calls += "published" },
+            onAborted = { calls += "aborted" },
+            salvage = salvage(audio),
+        )
+    }
+
+    @Test fun unsuccessfulTakeWithBytesPublishesBothOutputsAsIncompleteAndNeverDiscards() {
+        val f = SalvageFixture(); val result = f.run(success = false)
+        assertEquals("video" to "audio", result.outputs)
+        assertTrue(result.incomplete)
+        assertEquals(listOf("audio-start-failed"), result.incompleteReasons)
+        assertEquals(listOf("salvageAudio", "preparedAudio", "salvageVideo", "preparedVideo", "publish:preparedAudio", "publish:preparedVideo", "aborted"), f.calls)
+        assertFalse(f.calls.any { it.startsWith("discard") || it == "published" || it == "prepared" })
+    }
+    @Test fun emptyAudioIsDroppedAndVideoWithBytesIsKept() {
+        val f = SalvageFixture(); f.audioBytes = false
+        val result = f.run(success = false)
+        assertEquals("video" to null, result.outputs); assertTrue(result.incomplete)
+        assertNull(result.salvagedAudio)
+    }
+    @Test fun emptyVideoIsDroppedAndAudioWithBytesIsKept() {
+        val f = SalvageFixture(); f.videoBytes = false
+        val result = f.run(success = false)
+        assertNull(result.outputs); assertEquals("audio", result.salvagedAudio); assertTrue(result.incomplete)
+        assertFalse(f.calls.contains("publish:preparedVideo"))
+    }
+    @Test fun nothingWithBytesIsNotAnIncompleteTake() {
+        val f = SalvageFixture(); f.audioBytes = false; f.videoBytes = false
+        val result = f.run(success = false)
+        assertNull(result.outputs); assertFalse(result.incomplete); assertTrue(result.incompleteReasons.isEmpty())
+        assertFalse(f.calls.any { it.startsWith("publish") })
+    }
+    @Test fun failedSalvageStepsKeepRowsPendingAndReportTheCauseWhenNothingWasKept() {
+        val f = SalvageFixture(); f.failAt = "preparedVideo"; f.audioBytes = false
+        assertSame(f.failure, assertThrows(IllegalStateException::class.java) { f.run(success = false) })
+        assertFalse(f.calls.any { it.startsWith("discard") })
+    }
+    @Test fun oneFailedSalvageStepDoesNotLoseTheOtherOutput() {
+        val f = SalvageFixture(); f.failAt = "preparedAudio"
+        val result = f.run(success = false)
+        assertEquals("video" to null, result.outputs); assertEquals(listOf(f.failure), result.incompleteFailures)
+    }
+    @Test fun publicationFailureSalvagesInsteadOfCompensatingAndAddsItsReason() {
+        for (stage in listOf("audio", "video")) {
+            val f = SalvageFixture(reasons = emptyList())
+            val result = f.run(success = true, failPublish = stage)
+            assertTrue(result.incomplete)
+            assertEquals(listOf(PUBLICATION_FAILED_REASON), result.incompleteReasons)
+            assertEquals(listOf(listOf(PUBLICATION_FAILED_REASON), listOf(PUBLICATION_FAILED_REASON)), f.seenReasons)
+            assertFalse(f.calls.any { it.startsWith("discard") })
+            assertFalse("published" in f.calls)
+        }
+    }
+    @Test fun incompleteTakesStayOutOfTheTransferJournal() {
+        val f = SalvageFixture(); f.run(success = false)
+        assertFalse("prepared" in f.calls); assertFalse("published" in f.calls); assertTrue("aborted" in f.calls)
+    }
 }

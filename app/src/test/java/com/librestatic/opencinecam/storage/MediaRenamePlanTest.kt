@@ -34,6 +34,19 @@ class MediaRenamePlanTest {
         val catalog = images.map { artifact -> val identity = requireNotNull(mediaOriginalIdentity(artifact.uri)); CatalogRow(artifact, identity.second, identity.first, ns) }
         return Fixture(requireNotNull(catalogTake(ns, catalog, documents)), rows, documents)
     }
+    @Test fun clipSidecarKeepsItsShapeWhileMotionLogsAreNumberedSeparately() {
+        val recording = MediaNamespace(id, true)
+        val video = LocalMediaArtifact("content://media/external_primary/video/media/1", "original.mp4", "video/mp4", 12, 100)
+        val clip = LocalMediaArtifact("content://media/external_primary/downloads/5", "original.clip.json", "application/json", 10, 100)
+        val gcsv = LocalMediaArtifact("content://media/external_primary/downloads/6", "original.gcsv", GyroflowLog.MIME_TYPE, 10, 100)
+        val take = requireNotNull(catalogTake(recording, listOf(CatalogRow(video, 1, LocalMediaKind.VIDEO, recording)),
+            emptyList(), attachments = listOf(clip, gcsv)))
+        val names = mediaRenamePreview(take, "Scene_12").files.associate { it.artifact.uri to it.newName }
+        assertEquals("Scene_12.clip.json", names.getValue(clip.uri))
+        assertTrue(names.getValue(gcsv.uri).endsWith(".gcsv"))
+        assertNotEquals(names.getValue(clip.uri), names.getValue(gcsv.uri))
+    }
+
     private fun plan(f: Fixture, stem: String = "Scene_12") = mediaRenamePlan(f.take, mediaRenamePreview(f.take, stem), f.rows, f.documents)
     private fun rejected(block: () -> Unit) { assertTrue(runCatching(block).isFailure) }
     private inner class Access(initial: Fixture = fixture()) : MediaRenameAccess {

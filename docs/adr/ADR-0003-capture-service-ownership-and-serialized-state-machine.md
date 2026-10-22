@@ -51,3 +51,31 @@ OCC-PLAN-013, OCC-PLAN-016, OCC-PLAN-027-029
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-CAM-001, OCC-LIFE-001
+- Related ADRs: None
+
+### Context
+
+The original decision gives the bound CaptureService sole ownership of Camera2 and media resources. On a cold start the camera then waited for Compose to draw the first frame, the service to bind and the cameras to be enumerated before it began to open. Since 0.4.1-beta, `MainActivity.onCreate` calls `CaptureStartup.begin()` (`app/src/main/java/com/librestatic/opencinecam/service/CaptureStartup.kt`) to open the `CameraDevice` ahead of the service, which cut the time to first display on the Razr from 422 ms to 276 ms (commits f5c0a28 and 6aee7be).
+
+### Decision
+
+The Activity may pre-open the `CameraDevice` through `CaptureStartup.begin()` and nothing else. It never configures a capture session, never records, and never touches codecs or audio. The CaptureService remains the only owner of sessions and media resources: it adopts the pre-opened engine (`CaptureStartup.adoptEngine`) and configures the session from the saved settings once the viewfinder surface exists. If the service never adopts the device, or the app leaves the screen first, the pre-opened device is closed (`CaptureStartup.stopped()`, `dropPreopen`).
+
+### Alternatives considered
+
+- Start the service from `onCreate`: rejected because the service still binds only after the first frame and the camera loses the head start.
+- Keep strict Activity-never-touches-the-camera ownership: rejected because the measured startup gain is the point of the change and the device is handed over, not shared.
+
+### Consequences
+
+- Positive: faster cold start with a single owner for sessions and media; a stale pre-open cannot leak because it is closed when the screen is left.
+- Negative: for a short window the Activity process holds an open `CameraDevice` that the service has not yet adopted.
+- Operational: `CaptureStartup` must keep a surface limited to preparing, adopting and dropping the device; a host test guards against start or record entry points being added.
+
+The original decision above is retained as history; this amendment governs where they differ.

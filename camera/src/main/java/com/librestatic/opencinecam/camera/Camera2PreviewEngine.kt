@@ -36,6 +36,8 @@ import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.Build
 import com.librestatic.opencinecam.core.model.Knowledge
+import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.core.model.QuirkEffect
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
@@ -123,6 +125,8 @@ data class Camera2CameraDescriptor(
     val opticalAnchors: List<ZoomAnchor> = emptyList(),
     val supportsHfrZoom: Boolean = false,
     val kelvinRange: IntRange? = null,
+    /** SENSOR_INFO_PHYSICAL_SIZE in mm (width, height), when advertised. */
+    val sensorSizeMm: Pair<Float, Float>? = null,
     val tintSupported: Boolean = false,
     val availableAwbModes: Set<Int> = emptySet(),
     val exposureCapabilities: ExposureCapabilities = ExposureCapabilities(),
@@ -153,6 +157,9 @@ data class Camera2CameraDescriptor(
     /** Qualcomm/Motorola auto frame rate (IQdynamicFPS) can be switched both ways; see [DynamicFps]. */
     val lowLightAutoFps: Boolean = false,
 ) {
+    /** The first focal length as a 35 mm equivalent; inferred from the sensor size, null without it. */
+    val equivalentFocalLengthMm: Float? get() = focalLengthsMm.firstOrNull()?.let { equivalentFocalLengthMm(it, sensorSizeMm?.first, sensorSizeMm?.second) }
+
     /** True when [width]x[height] is a compressed still only a public physical camera advertises (OCC-PLAN-069). */
     fun isPhysicalOnlyStill(width: Int, height: Int, heic: Boolean): Boolean {
         val size = Size(width, height)
@@ -330,6 +337,18 @@ interface Camera2PreviewListener {
      * kept running on its previous request. Never a reason to finalize or discard a running take.
      */
     fun onControlRejected(code: String, message: String) = onFailure(code, message, true)
+    /** Adaptive policy applied a control other than requested (clamped, or fell back to auto); a transient disclosure, never a failure. */
+    fun onControlAdapted(code: String, message: String) = Unit
+    /**
+     * Adaptive recorded a normal SDR take with a software AVC encoder because no hardware encoder fits
+     * (before [onRecordingStarted]); a persistent disclosure for the take, never a failure.
+     */
+    fun onSoftwareVideoEncoder(codecName: String) = Unit
+    /**
+     * Strict refused to start a take (stable [code], e.g. `video-hardware-encoder-unavailable`). The session
+     * and preview are unaffected, so the default is not an error.
+     */
+    fun onRecordingStartRefused(code: String, message: String) = onFailure(code, message, true)
     fun onTorchRejected(message: String) = Unit
     fun onPreviewSurfaceLost(message: String) = Unit
     fun onTapFocusState(state: TapFocusState) = Unit
@@ -337,8 +356,23 @@ interface Camera2PreviewListener {
     fun onZoomEffective(ratio: Float) = Unit
     fun onZoomRejected(requested: Float, accepted: Float) = Unit
     fun onAeLockChanged(active: Boolean) = Unit
+    /**
+     * The physical camera the compressed still is routed to ([requestedPhysicalId], null on the
+     * logical route) against the one the still's own result confirms ([reportedPhysicalId], null when
+     * the result carries no physical results). At configuration (unconfirmed) and once per still. Camera thread.
+     */
+    fun onPhysicalRoute(requestedPhysicalId: String?, reportedPhysicalId: String?) = Unit
+    /**
+     * The physical lens serving the logical streams, from the preview results. Informational: it follows
+     * zoom and is never a discrepancy. Only on change, camera thread.
+     */
+    fun onActiveLens(physicalId: String?) = Unit
+    /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
+    fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
     fun onCadenceGuardChanged(engaged: Boolean) = Unit
+    /** Frame delivery broke down for several seconds of the take (see [SustainedCadenceGuard]); [action] follows the recording policy. Camera thread. */
+    fun onSustainedCadenceLoss(action: CaptureAuditAction, detail: String) = Unit
     fun onAfLockChanged(state: LockState) = Unit
     fun onFocusPullFinished() = Unit
     fun onFocusPullStarted(targetDiopters: Float) = Unit
@@ -386,6 +420,7 @@ private data class TapFocusRequestTag(val token: Long)
 class Camera2PreviewEngine(
     context: Context,
     private val ownerAdmission: CaptureOwnerAdmission = CaptureOwnerAdmission.processGlobal,
+    private val deviceQuirks: DeviceQuirks = DeviceQuirks.None,
 ) : AutoCloseable {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val appContext = context.applicationContext
@@ -424,6 +459,11 @@ class Camera2PreviewEngine(
 
     /** True once a rejected physical-still routing retired this graph's physical stills (OCC-PLAN-069). */
     private var physicalStillFallbackTaken = false
+    /** The physical camera the current graph routes the compressed still to; null on the logical route. */
+    @Volatile private var routedStillPhysicalId: String? = null
+    /** Audit warnings already forwarded for the current graph; cameraExecutor only, so a warning repeating every frame reaches the listener once. */
+    private val forwardedAuditWarnings = HashSet<String>()
+    private var lastActiveLensReport: Pair<Boolean, String?>? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private val instantAec = InstantAecMachine()
     private var instantAecSession: CameraCaptureSession? = null
@@ -530,6 +570,10 @@ class Camera2PreviewEngine(
     private var recordSurface: Surface? = null
     @Volatile private var recording = false
     private var recordingSessionGeneration = 0L
+    // Camera thread only: the recorder session whose repeating request was stopped, and the
+    // continuation that stops MediaRecorder once that session reports no captures in flight.
+    private var drainingRecorderSession: CameraCaptureSession? = null
+    private var recorderDrainContinuation: (() -> Unit)? = null
     // Fault qualification observes the real platform callback; production leaves this unset.
     private var recordingSessionObserver: ((SessionConfiguration) -> Unit)? = null
     @Volatile private var activeDescriptor: Camera2CameraDescriptor? = null
@@ -667,6 +711,28 @@ class Camera2PreviewEngine(
     private var suspensionNotified: Pair<Camera2PreviewListener, AnalysisSuspension>? = null
     // cameraExecutor: DIAGNOSTIC-only capture-result audit of the current graph.
     private var graphAudit: Pair<CameraCaptureSession, CaptureResultAuditor>? = null
+    /** Set by the service for the length of a take; null (preview, photo) leaves the audit diagnostic only. */
+    @Volatile private var cadenceLossGuard: Pair<PolicyMode, SustainedCadenceGuard>? = null
+
+    /**
+     * Arms the sustained-cadence check for a take under [policy], or disarms it with null. The
+     * auditor itself stays DIAGNOSTIC: its STRICT mode demands a request correlation a repeating
+     * request does not have and stops on a single outlier, which would end ordinary takes.
+     */
+    fun setRecordingCadencePolicy(policy: PolicyMode?) {
+        cadenceLossGuard = policy?.let { it to SustainedCadenceGuard() }
+    }
+    /** Strict (default) rejects out-of-range professional controls; Adaptive clamps and discloses. Camera-thread owned. */
+    private var controlPolicy = PolicyMode.STRICT
+    /** The last (selection, camera, policy, outcome) reported, so request rebuilds do not repeat a notice. */
+    private var lastExposureGateKey: Any? = null
+
+    /** Sets the policy for professional controls; call before [setProfessionalControls] so the next request honours it. */
+    fun setControlPolicy(policy: PolicyMode) {
+        cameraExecutor.execute { controlPolicy = policy; encoderPolicy = policy }
+    }
+    /** Set with [controlPolicy] on the camera thread; read by [startExistingGpuVideo] for the encoder gate. */
+    @Volatile private var encoderPolicy = PolicyMode.STRICT
     private var lastCaptureAuditSummaryAtMs = 0L
     @Volatile private var latestCaptureDiagnostics: CaptureAuditStats? = null
     @Volatile private var latestStillShutterLatency: StillShutterLatency? = null
@@ -879,7 +945,7 @@ class Camera2PreviewEngine(
                     Camera2VideoProfile(it.size, it.fps, true)
                 } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
                 val cameraIdToOpen = if (highSpeedProfile != null) {
-                    if (Build.MANUFACTURER.equals("motorola", ignoreCase = true)) {
+                    if (deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
                         preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
                             ?: descriptor.cameraId
                     } else descriptor.cameraId
@@ -1278,6 +1344,13 @@ class Camera2PreviewEngine(
         return pipeline.startRecording(output, bitrate, geometry, audio, minimumSensorTimestampNs = recordingWbMinimumTimestampNs,
             timelapse = timelapse, projectRateOverride = projectRateOverride, separateAudioClock = separateAudioClock,
             recordingLut = recordingLut, videoCodec = videoCodec,
+            encoderPolicy = encoderPolicy,
+            onSoftwareEncoder = { name ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onSoftwareVideoEncoder(name)
+            },
+            onStartRefused = { code, message ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingStartRefused(code, message)
+            },
             onRecordingLutApplied = { evidence ->
                 if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
             },
@@ -1653,6 +1726,7 @@ class Camera2PreviewEngine(
                             return
                         }
                         owner.result = result
+                        reportStillRoute(result)
                         purgeUnmatchedRaw(owner, timestamp)
                         owner.report = PhotoFlashReport(owner.selection, request.get(CaptureRequest.CONTROL_AE_MODE),
                             requireNotNull(request.get(CaptureRequest.FLASH_MODE)), owner.plan?.strength,
@@ -3174,6 +3248,31 @@ class Camera2PreviewEngine(
         )
     }
 
+    /** Tells the listener which physical lens serves the logical preview streams, when that changes. */
+    private fun reportActiveLens(result: TotalCaptureResult) {
+        val active = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        } else null
+        val report = true to active
+        if (report == lastActiveLensReport) return
+        lastActiveLensReport = report
+        listener?.onActiveLens(active)
+    }
+
+    /**
+     * Confirms the still route from the still's own result: a still on a physical output stream always
+     * comes from that camera, so its physical results name the camera that produced it.
+     */
+    private fun reportStillRoute(result: TotalCaptureResult) {
+        val requested = routedStillPhysicalId ?: return
+        val ids = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            result.physicalCameraTotalResults?.keys
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            @Suppress("DEPRECATION") result.physicalCameraResults?.keys
+        } else null
+        listener?.onPhysicalRoute(requested, stillRouteReportedId(requested, ids.orEmpty()))
+    }
+
     private fun reportEffectiveZoom(result: TotalCaptureResult) {
         val descriptor = activeDescriptor ?: return
         val range = descriptor.effectiveZoomRange ?: return
@@ -3307,8 +3406,7 @@ class Camera2PreviewEngine(
                     setVideoSize(size.width, size.height)
                     setVideoFrameRate(outputFrameRate ?: requestedTargetFps)
                     captureRate?.let { setCaptureRate(it) }
-                    val rateScaledBitrate = videoBitrate.toLong() * requestedTargetFps / DEFAULT_TARGET_FPS
-                    setVideoEncodingBitRate(rateScaledBitrate.coerceIn(8_000_000L, 200_000_000L).toInt())
+                    setVideoEncodingBitRate(RecordingDataRate.recorderVideoBps(videoBitrate, requestedTargetFps))
                     // The encoder receives raw sensor frames here (no GPU pass bakes rotation into
                     // pixels), so the container carries the whole content rotation.
                     setOrientationHint(recordingGeometry?.containerRotationDegrees ?: jpegOrientation(descriptor))
@@ -3609,32 +3707,82 @@ class Camera2PreviewEngine(
         if (!request.stopRequested.compareAndSet(false, true)) return false
         cameraExecutor.execute {
             if (!ownsRecorderRequest(request)) return@execute
-            val descriptor = activeDescriptor
-            val device = camera
-            val surface = previewSurface
-            val pipeline = logPipeline?.takeIf { recorderOverGpuPreview && gpuPreviewEnabled }
-            var success = true
-            runCatching { session?.stopRepeating() }
-            runCatching { session?.close() }
+            // Stop feeding the recorder first and let the frames already in the pipeline reach it.
+            // MediaRecorder stops only once the session is idle, so the encoder gets every frame up
+            // to the stop and the camera never queues into a released surface.
+            val draining = session
             session = null
-            try { recorder?.stop() } catch (failure: RuntimeException) {
-                success = false
-                Log.w(TAG, "MediaRecorder stop failed", failure)
+            if (draining == null || runCatching { draining.stopRepeating() }.isFailure) {
+                finishRecorderStop(request, draining)
+                return@execute
             }
-            Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
-            releaseRecorder(request)
-            reportRecordingStopped(success, recorderOutputRetirement())
-            if (success && descriptor != null && device != null && pipeline != null) {
-                configureGpuPreviewSession(device, descriptor, pipeline, generation)
-            } else if (success && descriptor != null && device != null && surface?.isValid == true) {
-                if (activeVideoProfile?.constrainedHighSpeed == true) {
-                    configureHighSpeedPreviewSession(device, descriptor, surface, generation)
-                } else configureSession(device, descriptor, surface, generation)
-            } else if (!success) {
-                listener?.onFailure("video-stop-failed", "The recording was too short or could not be finalized.", true)
+            var finished = false
+            lateinit var timeout: Runnable
+            val finish = {
+                if (!finished) {
+                    finished = true
+                    imageHandler.removeCallbacks(timeout)
+                    if (drainingRecorderSession === draining) {
+                        drainingRecorderSession = null
+                        recorderDrainContinuation = null
+                    }
+                    finishRecorderStop(request, draining)
+                }
             }
+            timeout = Runnable {
+                cameraExecutor.execute {
+                    if (!finished) Log.w(TAG, "Recorder session did not drain within $RECORDER_STOP_DRAIN_TIMEOUT_MS ms; stopping anyway")
+                    finish()
+                }
+            }
+            drainingRecorderSession = draining
+            recorderDrainContinuation = finish
+            imageHandler.postDelayed(timeout, RECORDER_STOP_DRAIN_TIMEOUT_MS)
         }
         return true
+    }
+
+    /** Camera thread: a recorder session reported no captures in flight. */
+    private fun onRecorderSessionReady(configured: CameraCaptureSession) {
+        if (configured !== drainingRecorderSession) return
+        val continuation = recorderDrainContinuation ?: return
+        drainingRecorderSession = null
+        recorderDrainContinuation = null
+        continuation()
+    }
+
+    /**
+     * Camera thread, after the recorder session drained (or could not be drained). The next
+     * preview session replaces [drained] directly: an explicit close makes the framework
+     * unconfigure every stream first, which the Qualcomm HAL rejects as an empty stream set.
+     */
+    private fun finishRecorderStop(request: RecorderRequest, drained: CameraCaptureSession?) {
+        if (!ownsRecorderRequest(request)) {
+            drained?.let { runCatching { it.close() } }
+            return
+        }
+        val descriptor = activeDescriptor
+        val device = camera
+        val surface = previewSurface
+        val pipeline = logPipeline?.takeIf { recorderOverGpuPreview && gpuPreviewEnabled }
+        var success = true
+        try { recorder?.stop() } catch (failure: RuntimeException) {
+            success = false
+            Log.w(TAG, "MediaRecorder stop failed", failure)
+        }
+        Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
+        releaseRecorder(request)
+        reportRecordingStopped(success, recorderOutputRetirement())
+        if (success && descriptor != null && device != null && pipeline != null) {
+            configureGpuPreviewSession(device, descriptor, pipeline, generation)
+        } else if (success && descriptor != null && device != null && surface?.isValid == true) {
+            if (activeVideoProfile?.constrainedHighSpeed == true) {
+                configureHighSpeedPreviewSession(device, descriptor, surface, generation)
+            } else configureSession(device, descriptor, surface, generation)
+        } else {
+            drained?.let { runCatching { it.close() } }
+            if (!success) listener?.onFailure("video-stop-failed", "The recording was too short or could not be finalized.", true)
+        }
     }
 
     fun detachPreviewWhileRecording(): Boolean {
@@ -3890,6 +4038,8 @@ class Camera2PreviewEngine(
                         }
                     }
 
+                    override fun onReady(configured: CameraCaptureSession) = onRecorderSessionReady(configured)
+
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
                         if (!ownsConfiguration()) return
@@ -4033,6 +4183,8 @@ class Camera2PreviewEngine(
                             } else finalizeRecordingAfterSessionFailure(request)
                         }
                     }
+
+                    override fun onReady(configured: CameraCaptureSession) = onRecorderSessionReady(configured)
 
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
@@ -4258,6 +4410,10 @@ class Camera2PreviewEngine(
         if (activeVideoProfile == null) {
         val compressedFormat = if (activeStillFormat == StillPhotoFormat.HEIC) ImageFormat.HEIC else ImageFormat.JPEG
         compressedPlan = compressedStillPlan(descriptor)
+        routedStillPhysicalId = compressedPlan?.physicalId
+        forwardedAuditWarnings.clear()
+        lastActiveLensReport = null
+        compressedPlan?.physicalId?.let { listener?.onPhysicalRoute(it, null) }
         val compressedSize = compressedPlan?.size
         compressedSize?.let { size ->
             jpegReader = ImageReader.newInstance(size.width, size.height, compressedFormat, MAX_BURST_IMAGES + 2).apply {
@@ -4605,6 +4761,7 @@ class Camera2PreviewEngine(
                     reportAfLockResult(request, result)
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
+                    reportActiveLens(result)
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     readIspHistogram(result)
@@ -4772,8 +4929,11 @@ class Camera2PreviewEngine(
                 }
                 result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE)?.let { put(AUDIT_AF_STATE, it.toString()) }
             }
+            val droppedBefore = auditor.diagnostics().droppedFrames
             auditor.auditResult(CaptureResultSample(result.frameNumber, sensorTimestamp?.takeIf { it >= 0 }, metadata))
+                .forEach { event -> auditWarningText(event)?.takeIf(forwardedAuditWarnings::add)?.let { listener?.onAuditWarning(it) } }
             val stats = auditor.diagnostics()
+            checkSustainedCadence(sensorTimestamp, stats.droppedFrames - droppedBefore, stats)
             latestCaptureDiagnostics = stats
             val now = SystemClock.elapsedRealtime()
             if (now - lastCaptureAuditSummaryAtMs >= CAPTURE_AUDIT_SUMMARY_MS) {
@@ -4781,6 +4941,21 @@ class Camera2PreviewEngine(
                 Log.i(TAG, "Capture audit: $stats")
             }
         }.onFailure { Log.w(TAG, "Capture audit skipped a result.", it) }
+    }
+
+    /**
+     * cameraExecutor: feeds the take's [SustainedCadenceGuard]. Constrained high-speed sessions
+     * (results arrive per batch) and time-lapse takes (frames are taken at the interval, not the
+     * stream rate) are not judged.
+     */
+    private fun checkSustainedCadence(sensorTimestamp: Long?, droppedFrames: Long, stats: CaptureAuditStats) {
+        val (policy, guard) = cadenceLossGuard ?: return
+        if (sensorTimestamp == null || sensorTimestamp < 0 || guard.tripped || isHighSpeedSession() || timelapseTake) return
+        if (guard.observe(sensorTimestamp, droppedFrames)) {
+            val action = cadenceLossAction(policy)
+            Log.w(TAG, "Sustained cadence loss ($action): $stats")
+            listener?.onSustainedCadenceLoss(action, "droppedFrames=${stats.droppedFrames} results=${stats.results}")
+        }
     }
 
     private fun recordingCaptureCallback(
@@ -4869,16 +5044,29 @@ class Camera2PreviewEngine(
         builder.set(CaptureRequest.SENSOR_FRAME_DURATION, frameDurationNs)
     }
 
+    private fun reportExposureGate(selection: ExposureSelection, gate: ExposureGate) {
+        val key = if (gate.code == null) null else listOf(selection, activeDescriptor?.cameraId, controlPolicy, gate.code)
+        if (key == lastExposureGateKey) return
+        lastExposureGateKey = key
+        val message = gate.message ?: return
+        val code = gate.code?.code ?: return
+        if (gate.rejected) listener?.onControlRejected(code, message) else listener?.onControlAdapted(code, message)
+    }
+
     private fun applyManualControls(
         builder: CaptureRequest.Builder,
         defaultAfMode: Int = if (recording || logPreviewEnabled || (gpuPreviewEnabled && !gpuPhotoPreviewEnabled) || activeVideoProfile != null)
             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
     ) {
         if (!isHighSpeedSession()) enableIspHistogram(builder)
-        val pro = professionalExposure?.resolve(
-            if (isHighSpeedSession()) ExposureCapabilities() else activeDescriptor?.exposureCapabilities ?: ExposureCapabilities(),
-            CaptureFrameRate(requestedTargetFps.coerceAtLeast(1)),
-        )
+        val pro = professionalExposure?.let { selection ->
+            val rate = CaptureFrameRate(requestedTargetFps.coerceAtLeast(1))
+            // High-speed sessions pass empty capabilities on purpose: they fall back to auto without a notice.
+            if (isHighSpeedSession()) return@let selection.resolve(ExposureCapabilities(), rate)
+            val gate = selection.gate(activeDescriptor?.exposureCapabilities ?: ExposureCapabilities(), rate, controlPolicy)
+            reportExposureGate(selection, gate)
+            gate.exposure
+        }
         val iso = if (pro != null) pro.iso else requestedIso
         val exposure = if (pro != null) pro.timeNs else requestedExposureNs
         if (pro == null && Build.VERSION.SDK_INT >= 36 && activeDescriptor?.exposureCapabilities?.priorities?.isNotEmpty() == true) {
@@ -5579,18 +5767,18 @@ class Camera2PreviewEngine(
      * the device advertises and configures 120/240 fps but its Qualcomm HAL rejects request zero.
      */
     private fun applyMotorolaHighSpeedSessionControls(builder: CaptureRequest.Builder) {
-        if (!Build.MANUFACTURER.equals("motorola", ignoreCase = true)) return
         val descriptor = activeDescriptor ?: return
+        if (!deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
         val keys = runCatching {
             manager.getCameraCharacteristics(descriptor.cameraId).availableCaptureRequestKeys
         }.getOrNull().orEmpty()
-        keys.firstOrNull { it.name == MOTOROLA_IS_CAMERA2_KEY }?.let { key ->
+        for (control in MotorolaHighSpeed.sessionValues(keys.map { it.name })) {
+            val key = keys.first { it.name == control.keyName }
             @Suppress("UNCHECKED_CAST")
-            builder.set(key as CaptureRequest.Key<ByteArray>, byteArrayOf(1))
-        }
-        keys.firstOrNull { it.name == MOTOROLA_CURRENT_MODE_KEY }?.let { key ->
-            @Suppress("UNCHECKED_CAST")
-            builder.set(key as CaptureRequest.Key<IntArray>, intArrayOf(MOTOROLA_SLOW_MOTION_MODE))
+            when (control) {
+                is HighSpeedSessionValue.Bytes -> builder.set(key as CaptureRequest.Key<ByteArray>, control.value)
+                is HighSpeedSessionValue.Ints -> builder.set(key as CaptureRequest.Key<IntArray>, control.value)
+            }
         }
     }
 
@@ -5601,8 +5789,7 @@ class Camera2PreviewEngine(
     ): String? {
         val logical = runCatching { manager.getCameraCharacteristics(descriptor.cameraId) }.getOrNull()
             ?: return null
-        val targetFocal = descriptor.focalLengthsMm.firstOrNull()
-        return logical.physicalCameraIds.mapNotNull { id ->
+        val candidates = logical.physicalCameraIds.mapNotNull { id ->
             val physical = runCatching { manager.getCameraCharacteristics(id) }.getOrNull()
                 ?: return@mapNotNull null
             val map = physical.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
@@ -5614,10 +5801,12 @@ class Camera2PreviewEngine(
                     }
             }.getOrDefault(false)
             if (!supportsProfile) return@mapNotNull null
-            val focal = physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                ?.firstOrNull()
-            id to if (targetFocal != null && focal != null) abs(targetFocal - focal) else Float.MAX_VALUE
-        }.minByOrNull { it.second }?.first
+            PhysicalHighSpeedCandidate(
+                id,
+                physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull(),
+            )
+        }
+        return MotorolaHighSpeed.closestFocalPhysicalId(candidates, descriptor.focalLengthsMm.firstOrNull())
     }
 
     private fun updateEffectiveFps(sensorTimestampNs: Long?) {
@@ -5808,6 +5997,7 @@ class Camera2PreviewEngine(
                 timestampSourceRealtime = characteristics.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME,
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
                 focalLengthsMm = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList().orEmpty(),
+                sensorSizeMm = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { it.width to it.height },
                 previewSize = previewSize,
                 jpegSize = map.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height },
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)
@@ -5958,6 +6148,9 @@ class Camera2PreviewEngine(
 
     /** Codec of the SDR take in flight (GPU or direct MediaRecorder route); null when none or LOG/HLG. */
     fun activeVideoCodec(): VideoCodec? = logPipeline?.activeVideoCodec() ?: recorderVideoCodec
+
+    /** True while a MediaRecorder owns the take (off-speed and high-speed); false for the MediaCodec graphs. */
+    fun recordsThroughMediaRecorder(): Boolean = recorderRequest.get() != null
 
     /** Why the latest SDR take fell back from HEVC to H.264, or null. */
     fun videoCodecFallbackReason(): String? = logPipeline?.videoCodecFallbackReason() ?: recorderCodecFallback
@@ -6409,6 +6602,8 @@ class Camera2PreviewEngine(
 
         const val DEFAULT_TARGET_FPS = 30
         private const val RECORDER_LEVEL_INTERVAL_MS = 100L
+        // A few frames at 24 fps; a high-speed burst drains far sooner.
+        private const val RECORDER_STOP_DRAIN_TIMEOUT_MS = 500L
         internal const val MIME_AVC = "video/avc"
         internal const val MIME_HEVC = "video/hevc"
         private const val MIN_SELECTABLE_FPS = 10
@@ -6419,9 +6614,6 @@ class Camera2PreviewEngine(
         private const val TAP_FOCUS_HOLD_MS = 3_000L
         internal const val SCOPE_HISTOGRAM_BINS = 64
         private const val MAX_BURST_IMAGES = 10
-        private const val MOTOROLA_IS_CAMERA2_KEY = "com.lenovo.moto.clientapp.is_motcamera2"
-        private const val MOTOROLA_CURRENT_MODE_KEY = "com.lenovo.moto.clientapp.current_mode"
-        private const val MOTOROLA_SLOW_MOTION_MODE = 3
         private const val TAG = "Camera2PreviewEngine"
         private const val CADENCE_TAG = "CadenceGuard"
     }

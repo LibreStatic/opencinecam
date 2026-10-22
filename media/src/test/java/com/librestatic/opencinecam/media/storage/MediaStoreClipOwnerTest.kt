@@ -73,10 +73,27 @@ class MediaStoreClipOwnerTest {
         val rows = Rows()
         assertEquals(ClipFinalizationResult.Published(incomplete = false),
             finalizeClip(rows, "clip", "sidecar", true, 10, { "{}".toByteArray() }, "take-3"))
-        assertEquals(listOf("sidecar:sidecar:{}", "publish:clip"), rows.events)
+        assertEquals(listOf("sidecar:sidecar:{}", "publish:sidecar", "publish:clip"), rows.events)
 
         val empty = Rows()
         assertEquals(ClipFinalizationResult.Deleted, finalizeClip(empty, "clip", "sidecar", true, 0, null, "take-4"))
         assertEquals(listOf("delete:clip", "delete:sidecar"), empty.events)
+    }
+
+    @Test
+    fun incompleteClipWithBytesIsPublishedWithItsAttachmentsAndAnAlreadyWrittenSidecar() {
+        val rows = Rows()
+        val result = finalizeClip(rows, "clip", "sidecar", muxerFinalized = false, bytesWritten = 7,
+            sidecarBytes = null, correlationId = "take-5", attachments = listOf("log"))
+        assertEquals(ClipFinalizationResult.Published(incomplete = true), result)
+        assertEquals(listOf("publish:log", "publish:sidecar", "publish:clip"), rows.events)
+    }
+
+    @Test
+    fun emptyClipDeletesItsAttachmentsToo() {
+        val rows = Rows()
+        assertEquals(ClipFinalizationResult.Deleted,
+            finalizeClip(rows, "clip", "sidecar", false, 0, null, "take-6", attachments = listOf("log")))
+        assertEquals(listOf("delete:clip", "delete:sidecar", "delete:log"), rows.events)
     }
 }

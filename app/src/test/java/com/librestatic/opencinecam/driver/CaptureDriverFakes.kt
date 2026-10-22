@@ -42,7 +42,7 @@ import kotlinx.coroutines.delay
 
 /** A rear camera with manual exposure, white balance in kelvin, manual focus, Razr-like video sizes and 12/8/5 MP stills. */
 internal val DriverCamera = Camera2CameraDescriptor(
-    cameraId = "0", lensFacing = CameraMetadata.LENS_FACING_BACK, focalLengthsMm = listOf(6.9f),
+    cameraId = "0", lensFacing = CameraMetadata.LENS_FACING_BACK, focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f,
     previewSize = Size(1920, 1080), jpegSize = Size(4000, 3000), rawSize = Size(4000, 3000), analysisSize = Size(640, 360),
     sensorOrientation = 90, sensitivityRange = Range(50, 6400), exposureTimeRangeNs = Range(100_000L, 500_000_000L),
     aeCompensationRange = Range(-6, 6), aeCompensationStep = 1f / 3f, minimumFocusDistance = 10f,

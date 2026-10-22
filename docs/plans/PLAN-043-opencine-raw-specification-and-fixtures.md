@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-043
 title: "OpenCine RAW specification and fixtures"
 status: Done
-revision: 1
+revision: 2
 milestone: M13
 intended_executor: GPT-5.6 Luna
 execution_mode: implementation
@@ -151,3 +151,4 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 - Evidence: `evidence/plan-043/gradle-build.log`, `evidence/plan-043/format.log`, `evidence/plan-043/validator.log`, `evidence/plan-043/ffprobe.log`
 - Deviations: No recorded media fixture was available for ffprobe; the installed ffprobe version is recorded and the deterministic codec tests cover binary/CRC32C/CBOR/recovery behavior. RAW capability remains governed by upstream public Camera2 evidence and no RAW-video claim is promoted.
 - Follow-up plans: OCC-PLAN-044 and OCC-PLAN-045 are unblocked; OCC-PLAN-047 still retains its conditional inputs.
+- Amendment (2026-10-19): the "Primary paths" of section 11 (`media/src/main/ocraw/`, `desktop-tools/`) were never created as such. The ocraw codec, journal and desktop facade live in the existing `:media` module at `media/src/main/java/com/librestatic/opencinecam/media/ocraw/` (`OpenCineRaw.kt`, `OcrawJournal.kt`, `OcrawInterop.kt`, `OcrawDesktop.kt`), as OCC-PLAN-044 and OCC-PLAN-045 state. `desktop-tools/` is a folder for the dependency-free Python CLI (`ocraw_recovery.py`), not a Gradle module.

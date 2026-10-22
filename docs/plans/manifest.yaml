@@ -554,7 +554,7 @@ plans:
   - id: OCC-PLAN-043
     title: "OpenCine RAW specification and fixtures"
     status: Done
-    revision: 1
+    revision: 2
     milestone: M13
     path: docs/plans/PLAN-043-opencine-raw-specification-and-fixtures.md
     depends_on: [OCC-PLAN-005, OCC-PLAN-006, OCC-PLAN-037]
@@ -690,7 +690,7 @@ plans:
   - id: OCC-PLAN-053
     title: "APV UI fallback and APV RAW verdict"
     status: Done
-    revision: 1
+    revision: 2
     milestone: M15
     path: docs/plans/PLAN-053-apv-ui-fallback-and-apv-raw-verdict.md
     depends_on: [OCC-PLAN-011, OCC-PLAN-052]
@@ -769,7 +769,7 @@ plans:
   - id: OCC-PLAN-059
     title: "F-Droid direct Google Play release and SBOM"
     status: Done
-    revision: 1
+    revision: 2
     milestone: M17
     path: docs/plans/PLAN-059-f-droid-direct-google-play-release-and-sbom.md
     depends_on: [OCC-PLAN-002, OCC-PLAN-003, OCC-PLAN-058]
@@ -812,7 +812,7 @@ plans:
   - id: OCC-PLAN-062
     title: "F-Droid and Google Play channel activation"
     status: ConditionalReady
-    revision: 1
+    revision: 2
     milestone: M17
     path: docs/plans/PLAN-062-f-droid-and-google-play-channel-activation.md
     depends_on: [OCC-PLAN-058, OCC-PLAN-059]
@@ -827,7 +827,7 @@ plans:
   - id: OCC-PLAN-063
     title: "Shared settings and session torch"
     status: InProgress
-    revision: 2
+    revision: 3
     milestone: H1
     path: docs/plans/PLAN-063-settings-and-session-torch.md
     depends_on: [OCC-PLAN-015]
@@ -841,7 +841,7 @@ plans:
   - id: OCC-PLAN-064
     title: "Fold display sessions, roles and continuity"
     status: InProgress
-    revision: 6
+    revision: 7
     milestone: H2
     path: docs/plans/PLAN-064-fold-display-sessions-and-continuity.md
     depends_on: [OCC-PLAN-015]
@@ -855,7 +855,7 @@ plans:
   - id: OCC-PLAN-065
     title: "Professional control intent and operation"
     status: InProgress
-    revision: 9
+    revision: 10
     milestone: H3
     path: docs/plans/PLAN-065-professional-control-intent-and-operation.md
     depends_on: [OCC-PLAN-015]
@@ -869,7 +869,7 @@ plans:
   - id: OCC-PLAN-066
     title: "Capture and project timelines"
     status: InProgress
-    revision: 35
+    revision: 68
     milestone: H4
     path: docs/plans/PLAN-066-capture-and-project-timelines.md
     depends_on: [OCC-PLAN-015]

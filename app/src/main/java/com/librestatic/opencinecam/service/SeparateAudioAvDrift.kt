@@ -19,18 +19,26 @@ import com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot
  * comparison has no meaning (camera not on BOOTTIME, or fewer than two distinct timestamps).
  */
 internal fun separateAudioAvDrift(cameraRealtime: Boolean, timing: PcmSourceTimingReport?, correlationId: String): AvDiagnosticSnapshot? {
+    val (videoClockUs, audioClockUs) = avClockSample(cameraRealtime, timing) ?: return null
+    return AvClockDiagnostics(PolicyMode.ADAPTIVE, correlationId = correlationId).use { diagnostics ->
+        diagnostics.observe(0, 0, 0)
+        diagnostics.observe(videoClockUs, audioClockUs, videoClockUs)
+    }
+}
+
+/**
+ * The (video clock, audio clock) elapsed microseconds between the first and last AudioTimestamp
+ * observation, or null when the comparison has no meaning. Both only ever grow, so successive
+ * samples of a running take can feed one [AvClockDiagnostics].
+ */
+internal fun avClockSample(cameraRealtime: Boolean, timing: PcmSourceTimingReport?): Pair<Long, Long>? {
     if (!cameraRealtime || timing == null || timing.timestampObservations < 2) return null
     val firstFrame = timing.firstTimestampFrame ?: return null
     val lastFrame = timing.lastTimestampFrame ?: return null
     val firstNs = timing.firstTimestampNs ?: return null
     val lastNs = timing.lastTimestampNs ?: return null
     if (lastFrame <= firstFrame || lastNs <= firstNs) return null
-    val videoClockUs = (lastNs - firstNs) / 1_000
-    val audioClockUs = pcmFrameDurationNs(lastFrame - firstFrame, timing.sampleRateHz) / 1_000
-    return AvClockDiagnostics(PolicyMode.ADAPTIVE, correlationId = correlationId).use { diagnostics ->
-        diagnostics.observe(0, 0, 0)
-        diagnostics.observe(videoClockUs, audioClockUs, videoClockUs)
-    }
+    return (lastNs - firstNs) / 1_000 to pcmFrameDurationNs(lastFrame - firstFrame, timing.sampleRateHz) / 1_000
 }
 
 /** One log line for the take; the snapshot itself stays in memory for the binder. */

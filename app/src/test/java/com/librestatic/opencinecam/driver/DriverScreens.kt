@@ -51,6 +51,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
+import com.librestatic.opencinecam.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.StorageBenchmarkContent
+import com.librestatic.opencinecam.camera.CameraInventory
+import com.librestatic.opencinecam.camera.CharacteristicEntry
+import com.librestatic.opencinecam.core.model.BenchmarkResultDocument
+import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.core.model.StorageBenchmarkOutcome
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
@@ -160,6 +169,13 @@ fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
 @Composable
 fun CaptureRecording() = CaptureChrome(
     driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L),
+)
+
+/** Recording under the Adaptive policy with a live warning: it must show in every layout while the take runs. */
+@Composable
+fun CaptureRecordingWarning() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        recordingWarning = "Storage is running low · Audio is drifting from the picture"),
 )
 
 /** Recording through a confirmed USB lavalier: the meter shows a USB badge. */
@@ -281,6 +297,61 @@ fun SettingsLowLightFps() = DriverTheme {
 fun SettingsRecording() = DriverTheme {
     SettingsScreen(CameraUiState(phase = CameraUiPhase.RECORDING, settingsPending = true), CameraSettings(),
         audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = {})
+}
+
+/** The settings hub on an Adaptive recording policy; `click tag=settings-category-RECORDING` shows the policy row. */
+@Composable
+fun SettingsRecordingPolicy() = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(recordingPolicy = PolicyMode.ADAPTIVE)) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+}
+
+private val FakeInventory = listOf(
+    CameraInventory("0", null, listOf(CharacteristicEntry("android.lens.facing", "BACK"),
+        CharacteristicEntry("android.sensor.info.sensitivityRange", "[50, 6400]")), lensFacing = 1, focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f),
+)
+
+/** Capabilities with the export dialog open: redacted by default, consent not yet given, so the actions are off. */
+@Composable
+fun CapabilitiesExport() = DriverTheme {
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory },
+        initialExportOpen = true, loadCodecAudio = { _, _ -> null })
+}
+
+/** Capabilities with the latest Main10 file check: HLG signalling passed, effective precision needs a controlled capture. */
+@Composable
+fun CapabilitiesMain10() = DriverTheme {
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
+        loadMain10Check = { com.librestatic.opencinecam.camera.Main10FileChecks.evaluate(com.librestatic.opencinecam.camera.Main10TakeKind.HLG,
+            com.librestatic.opencinecam.camera.Main10FileSignal("video/hevc", "Main10", "BT.2020", "HLG", 10), "OCC_20261019_120000.mp4", 1_792_000_000_000L) })
+}
+
+/**
+ * Capabilities with the Razr's bundled device profile on a build other than the one it was recorded
+ * on: active, the two high-speed quirks listed, and the "not verified on this build" notice.
+ */
+@Composable
+fun CapabilitiesDeviceProfile() = DriverTheme {
+    val documents = java.io.File("src/main/profiles/device-profiles").listFiles { file -> file.extension == "json" }
+        .orEmpty().sortedBy { it.name }.associate { it.name to it.readText() }
+    val quirks = com.librestatic.opencinecam.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
+    CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
+        loadMain10Check = { null }, loadDeviceProfile = { _, cameraId -> quirks.resolve(cameraId) })
+}
+
+/** The storage benchmark page with a finished, qualified result (three windows). */
+@Composable
+fun StorageBenchmark() = DriverTheme {
+    val window = { index: Int, rate: Long -> buildJsonObject { put("index", index); put("bytesPerSecond", rate) } }
+    val result = BenchmarkResultDocument(
+        schemaVersion = "1.0.0", benchmarkId = "driver-benchmark", createdAt = "2026-10-19T12:00:00Z",
+        destination = buildJsonObject { put("kind", "saf-destination") }, bytesWritten = 3L * 1024 * 1024 * 1024,
+        windows = listOf(window(0, 410_000_000L), window(1, 395_000_000L), window(2, 402_000_000L)),
+        requiredBytesPerSecond = 37_500_000L, qualificationMarginBytesPerSecond = 357_500_000L,
+        outcome = "pass", outcomeDetail = StorageBenchmarkOutcome.QUALIFIED.name,
+    )
+    StorageBenchmarkContent(37_500_000L, running = false, last = result, onBack = {}, onChoose = {}, onCancel = {})
 }
 
 /** The media catalog with a mix of video, photo and audio takes; take 1's proxy is ready, take 2's is being made. */

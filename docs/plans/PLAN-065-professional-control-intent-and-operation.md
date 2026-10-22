@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-065
 title: "Professional control intent and operation"
 status: InProgress
-revision: 9
+revision: 10
 milestone: H3
 intended_executor: Codex
 execution_mode: implementation
@@ -242,3 +242,5 @@ Package/patch/restore of this connection are recorded in `FINAL_E15_METERS_REOPE
 Revision17 / H3 operator — production changes after the Rev67 seal (F1–F3), recorded here because they were applied without formal review (HANDOFF-2026-09-21, end-to-end review 2026-09-25). `OperatorControls.kt`: each assignable button draws one glyph per action (`OperatorActionIcon`; letters for A/B/C1/C2) instead of plain text; actions with latched state (TORCH, PEAKING, ZEBRA, HISTOGRAM, VIEW_ASSIST, CONTROL_LOCK, EXTERIOR) show a container color and an ON/OFF pill with `stateDescription` for TalkBack, derived from `operatorActionToggleState` in `OperatorPreferences.kt`; a long press shows the action's help text (21 new `operator_*` strings in EN and ES, parity kept). `operatorActionAvailable` gates VIEW_ASSIST so it is not left enabled where it is a no-op. Verification status: host 1731/0 and lint with no errors in the 2026-09-25 review; `OperatorUiTest` 6/6 on the API30 emulator per the handoff; nothing verified on a physical device.
 
 The 2026-09-25 review opened observations on this work that the fixes flow (package WP4) corrects without closing acceptance: the `state.gpuViewfinder || selectedMode == LOG` gate enables VIEW_ASSIST and shows ON also in TIME_LAPSE, VIDEO with LUT/subject preview and PHOTO with LUT, where the GPU viewfinder is passthrough and does not apply the transformation (R2; the correct gate is LOG only); the TORCH pill reads the requested setting and not the effective one; the long-press help must not be lost on a disabled button; the toggles lack a `Role`. Still open: LOG without hang, VIEW_ASSIST in LOG and peaking during recording on a real device, and all the physical H3 acceptance listed above. No final APK.
+
+Amendment (2026-10-19): the statements that no final APK or publication happens before the whole H1-H5 program completes are superseded by AGENTS.md. Store releases ship incrementally, each with a `versionName` bump (`tools/play-publish.py`, closed `alpha` track), and releases up to 0.4.2-beta have shipped. The acceptance criteria of this plan are unchanged.

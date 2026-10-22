@@ -82,7 +82,7 @@ internal fun requireHashSnapshot(spec: WebDavArtifactSpec, snapshot: WebDavClipS
             "flac" -> setOf("audio/flac", "audio/x-flac")
             else -> emptySet()
         }
-        WebDavArtifactRole.VIDEO_METADATA, WebDavArtifactRole.AUDIO_METADATA ->
+        WebDavArtifactRole.VIDEO_METADATA, WebDavArtifactRole.AUDIO_METADATA, WebDavArtifactRole.CLIP_METADATA ->
             if (extension == "json") setOf("application/json") else emptySet()
     }
     if (snapshot.mimeType.lowercase(Locale.ROOT) !in allowedMime) throw WebDavArtifactContentChanged()

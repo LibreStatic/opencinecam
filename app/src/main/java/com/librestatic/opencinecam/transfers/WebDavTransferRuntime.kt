@@ -28,6 +28,13 @@ internal interface WebDavRuntimeNetworkSource : AutoCloseable {
     fun start(changed: (Network?, WebDavNetwork) -> Unit)
 }
 
+/** One automatic send: the final message, the bundle's artifacts afterwards, and whether it never started. */
+internal data class AutoSendResult(
+    val message: WebDavTransferMessage,
+    val artifacts: List<WebDavOutboxArtifact> = emptyList(),
+    val busy: Boolean = false,
+)
+
 enum class MediaMutationBlocker { CAPTURE, TRANSFER, MEDIA_MUTATION, CLOSED }
 
 /** Typed refusal so waiters can tell temporary ownership from a real failure. */
@@ -92,17 +99,54 @@ class WebDavTransferRuntime internal constructor(
 
     private class Work(val bundleId: String?) {
         val finished = CompletableDeferred<Unit>()
+        /** Final visible result, completed after SQLite/FD/worker cleanup has returned. */
+        val result = CompletableDeferred<WebDavTransferMessage>()
         @Volatile var stopped: WebDavTransferMessage? = null
     }
 
     /** All public entry points below only mutate memory/enqueue work on their caller. */
     fun refresh() = start(null)
     fun send(bundleId: String) { requireOutboxUuid(bundleId); start(bundleId) }
-    fun cancel() = synchronized(gate) {
+    fun cancel() = synchronized(gate) { cancelLocked() }
+
+    /** Stops only the batch for [bundleId], never a manual batch for another bundle or a refresh. */
+    internal fun cancel(bundleId: String) = synchronized(gate) {
+        if (work?.bundleId == bundleId) cancelLocked()
+    }
+
+    private fun cancelLocked() {
         work?.stopped = WebDavTransferMessage.CANCELLED
         receipt = control.cancelAsync(::dispatchCleanup)
         receipt = control.updatePolicyAsync(policyLocked(), ::dispatchCleanup)
         publishLocked(WebDavTransferMessage.CANCELLED)
+    }
+
+    /**
+     * Sends one bundle through the same admission as [send] and suspends until its batch has fully
+     * retired. A busy runtime (another batch, a capture, a media mutation) returns at once with
+     * [AutoSendResult.busy] set; nothing is queued behind it.
+     */
+    internal suspend fun sendAndAwait(bundleId: String): AutoSendResult {
+        requireOutboxUuid(bundleId)
+        val admitted = admit(bundleId) ?: return synchronized(gate) {
+            AutoSendResult(
+                when {
+                    mediaMutations > 0 -> WebDavTransferMessage.WAITING_MEDIA
+                    captures > 0 -> WebDavTransferMessage.WAITING_RECORDING
+                    else -> mutable.value.message
+                }, busy = true)
+        }
+        val message = try {
+            admitted.result.await()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            cancel(bundleId) // The caller stopped waiting: stop our own batch only.
+            throw cancelled
+        }
+        val artifacts = withContext(Dispatchers.IO) {
+            try { WebDavSqliteOutbox(context, databaseName).use { it.load(bundleId)?.artifacts.orEmpty() } }
+            catch (_: Exception) { emptyList() }
+        }
+        return AutoSendResult(message, artifacts)
     }
 
     fun reserveCapture(): CaptureTransferReservation = synchronized(gate) {
@@ -172,17 +216,18 @@ class WebDavTransferRuntime internal constructor(
         publishLocked(WebDavTransferMessage.WAITING_MEDIA, updated.values.toList())
     }
 
-    private fun start(bundleId: String?) {
-        synchronized(gate) {
-            if (closed) return
-            if (mediaMutations > 0) { publishLocked(WebDavTransferMessage.WAITING_MEDIA); return }
-            if (captures > 0) { publishLocked(WebDavTransferMessage.WAITING_RECORDING); return }
-            if (work != null || !receipt.isRetired) return
-            val admitted = Work(bundleId)
-            work = admitted // Register local I/O ownership BEFORE enqueuing it.
-            publishLocked(if (bundleId == null) WebDavTransferMessage.IDLE else WebDavTransferMessage.SENDING)
-            executor.execute { execute(admitted) }
-        }
+    private fun start(bundleId: String?) { admit(bundleId) }
+
+    private fun admit(bundleId: String?): Work? = synchronized(gate) {
+        if (closed) return null
+        if (mediaMutations > 0) { publishLocked(WebDavTransferMessage.WAITING_MEDIA); return null }
+        if (captures > 0) { publishLocked(WebDavTransferMessage.WAITING_RECORDING); return null }
+        if (work != null || !receipt.isRetired) return null
+        val admitted = Work(bundleId)
+        work = admitted // Register local I/O ownership BEFORE enqueuing it.
+        publishLocked(if (bundleId == null) WebDavTransferMessage.IDLE else WebDavTransferMessage.SENDING)
+        executor.execute { execute(admitted) }
+        admitted
     }
 
     private fun dispatchCleanup(action: () -> Unit) {
@@ -293,6 +338,7 @@ class WebDavTransferRuntime internal constructor(
                 if (work === current) work = null
                 publishLocked(current.stopped ?: message)
                 notifyIdleLocked()
+                current.result.complete(current.stopped ?: message)
             }
         }
     }

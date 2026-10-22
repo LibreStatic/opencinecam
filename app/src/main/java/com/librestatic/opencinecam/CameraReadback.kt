@@ -40,6 +40,10 @@ internal sealed interface ReadbackDifference {
 private const val TIME_TOLERANCE = 0.01
 /** The reported colour temperature is an estimate; this close it matches the request. */
 private const val TEMPERATURE_TOLERANCE_K = 100
+/** The lens settles on a manual focus distance over several frames; this close (in diopters) it is the requested focus. */
+private const val FOCUS_TOLERANCE_DIOPTERS = 0.3f
+/** The measured frame rate is a smoothed estimate from sensor timestamps; this close (relative) it is the requested rate. */
+private const val FPS_TOLERANCE = 0.05
 
 internal fun antibandingOf(code: Int?): Antibanding? = when (code) {
     CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> Antibanding.AUTO
@@ -105,6 +109,51 @@ internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?
     )
 }
 
+/**
+ * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO and time
+ * (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
+ * [TEMPERATURE_TOLERANCE_K]), the AF mode and, under manual focus, the focus distance (within
+ * [FOCUS_TOLERANCE_DIOPTERS]), the frame rate (within [FPS_TOLERANCE]), the processing modes actually submitted, and the vendor picture
+ * controls. Automatic values, unknown reports and cleared requests produce no pair.
+ */
+internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = buildList {
+    fun add(key: String, requested: Any?, reported: Any?, within: Boolean) {
+        if (requested != null && reported != null) add(ReadbackSample(key, requested.toString(), reported.toString(), within))
+    }
+    state.reportedExposureMode?.let { add("android.control.aeMode", state.requestedExposureMode.name, it.name, it == state.requestedExposureMode) }
+    add("android.sensor.sensitivity", state.requestedIso, state.sensitivityIso, state.requestedIso == state.sensitivityIso)
+    val time = state.requestedExposureTimeNs
+    val reportedTime = state.exposureTimeNs
+    if (time != null && reportedTime != null) add("android.sensor.exposureTime", "$time ns", "$reportedTime ns", abs(reportedTime - time) <= time * TIME_TOLERANCE)
+    val exposure = state.effectiveSettings?.exposure
+    val band = exposure?.antibanding
+    val reportedBand = state.reportedAntibanding
+    if (band != null && reportedBand != null) add("android.control.aeAntibandingMode", band.name, antibandingOf(reportedBand)?.name ?: "#$reportedBand", antibandingOf(reportedBand) == band)
+    val metering = exposure?.metering
+    val reportedMetering = state.reportedMeteringMode
+    if (metering != null && reportedMetering != null) add("org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode",
+        metering.name, ExposureMetering.fromVendor(reportedMetering)?.name ?: "#$reportedMetering", reportedMetering == metering.vendorValue)
+    val wb = state.requestedWhiteBalance
+    val reportedK = state.reportedColorTemperatureK
+    if (wb is WhiteBalanceSelection.Kelvin && reportedK != null) add("android.colorCorrection.colorTemperature", "${wb.kelvin} K", "$reportedK K", abs(reportedK - wb.kelvin) <= TEMPERATURE_TOLERANCE_K)
+    add("android.control.afMode", state.submittedAfMode, state.reportedAfMode, state.submittedAfMode == state.reportedAfMode)
+    val focus = state.requestedFocusDiopters
+    val reportedFocus = state.focusDistanceDiopters
+    if (focus != null && reportedFocus != null) add("android.lens.focusDistance", "$focus dpt", "$reportedFocus dpt", abs(reportedFocus - focus) <= FOCUS_TOLERANCE_DIOPTERS)
+    // Dynamic range has no reported side in the UI state (only the requested profile), so it has no pair.
+    state.effectiveFps?.let { fps -> add("opencinecam.frameRate", "${state.targetFps} fps", "%.2f fps".format(java.util.Locale.ROOT, fps), abs(fps - state.targetFps) <= state.targetFps * FPS_TOLERANCE) }
+    state.submittedImageProcessing?.let { sent ->
+        add("android.lens.opticalStabilizationMode", sent.optical, state.reportedOpticalStabilization, sent.optical == state.reportedOpticalStabilization)
+        add("android.control.videoStabilizationMode", sent.video, state.reportedVideoStabilization, sent.video == state.reportedVideoStabilization)
+        add("android.noiseReduction.mode", sent.noise, state.reportedNoiseReduction, sent.noise == state.reportedNoiseReduction)
+        add("android.edge.mode", sent.edge, state.reportedEdgeEnhancement, sent.edge == state.reportedEdgeEnhancement)
+    }
+    state.pictureControlReadback?.let { picture ->
+        add("org.codeaurora.qcamera3.saturation.use_saturation", picture.submittedSaturation, picture.reportedSaturation, picture.submittedSaturation == picture.reportedSaturation)
+        add("org.codeaurora.qcamera3.sharpness.strength", picture.submittedSharpness, picture.reportedSharpness, picture.submittedSharpness == picture.reportedSharpness)
+    }
+}
+
 private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
 private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
 private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
@@ -149,6 +198,8 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
         "android.edge.mode" to readback(code(sent?.edge, PROCESSING_MODES), code(state.reportedEdgeEnhancement, PROCESSING_MODES)),
         "android.tonemap.mode" to readback(code(state.submittedToneMapMode, TONEMAP_MODES), code(state.reportedToneMapMode, TONEMAP_MODES)),
         "android.scaler.cropRegion" to readback(null, state.reportedCropRegion?.joinToString(", ", "[", "]")),
+        "opencinecam.stillPhysicalRoute" to routeLine(state.hardwareTruth),
+        "android.logicalMultiCamera.activePhysicalId" to readback(null, state.hardwareTruth.reported[ACTIVE_LENS_KEY]),
     ) + listOfNotNull(
         picture?.takeIf { it.reportedSaturation != null }?.let {
             "org.codeaurora.qcamera3.saturation.use_saturation" to readback(it.submittedSaturation?.toString(), it.reportedSaturation?.toString()) },
@@ -156,6 +207,14 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
             "org.codeaurora.qcamera3.sharpness.strength" to readback(it.submittedSharpness?.toString(), it.reportedSharpness?.toString()) },
     )
 }
+
+/** The still's physical route against the camera its own result names, with the verdict (the preview's active lens is a separate line). */
+internal fun routeLine(hud: HardwareTruthHudState): String =
+    "${readback(hud.requested[ROUTE_KEY] ?: "logical", hud.reported[ROUTE_KEY])} · ${hud.routeTruth.name}"
+
+/** One line per recorded requested/reported mismatch, oldest first. */
+internal fun discrepancyLines(hud: HardwareTruthHudState): List<Pair<String, String>> =
+    hud.discrepancyHistory.map { it.key to "${readback(it.requested, it.reported)} · ${it.explanation}" }
 
 private fun readback(requested: String?, reported: String?): String = "${requested ?: "—"} → ${reported ?: "—"}"
 

@@ -34,6 +34,15 @@ class CaptureTransferPublication private constructor(
     }
 
     companion object {
+        private fun scheduleAutoUpload(context: Context, bundleId: String) {
+            try {
+                val allowCellular = WebDavQueueSettings.get(context).states.value.preferences.allowCellular
+                WebDavAutoUploadScheduler.get(context).enqueue(bundleId, allowCellular)
+            } catch (failure: Exception) {
+                android.util.Log.w("CapturePublication", "Automatic upload was not scheduled", failure)
+            }
+        }
+
         /** Freeze before engine.startVideo; changing settings during REC affects only later takes. */
         fun admit(context: Context, state: WebDavQueueSettingsState = WebDavQueueSettings.get(context).snapshotForAdmission(),
             bundleId: String = UUID.randomUUID().toString(), databaseName: String = "webdav-outbox.db"): CaptureTransferPublication {
@@ -46,11 +55,12 @@ class CaptureTransferPublication private constructor(
                 val endpoint = requireNotNull(preferences.activeEndpoint)
                 val enrollments = CaptureTransferEnrollmentFile(context)
                 // An endpoint's URL never mutates: a different URL receives a different UUID.
-                enrollments.enroll(CaptureTransferEnrollment(bundleId, endpoint.id, 0L, preferences.revision))
+                enrollments.enroll(CaptureTransferEnrollment(bundleId, endpoint.id, 0L, preferences.revision, preferences.autoUpload))
                 store = WebDavSqliteOutbox(context, databaseName)
                 val bridge = CapturePublicationOutboxBridge(bundleId, journal,
                     { CapturePublicationJournal.load(context, it) }, enrollments, store,
-                    MediaStorePreparedArtifactProbe(context.contentResolver))
+                    MediaStorePreparedArtifactProbe(context.contentResolver),
+                    if (preferences.autoUpload) { id -> scheduleAutoUpload(context, id) } else { _ -> })
                 CaptureTransferPublication(bundleId, bridge, bridge, store, null)
             } catch (failure: Exception) {
                 try { store?.close() } catch (cleanup: Exception) { failure.addSuppressed(cleanup) }

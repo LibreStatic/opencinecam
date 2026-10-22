@@ -242,3 +242,71 @@ The first full regression passed148 existing native cases but lint correctly rej
 
 
 Final frozen-source regression completed successfully in9m5s:506 Android unit tests (165 app +341 camera),150 instrumented cases including both new API30 timecode executions, and app/camera lint without errors or new warnings. The independent11535-vector oracle remains byte-identical, and the reference tmcd samples retain107892/215784 at the one-hour DF labels. The failed original inverse regression and failed API31-only lint run remain preserved. Byte-for-byte rollback of all516 original files and separate original/modified/restored test results are recorded in build/implementation-h4-timecode-arithmetic/VERIFICATION.txt. Full H1–H5 stays ACTIVE. Next timecode work must connect actual encoded-frame progress and per-take lifecycle/configuration to RECORD_RUN/REGEN and final file metadata/tracks; the corrected arithmetic alone does not complete that integration. No final APK.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRO-001, OCC-PRO-007
+- Related ADRs: ADR-0010, ADR-0016
+
+### Context
+
+The timelapse paragraph above says normal VIDEO and LOG retain their hardware-only encoder gates. ADR-0010 and `docs/architecture.md` ("Qualifying hardware codecs precede software codecs") order encoders hardware first and allow a software codec when no hardware codec fits. The two statements disagree for normal SDR VIDEO.
+
+### Decision
+
+ADR-0010 and `docs/architecture.md` govern; the VIDEO half of the sentence above is replaced.
+
+- Normal SDR VIDEO (including recording-LUT SDR video and off-speed project rates) may use an advertised software AVC Surface encoder, and only when no hardware encoder fits the encoded size and rate. `selectSurfaceEncoder` sorts hardware first, so a software pick means none did. If HEVC was requested and no hardware HEVC encoder exists, the existing fallback to AVC applies first, and that AVC encoder may then be software.
+- Strict (the recording policy, ADR-0016) refuses the start with the stable code `video-hardware-encoder-unavailable` and a message that Adaptive allows a software encoder. The refusal is soft: the preview keeps running, the phase returns to previewing, and nothing is recorded.
+- Adaptive records with the software encoder and shows a persistent warning for the whole take ("Software video encoder: <codec>; frames may drop"). The take's hardware-truth sidecar carries the same warning plus a `videoEncoder` object with the codec name and `hardwareAccelerated: false`.
+- LOG (HEVC Main10), HLG, HDR10 and SDR HEVC stay hardware-only. Timelapse is unchanged: software remains allowed in both policies and is exposed through its progress.
+- Software encoding is never hardware qualification evidence: a take recorded with a software encoder qualifies nothing about hardware codecs.
+
+### Alternatives considered
+
+- Keep VIDEO hardware-only: rejected by the owner decision that ADR-0010 and the architecture document win.
+- Allow software silently in both policies: rejected because dropped frames must be disclosed, and Strict exists to refuse unqualified paths.
+
+### Consequences
+
+- Positive: a device whose hardware AVC encoder cannot take the requested size or rate can still record under Adaptive, with the cost disclosed.
+- Negative: software takes can drop frames; the warning and sidecar say so.
+- Operational: validate on a device with no fitting hardware encoder (the emulator's software AVC is the available stand-in).
+
+The original decision above is retained as history; this amendment governs where they differ.
+
+## Amendment (2026-10-19): failed takes are kept as incomplete
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-PRO-001
+- Related ADRs: ADR-0011
+
+### Context
+
+Revisions 4, 5 and 6 above say that missing requested audio is a failed take and that a publication failure discards audio and video. ADR-0011 and `docs/architecture.md` give the muxer actor "graceful incomplete publication" and the deletion of "unfinalizable zero-length files" only. The two statements disagree about what a failed take leaves behind.
+
+### Decision
+
+ADR-0011 governs; the discarding sentences above are replaced.
+
+- A take that is not fully successful keeps every output that holds bytes and publishes it (`IS_PENDING=0`). Only zero-length outputs are deleted. Not fully successful means: requested audio failed to start, the encoder failed, the recording LUT could not be verified, LOG evidence is missing, the muxer was not finalized, or a publication step failed.
+- The take's metadata sidecar (forced when the take would otherwise have none) carries `"takeStatus": "incomplete"` and `"failureReasons"`, a list of stable codes: `audio-start-failed`, `encoder-failed`, `muxer-not-finalized`, `native-retirement-pending`, `recording-lut-unverified`, `log-evidence-missing`, `publication-failed`, `recording-interrupted`, `process-death`. Complete takes carry neither field. The service reports `Take saved as incomplete: <reason>` and keeps the first stable code as `errorCode`.
+- The decision for each output is `decideClipRecovery` and its publication is `finalizeClip` (`:media`), so no output with bytes is deleted because a sidecar failed.
+- No output is published or deleted under a live native writer. When the video writer has not retired, or the take ends in an engine failure or a preview recovery, the rows stay pending and journalled. As soon as the engine proves native retirement, the retained members are published as incomplete on the storage executor (`native-retirement-pending` is then replaced by the real failure codes; an engine failure uses its own stable code, a preview recovery `recording-interrupted`), and the group is committed so crash recovery does not reprocess it. A process death before that is covered by crash recovery. `Take saved as incomplete: <reason>` is shown only once the file is published. Audio is sealed at once so a microphone never keeps running while the video retires.
+- A take that never encoded a video sample (a refused or failed start, or an encoded-sample count of zero) is deleted whatever the container holds, so an empty MP4 header is never published. An unknown count falls back to the byte count.
+- The separate audio sidecar's `.audio.json` carries the same marker and reasons; when the video is empty and the audio is kept, it is the take's only marker.
+- Crash recovery publishes an uncommitted take that no process owns any more the same way: outputs with bytes are published with an incomplete sidecar (`process-death`, a note that the container may need repair), empty ones are deleted, and the journal entry ends committed so no later recovery deletes the take. Stills are unchanged.
+- The gallery lists a take with the incomplete marker as incomplete and shows the reasons in the inspector. An incomplete marker never authorizes deleting a truncated set: deletion still enumerates the provider itself. Sharing and proxy jobs still require a declared, complete take.
+- Incomplete takes stay out of the transfer journal, which has no incomplete state, so they are never queued for WebDAV upload; only complete takes are.
+- The gallery labels a take marked incomplete by its sidecar "Incomplete take"; "Some files missing" stays for a take whose files are not all present.
+
+### Consequences
+
+- Positive: media captured before a failure is never lost to cleanup; the reason is on the take.
+- Negative: an incomplete MP4 may be unplayable until repaired; the gallery says so but does not repair it.
+- Operational: validate on a device by failing audio start and by killing the process while recording.
+
+The original decisions above are retained as history; this amendment governs where they differ.

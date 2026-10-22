@@ -10,7 +10,7 @@ import org.junit.Test
 class ReleaseCertificationTest {
     private val hash = "a".repeat(64)
     private val artifact = ReleaseArtifactIdentity("release-1", 1, "unsigned", hash, hash)
-    private val target = CertificationTarget("device/fingerprint", 36, "protocol-1")
+    private val target = CertificationTarget("device/fingerprint", 36, "protocol-1", EvidenceOrigin.PHYSICAL_DEVICE)
 
     @Test
     fun exactArtifactTargetAndAllChecksCertify() {
@@ -32,6 +32,16 @@ class ReleaseCertificationTest {
             mapOf("build" to true, "device" to false))
         assertEquals(CertificationStatus.FAILED, failed.status)
         assertEquals(listOf("device"), failed.failedChecks)
+    }
+
+    @Test
+    fun aFingerprintWithoutProvenPhysicalOriginNeverCertifies() {
+        for (origin in listOf(EvidenceOrigin.EMULATOR, EvidenceOrigin.HOST, EvidenceOrigin.UNKNOWN)) {
+            val result = ReleaseCertification.evaluate(artifact, target.copy(origin = origin), mapOf("build" to true))
+            assertEquals(origin.name, CertificationStatus.NOT_RUN, result.status)
+            assertEquals("physical-device-origin-required", result.reasonCode)
+        }
+        assertEquals(EvidenceOrigin.UNKNOWN, CertificationTarget("device/fingerprint", 36, "protocol-1").origin)
     }
 
     @Test

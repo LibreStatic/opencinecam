@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Validate Google Play graphics under store/play/images/ (dimensions, size, alpha, counts)."""
 import pathlib, sys
 from PIL import Image

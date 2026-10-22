@@ -17,6 +17,22 @@ enum class EvidenceStage(val ordinalValue: Int) {
     EMPIRICALLY_VERIFIED(7),
     CERTIFIED(8),
     FAILED(-1),
+    ;
+
+    /**
+     * ADR-0026 and testing-strategy.md: only advertised and candidate claims are contract-level, where
+     * host and emulator runs are orchestration evidence. Everything from a created Camera2 session
+     * upward is Camera2, codec, storage or soak behavior that physical-device suites alone establish.
+     */
+    val requiresPhysicalDevice: Boolean get() = ordinalValue >= SESSION_CREATED.ordinalValue
+}
+
+/** Where an observation was made. Only a physical device can certify a capability (ADR-0026). */
+enum class EvidenceOrigin {
+    PHYSICAL_DEVICE,
+    EMULATOR,
+    HOST,
+    UNKNOWN,
 }
 
 enum class EvidenceStatus {
@@ -100,6 +116,7 @@ data class CapabilityEvidence<T>(
     val validityKey: CacheValidityKey,
     val value: Knowledge<T>,
     val details: Map<String, String> = emptyMap(),
+    val origin: EvidenceOrigin = EvidenceOrigin.UNKNOWN,
 ) {
     init {
         require(source.isNotBlank()) { "evidence source must not be blank" }
@@ -139,9 +156,11 @@ data class EvidenceTrail<T>(val entries: List<CapabilityEvidence<T>> = emptyList
         require(entries.zipWithNext().none { (a, b) -> a.observedAt.isAfter(b.observedAt) }) {
             "evidence entries must be ordered by observation time"
         }
+        entries.forEach(::requirePhysicalOriginForCertifyingPass)
     }
 
     fun append(next: CapabilityEvidence<T>): EvidenceTrail<T> {
+        requirePhysicalOriginForCertifyingPass(next)
         val previous = entries.lastOrNull { it.graphId == next.graphId && it.validityKey == next.validityKey }
         if (previous != null && previous.status == EvidenceStatus.PASS && next.status == EvidenceStatus.PASS) {
             require(
@@ -150,5 +169,14 @@ data class EvidenceTrail<T>(val entries: List<CapabilityEvidence<T>> = emptyList
             ) { "evidence stage cannot move backwards for an unchanged graph" }
         }
         return copy(entries = entries + next)
+    }
+}
+
+/** ADR-0026: an emulator, host run or unknown origin cannot pass a stage beyond the contract level; unknown fails closed. */
+private fun requirePhysicalOriginForCertifyingPass(evidence: CapabilityEvidence<*>) {
+    if (evidence.status != EvidenceStatus.PASS) return
+    if (!evidence.stage.requiresPhysicalDevice) return
+    require(evidence.origin == EvidenceOrigin.PHYSICAL_DEVICE) {
+        "${evidence.stage} PASS evidence requires a physical device origin, not ${evidence.origin}"
     }
 }

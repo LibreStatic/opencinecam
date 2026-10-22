@@ -7,6 +7,15 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
+/** Diagonal of a 36 x 24 mm frame, the reference of 35 mm equivalent focal lengths. */
+const val FULL_FRAME_DIAGONAL_MM = 43.27f
+
+/** 35 mm equivalent of [focalMm] on a sensor of [widthMm] x [heightMm] (SENSOR_INFO_PHYSICAL_SIZE); null when the size is missing or not positive. */
+fun equivalentFocalLengthMm(focalMm: Float, widthMm: Float?, heightMm: Float?): Float? {
+    if (widthMm == null || heightMm == null || widthMm <= 0f || heightMm <= 0f || focalMm <= 0f) return null
+    return focalMm * FULL_FRAME_DIAGONAL_MM / sqrt(widthMm * widthMm + heightMm * heightMm)
+}
+
 /**
  * Optical anchor for a logical camera. [ratio] is the zoom multiplier relative to the logical
  * camera's primary physical sensor (lowest focal length that the logical camera reports as its

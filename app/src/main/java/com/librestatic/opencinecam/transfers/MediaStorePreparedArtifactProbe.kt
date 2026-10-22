@@ -73,7 +73,7 @@ class MediaStorePreparedArtifactProbe(private val resolver: ContentResolver) : P
         val expectedCollection = when (artifact.role) {
             CaptureArtifactRole.VIDEO -> listOf("video", "media")
             CaptureArtifactRole.AUDIO -> listOf("audio", "media")
-            CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO_METADATA -> listOf("downloads")
+            CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.CLIP_METADATA -> listOf("downloads")
         }
         require(parts.subList(1, parts.lastIndex) == expectedCollection) { "Prepared artifact role does not match its collection" }
         return Identity(artifact.uri.toUri(), id)
@@ -105,7 +105,7 @@ class MediaStorePreparedArtifactProbe(private val resolver: ContentResolver) : P
                     "flac" -> setOf("audio/flac", "audio/x-flac")
                     else -> emptySet()
                 }
-                CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO_METADATA ->
+                CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.CLIP_METADATA ->
                     if (extension == "json") setOf("application/json") else emptySet()
             }
             check(mime.lowercase(Locale.ROOT) in allowedMime) { "Prepared artifact MIME does not match its role and name" }

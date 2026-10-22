@@ -20,6 +20,27 @@ class LocalMediaCatalogTest {
         val mime = when (kind) { LocalMediaKind.PHOTO -> "image/jpeg"; LocalMediaKind.VIDEO -> "video/mp4"; LocalMediaKind.AUDIO -> "audio/wav" }
         return CatalogRow(LocalMediaArtifact("content://media/external_primary/$segment/media/$id", name, mime, 12, date), id, kind, namespace)
     }
+    private fun download(n: Int, name: String, mime: String) =
+        LocalMediaArtifact("content://media/external_primary/downloads/$n", name, mime, 10, 100)
+
+    @Test fun clipSidecarIsATakeAttachmentButNeverAMotionLogOrMetadata() {
+        val clip = download(5, "OCC_take.clip.json", "application/json")
+        val gcsv = download(6, "OCC_take.gcsv", "text/plain")
+        val timing = download(7, "OCC_take.timing.json", "application/json")
+        assertTrue(isClipSidecarAttachment(clip)); assertFalse(isMotionLogAttachment(clip)); assertTrue(isTakeAttachment(clip))
+        assertTrue(isTakeAttachment(gcsv)); assertFalse(isClipSidecarAttachment(gcsv))
+        assertFalse(isTakeAttachment(timing))
+        assertFalse(isClipSidecarAttachment(clip.copy(mimeType = "text/plain")))
+    }
+
+    @Test fun takeKeepsItsClipSidecarAsAnAttachmentWithoutCountingItAsMetadata() {
+        val video = row(1, LocalMediaKind.VIDEO, recording, name = "OCC_take.mp4")
+        val clip = download(5, "OCC_take.clip.json", "application/json")
+        val take = requireNotNull(catalogTake(recording, listOf(video), emptyList(), attachments = listOf(clip)))
+        assertEquals(listOf(clip), take.attachments)
+        assertTrue(take.metadata.isEmpty())
+    }
+
     private fun document(text: String, n: Int = 1) = MetadataDocument(
         LocalMediaArtifact("content://media/external_primary/downloads/$n", "metadata$n.json", "application/json", text.length.toLong(), 100), text)
     private fun stillJson(rows: List<CatalogRow>, slate: ProductionSlateSettings? = null, bundle: String = id): String = buildJsonObject {
@@ -225,4 +246,29 @@ class LocalMediaCatalogTest {
             catalogTake(still, images, listOf(document(stillJson(images))))?.relationStatus)
     }
 
+
+    @Test fun aSidecarMarkedIncompleteSurfacesAsIncompleteWithItsReasons() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        val slate = ProductionSlateSettings(project = "Feature")
+        val marked = IncompleteTake.mark(recordingJson(video, slate), listOf("audio-start-failed", "muxer-not-finalized"))
+        var encoding: LocalMediaEncoding? = null
+        val take = requireNotNull(catalogTake(recording, listOf(video), listOf(document(marked))) { encoding = it })
+        assertEquals(LocalMediaRelationStatus.INCOMPLETE, take.relationStatus)
+        assertEquals(listOf("audio-start-failed", "muxer-not-finalized"), encoding?.incompleteReasons)
+        // A complete take carries neither field and stays DECLARED.
+        val complete = requireNotNull(catalogTake(recording, listOf(video), listOf(document(recordingJson(video, slate)))))
+        assertEquals(LocalMediaRelationStatus.DECLARED, complete.relationStatus)
+    }
+    @Test fun anIncompleteMarkerNeverHidesInvalidMetadataOrSurvivesAnUnreadableSidecar() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        val slate = ProductionSlateSettings(project = "Feature")
+        val marked = IncompleteTake.mark(recordingJson(video, slate), listOf("encoder-failed"))
+        val conflicting = marked.replace("\"videoUri\"", "\"videoUri\": \"x\", \"videoUri\"")
+        assertEquals(LocalMediaRelationStatus.INVALID_METADATA,
+            catalogTake(recording, listOf(video), listOf(document(conflicting)))?.relationStatus)
+        val oversize = IncompleteTake.mark(recordingJson(video, slate), listOf("x".repeat(49), "ok"))
+        var encoding: LocalMediaEncoding? = null
+        catalogTake(recording, listOf(video), listOf(document(oversize))) { encoding = it }
+        assertEquals(listOf("ok"), encoding?.incompleteReasons)
+    }
 }

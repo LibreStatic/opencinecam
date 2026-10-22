@@ -204,6 +204,7 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import com.librestatic.opencinecam.camera.Camera2LogProfile
+import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
@@ -415,6 +416,14 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             liveState = state,
                         )
                         }
+                    } else if (settingsPage == SettingsPage.STORAGE_BENCHMARK) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
+                        StorageBenchmarkScreen(
+                            requiredBytesPerSecond = benchmarkRequiredBytesPerSecond(state.selectedMode, settings, state.targetFps,
+                                state.activeVideoProfile?.constrainedHighSpeed == true),
+                            onBack = { settingsPage = SettingsPage.MAIN },
+                        )
+                        }
                     } else {
                         settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsScreen(
@@ -427,6 +436,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onSettingsChange = settingsRepository::set,
                             onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
+                            onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
                         )
                         }
                     }
@@ -1455,11 +1465,12 @@ internal fun AdaptiveCaptureChrome(
         val displayedMode = modeSelection.displayed
         val choices = visibleCaptureModes(state.modeGates, displayedMode).map { mode ->
             val gate = state.modeGates.getValue(mode)
+            val experimental = showsExperimentalGate(mode, gate, state.descriptor?.hasVerifiedOpenCineLog == true)
             CaptureModeChoice(
                 mode = mode,
                 label = modeLabel(mode),
-                gateLabel = if (gate != ModeGateState.AVAILABLE) gateLabel(gate) else null,
-                gateColor = gateColor(gate),
+                gateLabel = if (gate != ModeGateState.AVAILABLE || experimental) gateLabel(gate, experimental) else null,
+                gateColor = gateColor(gate, experimental),
                 enabled = CameraUiState.isModeSelectable(gate),
                 selected = mode == displayedMode,
             )
@@ -1920,7 +1931,7 @@ internal fun AdaptiveCaptureChrome(
 
         val displayedMode = modeSelection.displayed
         val modeName = modeLabel(displayedMode)
-        val slots = captureSlotModels(state, displayedMode)
+        val slots = captureSlotModels(state, displayedMode, settings.videoProjectRate)
         val activeSlot = (pane as? CapturePane.Control)?.dial?.slot()
         val onSlot: (CaptureSlot) -> Unit = { slot -> togglePane(CapturePane.Control(slot.dial())) }
         val openModeSheet: () -> Unit = {
@@ -2335,11 +2346,15 @@ private fun ControlDial.slot(): CaptureSlot = when (this) {
 }
 
 /**
- * What the RES slot offers in [mode]: video sizes where the size picks the profile, still sizes in
- * photo modes. Slow motion, RAW photo and the experimental modes offer at most their one size.
+ * What the RES slot offers in [mode]: video sizes where the size picks the profile, the sizes with a
+ * rate faster than the project rate in slow motion, still sizes in photo modes. RAW photo and the experimental modes
+ * offer at most their one size.
  */
-private fun CameraUiState.resolutionChoices(mode: CaptureMode): List<Pair<Int, Int>> = when (mode) {
+private fun CameraUiState.resolutionChoices(mode: CaptureMode, projectRate: CaptureFrameRate): List<Pair<Int, Int>> = when (mode) {
     in CameraUiState.resolutionProfileModes -> availableVideoSizes
+    CaptureMode.SLOW_MOTION -> slowMotionSizes(availableVideoProfiles.map { it.toSpec() }, projectRate).let { fast ->
+        availableVideoSizes.filter { it in fast }
+    }
     in CameraUiState.photoResolutionModes -> availableStillSizes
     else -> emptyList()
 }
@@ -2351,7 +2366,7 @@ private fun CameraUiState.resolutionName(mode: CaptureMode): String =
 
 /** The six slots of [mode] with their current values, and why any of them cannot be driven now. */
 @Composable
-private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<CaptureSlotModel> {
+private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate): List<CaptureSlotModel> {
     val highSpeed = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
     val exposureCaps = state.descriptor?.exposureCapabilities
     val manualIso = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
@@ -2359,7 +2374,7 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode): List<Cap
     val auto = stringResource(R.string.auto_value)
     return captureSlots(mode).map { slot ->
         val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
-            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode).size,
+            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode, projectRate).size,
             nightPhoto = mode == CaptureMode.PHOTO && state.nightExtensionRunning)
         // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
         val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
@@ -3373,6 +3388,7 @@ private fun RecordingOverlay(
         // A phone-width strip drops the frame size and the monitoring shortcut to keep REC, the
         // meter and stop on one row.
         val compact = windowWidthClass(maxWidth.value) == WindowWidthClass.COMPACT
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -3402,6 +3418,21 @@ private fun RecordingOverlay(
                     contentAlignment = Alignment.Center,
                 ) { Box(Modifier.size(16.dp).testTag("recording-stop-glyph").clip(RoundedCornerShape(2.dp)).background(RecordRed)) }
             }
+        }
+        // The Adaptive policy's live warning, on every layout: CaptureStatus is hidden while a take runs.
+        state.recordingWarning?.let { warning ->
+            Text(
+                warning,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("recording-warning")
+                    .background(Panel, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
         }
     }
     if (showMonitors) {
@@ -3584,8 +3615,8 @@ private fun ManualControlDial(
     if (state.descriptor == null) return
     CompositionLocalProvider(LocalPanelHeaderVisible provides (showHeader && LocalPanelHeaderVisible.current)) {
         when (control) {
-            ControlDial.RESOLUTION -> ResolutionDial(state, binder, onClose)
-            ControlDial.FPS -> FpsDial(state, binder, onClose)
+            ControlDial.RESOLUTION -> ResolutionDial(state, binder, settings.videoProjectRate, onClose)
+            ControlDial.FPS -> FpsDial(state, binder, settings.videoProjectRate, onClose)
             ControlDial.WB -> WbDial(state, binder, onClose)
             ControlDial.EV -> EvDial(state, binder, onClose)
             ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
@@ -3738,11 +3769,14 @@ private fun EvDial(
 private fun ResolutionDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
+    projectRate: CaptureFrameRate,
     onClose: () -> Unit,
 ) {
-    val mode = state.selectedMode
+    // Slow motion runs on VIDEO, so only the displayed mode tells it apart.
+    val slowMotion = LocalModeSelection.current?.displayed == CaptureMode.SLOW_MOTION
+    val mode = if (slowMotion) CaptureMode.SLOW_MOTION else state.selectedMode
     val photo = mode in CameraUiState.photoResolutionModes
-    val sizes = state.resolutionChoices(mode)
+    val sizes = state.resolutionChoices(mode, projectRate)
     val active = if (photo) state.activeStillSize else state.targetVideoWidth to state.targetVideoHeight
     val enabled = !state.structuralSettingsFrozen && state.phase != CameraUiPhase.CAPTURING && mode != CaptureMode.RAW_PHOTO
     PanelColumn(Modifier.testTag("resolution-panel")) {
@@ -3753,7 +3787,12 @@ private fun ResolutionDial(
             ChoiceGrid(group.sizes, minTileWidth = 96.dp, maxColumns = 3) { (width, height), modifier ->
                 val name = if (photo) megapixelName(width, height) else resolutionShortName(width, height)
                 ChoiceTile(name, (width to height) == active, modifier, enabled = enabled, detail = formatFrameSize(width, height)) {
-                    if (photo) binder?.selectPhotoResolution(width, height) else binder?.selectVideoResolution(width, height)
+                    when {
+                        photo -> binder?.selectPhotoResolution(width, height)
+                        slowMotion -> slowMotionRateAt(state.availableVideoProfiles.map { it.toSpec() }, width, height, state.targetFps, projectRate)
+                            ?.let { fps -> binder?.selectVideoResolution(width, height, fps) }
+                        else -> binder?.selectVideoResolution(width, height)
+                    }
                     onClose()
                 }
             }
@@ -3765,8 +3804,11 @@ private fun ResolutionDial(
 private fun FpsDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
+    projectRate: CaptureFrameRate,
     onClose: () -> Unit,
 ) {
+    // Slow motion conforms the capture rate to the project rate: a rate at or below it records in real time.
+    val slowMotion = LocalModeSelection.current?.displayed == CaptureMode.SLOW_MOTION
     val log = state.selectedMode.usesLogGraph
     val logSpecs = state.availableLogProfiles.map { it.toSpec() }
     val videoSpecs = state.availableVideoProfiles.map { it.toSpec() }
@@ -3783,7 +3825,7 @@ private fun FpsDial(
         }
         FpsOption(
             fps = fps,
-            offered = fps in offeredAtSize,
+            offered = fps in offeredAtSize && (!slowMotion || slowsDown(fps, projectRate)),
             highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
                 !log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
             },
@@ -3810,7 +3852,11 @@ private fun FpsDial(
             // 240 fps session runs at 30 fps while the file keeps every frame.
             PanelNote(stringResource(R.string.fps_high_speed_preview_note), Modifier.testTag("fps-high-speed-note"))
         }
-        if (options.any { !it.offered }) {
+        if (slowMotion && options.any { !slowsDown(it.fps, projectRate) }) {
+            PanelNote(stringResource(R.string.fps_slow_motion_needs_faster_rate, projectRate.projectLabel()),
+                Modifier.testTag("fps-slow-motion-note"))
+        }
+        if (options.any { it.fps !in offeredAtSize }) {
             PanelNote(stringResource(R.string.fps_unavailable_at_size, formatFrameSize(state.targetVideoWidth, state.targetVideoHeight)),
                 Modifier.testTag("fps-unavailable-note"))
         }
@@ -3931,6 +3977,7 @@ internal fun SettingsContent(
     onApplyPreset: ((CameraPreset) -> Unit)? = null,
     onOpenCapabilities: (() -> Unit)? = null,
     audioPermissionBlocked: Boolean = false,
+    onOpenStorageBenchmark: (() -> Unit)? = null,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
@@ -4144,6 +4191,9 @@ internal fun SettingsContent(
         if ("zero-shutter-lag" in visibleIds) settingsCard("zero-shutter-lag") {
             ZeroShutterLagSettings(state, settings, onSettingsChange)
         }
+        if (RECORDING_POLICY_SETTING_ID in visibleIds) settingsCard(RECORDING_POLICY_SETTING_ID) {
+            RecordingPolicySettings(settings, onSettingsChange)
+        }
         if ("low-light-fps" in visibleIds && state.descriptor?.lowLightAutoFps == true) settingsCard("low-light-fps") {
             LowLightFpsSettings(state, settings, onSettingsChange)
         }
@@ -4241,14 +4291,19 @@ internal fun SettingsContent(
             SettingsLinkRow(stringResource(R.string.caps_title), stringResource(R.string.caps_settings_summary), onOpenCapabilities,
                 Modifier.testTag("settings-open-capabilities"))
         }
+        if ("storage-benchmark" in visibleIds && onOpenStorageBenchmark != null) settingsCard("storage-benchmark") {
+            SettingsLinkRow(stringResource(R.string.bench_title), stringResource(R.string.bench_settings_summary), onOpenStorageBenchmark,
+                Modifier.testTag("settings-open-storage-benchmark"))
+        }
         if ("hardware" in visibleIds) settingsCard("hardware") { HardwareSettingsSummary(state.descriptor) }
         if ("modes" in visibleIds) settingsCard("modes") {
             SettingsSectionTitle(stringResource(R.string.settings_mode_availability))
             CaptureMode.entries.forEach { mode ->
                 val gate = state.modeGates.getValue(mode)
+                val experimental = showsExperimentalGate(mode, gate, state.descriptor?.hasVerifiedOpenCineLog == true)
                 Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(modeLabel(mode), Modifier.weight(1f).padding(end = 16.dp), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
-                    Text(gateLabel(gate), color = gateColor(gate), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(gateLabel(gate, experimental), color = gateColor(gate, experimental), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -4832,6 +4887,19 @@ internal fun modeLabel(mode: CaptureMode): String = when (mode) {
     CaptureMode.RAW_VIDEO -> stringResource(R.string.raw_video_mode)
 }
 
+/**
+ * An AVAILABLE gate on an experimental mode is shown as "Experimental" rather than as ready. LOG and
+ * HLG leave that state once the camera has an OpenCineLog profile backed by accepted evidence.
+ */
+internal fun showsExperimentalGate(mode: CaptureMode, gate: ModeGateState, hasVerifiedOpenCineLog: Boolean): Boolean =
+    gate == ModeGateState.AVAILABLE && mode.experimental && !(mode.usesLogGraph && hasVerifiedOpenCineLog)
+
+@Composable
+private fun gateLabel(gate: ModeGateState, experimental: Boolean = false): String = when {
+    experimental -> stringResource(R.string.gate_experimental)
+    else -> gateLabel(gate)
+}
+
 @Composable
 private fun gateLabel(gate: ModeGateState): String = when (gate) {
     ModeGateState.AVAILABLE -> stringResource(R.string.available)
@@ -4839,6 +4907,11 @@ private fun gateLabel(gate: ModeGateState): String = when (gate) {
     ModeGateState.UNSUPPORTED -> stringResource(R.string.unsupported)
     ModeGateState.FAILED -> stringResource(R.string.failed)
 }
+
+@Composable
+@ReadOnlyComposable
+private fun gateColor(gate: ModeGateState, experimental: Boolean): Color =
+    if (experimental) MaterialTheme.colorScheme.onSurface else gateColor(gate)
 
 @Composable
 @ReadOnlyComposable
@@ -4908,7 +4981,7 @@ private fun formatBytes(bytes: Long?): String = when {
 private fun CaptureSlotsPreview() {
     val state = CameraUiState(selectedMode = CaptureMode.VIDEO, phase = CameraUiPhase.PREVIEWING)
     Column(Modifier.background(Panel).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CaptureSlotStrip(captureSlotModels(state, CaptureMode.VIDEO), CaptureSlot.ISO, {})
+        CaptureSlotStrip(captureSlotModels(state, CaptureMode.VIDEO, CameraSettings().videoProjectRate), CaptureSlot.ISO, {})
         CaptureModeButton(modeLabel(CaptureMode.VIDEO), {})
     }
 }

@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.runtime.compositionLocalOf
+import com.librestatic.opencinecam.camera.CaptureFrameRate
 
 /**
  * Slow motion is the video pipeline recording off-speed: a high-speed capture rate conformed to the
@@ -35,6 +36,33 @@ internal fun slowMotionProfile(profiles: List<VideoProfileSpec>, width: Int, hei
     val fast = profiles.filter { it.fps >= SLOW_MOTION_MIN_FPS }
     val candidates = fast.filter { it.width == width && it.height == height }.takeIf { it.isNotEmpty() } ?: fast
     return candidates.maxWithOrNull(compareBy<VideoProfileSpec> { it.fps }.thenBy { it.width.toLong() * it.height })
+}
+
+/**
+ * Whether [fps] plays back slower than [projectRate]: slow motion conforms any faster capture rate to
+ * the project rate, so 60 fps in a 30 fps project is 2x slow motion, not only the high-speed rates.
+ */
+internal fun slowsDown(fps: Int, projectRate: CaptureFrameRate): Boolean =
+    fps.toLong() * projectRate.denominator > projectRate.numerator
+
+/** The sizes slow motion can record at: those with a rate faster than [projectRate]. */
+internal fun slowMotionSizes(profiles: List<VideoProfileSpec>, projectRate: CaptureFrameRate): Set<Pair<Int, Int>> =
+    profiles.filter { slowsDown(it.fps, projectRate) }.mapTo(mutableSetOf()) { it.width to it.height }
+
+/**
+ * The rate slow motion keeps when the RES slot moves it to [width]x[height]: the current rate when
+ * that size offers it, otherwise the fastest there. Never one at or below [projectRate], so a size
+ * change cannot drop the take to real time.
+ */
+internal fun slowMotionRateAt(
+    profiles: List<VideoProfileSpec>,
+    width: Int,
+    height: Int,
+    currentFps: Int,
+    projectRate: CaptureFrameRate,
+): Int? {
+    val atSize = profiles.filter { it.width == width && it.height == height && slowsDown(it.fps, projectRate) }
+    return atSize.firstOrNull { it.fps == currentFps }?.fps ?: atSize.maxOfOrNull { it.fps }
 }
 
 /** The mode shown as selected and the action that selects one, provided by the capture chrome. */

@@ -4,7 +4,8 @@ package com.librestatic.opencinecam.transfers
 import java.net.URI
 import java.util.UUID
 
-enum class WebDavArtifactRole { VIDEO, VIDEO_METADATA, AUDIO, AUDIO_METADATA }
+/** Mirrors [com.librestatic.opencinecam.storage.CaptureArtifactRole] by name; rows persisted before CLIP_METADATA existed decode unchanged. */
+enum class WebDavArtifactRole { VIDEO, VIDEO_METADATA, AUDIO, AUDIO_METADATA, CLIP_METADATA }
 enum class WebDavArtifactState { QUEUED, UPLOADING, UNCERTAIN, VERIFIED, CONFLICT, SOURCE_UNAVAILABLE }
 enum class WebDavBundleState { AWAITING_PUBLICATION, QUEUED, ACTIVE, UNCERTAIN, ATTENTION, COMPLETE }
 enum class WebDavAttemptKind { PUT, RECONCILE }
@@ -325,7 +326,7 @@ private fun requireOutboxName(value: String) {
 }
 
 private fun requireCompleteArtifactSet(artifacts: List<WebDavArtifactSpec>) {
-    require(artifacts.size in 1..4)
+    require(artifacts.size in 1..5)
     require(artifacts.map { it.id }.toSet().size == artifacts.size)
     require(artifacts.map { it.role }.toSet().size == artifacts.size)
     require(artifacts.map { it.sourceUri }.toSet().size == artifacts.size)

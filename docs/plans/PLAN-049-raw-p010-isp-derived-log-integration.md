@@ -32,6 +32,8 @@ created_by: GPT-5.6 Sol
 ---
 # OCC-PLAN-049: RAW P010 ISP-derived Log integration
 
+> **Superseded by OCC-PLAN-061 (2026-10-19 note).** This plan specifies OpenCine Log v1 (OCLog1) and is kept as the historical host record. Live capture targets OCLog2 under OCC-PLAN-061, which does not revive OCLog1.
+
 ## 1. Objective
 
 Integrate verified RAW/P010/ISP input branches, documented color transforms, provenance labels, metadata, and unsupported paths. The observable outcome is a buildable repository with passing automated checks and versioned evidence.

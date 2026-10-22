@@ -1,13 +1,13 @@
 # Plan Quality Report
 
 - Result: **PASS**
-- Requirements: 104
-- ADRs: 34
+- Requirements: 106
+- ADRs: 35
 - Risks: 20
-- Plans: 67
-- Done: 54
+- Plans: 69
+- Done: 55
 - Superseded: 4
-- InProgress: 5
+- InProgress: 6
 - Ready: 1
 - ConditionalReady: 3
 - Blocked: 0
@@ -18,9 +18,9 @@
 
 ## Checks
 
-- PASS: required files and 7 JSON schemas exist and parse.
+- PASS: required files and 8 JSON schemas exist and parse.
 - PASS: IDs, paths, dependencies, references, and statuses resolve.
 - PASS: dependency graph is acyclic and every plan has 21 sections.
 - PASS: all accepted requirements, ADRs, and risks are traceable.
 - PASS: ConditionalReady plans carry deterministic gates.
-- WARN: 293 Done-plan evidence paths are absent from this checkout (`evidence/` is gitignored); certification requires `--require-evidence`.
+- WARN: 295 Done-plan evidence paths are absent from this checkout (`evidence/` is gitignored); certification requires `--require-evidence`.

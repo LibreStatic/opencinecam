@@ -164,7 +164,7 @@ class WebDavQueuePreferencesTest {
             assertEquals(value, decoded)
             assertArrayEquals(bytes, WebDavQueuePreferencesCodec.encode(decoded))
         }
-        assertEquals("{\"version\":2,\"revision\":0,\"enabled\":false,\"allowCellular\":false,\"activeEndpointId\":null,\"endpoints\":[]}",
+        assertEquals("{\"version\":3,\"revision\":0,\"enabled\":false,\"allowCellular\":false,\"autoUpload\":false,\"activeEndpointId\":null,\"endpoints\":[]}",
             WebDavQueuePreferencesCodec.encode(WebDavQueuePreferences()).toString(Charsets.UTF_8))
     }
 
@@ -176,7 +176,7 @@ class WebDavQueuePreferencesTest {
     }
 
     @Test fun codecRejectsVersionAndScalarCoercion() {
-        for (version in listOf("3", "\"2\"", "2.0", "null")) reject(document.replace("\"version\":2", "\"version\":$version"))
+        for (version in listOf("4", "\"3\"", "3.0", "null")) reject(document.replace("\"version\":3", "\"version\":$version"))
         for (revision in listOf("\"7\"", "7.0", "7e0", "-1", "9223372036854775808", "null")) reject(document.replace("\"revision\":7", "\"revision\":$revision"))
         reject(document.replace("\"enabled\":true", "\"enabled\":\"true\""))
         reject(document.replace("\"allowCellular\":false", "\"allowCellular\":0"))
@@ -185,7 +185,7 @@ class WebDavQueuePreferencesTest {
 
     @Test fun codecRejectsDuplicateMissingAndUnknownFields() {
         reject(document.replace("\"revision\":7", "\"revision\":7,\"revision\":7"))
-        reject(document.replace("\"version\":2,", ""))
+        reject(document.replace("\"version\":3,", ""))
         reject(document.dropLast(1) + ",\"password\":\"hidden\"}")
         reject(document.replace("\"url\":\"${first.url}\"", "\"url\":\"${first.url}\",\"password\":\"hidden\""))
     }
@@ -193,7 +193,7 @@ class WebDavQueuePreferencesTest {
     @Test fun codecRejectsNoncanonicalWhitespaceOrderingAndEndpointNormalization() {
         reject(" $document")
         reject(document + "\n")
-        reject(document.replace("\"version\":2,", "").dropLast(1) + ",\"version\":2}")
+        reject(document.replace("\"version\":3,", "").dropLast(1) + ",\"version\":3}")
         reject(document.replace(first.url, first.url + "temp/../"))
         reject(document.replace(first.id, "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))
     }
@@ -278,14 +278,14 @@ class WebDavQueuePreferencesTest {
 
     @Test fun canonicalVersionOneMigratesAllBindingsAndExactRevisionWithTlsExceptionsOff() {
         val revision = 9_007_199_254_740_993L
-        val legacy = document.replace("\"version\":2", "\"version\":1")
+        val legacy = document.replace("\"version\":3", "\"version\":1").replace(",\"autoUpload\":false", "")
             .replace("\"revision\":7", "\"revision\":$revision")
             .replace(",\"ignoreTlsErrors\":false", "")
         val decoded = WebDavQueuePreferencesCodec.decode(legacy.toByteArray())
         assertEquals(WebDavQueuePreferences(revision, true, false, first.id, listOf(first, second)), decoded)
         assertTrue(decoded.endpoints.none { it.ignoreTlsErrors })
         val migrated = WebDavQueuePreferencesCodec.encode(decoded).toString(Charsets.UTF_8)
-        assertTrue(migrated.startsWith("{\"version\":2,"))
+        assertTrue(migrated.startsWith("{\"version\":3,"))
         assertEquals(decoded, WebDavQueuePreferencesCodec.decode(migrated.toByteArray()))
         reject(" $legacy")
         reject(legacy.replace("\"version\":1", "\"version\":1,\"version\":1"))
@@ -293,7 +293,7 @@ class WebDavQueuePreferencesTest {
     }
 
     @Test fun codecRequiresStrictVersionSpecificTlsFieldAndRejectsPublicException() {
-        reject(document.replace("\"version\":2", "\"version\":1"))
+        reject(document.replace("\"version\":3", "\"version\":1"))
         reject(document.replace(",\"ignoreTlsErrors\":false", ""))
         for (value in listOf("\"false\"", "0", "null", "[]", "{}")) {
             reject(document.replace("\"ignoreTlsErrors\":false", "\"ignoreTlsErrors\":$value"))
@@ -309,6 +309,71 @@ class WebDavQueuePreferencesTest {
         assertTrue(bytes.toString(Charsets.UTF_8).contains("\"ignoreTlsErrors\":true"))
         assertEquals(value, WebDavQueuePreferencesCodec.decode(bytes))
         assertArrayEquals(bytes, WebDavQueuePreferencesCodec.encode(WebDavQueuePreferencesCodec.decode(bytes)))
+    }
+
+    private val automatic get() = WebDavQueuePreferences(7, true, false, first.id, listOf(first, second), autoUpload = true)
+
+    @Test fun automaticUploadIsOffByDefaultAndRequiresAnEnabledQueue() {
+        assertFalse(WebDavQueuePreferences().autoUpload)
+        assertFalse(configured.autoUpload)
+        assertThrows(IllegalArgumentException::class.java) { WebDavQueuePreferences(autoUpload = true) }
+        assertThrows(IllegalArgumentException::class.java) {
+            WebDavQueuePreferences(1, false, false, first.id, listOf(first), autoUpload = true)
+        }
+    }
+
+    @Test fun automaticUploadChangesRevisionAndDisablingTheQueueForcesItOff() {
+        val on = configured.updated(first.url, true, false, autoUpload = true)
+        assertTrue(on.autoUpload)
+        assertEquals(8L, on.revision)
+        assertNotEquals(configured, on)
+        assertNotEquals(configured.hashCode(), on.hashCode())
+        assertSame(on, on.updated(first.url, true, false))
+        assertSame(on, on.updated(first.url, true, false, autoUpload = true))
+        val off = on.updated(first.url, true, false, autoUpload = false)
+        assertFalse(off.autoUpload)
+        assertEquals(9L, off.revision)
+        val disabled = on.updated(first.url, false, false)
+        assertFalse(disabled.enabled)
+        assertFalse(disabled.autoUpload)
+        assertEquals(9L, disabled.revision)
+        assertFalse(WebDavQueuePreferences().updated("", false, false, autoUpload = true).autoUpload)
+        assertTrue(on.updated(first.url, true, true).autoUpload)
+    }
+
+    @Test fun versionThreeRoundTripsAutomaticUploadCanonically() {
+        for (value in listOf(configured, automatic)) {
+            val bytes = WebDavQueuePreferencesCodec.encode(value)
+            assertTrue(bytes.toString(Charsets.UTF_8).startsWith("{\"version\":3,"))
+            val decoded = WebDavQueuePreferencesCodec.decode(bytes)
+            assertEquals(value, decoded)
+            assertEquals(value.autoUpload, decoded.autoUpload)
+            assertArrayEquals(bytes, WebDavQueuePreferencesCodec.encode(decoded))
+        }
+        assertTrue(WebDavQueuePreferencesCodec.encode(automatic).toString(Charsets.UTF_8).contains("\"autoUpload\":true"))
+    }
+
+    @Test fun versionTwoStillDecodesWithAutomaticUploadOffAndStaysCanonicalForItsOwnVersion() {
+        val legacy = document.replace("\"version\":3", "\"version\":2").replace(",\"autoUpload\":false", "")
+        val decoded = WebDavQueuePreferencesCodec.decode(legacy.toByteArray())
+        assertEquals(configured, decoded)
+        assertFalse(decoded.autoUpload)
+        reject(" $legacy")
+        reject(legacy.replace("\"allowCellular\":false,", "\"allowCellular\":false,\"autoUpload\":false,"))
+        reject(legacy.replace(",\"ignoreTlsErrors\":false", ""))
+    }
+
+    @Test fun versionOneRejectsAnAutomaticUploadField() {
+        val legacy = document.replace("\"version\":3", "\"version\":1").replace(",\"ignoreTlsErrors\":false", "")
+        reject(legacy)
+    }
+
+    @Test fun versionThreeRejectsMissingCoercedDuplicateAndUnreachableAutomaticUpload() {
+        reject(document.replace(",\"autoUpload\":false", ""))
+        for (value in listOf("\"false\"", "0", "null", "[]")) reject(document.replace("\"autoUpload\":false", "\"autoUpload\":$value"))
+        reject(document.replace("\"autoUpload\":false", "\"autoUpload\":false,\"autoUpload\":false"))
+        // Automatic upload without an enabled queue is not representable.
+        reject(document.replace("\"enabled\":true", "\"enabled\":false").replace("\"autoUpload\":false", "\"autoUpload\":true"))
     }
 
     private fun reject(text: String) {

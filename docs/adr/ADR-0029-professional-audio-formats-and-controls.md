@@ -63,3 +63,39 @@ OCC-PLAN-021, OCC-PLAN-022, OCC-PLAN-023, OCC-PLAN-041
 ## Revisit conditions
 
 Revisit when the standard video path migrates to the app-owned AudioRecord/MediaCodec muxer, a validated FLAC writer lands, RF64 is required, or Android publishes stronger microphone/effect provenance APIs.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-AUDIO-001 through OCC-AUDIO-011
+- Related ADRs: ADR-0010, ADR-0031, ADR-0033
+
+### Context
+
+Three statements of the original decision no longer match the shipped app:
+
+- Context and Decision 8: FLAC is unavailable. `FlacAudioSidecarRecorder` (`app/src/main/java/com/librestatic/opencinecam/storage/FlacAudioSidecarRecorder.kt`) writes a FLAC sidecar, and `ProfessionalAudio.kt` offers FLAC when the device advertises the FLAC encoder. ADR-0033 revision 5 (audio worker retirement) and revision 14 (separate WAV/FLAC source epochs) record the writer, its STREAMINFO and frame-count checks and an FFmpeg decode of five takes, and revision 15 records FLAC in the shared pause.
+- Decision 7: OCLog2 accepts only a WAV sidecar or no audio. ADR-0033 revision 15 passes a per-take capture clock from VIDEO and LOG alike to either embedded AAC or a separate WAV/FLAC recorder.
+- Context: standard video uses `MediaRecorder`. Normal VIDEO and time-lapse now run on the app-owned GPU to `MediaCodec` graph (`Camera2PreviewEngine.startGpuVideo`), with AAC from an app-owned `AudioRecord` and `MediaCodec` into the shared muxer, as `docs/architecture.md` and ADR-0031 describe. `MediaRecorder` remains only on the constrained high-speed route, where `CaptureService` passes `captureRate` and `startVideo` takes the direct path (`captureRate != null`).
+
+### Decision
+
+- **Decision 7 is replaced.** LOG, like VIDEO, accepts embedded AAC-LC or a separate WAV or FLAC sidecar, or deliberate audio-off, and never records both. The route is selected by the existing audio format intent. A requested route that cannot start still fails before publication (Decision 9), and AAC is still not silently dropped.
+- **Decision 8 is amended.** A streaming FLAC writer exists and FLAC is selectable. Its published evidence is the writer's STREAMINFO and frame accounting plus FFmpeg decoding of the retained files (ADR-0033 revision 14). The part of the original gate that asks for a second independent decoder fixture on a published sidecar is not recorded in ADR-0033 and stays pending. FLAC is not described as interoperability-qualified until that fixture is recorded.
+- **Context amended.** The standard video path is the GPU graph with an app-owned encoder; `MediaRecorder` is used only for constrained high-speed slow motion (`captureRate != null`).
+
+Decisions 1 to 6 and 9 are unchanged.
+
+### Alternatives considered
+
+- Keep FLAC unavailable until the second decoder fixture exists: rejected because the writer already ships with FFmpeg-verified output, and hiding it would contradict the shipped settings.
+- Treat FFmpeg as sufficient qualification: rejected because Decision 8 asked for FFmpeg plus one independent decoder.
+
+### Consequences
+
+- Positive: the ADR matches the shipped audio and video routes.
+- Negative: FLAC interoperability stays an open validation item.
+- Operational: record the second decoder fixture in the device validation evidence, then drop the pending note.
+
+The original decision above is retained as history; this amendment governs where they differ.

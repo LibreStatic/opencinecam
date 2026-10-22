@@ -22,7 +22,12 @@ class EvidenceModelTest {
         graphId = GraphId("graph-001"),
     )
 
-    private fun evidence(stage: EvidenceStage, at: String, status: EvidenceStatus = EvidenceStatus.PASS) =
+    private fun evidence(
+        stage: EvidenceStage,
+        at: String,
+        status: EvidenceStatus = EvidenceStatus.PASS,
+        origin: EvidenceOrigin = EvidenceOrigin.PHYSICAL_DEVICE,
+    ) =
         CapabilityEvidence(
             id = EvidenceId("evidence-${stage.name}"),
             stage = stage,
@@ -33,6 +38,7 @@ class EvidenceModelTest {
             graphId = GraphId("graph-001"),
             validityKey = key,
             value = Knowledge.Known(true),
+            origin = origin,
         )
 
     @Test
@@ -61,5 +67,49 @@ class EvidenceModelTest {
         val updated = trail.append(second)
         assertEquals(1, trail.entries.size)
         assertEquals(2, updated.entries.size)
+    }
+
+    @Test
+    fun onlyAPhysicalDeviceCanPassAnyStageBeyondTheContractLevel() {
+        val beyond = EvidenceStage.entries.filter { it.requiresPhysicalDevice }
+        assertEquals(
+            listOf(
+                EvidenceStage.SESSION_CREATED, EvidenceStage.FIRST_FRAME_RECEIVED, EvidenceStage.RECORDED,
+                EvidenceStage.FILE_VERIFIED, EvidenceStage.SUSTAINED, EvidenceStage.EMPIRICALLY_VERIFIED, EvidenceStage.CERTIFIED,
+            ),
+            beyond,
+        )
+        for (stage in beyond) {
+            for (origin in listOf(EvidenceOrigin.EMULATOR, EvidenceOrigin.HOST, EvidenceOrigin.UNKNOWN)) {
+                assertThrows(IllegalArgumentException::class.java) {
+                    EvidenceTrail<Boolean>().append(evidence(stage, "2026-08-20T00:00:00Z", origin = origin))
+                }
+            }
+            val trail = EvidenceTrail<Boolean>()
+                .append(evidence(stage, "2026-08-20T00:00:00Z", origin = EvidenceOrigin.PHYSICAL_DEVICE))
+            assertEquals(1, trail.entries.size)
+        }
+    }
+
+    @Test
+    fun contractLevelStagesAcceptHostAndEmulatorEvidence() {
+        for (stage in listOf(EvidenceStage.ADVERTISED, EvidenceStage.CANDIDATE)) {
+            for (origin in listOf(EvidenceOrigin.EMULATOR, EvidenceOrigin.HOST, EvidenceOrigin.UNKNOWN)) {
+                assertEquals(1, EvidenceTrail<Boolean>().append(evidence(stage, "2026-08-20T00:00:00Z", origin = origin)).entries.size)
+            }
+        }
+    }
+
+    @Test
+    fun emulatorEvidenceStillCountsWhenNotPassing() {
+        val trail = EvidenceTrail<Boolean>()
+            .append(evidence(EvidenceStage.CANDIDATE, "2026-08-20T00:00:00Z", origin = EvidenceOrigin.EMULATOR))
+            .append(
+                evidence(
+                    EvidenceStage.SUSTAINED, "2026-08-20T00:00:01Z",
+                    status = EvidenceStatus.FAIL, origin = EvidenceOrigin.EMULATOR,
+                ),
+            )
+        assertEquals(2, trail.entries.size)
     }
 }

@@ -104,7 +104,7 @@ class ContributionWorkflow(private val maxRecords: Int = 128) {
                     } else {
                         ContributionCheckStatus.FAIL
                     },
-                    "fingerprint/camera/codec/protocol/digest scope is required",
+                    "device/camera/codec/protocol scope is required",
                 ),
             )
             add(

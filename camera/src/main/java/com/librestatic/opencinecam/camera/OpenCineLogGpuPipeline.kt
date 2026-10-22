@@ -40,12 +40,20 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
+import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.media.video.SdrAvcCaptureKind
+import com.librestatic.opencinecam.media.video.SdrAvcEncoderDecision
+import com.librestatic.opencinecam.media.video.SurfaceEncoderPick
 import com.librestatic.opencinecam.media.video.SurfaceEncoderPolicy
+import com.librestatic.opencinecam.media.video.decideSdrAvcEncoder
 import com.librestatic.opencinecam.media.video.VideoCodec
 import com.librestatic.opencinecam.media.video.VideoCodecPreference
 import com.librestatic.opencinecam.media.video.VideoEncoderSelector
 import com.librestatic.opencinecam.media.video.resolveVideoCodec
 import com.librestatic.opencinecam.media.video.platformSurfaceEncoders
+
+/** Strict refused the start: only a software encoder fits. A soft refusal, never an engine failure. */
+internal class VideoEncoderStartRefused(val code: String, message: String) : IllegalStateException(message)
 
 data class OpenCineLogEncoderCandidate(
     val codecName: String,
@@ -595,6 +603,12 @@ class OpenCineLogGpuPipeline(
         videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
         /** With [hlgOutput]: record HDR10 (PQ, HEVC Main10 HDR10) instead of HLG. */
         hdr10Output: Boolean = false,
+        /** Only the SDR AVC route reads it: Strict refuses a software encoder for VIDEO, Adaptive records and discloses. */
+        encoderPolicy: PolicyMode = PolicyMode.STRICT,
+        /** Called before [onStarted] when a take records with a software encoder under Adaptive (codec name). */
+        onSoftwareEncoder: ((String) -> Unit)? = null,
+        /** A policy refusal of the start (stable code, message); replaces [onFailure] so the engine stays healthy. */
+        onStartRefused: ((String, String) -> Unit)? = null,
     ): Boolean {
         require(!hdr10Output || hlgOutput) { "HDR10 output is a variant of the HDR graph." }
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null &&
@@ -657,9 +671,24 @@ class OpenCineLogGpuPipeline(
                     runCatching { hevcSdrEncoderSelector(platformEncodedSize, encoderRate) }.getOrNull()
                 } else null
                 val useHevc = resolveVideoCodec(videoCodec, hevcCandidate != null) == VideoCodec.HEVC
-                fun avcCandidate() = avcEncoderSelector(platformEncodedSize, encoderRate, timelapse != null)
-                    ?.copy(mime = MediaFormat.MIMETYPE_VIDEO_AVC)
-                    ?: error("No ${if (timelapse == null) "hardware " else "advertised "}${MediaFormat.MIMETYPE_VIDEO_AVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
+                var softwareEncoderToDisclose: String? = null
+                // Hardware sorts first, so a software pick means no hardware encoder fits this size and rate.
+                fun avcCandidate(): OpenCineLogEncoderCandidate {
+                    val found = avcEncoderSelector(platformEncodedSize, encoderRate, true)
+                    val pick = found?.let { SurfaceEncoderPick(it.codecName, it.profile, it.hardwareAccelerated, it.level) }
+                    val decision = decideSdrAvcEncoder(pick, encoderPolicy, if (timelapse != null) SdrAvcCaptureKind.TIMELAPSE else SdrAvcCaptureKind.VIDEO)
+                    return when (decision) {
+                        is SdrAvcEncoderDecision.Hardware -> requireNotNull(found).copy(mime = MediaFormat.MIMETYPE_VIDEO_AVC)
+                        is SdrAvcEncoderDecision.Software -> {
+                            softwareEncoderToDisclose = decision.pick.codecName.takeIf { decision.disclose }
+                            requireNotNull(found).copy(mime = MediaFormat.MIMETYPE_VIDEO_AVC)
+                        }
+                        is SdrAvcEncoderDecision.Refused -> throw VideoEncoderStartRefused(decision.code,
+                            "No hardware ${MediaFormat.MIMETYPE_VIDEO_AVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps; only software encoder ${decision.codecName} does. Adaptive allows it.")
+                        SdrAvcEncoderDecision.Unavailable ->
+                            error("No advertised ${MediaFormat.MIMETYPE_VIDEO_AVC} Surface encoder accepts ${encodedSize.width}x${encodedSize.height} at $encoderRate fps.")
+                    }
+                }
                 var candidate = if (useHevc) requireNotNull(hevcCandidate)
                     else if (passthroughSdr) avcCandidate()
                     else (if (hdr10Output) findHdr10Encoder(platformEncodedSize, targetFps) else findEncoder(platformEncodedSize, targetFps))
@@ -669,8 +698,7 @@ class OpenCineLogGpuPipeline(
                     // OMX AVC requires the advertised level whenever a profile is supplied.
                     candidate.level?.let { setInteger(MediaFormat.KEY_LEVEL, it) }
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    val rateScaledBitrate = bitrate.toLong() * encoderRate / 30
-                    setInteger(MediaFormat.KEY_BIT_RATE, rateScaledBitrate.coerceIn(12_000_000L, 200_000_000L).toInt())
+                    setInteger(MediaFormat.KEY_BIT_RATE, RecordingDataRate.gpuVideoBps(bitrate, encoderRate))
                     if (timelapse == null && projectRateOverride == null) setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
                     else setFloat(MediaFormat.KEY_FRAME_RATE, projectFps.toFloat())
                     if (timelapse != null || projectRateOverride != null) setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
@@ -789,7 +817,11 @@ class OpenCineLogGpuPipeline(
                     throw failure
                 }
                 // Commit owns the take before external callbacks, which can themselves block.
-                runCatching { active.reportEncodedProgress(); onStarted(); active.reportPauseStatus() }.onFailure { active.failure = it; stopRecording() }
+                runCatching {
+                    // Before onStarted, which resets the take's warning surface from what was disclosed so far.
+                    softwareEncoderToDisclose?.let { name -> onSoftwareEncoder?.invoke(name) }
+                    active.reportEncodedProgress(); onStarted(); active.reportPauseStatus()
+                }.onFailure { active.failure = it; stopRecording() }
               } finally {
                 try {
                     if (!preparation.isCommitted) {
@@ -812,7 +844,11 @@ class OpenCineLogGpuPipeline(
                 preparation.ownerFinished()
             }
             if (failure is InterruptedException) Thread.currentThread().interrupt()
-            if (!cancelled) true else {
+            val refusal = generateSequence<Throwable>(failure) { it.cause }.filterIsInstance<VideoEncoderStartRefused>().firstOrNull()
+            if (!cancelled) true else if (refusal != null && onStartRefused != null) {
+                onStartRefused(refusal.code, refusal.message ?: refusal.code)
+                false
+            } else {
                 onFailure("log-recording-prepare-failed", failure.message ?: "OCLog recording could not be prepared.")
                 false
             }
@@ -2196,7 +2232,7 @@ class OpenCineLogGpuPipeline(
                 SurfaceEncoderPolicy.HEVC_HDR10_HARDWARE, size.width, size.height, targetFps, platformSurfaceEncoders(),
             )?.let { OpenCineLogEncoderCandidate(it.codecName, it.profile, size, it.hardwareAccelerated, it.level) }
 
-        /** AVC High Surface encoder; software is admitted only when [allowSoftware] (timelapse). */
+        /** AVC High Surface encoder; software is admitted only when [allowSoftware], and the caller then applies the policy. */
         fun findAvcEncoder(size: Size, targetFps: Int, allowSoftware: Boolean = false): OpenCineLogEncoderCandidate? =
             VideoEncoderSelector().selectSurfaceEncoder(
                 SurfaceEncoderPolicy.avcHigh(allowSoftware), size.width, size.height, targetFps, platformSurfaceEncoders(),

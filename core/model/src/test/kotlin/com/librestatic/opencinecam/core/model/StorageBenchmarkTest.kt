@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam.core.model
 
 import java.io.ByteArrayOutputStream
+import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
@@ -100,15 +101,33 @@ class StorageBenchmarkTest {
         val request = StorageBenchmarkRequest("bench-persist", requiredBytesPerSecond = 1, chunkSizeBytes = 64)
         val report = StorageBenchmarkRunner(
             FakeClock(),
-            JsonBenchmarkResultRepository(output),
+            JsonBenchmarkResultRepository(output) { Instant.parse("2026-10-19T10:00:00Z") },
         ).run(request, listOf(destination))
 
         val encoded = output.toString(Charsets.UTF_8)
         val document = decodeCanonical<BenchmarkResultDocument>(encoded)
         assertEquals(report.results.single().bytesWritten, document.bytesWritten)
         assertEquals(1, document.windows.size)
-        assertEquals("QUALIFIED", document.outcome)
+        assertEquals("pass", document.outcome)
+        assertEquals("QUALIFIED", document.outcomeDetail)
         assertNotNull(document.requiredBytesPerSecond)
+        assertEquals(report.results.single().qualificationMarginBytesPerSecond, document.qualificationMarginBytesPerSecond)
+        assertEquals("2026-10-19T10:00:00Z", document.createdAt)
+        assertEquals(1, Instant.parse(document.createdAt).epochSecond.compareTo(0))
+    }
+
+    @Test
+    fun outcomesMapOntoTheSchemaVocabulary() {
+        assertEquals(
+            listOf("pass", "fail", "cancelled", "error", "error"),
+            listOf(
+                StorageBenchmarkOutcome.QUALIFIED,
+                StorageBenchmarkOutcome.NOT_QUALIFIED,
+                StorageBenchmarkOutcome.CANCELLED,
+                StorageBenchmarkOutcome.UNSUPPORTED,
+                StorageBenchmarkOutcome.FAILED,
+            ).map { it.schemaOutcome() },
+        )
     }
 
     private class FakeClock : BenchmarkClock {

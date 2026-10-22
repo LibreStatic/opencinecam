@@ -37,8 +37,8 @@ enum class CaptureMode(val experimental: Boolean = false) {
     TIME_LAPSE,
     BRACKET,
     LIGHT_TRAIL,
-    LOG,
-    HLG,
+    LOG(true),
+    HLG(true),
     APV(true),
     RAW_VIDEO(true),
 }
@@ -98,6 +98,8 @@ data class CameraUiState(
     /** Null unless the low-light boost AE mode was submitted and the camera reported its state. */
     val reportedLowLightBoost: Boolean? = null,
     val reportedMeteringMode: Int? = null,
+    /** Requested against reported physical lens and the bounded history of mismatches (PLAN-015, PLAN-026). */
+    val hardwareTruth: HardwareTruthHudState = HardwareTruthHudState(),
     val requestedExposureMode: com.librestatic.opencinecam.camera.ExposureMode = com.librestatic.opencinecam.camera.ExposureMode.AUTO,
     val exposureControlUnavailable: Boolean = false,
     val exposureClamped: Boolean = false,
@@ -134,6 +136,8 @@ data class CameraUiState(
     val recordingWidth: Int? = null,
     val recordingHeight: Int? = null,
     val availableStorageBytes: Long? = null,
+    /** A degraded-but-recording condition the Adaptive policy keeps on screen for the rest of the take. */
+    val recordingWarning: String? = null,
     val accumulationFrames: Int = 0,
     val accumulationElapsedMs: Long = 0,
     val accumulationTargetMs: Long = 0,

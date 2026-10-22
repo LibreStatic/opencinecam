@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
+
 cmake_minimum_required(VERSION 3.22.1)
 project(opencinecam_native_pipeline LANGUAGES CXX)
 
