@@ -37,8 +37,10 @@ fun mediaRenamePreview(take: LocalMediaTake, stem: String): MediaRenamePreview {
         require(artifact.mimeType == "application/json") { "Only known JSON metadata can be renamed coherently" }
         names[artifact.uri] = "$normalized-metadata-${(index + 1).toString().padStart(2, '0')}" + renameExtension(artifact)
     }
-    take.attachments.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }.forEachIndexed { index, artifact ->
-        require(isMotionLogAttachment(artifact)) { "Unknown attachment cannot be renamed coherently" }
+    take.attachments.forEach { artifact -> require(isTakeAttachment(artifact)) { "Unknown attachment cannot be renamed coherently" } }
+    // The clip sidecar keeps the `.clip.json` shape so it is still recognised after the rename.
+    take.attachments.filter(::isClipSidecarAttachment).forEach { names[it.uri] = "$normalized$CLIP_SIDECAR_SUFFIX" }
+    take.attachments.filter { !isClipSidecarAttachment(it) }.sortedBy { requireNotNull(mediaDeleteIdentity(it.uri)).id }.forEachIndexed { index, artifact ->
         names[artifact.uri] = "$normalized-motion-${(index + 1).toString().padStart(2, '0')}" + renameExtension(artifact)
     }
     val files = all.map { MediaRenameTarget(it, names.getValue(it.uri)) }

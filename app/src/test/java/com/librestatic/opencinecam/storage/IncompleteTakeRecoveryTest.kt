@@ -119,6 +119,43 @@ class IncompleteTakeRecoveryTest {
         assertEquals("incomplete", parse(rows.written.getValue("s")).getString("takeStatus"))
     }
 
+    @Test fun clipSidecarIsNotTakenForTheTimingSidecarAndIsMarkedAndPublishedWithTheVideo() {
+        val clipText = """{"schemaVersion":"1.0.0","recordingId":"$id","events":[]}"""
+        val (published, rows, inserted) = recover(listOf(
+            row("DCIM", "v", "take.mp4", "video/mp4", 100),
+            row("Download", "c", "take.clip.json", "application/json", 60),
+        ), mapOf("c" to clipText))
+        assertEquals(1, published)
+        // The clip is not the timing sidecar, so a separate incomplete sidecar is still created.
+        assertEquals(listOf("take.incomplete.json"), inserted)
+        val json = parse(rows.written.getValue("c"))
+        assertEquals("incomplete", json.getString("takeStatus"))
+        assertEquals("process-death", json.getJSONArray("failureReasons").getString(0))
+        assertEquals(id, json.getString("recordingId"))
+        assertTrue("publish:c" in rows.events && "publish:v" in rows.events)
+        assertTrue(rows.events.indexOf("publish:c") < rows.events.indexOf("publish:v"))
+    }
+
+    @Test fun clipSidecarOfAnEmptyVideoIsDeleted() {
+        val (published, rows, _) = recover(listOf(
+            row("DCIM", "v", "take.mp4", "video/mp4", 0),
+            row("Download", "c", "take.clip.json", "application/json", 60),
+        ))
+        assertEquals(0, published)
+        assertTrue("delete:c" in rows.events)
+        assertFalse("publish:c" in rows.events)
+    }
+
+    @Test fun clipSidecarAlreadyMarkedIncompleteIsLeftAsWritten() {
+        val marked = IncompleteTake.mark("""{"recordingId":"$id"}""", listOf("encoder-failed"), null)
+        val (_, rows, _) = recover(listOf(
+            row("DCIM", "v", "take.mp4", "video/mp4", 100),
+            row("Download", "c", "take.clip.json", "application/json", 60),
+        ), mapOf("c" to marked))
+        assertFalse("c" in rows.written)
+        assertTrue("publish:c" in rows.events)
+    }
+
     @Test fun reportKeepsItsPreviousShapeWhenNothingWasKept() {
         assertEquals(RecordingRecoveryReport(discardedGroups = 1), RecordingRecoveryReport(1, 0, 0))
         assertEquals(1, RecordingRecoveryReport(incompleteGroups = 1).incompleteGroups)

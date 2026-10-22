@@ -317,19 +317,20 @@ class CapturePublicationOutboxBridgeTest {
         assertEquals(CapturePublicationState.ABORTED, f.journal.value?.state)
     }
 
-    @Test fun allFourVideoAudioAndMetadataRolesAreStagedAndSealedTogether() {
+    @Test fun everyArtifactRoleIncludingTheClipSidecarIsStagedAndSealedTogether() {
         val f = Fixture()
         val complete = f.artifacts + listOf(
             PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, "content://media/external/audio/media/3", "take.wav"),
             PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, "content://media/external/downloads/4", "take.wav.json"),
+            PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json"),
         )
         f.bridge.onPrepared(complete)
-        assertEquals(4, f.store.value?.artifacts?.size)
+        assertEquals(5, f.store.value?.artifacts?.size)
         assertFalse(requireNotNull(f.store.value).sealed)
         f.bridge.onPublished(complete.reversed())
         assertTrue(requireNotNull(f.store.value).sealed)
         assertEquals(WebDavArtifactRole.entries.toSet(), requireNotNull(f.store.value).artifacts.map { it.spec.role }.toSet())
-        assertEquals(8, f.probeCalls)
+        assertEquals(10, f.probeCalls)
     }
 
     @Test fun enrollmentForDifferentBundleCannotEnrollCurrentCapture() {

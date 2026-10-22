@@ -46,3 +46,5 @@ The "automatic scheduling remains pending" statement above is superseded. Automa
 - **Permissions.** `FOREGROUND_SERVICE_DATA_SYNC` is justified by the WebDAV opt-in in `SecurityAudit`; the WorkManager `SystemForegroundService` entry is non-exported with the `dataSync` type. WorkManager's own library manifest adds `RECEIVE_BOOT_COMPLETED` and `WAKE_LOCK` to the merged manifest.
 
 Real-device behaviour (vendor background restrictions, Doze, foreground-start limits) is not claimed by the host tests.
+
+Amendment 2026-10-22: a prepared video bundle may carry a fifth artifact role, `CLIP_METADATA`, the canonical `<videoStem>.clip.json` sidecar (`docs/schemas/clip-sidecar.schema.json`). It joins the same bundle as the video, is hashed and uploaded like any other JSON sidecar, and the outbox and journal limits are 5 artifacts. Rows written before the amendment still decode, because roles are stored by name and none was renamed.

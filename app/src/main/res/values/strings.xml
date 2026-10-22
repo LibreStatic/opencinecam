@@ -600,6 +600,7 @@
     <string name="webdav_transfer_video_metadata">Video metadata</string>
     <string name="webdav_transfer_audio">Audio</string>
     <string name="webdav_transfer_audio_metadata">Audio metadata</string>
+    <string name="webdav_transfer_clip_metadata">Clip sidecar</string>
     <string name="webdav_transfer_preparing_capture">Stopping transfers before recording…</string>
     <string name="webdav_transfer_prepare_failed">Transfer cleanup is still pending. Recording has not started.</string>
     <string name="webdav_transfer_cancel_capture">Cancel recording preparation</string>

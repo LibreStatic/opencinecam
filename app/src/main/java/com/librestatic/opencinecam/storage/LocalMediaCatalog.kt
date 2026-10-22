@@ -16,7 +16,7 @@ data class LocalMediaArtifact(val uri: String, val name: String, val mimeType: S
 data class LocalMediaTake(val id: String, val primary: LocalMediaArtifact,
     val originals: List<LocalMediaArtifact>, val metadata: List<LocalMediaArtifact>,
     val kind: LocalMediaKind, val slate: ProductionSlateSettings?, val relationStatus: LocalMediaRelationStatus,
-    /** Non-JSON files owned by the take, such as its Gyroflow `.gcsv` log. They are never relationship metadata. */
+    /** Files owned by the take that are never relationship metadata: its Gyroflow `.gcsv` log and its `.clip.json` sidecar. */
     val attachments: List<LocalMediaArtifact> = emptyList())
 /** Codec facts a take's sidecars declare. They stay out of [LocalMediaTake], whose equality is the
  * identity check behind sharing, renaming and proxy jobs. */
@@ -41,6 +41,15 @@ internal data class CatalogRow(val artifact: LocalMediaArtifact, val id: Long,
 /** A take attachment is a plain-text motion log in the take's Download namespace, never a JSON sidecar. */
 internal fun isMotionLogAttachment(artifact: LocalMediaArtifact): Boolean =
     artifact.name.endsWith("." + GyroflowLog.EXTENSION, ignoreCase = true) && artifact.mimeType != "application/json"
+/**
+ * The canonical `<stem>.clip.json` sidecar. It is carried as an opaque take attachment: it declares no
+ * `schema`/`videoUri` relationship, so it is neither relationship metadata (which the catalog validates and the
+ * proxy writer counts as exactly two documents) nor rewritten when the take is renamed.
+ */
+internal fun isClipSidecarAttachment(artifact: LocalMediaArtifact): Boolean =
+    artifact.name.endsWith(CLIP_SIDECAR_SUFFIX, ignoreCase = true) && artifact.mimeType == "application/json"
+internal fun isTakeAttachment(artifact: LocalMediaArtifact): Boolean =
+    isMotionLogAttachment(artifact) || isClipSidecarAttachment(artifact)
 internal data class MetadataDocument(val artifact: LocalMediaArtifact, val text: String?, val disappeared: Boolean = false)
 
 /** Only exact application roots and canonical UUID namespaces carry identity. Names never do. */

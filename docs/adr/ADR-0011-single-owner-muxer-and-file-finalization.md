@@ -51,3 +51,5 @@ OCC-PLAN-018-020
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+Amendment 2026-10-22: every published video take also gets one canonical `<videoStem>.clip.json` sidecar (`docs/schemas/clip-sidecar.schema.json`), written pending and published before the video. An incomplete take gets one too, marked `takeStatus: "incomplete"` with `failureReasons` and one `incomplete:<reason>` event per reason; recovery after process death marks an unmarked clip sidecar the same way and never mistakes it for the timing sidecar. Failing to build or write it never fails or deletes the take.

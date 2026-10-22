@@ -225,7 +225,9 @@ internal class RecordingCaptureRecovery(context: Context) {
 
 internal data class RecordingRow(val uri: Uri, val name: String, val mime: String, val root: String, val metadata: Boolean,
     /** A take attachment such as the Gyroflow log: journalled and published with the take, never a prepared artifact. */
-    val auxiliary: Boolean = false)
+    val auxiliary: Boolean = false,
+    /** The video member's second metadata row, the canonical clip sidecar; prepared as CLIP_METADATA. */
+    val clip: Boolean = false)
 
 /** Enrolment closes when preparation begins. All members must publish before a durable commit. */
 class RecordingRecoveryGroup internal constructor(private val journal: RecordingCaptureRecovery, val id: String) {
@@ -264,16 +266,27 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         } }
     }
 
-    internal fun insert(member: RecordingRecoveryMember, name: String, mime: String, metadata: Boolean): Uri = synchronized(recordingRecoveryLock) {
-        check(!aborted && !committed && !member.prepared && member.rows.count { !it.auxiliary } < 2)
-        check(member.rows.none { !it.auxiliary && it.metadata == metadata })
+    internal fun insert(member: RecordingRecoveryMember, name: String, mime: String, metadata: Boolean, clip: Boolean = false): Uri = synchronized(recordingRecoveryLock) {
+        check(!clip || metadata && member.kind == RecordingMemberKind.VIDEO)
+        check(!aborted && !committed && !member.prepared && member.rows.count { !it.auxiliary } < (if (member.kind == RecordingMemberKind.VIDEO) 3 else 2))
+        check(member.rows.none { !it.auxiliary && it.metadata == metadata && it.clip == clip })
         require(name.isNotBlank() && '/' !in name && name.length <= 180)
         require(if (metadata) mime == "application/json" else when (member.kind) {
             RecordingMemberKind.VIDEO -> mime == "video/mp4"
             RecordingMemberKind.AUDIO -> mime in setOf("audio/wav", "audio/flac")
         })
         val root = if (metadata) "Download" else if (member.kind == RecordingMemberKind.VIDEO) "DCIM" else "Music"
-        journal.insert(id, root, name, mime).also { uri -> member.rows += RecordingRow(uri, name, journal.allocatedMime(uri, mime), root, metadata) }
+        journal.insert(id, root, name, mime).also { uri -> member.rows += RecordingRow(uri, name, journal.allocatedMime(uri, mime), root, metadata, clip = clip) }
+    }
+
+    /** Withdraws the clip sidecar row of a take whose sidecar could not be written; the take itself is untouched. */
+    internal fun removeClip(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
+        check(!aborted && !committed && !member.prepared)
+        member.rows.firstOrNull { it.clip }?.let { row ->
+            journal.delete(row.uri)
+            member.rows.remove(row)
+        }
+        Unit
     }
 
     /** The one extra Download row a video take may own. A provider that mangles the identity is undone. */
@@ -308,12 +321,13 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         check(artifacts.size == member.rows.count { !it.auxiliary } && artifacts.map { it.uri }.toSet().size == artifacts.size)
         val required = if (member.kind == RecordingMemberKind.VIDEO) setOf(CaptureArtifactRole.VIDEO) else
             setOf(CaptureArtifactRole.AUDIO, CaptureArtifactRole.AUDIO_METADATA)
-        val allowed = if (member.kind == RecordingMemberKind.VIDEO) required + CaptureArtifactRole.VIDEO_METADATA else required
+        val allowed = if (member.kind == RecordingMemberKind.VIDEO) required + CaptureArtifactRole.VIDEO_METADATA + CaptureArtifactRole.CLIP_METADATA else required
         check(artifacts.map { it.role }.toSet().containsAll(required) && artifacts.all { it.role in allowed })
         artifacts.forEach { artifact ->
             val row = member.rows.single { !it.auxiliary && it.uri.toString() == artifact.uri }
             check(row.name == artifact.displayName)
-            check(row.metadata == (artifact.role in setOf(CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.VIDEO_METADATA)))
+            check(row.metadata == (artifact.role in setOf(CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.CLIP_METADATA)))
+            check(row.clip == (artifact.role == CaptureArtifactRole.CLIP_METADATA))
             journal.verify(id, row, 1)
         }
         member.rows.filter { it.auxiliary }.forEach { journal.verify(id, it, 1) }
@@ -385,6 +399,8 @@ internal class RecordingRecoveryMember(internal val group: RecordingRecoveryGrou
     fun beginSalvage() = group.beginSalvage()
     fun keepBytes() = group.keepBytes(this)
     fun insert(displayName: String, mimeType: String, metadata: Boolean): Uri = group.insert(this, displayName, mimeType, metadata)
+    fun insertClipSidecar(displayName: String): Uri = group.insert(this, displayName, "application/json", metadata = true, clip = true)
+    fun removeClipSidecar() = group.removeClip(this)
     fun insertAuxiliary(displayName: String, mimeType: String): Uri = group.insertAuxiliary(this, displayName, mimeType)
     fun removeAuxiliary() = group.removeAuxiliary(this)
     fun prepared(artifacts: List<PreparedCaptureArtifact>) = group.prepared(this, artifacts)

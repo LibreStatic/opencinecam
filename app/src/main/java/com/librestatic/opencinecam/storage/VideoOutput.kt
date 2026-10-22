@@ -33,6 +33,9 @@ class VideoOutput private constructor(
     private val recoveryMember: RecordingRecoveryMember,
 ) : AutoCloseable {
     private var sidecarUri: Uri? = null
+    private var clipSidecarUri: Uri? = null
+    private var writtenClipSidecarJson: String? = null
+    private var geometryFailure: String? = null
     private var motionRecorder: MotionLogRecorder? = null
     private var motionLog: File? = null
     private var motionLogUri: Uri? = null
@@ -80,8 +83,9 @@ class VideoOutput private constructor(
         sidecarJson: String? = null,
         expectedGeometry: RecordingGeometry? = null,
         timingSidecar: Boolean = false,
+        clipSidecar: ClipSidecarProvider? = null,
     ): PreparedVideoOutput? = transaction.prepare {
-        prepareOwned(sidecarJson, expectedGeometry, timingSidecar)
+        prepareOwned(sidecarJson, expectedGeometry, timingSidecar, clipSidecar = clipSidecar)
     }?.let { requireNotNull(preparedOutput) }
 
     /**
@@ -98,6 +102,7 @@ class VideoOutput private constructor(
         timingSidecar: Boolean = false,
         muxerFinalized: Boolean = false,
         encodedFrames: Long? = null,
+        clipSidecar: ClipSidecarProvider? = null,
     ): PreparedVideoOutput? {
         recoveryMember.beginSalvage()
         val measured = runCatching { descriptor.statSize }.getOrNull()?.takeIf { it >= 0L }
@@ -119,11 +124,12 @@ class VideoOutput private constructor(
             return prepared
         }
         return transaction.prepare {
-            prepareOwned(sidecarJson, null, timingSidecar, reasons)
+            prepareOwned(sidecarJson, null, timingSidecar, reasons, clipSidecar)
         }?.let { requireNotNull(preparedOutput) }
     }
 
     private fun markPreparedSidecarIncomplete(reasons: List<String>) {
+        markPreparedClipSidecarIncomplete(reasons)
         val sidecar = sidecarUri ?: run {
             android.util.Log.w("VideoOutput", "Prepared take has no sidecar to carry the incomplete marker")
             return
@@ -137,15 +143,28 @@ class VideoOutput private constructor(
         }
     }
 
+    /** Best effort, like the timing sidecar: the clip sidecar must never fail a take that is being kept. */
+    private fun markPreparedClipSidecarIncomplete(reasons: List<String>) {
+        val clip = clipSidecarUri ?: return
+        try {
+            val marked = IncompleteTake.mark(writtenClipSidecarJson, reasons)
+            requireNotNull(context.contentResolver.openOutputStream(clip, "wt")).use { it.write(marked.toByteArray()) }
+            writtenClipSidecarJson = marked
+        } catch (failure: Exception) {
+            android.util.Log.w("VideoOutput", "Incomplete marker could not be written to the clip sidecar; the take is still kept", failure)
+        }
+    }
+
     /** Publication never creates another row or writes new metadata. */
     @Synchronized
     fun publishPrepared(): Uri? = transaction.publish(::publishOwned)
 
     /** The legacy first-completion contract remains atomic across preparation/publication. */
     @Synchronized
-    fun finish(success: Boolean, sidecarJson: String? = null, expectedGeometry: RecordingGeometry? = null, timingSidecar: Boolean = false): Uri? =
+    fun finish(success: Boolean, sidecarJson: String? = null, expectedGeometry: RecordingGeometry? = null, timingSidecar: Boolean = false,
+        clipSidecar: ClipSidecarProvider? = null): Uri? =
         transaction.finish(success, prepare = {
-            prepareOwned(sidecarJson, expectedGeometry, timingSidecar)
+            prepareOwned(sidecarJson, expectedGeometry, timingSidecar, clipSidecar = clipSidecar)
         }, publish = ::publishOwned)
 
     private fun prepareOwned(
@@ -153,11 +172,17 @@ class VideoOutput private constructor(
         expectedGeometry: RecordingGeometry?,
         timingSidecar: Boolean,
         incomplete: List<String>? = null,
+        clipSidecar: ClipSidecarProvider? = null,
     ) {
         sealMotionLog(true)
+        var fileVerified = ClipStepStatus.NOT_RUN
+        var fileVerifiedDetail: String? = geometryFailure?.also { fileVerified = ClipStepStatus.FAIL }
         expectedGeometry?.takeIf { incomplete == null }?.let { expected ->
             val validation = VideoFileGeometryValidator(context).validate(uri, expected)
+            if (!validation.valid) geometryFailure = validation.message
             check(validation.valid) { validation.message }
+            fileVerified = ClipStepStatus.PASS
+            fileVerifiedDetail = null
         }
         val videoName = ownedDisplayName(uri)
         val metadata = if (captureLocation != null) recordingPublicationMetadata(
@@ -170,10 +195,14 @@ class VideoOutput private constructor(
         } ?: sidecarJson
         val published = if (incomplete != null) IncompleteTake.mark(metadata, incomplete) else metadata
         published?.let { writePendingSidecar(it, timingSidecar || sidecarJson == null, videoName) }
+        writePendingClipSidecar(clipSidecar, videoName, sidecarUri?.let(::ownedDisplayName), fileVerified, fileVerifiedDetail, incomplete)
         attachMotionLogRow(videoName)
         val artifacts = mutableListOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, uri.toString(), videoName))
         sidecarUri?.let { sidecar ->
             artifacts += PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, sidecar.toString(), ownedDisplayName(sidecar))
+        }
+        clipSidecarUri?.let { clip ->
+            artifacts += PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, clip.toString(), ownedDisplayName(clip))
         }
         check(descriptorRetired)
         recoveryMember.prepared(artifacts)
@@ -216,7 +245,7 @@ class VideoOutput private constructor(
         val result = finalizeClip(
             ContentResolverClipRows(context.contentResolver), uri, sidecarUri,
             muxerFinalized = incompleteMuxerFinalized, bytesWritten = incompleteBytes,
-            sidecarBytes = null, correlationId = recoveryGroup.id, attachments = listOfNotNull(motionLogUri),
+            sidecarBytes = null, correlationId = recoveryGroup.id, attachments = listOfNotNull(motionLogUri, clipSidecarUri),
         )
         when (result) {
             is ClipFinalizationResult.Published -> recoveryMember.published()
@@ -237,6 +266,11 @@ class VideoOutput private constructor(
         sidecarUri?.let { sidecar ->
             check(resolver.update(sidecar, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
                 "Sidecar publication did not update its owned row"
+            }
+        }
+        clipSidecarUri?.let { clip ->
+            check(resolver.update(clip, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
+                "Clip sidecar publication did not update its owned row"
             }
         }
         check(resolver.update(uri, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null) == 1) {
@@ -269,6 +303,39 @@ class VideoOutput private constructor(
         }
         // The group waits for the separate native engine guard and any audio worker.
         recoveryMember.abort()
+    }
+
+    /**
+     * The canonical `<stem>.clip.json`. Best effort by decision: a provider or write failure is logged and the take
+     * publishes without it, with its row withdrawn so artifact and row accounting stay consistent.
+     */
+    private fun writePendingClipSidecar(
+        provider: ClipSidecarProvider?, videoName: String, metadataName: String?,
+        fileVerified: ClipStepStatus, fileVerifiedDetail: String?, incomplete: List<String>?,
+    ) {
+        if (provider == null) {
+            // A row left by an earlier attempt of this take keeps travelling with it, marked like the rest.
+            if (incomplete != null) markPreparedClipSidecarIncomplete(incomplete)
+            return
+        }
+        try {
+            val json = provider.build(ClipSidecarPrepareContext(
+                recordingId = recoveryGroup.id, videoName = videoName, metadataName = metadataName,
+                fileVerified = fileVerified, fileVerifiedDetail = fileVerifiedDetail, incompleteReasons = incomplete,
+            )) ?: return
+            val clip = clipSidecarUri ?: recoveryMember.insertClipSidecar(clipSidecarName(videoName))
+            clipSidecarUri = clip
+            try {
+                requireNotNull(context.contentResolver.openOutputStream(clip, "wt")).use { it.write(json.toByteArray()) }
+            } catch (failure: Throwable) {
+                clipSidecarUri = null
+                try { recoveryMember.removeClipSidecar() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+                throw failure
+            }
+            writtenClipSidecarJson = json
+        } catch (failure: Exception) {
+            android.util.Log.w("VideoOutput", "Clip sidecar skipped; the take publishes without it", failure)
+        }
     }
 
     private fun writePendingSidecar(json: String, timing: Boolean, videoName: String) {
