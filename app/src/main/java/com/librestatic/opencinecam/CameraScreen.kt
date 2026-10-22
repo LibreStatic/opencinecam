@@ -3616,7 +3616,7 @@ private fun ManualControlDial(
     CompositionLocalProvider(LocalPanelHeaderVisible provides (showHeader && LocalPanelHeaderVisible.current)) {
         when (control) {
             ControlDial.RESOLUTION -> ResolutionDial(state, binder, settings.videoProjectRate, onClose)
-            ControlDial.FPS -> FpsDial(state, binder, onClose)
+            ControlDial.FPS -> FpsDial(state, binder, settings.videoProjectRate, onClose)
             ControlDial.WB -> WbDial(state, binder, onClose)
             ControlDial.EV -> EvDial(state, binder, onClose)
             ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
@@ -3804,8 +3804,11 @@ private fun ResolutionDial(
 private fun FpsDial(
     state: CameraUiState,
     binder: CaptureService.LocalBinder?,
+    projectRate: CaptureFrameRate,
     onClose: () -> Unit,
 ) {
+    // Slow motion conforms the capture rate to the project rate: a rate at or below it records in real time.
+    val slowMotion = LocalModeSelection.current?.displayed == CaptureMode.SLOW_MOTION
     val log = state.selectedMode.usesLogGraph
     val logSpecs = state.availableLogProfiles.map { it.toSpec() }
     val videoSpecs = state.availableVideoProfiles.map { it.toSpec() }
@@ -3822,7 +3825,7 @@ private fun FpsDial(
         }
         FpsOption(
             fps = fps,
-            offered = fps in offeredAtSize,
+            offered = fps in offeredAtSize && (!slowMotion || slowsDown(fps, projectRate)),
             highSpeed = logProfile?.constrainedHighSpeed == true || state.availableVideoProfiles.any {
                 !log && it.size.width == state.targetVideoWidth && it.size.height == state.targetVideoHeight && it.fps == fps && it.constrainedHighSpeed
             },
@@ -3849,7 +3852,11 @@ private fun FpsDial(
             // 240 fps session runs at 30 fps while the file keeps every frame.
             PanelNote(stringResource(R.string.fps_high_speed_preview_note), Modifier.testTag("fps-high-speed-note"))
         }
-        if (options.any { !it.offered }) {
+        if (slowMotion && options.any { !slowsDown(it.fps, projectRate) }) {
+            PanelNote(stringResource(R.string.fps_slow_motion_needs_faster_rate, projectRate.projectLabel()),
+                Modifier.testTag("fps-slow-motion-note"))
+        }
+        if (options.any { it.fps !in offeredAtSize }) {
             PanelNote(stringResource(R.string.fps_unavailable_at_size, formatFrameSize(state.targetVideoWidth, state.targetVideoHeight)),
                 Modifier.testTag("fps-unavailable-note"))
         }
