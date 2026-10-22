@@ -4,7 +4,11 @@ package com.librestatic.opencinecam.storage
 import android.net.Uri
 
 /** Complete identities allocated and written before any row is published. */
-enum class CaptureArtifactRole { VIDEO, VIDEO_METADATA, AUDIO, AUDIO_METADATA }
+enum class CaptureArtifactRole {
+    VIDEO, VIDEO_METADATA, AUDIO, AUDIO_METADATA,
+    /** The canonical `<videoStem>.clip.json` sidecar (ClipSidecarDocument); a video take may or may not have one. */
+    CLIP_METADATA,
+}
 
 data class PreparedCaptureArtifact(
     val role: CaptureArtifactRole,

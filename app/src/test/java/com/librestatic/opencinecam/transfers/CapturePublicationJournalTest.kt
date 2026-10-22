@@ -21,6 +21,30 @@ class CapturePublicationJournalTest {
         assertEquals(committed, CapturePublicationTransitions.prepared(id, committed, listOf(video, metadata)))
     }
 
+    @Test fun clipSidecarJoinsTheJournalAndFiveArtifactsFit() {
+        val clip = PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json")
+        val audio = PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, "content://media/external/audio/media/3", "take.wav")
+        val audioMeta = PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, "content://media/external/downloads/4", "take.audio.json")
+        val all = listOf(video, metadata, clip, audio, audioMeta)
+        val prepared = CapturePublicationTransitions.prepared(id, null, all)
+        assertEquals(5, prepared.artifacts.size)
+        assertEquals(CapturePublicationState.COMMITTED, CapturePublicationTransitions.published(id, prepared, all.reversed()).state)
+        assertThrows(IllegalArgumentException::class.java) {
+            CapturePublicationReceipt(id, CapturePublicationState.PREPARED, all + video.copy(uri = "content://media/external/video/media/9"))
+        }
+    }
+
+    @Test fun journalWrittenBeforeTheClipSidecarStillDecodes() {
+        val old = """{"version":1,"bundleId":"$id","state":"PREPARED","artifacts":[""" +
+            """{"role":"VIDEO","uri":"${video.uri}","displayName":"take.mp4"},""" +
+            """{"role":"VIDEO_METADATA","uri":"${metadata.uri}","displayName":"take.timing.json"}]}"""
+        val receipt = CapturePublicationJournalCodec.decode(old.toByteArray())
+        assertEquals(listOf(video, metadata), receipt.artifacts)
+        val clip = PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json")
+        val withClip = CapturePublicationReceipt(id, CapturePublicationState.PREPARED, listOf(video, metadata, clip))
+        assertEquals(withClip, CapturePublicationJournalCodec.decode(CapturePublicationJournalCodec.encode(withClip)))
+    }
+
     @Test fun publicationWithoutPreparationCannotInventACommittedReceipt() {
         assertThrows(IllegalArgumentException::class.java) { CapturePublicationTransitions.published(id, null, listOf(video)) }
     }

@@ -191,7 +191,8 @@ class WebDavArtifactHasherTest {
     @Test fun allSupportedArtifactRolesValidateMimeAndExtension() = owner { _, scope ->
         for ((role, name, mime) in listOf(Triple(WebDavArtifactRole.VIDEO, "a.mp4", "video/mp4"),
             Triple(WebDavArtifactRole.AUDIO, "a.wav", "audio/x-wav"), Triple(WebDavArtifactRole.AUDIO, "a.flac", "audio/flac"),
-            Triple(WebDavArtifactRole.VIDEO_METADATA, "a.json", "application/json"), Triple(WebDavArtifactRole.AUDIO_METADATA, "a.json", "application/json"))) {
+            Triple(WebDavArtifactRole.VIDEO_METADATA, "a.json", "application/json"), Triple(WebDavArtifactRole.AUDIO_METADATA, "a.json", "application/json"),
+            Triple(WebDavArtifactRole.CLIP_METADATA, "a.clip.json", "application/json"))) {
             val spec = spec().copy(role = role, sourceName = name)
             val source = Source(snapshot().copy(displayName = name, mimeType = mime))
             assertTrue(hash(source, scope, WebDavOutboxArtifact(spec, modifiedSeconds = 7)) is WebDavHashResult.Hashed)

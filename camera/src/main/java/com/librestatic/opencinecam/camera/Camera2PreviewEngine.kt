@@ -6149,6 +6149,9 @@ class Camera2PreviewEngine(
     /** Codec of the SDR take in flight (GPU or direct MediaRecorder route); null when none or LOG/HLG. */
     fun activeVideoCodec(): VideoCodec? = logPipeline?.activeVideoCodec() ?: recorderVideoCodec
 
+    /** True while a MediaRecorder owns the take (off-speed and high-speed); false for the MediaCodec graphs. */
+    fun recordsThroughMediaRecorder(): Boolean = recorderRequest.get() != null
+
     /** Why the latest SDR take fell back from HEVC to H.264, or null. */
     fun videoCodecFallbackReason(): String? = logPipeline?.videoCodecFallbackReason() ?: recorderCodecFallback
 

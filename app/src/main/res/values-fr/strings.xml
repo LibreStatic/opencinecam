@@ -595,6 +595,7 @@
     <string name="webdav_transfer_video_metadata">Métadonnées vidéo</string>
     <string name="webdav_transfer_audio">Audio</string>
     <string name="webdav_transfer_audio_metadata">Métadonnées audio</string>
+    <string name="webdav_transfer_clip_metadata">Sidecar du clip</string>
     <string name="webdav_transfer_preparing_capture">Arrêt des transferts avant l\'enregistrement…</string>
     <string name="webdav_transfer_prepare_failed">Le nettoyage des transferts est toujours en attente. L\'enregistrement n\'a pas démarré.</string>
     <string name="webdav_transfer_cancel_capture">Annuler la préparation de l\'enregistrement</string>

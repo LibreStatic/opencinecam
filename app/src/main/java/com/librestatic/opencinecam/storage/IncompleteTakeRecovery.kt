@@ -50,9 +50,13 @@ internal fun <U> recoverIncompleteTake(
         val bytes = bytesForDecision(clip.bytes)
         val existing = json.firstOrNull { it.handle !in consumed && ownsSidecar(it.name, stem, video) }
         existing?.let { consumed += it.handle }
+        // The canonical clip sidecar is not the timing or OCLog sidecar: it is never rewritten as one.
+        val clipSidecar = if (video) json.firstOrNull { it.handle !in consumed && it.name == stem + CLIP_SIDECAR_SUFFIX } else null
+        clipSidecar?.let { consumed += it.handle }
         val keep = decideClipRecovery(muxerFinalized = false, bytesWritten = bytes) != ClipRecoveryDecision.DELETE
+        if (keep && clipSidecar != null && clipSidecar.bytes != 0L) markRecoveredClipSidecar(bundleId, clipSidecar, clipRows, readText)
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
-        val attachments = if (video) others.filter { it.handle !in consumed }.also { list -> list.forEach { consumed += it.handle } } else emptyList()
+        val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
         // A motion log without bytes is deleted below like any other empty row, not published with the clip.
         val publishable = attachments.filter { it.bytes != 0L }.map { it.handle }
         val result = finalizeClip(
@@ -75,7 +79,7 @@ internal fun <U> recoverIncompleteTake(
 }
 
 private fun ownsSidecar(name: String, stem: String, video: Boolean): Boolean {
-    if (!name.startsWith("$stem.")) return false
+    if (!name.startsWith("$stem.") || name.endsWith(CLIP_SIDECAR_SUFFIX)) return false
     val audioSidecar = name.endsWith(".audio.json") || name.endsWith(".audio.incomplete.json")
     return audioSidecar != video
 }
@@ -93,4 +97,25 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
         base, listOf(IncompleteTake.PROCESS_DEATH),
         note = "Recording was interrupted before the file was finalized; the container may need repair.",
     )
+}
+
+/**
+ * ADR-0011 for the clip sidecar of an interrupted take: it was written pending as if the take would
+ * complete, so it gets the same incomplete marker as the timing sidecar. Best effort: a sidecar that is
+ * unreadable, not a JSON object or too large is published as it is, and a failed rewrite never stops
+ * the take from being kept.
+ */
+private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, clipRows: ClipRows<U>, readText: (U) -> String?) {
+    try {
+        val text = readText(clip.handle)?.takeIf { it.length <= RECOVERED_SIDECAR_LIMIT } ?: return
+        if (runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false).not()) return
+        if (IncompleteTake.reasonsOf(text) != null) return // already says why (the take was kept after a failure)
+        val marked = IncompleteTake.mark(
+            text, listOf(IncompleteTake.PROCESS_DEATH),
+            note = "Recording was interrupted before the file was finalized; the container may need repair.",
+        )
+        clipRows.writeSidecar(clip.handle, marked.toByteArray())
+    } catch (failure: Exception) {
+        runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
+    }
 }

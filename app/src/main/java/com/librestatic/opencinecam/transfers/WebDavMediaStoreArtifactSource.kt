@@ -28,6 +28,7 @@ internal class WebDavMediaStoreArtifactSource(
                 WebDavArtifactRole.VIDEO_METADATA -> CaptureArtifactRole.VIDEO_METADATA
                 WebDavArtifactRole.AUDIO -> CaptureArtifactRole.AUDIO
                 WebDavArtifactRole.AUDIO_METADATA -> CaptureArtifactRole.AUDIO_METADATA
+                WebDavArtifactRole.CLIP_METADATA -> CaptureArtifactRole.CLIP_METADATA
             }, spec.sourceUri, spec.sourceName,
         )
         private val probe = MediaStorePreparedArtifactProbe(resolver)

@@ -151,6 +151,16 @@ class WebDavOutboxTest {
         assertThrows(IllegalArgumentException::class.java) { plan.copy(artifacts = listOf(video, metadata.copy(role = WebDavArtifactRole.AUDIO_METADATA))) }
     }
 
+    @Test fun clipSidecarIsAnAcceptedFifthArtifactAndOldRoleNamesStillResolve() {
+        val plan = plan(withMetadata = true)
+        val clip = WebDavArtifactSpec(id(4), WebDavArtifactRole.CLIP_METADATA, "content://media/external/downloads/5", "take.clip.json", 40)
+        val five = plan.copy(artifacts = plan.artifacts + clip)
+        assertEquals(3, five.artifacts.size)
+        assertEquals(WebDavArtifactRole.VIDEO_METADATA, WebDavArtifactRole.valueOf("VIDEO_METADATA"))
+        assertEquals(WebDavArtifactRole.CLIP_METADATA, WebDavArtifactRole.valueOf("CLIP_METADATA"))
+        assertThrows(IllegalArgumentException::class.java) { plan.copy(artifacts = plan.artifacts + clip.copy(id = id(5)) + clip.copy(id = id(6), sourceUri = "content://media/external/downloads/6", remoteName = "x.clip.json")) }
+    }
+
     @Test fun validationRejectsSecretsAsIdsUnsafeNamesUrisAndNoncanonicalHashes() {
         val plan = plan()
         assertThrows(IllegalArgumentException::class.java) { plan.copy(endpointId = "https://user:secret@example/") }

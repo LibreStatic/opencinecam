@@ -222,7 +222,7 @@ class LocalMediaRepository(context: Context) {
             MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), null, METADATA_BOUND + 1)
         if (metadata.size > METADATA_BOUND) incomplete = true
         val bounded = metadata.take(METADATA_BOUND)
-        val logs = if (namespace.recording) bounded.filter { isMotionLogAttachment(it.artifact) } else emptyList()
+        val logs = if (namespace.recording) bounded.filter { isTakeAttachment(it.artifact) } else emptyList()
         val documents = bounded.filter { it !in logs }.map { row ->
             if (row.artifact.mimeType == "application/json") readMetadata(row.artifact) else MetadataDocument(row.artifact, null)
         }
