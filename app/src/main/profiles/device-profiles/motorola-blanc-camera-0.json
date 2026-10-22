@@ -6,7 +6,7 @@
   "trust": "BUNDLED_TRUSTED",
   "scope": {
     "device": "blanc",
-    "buildFingerprint": "motorola/blanc_g/blanc:16/W3WB36.36-123-2/unrecorded:user/release-keys",
+    "buildFingerprint": "motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys",
     "cameraId": "0"
   },
   "validity": {
@@ -16,7 +16,7 @@
   "signature": {
     "algorithm": "SHA-256",
     "keyId": "release",
-    "digest": "a7e5e3f513a5c953a741691abcdcb53c2cecd0be28a649565e2e32c2798e9097"
+    "digest": "9179d3ef58a4d9990842e8a553fad76637fde9779a4f6951783b901d2685fb6f"
   },
   "quirks": [
     {
