@@ -570,6 +570,10 @@ class Camera2PreviewEngine(
     private var recordSurface: Surface? = null
     @Volatile private var recording = false
     private var recordingSessionGeneration = 0L
+    // Camera thread only: the recorder session whose repeating request was stopped, and the
+    // continuation that stops MediaRecorder once that session reports no captures in flight.
+    private var drainingRecorderSession: CameraCaptureSession? = null
+    private var recorderDrainContinuation: (() -> Unit)? = null
     // Fault qualification observes the real platform callback; production leaves this unset.
     private var recordingSessionObserver: ((SessionConfiguration) -> Unit)? = null
     @Volatile private var activeDescriptor: Camera2CameraDescriptor? = null
@@ -3703,32 +3707,82 @@ class Camera2PreviewEngine(
         if (!request.stopRequested.compareAndSet(false, true)) return false
         cameraExecutor.execute {
             if (!ownsRecorderRequest(request)) return@execute
-            val descriptor = activeDescriptor
-            val device = camera
-            val surface = previewSurface
-            val pipeline = logPipeline?.takeIf { recorderOverGpuPreview && gpuPreviewEnabled }
-            var success = true
-            runCatching { session?.stopRepeating() }
-            runCatching { session?.close() }
+            // Stop feeding the recorder first and let the frames already in the pipeline reach it.
+            // MediaRecorder stops only once the session is idle, so the encoder gets every frame up
+            // to the stop and the camera never queues into a released surface.
+            val draining = session
             session = null
-            try { recorder?.stop() } catch (failure: RuntimeException) {
-                success = false
-                Log.w(TAG, "MediaRecorder stop failed", failure)
+            if (draining == null || runCatching { draining.stopRepeating() }.isFailure) {
+                finishRecorderStop(request, draining)
+                return@execute
             }
-            Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
-            releaseRecorder(request)
-            reportRecordingStopped(success, recorderOutputRetirement())
-            if (success && descriptor != null && device != null && pipeline != null) {
-                configureGpuPreviewSession(device, descriptor, pipeline, generation)
-            } else if (success && descriptor != null && device != null && surface?.isValid == true) {
-                if (activeVideoProfile?.constrainedHighSpeed == true) {
-                    configureHighSpeedPreviewSession(device, descriptor, surface, generation)
-                } else configureSession(device, descriptor, surface, generation)
-            } else if (!success) {
-                listener?.onFailure("video-stop-failed", "The recording was too short or could not be finalized.", true)
+            var finished = false
+            lateinit var timeout: Runnable
+            val finish = {
+                if (!finished) {
+                    finished = true
+                    imageHandler.removeCallbacks(timeout)
+                    if (drainingRecorderSession === draining) {
+                        drainingRecorderSession = null
+                        recorderDrainContinuation = null
+                    }
+                    finishRecorderStop(request, draining)
+                }
             }
+            timeout = Runnable {
+                cameraExecutor.execute {
+                    if (!finished) Log.w(TAG, "Recorder session did not drain within $RECORDER_STOP_DRAIN_TIMEOUT_MS ms; stopping anyway")
+                    finish()
+                }
+            }
+            drainingRecorderSession = draining
+            recorderDrainContinuation = finish
+            imageHandler.postDelayed(timeout, RECORDER_STOP_DRAIN_TIMEOUT_MS)
         }
         return true
+    }
+
+    /** Camera thread: a recorder session reported no captures in flight. */
+    private fun onRecorderSessionReady(configured: CameraCaptureSession) {
+        if (configured !== drainingRecorderSession) return
+        val continuation = recorderDrainContinuation ?: return
+        drainingRecorderSession = null
+        recorderDrainContinuation = null
+        continuation()
+    }
+
+    /**
+     * Camera thread, after the recorder session drained (or could not be drained). The next
+     * preview session replaces [drained] directly: an explicit close makes the framework
+     * unconfigure every stream first, which the Qualcomm HAL rejects as an empty stream set.
+     */
+    private fun finishRecorderStop(request: RecorderRequest, drained: CameraCaptureSession?) {
+        if (!ownsRecorderRequest(request)) {
+            drained?.let { runCatching { it.close() } }
+            return
+        }
+        val descriptor = activeDescriptor
+        val device = camera
+        val surface = previewSurface
+        val pipeline = logPipeline?.takeIf { recorderOverGpuPreview && gpuPreviewEnabled }
+        var success = true
+        try { recorder?.stop() } catch (failure: RuntimeException) {
+            success = false
+            Log.w(TAG, "MediaRecorder stop failed", failure)
+        }
+        Log.i(TAG, "Recorder take stopped: success=$success highSpeed=${activeVideoProfile?.constrainedHighSpeed == true}")
+        releaseRecorder(request)
+        reportRecordingStopped(success, recorderOutputRetirement())
+        if (success && descriptor != null && device != null && pipeline != null) {
+            configureGpuPreviewSession(device, descriptor, pipeline, generation)
+        } else if (success && descriptor != null && device != null && surface?.isValid == true) {
+            if (activeVideoProfile?.constrainedHighSpeed == true) {
+                configureHighSpeedPreviewSession(device, descriptor, surface, generation)
+            } else configureSession(device, descriptor, surface, generation)
+        } else {
+            drained?.let { runCatching { it.close() } }
+            if (!success) listener?.onFailure("video-stop-failed", "The recording was too short or could not be finalized.", true)
+        }
     }
 
     fun detachPreviewWhileRecording(): Boolean {
@@ -3984,6 +4038,8 @@ class Camera2PreviewEngine(
                         }
                     }
 
+                    override fun onReady(configured: CameraCaptureSession) = onRecorderSessionReady(configured)
+
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
                         if (!ownsConfiguration()) return
@@ -4127,6 +4183,8 @@ class Camera2PreviewEngine(
                             } else finalizeRecordingAfterSessionFailure(request)
                         }
                     }
+
+                    override fun onReady(configured: CameraCaptureSession) = onRecorderSessionReady(configured)
 
                     override fun onConfigureFailed(configured: CameraCaptureSession) {
                         configured.close()
@@ -6541,6 +6599,8 @@ class Camera2PreviewEngine(
 
         const val DEFAULT_TARGET_FPS = 30
         private const val RECORDER_LEVEL_INTERVAL_MS = 100L
+        // A few frames at 24 fps; a high-speed burst drains far sooner.
+        private const val RECORDER_STOP_DRAIN_TIMEOUT_MS = 500L
         internal const val MIME_AVC = "video/avc"
         internal const val MIME_HEVC = "video/hevc"
         private const val MIN_SELECTABLE_FPS = 10
