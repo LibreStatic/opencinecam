@@ -1,0 +1,64 @@
+<en-US>
+- Upload new takes automatically to your WebDAV server (off by default, Wi-Fi only)
+- A take that fails is kept as an incomplete take instead of being deleted
+- Slow motion: pick the resolution, and any rate above the project rate counts
+- High-speed takes no longer lose frames when you stop
+- Each video take saves a .clip.json with its settings
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+- Subí tomas nuevas automáticamente a tu servidor WebDAV (apagado de fábrica, solo Wi-Fi)
+- Una toma que falla queda como toma incompleta en vez de borrarse
+- Cámara lenta: elegí la resolución, y cualquier tasa mayor que la del proyecto sirve
+- Las tomas de alta velocidad ya no pierden cuadros al detener
+- Cada toma de video guarda un .clip.json con su configuración
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+- Sube tomas nuevas automáticamente a tu servidor WebDAV (desactivado de serie, solo Wi-Fi)
+- Una toma que falla se conserva como toma incompleta en lugar de borrarse
+- Cámara lenta: elige la resolución, y cualquier tasa mayor que la del proyecto sirve
+- Las tomas de alta velocidad ya no pierden fotogramas al detener
+- Cada toma de vídeo guarda un .clip.json con su configuración
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+- Envie novas tomadas automaticamente ao seu servidor WebDAV (desligado por padrão, só Wi-Fi)
+- Uma gravação que falha fica como gravação incompleta em vez de ser apagada
+- Câmera lenta: escolha a resolução, e qualquer taxa acima da do projeto vale
+- Gravações em alta velocidade não perdem mais quadros ao parar
+- Cada gravação de vídeo salva um .clip.json com suas configurações
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+- Envie novas tomadas automaticamente para o seu servidor WebDAV (desligado por omissão, só Wi-Fi)
+- Uma gravação que falha fica como gravação incompleta em vez de ser apagada
+- Câmara lenta: escolha a resolução, e qualquer taxa acima da do projeto conta
+- As gravações em alta velocidade já não perdem fotogramas ao parar
+- Cada gravação de vídeo guarda um .clip.json com as suas definições
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+- Téléversez automatiquement les nouvelles prises sur votre serveur WebDAV (désactivé par défaut, Wi-Fi seulement)
+- Une prise qui échoue est conservée comme prise incomplète au lieu d'être supprimée
+- Ralenti : choisissez la résolution ; toute cadence supérieure à celle du projet compte
+- Les prises à haute vitesse ne perdent plus d'images à l'arrêt
+- Chaque prise vidéo enregistre un .clip.json avec ses réglages
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+- Neue Takes automatisch auf deinen WebDAV-Server hochladen (standardmäßig aus, nur WLAN)
+- Eine fehlgeschlagene Aufnahme bleibt als unvollständige Aufnahme erhalten, statt gelöscht zu werden
+- Zeitlupe: Auflösung wählbar, jede Bildrate über der Projektrate zählt
+- Highspeed-Aufnahmen verlieren beim Stoppen keine Bilder mehr
+- Jede Videoaufnahme speichert eine .clip.json mit ihren Einstellungen
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+- Carica automaticamente le nuove riprese sul tuo server WebDAV (disattivato di default, solo Wi-Fi)
+- Una ripresa che fallisce resta come ripresa incompleta invece di essere eliminata
+- Rallentatore: scegli la risoluzione; vale qualsiasi frequenza superiore a quella del progetto
+- Le riprese ad alta velocità non perdono più fotogrammi all'arresto
+- Ogni ripresa video salva un .clip.json con le sue impostazioni
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
