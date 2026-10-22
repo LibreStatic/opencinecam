@@ -1553,208 +1553,223 @@ class CaptureService : Service() {
             var startDeferredSalvage: (() -> Unit)? = null
             val timecodeReport = timecodeTracker.recordingReport()
             val subjectSyncMarker = subjectSyncMarkers.consume()
-            try {
-                val requestedAudioFailure = take.audioStartFailure
-                val audioOutput = take.audio
-                val graphEvidence = previewEngine.consumeLastOpenCineLogEvidence()
-                // HLG takes run through the same graph but are standard HDR video: no OCLog sidecar.
-                val hlgEvidence = graphEvidence?.takeIf { HdrVideoFormat.fromCurve(it.curve) != null }
-                val logEvidence = graphEvidence?.takeUnless { HdrVideoFormat.fromCurve(it.curve) != null }
-                val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
-                val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
-                // ADR-0011: stable reasons a take is not fully successful; any of them makes it incomplete.
-                val muxerFinalized = success && nativeRetired
-                val incompleteReasons = buildList {
-                    if (requestedAudioFailure != null) add(IncompleteTake.AUDIO_START_FAILED)
-                    if (!success) add(IncompleteTake.ENCODER_FAILED)
-                    if (!nativeRetired) add(IncompleteTake.NATIVE_RETIREMENT_PENDING)
-                    if (!muxerFinalized) add(IncompleteTake.MUXER_NOT_FINALIZED)
-                    if (!bakingVerified) add(IncompleteTake.RECORDING_LUT_UNVERIFIED)
-                    if (cameraState.value.selectedMode.usesLogGraph && graphEvidence == null) add(IncompleteTake.LOG_EVIDENCE_MISSING)
-                }
-                val finalizedSuccess = incompleteReasons.isEmpty()
-                val geometry = take.geometry
-                var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
-                val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
-                    catch (problem: Throwable) {
-                        registrationCreationFailed = true
-                        android.util.Log.e("CapturePublication", "Publication journal creation failed; capture remains independent", problem)
-                        null
+            // Everything the engine or the next take can overwrite is read here, on the camera thread.
+            val graphEvidence = previewEngine.consumeLastOpenCineLogEvidence()
+            val bakedEvidence = previewEngine.consumeLastRecordingLutEvidence()
+            val takeUsedLogGraph = cameraState.value.selectedMode.usesLogGraph
+            val takeAudioLabel = activeRecordingAudioLabel
+            // Publication reads the MP4 back, writes MediaStore and the sidecars. It runs on the storage
+            // thread so the engine can bring the preview back at once; recordingFinalizing keeps the next
+            // take out until it is done.
+            val finishTake = Runnable {
+                try {
+                    val requestedAudioFailure = take.audioStartFailure
+                    val audioOutput = take.audio
+                    // HLG takes run through the same graph but are standard HDR video: no OCLog sidecar.
+                    val hlgEvidence = graphEvidence?.takeIf { HdrVideoFormat.fromCurve(it.curve) != null }
+                    val logEvidence = graphEvidence?.takeUnless { HdrVideoFormat.fromCurve(it.curve) != null }
+                    val bakingVerified = bakedEvidence?.selectionId == monitorLutIdentity(frozenLut)
+                    // ADR-0011: stable reasons a take is not fully successful; any of them makes it incomplete.
+                    val muxerFinalized = success && nativeRetired
+                    val incompleteReasons = buildList {
+                        if (requestedAudioFailure != null) add(IncompleteTake.AUDIO_START_FAILED)
+                        if (!success) add(IncompleteTake.ENCODER_FAILED)
+                        if (!nativeRetired) add(IncompleteTake.NATIVE_RETIREMENT_PENDING)
+                        if (!muxerFinalized) add(IncompleteTake.MUXER_NOT_FINALIZED)
+                        if (!bakingVerified) add(IncompleteTake.RECORDING_LUT_UNVERIFIED)
+                        if (takeUsedLogGraph && graphEvidence == null) add(IncompleteTake.LOG_EVIDENCE_MISSING)
                     }
-                fun noteAudioPrepared(sidecar: AudioSidecarRecorder, prepared: com.librestatic.opencinecam.storage.PreparedAudioSidecar?):
-                    com.librestatic.opencinecam.storage.PreparedAudioSidecar? {
-                    val result = prepared?.result
-                    if (result != null) avTiming = sidecar.captureClock?.report(avTiming?.videoEncoderFirstPtsUs, null, null)
-                        ?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_${result.container}") ?: avTiming
-                    lastSeparateAudioAvDrift = result?.let {
-                        separateAudioAvDrift(sidecar.captureClock?.cameraRealtime == true, it.captureTiming, it.displayName)
-                    }?.also { android.util.Log.i("AvClockDiagnostics", separateAudioAvDriftLog(it)) }
-                    return prepared
-                }
-                fun buildSidecarJson(): String? {
-                    val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
-                        ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
-                        ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
-                        ?: timing?.let { timelapseTimingJson(it, requireNotNull(projectRateAtStop)) }
-                    val withBaking = if (bakedEvidence != null) {
-                        (metadata?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
-                            .put("recordingLut", recordingLutJson(bakedEvidence)).toString(2)
-                    } else metadata
-                    val withGain = if (recordingGain?.enabled == true) {
-                        (withBaking?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-audio.v1"))
-                            .put("recordingGain", recordingGainJson(recordingGain)).toString(2)
-                    } else withBaking
-                    val withTimecode = if (timecodeReport?.config?.enabled == true) {
-                        (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
-                            .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
-                    } else withGain
-                    val withMarker = subjectSyncMarker?.let { marker ->
-                        (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
-                            .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
-                                JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
-                    } ?: withTimecode
-                    return withHardwareTruth(withMarker, hardwareTruth)
-                }
-                fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
-                fun salvagePlan(reasons: List<String>) = com.librestatic.opencinecam.storage.IncompleteTakeSalvage<
-                    com.librestatic.opencinecam.storage.PreparedVideoOutput, com.librestatic.opencinecam.storage.PreparedAudioSidecar>(
-                    reasons = reasons,
-                    prepareAudio = audioOutput?.let { sidecar -> { r -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(r)) } },
-                    prepareVideo = { r ->
-                        output?.sealMotionLog(keep = false)
-                        output?.prepareIncomplete(r, buildSidecarJson(), timingSidecarFlag(), muxerFinalized, encodedFrames)
-                    },
-                )
-                val finalization = if (!nativeRetired) {
-                    // Never publish, and never delete, under a possibly live native writer. Rows stay pending and
-                    // journalled; once retirement is proven they are published as incomplete (ADR-0011), and a
-                    // process death before that is covered by crash recovery.
-                    runCatching { publicationObserver?.onAborted() }
-                    val published = incompleteReasons.filter { it != IncompleteTake.NATIVE_RETIREMENT_PENDING }
-                    startDeferredSalvage = {
-                        val expected = cameraState.value.message
-                        salvageAfterRetirement(output, audioOutput, retirement, incompleteReasons, run = {
-                            finalizePreparedRecordingTake<
-                                com.librestatic.opencinecam.storage.PreparedVideoOutput,
-                                com.librestatic.opencinecam.storage.PreparedAudioSidecar,
-                                android.net.Uri,
-                                com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
-                            >(
-                                success = false,
-                                prepareAudio = null,
-                                prepareVideo = { null },
-                                publishAudio = { _ -> audioOutput?.publishPrepared() },
-                                publishVideo = { _ -> output?.publishPrepared() },
-                                discardAudio = { audioOutput?.finish(false); Unit },
-                                discardVideo = { output?.finish(false); Unit },
-                                salvage = salvagePlan(published),
-                            )
-                        }, onSaved = { announceIncompleteSaved(expected, it) })
-                    }
-                    com.librestatic.opencinecam.storage.PreparedTakeResult<android.net.Uri, com.librestatic.opencinecam.storage.AudioSidecarRecordingResult>(null, emptyList())
-                } else finalizePreparedRecordingTake<
-                    com.librestatic.opencinecam.storage.PreparedVideoOutput,
-                    com.librestatic.opencinecam.storage.PreparedAudioSidecar,
-                    android.net.Uri,
-                    com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
-                >(
-                    success = finalizedSuccess,
-                    prepareAudio = audioOutput?.let { sidecar -> { noteAudioPrepared(sidecar, sidecar.prepareCompletion()) } },
-                    discardAudio = { audioOutput?.finish(false); Unit },
-                    discardVideo = { output?.finish(false); Unit },
-                    publishAudio = { _ -> audioOutput?.publishPrepared() },
-                    publishVideo = { _ -> output?.publishPrepared() },
-                    prepareVideo = {
-                        // A pause removes spans from the file timeline, so sensor time can no longer be mapped to it.
-                        output?.sealMotionLog(keep = finalizedSuccess && avTiming?.sharedPause?.windows.isNullOrEmpty())
-                        output?.prepareCompletion(
-                        buildSidecarJson(),
-                        expectedGeometry = geometry,
-                        timingSidecar = timingSidecarFlag(),
-                    ) },
-                    onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
-                    onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
-                    onAborted = { publicationObserver?.onAborted(); Unit },
-                    salvage = salvagePlan(incompleteReasons),
-                )
-                val completedTake = finalization.outputs
-                finalization.incompleteFailures.forEach { problem ->
-                    android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; affected outputs stay pending for recovery", problem)
-                }
-                val savedIncomplete = finalization.incomplete
-                finalization.registrationFailures.forEach { problem ->
-                    android.util.Log.e("CapturePublication", "Publication journal update failed; originals retained", problem)
-                }
-                val registrationFailed = registrationCreationFailed || finalization.registrationFailures.isNotEmpty() || transferPublication?.registrationFailed == true
-                timecodeReport?.let { timecodeTracker.onRecordingStopped(completedTake != null, it.lifecycleToken) }
-                val uri = completedTake?.first
-                val sidecarResult = completedTake?.second
-                val registrationNotice = if (completedTake == null || finalization.incomplete) "" else buildString {
-                    if (transferPublication?.registered == true) append(" · " + getString(R.string.webdav_queue_registered))
-                    if (registrationFailed) append(" · " + getString(if (transferPublication?.registrationFailed == true)
-                        R.string.webdav_queue_registration_failed else R.string.capture_publication_registration_failed))
-                }
-                if (uri != null) output?.productionSlate?.let(::incrementSavedSlate)
-                // PLAN-036: judge the published Main10 file's signalling off every service thread; evidence only.
-                if (uri != null && !finalization.incomplete) {
-                    val checkKind = if (hlgEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.HLG
-                        else if (logEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.LOG else null
-                    if (checkKind != null) com.librestatic.opencinecam.Main10FileCheckScheduler.schedule(this@CaptureService, uri.toString(), checkKind, output?.displayName)
-                }
-                // A SAVED observer must see the registration outcome in the same state emission.
-                cameraState.update { current -> current.copy(
-                    phase = if (finalizedSuccess) CameraUiPhase.SAVED else CameraUiPhase.ERROR,
-                    recordingFinalizing = false,
-                    recordingWarning = null,
-                    recordingPauseStatus = timing,
-                    recordingAvTiming = avTiming,
-                    recordingPausePending = false,
-                    recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,
-                    lastSavedUri = uri?.toString(),
-                    message = ((if (finalizedSuccess) {
-                        val audioSaved = savedAudioSuffix(
-                            sidecarResult?.let { SavedSidecarAudio(it.bitDepth.bits, it.container, it.sampleRateHz) },
-                            activeRecordingAudioLabel,
-                        )
-                        if (hlgEvidence != null) {
-                            "${HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG"} HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
-                        } else if (logEvidence != null) {
-                            val source = if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
-                                "HFR ISP-derived"
-                            } else "HLG-derived 10-bit"
-                            val outputColor = if (bakedEvidence != null) "LUT → SDR BT.709" else "OCLog2"
-                            "$outputColor Main10 saved · $source + provenance$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                    val finalizedSuccess = incompleteReasons.isEmpty()
+                    val geometry = take.geometry
+                    var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
+                    val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
+                        catch (problem: Throwable) {
+                            registrationCreationFailed = true
+                            android.util.Log.e("CapturePublication", "Publication journal creation failed; capture remains independent", problem)
+                            null
                         }
-                        else "Video saved$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
-                    } else if (savedIncomplete) {
-                        getString(R.string.take_saved_incomplete,
-                            requestedAudioFailure ?: (finalization.incompleteReasons.ifEmpty { incompleteReasons }).joinToString(", "))
-                    } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice)
-                        .let { outcome -> if (stopReason == null) outcome else getString(R.string.take_stopped_reason, stopReasonText(stopReason), outcome) },
-                    errorCode = if (finalizedSuccess) null else incompleteReasons.first(),
-                    recordingElapsedMs = durationMs,
-                ) }
-                // After the state above, so a publication that completes at once finds the message to replace.
-                startDeferredSalvage?.invoke()
-            } catch (failure: Throwable) {
-                // ADR-0011: nothing that holds bytes is deleted here; it stays pending for crash recovery.
-                runCatching { output?.recoveryGroup?.beginSalvage() }
-                runCatching { take.audio?.prepareIncompleteCompletion(listOf(com.librestatic.opencinecam.storage.PUBLICATION_FAILED_REASON)) }
-                runCatching { output?.finish(false) }
-                fail("video-save-failed", failure.message ?: "Video could not be saved.")
-            } finally {
-                try { transferPublication?.close() } catch (problem: Exception) {
-                    android.util.Log.e("CapturePublication", "Optional queue handle cleanup failed", problem)
+                    fun noteAudioPrepared(sidecar: AudioSidecarRecorder, prepared: com.librestatic.opencinecam.storage.PreparedAudioSidecar?):
+                        com.librestatic.opencinecam.storage.PreparedAudioSidecar? {
+                        val result = prepared?.result
+                        if (result != null) avTiming = sidecar.captureClock?.report(avTiming?.videoEncoderFirstPtsUs, null, null)
+                            ?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_${result.container}") ?: avTiming
+                        lastSeparateAudioAvDrift = result?.let {
+                            separateAudioAvDrift(sidecar.captureClock?.cameraRealtime == true, it.captureTiming, it.displayName)
+                        }?.also { android.util.Log.i("AvClockDiagnostics", separateAudioAvDriftLog(it)) }
+                        return prepared
+                    }
+                    fun buildSidecarJson(): String? {
+                        val metadata = logEvidence?.copy(avTiming = avTiming)?.let { logSidecarJson(it, timecodeReport) }
+                            ?: hlgEvidence?.let { hlgSidecarJson(it, avTiming) }
+                            ?: avTiming?.let { JSONObject().put("schema", "opencinecam.av-timing.v1").put("avTiming", captureEpochJson(it)).toString(2) }
+                            ?: timing?.let { timelapseTimingJson(it, requireNotNull(projectRateAtStop)) }
+                        val withBaking = if (bakedEvidence != null) {
+                            (metadata?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                                .put("recordingLut", recordingLutJson(bakedEvidence)).toString(2)
+                        } else metadata
+                        val withGain = if (recordingGain?.enabled == true) {
+                            (withBaking?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-audio.v1"))
+                                .put("recordingGain", recordingGainJson(recordingGain)).toString(2)
+                        } else withBaking
+                        val withTimecode = if (timecodeReport?.config?.enabled == true) {
+                            (withGain?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
+                                .put("timecode", recordingTimecodeJson(timecodeReport)).toString(2)
+                        } else withGain
+                        val withMarker = subjectSyncMarker?.let { marker ->
+                            (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
+                                .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
+                                    JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
+                        } ?: withTimecode
+                        return withHardwareTruth(withMarker, hardwareTruth)
+                    }
+                    fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                    fun salvagePlan(reasons: List<String>) = com.librestatic.opencinecam.storage.IncompleteTakeSalvage<
+                        com.librestatic.opencinecam.storage.PreparedVideoOutput, com.librestatic.opencinecam.storage.PreparedAudioSidecar>(
+                        reasons = reasons,
+                        prepareAudio = audioOutput?.let { sidecar -> { r -> noteAudioPrepared(sidecar, sidecar.prepareIncompleteCompletion(r)) } },
+                        prepareVideo = { r ->
+                            output?.sealMotionLog(keep = false)
+                            output?.prepareIncomplete(r, buildSidecarJson(), timingSidecarFlag(), muxerFinalized, encodedFrames)
+                        },
+                    )
+                    val finalization = if (!nativeRetired) {
+                        // Never publish, and never delete, under a possibly live native writer. Rows stay pending and
+                        // journalled; once retirement is proven they are published as incomplete (ADR-0011), and a
+                        // process death before that is covered by crash recovery.
+                        runCatching { publicationObserver?.onAborted() }
+                        val published = incompleteReasons.filter { it != IncompleteTake.NATIVE_RETIREMENT_PENDING }
+                        startDeferredSalvage = {
+                            val expected = cameraState.value.message
+                            salvageAfterRetirement(output, audioOutput, retirement, incompleteReasons, run = {
+                                finalizePreparedRecordingTake<
+                                    com.librestatic.opencinecam.storage.PreparedVideoOutput,
+                                    com.librestatic.opencinecam.storage.PreparedAudioSidecar,
+                                    android.net.Uri,
+                                    com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
+                                >(
+                                    success = false,
+                                    prepareAudio = null,
+                                    prepareVideo = { null },
+                                    publishAudio = { _ -> audioOutput?.publishPrepared() },
+                                    publishVideo = { _ -> output?.publishPrepared() },
+                                    discardAudio = { audioOutput?.finish(false); Unit },
+                                    discardVideo = { output?.finish(false); Unit },
+                                    salvage = salvagePlan(published),
+                                )
+                            }, onSaved = { announceIncompleteSaved(expected, it) })
+                        }
+                        com.librestatic.opencinecam.storage.PreparedTakeResult<android.net.Uri, com.librestatic.opencinecam.storage.AudioSidecarRecordingResult>(null, emptyList())
+                    } else finalizePreparedRecordingTake<
+                        com.librestatic.opencinecam.storage.PreparedVideoOutput,
+                        com.librestatic.opencinecam.storage.PreparedAudioSidecar,
+                        android.net.Uri,
+                        com.librestatic.opencinecam.storage.AudioSidecarRecordingResult,
+                    >(
+                        success = finalizedSuccess,
+                        prepareAudio = audioOutput?.let { sidecar -> { noteAudioPrepared(sidecar, sidecar.prepareCompletion()) } },
+                        discardAudio = { audioOutput?.finish(false); Unit },
+                        discardVideo = { output?.finish(false); Unit },
+                        publishAudio = { _ -> audioOutput?.publishPrepared() },
+                        publishVideo = { _ -> output?.publishPrepared() },
+                        prepareVideo = {
+                            // A pause removes spans from the file timeline, so sensor time can no longer be mapped to it.
+                            output?.sealMotionLog(keep = finalizedSuccess && avTiming?.sharedPause?.windows.isNullOrEmpty())
+                            output?.prepareCompletion(
+                            buildSidecarJson(),
+                            expectedGeometry = geometry,
+                            timingSidecar = timingSidecarFlag(),
+                        ) },
+                        onPrepared = { video, audio -> publicationObserver?.onPrepared(video.artifacts + audio?.artifacts.orEmpty()); Unit },
+                        onPublished = { video, audio -> publicationObserver?.onPublished(video.artifacts + audio?.artifacts.orEmpty()); Unit },
+                        onAborted = { publicationObserver?.onAborted(); Unit },
+                        salvage = salvagePlan(incompleteReasons),
+                    )
+                    val completedTake = finalization.outputs
+                    finalization.incompleteFailures.forEach { problem ->
+                        android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; affected outputs stay pending for recovery", problem)
+                    }
+                    val savedIncomplete = finalization.incomplete
+                    finalization.registrationFailures.forEach { problem ->
+                        android.util.Log.e("CapturePublication", "Publication journal update failed; originals retained", problem)
+                    }
+                    val registrationFailed = registrationCreationFailed || finalization.registrationFailures.isNotEmpty() || transferPublication?.registrationFailed == true
+                    timecodeReport?.let { timecodeTracker.onRecordingStopped(completedTake != null, it.lifecycleToken) }
+                    val uri = completedTake?.first
+                    val sidecarResult = completedTake?.second
+                    val registrationNotice = if (completedTake == null || finalization.incomplete) "" else buildString {
+                        if (transferPublication?.registered == true) append(" · " + getString(R.string.webdav_queue_registered))
+                        if (registrationFailed) append(" · " + getString(if (transferPublication?.registrationFailed == true)
+                            R.string.webdav_queue_registration_failed else R.string.capture_publication_registration_failed))
+                    }
+                    if (uri != null) output?.productionSlate?.let(::incrementSavedSlate)
+                    // PLAN-036: judge the published Main10 file's signalling off every service thread; evidence only.
+                    if (uri != null && !finalization.incomplete) {
+                        val checkKind = if (hlgEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.HLG
+                            else if (logEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.LOG else null
+                        if (checkKind != null) com.librestatic.opencinecam.Main10FileCheckScheduler.schedule(this@CaptureService, uri.toString(), checkKind, output?.displayName)
+                    }
+                    // A SAVED observer must see the registration outcome in the same state emission.
+                    cameraState.update { current -> current.copy(
+                        phase = if (finalizedSuccess) CameraUiPhase.SAVED else CameraUiPhase.ERROR,
+                        recordingFinalizing = false,
+                        recordingWarning = null,
+                        recordingPauseStatus = timing,
+                        recordingAvTiming = avTiming,
+                        recordingPausePending = false,
+                        recordingWhiteBalanceStatus = RecordingWhiteBalanceStatus.IDLE,
+                        lastSavedUri = uri?.toString(),
+                        message = ((if (finalizedSuccess) {
+                            val audioSaved = savedAudioSuffix(
+                                sidecarResult?.let { SavedSidecarAudio(it.bitDepth.bits, it.container, it.sampleRateHz) },
+                                takeAudioLabel,
+                            )
+                            if (hlgEvidence != null) {
+                                "${HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG"} HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                            } else if (logEvidence != null) {
+                                val source = if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
+                                    "HFR ISP-derived"
+                                } else "HLG-derived 10-bit"
+                                val outputColor = if (bakedEvidence != null) "LUT → SDR BT.709" else "OCLog2"
+                                "$outputColor Main10 saved · $source + provenance$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                            }
+                            else "Video saved$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                        } else if (savedIncomplete) {
+                            getString(R.string.take_saved_incomplete,
+                                requestedAudioFailure ?: (finalization.incompleteReasons.ifEmpty { incompleteReasons }).joinToString(", "))
+                        } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice)
+                            .let { outcome -> if (stopReason == null) outcome else getString(R.string.take_stopped_reason, stopReasonText(stopReason), outcome) },
+                        errorCode = if (finalizedSuccess) null else incompleteReasons.first(),
+                        recordingElapsedMs = durationMs,
+                    ) }
+                    // After the state above, so a publication that completes at once finds the message to replace.
+                    startDeferredSalvage?.invoke()
+                } catch (failure: Throwable) {
+                    // ADR-0011: nothing that holds bytes is deleted here; it stays pending for crash recovery.
+                    runCatching { output?.recoveryGroup?.beginSalvage() }
+                    runCatching { take.audio?.prepareIncompleteCompletion(listOf(com.librestatic.opencinecam.storage.PUBLICATION_FAILED_REASON)) }
+                    runCatching { output?.finish(false) }
+                    fail("video-save-failed", failure.message ?: "Video could not be saved.")
+                } finally {
+                    try { transferPublication?.close() } catch (problem: Exception) {
+                        android.util.Log.e("CapturePublication", "Optional queue handle cleanup failed", problem)
+                    }
+                    timecodeReport?.let { timecodeTracker.onRecordingStopped(false, it.lifecycleToken) }
+                    // The preview may already be back; the monitor waited for this reservation.
+                    releaseTransferCapture(transferReservation) { startPreviewAudioMonitorIfEligible() }
                 }
-                timecodeReport?.let { timecodeTracker.onRecordingStopped(false, it.lifecycleToken) }
-                releaseTransferCapture(transferReservation)
+                if (timecodeTracker.continuationStorageFailed) cameraState.value = cameraState.value.copy(
+                    message = cameraState.value.message.orEmpty() + " · " + getString(R.string.timecode_continuity_failed))
+                foreground.stop()
+                // Drop only the started-service lifetime; a bound operator/exterior keeps the service.
+                stopSelf()
+                mainHandler.post { localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value) }
             }
-            if (timecodeTracker.continuationStorageFailed) cameraState.value = cameraState.value.copy(
-                message = cameraState.value.message.orEmpty() + " · " + getString(R.string.timecode_continuity_failed))
-            foreground.stop()
-            // Drop only the started-service lifetime; a bound operator/exterior keeps the service.
-            stopSelf()
-            mainHandler.post { localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value) }
+            try {
+                storageExecutor.execute(finishTake)
+            } catch (_: java.util.concurrent.RejectedExecutionException) {
+                // A full queue or a destroyed service: finish here, as before, rather than lose the take.
+                finishTake.run()
+            }
         }
 
         override fun onTapFocusState(state: TapFocusState) {
@@ -3088,6 +3103,8 @@ class CaptureService : Service() {
             if (current.phase == CameraUiPhase.RECORDING && current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.TIME_LAPSE, CaptureMode.LOG, CaptureMode.HLG)) {
                 return stopRecording()
             }
+            // The preview comes back before the previous take is published; no capture overlaps that.
+            if (current.recordingFinalizing) return false
             if (current.phase != CameraUiPhase.PREVIEWING && current.phase != CameraUiPhase.SAVED && !(whiteBalancePrepared && current.phase == CameraUiPhase.CAPTURING)) return false
             // Every branch below starts clean; time-lapse never sets a label and must not inherit the last take's.
             activeRecordingAudioLabel = "no audio"
