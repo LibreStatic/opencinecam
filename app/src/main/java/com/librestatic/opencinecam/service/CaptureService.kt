@@ -2593,7 +2593,8 @@ class CaptureService : Service() {
             attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
         }
 
-        fun selectVideoResolution(width: Int, height: Int) {
+        /** [requestedFps] is the rate to keep at the new size when it offers it; slow motion passes a high-speed one. */
+        fun selectVideoResolution(width: Int, height: Int, requestedFps: Int = cameraState.value.targetFps) {
             val current = cameraState.value
             if (current.structuralSettingsFrozen || current.selectedMode !in CameraUiState.resolutionProfileModes) return
             val descriptor = current.descriptor ?: return
@@ -2608,7 +2609,7 @@ class CaptureService : Service() {
                     choices.map { it.toSpec() },
                     width,
                     height,
-                    current.targetFps,
+                    requestedFps,
                     Camera2PreviewEngine.DEFAULT_TARGET_FPS,
                 )
                 val selected = snap.profile ?: return
@@ -2626,7 +2627,7 @@ class CaptureService : Service() {
                     choices.map { it.toSpec() },
                     width,
                     height,
-                    current.targetFps,
+                    requestedFps,
                     Camera2PreviewEngine.DEFAULT_TARGET_FPS,
                 ) ?: return
                 selectedFps = selected.fps
