@@ -73,19 +73,37 @@ data class CachedCodecAudioReport(
     val metadata: CodecAudioMetadata,
 )
 
-/** Small owner-scoped cache; any validity-key change invalidates the previous report. */
-class CodecAudioReportCache {
+/**
+ * Owner-scoped cache; any validity-key change invalidates the previous report. With a [store] the
+ * report also survives a restart, so the encoder list is not re-probed until the build, the
+ * characteristics or a probe version changes.
+ */
+class CodecAudioReportCache(private val store: CodecAudioReportStore? = null) {
     private var cached: CachedCodecAudioReport? = null
+    private var loaded = false
 
-    fun read(current: CacheValidityKey): CodecAudioMetadata? =
-        cached?.takeIf { it.validityKey == current }?.metadata
-
-    fun write(key: CacheValidityKey, metadata: CodecAudioMetadata) {
-        cached = CachedCodecAudioReport(key, metadata)
+    @Synchronized
+    fun read(current: CacheValidityKey): CodecAudioMetadata? {
+        if (!loaded) {
+            loaded = true
+            cached = store?.load()
+        }
+        val hit = cached?.takeIf { it.validityKey == current }
+        if (hit == null && cached != null) clear()
+        return hit?.metadata
     }
 
+    @Synchronized
+    fun write(key: CacheValidityKey, metadata: CodecAudioMetadata) {
+        loaded = true
+        cached = CachedCodecAudioReport(key, metadata)
+        store?.save(requireNotNull(cached))
+    }
+
+    @Synchronized
     fun clear() {
         cached = null
+        store?.delete()
     }
 }
 
@@ -96,3 +114,12 @@ class CodecAudioProbe(
     fun probe(key: CacheValidityKey): CodecAudioMetadata =
         cache.read(key) ?: source.probe().also { cache.write(key, it) }
 }
+
+/** Names of every encoder on the device: cheap to list, and it changes when codecs are added or removed. */
+fun listEncoderNames(): List<String> = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+    .filter(MediaCodecInfo::isEncoder)
+    .flatMap { info -> info.supportedTypes.map { mime -> "${info.name}|$mime" } }
+    .sorted()
+
+const val CODEC_AUDIO_PROTOCOL_VERSION = "1"
+const val CODEC_AUDIO_PROBE_VERSION = "1"

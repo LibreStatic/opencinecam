@@ -16,12 +16,14 @@ data class LocalMediaArtifact(val uri: String, val name: String, val mimeType: S
 data class LocalMediaTake(val id: String, val primary: LocalMediaArtifact,
     val originals: List<LocalMediaArtifact>, val metadata: List<LocalMediaArtifact>,
     val kind: LocalMediaKind, val slate: ProductionSlateSettings?, val relationStatus: LocalMediaRelationStatus,
-    /** Non-JSON files owned by the take, such as its Gyroflow `.gcsv` log. They are never relationship metadata. */
+    /** Files owned by the take that are never relationship metadata: its Gyroflow `.gcsv` log and its `.clip.json` sidecar. */
     val attachments: List<LocalMediaArtifact> = emptyList())
 /** Codec facts a take's sidecars declare. They stay out of [LocalMediaTake], whose equality is the
  * identity check behind sharing, renaming and proxy jobs. */
 data class LocalMediaEncoding(val videoMime: String? = null, val videoProfile: String? = null,
-    val audioContainer: String? = null, val audioSamples: String? = null)
+    val audioContainer: String? = null, val audioSamples: String? = null,
+    /** Stable failure reasons of a take whose sidecar says `takeStatus: incomplete` (ADR-0011); empty otherwise. */
+    val incompleteReasons: List<String> = emptyList())
 /** [encodings] holds, by take id, what the page's sidecars declared; takes without one are absent. */
 data class LocalMediaPage(val takes: List<LocalMediaTake>, val next: LocalMediaCursor?,
     val encodings: Map<String, LocalMediaEncoding> = emptyMap())
@@ -39,6 +41,15 @@ internal data class CatalogRow(val artifact: LocalMediaArtifact, val id: Long,
 /** A take attachment is a plain-text motion log in the take's Download namespace, never a JSON sidecar. */
 internal fun isMotionLogAttachment(artifact: LocalMediaArtifact): Boolean =
     artifact.name.endsWith("." + GyroflowLog.EXTENSION, ignoreCase = true) && artifact.mimeType != "application/json"
+/**
+ * The canonical `<stem>.clip.json` sidecar. It is carried as an opaque take attachment: it declares no
+ * `schema`/`videoUri` relationship, so it is neither relationship metadata (which the catalog validates and the
+ * proxy writer counts as exactly two documents) nor rewritten when the take is renamed.
+ */
+internal fun isClipSidecarAttachment(artifact: LocalMediaArtifact): Boolean =
+    artifact.name.endsWith(CLIP_SIDECAR_SUFFIX, ignoreCase = true) && artifact.mimeType == "application/json"
+internal fun isTakeAttachment(artifact: LocalMediaArtifact): Boolean =
+    isMotionLogAttachment(artifact) || isClipSidecarAttachment(artifact)
 internal data class MetadataDocument(val artifact: LocalMediaArtifact, val text: String?, val disappeared: Boolean = false)
 
 /** Only exact application roots and canonical UUID namespaces carry identity. Names never do. */
@@ -96,6 +107,8 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     val slates = mutableSetOf<ProductionSlateSettings>()
     var slateAbsent = false
     var encoding = LocalMediaEncoding()
+    var markedIncomplete = false
+    val incompleteReasons = linkedSetOf<String>()
     for (document in documents) {
         if (document.disappeared) { missing = true; continue }
         try {
@@ -148,6 +161,14 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
                     details?.get("bytes")?.let { require((it as? JsonPrimitive)?.let { v -> !v.isString && v.longOrNull == existing.artifact.sizeBytes } == true) }
                 }
             }
+            // ADR-0011: a take kept after a failure says so in its sidecar. It surfaces as INCOMPLETE and is
+            // never an authority to delete anything (deletion enumerates the provider itself).
+            if (!still && (obj[IncompleteTake.STATUS_KEY] as? JsonPrimitive)?.takeIf { it.isString }?.content == IncompleteTake.STATUS_INCOMPLETE) {
+                markedIncomplete = true
+                (obj[IncompleteTake.REASONS_KEY] as? JsonArray)?.take(8)?.forEach { reason ->
+                    (reason as? JsonPrimitive)?.takeIf { it.isString && it.content.length in 1..48 }?.let { incompleteReasons += it.content }
+                }
+            }
             val node = obj["productionSlate"]
             val slate = if (node == null) null else requireNotNull(parseProductionSlateJson(node as? JsonObject ?: error("Slate object required")))
             if (slate == null) slateAbsent = true else slates += slate
@@ -161,6 +182,10 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
         } catch (_: Exception) { invalid = true }
     }
     if (slates.size > 1 || slates.isNotEmpty() && slateAbsent) invalid = true
+    if (markedIncomplete) {
+        missing = true
+        encoding = encoding.copy(incompleteReasons = incompleteReasons.toList())
+    }
     if (documents.isNotEmpty() && known.keys.any { it !in references }) missing = true
     if (!invalid && encoding != LocalMediaEncoding()) onEncoding?.invoke(encoding)
     val status = when {

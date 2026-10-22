@@ -25,9 +25,9 @@ The app is developed and published by FacuM and the OpenCineCam contributors (pr
 
 The only network feature is **optional WebDAV transfer**, which is off by default:
 
-- Nothing is uploaded unless you turn the feature on, set your own HTTPS destination and start or register a transfer. Presets never enable it, and there is no background or automatic upload of existing media.
+- Nothing is uploaded unless you turn the feature on and set your own HTTPS destination. By default you start or register each transfer yourself. An optional switch, **Upload new takes automatically**, is also off by default: once you turn it on, takes you record afterwards are uploaded in the background, with a visible notification while an upload runs and paused while you record. Existing media is never uploaded automatically, incomplete takes are never enrolled, and presets never enable either setting. Turning the switch or the queue off cancels pending automatic uploads.
 - Files go directly from your device to the WebDAV server you specified, over HTTPS. That server is operated by you or a third party of your choice. We have no access to it, and its own privacy policy applies. An advanced option lets you accept an unverified certificate for a server on a private local network; it is off by default and the app explains that it removes server authentication.
-- Transfers use Wi-Fi unless you allow cellular data.
+- Transfers, automatic ones included, use Wi-Fi unless you allow cellular data.
 - The hosting of the destination server can see your IP address and the uploaded files, as with any upload.
 
 The app contains no other network requests, no advertising or analytics libraries and no third-party SDKs.

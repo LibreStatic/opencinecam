@@ -28,3 +28,11 @@ launcher-reachable product. It does not renumber the canonical 60-plan graph.
 - APV may be reconsidered only on a fingerprint exposing a qualifying hardware encoder.
 - RAW video remains disabled because the sustained throughput gate failed.
 - High-speed slow motion remains Candidate until a constrained high-speed Camera2 session passes exact device validation.
+
+## Later status note (2026-10-19)
+
+The list above records the state of 2026-08-20 and is kept as history. Since then:
+
+- OpenCine Log: OCLog2 (OCC-PLAN-061) is reachable from the launcher as an experimental mode behind a runtime gate. It is not qualified and no tuple is promoted; see `plans/README.md`. The OCLog1 plans 047-050 are Superseded.
+- High-speed slow motion: a 240 fps take was recorded on the Razr Fold through the direct recorder route (about 232 fps captured, 1920x1080 H.264), recorded in OCC-PLAN-068 U8.
+- APV and RAW video are unchanged.

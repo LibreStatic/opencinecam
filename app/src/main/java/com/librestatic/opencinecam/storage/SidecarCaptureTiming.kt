@@ -7,13 +7,17 @@ import com.librestatic.opencinecam.camera.PcmSourceTiming
 import com.librestatic.opencinecam.camera.PcmSourceTimingReport
 import org.json.JSONObject
 
-/** AudioRecord timestamps use BOOTTIME; command receipts never substitute for missing source anchors. */
+/**
+ * AudioRecord timestamps use BOOTTIME; command receipts never substitute for missing source anchors.
+ * The capture thread writes while the recording ticker reads [report] live, so every access locks.
+ */
 internal class SidecarCaptureTiming(rate: Int, private val frameBytes: Int,
     private val shared: com.librestatic.opencinecam.camera.CaptureEpochClock? = null) {
     init { require(shared == null || shared.sampleRateHz == rate) }
     private val source = PcmSourceTiming(rate, frameBytes)
     private val timestamp = AudioTimestamp()
     private var capturedFrames = 0L
+    @Synchronized
     fun captured(record: AudioRecord, buffer: java.nio.ByteBuffer, bytes: Int): Int {
         source.captured(bytes)
         if (record.getTimestamp(timestamp, AudioTimestamp.TIMEBASE_BOOTTIME) == AudioRecord.SUCCESS) {
@@ -24,13 +28,16 @@ internal class SidecarCaptureTiming(rate: Int, private val frameBytes: Int,
         capturedFrames = Math.addExact(capturedFrames, (bytes / frameBytes).toLong())
         return if (spans == null) bytes else com.librestatic.opencinecam.camera.compactPcmFrames(buffer, bytes, frameBytes, spans)
     }
+    @Synchronized
     fun written(bytes: Int) = source.written(bytes)
+    @Synchronized
     fun requireComplete(frames: Long) {
         if (shared == null) source.requireComplete(frames) else {
             shared.requireRetainedAudioFrames(frames)
             check(source.report().writtenFrames == frames) { "Selected lossless PCM did not reach output" }
         }
     }
+    @Synchronized
     fun report() = source.report()
 }
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 OpenCineCam contributors
 """Publish a signed AAB to a Google Play track through the Play Developer API.
 
 Shared by the LibreStatic apps. Standard library only; the JWT is signed with the

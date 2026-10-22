@@ -73,6 +73,17 @@ class CameraReadbackTest {
         assertEquals("— → SPOT (2)", metered["org.codeaurora.qcamera3.exposure_metering.exposure_metering_mode"])
     }
 
+    @Test fun routeLineAndDiscrepancyHistoryComeFromTheHardwareTruth() {
+        val logical = CameraUiState()
+        assertEquals("logical → — · LOGICAL", requestedReportedLines(logical).toMap()["opencinecam.stillPhysicalRoute"])
+        val mismatched = CameraUiState(hardwareTruth = HardwareTruthHudState().withRoute("2", "3"))
+        assertEquals("2 → 3 · MISMATCH", requestedReportedLines(mismatched).toMap()["opencinecam.stillPhysicalRoute"])
+        val lines = discrepancyLines(mismatched.hardwareTruth)
+        assertEquals(1, lines.size)
+        assertEquals("physicalCameraId", lines.single().first)
+        assertEquals(emptyList<Pair<String, String>>(), discrepancyLines(logical.hardwareTruth))
+    }
+
     @Test fun lowLightBoostStateIsReportedOnlyWhenTheCameraSaidSo() {
         fun line(state: CameraUiState) = requestedReportedLines(state).toMap()["android.control.lowLightBoostState"]
         assertEquals("— → —", line(CameraUiState()))
@@ -137,5 +148,46 @@ class LowLightBoostSettingsTest {
         assertEquals(3, pictureControlDeviceValue(sharpness, null))
         assertEquals(3, pictureControlDeviceValue(sharpness, 9))
         assertEquals(5, pictureControlDeviceValue(PictureControlRange(0, 10, 1, 5, true), 2))
+    }
+
+    @Test fun readbackSamplesJudgeOnlyRequestedValuesWithTheirTolerances() {
+        assertEquals(emptyList<ReadbackSample>(), readbackSamples(CameraUiState()))
+        val state = CameraUiState(
+            requestedExposureMode = com.librestatic.opencinecam.camera.ExposureMode.MANUAL,
+            reportedExposureMode = com.librestatic.opencinecam.camera.ExposureMode.MANUAL,
+            requestedIso = 100, sensitivityIso = 125,
+            requestedExposureTimeNs = 10_000_000L, exposureTimeNs = 10_050_000L,
+            requestedWhiteBalance = com.librestatic.opencinecam.camera.WhiteBalanceSelection.Kelvin(5600), reportedColorTemperatureK = 5850,
+        )
+        val byKey = readbackSamples(state).associateBy { it.key }
+        assertEquals(true, byKey.getValue("android.control.aeMode").withinTolerance)
+        assertEquals(false, byKey.getValue("android.sensor.sensitivity").withinTolerance)
+        assertEquals(true, byKey.getValue("android.sensor.exposureTime").withinTolerance)
+        assertEquals(false, byKey.getValue("android.colorCorrection.colorTemperature").withinTolerance)
+        val auto = readbackSamples(state.copy(requestedIso = null, requestedExposureTimeNs = null))
+        assertEquals(setOf("android.control.aeMode", "android.colorCorrection.colorTemperature"), auto.map { it.key }.toSet())
+        assertEquals(true, readbackSamples(state.copy(reportedColorTemperatureK = 5650)).first { it.key.endsWith("colorTemperature") }.withinTolerance)
+    }
+
+    @Test fun focusAndCadenceSamplesNeedBothSides() {
+        assertEquals(emptyList<ReadbackSample>(), readbackSamples(CameraUiState(submittedAfMode = 3, requestedFocusDiopters = 2f, targetFps = 24)))
+        val state = CameraUiState(submittedAfMode = 0, reportedAfMode = 0, requestedFocusDiopters = 2f, focusDistanceDiopters = 2.1f, targetFps = 24, effectiveFps = 23.98)
+        val byKey = readbackSamples(state).associateBy { it.key }
+        assertEquals(setOf("android.control.afMode", "android.lens.focusDistance", "opencinecam.frameRate"), byKey.keys)
+        assertTrue(byKey.getValue("android.control.afMode").withinTolerance)
+        assertTrue(byKey.getValue("android.lens.focusDistance").withinTolerance)
+        assertTrue(byKey.getValue("opencinecam.frameRate").withinTolerance)
+        val off = readbackSamples(state.copy(reportedAfMode = 4, focusDistanceDiopters = 4f, effectiveFps = 20.0)).associateBy { it.key }
+        assertFalse(off.getValue("android.control.afMode").withinTolerance)
+        assertFalse(off.getValue("android.lens.focusDistance").withinTolerance)
+        assertFalse(off.getValue("opencinecam.frameRate").withinTolerance)
+        assertEquals("24 fps", off.getValue("opencinecam.frameRate").requested)
+        assertNull(readbackSamples(state.copy(requestedFocusDiopters = null)).firstOrNull { it.key == "android.lens.focusDistance" })
+    }
+
+    @Test fun lensLabelsPutTheInferredEquivalentAheadOfTheNativeFocalLength() {
+        assertEquals(" · 25 mm eq. · 6.9 mm", lensFocalSuffix(6.9f, 24.9f, "%s mm eq."))
+        assertEquals(" · 6.9 mm", lensFocalSuffix(6.9f, null, "%s mm eq."))
+        assertEquals("", lensFocalSuffix(null, null, "%s mm eq."))
     }
 }

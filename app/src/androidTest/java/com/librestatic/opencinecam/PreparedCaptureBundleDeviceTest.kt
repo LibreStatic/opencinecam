@@ -63,6 +63,30 @@ class PreparedCaptureBundleDeviceTest {
     @Test fun configuredFlacBundleNamesRemainCoherentThroughPreparationPublicationAndQueue() = successfulBundle(
         "named-flac","FLAC",productionSlate=slateFixture(),captureNames=CaptureNameSnapshot(CaptureNamingSettings(true,"{project}_{reel}_{time}"),slateFixture(),0))
 
+    @Test fun clipSidecarIsPendingThenPublishedWithTheVideoAsACanonicalFifthRole() = withTake(null) { take ->
+        val prepared = requireNotNull(take.prepareVideo(true, clip = ClipSidecarProvider { context ->
+            assertEquals(take.video.recoveryGroup.id, context.recordingId)
+            """{"schemaVersion":"1.0.0","recordingId":"${context.recordingId}"}"""
+        }))
+        val clip = prepared.artifacts.single { it.role == CaptureArtifactRole.CLIP_METADATA }
+        assertEquals(clipSidecarName(take.video.displayName), clip.displayName)
+        assertEquals(3, prepared.artifacts.size)
+        verifyRows(prepared.artifacts, pending = 1)
+        assertTrue(String(bytes(clip), Charsets.UTF_8).contains("recordingId"))
+        requireNotNull(take.video.publishPrepared())
+        verifyRows(prepared.artifacts, pending = 0)
+    }
+
+    @Test fun clipSidecarThatCannotBeBuiltNeverBlocksTheTake() {
+        for (broken in listOf(ClipSidecarProvider { error("builder bug") }, ClipSidecarProvider { null })) withTake(null) { take ->
+            val prepared = requireNotNull(take.prepareVideo(true, clip = broken))
+            assertTrue(prepared.artifacts.none { it.role == CaptureArtifactRole.CLIP_METADATA })
+            assertEquals(2, prepared.artifacts.size)
+            requireNotNull(take.video.publishPrepared())
+            verifyRows(prepared.artifacts, pending = 0)
+        }
+    }
+
     private fun slateFixture() = ProductionSlateSettings(project="Recorded slate", camera="B", scene="12B",
         reel="R4", lens="35mm", takeNumber=17, location=ProductionSlateLocation.EXTERIOR,
         timeOfDay=ProductionSlateTimeOfDay.NIGHT, goodTake=true, autoIncrementTake=true)
@@ -152,6 +176,7 @@ class PreparedCaptureBundleDeviceTest {
                             CaptureArtifactRole.VIDEO_METADATA -> ".timing.json"
                             CaptureArtifactRole.AUDIO -> if(format=="FLAC") ".flac" else ".wav"
                             CaptureArtifactRole.AUDIO_METADATA -> ".audio.json"
+                            CaptureArtifactRole.CLIP_METADATA -> ".clip.json"
                         }
                         assertEquals(stem+suffix,artifact.displayName)
                     }
@@ -342,14 +367,14 @@ class PreparedCaptureBundleDeviceTest {
             preparedAudio = it
             artifacts.addAll(it.artifacts.filterNot { candidate -> artifacts.any { old -> old.uri == candidate.uri } })
         }
-        fun prepareVideo(metadata: Boolean, catalogMetadata: Boolean = false): PreparedVideoOutput? {
+        fun prepareVideo(metadata: Boolean, catalogMetadata: Boolean = false, clip: ClipSidecarProvider? = null): PreparedVideoOutput? {
             val json = if (metadata) JSONObject().put("schema", if (catalogMetadata) "opencinecam.recording.v1" else "prepared-bundle-device-v1")
                 .put("audioFrames", preparedAudio?.result?.frames ?: JSONObject.NULL).apply {
                     // The old ownership fixture deliberately used a private schema; gallery review
                     // requires a declared relationship with actual URI and bundle identity.
                     if (catalogMetadata) { put("videoUri", video.uri.toString()); put("bundleId", video.recoveryGroup.id) }
                 }.toString() else null
-            return video.prepareCompletion(json, geometry, timingSidecar = true)?.also {
+            return video.prepareCompletion(json, geometry, timingSidecar = true, clipSidecar = clip)?.also {
                 artifacts.addAll(it.artifacts.filterNot { candidate -> artifacts.any { old -> old.uri == candidate.uri } })
             }
         }

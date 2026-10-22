@@ -28,6 +28,8 @@ data class CertificationTarget(
     val fingerprint: String?,
     val apiLevel: Int?,
     val protocolVersion: String,
+    /** Where the checks ran; certification needs a proven physical device, so unknown fails closed (ADR-0026). */
+    val origin: EvidenceOrigin = EvidenceOrigin.UNKNOWN,
 ) {
     init {
         require(protocolVersion.isNotBlank())
@@ -58,6 +60,10 @@ object ReleaseCertification {
                 emptyList(),
                 "physical-target-or-artifact-missing",
             )
+        }
+        if (target.origin != EvidenceOrigin.PHYSICAL_DEVICE) {
+            return CertificationResult(CertificationStatus.NOT_RUN, artifact.artifactId, target.fingerprint,
+                emptyList(), emptyList(), "physical-device-origin-required")
         }
         if (checks.isEmpty()) {
             return CertificationResult(CertificationStatus.NOT_RUN, artifact.artifactId, target.fingerprint,

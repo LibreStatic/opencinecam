@@ -286,4 +286,33 @@ class PendingOutputTransactionTest {
         workers.forEach { it.join(5000); assertFalse("Worker did not finish", it.isAlive) }
         assertTrue(errors.toString(), errors.isEmpty())
     }
+
+    @Test fun retainedAbortAfterPublicationFailureCanBeResumedAndPublishedOnce() {
+        val calls = mutableListOf<String>()
+        val failure = IllegalStateException("publish")
+        val t = PendingOutputTransaction("uri", { calls += "close" }, { calls += "keep" })
+        assertEquals("uri", t.prepare { calls += "prepare" })
+        assertSame(failure, assertThrows(IllegalStateException::class.java) { t.publish { throw failure } })
+        assertNull(t.publish { fail("aborted transactions never publish") })
+        t.resumeAfterRetainedAbort(wasPrepared = true)
+        assertEquals("uri", t.publish { calls += "publish" })
+        t.resumeAfterRetainedAbort(wasPrepared = true)
+        assertEquals("uri", t.publish { fail("published twice") })
+        assertEquals(listOf("close", "prepare", "keep", "publish"), calls)
+    }
+
+    @Test fun retainedAbortDuringPreparationResumesToOpen() {
+        val calls = mutableListOf<String>()
+        val t = PendingOutputTransaction("uri", { calls += "close" }, { calls += "keep" })
+        assertThrows(IllegalStateException::class.java) { t.prepare { error("prepare") } }
+        t.resumeAfterRetainedAbort(wasPrepared = false)
+        assertEquals("uri", t.prepare { calls += "prepare" })
+        assertEquals(listOf("close", "keep", "prepare"), calls)
+    }
+
+    @Test fun resumeDoesNothingUnlessAborted() {
+        val t = PendingOutputTransaction("uri", {}, { fail("deleted") })
+        t.resumeAfterRetainedAbort(wasPrepared = true)
+        assertNull(t.publish { fail("unprepared") })
+    }
 }

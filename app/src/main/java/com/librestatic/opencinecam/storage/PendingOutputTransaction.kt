@@ -69,6 +69,19 @@ internal class PendingOutputTransaction<T : Any>(
         }
     }
 
+    /**
+     * After an abort whose delete callback deliberately kept the output (ADR-0011: it holds bytes),
+     * allow one salvage attempt: back to PREPARED when it had been prepared, else to OPEN. The
+     * descriptor stays closed. No effect unless the transaction was aborted.
+     */
+    @Synchronized
+    fun resumeAfterRetainedAbort(wasPrepared: Boolean) {
+        if (state != State.ABORTED) return
+        state = if (wasPrepared) State.PREPARED else State.OPEN
+        deleteAttempted = false
+        abortRequested = false
+    }
+
     private fun closeOnce() {
         if (descriptorClosed) return
         descriptorClosed = true

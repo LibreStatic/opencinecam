@@ -47,6 +47,20 @@ class SchemaModelsTest {
         jsonDocuments.forEach { json -> assertTrue(json.contains("\"schemaVersion\": \"1.0.0\"")) }
     }
 
+    @Test
+    fun clipSidecarKeepsItsAdditionalMediaAndIncompleteFields() {
+        val evidence = SchemaEvidence("Recorded", "fail", "2026-08-20T00:00:00Z")
+        val document = ClipSidecarDocument(
+            "1.0.0", "recording", "2026-08-20T00:00:00Z", objectValue, objectValue, emptyList(), listOf(evidence),
+            media = buildJsonObject { put("displayName", "take.mp4") },
+            takeStatus = "incomplete", failureReasons = listOf("encoder-failed"),
+        )
+        val decoded = decodeCanonical<ClipSidecarDocument>(encodeCanonical(document))
+        assertEquals(document, decoded)
+        val plain = encodeCanonical(document.copy(media = null, takeStatus = null, failureReasons = null))
+        assertTrue(!plain.contains("media") && !plain.contains("takeStatus") && !plain.contains("failureReasons"))
+    }
+
     @Test(expected = UnsupportedSchemaMajor::class)
     fun majorVersionIsRejected() {
         checkSchemaCompatibility("2.0.0")

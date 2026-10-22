@@ -41,7 +41,11 @@ data class CameraInventory(
     val error: String? = null,
     val lensFacing: Int? = null,
     val focalLengthsMm: List<Float> = emptyList(),
+    /** SENSOR_INFO_PHYSICAL_SIZE in mm (width, height), when advertised. */
+    val sensorSizeMm: Pair<Float, Float>? = null,
 ) {
+    /** The first focal length as a 35 mm equivalent; inferred from the sensor size, null without it. */
+    val equivalentFocalLengthMm: Float? get() = focalLengthsMm.firstOrNull()?.let { equivalentFocalLengthMm(it, sensorSizeMm?.first, sensorSizeMm?.second) }
     fun value(key: String): String? = entries.firstOrNull { it.key == key }?.value
 }
 
@@ -93,6 +97,7 @@ class Camera2CapabilityInventory(private val manager: CameraManager) {
             lensFacing = runCatching { characteristics.get(CameraCharacteristics.LENS_FACING) }.getOrNull(),
             focalLengthsMm = runCatching { characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList() }
                 .getOrNull().orEmpty(),
+            sensorSizeMm = runCatching { characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { it.width to it.height } }.getOrNull(),
         )
     }
 

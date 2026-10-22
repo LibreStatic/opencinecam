@@ -78,4 +78,24 @@ class SecurityAuditManifestTest {
         assertFalse(report.passed)
         assertFalse(report.findings.first { it.findingId == "SEC-NETWORK" }.passed)
     }
+
+    @Test
+    fun realManifestFailsIfTheDataSyncServicePermissionHasNoWebDavOptIn() {
+        val input = manifestInput()
+        assertTrue(input.permissions.contains("android.permission.FOREGROUND_SERVICE_DATA_SYNC"))
+        val report = SecurityPrivacyAccessibilityAuditor.audit(
+            input.copy(declaredOptInFeatures = appOptInFeatures - OptInFeature.WEBDAV_TRANSFER),
+        )
+        assertFalse(report.findings.first { it.findingId == "SEC-PERMISSIONS" }.passed)
+    }
+
+    @Test
+    fun workManagersForegroundServiceIsDeclaredNonExportedWithTheDataSyncType() {
+        val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+        val root = factory.newDocumentBuilder().parse(manifestFile()).documentElement
+        val service = root.children("application").single().children("service")
+            .single { it.getAttributeNS(androidNs, "name") == "androidx.work.impl.foreground.SystemForegroundService" }
+        assertTrue(service.getAttributeNS(androidNs, "exported") == "false")
+        assertTrue(service.getAttributeNS(androidNs, "foregroundServiceType") == "dataSync")
+    }
 }

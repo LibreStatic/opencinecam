@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-053
 title: "APV UI fallback and APV RAW verdict"
 status: Done
-revision: 1
+revision: 2
 milestone: M15
 intended_executor: GPT-5.6 Luna
 execution_mode: implementation
@@ -147,5 +147,6 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 - Executor: GPT-5.6 Luna
 - Commits:
 - Evidence: `evidence/plan-053/gradle-build.log`, `evidence/plan-053/python-tests.log`, `evidence/plan-053/format.log`, `evidence/plan-053/validator.log`, `evidence/plan-053/ffprobe.log`, `evidence/plan-053/device-gate.log`, `evidence/plan-053/device-gate.json`, `evidence/plan-053/device-gate-collector.log`
-- Deviations: Host UI policy disables unqualified APV with an explicit AVC/HEVC SDR fallback and keeps APV RAW verdict separate. The production selector explicitly shows APV as unsupported and cannot start capture; APV RAW remains separately unqualified.
+- Deviations: Host UI policy disables unqualified APV with an explicit AVC/HEVC SDR fallback and keeps APV RAW verdict separate. APV can never start capture; APV RAW remains separately unqualified.
+- Amendment (2026-10-19): The capture mode dial hides UNSUPPORTED modes by design (`app/src/main/java/com/librestatic/opencinecam/ModeSelection.kt`), so the production selector does not show APV. APV is reported as "Unsupported: <reason>" in Settings > Camera capabilities and can never start capture. This corrects the earlier statement that the production selector explicitly shows APV.
 - Follow-up plans: Re-evaluate only on a fingerprint that passes OCC-PLAN-051 and OCC-PLAN-052.

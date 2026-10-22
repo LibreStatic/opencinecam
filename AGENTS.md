@@ -95,6 +95,7 @@ Outputs and logs:
 | `CaptureNightSuggested` / `CaptureNightOn` | `AdaptiveCaptureChrome` | photo in Auto on a camera with the night extension, the scene dark: the quick toggle (`capture-night-toggle`) offered beside the lock keys, or engaged (highlighted) |
 | `CaptureFpsLock` / `CaptureFpsLockHolding` | `AdaptiveCaptureChrome` | video on a camera with exposure-time priority: the FPS LOCK key (`capture-fps-lock`) beside the lock keys, on, or amber while it is holding the shutter at 1/fps |
 | `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23; `click tag=recording-reveal-surface` reveals the chrome |
+| `CaptureRecordingWarning` | `AdaptiveCaptureChrome` | the same take with the Adaptive policy's live warning (`recording-warning`) under the REC strip; check it on `phone` and `inner` |
 | `CaptureLandscape` | `AdaptiveCaptureChrome` | video, previewing (use `--device landscape` for the side rails) |
 | `CaptureSheetWb` / `CaptureSheetFocus` | `AdaptiveCaptureChrome` | the white balance or focus panel open (focus marks A and B) |
 | `CaptureModeSheet` | `AdaptiveCaptureChrome` | the phone's modal mode sheet open (a dialog: use `tree`) |
@@ -107,6 +108,11 @@ Outputs and logs:
 | `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |
 | `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes |
 | `SettingsRecording` | `SettingsScreen` | locked while recording |
+| `SettingsRecordingPolicy` | `SettingsScreen` | the Adaptive recording policy; `textInput policy tag=settings-search` shows the Strict/Adaptive row (`recording-policy-*`) |
+| `CapabilitiesExport` | `CameraCapabilitiesScreen` | the report export dialog open (`capabilities-export-*` tags): redacted or full, consent gate, Save/Share/Copy |
+| `CapabilitiesMain10` | `CameraCapabilitiesScreen` | the latest Main10 file check card (`capabilities-main10-check`): HLG signalling passed, effective precision "needs a controlled capture" |
+| `CapabilitiesDeviceProfile` | `CameraCapabilitiesScreen` | the device profile card (`capabilities-device-profile`): the Razr's bundled `blanc` profile read on another build, so "Active, not verified on this build" with the two high-speed quirks (`capabilities-quirk-*`) |
+| `StorageBenchmark` | `StorageBenchmarkContent` | a finished qualified benchmark: outcome, margin and three windows |
 | `Gallery` | `MediaCatalogContent` | seven takes (two LOG videos, DNG, legacy JPEG, AAC and WAV audio, a plain video) with gradient thumbnails, codec badges, one proxy ready and one being made |
 | `GalleryInspector` | `MediaCatalogContent` | the same takes with take 1's details open in a sheet: at the bottom on `phone` and `compact`, at the side on the others. Screenshot it with `tag=gallery-info-sheet`. The docked side pane needs a large or expanded landscape window, e.g. `--device w1280dp-h800dp-land-mdpi` |
 | `GalleryInspectorProbed` | `MediaCatalogContent` | take 7's details: a plain video whose codec chip comes from a fake file probe (its card has no codec badge) |

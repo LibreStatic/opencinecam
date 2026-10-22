@@ -27,6 +27,7 @@
     <string name="gallery_missing">Scheda della ripresa mancante</string>
     <string name="gallery_invalid">Scheda della ripresa illeggibile</string>
     <string name="gallery_incomplete">Alcuni file mancanti</string>
+    <string name="gallery_incomplete_take">Ripresa incompleta</string>
     <string name="gallery_original">Originale: %1$s</string>
     <string name="gallery_metadata">Metadati: %1$s</string>
     <string name="gallery_open_failed">Impossibile aprire il file selezionato. Potrebbe non essere disponibile o non c\'è un\'app compatibile installata.</string>

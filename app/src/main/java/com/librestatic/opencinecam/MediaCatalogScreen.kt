@@ -242,7 +242,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     val probedCodecs = remember(source) { mutableMapOf<String, CodecBadge?>() }
     val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
         .collectAsState(emptyMap())
-    fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE)
+    fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE,
+        visible.encodings[take.id]?.incompleteReasons.orEmpty())
     val thumbnails = remember(source) { GalleryThumbnailCache() }
     val groups = remember(visible.takes) { groupByTakeDay(visible.takes, ZoneId.systemDefault()) { it.primary.modifiedSeconds } }
     val gridState = rememberLazyGridState()

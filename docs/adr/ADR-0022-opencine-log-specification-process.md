@@ -50,3 +50,31 @@ OCC-PLAN-047-050
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-19)
+
+- Status: Accepted
+- Date: 2026-10-19
+- Related requirements: OCC-COLOR-001
+- Related ADRs: None
+
+### Context
+
+The original decision keeps Log unavailable until the specification, references, vectors and tolerances pass. OCC-PLAN-061 later put an OCLog2 runtime behind the launcher, and `docs/color/opencine-log-v2.md` and `docs/architecture.md` describe it as experimental and not qualified. The mode UI labels an available LOG gate "Experimental" unless the camera has an OpenCineLog profile backed by accepted evidence (`showsExperimentalGate` in `app/src/main/java/com/librestatic/opencinecam/CameraScreen.kt`).
+
+### Decision
+
+Log may ship as an Experimental mode with a visible "Experimental" label. It must never be described, labelled or exported as qualified, and no tuple is promoted, until the criteria of the original decision pass for that exact tuple (versioned domain, gamut, curve, range and provenance, CPU/GPU references, vectors, LUT/OCIO/DCTL, metadata and tolerances). The experimental label is removed only for a camera with an accepted OpenCineLog profile. Marketing names and reuse of the HLG name stay rejected.
+
+### Alternatives considered
+
+- Keep Log hidden until qualified: rejected by the user decision of 2026-10-19 because the experimental mode already ships and is useful for evaluation.
+- Ship it without a label: rejected because it would imply a qualification that does not exist.
+
+### Consequences
+
+- Positive: the ADR, `architecture.md` and the UI agree.
+- Negative: users see a mode whose output is not qualified.
+- Operational: any change that removes the label, or claims qualification, needs the qualification evidence of OCC-PLAN-061 first.
+
+The original decision above is retained as history; this amendment governs where they differ.

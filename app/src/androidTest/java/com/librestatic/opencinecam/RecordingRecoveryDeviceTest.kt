@@ -139,8 +139,10 @@ class RecordingRecoveryDeviceTest {
             } }
             // Restore only this fixture receipt for subsequent independent cases and cleanup.
             f.database { it.execSQL("UPDATE captures SET committed = 0 WHERE id = ?", arrayOf(id)) }
-            assertEquals(RecordingRecoveryReport(discardedGroups = 1), f.journal.recover())
-            assertTrue(f.journal.allRows(id).isEmpty())
+            // ADR-0011: the row holds bytes, so recovery publishes it as incomplete instead of deleting it.
+            assertEquals(RecordingRecoveryReport(incompleteGroups = 1), f.journal.recover())
+            f.adopt(f.journal.allRows(id))
+            assertTrue(row in f.journal.allRows(id)); assertEquals(0, f.pending(row)); assertNull(f.state(id))
         }
     }
 
@@ -155,7 +157,9 @@ class RecordingRecoveryDeviceTest {
         assertArrayEquals(beforeDatabase, f.databaseFile.readBytes())
         assertEquals(beforeRow, f.digest(row))
         f.database { assertEquals(2, it.version); it.version = 1 }
-        assertEquals(RecordingRecoveryReport(discardedGroups = 1), f.journal.recover())
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), f.journal.recover())
+        f.adopt(f.journal.allRows(id))
+        assertEquals(0, f.pending(row))
     }
 
     @Test fun orphanRecoveryFindsProviderRenamesButPreservesSimilarAndTransferNamespaces() = Fixture().use { f ->
@@ -172,8 +176,14 @@ class RecordingRecoveryDeviceTest {
             path = "Download/OpenCineCam/")
         val before = listOf(similar, transfer).associateWith(f::digest)
         assertEquals(setOf(video, audio, metadata), f.journal.allRows(id))
-        assertEquals(RecordingRecoveryReport(discardedGroups = 1), RecordingCaptureRecovery(f.context).recover())
-        assertTrue(f.journal.allRows(id).isEmpty()); assertNull(f.state(id))
+        // ADR-0011: every row holds bytes, so the interrupted take is published as incomplete (with two new
+        // incomplete sidecars for the renamed video and the audio) and its receipt is committed and pruned.
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), RecordingCaptureRecovery(f.context).recover())
+        val recovered = f.journal.allRows(id)
+        f.adopt(recovered)
+        assertTrue(recovered.containsAll(setOf(video, audio, metadata))); assertEquals(5, recovered.size)
+        recovered.forEach { assertEquals(0, f.pending(it)) }
+        assertNull(f.state(id))
         assertEquals(RecordingRecoveryReport(), f.journal.recover())
         before.forEach { (uri, digest) -> assertEquals(digest, f.digest(uri)) }
     }
@@ -232,6 +242,8 @@ class RecordingRecoveryDeviceTest {
                 it.write("ownership protocol fixture: $label".toByteArray(Charsets.UTF_8))
             }
         }
+        /** Rows recovery created itself belong to this fixture's cleanup too. */
+        fun adopt(uris: Set<Uri>) { rows += uris }
         fun publish(outputs: List<Output>) = outputs.forEach { assertEquals(1, context.contentResolver.update(it.uri,
             ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)) }
         fun pending(uri: Uri): Int = requireNotNull(context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.IS_PENDING), null, null, null)).use {

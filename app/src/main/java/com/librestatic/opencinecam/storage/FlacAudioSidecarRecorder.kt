@@ -68,6 +68,7 @@ class FlacAudioSidecarRecorder private constructor(
     private val running = AtomicBoolean(false)
     private val capturedSampleRateHz = audioRecord.sampleRate
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
+    override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
     private var deferredFileCleanup = false
     @Volatile private var nativeRetired = false
     private val effects = mutableListOf<AudioEffect>()
@@ -103,6 +104,9 @@ class FlacAudioSidecarRecorder private constructor(
         check(deleted in 0..1) { "Audio compensation affected an unexpected row count." }
     }.apply { add(uri) }
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
+
+    private var salvaging = false
+    private var incompleteReasons: List<String>? = null
 
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
@@ -140,6 +144,32 @@ class FlacAudioSidecarRecorder private constructor(
         } catch (failure: Throwable) {
             abortAfterFailure(failure)
             throw failure
+        }
+    }
+
+    /** ADR-0011: seal whatever was captured and keep it; see [AudioSidecarRecorder.prepareIncompleteCompletion]. */
+    @Synchronized override fun prepareIncompleteCompletion(reasons: List<String>): PreparedAudioSidecar? {
+        recoveryMember.beginSalvage()
+        salvaging = true
+        incompleteReasons = reasons
+        val alreadyPrepared = preparedOutput != null
+        return prepareCompletion()?.also {
+            recoveryMember.keepBytes()
+            if (alreadyPrepared) markPreparedMetadataIncomplete(reasons)
+        }
+    }
+
+    /** The metadata of an output prepared as complete is rewritten when the take turns out incomplete. */
+    private fun markPreparedMetadataIncomplete(reasons: List<String>) {
+        val metadata = preparedMetadataUri ?: return
+        try {
+            val resolver = context.contentResolver
+            val document = requireNotNull(resolver.openInputStream(metadata)).use { JSONObject(String(it.readBytes())) }
+            requireNotNull(resolver.openOutputStream(metadata, "wt")).use {
+                it.write(document.putIncompleteMarker(reasons).toString(2).toByteArray())
+            }
+        } catch (failure: Exception) {
+            android.util.Log.w("AudioSidecar", "Incomplete marker could not be written to the audio metadata", failure)
         }
     }
 
@@ -254,10 +284,11 @@ class FlacAudioSidecarRecorder private constructor(
         retirement.failure?.let { throw it }
         stoppedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
         val capturedResult = result()
-        failure?.let { if (success) throw it }
-        if (!success || failure != null || inputBytes == 0L || encodedBytes == 0L) return null
-        captureTiming.requireComplete(capturedResult.frames)
-        patchTotalSamples(inputBytes / (settings.audioChannels * settings.audioBitDepth.bits / 8))
+        failure?.let { if (success && !salvaging) throw it }
+        if (!success || (failure != null && !salvaging) || inputBytes == 0L || encodedBytes == 0L) return null
+        if (salvaging) runCatching { captureTiming.requireComplete(capturedResult.frames) } else captureTiming.requireComplete(capturedResult.frames)
+        // A failed encoder leaves a truncated stream: its STREAMINFO sample count would be wrong.
+        if (failure == null) patchTotalSamples(inputBytes / (settings.audioChannels * settings.audioBitDepth.bits / 8))
         output.channel.force(true)
         output.close()
         descriptor.close()
@@ -527,6 +558,7 @@ class FlacAudioSidecarRecorder private constructor(
             .put("audioEffects", result.audioEffects?.let { audioEffectsJson(it, requireNotNull(result.audioEffectsObservedAtElapsedRealtimeMs)) } ?: JSONObject.NULL)
             .put("acousticEchoCancelerEnabled", result.acousticEchoCancelerEnabled)
             .put("disclosure", "FLAC encoded with Android MediaCodec; OEM processing outside public APIs may still exist.")
+        incompleteReasons?.let { json.putIncompleteMarker(it) }
         val metadataName = displayName.removeSuffix(".flac") + ".audio.json"
         val resolver = context.contentResolver
         val metadataUri = recoveryMember.insert(metadataName, "application/json", metadata = true)

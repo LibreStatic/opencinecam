@@ -2,7 +2,7 @@
 plan_id: OCC-PLAN-066
 title: "Capture and project timelines"
 status: InProgress
-revision: 35
+revision: 68
 milestone: H4
 intended_executor: Codex
 execution_mode: implementation
@@ -52,6 +52,8 @@ Full H4 timeline scope: interval selection, rational capture/project clocks, off
 ## 8. Out of Scope
 
 This plan alone does not complete H4 photography/media library work, remaining H3 monitors/audio or H5. No final APK before the entire goal passes.
+
+Amendment (2026-10-19, revision 68): Revisions 23-66 implemented inside this plan the H4 photo features E4-E9, the E16 media library (MED-01) and the E17 proxies (MED-02), each with local acceptance only. They are in scope as implemented; their physical, editorial and external acceptance, the remaining H3 monitors/audio (PLAN-065) and H5 (PLAN-067) stay open. "No final APK before the entire goal passes" is superseded by AGENTS.md: store releases ship incrementally with a `versionName` bump.
 
 ## 9. Architecture
 
@@ -366,7 +368,7 @@ The GPU drain now publishes immutable progress after each successfully written v
 
 TimecodeTracker freezes enabled/mode/rate/start configuration at RECORDING_STARTED, including disabled takes. Valid later configurations are deferred (last wins), and an invalid configuration never replaces the prior pending choice. Observations bind to the active take and reject stale IDs, regressed counts, changed first PTS and contradictory duplicate snapshots. RECORD_RUN assigns contiguous labels to actual written video samples and consumes those samples even if final publication fails. REGEN advances only after paired audio/video publication succeeds; failed publication leaves its previous published end unchanged. Finalization is idempotent. Arithmetic wraps each cursor within the selected DF/NDF day before addition, including Long-limit test inputs. No new images during pause means no RECORD_RUN/REGEN advancement.
 
-CaptureService starts the tracker with the recording, samples actual progress for the operator display, observes final progress before building metadata, and commits REGEN only after finalizeRecordingTake returns a published pair. Compensating cleanup ends the timecode take as unsuccessful. LOG provenance now uses the frozen take report instead of mutable settings; ordinary VIDEO/timelapse timing JSON includes the same report when enabled. The timecode object includes actual first/last muxed PTS and frame count, first/last contiguous labels when available, the exact numbering rate, cursor policy and take ID. Disabled ordinary recordings do not gain a timecode-only sidecar. FREE_RUN remains monotonic receipt-clock display including pauses; its per-frame labels stay null and source mapping is explicitly unqualified. An unavailable encoder count is null, not a duration-derived estimate.
+CaptureService starts the tracker with the recording, samples actual progress for the operator display, observes final progress before building metadata, and commits REGEN only after finalizePreparedRecordingTake returns a published pair. Compensating cleanup ends the timecode take as unsuccessful. LOG provenance now uses the frozen take report instead of mutable settings; ordinary VIDEO/timelapse timing JSON includes the same report when enabled. The timecode object includes actual first/last muxed PTS and frame count, first/last contiguous labels when available, the exact numbering rate, cursor policy and take ID. Disabled ordinary recordings do not gain a timecode-only sidecar. FREE_RUN remains monotonic receipt-clock display including pauses; its per-frame labels stay null and source mapping is explicitly unqualified. An unavailable encoder count is null, not a duration-derived estimate.
 
 Settings help in English/Spanish explains the per-mode behavior, deferred changes and JSON-only metadata. Timecode rate remains independent of project rate; matching, rational NDF options, interoperable app-written timecode tracks, source-clock FREE_RUN mapping across pause, physical/editor qualification and service-process recreation cursor persistence remain open. The existing service lifetime retains cursors only while the owner lives. This checkpoint does not assert external timecode/genlock or full H4 completion. Full H1–H5 remains ACTIVE; no final APK.
 
@@ -1007,6 +1009,8 @@ Independent oracle: lag 0 and correlation ≥0.999983 throughout; raw decoder su
 
 Rollback validated only in isolated /dev/shm copies (restores Rev63 bytes). No final APK; physical/editorial H1–H5 pending items intact; simultaneous graph with proxy and other cells keep their place. Local closure identified by `FINAL_E17_SIDECAR_INTEROP_REOPEN_FIELDS` and `FINAL_E17_SIDECAR_INTEROP_STATE.json`.
 
+Note (2026-10-19, see Revision 68): "no production changes" holds for the Rev64 cells only, not for the worktree, which had accumulated unreviewed production changes. The two "PRE-EXISTING host failures" were in the tests (`OperatorPreferencesTest`, `ProjectTimingTest` assumed a fixed key list), not in the schema, and they pass now.
+
 
 ### Revision 65 — E17/MED-02: complete graph of simultaneous capture with proxy
 
@@ -1043,3 +1047,5 @@ Inventory of code with tests but without production callers (P2 of the review). 
 - `:app`: `ActivityContinuityCoordinator` (only its test); `ProbeScreen` is no longer reachable from the launcher.
 
 Open decision, with no owner yet: for each symbol, wire it into the production path (with new evidence) or delete it along with its tests. Until that is decided, no H1–H5 acceptance criterion may rely on its coverage. Physical/editorial H1–H5 pending items intact; no final APK.
+
+Status note (2026-10-19, docs conformance): the inventory above is stale. Production now calls `CaptureStateMachine` Prepare/Start/Recording/Stopping/Recover (`CaptureStateCommands`), `GraphNegotiator.fallbackGraphs`, `StreamCapabilityProbe`, `CaptureResultAuditor` and `CaptureRequestComposer` (`Camera2PreviewEngine`), `VideoEncoderSelector` (`OpenCineLogGpuPipeline`), `AvClockDiagnostics` (`SeparateAudioAvDrift`), `RuntimeHardeningPolicy` (`RuntimePolicyDecision`), `decideClipRecovery` (incomplete-take salvage and crash recovery, ADR-0033) and `Main10FileQualifier` (post-take Main10 file check). The user decided to wire every remaining symbol, replacing the duplicate production paths after characterization tests rather than deleting either side; the work is ordered in the docs-conformance plan and each wiring records its own evidence. Until a symbol is wired, the rule above still applies to it.

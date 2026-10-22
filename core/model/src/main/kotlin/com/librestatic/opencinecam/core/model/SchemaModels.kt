@@ -42,6 +42,11 @@ data class ClipSidecarDocument(
     val resolvedGraph: JsonObject,
     val events: List<JsonObject>,
     val validation: List<SchemaEvidence>,
+    /** Additional properties the schema allows: the take's files, written only when known. */
+    val media: JsonObject? = null,
+    /** ADR-0011: `incomplete` on a take that was kept after a failure; absent on a complete take. */
+    val takeStatus: String? = null,
+    val failureReasons: List<String>? = null,
 )
 
 @Serializable
@@ -72,7 +77,9 @@ data class BenchmarkResultDocument(
     val bytesWritten: Long,
     val windows: List<JsonObject>,
     val requiredBytesPerSecond: Long? = null,
+    val qualificationMarginBytesPerSecond: Long? = null,
     val outcome: String,
+    val outcomeDetail: String? = null,
 )
 
 @Serializable
@@ -140,3 +147,8 @@ inline fun <reified T> decodeCanonical(raw: String): T {
 }
 
 inline fun <reified T> encodeCanonical(value: T): String = canonicalJson.encodeToString(value)
+
+/** Non-inline entry points for modules built for an older JVM target than this one. */
+fun encodeClipSidecar(document: ClipSidecarDocument): String = encodeCanonical(document)
+
+fun decodeClipSidecar(raw: String): ClipSidecarDocument = decodeCanonical(raw)

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "profileId": "3f6c2a9e-7d41-4b58-9c0e-5a1d8e2b7f04",
+  "createdAt": "2026-10-19T00:00:00Z",
+  "source": "release",
+  "trust": "BUNDLED_TRUSTED",
+  "scope": {
+    "device": "blanc",
+    "buildFingerprint": "motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys",
+    "cameraId": "0"
+  },
+  "validity": {
+    "protocolVersion": "1"
+  },
+  "configurations": [],
+  "signature": {
+    "algorithm": "SHA-256",
+    "keyId": "release",
+    "digest": "9179d3ef58a4d9990842e8a553fad76637fde9779a4f6951783b901d2685fb6f"
+  },
+  "quirks": [
+    {
+      "quirkId": "OCC-QUIRK-0001",
+      "effect": "high-speed-prefer-physical-camera",
+      "enabled": true
+    },
+    {
+      "quirkId": "OCC-QUIRK-0002",
+      "effect": "moto-high-speed-session-keys",
+      "enabled": true
+    }
+  ]
+}

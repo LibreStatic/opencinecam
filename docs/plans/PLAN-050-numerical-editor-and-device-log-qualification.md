@@ -32,6 +32,8 @@ created_by: GPT-5.6 Sol
 ---
 # OCC-PLAN-050: Numerical editor and device Log qualification
 
+> **Superseded by OCC-PLAN-061 (2026-10-19 note).** This plan specifies OpenCine Log v1 (OCLog1) and is kept as the historical host record. Live capture targets OCLog2 under OCC-PLAN-061, which does not revive OCLog1.
+
 ## 1. Objective
 
 Run round-trip numeric, [redacted editor]/FFmpeg workflow, controlled device, clipping/range, and file metadata qualification. The observable outcome is a buildable repository with passing automated checks and versioned evidence.

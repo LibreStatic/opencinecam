@@ -30,4 +30,11 @@ class StoragePolicyTest {
         assertEquals(ClipRecoveryDecision.PUBLISH_INCOMPLETE, decideClipRecovery(false, 1))
         assertEquals(ClipRecoveryDecision.PUBLISH_COMPLETE, decideClipRecovery(true, 1))
     }
+
+    @Test
+    fun negativeOrUnknownByteCountsNeverPublish() {
+        assertEquals(ClipRecoveryDecision.DELETE, decideClipRecovery(true, 0))
+        assertEquals(ClipRecoveryDecision.DELETE, decideClipRecovery(true, -1))
+        assertEquals(ClipRecoveryDecision.PUBLISH_INCOMPLETE, decideClipRecovery(false, Long.MAX_VALUE))
+    }
 }
