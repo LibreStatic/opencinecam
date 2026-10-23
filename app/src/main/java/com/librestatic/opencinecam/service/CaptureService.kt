@@ -2360,6 +2360,15 @@ class CaptureService : Service() {
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
         val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
+
+        /**
+         * Locks the selected logical camera to [physicalId] (one of `CameraUiState.lensLock.options`),
+         * or unlocks it with null. Persisted per logical camera in `CameraSettings.lensLock`; refused
+         * while recording or while the capture controls are locked. Implemented by PLAN-070 slice 3a.
+         */
+        fun setLensLock(physicalId: String?) {
+            if (serviceDestroyed) return
+        }
         /** Starts a calibration run on the selected logical camera; the capture screen must be showing. */
         fun startLensCalibration() {
             if (serviceDestroyed || calibrationRun != null) return
