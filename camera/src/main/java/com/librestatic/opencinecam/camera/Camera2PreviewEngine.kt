@@ -6354,10 +6354,13 @@ class Camera2PreviewEngine(
                             ?.firstOrNull()
                     }.getOrNull()?.let { focal -> id to focal }
                 }
+            // The lens lock's anchors (field of view), so the bar matches where the HAL switches lens.
+            val fovRatios = lensLockCandidates(cameraId).associate { it.physicalId to it.anchorRatio }
             val anchors = ZoomMath.deriveAnchors(
                 logicalFocal, physicalFocals,
                 rangeMin = zoomRange?.start ?: Float.NEGATIVE_INFINITY,
                 rangeMax = zoomRange?.endInclusive ?: Float.POSITIVE_INFINITY,
+                fovRatios = fovRatios,
             )
             // HFR zoom is only safe when the camera uses the CONTROL_ZOOM_RATIO API (API 30+)
             // and the key is present in availableCaptureRequestKeys. Constrained sessions reject

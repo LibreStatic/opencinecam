@@ -73,12 +73,17 @@ object ZoomMath {
      *
      * If [physicalFocals] is empty or the reference is unavailable, only the 1x anchor is
      * returned, leaving the rest of the range to digital zoom.
+     *
+     * [fovRatios] overrides the focal ratio per physical id with the field-of-view ratio
+     * ([lensAnchorRatio]). Sensors differ in size, so the focal ratio can misplace a lens: the
+     * Razr Fold's tele is 2x by focal length but 3x by field of view, where the HAL switches to it.
      */
     fun deriveAnchors(
         referenceFocalMm: Float?,
         physicalFocals: List<Pair<String, Float>>,
         rangeMin: Float = Float.NEGATIVE_INFINITY,
         rangeMax: Float = Float.POSITIVE_INFINITY,
+        fovRatios: Map<String, Float> = emptyMap(),
     ): List<ZoomAnchor> {
         if (referenceFocalMm == null || referenceFocalMm <= 0f || physicalFocals.isEmpty()) {
             return listOf(ZoomAnchor(1f.coerceIn(rangeMin, rangeMax), referenceFocalMm ?: 0f, null))
@@ -86,7 +91,7 @@ object ZoomMath {
         val ratios = physicalFocals.mapNotNull { (id, focal) ->
             if (focal <= 0f) return@mapNotNull null
             // A shorter physical focal = wider field of view = lower zoom ratio.
-            val ratio = focal / referenceFocalMm
+            val ratio = fovRatios[id]?.takeIf { it > 0f && it.isFinite() } ?: (focal / referenceFocalMm)
             ZoomAnchor(ratio.coerceIn(rangeMin, rangeMax), focal, id)
         }
         val withUnity = (ratios + ZoomAnchor(1f, referenceFocalMm, null))
