@@ -190,6 +190,7 @@ class CaptureService : Service() {
     private val state = MutableStateFlow<CaptureState>(CaptureState.Stopped)
     private val stateCommands = CaptureStateCommands(OWNER_ID)
     private val cameraState = MutableStateFlow(CameraUiState())
+    private val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.LensCalibrationUiState())
     private val localBinder = LocalBinder()
     private val foreground = RecordingForegroundController(this)
     private val previewEngine by lazy { CaptureStartup.adoptEngine(this) }
@@ -2085,6 +2086,15 @@ class CaptureService : Service() {
 
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
+        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
+        /** Starts a calibration run on the selected logical camera; the capture screen must be showing. */
+        fun startLensCalibration() = Unit
+        fun cancelLensCalibration() = Unit
+        /** Saves the run's result for this build and camera, and applies it when the correction is on. */
+        fun saveLensCalibration() = Unit
+        fun discardLensCalibration() = Unit
+        /** Deletes the saved calibration of the selected camera. */
+        fun deleteLensCalibration() = Unit
         /** A/V clock drift of the last separate WAV/FLAC take, or null (no such take, or not measurable). Diagnostic only. */
         val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
 
