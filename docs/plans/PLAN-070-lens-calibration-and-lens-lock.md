@@ -145,7 +145,7 @@ Device gates use the `.debug` package with `adb -s <razr-serial>` and `monkey -p
 
 ## 16. Acceptance Criteria
 
-- [ ] G0: the probe records, for each candidate vendor key and for direct opens of physicals 2, 3 and 5, whether it works on the Razr Fold, and the physical-versus-logical descriptor diff is in `docs/device-validation.md`.
+- [x] G0: the probe records, for each candidate vendor key and for direct opens of physicals 2, 3 and 5, whether it works on the Razr Fold, and the physical-versus-logical descriptor diff is in `docs/device-validation.md`.
 - [ ] The solvers recover the known matrix, shift, scale and rotation of synthetic fixtures within the stated bounds and fall back on degenerate scenes.
 - [ ] The calibration codec and store round-trip and are excluded from the portable preset.
 - [ ] G1: lens lock on each of 2, 3 and 5 records video, JPEG and DNG with zoom 1x to 8x and the active lens reported constant.
@@ -181,4 +181,5 @@ Not complete. Revision 1 opened 2026-10-23 with the approved design, plan and AD
 
 ## 21. Execution Record
 
-Pending. Real command output, device logs and gate results are recorded here as slices and gates are executed; nothing has been run yet.
+- 2026-10-23 G0 on the Razr Fold (`motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`): physicals 2, 3 and 5 open directly with preview, 1080p `MediaRecorder` and full-size JPEG at 1x to 8x; 10-bit HLG/HDR10, EIS and AF kept; 3 and 5 lack constrained high speed. Automatic switches up 3->2 at 1.00x and 2->5 at 3.00x, down 5->2 at 2.95x and 2->3 at 0.95x. `MasterCamera` (request 0/1/2/3/5, session 0/1) has no effect. Slice 3 uses direct physical opens. Details in `docs/device-validation.md`; raw log and files kept outside the repository.
+- Slices 1, 2, 5, 6 and 7 are implemented on `feat/lens-calibration` with their host suites passing; the device gates G1 to G5 are pending.
