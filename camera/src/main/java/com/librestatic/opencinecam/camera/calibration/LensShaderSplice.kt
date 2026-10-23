@@ -49,7 +49,7 @@ object LensShaderSplice {
             vec3 lin = lensDecode(signal);
             return lensEncode(max(exp2(uLensEv) * (uLensMatrix * (uLensGains * lin)), vec3(0.0)));
         }
-        
+
     """.trimIndent() + "\n"
 
     /** [source] is a complete fragment shader whose input signal has transfer [curve]. */
