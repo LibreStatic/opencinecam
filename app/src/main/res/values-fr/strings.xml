@@ -1036,4 +1036,17 @@
     <string name="lens_cal_fail_scene_unstable">L’exposition ou la balance des blancs ne se sont jamais stabilisées. Utilisez une lumière plus stable et gardez le téléphone immobile.</string>
     <string name="lens_cal_fail_low_quality">Aucun objectif n’a donné de résultat fiable. Choisissez une scène avec plus de textures et de couleurs, plus éloignée et sous une lumière uniforme.</string>
     <string name="lens_cal_fail_internal">Un problème est survenu. Réessayez.</string>
+    <string name="lens_lock_title">Verrouillage de l\'objectif</string>
+    <string name="lens_lock_summary">Garde un seul objectif : le zoom devient numérique et l\'appareil ne change jamais d\'objectif</string>
+    <string name="lens_lock_off">Désactivé</string>
+    <string name="lens_lock_ultra_wide">%1$s ultra grand-angle</string>
+    <string name="lens_lock_wide">%1$s grand-angle</string>
+    <string name="lens_lock_tele">%1$s télé</string>
+    <string name="lens_lock_toggle_on">Verrouillage de l\'objectif : activé, %1$s</string>
+    <string name="lens_lock_toggle_off">Verrouillage de l\'objectif : désactivé</string>
+    <string name="lens_lock_short">OBJ</string>
+    <string name="lens_lock_notice_crop">Verrouillage de l\'objectif : recadrage numérique</string>
+    <string name="lens_lock_notice_switched">L\'appareil a changé d\'objectif en faible lumière</string>
+    <string name="lens_lock_anchor_locked">Objectif %1$s verrouillé</string>
+    <string name="lens_lock_anchor">Verrouiller sur l\'objectif %1$s</string>
 </resources>

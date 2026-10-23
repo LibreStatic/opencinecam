@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
+import com.librestatic.opencinecam.CineGlyph
+import com.librestatic.opencinecam.CineIcon
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import kotlinx.coroutines.delay
@@ -61,9 +63,15 @@ internal fun rockerTickDeltaSeconds(previousTickNs: Long, currentTickNs: Long): 
     ((currentTickNs - previousTickNs).coerceAtLeast(0L) / 1_000_000_000f)
         .coerceAtMost(MaxRockerTickSeconds)
 
+/** The anchor label, shared by the free and the locked bar: one decimal, no unit ("0.6", "1.0", "3.0"). */
+internal fun zoomAnchorLabel(ratio: Float): String = String.format(Locale.US, "%.1f", ratio)
+
 /**
  * Optical-anchor buttons (0.5x / 1x / 2x ...) derived from the active descriptor anchors.
  * Tapping selects the nearest anchor. The active anchor is highlighted.
+ *
+ * With [locked] the anchors are the lens lock options: the one at [activeRatio] is the locked lens,
+ * highlighted with a small padlock, and tapping another one asks to lock to it instead of zooming.
  */
 @Composable
 fun ZoomAnchorBar(
@@ -71,25 +79,31 @@ fun ZoomAnchorBar(
     activeRatio: Float,
     onSelect: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    locked: Boolean = false,
 ) {
     if (anchors.isEmpty()) return
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(ZoomPanel)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .then(if (locked) Modifier.testTag("zoom-anchor-bar-locked") else Modifier),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         anchors.forEach { anchor ->
             val isActive = (activeRatio - anchor.ratio).let { it >= -0.05f && it <= 0.05f }
-            val label = String.format(Locale.US, "%.1f", anchor.ratio)
-            val description = stringResource(
-                if (isActive) com.librestatic.opencinecam.R.string.zoom_anchor_active
-                else com.librestatic.opencinecam.R.string.zoom_anchor,
-                anchor.ratio,
-            )
-            Box(
+            val label = zoomAnchorLabel(anchor.ratio)
+            val description = when {
+                locked && isActive -> stringResource(R.string.lens_lock_anchor_locked, "$label×")
+                locked -> stringResource(R.string.lens_lock_anchor, "$label×")
+                else -> stringResource(
+                    if (isActive) R.string.zoom_anchor_active else R.string.zoom_anchor,
+                    anchor.ratio,
+                )
+            }
+            val fg = if (isActive) Color.Black else Color.White
+            Row(
                 Modifier
                     .testTag("zoom-anchor-$label")
                     .semantics { contentDescription = description }
@@ -98,12 +112,14 @@ fun ZoomAnchorBar(
                     .background(if (isActive) ZoomAccent else Color.Transparent)
                     .border(1.dp, if (isActive) ZoomAccent else Color(0xFF4A5258), CircleShape)
                     .clickable { onSelect(anchor.ratio) }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center,
+                    .padding(horizontal = if (locked && isActive) 8.dp else 10.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (locked && isActive) CineGlyph(CineIcon.LOCK, fg, Modifier.size(11.dp))
                 Text(
                     label,
-                    color = if (isActive) Color.Black else Color.White,
+                    color = fg,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 )
