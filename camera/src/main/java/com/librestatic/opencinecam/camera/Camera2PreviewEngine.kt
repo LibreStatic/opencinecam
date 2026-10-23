@@ -156,7 +156,15 @@ data class Camera2CameraDescriptor(
     val nightExtension: NightExtensionCapability? = null,
     /** Qualcomm/Motorola auto frame rate (IQdynamicFPS) can be switched both ways; see [DynamicFps]. */
     val lowLightAutoFps: Boolean = false,
+    /** Set on the descriptor of a lens-locked session, built from the physical camera (PLAN-070); null otherwise. */
+    val lensLock: LensLockBinding? = null,
 ) {
+    /** The id the app knows this camera by: the logical id of a lens-locked session, else [cameraId]. */
+    val logicalCameraId: String get() = lensLock?.logicalId ?: cameraId
+
+    /** The id device-profile quirks resolve against; they are keyed by the logical id. */
+    val quirkCameraId: String get() = quirkCameraIdOf(cameraId, lensLock)
+
     /** The first focal length as a 35 mm equivalent; inferred from the sensor size, null without it. */
     val equivalentFocalLengthMm: Float? get() = focalLengthsMm.firstOrNull()?.let { equivalentFocalLengthMm(it, sensorSizeMm?.first, sensorSizeMm?.second) }
 
@@ -369,6 +377,17 @@ interface Camera2PreviewListener {
      * zoom and is never a discrepancy. Only on change, camera thread.
      */
     fun onActiveLens(physicalId: String?) = Unit
+    /**
+     * Once the session is configured: the lens-locked physical camera [physicalId] and its zoom
+     * range on the logical scale (anchor x physical range), or both null when the session is not
+     * lens-locked. While locked, [onZoomRangeAvailable] is not called. Camera thread.
+     */
+    fun onLensLock(physicalId: String?, uiZoomRange: ClosedFloatingPointRange<Float>?) = Unit
+    /**
+     * A lens lock was requested but the logical camera was opened instead; [reason] is one of
+     * [LensLockUnavailable]. Camera thread.
+     */
+    fun onLensLockUnavailable(physicalId: String, reason: String) = Unit
     /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
     fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
@@ -626,8 +645,11 @@ class Camera2PreviewEngine(
     private var logPipeline: OpenCineLogGpuPipeline? = null
         set(value) {
             field = value
-            lensCorrectionTable?.let { value?.setLensCorrection(it) }
-            lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
+            // The logical calibration never applies to a lens-locked session (PLAN-070).
+            if (activeDescriptor?.lensLock == null) {
+                lensCorrectionTable?.let { value?.setLensCorrection(it) }
+                lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
+            }
             calibrationReadback?.let { value?.setCalibrationReadback(it) }
             value?.setMonitoringOptions(monitoringOptions)
             value?.setFocusPeakingEnabled(focusPeakingEnabled)
@@ -645,7 +667,7 @@ class Camera2PreviewEngine(
     fun setLensCorrection(table: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable?) {
         lensCalibration = null
         lensCorrectionTable = table
-        logPipeline?.setLensCorrection(table)
+        logPipeline?.setLensCorrection(table.takeIf { activeDescriptor?.lensLock == null })
     }
 
     /**
@@ -655,7 +677,7 @@ class Camera2PreviewEngine(
     fun setLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
         lensCorrectionTable = null
         lensCalibration = set?.let { it to alignmentEnabled }
-        logPipeline?.setLensCalibration(set, alignmentEnabled)
+        logPipeline?.setLensCalibration(set.takeIf { activeDescriptor?.lensLock == null }, alignmentEnabled)
     }
 
     @Volatile private var photoLensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
@@ -681,6 +703,7 @@ class Camera2PreviewEngine(
     /** The lens correction plan for one compressed still, or null (with the reason logged). */
     private fun photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int):
         com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
+        if (owner.descriptor.lensLock != null) return null
         val (set, alignment) = photoLensCalibration ?: return null
         val physicalId = stillPhysicalId(owner)
         val resolution = com.librestatic.opencinecam.camera.calibration.PhotoLensCorrection.resolve(set, alignment, physicalId, width, height)
@@ -988,9 +1011,148 @@ class Camera2PreviewEngine(
     @Volatile private var lastLogRecordingEvidence: OpenCineLogRecordingEvidence? = null
     @Volatile private var lastRecordingLutEvidence: BakedLutEvidence? = null
 
-    fun descriptors(targetWidth: Int, targetHeight: Int): List<Camera2CameraDescriptor> =
-        manager.cameraIdList.mapNotNull { cameraId -> descriptor(cameraId, targetWidth, targetHeight) }
+    fun descriptors(targetWidth: Int, targetHeight: Int): List<Camera2CameraDescriptor> {
+        descriptorTarget = targetWidth to targetHeight
+        return manager.cameraIdList.mapNotNull { cameraId -> descriptor(cameraId, targetWidth, targetHeight) }
             .sortedWith(compareBy<Camera2CameraDescriptor> { lensOrder(it.lensFacing) }.thenBy { it.cameraId })
+    }
+
+    // ---- Lens lock (PLAN-070 slice 3, ADR-0036) ----
+
+    /** The target size the app's descriptors were built for; a lens-locked physical descriptor uses the same. */
+    @Volatile private var descriptorTarget: Pair<Int, Int>? = null
+    private val lensLockCandidateCache = java.util.concurrent.ConcurrentHashMap<String, List<LensLockCandidate>>()
+    private val physicalDescriptorCache = java.util.concurrent.ConcurrentHashMap<Triple<String, Int, Int>, java.util.Optional<Camera2CameraDescriptor>>()
+    /** The logical descriptor the app passed for the current lens-locked session; null when not locked. */
+    @Volatile private var lockedLogicalDescriptor: Camera2CameraDescriptor? = null
+    /**
+     * Set by a lens-locked start until its session is configured. The single fallback point: a
+     * failed physical open or configuration reopens the logical camera unlocked in the same
+     * generation. Slice 4 (GPU crop) replaces what it does. cameraExecutor only.
+     */
+    private var lensLockWithdraw: ((String) -> Unit)? = null
+
+    /**
+     * The lenses [logicalCameraId] can be locked to, sorted by anchor ratio: ids listed by its
+     * `getPhysicalCameraIds()` that face the same way and have a computable field of view. Empty for
+     * a camera that is not a logical multi-camera, or below API 28.
+     */
+    fun lensLockCandidates(logicalCameraId: String): List<LensLockCandidate> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return emptyList()
+        lensLockCandidateCache[logicalCameraId]?.let { return it }
+        val candidates = runCatching {
+            val logical = manager.getCameraCharacteristics(logicalCameraId)
+            val facing = logical.get(CameraCharacteristics.LENS_FACING)
+            val logicalFov = fovWidth(logical)
+            logical.physicalCameraIds.filter { it != logicalCameraId }.mapNotNull { id ->
+                val physical = runCatching { manager.getCameraCharacteristics(id) }.getOrNull() ?: return@mapNotNull null
+                if (physical.get(CameraCharacteristics.LENS_FACING) != facing) return@mapNotNull null
+                val anchor = lensAnchorRatio(logicalFov, fovWidth(physical)) ?: return@mapNotNull null
+                LensLockCandidate(
+                    physicalId = id,
+                    anchorRatio = anchor,
+                    focalMm = physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull() ?: 0f,
+                    physicalZoomRange = zoomRangeOf(physical) ?: (1f..1f),
+                )
+            }.sortedBy { it.anchorRatio }
+        }.getOrDefault(emptyList())
+        lensLockCandidateCache[logicalCameraId] = candidates
+        return candidates
+    }
+
+    private fun zoomRangeOf(c: CameraCharacteristics): ClosedFloatingPointRange<Float>? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.takeIf { it.lower < it.upper }?.let { return it.lower..it.upper }
+        }
+        return c.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)?.takeIf { it > 1f }?.let { 1f..it }
+    }
+
+    /** The physical camera's own descriptor for [binding], built for the app's target size; null when it cannot be. */
+    private fun physicalDescriptor(binding: LensLockBinding, logical: Camera2CameraDescriptor): Camera2CameraDescriptor? {
+        // ADR-0036: only an id the logical camera itself reports is ever opened.
+        if (lensLockCandidates(binding.logicalId).none { it.physicalId == binding.physicalId }) return null
+        val (width, height) = descriptorTarget ?: (logical.previewSize.width to logical.previewSize.height)
+        return physicalDescriptorCache.getOrPut(Triple(binding.physicalId, width, height)) {
+            java.util.Optional.ofNullable(descriptor(binding.physicalId, width, height))
+        }.orElse(null)?.copy(lensLock = binding)
+    }
+
+    private class LensLockPlan(
+        val descriptor: Camera2CameraDescriptor,
+        val videoProfile: Camera2VideoProfile?,
+        val logProfile: Camera2LogProfile?,
+        val stillSize: Size?,
+    )
+
+    /**
+     * Resolves a lens lock for one start: the physical descriptor and the requested profiles and
+     * still size mapped onto it, or null (reported as unavailable) when the lock cannot apply.
+     */
+    private fun lensLockPlan(
+        binding: LensLockBinding,
+        logical: Camera2CameraDescriptor,
+        listener: Camera2PreviewListener,
+        openCineLog: Boolean,
+        nightExtension: Boolean,
+        gpuPhotoPreview: Boolean,
+        videoProfile: Camera2VideoProfile?,
+        logProfile: Camera2LogProfile?,
+        stillFormat: StillPhotoFormat,
+        stillSize: Size?,
+        targetFps: Int,
+    ): LensLockPlan? {
+        fun refuse(reason: String): LensLockPlan? {
+            Log.i(TAG, "Lens lock on ${binding.physicalId} not applied ($reason); opening camera ${logical.cameraId}")
+            listener.onLensLockUnavailable(binding.physicalId, reason)
+            return null
+        }
+        val highSpeed = (!gpuPhotoPreview && videoProfile?.constrainedHighSpeed == true) ||
+            (openCineLog && logProfile?.constrainedHighSpeed == true)
+        if (highSpeed) return refuse(LensLockUnavailable.HIGH_SPEED)
+        if (nightExtensionEngaged(nightExtension, Build.VERSION.SDK_INT, logical.nightExtension) && !openCineLog &&
+            videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG) return refuse(LensLockUnavailable.NIGHT)
+        val physical = physicalDescriptor(binding, logical) ?: return refuse(LensLockUnavailable.DESCRIPTOR)
+        if (stillFormat == StillPhotoFormat.HEIC && physical.heicSize == null) return refuse(LensLockUnavailable.FORMAT)
+        if (openCineLog && !physical.supportsOpenCineLog) return refuse(LensLockUnavailable.LOG)
+        val mappedVideo = videoProfile?.let { requested ->
+            val candidates = physical.videoProfiles.filterNot { it.constrainedHighSpeed }
+            LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
+                candidates.map { Triple(it.size.width, it.size.height, it.fps) })?.let(candidates::get)
+        }
+        val mappedLog = if (!openCineLog) null else {
+            val regular = physical.logProfiles.filterNot { it.constrainedHighSpeed }
+            val fps = logProfile?.fps ?: targetFps
+            logProfile?.let { requested ->
+                val candidates = regular.filter { it.sourcePath == requested.sourcePath }
+                LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
+                    candidates.map { Triple(it.size.width, it.size.height, it.fps) }, anyRate = false)?.let(candidates::get)
+            } ?: preferredLogProfile(regular.filter { it.fps == fps }, fps) ?: preferredLogProfile(regular, fps)
+        }
+        val mappedStill = stillSize?.let { requested ->
+            val sizes = if (stillFormat == StillPhotoFormat.HEIC) physical.heicSizes else physical.jpegSizes
+            LensLockMapping.stillSize(requested.width, requested.height, sizes.map { it.width to it.height })
+                ?.let { (w, h) -> Size(w, h) }
+        }
+        Log.i(TAG, "Lens lock: camera ${logical.cameraId} opens physical ${binding.physicalId} (anchor ${binding.anchorRatio}); " +
+            "video ${videoProfile?.let { "${it.size}@${it.fps}" }} -> ${mappedVideo?.let { "${it.size}@${it.fps}" }}, " +
+            "log ${logProfile?.let { "${it.size}@${it.fps}" }} -> ${mappedLog?.let { "${it.size}@${it.fps}" }}, still $stillSize -> $mappedStill")
+        return LensLockPlan(physical, mappedVideo, mappedLog, mappedStill)
+    }
+
+    /** Hands a failed lens-locked open or configuration to the fallback; false when the session is not a pending lock. */
+    private fun withdrawLensLock(reason: String): Boolean {
+        val withdraw = lensLockWithdraw ?: return false
+        withdraw(reason)
+        return true
+    }
+
+    /** The descriptor the app knows: the logical one for a lens-locked session. */
+    private fun appDescriptor(descriptor: Camera2CameraDescriptor): Camera2CameraDescriptor =
+        if (descriptor.lensLock != null) lockedLogicalDescriptor ?: descriptor else descriptor
+
+    /** A physical zoom ratio on the logical scale while lens-locked. */
+    private fun uiZoom(physical: Float): Float =
+        activeDescriptor?.lensLock?.let { LensLockZoom.toUi(physical, it.anchorRatio) } ?: physical
 
     fun preferredDescriptor(targetWidth: Int, targetHeight: Int): Camera2CameraDescriptor? =
         descriptors(targetWidth, targetHeight).firstOrNull()
@@ -1026,6 +1188,7 @@ class Camera2PreviewEngine(
         nightExtension: Boolean = false,
         lowLightAutoFps: Boolean = false,
         fpsLock: Boolean = false,
+        lensLock: LensLockBinding? = null,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -1046,16 +1209,48 @@ class Camera2PreviewEngine(
             listener.onAfLockChanged(LockState.OFF)
             // A listener that joins while the scopes are suspended (or missed a resume) learns it once.
             notifyAnalysisSuspension(listener)
-            if (requestedFocusCameraId != descriptor.cameraId) {
+            // A lock for another camera is ignored. Manual focus distances belong to the lens that is opened.
+            val requestedLock = lensLock?.takeIf { it.logicalId == descriptor.cameraId }
+            if (requestedFocusCameraId != (requestedLock?.physicalId ?: descriptor.cameraId)) {
                 requestedFocusDiopters = null
                 requestedFocusCameraId = null
             }
             listener.onFocusSelectionChanged(requestedFocusDiopters)
+            // The app's per-camera state stays on the logical camera, locked or not.
             listener.onOpening(descriptor)
+            // The lock plan is resolved once per start; a failed physical open or configuration
+            // withdraws it, and the start runs again on the logical camera in the same generation.
+            var lockResolved = requestedLock == null
+            var lockPlan: LensLockPlan? = null
             lateinit var start: Runnable
             start = Runnable {
                 if (disposed.get() || currentGeneration != generation || !surface.isValid) return@Runnable
                 this.listener = listener
+                if (!lockResolved) {
+                    lockResolved = true
+                    lockPlan = lensLockPlan(requestedLock!!, descriptor, listener, openCineLog, nightExtension,
+                        gpuPhotoPreview, videoProfile, logProfile, stillFormat, stillSize, targetFps)
+                }
+                val plan = lockPlan
+                val logicalDescriptor = descriptor
+                // From here the session runs on the physical descriptor when the lock applies.
+                @Suppress("NAME_SHADOWING") val descriptor = plan?.descriptor ?: logicalDescriptor
+                @Suppress("NAME_SHADOWING") val videoProfile = if (plan != null) plan.videoProfile else videoProfile
+                @Suppress("NAME_SHADOWING") val logProfile = if (plan != null) plan.logProfile else logProfile
+                @Suppress("NAME_SHADOWING") val stillSize = if (plan != null) plan.stillSize else stillSize
+                this.lockedLogicalDescriptor = logicalDescriptor.takeIf { plan != null }
+                this.lensLockWithdraw = if (plan == null) null else { reason ->
+                    if (!disposed.get() && currentGeneration == generation && lockPlan === plan) {
+                        Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} withdrawn ($reason); opening camera ${logicalDescriptor.cameraId}")
+                        lensLockWithdraw = null
+                        lockPlan = null
+                        listener.onLensLockUnavailable(plan.descriptor.cameraId, reason)
+                        closeResources()
+                        this.listener = listener
+                        pendingPreviewStart = start
+                        runPendingPreviewStart()
+                    }
+                }
                 if (stillFormat == StillPhotoFormat.HEIC && descriptor.heicSize == null) {
                     listener.onFailure("still-format-unavailable", "This camera does not advertise a native HEIC output.", true)
                     return@Runnable
@@ -1089,7 +1284,7 @@ class Camera2PreviewEngine(
                     Camera2VideoProfile(it.size, it.fps, true)
                 } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
                 val cameraIdToOpen = if (highSpeedProfile != null) {
-                    if (deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
+                    if (deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
                         preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
                             ?: descriptor.cameraId
                     } else descriptor.cameraId
@@ -1206,6 +1401,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
                         }
@@ -1223,6 +1419,7 @@ class Camera2PreviewEngine(
                     }
                 } catch (failure: Exception) {
                     cameraOpening = false
+                    if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return@Runnable
                     listener.onFailure("camera-open-exception", failure.message ?: "Camera open failed.", true)
                     finishCloseIfIdle()
                 }
@@ -1431,6 +1628,7 @@ class Camera2PreviewEngine(
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
         val input = pipeline.cameraInputSurface
         fun sessionException(failure: Throwable) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
@@ -1459,12 +1657,13 @@ class Camera2PreviewEngine(
                         } else configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, callback)
                         notifyZoomRange()
                     } catch (failure: Throwable) {
+                        if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                         listener?.onFailure("video-preview-gpu-request-failed", failure.message ?: "GPU preview request failed.", true)
                     }
                 }
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
-                    if (currentGeneration == generation) listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
+                    if (currentGeneration == generation && !withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
                 }
             },
         )
@@ -2605,13 +2804,13 @@ class Camera2PreviewEngine(
         val minDistance = descriptor.minimumFocusDistance ?: return false
         if (!diopters.isFinite() || label !in setOf("A", "B", "C", "D") || !minDistance.isFinite() || minDistance <= 0f) return false
         val clamped = diopters.coerceIn(0f, minDistance)
-        perCameraFocusMarks.compute(descriptor.cameraId) { _, marks -> (marks ?: emptyMap()) + (label to clamped) }
+        perCameraFocusMarks.compute(descriptor.logicalCameraId) { _, marks -> (marks ?: emptyMap()) + (label to clamped) }
         return true
     }
 
     /** Removes a single focus mark. Returns false when the mark does not exist. */
     fun clearFocusMark(label: String): Boolean {
-        val cameraId = activeDescriptor?.cameraId ?: return false
+        val cameraId = activeDescriptor?.logicalCameraId ?: return false
         var removed = false
         perCameraFocusMarks.computeIfPresent(cameraId) { _, marks ->
             removed = label in marks
@@ -2622,7 +2821,7 @@ class Camera2PreviewEngine(
 
     /** Returns the focus marks saved for the active camera, or an empty map when none exist. */
     fun getFocusMarks(): Map<String, Float> {
-        val cameraId = activeDescriptor?.cameraId ?: return emptyMap()
+        val cameraId = activeDescriptor?.logicalCameraId ?: return emptyMap()
         return perCameraFocusMarks[cameraId] ?: emptyMap()
     }
 
@@ -3275,9 +3474,11 @@ class Camera2PreviewEngine(
     fun setZoomRatio(ratio: Float): Boolean {
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
+        // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
+        val target = descriptor.lensLock?.let { LensLockZoom.toPhysical(ratio, it.anchorRatio, range) } ?: ratio
         cameraExecutor.execute {
             val previousRatio = requestedZoomRatio
-            requestedZoomRatio = ZoomMath.coerce(ratio, range)
+            requestedZoomRatio = ZoomMath.coerce(target, range)
             if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
                 zoomOverrideArmed = true
                 lastZoomChangeAtMs = SystemClock.elapsedRealtime()
@@ -3289,7 +3490,7 @@ class Camera2PreviewEngine(
         return true
     }
 
-    /** Current effective (last-accepted) zoom ratio, or 1f when no session is active. */
+    /** Current effective (last-accepted) zoom ratio, or 1f when no session is active; on the logical scale while lens-locked. */
     fun currentEffectiveZoomRatio(): Float = effectiveZoomRatio
 
     private fun zoomOverrideEligible(descriptor: Camera2CameraDescriptor): Boolean =
@@ -3368,7 +3569,7 @@ class Camera2PreviewEngine(
         } catch (failure: Throwable) {
             if (isZoomRejection(failure, zoomChanged = requestedZoomRatio != lastAcceptedZoomRatio)) {
                 requestedZoomRatio = lastAcceptedZoomRatio
-                listener?.onZoomRejected(requestedZoomRatio, lastAcceptedZoomRatio)
+                listener?.onZoomRejected(uiZoom(requestedZoomRatio), uiZoom(lastAcceptedZoomRatio))
             } else {
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
@@ -3407,7 +3608,8 @@ class Camera2PreviewEngine(
 
     /** Tells the listener which physical lens serves the logical preview streams, when that changes. */
     private fun reportActiveLens(result: TotalCaptureResult) {
-        val active = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // A direct physical open carries no active-physical key: the locked lens is the active one.
+        val active = activeDescriptor?.lensLock?.physicalId ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
         } else null
         val report = true to active
@@ -3444,15 +3646,26 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION),
             )
         } ?: return
-        val coerced = ZoomMath.coerce(ratio, range)
+        val coerced = descriptor.lensLock?.let { LensLockZoom.toUi(ZoomMath.coerce(ratio, range), it.anchorRatio) }
+            ?: ZoomMath.coerce(ratio, range)
         effectiveZoomRatio = coerced
         listener?.onZoomEffective(coerced)
     }
 
     private fun notifyZoomRange() {
         val descriptor = activeDescriptor ?: return
-        val range = descriptor.effectiveZoomRange ?: return
-        listener?.onZoomRangeAvailable(range.start, range.endInclusive, descriptor.opticalAnchors)
+        val lock = descriptor.lensLock
+        if (lock != null) {
+            // The locked session is configured: later failures are ordinary failures, not a fallback.
+            lensLockWithdraw = null
+            val range = descriptor.effectiveZoomRange ?: (1f..1f)
+            listener?.onLensLock(lock.physicalId, LensLockZoom.uiRange(lock.anchorRatio, range))
+            return
+        }
+        descriptor.effectiveZoomRange?.let { range ->
+            listener?.onZoomRangeAvailable(range.start, range.endInclusive, descriptor.opticalAnchors)
+        }
+        listener?.onLensLock(null, null)
     }
 
     fun startVideo(
@@ -4253,7 +4466,7 @@ class Camera2PreviewEngine(
                         repeatingBuilder = builder
                         val burst = configured.createHighSpeedRequestList(builder.build())
                         configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
-                        listener?.onPreviewStarted(descriptor)
+                        listener?.onPreviewStarted(appDescriptor(descriptor))
                         notifyZoomRange()
                     } catch (failure: Throwable) {
                         listener?.onFailure("high-speed-preview-request-failed", failure.message ?: "High-speed preview request failed.", true)
@@ -4405,6 +4618,7 @@ class Camera2PreviewEngine(
             return
         }
         fun sessionException(failure: Throwable) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("log-session-exception", failure.message ?: "The HLG10 OCLog graph could not be created.", false)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
@@ -4438,6 +4652,7 @@ class Camera2PreviewEngine(
                         )
                         notifyZoomRange()
                     } catch (failure: Throwable) {
+                        if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                         listener?.onFailure("log-request-failed", failure.message ?: "The HLG10 source request failed.", false)
                     }
                 }
@@ -4445,6 +4660,7 @@ class Camera2PreviewEngine(
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
                     if (currentGeneration != generation || !logPreviewEnabled) return
+                    if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                     listener?.onFailure("log-session-failed", "CameraService rejected the HLG10 OCLog graph.", false)
                 }
             },
@@ -4556,7 +4772,7 @@ class Camera2PreviewEngine(
         val photoPipeline = logPipeline.takeIf { gpuPhotoPreviewEnabled }
         if (gpuPhotoPreviewEnabled) check(photoPipeline != null && surface === photoPipeline.cameraInputSurface)
         val previewOutput = sessionOutput(surface) { failure ->
-            listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+            if (!withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
         } ?: return
         applyStreamUse(previewOutput, descriptor, StreamRole.PREVIEW)
         val outputs = mutableListOf(previewOutput)
@@ -4734,7 +4950,7 @@ class Camera2PreviewEngine(
                     physicalStillFallbackTaken = true
                     retireGraphReaders()
                     configureSession(device, descriptor, surface, currentGeneration)
-                } else {
+                } else if (!withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) {
                     listener?.onFailure(code, message, true)
                 }
             },
@@ -4802,6 +5018,7 @@ class Camera2PreviewEngine(
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, true))
             notifyZoomRange()
         } catch (failure: Exception) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("preview-request-failed", failure.message ?: "Camera preview request failed.", true)
         }
     }
@@ -4814,6 +5031,8 @@ class Camera2PreviewEngine(
      * no-op without the vendor request key and an advertised boost mode.
      */
     private fun driveInstantAec(armedSession: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+        // A lens-locked session never switches lens, and its vendor keys belong to the physical camera.
+        if (activeDescriptor?.lensLock != null) return
         runCatching {
             val builder = repeatingBuilder ?: return
             val eligible = InstantAec.eligible(
@@ -4919,7 +5138,7 @@ class Camera2PreviewEngine(
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.
                         pendingPreviewStartedReceipt = null
-                        listener?.onPreviewStarted(receipt.descriptor)
+                        listener?.onPreviewStarted(appDescriptor(receipt.descriptor))
                     }
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
@@ -5938,7 +6157,7 @@ class Camera2PreviewEngine(
      */
     private fun applyMotorolaHighSpeedSessionControls(builder: CaptureRequest.Builder) {
         val descriptor = activeDescriptor ?: return
-        if (!deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
+        if (!deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
         val keys = runCatching {
             manager.getCameraCharacteristics(descriptor.cameraId).availableCaptureRequestKeys
         }.getOrNull().orEmpty()
@@ -6434,7 +6653,8 @@ class Camera2PreviewEngine(
             logicalSizes.map { it.width to it.height },
             physicalSizes.mapValues { entry -> entry.value.map { it.width to it.height } },
         )
-        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken })
+        // A lens-locked session already runs on one physical camera: no physical still routing (OCC-PLAN-069).
+        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken && descriptor.lensLock == null })
     }
 
     private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? = compressedStillPlan(descriptor)?.size
@@ -6505,6 +6725,8 @@ class Camera2PreviewEngine(
         activeLogProfile = null
         previewSurface = null
         activeDescriptor = null
+        lockedLogicalDescriptor = null
+        lensLockWithdraw = null
         requestedAeCompensationIndex = null
         requestedWhiteBalance = WhiteBalanceSelection.Auto
         requestedZoomRatio = 1f
