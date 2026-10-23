@@ -1023,6 +1023,7 @@
     <string name="lens_cal_phase_measuring">Measuring</string>
     <string name="lens_cal_phase_solving">Solving</string>
     <string name="lens_cal_keep_still">Keep the phone still</string>
+    <string name="lens_cal_hold_short">Calibrating</string>
     <string name="lens_cal_result_title">Calibration ready</string>
     <string name="lens_cal_save">Save</string>
     <string name="lens_cal_discard">Discard</string>

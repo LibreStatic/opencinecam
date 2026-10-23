@@ -66,6 +66,8 @@ private val BusyStillModes = setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, Cap
 internal val CameraUiState.captureHold: CaptureHold?
     get() = when {
         !captureControlsLocked -> null
+        // A lens calibration run owns the camera like a save does: nothing to unlock.
+        lensCalibrationRunning -> CaptureHold.BUSY
         stillCapturePending || (phase == CameraUiPhase.CAPTURING && selectedMode in BusyStillModes) -> CaptureHold.BUSY
         else -> CaptureHold.OPERATOR
     }
@@ -127,7 +129,8 @@ internal fun CaptureHeldSlots(
             when {
                 target == null -> Unit
                 style == HoldStyle.PILL -> CaptureHoldPill(target, title, onUnlock, Modifier.fillMaxSize())
-                else -> CaptureHoldStrip(target, title, onUnlock, Modifier.fillMaxSize(), nightPercent)
+                else -> CaptureHoldStrip(target, title, onUnlock, Modifier.fillMaxSize(), nightPercent,
+                    hintRes = if (state.lensCalibrationRunning) R.string.lens_cal_keep_still else null)
             }
         }
     }
@@ -157,7 +160,12 @@ internal fun CaptureDimmedWhileHeld(state: CameraUiState, modifier: Modifier = M
 
 private const val BUSY_REVEAL_DELAY_MS = 150L
 
-private fun holdTitle(state: CameraUiState, style: HoldStyle): Int = when (state.captureHold) {
+private fun holdTitle(state: CameraUiState, style: HoldStyle): Int = when {
+    state.lensCalibrationRunning -> if (style == HoldStyle.PILL) R.string.lens_cal_hold_short else R.string.lens_cal_card_title
+    else -> holdTitleForCapture(state, style)
+}
+
+private fun holdTitleForCapture(state: CameraUiState, style: HoldStyle): Int = when (state.captureHold) {
     CaptureHold.OPERATOR -> if (style == HoldStyle.PILL) R.string.capture_unlock else R.string.capture_hold_operator_title
     else -> when (state.selectedMode) {
         CaptureMode.PHOTO -> when {
@@ -184,10 +192,10 @@ private fun HoldIndicator(busy: Boolean, size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> Unit, modifier: Modifier, percent: Int? = null) {
+private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> Unit, modifier: Modifier, percent: Int? = null, hintRes: Int? = null) {
     val colors = MaterialTheme.colorScheme
     val busy = hold == CaptureHold.BUSY
-    val hint = stringResource(if (busy) R.string.capture_hold_busy_hint else R.string.capture_hold_operator_hint)
+    val hint = stringResource(hintRes ?: if (busy) R.string.capture_hold_busy_hint else R.string.capture_hold_operator_hint)
     val accent = colors.primary
     Box(
         modifier

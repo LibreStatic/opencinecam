@@ -1028,6 +1028,10 @@ class CaptureService : Service() {
     private val calibrationCaptureTimeoutMs = 10_000L
     private val calibrationModeSwitchGraceMs = 2_000L
     private val calibrationQueueSize = 8
+    /** How long a start waits for the viewfinder to attach and preview; 0 when no start is waiting. Main thread. */
+    private var calibrationStartDeadlineMs = 0L
+    private val calibrationStartWaitMs = 10_000L
+    private val calibrationStartRetry = Runnable { localBinder.beginLensCalibration() }
     private val illuminantMismatchLimit = 0.15f
 
     private fun calibrationLensesOf(descriptor: Camera2CameraDescriptor?): List<com.librestatic.opencinecam.camera.calibration.CalibrationLens> =
@@ -2350,6 +2354,32 @@ class CaptureService : Service() {
         /** Starts a calibration run on the selected logical camera; the capture screen must be showing. */
         fun startLensCalibration() {
             if (serviceDestroyed || calibrationRun != null) return
+            calibrationStartDeadlineMs = android.os.SystemClock.elapsedRealtime() + calibrationStartWaitMs
+            mainHandler.removeCallbacks(calibrationStartRetry)
+            beginLensCalibration()
+        }
+
+        /** Stops a start that is still waiting for the viewfinder, or the run in progress. */
+        fun cancelLensCalibration() {
+            if (calibrationStartDeadlineMs != 0L) {
+                calibrationStartDeadlineMs = 0L
+                mainHandler.removeCallbacks(calibrationStartRetry)
+                lensCalibrationState.update {
+                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                }
+            }
+            val run = calibrationRun ?: return
+            run.cancelled = true
+            run.runner?.cancel()
+        }
+
+        /**
+         * The start proper. The page that asks for a run hands over to the capture screen in the same
+         * gesture, so the viewfinder is usually still attaching: a camera that is not yet previewing
+         * (or has no surface) is waited for, showing PREPARING, until [calibrationStartDeadlineMs].
+         */
+        internal fun beginLensCalibration() {
+            if (serviceDestroyed || calibrationRun != null || calibrationStartDeadlineMs == 0L) return
             val current = cameraState.value
             val cameraId = current.selectedCameraId
             val lenses = calibrationLensesOf(current.descriptor)
@@ -2361,6 +2391,11 @@ class CaptureService : Service() {
                 }
             }
             if (cameraId == null || !current.zoomSupported || lenses.size < 2) {
+                if (current.descriptor == null && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
+                    mainHandler.postDelayed(calibrationStartRetry, 250L)
+                    return
+                }
+                calibrationStartDeadlineMs = 0L
                 refuse(com.librestatic.opencinecam.LensCalibrationFailure.NO_MULTI_CAMERA)
                 return
             }
@@ -2368,9 +2403,20 @@ class CaptureService : Service() {
                 !current.captureControlsLocked && stillOwner.get() == null && transferCapture.get() == null && !recordingWbPreparing &&
                 captureCountdown.active == null
             if (!idle || attachedPreviewSurface?.isValid != true) {
+                val waiting = current.phase !in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING) && !current.structuralSettingsFrozen
+                if (waiting && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
+                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
+                        it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
+                            referencePhysicalId = null, lenses = emptyList(), failure = null)
+                    }
+                    mainHandler.postDelayed(calibrationStartRetry, 250L)
+                    return
+                }
+                calibrationStartDeadlineMs = 0L
                 refuse(com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE)
                 return
             }
+            calibrationStartDeadlineMs = 0L
             val run = CalibrationRun(CalibrationRestore(cameraId, current.selectedMode, current.zoomRatio))
             calibrationRun = run
             calibrationPending = null
@@ -2402,12 +2448,6 @@ class CaptureService : Service() {
             run.thread = Thread({
                 runCalibration(run, lenses, mode, current.zoomMinRatio..current.zoomMaxRatio, openedBefore, switched)
             }, "lens-calibration").also { it.isDaemon = true; it.start() }
-        }
-
-        fun cancelLensCalibration() {
-            val run = calibrationRun ?: return
-            run.cancelled = true
-            run.runner?.cancel()
         }
 
         /** Saves the run's result for this build and camera, and applies it when the correction is on. */
