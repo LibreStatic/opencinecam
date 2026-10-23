@@ -975,8 +975,10 @@ class CaptureService : Service() {
     // ---- Lens lock (PLAN-070 slice 3a, ADR-0036) ----
 
     /**
-     * The engine did not apply the lock of the session being opened (refused, or the physical open
-     * or configuration failed): that session runs on the logical camera. Reset by every opening.
+     * The engine refused the lock of the session being opened (high speed, night, or a lens it
+     * cannot serve at all): that session runs on the logical camera unlocked. A failed physical
+     * open or configuration is not a fallback here: the engine serves it by the GPU crop
+     * (`onLensLockCrop`), which still counts as a locked session. Reset by every opening.
      */
     @Volatile private var lensLockFallback = false
 
@@ -1007,15 +1009,17 @@ class CaptureService : Service() {
     private fun lensLockedSession(cameraId: String?): Boolean = !lensLockFallback && currentLensLockBinding(cameraId) != null
 
     /**
-     * Ends a direct-physical route: puts back the logical camera's zoom range and anchors that a
-     * locked session replaced. A no-op when no lock was being served.
+     * Ends a direct-physical or GPU-crop route: puts back the logical camera's zoom range and anchors
+     * that a locked session replaced, and drops the switched-lens warning. A no-op when no lock was
+     * being served.
      */
     private fun clearLensLockRoute() {
         cameraState.update { state ->
-            if (state.lensLock.route == null) return@update state
+            if (state.lensLock.route == null && !state.lensLock.lensSwitchedWarning) return@update state
+            if (state.lensLock.route == null) return@update state.copy(lensLock = state.lensLock.copy(lensSwitchedWarning = false))
             val range = state.descriptor?.effectiveZoomRange
             state.copy(
-                lensLock = state.lensLock.copy(route = null),
+                lensLock = state.lensLock.copy(route = null, lensSwitchedWarning = false),
                 zoomMinRatio = range?.start ?: state.zoomMinRatio,
                 zoomMaxRatio = range?.endInclusive ?: state.zoomMaxRatio,
                 zoomSupported = range?.let { it.start < it.endInclusive } ?: state.zoomSupported,
@@ -1031,7 +1035,8 @@ class CaptureService : Service() {
         val locked = cameraId?.let { settings.lensLock[it] }?.takeIf { id -> options.size >= 2 && options.any { it.physicalId == id } }
         cameraState.update { state ->
             val route = state.lensLock.route.takeIf { locked != null && state.lensLock.lockedPhysicalId == locked }
-            val next = state.lensLock.copy(options = options, lockedPhysicalId = locked, route = route)
+            val next = state.lensLock.copy(options = options, lockedPhysicalId = locked, route = route,
+                lensSwitchedWarning = lensLockSwitchedWarning(state.lensLock.lensSwitchedWarning, route))
             if (next == state.lensLock) state else state.copy(lensLock = next)
         }
     }
@@ -1345,7 +1350,10 @@ class CaptureService : Service() {
         // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
         // A lens correction shows only on the GPU path.
-        (photoPreviewMode(mode) && (currentOperatorLut != null || lensCalibrationFor(cameraState.value.selectedCameraId) != null)))
+        (photoPreviewMode(mode) && (currentOperatorLut != null || lensCalibrationFor(cameraState.value.selectedCameraId) != null)) ||
+        // The lens lock's GPU crop zooms only on the GPU path. The restart this causes reopens on
+        // the same route: the engine remembers the failed lens and the route survives onOpening.
+        lensLockCropNeedsGpuViewfinder(photoPreviewMode(mode), cameraState.value.lensLock.route))
 
     /** Night photo applies to PHOTO only, on a camera that offers the extension (API 31+). */
     private fun nightExtensionActive(mode: CaptureMode = cameraState.value.selectedMode): Boolean {
@@ -2344,12 +2352,37 @@ class CaptureService : Service() {
                 clearLensLockRoute()
                 return
             }
-            // The locked lens' own range on the logical scale; the anchors are the lock options.
+            serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL)
+        }
+
+        override fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) {
+            android.util.Log.i("CaptureService", "Lens lock on $physicalId served by the GPU crop over $uiZoomRange")
+            // The lock is served, so this is not a fallback: the logical calibration stays off.
+            lensLockFallback = false
+            serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.GPU_CROP)
+            // Photo previews straight to the window by default; the crop needs the GPU viewfinder.
+            mainHandler.post {
+                if (cameraState.value.lensLock.route != com.librestatic.opencinecam.LensLockRoute.GPU_CROP ||
+                    cameraState.value.structuralSettingsFrozen || previewEngine.usesGpuViewfinder() || !desiredGpuViewfinder()) return@post
+                attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+            }
+        }
+
+        override fun onLensLockSwitched(switched: Boolean) {
+            cameraState.update { state ->
+                val warning = lensLockSwitchedWarning(switched, state.lensLock.route)
+                if (state.lensLock.lensSwitchedWarning == warning) state
+                else state.copy(lensLock = state.lensLock.copy(lensSwitchedWarning = warning))
+            }
+        }
+
+        /** Publishes a served lock: the locked lens' own range on the logical scale; the anchors are the lock options. */
+        private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.LensLockRoute) {
             refreshLensLockState()
             cameraState.update { state ->
                 val anchors = state.lensLock.options.map { ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }
                 state.copy(
-                    lensLock = state.lensLock.copy(lockedPhysicalId = physicalId, route = com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL),
+                    lensLock = state.lensLock.copy(lockedPhysicalId = physicalId, route = route, lensSwitchedWarning = false),
                     zoomMinRatio = uiZoomRange.start,
                     zoomMaxRatio = uiZoomRange.endInclusive,
                     opticalAnchors = anchors,
@@ -3560,8 +3593,8 @@ class CaptureService : Service() {
          * loses the physical sizes and the session falls back to logical ones on its own.
          */
         private fun rebuildGraphWhenPhysicalStillZoomWindowCrosses(previous: CameraUiState, ratio: Float) {
-            // A lens-locked session has no physical still routing and never switches lens.
-            if (previous.lensLock.route == com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL) return
+            // A lens-locked session (direct or GPU crop, whose HAL zoom is pinned) has no physical still routing.
+            if (lensLockSkipsStillZoomRebuild(previous.lensLock.route)) return
             if ((previous.zoomRatio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW) ==
                 (ratio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW)
             ) return

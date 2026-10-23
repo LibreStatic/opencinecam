@@ -15,9 +15,14 @@ internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection,
     quality: Int, checkRunning: () -> Unit): StillImagePayload =
     cropPhotoAspectJpeg(bytes, aspect, desiredOrientationDegrees, quality, null, checkRunning)
 
-/** With a [lens] plan the decoded sensor-grid pixels are lens-corrected first, then oriented and cropped. */
+/**
+ * With a [lens] plan the decoded sensor-grid pixels are lens-corrected first, then oriented and cropped.
+ * A [zoomCrop] above 1 (the lens lock's GPU-crop route) narrows the frame about its centre before the
+ * aspect crop, without upscaling.
+ */
 internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection, desiredOrientationDegrees: Int,
-    quality: Int, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?, checkRunning: () -> Unit): StillImagePayload {
+    quality: Int, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?, checkRunning: () -> Unit,
+    zoomCrop: Float = 1f): StillImagePayload {
     require(aspect.enabled && desiredOrientationDegrees in setOf(0, 90, 180, 270) && quality in 1..100)
     require(bytes.isNotEmpty() && bytes.size <= PhotoAspectBounds.MAX_ENCODED_BYTES)
     checkRunning()
@@ -65,7 +70,7 @@ internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection,
         }
         val oriented = own(Bitmap.createBitmap(source, 0, 0, source.width, source.height, transform, false))
         retainOnly(oriented)
-        val report = aspect.appliedReport(oriented.width, oriented.height)
+        val report = aspect.appliedReport(oriented.width, oriented.height, zoomCrop)
         checkRunning()
         val crop = report.crop
         val cropped = own(Bitmap.createBitmap(oriented, crop.left, crop.top, crop.width, crop.height))

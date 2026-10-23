@@ -485,6 +485,23 @@ class OpenCineLogGpuPipeline(
         setLensCorrection(LensCorrectionTable.build(set, alignmentEnabled, size.width.toFloat() / size.height.coerceAtLeast(1)))
     }
 
+    // Lens lock GPU crop (PLAN-070 slice 4). Written from any thread, read on the GL thread per draw.
+    @Volatile private var cropZoom = 1f
+    /** GL thread only. */
+    private val cropUvMatrix = FloatArray(16)
+    private val cropUvScratch = FloatArray(16)
+
+    /**
+     * Crops every output about its centre by [factor] (1 = none): the lens lock's GPU-crop route
+     * zooms here while the HAL zoom stays pinned. Only the uploaded texture matrix changes
+     * (`T x C`, after the lens alignment `T x A x C`), never the shader, so the sidecar
+     * `transformSha256` is unaffected. Preview, subject windows, the encoder and the scope/peaking
+     * analysis readback all see the crop; the calibration readback does not.
+     */
+    fun setCropZoom(factor: Float) {
+        cropZoom = if (factor.isFinite() && factor > 1f) factor else 1f
+    }
+
     /** Records which physical camera produced the frame with [timestampNs] (the sensor timestamp). */
     fun notePhysicalForTimestamp(timestampNs: Long, physicalId: String?) = lensTimeline.note(timestampNs, physicalId)
 
@@ -1534,16 +1551,22 @@ class OpenCineLogGpuPipeline(
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
         val lens = appliedLens
+        // The lens lock crop acts first on the output UV, so it composes after any alignment.
+        fun uploadTextureMatrix(matrix: FloatArray) {
+            val zoom = cropZoom
+            val uploaded = if (zoom > 1f) multiplyColumnMajor4(matrix, LensLockCrop.uvMatrix(zoom, cropUvMatrix), cropUvScratch) else matrix
+            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, uploaded, 0)
+        }
         if (lens != null) {
             // The alignment acts on the output-space UV before the SurfaceTexture transform: T * A.
             val entry = if (lensCorrected) frameLensEntry ?: lens.defaultEntry else lens.identityEntry
             multiplyColumnMajor4(textureMatrix, entry.uvMatrix, lensUvScratch)
-            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, lensUvScratch, 0)
+            uploadTextureMatrix(lensUvScratch)
             GLES30.glUniform1f(GLES30.glGetUniformLocation(selectedProgram, "uLensEv"), entry.evOffset)
             GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensMatrix"), 1, false, entry.colorMatrix, 0)
             GLES30.glUniform3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensGains"), 1, entry.gains, 0)
         } else {
-            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
+            uploadTextureMatrix(textureMatrix)
         }
         GLES30.glUniform1i(location("uOutputMode", outputModeLocation), outputMode)
         // Monitors, scopes and the encoder see the same scaled light; a take freezes its gain.

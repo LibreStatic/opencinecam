@@ -388,6 +388,18 @@ interface Camera2PreviewListener {
      * [LensLockUnavailable]. Camera thread.
      */
     fun onLensLockUnavailable(physicalId: String, reason: String) = Unit
+    /**
+     * Once the session is configured on the lens lock's GPU-crop route (PLAN-070 slice 4): the
+     * logical camera runs with its zoom pinned at [physicalId]'s anchor and zooms by a GPU crop over
+     * [uiZoomRange], the same logical-scale range as the direct route. Replaces [onLensLock] and
+     * [onZoomRangeAvailable] for that session; [onLensLockUnavailable] is not called. Camera thread.
+     */
+    fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) = Unit
+    /**
+     * On the GPU-crop route, the HAL's active physical camera left (true) or came back to (false)
+     * the locked lens, debounced over [LensSwitchDebounce.DEFAULT_THRESHOLD] results. Camera thread.
+     */
+    fun onLensLockSwitched(switched: Boolean) = Unit
     /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
     fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
@@ -511,6 +523,8 @@ class Camera2PreviewEngine(
         val aspect: PhotoAspectSelection = PhotoAspectSelection(),
         val burst: BurstRequest? = null,
         val zeroShutterLag: Boolean = false,
+        /** The lens lock's GPU crop at the shutter (PLAN-070 slice 4); null off that route. */
+        val lensCropFactor: Float? = null,
     ) {
         val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
         /** Engine admission time, the closest the camera layer gets to the shutter press. */
@@ -646,11 +660,12 @@ class Camera2PreviewEngine(
         set(value) {
             field = value
             // The logical calibration never applies to a lens-locked session (PLAN-070).
-            if (activeDescriptor?.lensLock == null) {
+            if (!lensLockEngaged()) {
                 lensCorrectionTable?.let { value?.setLensCorrection(it) }
                 lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
             }
             calibrationReadback?.let { value?.setCalibrationReadback(it) }
+            value?.setCropZoom(lensLockCrop?.factor ?: 1f)
             value?.setMonitoringOptions(monitoringOptions)
             value?.setFocusPeakingEnabled(focusPeakingEnabled)
             value?.setOperatorLut(operatorLutSelection)
@@ -667,7 +682,7 @@ class Camera2PreviewEngine(
     fun setLensCorrection(table: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable?) {
         lensCalibration = null
         lensCorrectionTable = table
-        logPipeline?.setLensCorrection(table.takeIf { activeDescriptor?.lensLock == null })
+        logPipeline?.setLensCorrection(table.takeIf { !lensLockEngaged() })
     }
 
     /**
@@ -677,7 +692,7 @@ class Camera2PreviewEngine(
     fun setLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
         lensCorrectionTable = null
         lensCalibration = set?.let { it to alignmentEnabled }
-        logPipeline?.setLensCalibration(set.takeIf { activeDescriptor?.lensLock == null }, alignmentEnabled)
+        logPipeline?.setLensCalibration(set.takeIf { !lensLockEngaged() }, alignmentEnabled)
     }
 
     @Volatile private var photoLensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
@@ -703,7 +718,7 @@ class Camera2PreviewEngine(
     /** The lens correction plan for one compressed still, or null (with the reason logged). */
     private fun photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int):
         com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
-        if (owner.descriptor.lensLock != null) return null
+        if (owner.descriptor.lensLock != null || owner.lensCropFactor != null) return null
         val (set, alignment) = photoLensCalibration ?: return null
         val physicalId = stillPhysicalId(owner)
         val resolution = com.librestatic.opencinecam.camera.calibration.PhotoLensCorrection.resolve(set, alignment, physicalId, width, height)
@@ -1027,10 +1042,60 @@ class Camera2PreviewEngine(
     @Volatile private var lockedLogicalDescriptor: Camera2CameraDescriptor? = null
     /**
      * Set by a lens-locked start until its session is configured. The single fallback point: a
-     * failed physical open or configuration reopens the logical camera unlocked in the same
-     * generation. Slice 4 (GPU crop) replaces what it does. cameraExecutor only.
+     * failed physical open or configuration reopens the logical camera on the GPU-crop route
+     * (slice 4) in the same generation. cameraExecutor only.
      */
     private var lensLockWithdraw: ((String) -> Unit)? = null
+
+    /**
+     * The lens lock's GPU-crop route (PLAN-070 slice 4): the logical camera with its HAL zoom pinned
+     * at [pinnedRatio] so SAT selects [binding]'s lens, and every zoom a GPU crop of [factor].
+     */
+    private class LensLockCropRoute(
+        val binding: LensLockBinding,
+        val physicalZoomRange: ClosedFloatingPointRange<Float>,
+        val pinnedRatio: Float,
+    ) {
+        /** The direct route's range on the logical scale: anchor x physical range. */
+        val uiRange: ClosedFloatingPointRange<Float> = LensLockZoom.uiRange(binding.anchorRatio, physicalZoomRange)
+        @Volatile var factor = 1f
+    }
+
+    /** The current session's GPU-crop route; null off it. Written on cameraExecutor. */
+    @Volatile private var lensLockCrop: LensLockCropRoute? = null
+
+    /**
+     * Physical ids whose direct open or configuration failed in this engine. Later starts of the
+     * same lock (a mode change, the service forcing the GPU viewfinder) go straight to the GPU crop
+     * instead of retrying the failing open each time. Cleared only with the engine ([close]).
+     */
+    private val lensLockCropFallbacks: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** The GPU-crop route's lens-switch debounce; touched on the capture callback thread only. */
+    private val lensSwitchDebounce = LensSwitchDebounce()
+
+    /** True while the session serves a lens lock, directly or by the GPU crop. */
+    private fun lensLockEngaged(): Boolean = activeDescriptor?.lensLock != null || lensLockCrop != null
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` skips the direct
+     * physical open so the GPU-crop route can be exercised on a device that opens physicals fine (G2).
+     */
+    private fun lensLockCropForced(): Boolean {
+        if (appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return false
+        val value = runCatching {
+            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java)
+                .invoke(null, "debug.opencinecam.lenslock.forcecrop") as? String
+        }.getOrNull()
+        return value == "1" || value == "true"
+    }
+
+    /** The GPU-crop route for [binding] on [logical], or null when the lens is not a lock candidate. */
+    private fun lensLockCropRoute(binding: LensLockBinding, logical: Camera2CameraDescriptor): LensLockCropRoute? {
+        val candidate = lensLockCandidates(binding.logicalId).firstOrNull { it.physicalId == binding.physicalId } ?: return null
+        return LensLockCropRoute(binding, candidate.physicalZoomRange,
+            LensLockCrop.pinnedRatio(binding.anchorRatio, logical.effectiveZoomRange))
+    }
 
     /**
      * The lenses [logicalCameraId] can be locked to, sorted by anchor ratio: ids listed by its
@@ -1086,7 +1151,9 @@ class Camera2PreviewEngine(
 
     /**
      * Resolves a lens lock for one start: the physical descriptor and the requested profiles and
-     * still size mapped onto it, or null (reported as unavailable) when the lock cannot apply.
+     * still size mapped onto it, or null. High speed and night photo refuse (reported as
+     * unavailable); a physical that cannot serve the session (descriptor, HEIC, LOG), a lens that
+     * already failed to open or configure, or the debug override hands [onCrop] the GPU-crop route.
      */
     private fun lensLockPlan(
         binding: LensLockBinding,
@@ -1100,10 +1167,17 @@ class Camera2PreviewEngine(
         stillFormat: StillPhotoFormat,
         stillSize: Size?,
         targetFps: Int,
+        onCrop: (LensLockCropRoute) -> Unit,
     ): LensLockPlan? {
         fun refuse(reason: String): LensLockPlan? {
             Log.i(TAG, "Lens lock on ${binding.physicalId} not applied ($reason); opening camera ${logical.cameraId}")
             listener.onLensLockUnavailable(binding.physicalId, reason)
+            return null
+        }
+        fun crop(reason: String): LensLockPlan? {
+            val route = lensLockCropRoute(binding, logical) ?: return refuse(reason)
+            Log.i(TAG, "Lens lock on ${binding.physicalId} served by the GPU crop ($reason); camera ${logical.cameraId} pinned at ${route.pinnedRatio}x")
+            onCrop(route)
             return null
         }
         val highSpeed = (!gpuPhotoPreview && videoProfile?.constrainedHighSpeed == true) ||
@@ -1111,9 +1185,11 @@ class Camera2PreviewEngine(
         if (highSpeed) return refuse(LensLockUnavailable.HIGH_SPEED)
         if (nightExtensionEngaged(nightExtension, Build.VERSION.SDK_INT, logical.nightExtension) && !openCineLog &&
             videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG) return refuse(LensLockUnavailable.NIGHT)
-        val physical = physicalDescriptor(binding, logical) ?: return refuse(LensLockUnavailable.DESCRIPTOR)
-        if (stillFormat == StillPhotoFormat.HEIC && physical.heicSize == null) return refuse(LensLockUnavailable.FORMAT)
-        if (openCineLog && !physical.supportsOpenCineLog) return refuse(LensLockUnavailable.LOG)
+        if (binding.physicalId in lensLockCropFallbacks) return crop("failed before")
+        if (lensLockCropForced()) return crop("forced by debug.opencinecam.lenslock.forcecrop")
+        val physical = physicalDescriptor(binding, logical) ?: return crop(LensLockUnavailable.DESCRIPTOR)
+        if (stillFormat == StillPhotoFormat.HEIC && physical.heicSize == null) return crop(LensLockUnavailable.FORMAT)
+        if (openCineLog && !physical.supportsOpenCineLog) return crop(LensLockUnavailable.LOG)
         val mappedVideo = videoProfile?.let { requested ->
             val candidates = physical.videoProfiles.filterNot { it.constrainedHighSpeed }
             LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
@@ -1222,6 +1298,7 @@ class Camera2PreviewEngine(
             // withdraws it, and the start runs again on the logical camera in the same generation.
             var lockResolved = requestedLock == null
             var lockPlan: LensLockPlan? = null
+            var cropRoute: LensLockCropRoute? = null
             lateinit var start: Runnable
             start = Runnable {
                 if (disposed.get() || currentGeneration != generation || !surface.isValid) return@Runnable
@@ -1229,7 +1306,7 @@ class Camera2PreviewEngine(
                 if (!lockResolved) {
                     lockResolved = true
                     lockPlan = lensLockPlan(requestedLock!!, descriptor, listener, openCineLog, nightExtension,
-                        gpuPhotoPreview, videoProfile, logProfile, stillFormat, stillSize, targetFps)
+                        gpuPhotoPreview, videoProfile, logProfile, stillFormat, stillSize, targetFps) { cropRoute = it }
                 }
                 val plan = lockPlan
                 val logicalDescriptor = descriptor
@@ -1239,12 +1316,27 @@ class Camera2PreviewEngine(
                 @Suppress("NAME_SHADOWING") val logProfile = if (plan != null) plan.logProfile else logProfile
                 @Suppress("NAME_SHADOWING") val stillSize = if (plan != null) plan.stillSize else stillSize
                 this.lockedLogicalDescriptor = logicalDescriptor.takeIf { plan != null }
+                val crop = cropRoute.takeIf { plan == null }
+                this.lensLockCrop = crop
+                if (crop != null) {
+                    // The HAL zoom stays at the anchor for the whole session; setZoomRatio only moves the GPU crop.
+                    requestedZoomRatio = crop.pinnedRatio
+                    lastAcceptedZoomRatio = crop.pinnedRatio
+                }
                 this.lensLockWithdraw = if (plan == null) null else { reason ->
                     if (!disposed.get() && currentGeneration == generation && lockPlan === plan) {
-                        Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} withdrawn ($reason); opening camera ${logicalDescriptor.cameraId}")
                         lensLockWithdraw = null
                         lockPlan = null
-                        listener.onLensLockUnavailable(plan.descriptor.cameraId, reason)
+                        val fallback = lensLockCropRoute(requestedLock!!, logicalDescriptor)
+                        if (fallback != null) {
+                            Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} failed ($reason); camera ${logicalDescriptor.cameraId} serves it by the GPU crop")
+                            // Remembered, so the next start of this lock does not retry the failing open.
+                            lensLockCropFallbacks += requestedLock.physicalId
+                            cropRoute = fallback
+                        } else {
+                            Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} withdrawn ($reason); opening camera ${logicalDescriptor.cameraId}")
+                            listener.onLensLockUnavailable(plan.descriptor.cameraId, reason)
+                        }
                         closeResources()
                         this.listener = listener
                         pendingPreviewStart = start
@@ -1798,7 +1890,8 @@ class Camera2PreviewEngine(
         if (reader.imageFormat != expectedFormat || raw?.imageFormat?.let { it != ImageFormat.RAW_SENSOR } == true) return false
         val request = PhotoRequest(photoIds.incrementAndGet(), generation, camera ?: return false,
             session ?: return false, reader, activeDescriptor ?: return false,
-            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst, zeroShutterLag)
+            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst, zeroShutterLag,
+            lensCropFactor = lensLockCrop?.factor)
         synchronized(stillAdmissionLock) {
             if (bracketRequest.get() !== bracket || accumulationRequest.get() !== accumulation || burstRequest.get() !== burst || legacyStillRequest.get() != null || recording || recorderRequest.get() != null ||
                 bracket != null && !ownsBracket(bracket) || accumulation != null && !ownsAccumulation(accumulation) ||
@@ -2132,8 +2225,24 @@ class Camera2PreviewEngine(
                             throw java.util.concurrent.TimeoutException("HEIC processing exceeded the still request deadline")
                     }
                     val lens = photoLensPlan(owner, it.kind, it.width, it.height)
+                    // The lens lock's GPU crop (PLAN-070 slice 4): the still matches the cropped viewfinder.
+                    val zoomCrop = owner.lensCropFactor?.takeIf { factor -> factor > LensLockCrop.RECODE_THRESHOLD } ?: 1f
                     add(if (!owner.aspect.enabled) {
-                        if (lens != null) {
+                        if (zoomCrop > 1f && it.kind == StillImageKind.JPEG) {
+                            try {
+                                cropPhotoZoomJpeg(it.bytes, zoomCrop, owner.quality, java.io.File(appContext.cacheDir, "photo-lens"), checkRunning)
+                            } catch (failure: java.util.concurrent.CancellationException) { throw failure
+                            } catch (failure: java.util.concurrent.TimeoutException) { throw failure
+                            } catch (failure: Exception) {
+                                Log.w(TAG, "Lens lock crop failed; keeping the uncropped still", failure)
+                                StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                            }
+                        } else if (zoomCrop > 1f) {
+                            // The re-encoded HEIC would lose the container metadata (EXIF, orientation
+                            // source), so only the aspect-crop path, which already re-encodes, crops it.
+                            Log.w(TAG, "Lens lock crop skipped: HEIC stills are cropped only with the aspect crop on")
+                            StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                        } else if (lens != null) {
                             // Same pixel grid and size: re-encode with the EXIF carried over; on any failure keep the original.
                             try {
                                 correctPhotoLensJpeg(it.bytes, lens, owner.quality, java.io.File(appContext.cacheDir, "photo-lens"), checkRunning)
@@ -2146,8 +2255,8 @@ class Camera2PreviewEngine(
                         } else StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
                     }
                     else if (it.kind == StillImageKind.HEIC) cropPhotoAspectHeic(it.bytes, owner.aspect,
-                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), lens, checkRunning)
-                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, lens, checkRunning))
+                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), lens, checkRunning, zoomCrop)
+                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, lens, checkRunning, zoomCrop))
                 }
                 raw?.let { image ->
                     pendingRawFrames.remove(timestamp)
@@ -3474,6 +3583,13 @@ class Camera2PreviewEngine(
     fun setZoomRatio(ratio: Float): Boolean {
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
+        // The GPU-crop route keeps the HAL zoom pinned at the anchor; the ratio moves the crop only.
+        lensLockCrop?.let { crop ->
+            val factor = LensLockCrop.cropFactor(ratio, crop.pinnedRatio, crop.uiRange)
+            crop.factor = factor
+            cameraExecutor.execute { if (lensLockCrop === crop) logPipeline?.setCropZoom(factor) }
+            return true
+        }
         // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
         val target = descriptor.lensLock?.let { LensLockZoom.toPhysical(ratio, it.anchorRatio, range) } ?: ratio
         cameraExecutor.execute {
@@ -3585,7 +3701,9 @@ class Camera2PreviewEngine(
         } else null
         val region = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
             ?.let { CropRect(it.left, it.top, it.right, it.bottom) }
-        val fov = RawZoomCrop.processedFieldOfView(active.width(), active.height(), region, zoomRatio)
+        // The GPU-crop route narrows what the operator saw about the processed frame's centre.
+        val fov = RawZoomCrop.digitalCrop(RawZoomCrop.processedFieldOfView(active.width(), active.height(), region, zoomRatio),
+            owner.lensCropFactor?.toDouble() ?: 1.0)
         var scale = 1.0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
@@ -3618,6 +3736,17 @@ class Camera2PreviewEngine(
         listener?.onActiveLens(active)
     }
 
+    /** On the GPU-crop route, warns (debounced) while the HAL serves the streams from another lens. */
+    private fun reportLensLockSwitch(result: TotalCaptureResult) {
+        val crop = lensLockCrop ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val active = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        lensSwitchDebounce.offer(active, crop.binding.physicalId)?.let { switched ->
+            Log.w(TAG, "Lens lock crop on ${crop.binding.physicalId}: the HAL ${if (switched) "switched to $active" else "is back on the locked lens"}")
+            listener?.onLensLockSwitched(switched)
+        }
+    }
+
     /**
      * Confirms the still route from the still's own result: a still on a physical output stream always
      * comes from that camera, so its physical results name the camera that produced it.
@@ -3646,7 +3775,9 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION),
             )
         } ?: return
-        val coerced = descriptor.lensLock?.let { LensLockZoom.toUi(ZoomMath.coerce(ratio, range), it.anchorRatio) }
+        val crop = lensLockCrop
+        val coerced = if (crop != null) LensLockCrop.uiRatio(ZoomMath.coerce(ratio, range), crop.factor)
+            else descriptor.lensLock?.let { LensLockZoom.toUi(ZoomMath.coerce(ratio, range), it.anchorRatio) }
             ?: ZoomMath.coerce(ratio, range)
         effectiveZoomRatio = coerced
         listener?.onZoomEffective(coerced)
@@ -3654,6 +3785,11 @@ class Camera2PreviewEngine(
 
     private fun notifyZoomRange() {
         val descriptor = activeDescriptor ?: return
+        lensLockCrop?.let { crop ->
+            lensLockWithdraw = null
+            listener?.onLensLockCrop(crop.binding.physicalId, crop.uiRange)
+            return
+        }
         val lock = descriptor.lensLock
         if (lock != null) {
             // The locked session is configured: later failures are ordinary failures, not a fallback.
@@ -5149,6 +5285,7 @@ class Camera2PreviewEngine(
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
                     reportActiveLens(result)
+                    reportLensLockSwitch(result)
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     readIspHistogram(result)
@@ -6657,7 +6794,8 @@ class Camera2PreviewEngine(
             physicalSizes.mapValues { entry -> entry.value.map { it.width to it.height } },
         )
         // A lens-locked session already runs on one physical camera: no physical still routing (OCC-PLAN-069).
-        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken && descriptor.lensLock == null })
+        // The GPU-crop route pins one lens through the logical streams, so it has none either.
+        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken && descriptor.lensLock == null && lensLockCrop == null })
     }
 
     private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? = compressedStillPlan(descriptor)?.size
@@ -6730,6 +6868,8 @@ class Camera2PreviewEngine(
         activeDescriptor = null
         lockedLogicalDescriptor = null
         lensLockWithdraw = null
+        lensLockCrop = null
+        lensSwitchDebounce.reset()
         requestedAeCompensationIndex = null
         requestedWhiteBalance = WhiteBalanceSelection.Auto
         requestedZoomRatio = 1f
@@ -6957,6 +7097,7 @@ class Camera2PreviewEngine(
             pendingPreviewStart = null
             subjectTarget = null
             listener = null
+            lensLockCropFallbacks.clear()
             try {
                 closeResources()
                 finishCloseIfIdle()

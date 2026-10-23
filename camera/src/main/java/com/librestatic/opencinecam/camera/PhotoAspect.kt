@@ -57,6 +57,16 @@ internal fun PhotoAspectSelection.appliedReport(width: Int, height: Int): PhotoA
     return PhotoAspectReport(this, if (enabled) PhotoAspectDisposition.APPLIED else PhotoAspectDisposition.FULL_FRAME,
         width, height, rect, rect.width, rect.height, 0)
 }
+/**
+ * Like [appliedReport] with the lens lock's GPU-crop [zoomCrop] (PLAN-070 slice 4) composed in: the
+ * aspect crop is taken inside the zoomed frame and reported against the full [width]x[height] source.
+ */
+internal fun PhotoAspectSelection.appliedReport(width: Int, height: Int, zoomCrop: Float): PhotoAspectReport {
+    if (!(zoomCrop > 1f)) return appliedReport(width, height)
+    require(enabled) { "A zoom crop is reported only with the aspect crop" }
+    val rect = LensLockCrop.stillCrop(width, height, zoomCrop, this)
+    return PhotoAspectReport(this, PhotoAspectDisposition.APPLIED, width, height, rect, rect.width, rect.height, 0)
+}
 internal fun PhotoAspectSelection.rawReport(width: Int, height: Int, orientationDegrees: Int): PhotoAspectReport =
     PhotoAspectReport(this, PhotoAspectDisposition.RAW_UNCHANGED, width, height,
         PhotoCropRect(0, 0, width, height), width, height, orientationDegrees)

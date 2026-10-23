@@ -221,3 +221,12 @@ Same build and fingerprint as G0, debug package, folded (cover screen). The lock
 - **Video sizes.** 1080p30 on the wide and 4K30 on the tele mapped to the same profile on the physical camera, so the size mismatch the engine allows for did not happen on this device.
 - **Anchor labels.** Unlocked, the anchor bar shows 0.5 / 1.0 / 2.0, from the focal ratios. Locked, it shows 0.6 / 1.0 / 3.0, from the fields of view. The logical camera switches to the tele at 3.00x, so the unlocked 2.0 anchor does not match the lens; this predates the lens lock.
 
+### G2 procedure: the GPU-crop fallback (not yet run)
+
+The Razr opens every physical directly, so G2 forces the fallback. On the debug package, run `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` and force-stop the app. The engine then skips the direct open and serves every lock by the GPU crop. Release builds ignore the property. Lock each of 2, 3 and 5 and check these points:
+- logcat shows `served by the GPU crop` with the pinned ratio;
+- the "Lens lock: digital crop" notice is shown;
+- the UI range is the same as in G1;
+- a photo mode reopens on the GPU viewfinder once and then stays on it.
+Zoom through each range. Then compare preview framing with a 1080p take, a JPEG with and without the aspect crop, and a DNG's DefaultCrop. A HEIC without the aspect crop stays uncropped by design: the log says so. Cover the lens in low light to see the switched-lens warning come and go. Clear the property with `adb shell setprop debug.opencinecam.lenslock.forcecrop 0`.
+

@@ -15,11 +15,12 @@ internal fun cropPhotoAspectHeic(bytes: ByteArray, aspect: PhotoAspectSelection,
     quality: Int, tempDirectory: File, checkRunning: () -> Unit): StillImagePayload =
     cropPhotoAspectHeic(bytes, aspect, desiredOrientationDegrees, quality, tempDirectory, null, checkRunning)
 
+/** [zoomCrop] above 1 (the lens lock's GPU-crop route) narrows the frame about its centre before the aspect crop. */
 internal fun cropPhotoAspectHeic(bytes: ByteArray, aspect: PhotoAspectSelection, desiredOrientationDegrees: Int,
     quality: Int, tempDirectory: File, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?,
-    checkRunning: () -> Unit): StillImagePayload {
+    checkRunning: () -> Unit, zoomCrop: Float = 1f): StillImagePayload {
     require(quality in 1..100)
-    return withCroppedHeicBitmap(bytes, aspect, desiredOrientationDegrees, lens, checkRunning) { bitmap, report ->
+    return withCroppedHeicBitmap(bytes, aspect, desiredOrientationDegrees, lens, checkRunning, zoomCrop) { bitmap, report ->
         val encoded = encodeHeicBitmap(bitmap, quality, tempDirectory, checkRunning)
         checkRunning()
         // Validate the actual HEIF container after codec/muxer retirement, before any publication.
@@ -42,7 +43,12 @@ internal fun <T> withCroppedHeicBitmap(bytes: ByteArray, aspect: PhotoAspectSele
 
 internal fun <T> withCroppedHeicBitmap(bytes: ByteArray, aspect: PhotoAspectSelection,
     desiredOrientationDegrees: Int, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?,
-    checkRunning: () -> Unit, consume: (Bitmap, PhotoAspectReport) -> T): T {
+    checkRunning: () -> Unit, consume: (Bitmap, PhotoAspectReport) -> T): T =
+    withCroppedHeicBitmap(bytes, aspect, desiredOrientationDegrees, lens, checkRunning, 1f, consume)
+
+internal fun <T> withCroppedHeicBitmap(bytes: ByteArray, aspect: PhotoAspectSelection,
+    desiredOrientationDegrees: Int, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?,
+    checkRunning: () -> Unit, zoomCrop: Float, consume: (Bitmap, PhotoAspectReport) -> T): T {
     require(aspect.enabled && desiredOrientationDegrees in setOf(0, 90, 180, 270))
     val owned = mutableListOf<Bitmap>()
     fun own(bitmap: Bitmap): Bitmap = bitmap.also { if (owned.none { prior -> prior === it }) owned += it }
@@ -60,7 +66,7 @@ internal fun <T> withCroppedHeicBitmap(bytes: ByteArray, aspect: PhotoAspectSele
         val matrix = Matrix().apply { postRotate(desiredOrientationDegrees.toFloat()) }
         val oriented = own(Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, false))
         retainOnly(oriented)
-        val report = aspect.appliedReport(oriented.width, oriented.height)
+        val report = aspect.appliedReport(oriented.width, oriented.height, zoomCrop)
         checkRunning()
         val rect = report.crop
         val cropped = own(Bitmap.createBitmap(oriented, rect.left, rect.top, rect.width, rect.height))

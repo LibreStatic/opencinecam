@@ -3,6 +3,7 @@ package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.LensLockOption
+import com.librestatic.opencinecam.LensLockRoute
 import com.librestatic.opencinecam.camera.LensLockBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,5 +52,26 @@ class LensLockGateTest {
         assertFalse(lensLockHighSpeed(CaptureMode.VIDEO, videoProfileHighSpeed = false, logProfileHighSpeed = true))
         assertFalse(lensLockHighSpeed(CaptureMode.PHOTO, videoProfileHighSpeed = true, logProfileHighSpeed = false))
         assertFalse(lensLockHighSpeed(CaptureMode.HLG, videoProfileHighSpeed = false, logProfileHighSpeed = false))
+    }
+
+    @Test fun theCropRouteForcesTheGpuViewfinderInPhotoOnly() {
+        assertTrue(lensLockCropNeedsGpuViewfinder(photoPreviewMode = true, route = LensLockRoute.GPU_CROP))
+        assertFalse(lensLockCropNeedsGpuViewfinder(photoPreviewMode = true, route = LensLockRoute.DIRECT_PHYSICAL))
+        assertFalse(lensLockCropNeedsGpuViewfinder(photoPreviewMode = true, route = null))
+        // Video modes preview through the GPU already.
+        assertFalse(lensLockCropNeedsGpuViewfinder(photoPreviewMode = false, route = LensLockRoute.GPU_CROP))
+    }
+
+    @Test fun aServedLockNeverRebuildsForThePhysicalStillWindow() {
+        assertTrue(lensLockSkipsStillZoomRebuild(LensLockRoute.DIRECT_PHYSICAL))
+        assertTrue(lensLockSkipsStillZoomRebuild(LensLockRoute.GPU_CROP))
+        assertFalse(lensLockSkipsStillZoomRebuild(null))
+    }
+
+    @Test fun theSwitchedWarningBelongsToTheCropRoute() {
+        assertTrue(lensLockSwitchedWarning(switched = true, route = LensLockRoute.GPU_CROP))
+        assertFalse(lensLockSwitchedWarning(switched = false, route = LensLockRoute.GPU_CROP))
+        assertFalse(lensLockSwitchedWarning(switched = true, route = LensLockRoute.DIRECT_PHYSICAL))
+        assertFalse(lensLockSwitchedWarning(switched = true, route = null))
     }
 }
