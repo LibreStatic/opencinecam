@@ -119,6 +119,14 @@ data class CameraSettings(
     val lowLightAutoFps: Boolean = false,
     /** Device-local FPS LOCK: in VIDEO, LOG and HLG hold the shutter at 1/fps when auto exposure would stretch the frame time. */
     val fpsLock: Boolean = true,
+    /** Device-local: apply the per-lens calibration (colour, exposure, alignment) to preview and video. */
+    val lensCorrectionVideo: Boolean = false,
+    /** Device-local: apply the per-lens calibration to JPEG/HEIC stills. */
+    val lensCorrectionPhotos: Boolean = false,
+    /** Device-local: include the geometric alignment when a lens correction is applied. */
+    val lensCorrectionAlignment: Boolean = true,
+    /** Device-local lens lock: logical camera id to the physical id it is pinned to (digital zoom only). Absent = no lock. */
+    val lensLock: Map<String, String> = emptyMap(),
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
     /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
     val zeroShutterLag: Boolean = true,
@@ -442,6 +450,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         ),
         lowLightAutoFps = preferences.getBoolean(KEY_LOW_LIGHT_FPS, false),
         fpsLock = preferences.getBoolean(KEY_FPS_LOCK, true),
+        lensCorrectionVideo = preferences.getBoolean(KEY_LENS_CORRECTION_VIDEO, false),
+        lensCorrectionPhotos = preferences.getBoolean(KEY_LENS_CORRECTION_PHOTOS, false),
+        lensCorrectionAlignment = preferences.getBoolean(KEY_LENS_CORRECTION_ALIGNMENT, true),
+        lensLock = LensLockCodec.decode(preferences.getString(KEY_LENS_LOCK, null)),
         torchStrengthLevel = preferences.getInt(KEY_TORCH_STRENGTH, 0).takeIf { it > 0 },
         zebraEnabled = preferences.getBoolean("zebra-enabled", false),
         peakingEnabled = preferences.getBoolean("peaking-enabled", false),
@@ -644,6 +656,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_NIGHT_PHOTO_MODE, settings.nightPhotoMode.name)
             .putBoolean(KEY_LOW_LIGHT_FPS, settings.lowLightAutoFps)
             .putBoolean(KEY_FPS_LOCK, settings.fpsLock)
+            .putBoolean(KEY_LENS_CORRECTION_VIDEO, settings.lensCorrectionVideo)
+            .putBoolean(KEY_LENS_CORRECTION_PHOTOS, settings.lensCorrectionPhotos)
+            .putBoolean(KEY_LENS_CORRECTION_ALIGNMENT, settings.lensCorrectionAlignment)
+            .putString(KEY_LENS_LOCK, LensLockCodec.encode(settings.lensLock))
             .putString(KEY_PHOTO_FLASH, settings.photoFlash.mode.name)
             .putInt(KEY_PHOTO_FLASH_STRENGTH, settings.photoFlash.strength ?: 0)
             .putInt(KEY_TORCH_STRENGTH, settings.torchStrengthLevel ?: 0)
@@ -908,6 +924,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_NIGHT_PHOTO_MODE = "night-photo-mode"
         const val KEY_LOW_LIGHT_FPS = "video-low-light-fps"
         const val KEY_FPS_LOCK = "video-fps-lock"
+        const val KEY_LENS_CORRECTION_VIDEO = "lens-correction-video"
+        const val KEY_LENS_CORRECTION_PHOTOS = "lens-correction-photos"
+        const val KEY_LENS_CORRECTION_ALIGNMENT = "lens-correction-alignment"
+        const val KEY_LENS_LOCK = "lens-lock"
         const val KEY_PHOTO_FLASH = "photo-flash-mode"
         const val KEY_PHOTO_FLASH_STRENGTH = "photo-flash-strength"
         const val KEY_TORCH_STRENGTH = "torch-strength-level"
@@ -966,4 +986,27 @@ internal fun decodeAudioInputKey(encoded: String): AudioInputKey? {
     if (parts.size != 3) return null
     val type = parts[0].toIntOrNull() ?: return null
     return AudioInputKey(type, parts[2], parts[1])
+}
+
+/**
+ * Stable text form of the lens lock map: `id=physical` pairs joined by commas, sorted by logical id.
+ * Ids are camera ids (letters, digits, `_`, `-`, `.`); anything malformed decodes to an empty map.
+ */
+internal object LensLockCodec {
+    private val id = Regex("[A-Za-z0-9_.-]{1,64}")
+
+    fun encode(lock: Map<String, String>): String =
+        lock.entries.filter { id.matches(it.key) && id.matches(it.value) }.sortedBy { it.key }
+            .joinToString(",") { "${it.key}=${it.value}" }
+
+    fun decode(text: String?): Map<String, String> {
+        if (text.isNullOrEmpty()) return emptyMap()
+        val result = linkedMapOf<String, String>()
+        for (pair in text.split(',')) {
+            val parts = pair.split('=')
+            if (parts.size != 2 || !id.matches(parts[0]) || !id.matches(parts[1]) || parts[0] in result) return emptyMap()
+            result[parts[0]] = parts[1]
+        }
+        return result
+    }
 }
