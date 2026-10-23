@@ -129,6 +129,12 @@ data class CameraUiState(
     val recordingFinalizing: Boolean = false,
     /** A lens calibration run owns the camera: mode, zoom, lens, recording and structural settings are locked. */
     val lensCalibrationRunning: Boolean = false,
+    /**
+     * The lens lock of the selected camera. While locked, [zoomMinRatio], [zoomMaxRatio], [zoomRatio]
+     * and [opticalAnchors] stay on the logical scale: the range is the locked lens' digital range
+     * times its anchor ratio, and the anchors are the lock options (tapping one changes the lock).
+     */
+    val lensLock: LensLockUiState = LensLockUiState(),
     val recordingPauseStatus: com.librestatic.opencinecam.camera.TimelapsePauseStatus? = null,
     val recordingPausePending: Boolean = false,
     val recordingAvTiming: com.librestatic.opencinecam.camera.CaptureEpochReport? = null,
