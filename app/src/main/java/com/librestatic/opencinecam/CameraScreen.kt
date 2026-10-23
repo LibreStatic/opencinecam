@@ -167,6 +167,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
 import com.librestatic.opencinecam.ui.viewfinder.ZoomAnchorBar
@@ -456,6 +457,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
                             onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
                             onOpenLensCalibration = { settingsPage = SettingsPage.LENS_CALIBRATION },
+                            onSetLensLock = binder?.let { owner -> { id -> owner.setLensLock(id) } },
                         )
                         }
                     }
@@ -1447,7 +1449,7 @@ internal fun AdaptiveCaptureChrome(
         var previous = zoomState.zoomRatio
         snapshotFlow { zoomState.zoomRatio }.collect { now ->
             val s = zoomState
-            zoomHapticFor(previous, now, s.opticalAnchors.map { it.ratio }, s.zoomMinRatio, s.zoomMaxRatio)?.let(zoomHaptics::perform)
+            zoomHapticFor(previous, now, zoomSectorAnchors(s).map { it.ratio }, s.zoomMinRatio, s.zoomMaxRatio)?.let(zoomHaptics::perform)
             previous = now
         }
     }
@@ -1684,10 +1686,10 @@ internal fun AdaptiveCaptureChrome(
                     val base = pinchRatio.floatValue
                     val candidate = base * zoom
                     val range = if (currentPinchSettings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
-                        shown.opticalAnchors.size > 1) {
+                        zoomSectorAnchors(shown).size > 1) {
                         ZoomMath.sectorBounds(
                             base,
-                            shown.opticalAnchors,
+                            zoomSectorAnchors(shown),
                             currentPinchSettings.zoomLensSwitchMode,
                             shown.zoomMinRatio,
                             shown.zoomMaxRatio,
@@ -1796,10 +1798,10 @@ internal fun AdaptiveCaptureChrome(
                     val speed = ZoomMath.rockerSpeedOctavesPerSecond(offset)
                     if (speed != 0f) {
                         val range = if (settings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
-                            state.opticalAnchors.size > 1) {
+                            zoomSectorAnchors(state).size > 1) {
                             ZoomMath.sectorBounds(
                                 state.zoomRatio,
-                                state.opticalAnchors,
+                                zoomSectorAnchors(state),
                                 settings.zoomLensSwitchMode,
                                 state.zoomMinRatio,
                                 state.zoomMaxRatio,
@@ -1937,6 +1939,17 @@ internal fun AdaptiveCaptureChrome(
             if (recording) (recordingHudTop + maxOf(recordingHudHeight, 52.dp) + 8.dp).px() else 0f,
         )
         val instrumentBottom = bottomBound - 8.dp.px()
+        val instrumentsHorizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound
+        // The lock keys stand at the top end of the frame. A row of instruments that would run under
+        // them wraps to a line below instead (anchors, meter and histogram beside four lock keys).
+        val lockRowObstacle = if (chromeVisible && instrumentsHorizontal && topEndClusterWidthPx > 0) {
+            val clusterTop = (if (stackedFamily) topBar + 6.dp else 8.dp).px()
+            val clusterBottom = clusterTop + 48.dp.px()
+            val clusterInner = endChrome + 8.dp.px() + topEndClusterWidthPx + 8.dp.px()
+            val main = if (rightToLeft) clusterInner - instrumentLeft else instrumentRight - (width - clusterInner)
+            val cross = clusterBottom - instrumentTop
+            if (main > 0f && cross > 0f) IntOffset(main.roundToInt(), cross.roundToInt()) else null
+        } else null
         InstrumentStack(
             state = state,
             binder = binder,
@@ -1945,7 +1958,9 @@ internal fun AdaptiveCaptureChrome(
             recording = recording,
             histogram = histogramShown,
             histogramMode = histogramMode,
-            horizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound,
+            horizontal = instrumentsHorizontal,
+            endObstacle = lockRowObstacle,
+            obstacleAtStart = rightToLeft,
             // A hinge split gives the chrome its own pane with no picture behind it: let the
             // histogram use the band between the instruments and the deck instead of a thumbnail.
             dedicatedPane = hinge,
@@ -2662,6 +2677,9 @@ private fun InstrumentStack(
     histogramMode: HistogramMode,
     horizontal: Boolean,
     dedicatedPane: Boolean = false,
+    /** Width (x) and height (y) in px of the lock keys' corner, which a row of instruments wraps under. */
+    endObstacle: IntOffset? = null,
+    obstacleAtStart: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val state = liveCameraState(state)
@@ -2678,27 +2696,33 @@ private fun InstrumentStack(
     val showHistogram = histogram && analysisFresh && state.histogram.isNotEmpty()
     // A hinge split has no picture here: the preview pane's overlay says it instead.
     val showSuspension = !dedicatedPane && state.analysisSuspension != AnalysisSuspension.NONE
-    if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showSuspension && !showLowLight) return
+    // The lens lock's crop route and its lens-switch warning sit where the scopes notice does.
+    val showLensNotice = lensLockNoticeText(state.lensLock) != null
+    val showNotice = showSuspension || showLensNotice
+    if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
         val stretchHistogram = dedicatedPane && horizontal && showHistogram
         // The notice goes under the zoom, so the lens anchors never move when it comes and goes.
         // A row has no width to spare for it: there it takes its own line under the row.
         val notice: @Composable () -> Unit = {
-            AnalysisSuspensionNotice(state, Modifier.widthIn(max = minOf(maxWidth, if (horizontal) 360.dp else 280.dp)))
+            val width = Modifier.widthIn(max = minOf(maxWidth, if (horizontal) 360.dp else 280.dp))
+            if (showSuspension) AnalysisSuspensionNotice(state, width)
+            if (showLensNotice) LensLockNotice(state.lensLock, width)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
-                wrapCross = horizontal && showSuspension, modifier = if (horizontal && showSuspension) Modifier else Modifier.weight(1f)) {
+                obstacle = if (horizontal && !stretchHistogram) endObstacle else null, obstacleAtStart = obstacleAtStart,
+                wrapCross = horizontal && showNotice, modifier = if (horizontal && showNotice) Modifier else Modifier.weight(1f)) {
                 if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
                 if (showLowLight) LowLightBoostBadge()
                 if (showZoom) ZoomReadout(state, binder)
-                if (showSuspension && !horizontal) notice()
+                if (showNotice && !horizontal) notice()
                 if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
                 if (showHistogram) HistogramGraph(state, settings.monitoring, histogramMode,
                     if (stretchHistogram) Modifier.fillMaxSize() else Modifier.width(histogramWidth).height(histogramWidth * .32f))
             }
-            if (showSuspension && horizontal) notice()
+            if (showNotice && horizontal) notice()
         }
     }
 }
@@ -2717,6 +2741,10 @@ private fun FittingStack(
     maxFillCross: androidx.compose.ui.unit.Dp = 160.dp,
     // A row that reports only the height it uses, so something can follow it.
     wrapCross: Boolean = false,
+    // A row only: a corner (width x, height y) at the end of the first line, or its start with
+    // [obstacleAtStart], that items must not enter. An item reaching into it opens a second line under it.
+    obstacle: IntOffset? = null,
+    obstacleAtStart: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -2739,18 +2767,30 @@ private fun FittingStack(
             leading + last
         } else measurables.map { it.measure(loose) }
         val positions = ArrayList<Pair<androidx.compose.ui.layout.Placeable, IntOffset>>()
-        var cursor = 0
+        val corner = obstacle?.takeIf { horizontal }
+        val lineStart = if (corner != null && obstacleAtStart) corner.x else 0
+        var cursor = lineStart
+        // The second line, opened under the corner once an item would reach into it.
+        var lineTop = 0
+        var firstLineHeight = 0
         placeables.forEach { item ->
             val main = if (horizontal) item.width else item.height
             val cross = if (horizontal) item.height else item.width
             val mainLimit = if (horizontal) constraints.maxWidth else constraints.maxHeight
             val crossLimit = if (horizontal) constraints.maxHeight else constraints.maxWidth
-            if (cursor + main <= mainLimit && cross <= crossLimit) {
-                positions += item to if (horizontal) IntOffset(cursor, 0) else IntOffset(0, cursor)
+            val lineLimit = if (corner != null && lineTop == 0 && !obstacleAtStart) mainLimit - corner.x else mainLimit
+            if (corner != null && lineTop == 0 && cursor + main > lineLimit && main <= mainLimit) {
+                lineTop = maxOf(firstLineHeight, corner.y) + gap
+                cursor = 0
+            }
+            val limit = if (corner != null && lineTop == 0 && !obstacleAtStart) mainLimit - corner.x else mainLimit
+            if (cursor + main <= limit && cross <= crossLimit - lineTop) {
+                positions += item to if (horizontal) IntOffset(cursor, lineTop) else IntOffset(0, cursor)
                 cursor += main + gap
+                if (lineTop == 0) firstLineHeight = maxOf(firstLineHeight, cross)
             }
         }
-        val height = if (wrapCross) positions.maxOfOrNull { it.first.height } ?: 0 else constraints.maxHeight
+        val height = if (wrapCross) positions.maxOfOrNull { it.second.y + it.first.height } ?: 0 else constraints.maxHeight
         layout(constraints.maxWidth, height) {
             positions.forEach { (item, at) -> item.place(at) }
         }
@@ -2760,17 +2800,34 @@ private fun FittingStack(
 @Composable
 private fun ZoomReadout(state: CameraUiState, binder: CaptureService.LocalBinder?) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val lock = state.lensLock
+        val lockedOption = lock.lockedOption
+        if (lockedOption != null) {
+            // Locked: the anchors are the lock options. The locked lens is highlighted; tapping it
+            // returns to its native field of view, tapping another lens moves the lock there.
+            ZoomAnchorBar(
+                anchors = lock.options.map { ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) },
+                activeRatio = lockedOption.anchorRatio,
+                onSelect = { ratio ->
+                    val option = lock.options.minBy { kotlin.math.abs(it.anchorRatio - ratio) }
+                    if (option.physicalId == lockedOption.physicalId) binder?.setZoomRatio(option.anchorRatio)
+                    else if (lensLockChangeAllowed(state)) binder?.setLensLock(option.physicalId)
+                },
+                locked = true,
+            )
         // A single lens has nothing to switch to, so its lone anchor would only repeat the ratio.
-        if (state.opticalAnchors.size > 1) ZoomAnchorBar(
+        } else if (state.opticalAnchors.size > 1) ZoomAnchorBar(
             anchors = state.opticalAnchors,
             activeRatio = state.zoomEffectiveRatio ?: state.zoomRatio,
             onSelect = { ratio -> binder?.selectZoomAnchor(ratio) },
         )
         val ratioValue = state.zoomEffectiveRatio ?: state.zoomRatio
-        val isDigital = state.opticalAnchors.none { (ratioValue - it.ratio).let { d -> d >= -0.05f && d <= 0.05f } }
+        // While locked only the locked lens' own anchor is optical; every other ratio is a crop.
+        val opticalRatios = lockedOption?.let { listOf(it.anchorRatio) } ?: state.opticalAnchors.map { it.ratio }
+        val isDigital = opticalRatios.none { (ratioValue - it).let { d -> d >= -0.05f && d <= 0.05f } }
         // On an anchor the highlighted anchor already states the ratio; the readout is for in-between.
         // It keeps its place while hidden, so a zoom passing an anchor never shifts the instruments under it.
-        val readoutShown = state.opticalAnchors.size <= 1 || isDigital
+        val readoutShown = (lockedOption == null && state.opticalAnchors.size <= 1) || isDigital
         Box(
             Modifier
                 .then(if (readoutShown) Modifier.testTag("zoom-ratio") else Modifier.alpha(0f).clearAndSetSemantics {})
@@ -2880,6 +2937,24 @@ private fun LockToggles(
                 onClick = {
                     haptics.perform(if (on) HapticEvent.LockOff else HapticEvent.LockOn)
                     onSettingsChanged(settings.copy(fpsLock = !on))
+                },
+            )
+        }
+        // LENS LOCK: pins one physical lens (zoom becomes digital); highlighted while locked.
+        if (lensLockKeyVisible(state)) {
+            val lockedOption = state.lensLock.lockedOption
+            val on = state.lensLock.locked
+            LockButton(
+                label = if (lockedOption != null) stringResource(R.string.lens_lock_toggle_on, lensLockOptionLabel(lockedOption))
+                    else stringResource(R.string.lens_lock_toggle_off),
+                shortLabel = stringResource(R.string.lens_lock_short),
+                active = on,
+                enabled = lensLockChangeAllowed(state),
+                testTag = "capture-lens-lock",
+                glyph = if (on) CineIcon.LOCK else CineIcon.UNLOCK,
+                onClick = {
+                    haptics.perform(if (on) HapticEvent.LockOff else HapticEvent.LockOn)
+                    binder?.setLensLock(if (on) null else lensLockToggleTarget(state) ?: return@LockButton)
                 },
             )
         }
@@ -4025,6 +4100,7 @@ internal fun SettingsContent(
     audioPermissionBlocked: Boolean = false,
     onOpenStorageBenchmark: (() -> Unit)? = null,
     onOpenLensCalibration: (() -> Unit)? = null,
+    onSetLensLock: ((String?) -> Unit)? = null,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
@@ -4331,6 +4407,9 @@ internal fun SettingsContent(
         if ("lens-calibration" in visibleIds && onOpenLensCalibration != null) settingsCard("lens-calibration") {
             SettingsLinkRow(stringResource(R.string.lens_cal_title), stringResource(R.string.lens_cal_settings_summary), onOpenLensCalibration,
                 Modifier.testTag("settings-lens-calibration"))
+        }
+        if ("lens-lock" in visibleIds && state.lensLock.available && onSetLensLock != null) settingsCard("lens-lock") {
+            LensLockSettings(state, onSetLensLock)
         }
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
