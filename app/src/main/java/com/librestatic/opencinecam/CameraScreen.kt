@@ -279,6 +279,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     val state by remember(liveState) { derivedStateOf(structuralEqualityPolicy()) { liveState.value.withoutLiveSamples() } }
     val settingsRepository = remember(context) { SettingsRepositories.get(context) }
     val settings by settingsRepository.states.collectAsStateWithLifecycle()
+    val lensCalibrationFallback = remember { MutableStateFlow(LensCalibrationUiState()) }
+    val lensCalibration by (binder?.lensCalibrationStates ?: lensCalibrationFallback).collectAsStateWithLifecycle()
     // A normal start keeps the splash until this: the viewfinder shows its first frame (or the
     // camera failed), or there is a screen other than the viewfinder to show first.
     val readyForSplash = !permissionGranted || !onboardingDone ||
@@ -424,6 +426,22 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onBack = { settingsPage = SettingsPage.MAIN },
                         )
                         }
+                    } else if (settingsPage == SettingsPage.LENS_CALIBRATION) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
+                        LensCalibrationContent(
+                            state = lensCalibration,
+                            settings = settings,
+                            onSettingsChange = settingsRepository::set,
+                            onBack = { settingsPage = SettingsPage.MAIN },
+                            onStart = {
+                                // The run happens on the viewfinder: start it, then show the capture screen.
+                                binder?.startLensCalibration()
+                                settingsPage = SettingsPage.MAIN
+                                section = AppSection.CAPTURE
+                            },
+                            onDelete = { binder?.deleteLensCalibration() },
+                        )
+                        }
                     } else {
                         settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsScreen(
@@ -437,6 +455,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
                             onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
+                            onOpenLensCalibration = { settingsPage = SettingsPage.LENS_CALIBRATION },
                         )
                         }
                     }
@@ -592,6 +611,8 @@ internal fun CaptureSurface(
     val showGrid = settings.compositionGridEnabled
     val gridMode = settings.compositionGridMode
     val showHorizon = settings.horizonLevelEnabled
+    val lensCalibrationFallback = remember { MutableStateFlow(LensCalibrationUiState()) }
+    val lensCalibration by (binder?.lensCalibrationStates ?: lensCalibrationFallback).collectAsStateWithLifecycle()
     var windowOrigin by remember { mutableStateOf(Offset.Zero) }
     val context = LocalContext.current
     val knownGoodStore = remember(context) { KnownGoodCaptureStore(context) }
@@ -816,6 +837,10 @@ internal fun CaptureSurface(
             onSettingsChanged = onSettingsChanged,
             onOpenMedia = onOpenMedia,
             onOpenSettings = onOpenSettings,
+            lensCalibration = lensCalibration,
+            onLensCalibrationCancel = { binder?.cancelLensCalibration() },
+            onLensCalibrationSave = { binder?.saveLensCalibration() },
+            onLensCalibrationDiscard = { binder?.discardLensCalibration() },
         )
         }
 
@@ -1368,6 +1393,11 @@ internal fun AdaptiveCaptureChrome(
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
     initialPane: CaptureInitialPane? = null,
+    // The lens calibration run (PLAN-070): its card shows while the phase is not IDLE.
+    lensCalibration: LensCalibrationUiState = LensCalibrationUiState(),
+    onLensCalibrationCancel: () -> Unit = {},
+    onLensCalibrationSave: () -> Unit = {},
+    onLensCalibrationDiscard: () -> Unit = {},
 ) {
     // One pane at a time: a control's dial, the modes or the monitoring toggles.
     var pane by remember { mutableStateOf(initialPane?.pane()) }
@@ -2315,6 +2345,22 @@ internal fun AdaptiveCaptureChrome(
                 end = 16.dp,
             ),
             chip = true,
+        )
+
+        // Over the viewfinder, above the deck: a run needs the scene in view, and the card is inert to touches.
+        if (lensCalibration.phase != LensCalibrationPhase.IDLE) LensCalibrationCard(
+            state = lensCalibration,
+            onCancel = onLensCalibrationCancel,
+            onSave = onLensCalibrationSave,
+            onDiscard = onLensCalibrationDiscard,
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .padding(
+                    bottom = deckHeight + (if (scopeTray) scopeTrayHeight else 0.dp) + 8.dp,
+                    start = (if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp) + 12.dp,
+                    end = endOccupied + 12.dp,
+                )
+                .widthIn(max = 420.dp).fillMaxWidth(),
+            maxHeight = (maxHeight - deckHeight - topBar - 24.dp).coerceAtLeast(160.dp),
         )
 
     }
@@ -3978,6 +4024,7 @@ internal fun SettingsContent(
     onOpenCapabilities: (() -> Unit)? = null,
     audioPermissionBlocked: Boolean = false,
     onOpenStorageBenchmark: (() -> Unit)? = null,
+    onOpenLensCalibration: (() -> Unit)? = null,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
@@ -4280,6 +4327,10 @@ internal fun SettingsContent(
                 ZoomLensSwitchMode.entries, settings.zoomLensSwitchMode,
                 label = { stringResource(if (it == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic) },
                 tag = { "zoom-lens-switch-$it" }, onSelect = { onSettingsChange(settings.copy(zoomLensSwitchMode = it)) })
+        }
+        if ("lens-calibration" in visibleIds && onOpenLensCalibration != null) settingsCard("lens-calibration") {
+            SettingsLinkRow(stringResource(R.string.lens_cal_title), stringResource(R.string.lens_cal_settings_summary), onOpenLensCalibration,
+                Modifier.testTag("settings-lens-calibration"))
         }
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)
