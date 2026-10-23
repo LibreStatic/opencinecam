@@ -1035,4 +1035,17 @@
     <string name="lens_cal_fail_scene_unstable">La exposición o el balance de blancos nunca se estabilizaron. Usa una luz más estable y mantén el teléfono quieto.</string>
     <string name="lens_cal_fail_low_quality">Ninguna lente dio un resultado fiable. Elige una escena con más textura y color, más lejana y con luz uniforme.</string>
     <string name="lens_cal_fail_internal">Algo salió mal. Inténtalo de nuevo.</string>
+    <string name="lens_lock_title">Bloqueo de lente</string>
+    <string name="lens_lock_summary">Mantiene una sola lente: el zoom pasa a ser digital y la cámara nunca cambia de lente</string>
+    <string name="lens_lock_off">Desactivado</string>
+    <string name="lens_lock_ultra_wide">%1$s ultra gran angular</string>
+    <string name="lens_lock_wide">%1$s gran angular</string>
+    <string name="lens_lock_tele">%1$s tele</string>
+    <string name="lens_lock_toggle_on">Bloqueo de lente: activado, %1$s</string>
+    <string name="lens_lock_toggle_off">Bloqueo de lente: desactivado</string>
+    <string name="lens_lock_short">LENTE</string>
+    <string name="lens_lock_notice_crop">Bloqueo de lente: recorte digital</string>
+    <string name="lens_lock_notice_switched">La cámara cambió de lente con poca luz</string>
+    <string name="lens_lock_anchor_locked">Lente %1$s bloqueada</string>
+    <string name="lens_lock_anchor">Bloquear en la lente %1$s</string>
 </resources>
