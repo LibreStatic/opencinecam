@@ -1017,6 +1017,7 @@
     <string name="lens_cal_phase_measuring">Messung</string>
     <string name="lens_cal_phase_solving">Berechnung</string>
     <string name="lens_cal_keep_still">Halte das Telefon ruhig</string>
+    <string name="lens_cal_hold_short">Kalibrierung</string>
     <string name="lens_cal_result_title">Kalibrierung bereit</string>
     <string name="lens_cal_save">Speichern</string>
     <string name="lens_cal_discard">Verwerfen</string>
