@@ -10,7 +10,8 @@ import com.librestatic.opencinecam.usesLogGraph
 /**
  * Whether a start of [logicalId] opens a locked lens (PLAN-070, ADR-0036). The lens lock needs at
  * least two lock options and a saved [requestedPhysicalId] among them. A calibration run measures
- * the logical camera, and constrained high speed stays on the logical camera, so both open it unlocked.
+ * the logical camera, and constrained high speed and the night extension stay on the logical camera,
+ * so all three open it unlocked without the engine having to refuse (and announce) the lock.
  */
 internal fun lensLockBindingFor(
     logicalId: String?,
@@ -18,8 +19,9 @@ internal fun lensLockBindingFor(
     requestedPhysicalId: String?,
     calibrating: Boolean,
     highSpeed: Boolean,
+    night: Boolean = false,
 ): LensLockBinding? {
-    if (logicalId == null || requestedPhysicalId == null || calibrating || highSpeed || options.size < 2) return null
+    if (logicalId == null || requestedPhysicalId == null || calibrating || highSpeed || night || options.size < 2) return null
     val option = options.firstOrNull { it.physicalId == requestedPhysicalId } ?: return null
     return LensLockBinding(logicalId, option.physicalId, option.anchorRatio)
 }
