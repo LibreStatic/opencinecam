@@ -42,6 +42,23 @@ object FrameOps {
         return RgbaFrame(outW, outH, out)
     }
 
+    /** Pixel-wise mean of equally sized [frames] on the codes (rounded; alpha is opaque). */
+    fun average(frames: List<RgbaFrame>): RgbaFrame {
+        require(frames.isNotEmpty()) { "Nothing to average." }
+        val first = frames[0]
+        require(frames.all { it.width == first.width && it.height == first.height }) { "Frames must match in size." }
+        if (frames.size == 1) return first
+        val out = ByteArray(first.pixels.size)
+        val n = frames.size
+        for (i in out.indices) {
+            if (i % 4 == 3) { out[i] = 0xFF.toByte(); continue }
+            var sum = 0
+            for (f in frames) sum += f.pixels[i].toInt() and 0xFF
+            out[i] = ((sum + n / 2) / n).toByte()
+        }
+        return RgbaFrame(first.width, first.height, out)
+    }
+
     /**
      * Rec.709-weighted luma in 0..1. With [linear] the codes are linearised through [curve]
      * first (relative luminance Y); otherwise it is the weighted sum of the codes.
