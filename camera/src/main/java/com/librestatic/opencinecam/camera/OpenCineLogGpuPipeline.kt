@@ -40,6 +40,14 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
+import com.librestatic.opencinecam.camera.calibration.LensCorrectionEvidence
+import com.librestatic.opencinecam.camera.calibration.LensCorrectionTable
+import com.librestatic.opencinecam.camera.calibration.LensEntry
+import com.librestatic.opencinecam.camera.calibration.LensShaderSplice
+import com.librestatic.opencinecam.camera.calibration.LensTakeUsage
+import com.librestatic.opencinecam.camera.calibration.PhysicalTimeline
+import com.librestatic.opencinecam.camera.calibration.TransferCurve
+import com.librestatic.opencinecam.camera.calibration.multiplyColumnMajor4
 import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.media.video.SdrAvcCaptureKind
 import com.librestatic.opencinecam.media.video.SdrAvcEncoderDecision
@@ -176,6 +184,8 @@ data class OpenCineLogRecordingEvidence(
     val encoderVuiTransfer: Int? = null,
     /** H.273 transfer the file carries after the app rewrote it; 2 (unspecified) for OCLog2. */
     val containerVuiTransfer: Int? = null,
+    /** The lens correction the take was encoded with; null when none was active. */
+    val lensCorrection: LensCorrectionEvidence? = null,
 )
 
 internal data class OpenCineLogPreviewGeometry(
@@ -430,6 +440,81 @@ class OpenCineLogGpuPipeline(
         runCatching { onOperatorLutStatus?.invoke(status) }
     }
 
+    // Lens correction. The request is written from any thread; the GL thread applies it between takes.
+    private val lensLock = Any()
+    private var requestedLens: LensCorrectionTable? = null
+    @Volatile private var lensRequestVersion = 0
+    private var lensAppliedVersion = 0
+    /** GL thread only. When non-null every linked program is the lens-spliced variant. */
+    private var appliedLens: LensCorrectionTable? = null
+    private var frameLensEntry: LensEntry? = null
+    private var frameLensLookup: PhysicalTimeline.Lookup? = null
+    private val lensTimeline = PhysicalTimeline()
+    private val lensUvScratch = FloatArray(16)
+    private val lensFallbackCounter = java.util.concurrent.atomic.AtomicLong()
+    /**
+     * Whether the scope/analysis readback sees the corrected frame (scopes show what is recorded).
+     * A calibration readback switches it off to read the camera's own pixels.
+     */
+    @Volatile internal var correctionEnabledForReadback = true
+    /** Frames drawn with a physical id found by a non-exact timestamp lookup. */
+    val lensFallbackFrames: Long get() = lensFallbackCounter.get()
+
+    /** Sets the lens correction (null disables). Applied on the GL thread; a running take keeps the table it started with. */
+    fun setLensCorrection(table: LensCorrectionTable?) {
+        synchronized(lensLock) { requestedLens = table; lensRequestVersion++ }
+        if (!closed.get()) handler.post { applyRequestedLens() }
+    }
+
+    /**
+     * Builds the table for this pipeline's frame aspect from [set] and applies it (null disables).
+     * A calibration solved on the other source path (SDR/HLG) still applies, with a warning.
+     */
+    fun setLensCalibration(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        if (set == null) { setLensCorrection(null); return }
+        val route = if (!passthroughSdr && sourcePath == OpenCineLogSourcePath.HLG10_BT2020)
+            com.librestatic.opencinecam.core.model.CalibrationSourcePath.HLG
+        else com.librestatic.opencinecam.core.model.CalibrationSourcePath.SDR
+        if (set.sourcePath != route) {
+            android.util.Log.w(LOG_TAG, "Lens calibration was solved on ${set.sourcePath} but this route is $route; applying it anyway.")
+        }
+        setLensCorrection(LensCorrectionTable.build(set, alignmentEnabled, size.width.toFloat() / size.height.coerceAtLeast(1)))
+    }
+
+    /** Records which physical camera produced the frame with [timestampNs] (the sensor timestamp). */
+    fun notePhysicalForTimestamp(timestampNs: Long, physicalId: String?) = lensTimeline.note(timestampNs, physicalId)
+
+    private fun applyRequestedLens() {
+        if (closed.get() || recording != null || lensRequestVersion == lensAppliedVersion) return
+        val (table, version) = synchronized(lensLock) { requestedLens to lensRequestVersion }
+        lensAppliedVersion = version
+        val relink = (table != null) != (appliedLens != null)
+        if (relink) {
+            try {
+                check(makeCurrent(pbuffer)) { "Lens correction context is unavailable." }
+                val fresh = if (passthroughSdr) linkProgram(VERTEX_SHADER, passthroughShader(table != null))
+                    else linkProgram(VERTEX_SHADER, transformShader(sourcePath, shaderYcbcr, table != null))
+                if (program != 0) GLES30.glDeleteProgram(program)
+                program = fresh
+                refreshMainProgramLocations()
+                if (operatorLutProgram != 0) { GLES30.glDeleteProgram(operatorLutProgram); operatorLutProgram = 0 }
+                if (hlgSignalProgram != 0) { GLES30.glDeleteProgram(hlgSignalProgram); hlgSignalProgram = 0 }
+            } catch (failure: Exception) {
+                android.util.Log.w(LOG_TAG, "Lens correction shader did not link; the correction stays off.", failure)
+                for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+                return
+            }
+        }
+        appliedLens = table
+    }
+
+    private fun lensSplicedSha(hlgOutput: Boolean, hdr10Output: Boolean): String = when {
+        passthroughSdr -> passthroughSha256(lens = true)
+        hdr10Output -> pqSignalSha256(shaderYcbcr, lens = true)
+        hlgOutput -> hlgSignalSha256(shaderYcbcr, lens = true)
+        else -> transformSha256(sourcePath, shaderYcbcr, lens = true)
+    }
+
     private var quad: PreviewQuad? = null
     private var textureMatrixLocation = -1
     private var outputModeLocation = -1
@@ -658,7 +743,8 @@ class OpenCineLogGpuPipeline(
                     if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
                     hlgSignalProgram = 0
                     // Mandatory output processing, like a recording LUT: no fallback to OCLog2 pixels.
-                    hlgSignalProgram = linkProgram(VERTEX_SHADER, if (hdr10Output) pqSignalShader(shaderYcbcr) else hlgSignalShader(shaderYcbcr))
+                    val lensOn = appliedLens != null
+                    hlgSignalProgram = linkProgram(VERTEX_SHADER, if (hdr10Output) pqSignalShader(shaderYcbcr, lensOn) else hlgSignalShader(shaderYcbcr, lensOn))
                     hlgSignalProgramPq = hdr10Output
                 }
                 val projectRate = timelapse?.projectRate ?: projectRateOverride ?: CaptureFrameRate(targetFps)
@@ -780,7 +866,8 @@ class OpenCineLogGpuPipeline(
                             !passthroughSdr && recordingLut == null -> HevcVuiTransfer.UNSPECIFIED
                             else -> null
                         },
-                        hlgOutput = hlgOutput, hdr10Output = hdr10Output)
+                        hlgOutput = hlgOutput, hdr10Output = hdr10Output,
+                        lens = appliedLens?.let { LensTakeUsage(it, lensSplicedSha(hlgOutput, hdr10Output)) })
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -1005,6 +1092,16 @@ class OpenCineLogGpuPipeline(
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
         program = if (passthroughSdr) linkProgram(VERTEX_SHADER, PASSTHROUGH_FRAGMENT_SHADER) else linkTransformProgram()
         quad = PreviewQuad()
+        refreshMainProgramLocations()
+        val createdTexture = SurfaceTexture(textureId).apply {
+            setDefaultBufferSize(size.width, size.height)
+            setOnFrameAvailableListener({ renderLatestFrame() }, handler)
+        }
+        surfaceTexture = createdTexture
+        inputSurface = Surface(createdTexture)
+    }
+
+    private fun refreshMainProgramLocations() {
         textureMatrixLocation = GLES30.glGetUniformLocation(program, "uTextureMatrix")
         outputModeLocation = GLES30.glGetUniformLocation(program, "uOutputMode")
         positionScaleLocation = GLES30.glGetUniformLocation(program, "uPositionScale")
@@ -1013,12 +1110,6 @@ class OpenCineLogGpuPipeline(
         sceneGainLocation = GLES30.glGetUniformLocation(program, "uSceneGain")
         ycbcrToRgbLocation = GLES30.glGetUniformLocation(program, "uYcbcrToRgb")
         ycbcrOffsetLocation = GLES30.glGetUniformLocation(program, "uYcbcrOffset")
-        val createdTexture = SurfaceTexture(textureId).apply {
-            setDefaultBufferSize(size.width, size.height)
-            setOnFrameAvailableListener({ renderLatestFrame() }, handler)
-        }
-        surfaceTexture = createdTexture
-        inputSurface = Surface(createdTexture)
     }
 
     /**
@@ -1045,6 +1136,7 @@ class OpenCineLogGpuPipeline(
         try {
             frameDiag?.frameStart()
             makeCurrent(pbuffer)
+            applyRequestedLens()
             texture.updateTexImage()
             frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.LATCH)
             val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
@@ -1056,6 +1148,12 @@ class OpenCineLogGpuPipeline(
                 ycbcrDataSpace = frameDataSpace
             }
             val timestampNs = texture.timestamp
+            appliedLens?.let { lens ->
+                val found = lensTimeline.lookup(timestampNs)
+                if (!found.exact) lensFallbackCounter.incrementAndGet()
+                frameLensLookup = found
+                frameLensEntry = lens.entryFor(found.physicalId)
+            }
             recording?.takeIf { it.acceptFrames.get() && recordingFrameMeetsWhiteBalanceBoundary(timestampNs, it.minimumSensorTimestampNs) }?.let { active ->
                 active.noteSourceDataSpace(frameDataSpace, sourcePath)
                 if (active.ycbcrConversion == null) active.ycbcrConversion = ycbcrConversion?.label
@@ -1083,6 +1181,7 @@ class OpenCineLogGpuPipeline(
                         hlgSignal = active.hlgOutput,
                     )
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_DRAW)
+                    frameLensLookup?.let { found -> active.lens?.record(found.physicalId, found.exact) }
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_SWAP)
@@ -1159,6 +1258,7 @@ class OpenCineLogGpuPipeline(
             height = height,
             previewOutput = false,
             recordingGeometry = null,
+            lensCorrected = correctionEnabledForReadback,
         )
         val rgba = ByteBuffer.allocateDirect(width * height * 4)
         GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, rgba)
@@ -1187,7 +1287,8 @@ class OpenCineLogGpuPipeline(
     private fun operatorProgram(lut: MonitorLut, forSubject: Boolean = false, forRecording: Boolean = false): Int {
         check(!forSubject || !forRecording)
         if (operatorLutProgram == 0) {
-            val source = if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else transformShader(sourcePath, shaderYcbcr)
+            val lensOn = appliedLens != null
+            val source = if (passthroughSdr) passthroughShader(lensOn) else transformShader(sourcePath, shaderYcbcr, lensOn)
             val declarations = """
                 uniform highp sampler3D uOperatorLut;
                 uniform vec3 uLutMin;
@@ -1213,7 +1314,9 @@ class OpenCineLogGpuPipeline(
                 }
             """.trimIndent()
             val augmented = source.replace("void main() {", declarations + "\nvoid main() {")
-            val signal = if (passthroughSdr) "texture(uTexture, vTexCoord).rgb" else "ocLog"
+            val signal = if (passthroughSdr) {
+                if (lensOn) "${LensShaderSplice.FUNCTION}(texture(uTexture, vTexCoord).rgb)" else "texture(uTexture, vTexCoord).rgb"
+            } else "ocLog"
             val end = augmented.lastIndexOf('}')
             operatorLutProgram = linkProgram(VERTEX_SHADER, augmented.substring(0, end) +
                 "outColor = vec4(applyOperatorLut($signal), 1.0);\n}")
@@ -1276,6 +1379,7 @@ class OpenCineLogGpuPipeline(
         subjectLutOutput: Boolean = false,
         recordingLut: MonitorLut? = null,
         hlgSignal: Boolean = false,
+        lensCorrected: Boolean = true,
     ): OperatorLutStatus? {
         check(!previewOutput || !subjectLutOutput)
         check(!hlgSignal || recordingLut == null && !previewOutput && !subjectLutOutput)
@@ -1322,7 +1426,18 @@ class OpenCineLogGpuPipeline(
         }
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-        GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
+        val lens = appliedLens
+        if (lens != null) {
+            // The alignment acts on the output-space UV before the SurfaceTexture transform: T * A.
+            val entry = if (lensCorrected) frameLensEntry ?: lens.defaultEntry else lens.identityEntry
+            multiplyColumnMajor4(textureMatrix, entry.uvMatrix, lensUvScratch)
+            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, lensUvScratch, 0)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(selectedProgram, "uLensEv"), entry.evOffset)
+            GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensMatrix"), 1, false, entry.colorMatrix, 0)
+            GLES30.glUniform3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensGains"), 1, entry.gains, 0)
+        } else {
+            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
+        }
         GLES30.glUniform1i(location("uOutputMode", outputModeLocation), outputMode)
         // Monitors, scopes and the encoder see the same scaled light; a take freezes its gain.
         GLES30.glUniform1f(location("uSceneGain", sceneGainLocation), recording?.sceneGain ?: sceneGain(greyReference))
@@ -1683,9 +1798,12 @@ class OpenCineLogGpuPipeline(
                     ycbcrConversion = if (shaderYcbcr) active.ycbcrConversion else null,
                     encoderVuiTransfer = active.encoderVuiTransfer,
                     containerVuiTransfer = active.containerVuiTransfer,
+                    lensCorrection = active.lens?.evidence(),
                 )
             } else null
             if (recording === active) recording = null
+            // A correction change requested during the take takes effect now.
+            if (!closed.get()) handler.post { applyRequestedLens() }
             active.onStopped(success && active.failure == null, evidence)
         }
     }
@@ -2117,6 +2235,8 @@ class OpenCineLogGpuPipeline(
         val hlgOutput: Boolean,
         /** With [hlgOutput]: the signal is converted to PQ and the encoder runs in the HDR10 profile. */
         val hdr10Output: Boolean = false,
+        /** The lens table frozen at REC start with the counters of the frames encoded through it; null when no correction. */
+        val lens: LensTakeUsage? = null,
     ) {
         val clearsVuiTransfer: Boolean get() = vuiTransfer != null
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
@@ -2508,19 +2628,39 @@ class OpenCineLogGpuPipeline(
          * ([OpenCineLogYcbcrConversion]), clamped to [0, 1] like a normalized sampler result.
          * Derived textually so both variants share one transform body.
          */
-        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(fragmentShader(sourcePath)) else fragmentShader(sourcePath)
+        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(fragmentShader(sourcePath)) else fragmentShader(sourcePath)
+            return if (lens) LensShaderSplice.splice(base, sourceCurve(sourcePath)) else base
+        }
+
+        /** The transfer the tier's camera signal carries; the lens correction decodes and re-encodes with it. */
+        private fun sourceCurve(sourcePath: OpenCineLogSourcePath): TransferCurve = when (sourcePath) {
+            OpenCineLogSourcePath.HLG10_BT2020 -> TransferCurve.HLG
+            OpenCineLogSourcePath.SDR_BT709_ISP -> TransferCurve.SDR
+        }
+
+        /** The SDR passthrough shader (the camera's code values straight to the output). */
+        fun passthroughShader(lens: Boolean = false): String =
+            if (lens) LensShaderSplice.splice(PASSTHROUGH_FRAGMENT_SHADER, TransferCurve.SDR) else PASSTHROUGH_FRAGMENT_SHADER
+
+        fun passthroughSha256(lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(passthroughShader(lens).toByteArray())
+            .joinToString("") { "%02x".format(it) }
 
         /** The HLG recording shader as linked; it shares the tier shader's YCbCr decoding. */
-        fun hlgSignalShader(shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
+        fun hlgSignalShader(shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
+            return if (lens) LensShaderSplice.splice(base, TransferCurve.HLG) else base
+        }
 
         /**
          * The HLG recording shader with a PQ output: HLG scene light through the 1000 cd/m2 HLG OOTF
          * and the ST 2084 inverse EOTF. [HlgToPq] is its host-testable mirror.
          */
-        fun pqSignalShader(shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(PQ_SIGNAL_FRAGMENT_SHADER) else PQ_SIGNAL_FRAGMENT_SHADER
+        fun pqSignalShader(shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(PQ_SIGNAL_FRAGMENT_SHADER) else PQ_SIGNAL_FRAGMENT_SHADER
+            return if (lens) LensShaderSplice.splice(base, TransferCurve.HLG) else base
+        }
 
         private fun ycbcrVariant(base: String): String {
             for (anchor in YCBCR_ANCHORS) check(base.split(anchor).size == 2) { "YCbCr shader anchor drifted: $anchor" }
@@ -2546,18 +2686,18 @@ class OpenCineLogGpuPipeline(
         )
 
         /** Identity of the linked transform; the shader-YCbCr variant is the qualified one. */
-        fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(transformShader(sourcePath, shaderYcbcr).toByteArray())
+        fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(transformShader(sourcePath, shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Identity of the linked HLG recording shader. */
-        fun hlgSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(hlgSignalShader(shaderYcbcr).toByteArray())
+        fun hlgSignalSha256(shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(hlgSignalShader(shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Identity of the linked PQ recording shader. */
-        fun pqSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(pqSignalShader(shaderYcbcr).toByteArray())
+        fun pqSignalSha256(shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(pqSignalShader(shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Backward-compatible identity of the qualified HLG transform. */

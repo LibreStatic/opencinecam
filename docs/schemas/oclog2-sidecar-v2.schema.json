@@ -98,6 +98,22 @@
       },
       "additionalProperties": true
     },
+    "lensCorrection": {
+      "type": "object",
+      "description": "Present only when a per-physical-lens correction was active for the take; frozen at REC start.",
+      "required": ["setSha256", "splicedTransformSha256", "alignment", "perLensFrameCounts", "fallbackFrames"],
+      "properties": {
+        "setSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "splicedTransformSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "alignment": { "type": "boolean" },
+        "perLensFrameCounts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "fallbackFrames": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
     "qualification": {
       "type": "object",
       "required": [

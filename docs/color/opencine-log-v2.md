@@ -97,6 +97,21 @@ match and the first unexpected dataspace. `tools/qualify_oclog2.py` fails a bund
 mismatched frame and leaves it `NOT_RUN` when the platform did not report a dataspace. The
 recording itself is kept, because a lost take is worse than a disclosed mismatch.
 
+## Lens correction
+
+With a lens calibration for the logical camera and the video correction on, the GPU pipeline
+corrects each frame for the physical lens that produced it before every other step: the
+camera sample is decoded with the tier's own source curve, multiplied as
+`2^ev * M * (gains * linear)`, clamped at zero and re-encoded with the same curve. The
+alignment moves the sampling window by the lens' similarity with one zoom shared by all lenses.
+The shader is spliced only while a correction is set, so the pinned `shaderSha256` above does
+not change. A take that used the correction adds a top-level `lensCorrection` object to the
+sidecar: `setSha256` (the calibration set), `splicedTransformSha256` (the shader actually
+linked), `alignment`, `perLensFrameCounts` (encoded frames per physical id) and
+`fallbackFrames` (encoded frames whose lens came from a non-exact timestamp lookup). The key
+is absent when no correction was active. The correction is frozen at REC start. Direct
+constrained high-speed recording has no GPU stage and is not corrected.
+
 ## YCbCr decoding
 
 The camera delivers YCbCr. With the default external sampler, the GPU driver converts it to
