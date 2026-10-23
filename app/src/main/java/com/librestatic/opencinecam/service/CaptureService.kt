@@ -976,10 +976,18 @@ class CaptureService : Service() {
      * The calibration of [cameraId] on this build when the video correction is on. Read lazily so
      * the GPU-viewfinder decision for a camera being switched to sees its own calibration.
      */
-    private fun lensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? {
+    private fun lensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? =
+        if (settings.lensCorrectionVideo) loadLensCalibration(cameraId) else null
+
+    /** Like [lensCalibrationFor] for still photos, gated by the separate "apply to photos" setting. */
+    private fun photoLensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? =
+        if (settings.lensCorrectionPhotos) loadLensCalibration(cameraId) else null
+
+    /** The cached store read shared by the video and photo gates; null while a calibration run is active. */
+    private fun loadLensCalibration(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? {
         // A run measures the uncorrected signal, so nothing is applied while it is going.
         if (calibrationRun != null) return null
-        if (!settings.lensCorrectionVideo || cameraId == null) return null
+        if (cameraId == null) return null
         lensCalibrationCache?.takeIf { it.first == cameraId }?.let { return it.second }
         val set = runCatching {
             com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
@@ -996,6 +1004,7 @@ class CaptureService : Service() {
      */
     private fun refreshLensCorrection(cameraId: String? = cameraState.value.selectedCameraId) {
         previewEngine.setLensCorrection(lensCalibrationFor(cameraId), settings.lensCorrectionAlignment)
+        previewEngine.setPhotoLensCorrection(photoLensCalibrationFor(cameraId), settings.lensCorrectionAlignment)
     }
 
     // ---- Lens calibration run (PLAN-070) ----
@@ -3140,6 +3149,7 @@ class CaptureService : Service() {
             ) }
             audioListeningController?.configure(settings.audioListening, settings.audioListeningOutputDeviceId)
             if (previous.lensCorrectionVideo != settings.lensCorrectionVideo ||
+                previous.lensCorrectionPhotos != settings.lensCorrectionPhotos ||
                 previous.lensCorrectionAlignment != settings.lensCorrectionAlignment) refreshLensCorrection()
             if (!wasLocked && cameraState.value.captureControlsLocked) previewEngine.cancelFocusPull()
             geometrySeeds = GeometrySeeds(

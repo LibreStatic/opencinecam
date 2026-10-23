@@ -658,6 +658,42 @@ class Camera2PreviewEngine(
         logPipeline?.setLensCalibration(set, alignmentEnabled)
     }
 
+    @Volatile private var photoLensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
+
+    /**
+     * Sets the calibration applied to JPEG (and aspect-cropped HEIC) stills, or null for none. Each
+     * still is corrected by the physical lens its own result names. DNG pixels and night-extension
+     * stills are never corrected.
+     */
+    fun setPhotoLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        photoLensCalibration = set?.let { it to alignmentEnabled }
+    }
+
+    /** The physical lens that took the still of [owner], from its own result; null when unknown. */
+    private fun stillPhysicalId(owner: PhotoRequest): String? {
+        val result = owner.result ?: return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)?.let { return it }
+        if (routedStillPhysicalId == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        return result.physicalCameraTotalResults?.keys?.singleOrNull()
+    }
+
+    /** The lens correction plan for one compressed still, or null (with the reason logged). */
+    private fun photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int):
+        com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
+        val (set, alignment) = photoLensCalibration ?: return null
+        val physicalId = stillPhysicalId(owner)
+        val resolution = com.librestatic.opencinecam.camera.calibration.PhotoLensCorrection.resolve(set, alignment, physicalId, width, height)
+        resolution.note?.let { Log.w(TAG, "Lens correction for the $kind still: $it") }
+        val plan = resolution.plan ?: return null
+        if (kind == StillImageKind.HEIC && !owner.aspect.enabled) {
+            // The container rotation is already applied by the decoder, so the sensor grid is not available.
+            Log.w(TAG, "Lens correction skipped: HEIC stills are corrected only with the aspect crop on")
+            return null
+        }
+        return plan
+    }
+
     @Volatile private var calibrationReadback: OpenCineLogGpuPipeline.CalibrationReadbackListener? = null
     /** Touched on [cameraExecutor] only, except for the volatile read in the capture callbacks (same thread). */
     @Volatile private var calibrationJoiner: com.librestatic.opencinecam.camera.calibration.CalibrationFrameJoiner? = null
@@ -1896,10 +1932,23 @@ class Camera2PreviewEngine(
                         if (it.kind == StillImageKind.HEIC && android.os.SystemClock.uptimeMillis() >= owner.deadlineUptimeMs)
                             throw java.util.concurrent.TimeoutException("HEIC processing exceeded the still request deadline")
                     }
-                    add(if (!owner.aspect.enabled) StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                    val lens = photoLensPlan(owner, it.kind, it.width, it.height)
+                    add(if (!owner.aspect.enabled) {
+                        if (lens != null) {
+                            // Same pixel grid and size: re-encode with the EXIF carried over; on any failure keep the original.
+                            try {
+                                correctPhotoLensJpeg(it.bytes, lens, owner.quality, java.io.File(appContext.cacheDir, "photo-lens"), checkRunning)
+                            } catch (failure: java.util.concurrent.CancellationException) { throw failure
+                            } catch (failure: java.util.concurrent.TimeoutException) { throw failure
+                            } catch (failure: Exception) {
+                                Log.w(TAG, "Lens correction failed; keeping the uncorrected still", failure)
+                                StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                            }
+                        } else StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                    }
                     else if (it.kind == StillImageKind.HEIC) cropPhotoAspectHeic(it.bytes, owner.aspect,
-                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), checkRunning)
-                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, checkRunning))
+                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), lens, checkRunning)
+                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, lens, checkRunning))
                 }
                 raw?.let { image ->
                     pendingRawFrames.remove(timestamp)

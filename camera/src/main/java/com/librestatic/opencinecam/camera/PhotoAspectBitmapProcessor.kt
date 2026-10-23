@@ -12,7 +12,12 @@ import java.io.ByteArrayOutputStream
 /** Native JPEG inputs explicitly request orientation zero. Normalize EXIF and the frozen desired
  * rotation, then center-crop actual pixels. No sampling/upscaling or silent format conversion. */
 internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection, desiredOrientationDegrees: Int,
-    quality: Int, checkRunning: () -> Unit): StillImagePayload {
+    quality: Int, checkRunning: () -> Unit): StillImagePayload =
+    cropPhotoAspectJpeg(bytes, aspect, desiredOrientationDegrees, quality, null, checkRunning)
+
+/** With a [lens] plan the decoded sensor-grid pixels are lens-corrected first, then oriented and cropped. */
+internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection, desiredOrientationDegrees: Int,
+    quality: Int, lens: com.librestatic.opencinecam.camera.calibration.PhotoLensPlan?, checkRunning: () -> Unit): StillImagePayload {
     require(aspect.enabled && desiredOrientationDegrees in setOf(0, 90, 180, 270) && quality in 1..100)
     require(bytes.isNotEmpty() && bytes.size <= PhotoAspectBounds.MAX_ENCODED_BYTES)
     checkRunning()
@@ -41,6 +46,9 @@ internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection,
         require(decoded.width == bounds.outWidth && decoded.height == bounds.outHeight &&
             decoded.config == Bitmap.Config.ARGB_8888 && decoded.colorSpace?.isSrgb == true)
         checkRunning()
+        // Alignment acts on the sensor pixel grid, so it precedes the EXIF/desired rotation and the crop.
+        val source = if (lens == null) decoded else own(applyLensPlan(decoded, lens, checkRunning)).also { retainOnly(it) }
+        checkRunning()
         val transform = Matrix().apply {
             val (a, b, c, d) = when (exif) {
                 2 -> listOf(-1f, 0f, 0f, 1f)
@@ -55,7 +63,7 @@ internal fun cropPhotoAspectJpeg(bytes: ByteArray, aspect: PhotoAspectSelection,
             setValues(floatArrayOf(a, b, 0f, c, d, 0f, 0f, 0f, 1f))
             postRotate(desiredOrientationDegrees.toFloat())
         }
-        val oriented = own(Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, transform, false))
+        val oriented = own(Bitmap.createBitmap(source, 0, 0, source.width, source.height, transform, false))
         retainOnly(oriented)
         val report = aspect.appliedReport(oriented.width, oriented.height)
         checkRunning()
