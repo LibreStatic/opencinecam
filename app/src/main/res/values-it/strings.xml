@@ -164,6 +164,7 @@
     <string name="capture_status_free">%1$s liberi</string>
     <string name="recording_status">REC %1$s · %2$d fps · %3$s · %4$s liberi</string>
     <string name="camera_switch_timeout">La fotocamera %1$s non si è avviata; ripristinata la fotocamera %2$s.</string>
+    <string name="lens_lock_unavailable">Il blocco dell\'obiettivo non è disponibile qui; la fotocamera cambia obiettivo da sola.</string>
     <string name="recording_channel">Registrazione</string>
     <string name="recording_channel_summary">Stato di registrazione visibile e azione di stop</string>
     <string name="recording_notification_title">Registrazione di OpenCineCam</string>
