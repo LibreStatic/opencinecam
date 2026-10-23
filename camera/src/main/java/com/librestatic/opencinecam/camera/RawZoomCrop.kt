@@ -30,6 +30,20 @@ object RawZoomCrop {
         return NormRect(map(cropRegion.left, w), map(cropRegion.top, h), map(cropRegion.right, w), map(cropRegion.bottom, h))
     }
 
+    /**
+     * [fov] narrowed by a centred GPU crop of [factor] (the lens lock's crop route, PLAN-070 slice 4):
+     * the processed outputs the operator saw were cropped about their own centre. Factors at or
+     * below 1 leave it unchanged.
+     */
+    fun digitalCrop(fov: NormRect, factor: Double): NormRect {
+        if (!(factor > 1.0) || factor.isInfinite()) return fov
+        val cx = (fov.left + fov.right) / 2
+        val cy = (fov.top + fov.bottom) / 2
+        val halfW = fov.width / 2 / factor
+        val halfH = fov.height / 2 / factor
+        return NormRect(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+    }
+
     /** Horizontal field-of-view width, proportional to the returned value; null when data is unusable. */
     fun fovWidth(physicalWidthMm: Float?, activeWidth: Int, pixelArrayWidth: Int, focalMm: Float?): Double? {
         if (physicalWidthMm == null || focalMm == null || physicalWidthMm <= 0f || focalMm <= 0f ||

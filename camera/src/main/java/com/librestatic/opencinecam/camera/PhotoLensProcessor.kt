@@ -100,6 +100,47 @@ internal fun correctPhotoLensJpeg(bytes: ByteArray, plan: PhotoLensPlan, quality
     } finally { decoded?.recycle(); corrected?.recycle() }
 }
 
+/**
+ * Centre-crops a JPEG delivered without an aspect crop by the lens lock's GPU-crop [factor]
+ * (PLAN-070 slice 4): W/f x H/f rounded to even, never upscaled. A centred crop does not depend on
+ * the orientation, so the EXIF of [bytes] (orientation included) is carried over as
+ * [correctPhotoLensJpeg] does; any failure throws and the caller keeps the original.
+ */
+internal fun cropPhotoZoomJpeg(bytes: ByteArray, factor: Float, quality: Int, tempDirectory: File,
+    checkRunning: () -> Unit): StillImagePayload {
+    require(quality in 1..100 && bytes.isNotEmpty() && bytes.size <= PhotoAspectBounds.MAX_ENCODED_BYTES)
+    checkRunning()
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    require(bounds.outMimeType == "image/jpeg" && bounds.outWidth > 0 && bounds.outHeight > 0)
+    require(bounds.outWidth.toLong() * bounds.outHeight <= PhotoAspectBounds.MAX_DECODED_PIXELS)
+    val options = BitmapFactory.Options().apply {
+        inPreferredConfig = Bitmap.Config.ARGB_8888
+        inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
+    }
+    var decoded: Bitmap? = null
+    var cropped: Bitmap? = null
+    try {
+        decoded = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options))
+        checkRunning()
+        val rect = LensLockCrop.stillCrop(decoded.width, decoded.height, factor)
+        cropped = Bitmap.createBitmap(decoded, rect.left, rect.top, rect.width, rect.height)
+        if (cropped !== decoded) { decoded.recycle() }
+        decoded = null
+        val output = ByteArrayOutputStream()
+        val ok = cropped.compress(Bitmap.CompressFormat.JPEG, quality, output)
+        checkRunning()
+        check(ok) { "Cropped JPEG encoding failed" }
+        val width = cropped.width; val height = cropped.height
+        cropped.recycle(); cropped = null
+        val withExif = copyExif(bytes, output.toByteArray(), tempDirectory)
+        check(withExif.size <= PhotoAspectBounds.MAX_ENCODED_BYTES) { "Cropped JPEG exceeds its encoded budget" }
+        return StillImagePayload.owned(StillImageKind.JPEG, withExif, width, height)
+    } catch (failure: OutOfMemoryError) {
+        throw IllegalStateException("The lens lock crop exceeds available bitmap memory", failure)
+    } finally { decoded?.recycle(); cropped?.recycle() }
+}
+
 private fun copyExif(source: ByteArray, encoded: ByteArray, tempDirectory: File): ByteArray {
     tempDirectory.mkdirs()
     val file = File.createTempFile("lens-", ".jpg", tempDirectory)
