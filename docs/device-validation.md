@@ -205,3 +205,19 @@ This is about 5 % hysteresis. The tele switch matches its field-of-view anchor.
 **Vendor keys.** `com.qti.chi.multicamerainfo.MasterCamera` was tried with the values 0, 1, 2, 3 and 5 as a repeating request key, and with 0 and 1 as a session parameter. It is accepted but changes nothing: the switch points and the reported lenses are unchanged. It is also missing from both the available request keys and the available session keys. The other candidates (`ForceFullFOV`, `SATFallback.W2UW`, `TransitionMode`, `manualWB`) were not reached before the probe was stopped to spare the device the heat.
 
 **Conclusion.** The lens lock opens the physical directly (ADR-0036). No vendor key is used.
+
+### G1: lens lock on the Razr Fold (2026-10-23)
+
+Same build and fingerprint as G0, debug package, folded (cover screen). The lock was set with the LENS key and moved between lenses with the locked anchor bar. Each lock opened the physical camera directly; no lock was withdrawn.
+
+| Lens | Zoom range on the UI scale | JPEG at the top of the range | Video |
+|---|---|---|---|
+| 3 (ultra-wide) | 0.55x to 4.4x | 3840x2880, 1.83 mm, digital zoom 8.0 | not recorded |
+| 2 (wide) | 1x to 8x | 4000x3000, 6.57 mm, digital zoom 8.0 | 1080p30 HEVC |
+| 5 (tele) | 3x to 24x | 4096x3072, 13.3 mm, digital zoom 8.0 | 4K30 HEVC |
+
+- **The lens never switched.** Locked to the wide, the zoom passed the 3.00x point where the logical camera hands over to the tele, and the JPEG at 8x still came from the wide. A take zoomed from about 3x to 8x on the wide shows no colour or framing jump: the largest frame-to-frame scene score was 0.10.
+- **RAW.** A DNG on the wide at 3.3x kept the full 4000x3000 frame with a 1217x912 DefaultCrop.
+- **Video sizes.** 1080p30 on the wide and 4K30 on the tele mapped to the same profile on the physical camera, so the size mismatch the engine allows for did not happen on this device.
+- **Anchor labels.** Unlocked, the anchor bar shows 0.5 / 1.0 / 2.0, from the focal ratios. Locked, it shows 0.6 / 1.0 / 3.0, from the fields of view. The logical camera switches to the tele at 3.00x, so the unlocked 2.0 anchor does not match the lens; this predates the lens lock.
+
