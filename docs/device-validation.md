@@ -167,3 +167,41 @@ Verify (native path): record 4K60 in a very dark room with FPS LOCK on, then:
 - `adb shell dumpsys media.camera`, "Last request sent": `android.control.aePriorityMode` is exposure-time priority and `android.sensor.exposureTime` ~16.57 ms; the latest result's `android.sensor.frameDuration` is ~16.67 ms.
 - The file is a true 60 fps (no ~33 fps stretch). With the setting off the same scene should show the 30 ms frame duration again.
 - In bright light the key stays white (on, not holding) and no `engaged` line appears.
+
+## Lens calibration and lens lock (PLAN-070 G0)
+
+Razr Fold probe, 2026-10-23, `motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`. The probe was a throwaway debug app; it ran in a dim room (ISO ~4500 at 40 ms).
+
+**Logical camera.** Camera `0` lists the physicals `[2, 3, 5]` and has a zoom range of 0.5–10×.
+
+**Direct physical opens.** `openCamera` works for each of `2` (wide), `3` (ultra-wide) and `5` (tele). Each one configures a three-stream session (preview, `MediaRecorder` at 1080p, full-size JPEG) and records about 3 s of video. Each shoots JPEG at 1×, 2×, 4× and 8×, at 4000x3000, 3840x2880 and 4096x3072 respectively. On a direct open `LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID` is absent.
+
+What each physical keeps, compared with the logical camera:
+
+| | Logical `0` | Wide `2` | Ultra-wide `3` | Tele `5` |
+|---|---|---|---|---|
+| Zoom range | 0.5–10× | 1–8× | 1–8× | 1–8× |
+| HLG10 and HDR10 | yes | yes | yes | yes |
+| EIS (off, on, preview) | yes | yes | yes | yes |
+| Autofocus | yes | yes | yes | yes |
+| Minimum focus distance | 8.3 D | 8.3 D | 40 D | 6.7 D |
+| Constrained high speed | yes | yes | no | no |
+| `[15, 60]` fps range | yes | yes | no | no |
+| `[60, 60]` fps range | yes | yes | yes | yes |
+| Request keys | 132 | 122 | 122 | 122 |
+| Session keys | 72 | 63 | 63 | 63 |
+
+Neither the ultra-wide nor the tele has constrained high speed. A lens-locked high-speed take therefore needs the wide, or the lock has to be refused.
+
+**Where the lenses sit.** The field-of-view ratios (`RawZoomCrop.fovWidth`) put the lenses at 0.55× (ultra-wide), 1× and 3.0× (tele). The focal ratio would suggest about 2× for the tele, but its sensor is smaller.
+
+**Automatic switch points.** In this light the switches happen at:
+
+- going up: 3 to 2 at 1.00× and 2 to 5 at 3.00×;
+- going down: 5 to 2 at 2.95× and 2 to 3 at 0.95×.
+
+This is about 5 % hysteresis. The tele switch matches its field-of-view anchor.
+
+**Vendor keys.** `com.qti.chi.multicamerainfo.MasterCamera` was tried with the values 0, 1, 2, 3 and 5 as a repeating request key, and with 0 and 1 as a session parameter. It is accepted but changes nothing: the switch points and the reported lenses are unchanged. It is also missing from both the available request keys and the available session keys. The other candidates (`ForceFullFOV`, `SATFallback.W2UW`, `TransitionMode`, `manualWB`) were not reached before the probe was stopped to spare the device the heat.
+
+**Conclusion.** The lens lock opens the physical directly (ADR-0036). No vendor key is used.
