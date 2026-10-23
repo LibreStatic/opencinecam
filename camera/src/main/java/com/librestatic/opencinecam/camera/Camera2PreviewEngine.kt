@@ -259,6 +259,8 @@ data class Camera2PreviewMetadata(
     val submittedFocusDistanceDiopters: Float? = null,
     /** Time the sensor takes to read the frame out, from first to last row; null when not reported. */
     val rollingShutterSkewNs: Long? = null,
+    /** COLOR_CORRECTION_GAINS (R, Geven, Godd, B) of the frame; the lens calibration compares them with the calibrated scene's. */
+    val awbGains: List<Float>? = null,
 )
 
 data class Camera2Analysis(
@@ -626,6 +628,7 @@ class Camera2PreviewEngine(
             field = value
             lensCorrectionTable?.let { value?.setLensCorrection(it) }
             lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
+            calibrationReadback?.let { value?.setCalibrationReadback(it) }
             value?.setMonitoringOptions(monitoringOptions)
             value?.setFocusPeakingEnabled(focusPeakingEnabled)
             value?.setOperatorLut(operatorLutSelection)
@@ -655,9 +658,81 @@ class Camera2PreviewEngine(
         logPipeline?.setLensCalibration(set, alignmentEnabled)
     }
 
+    @Volatile private var calibrationReadback: OpenCineLogGpuPipeline.CalibrationReadbackListener? = null
+    /** Touched on [cameraExecutor] only, except for the volatile read in the capture callbacks (same thread). */
+    @Volatile private var calibrationJoiner: com.librestatic.opencinecam.camera.calibration.CalibrationFrameJoiner? = null
+
+    /**
+     * Starts delivering calibration samples to [sink] (about 10 Hz): the uncorrected camera signal
+     * in its source curve, 640 px wide, joined with the frame's capture metadata by sensor
+     * timestamp. Needs the GPU pipeline; returns false without one. [onUnavailable] fires if the
+     * readback fails. The sink runs on the camera executor; keep it short. Survives a pipeline
+     * rebuild but not [stopCalibrationCapture].
+     */
+    fun startCalibrationCapture(
+        sink: (com.librestatic.opencinecam.camera.calibration.CalibrationSample) -> Unit,
+        onUnavailable: (String) -> Unit,
+    ): Boolean {
+        val pipeline = logPipeline ?: return false
+        val joiner = com.librestatic.opencinecam.camera.calibration.CalibrationFrameJoiner { sink(it) }
+        val listener = object : OpenCineLogGpuPipeline.CalibrationReadbackListener {
+            override fun onFrame(width: Int, height: Int, rgba: java.nio.ByteBuffer, timestampNs: Long) {
+                // The GL thread only reads pixels; the copy and the join happen on the camera executor.
+                try {
+                    cameraExecutor.execute {
+                        if (calibrationJoiner !== joiner) return@execute
+                        val bytes = ByteArray(width * height * 4)
+                        rgba.get(bytes)
+                        joiner.offerFrame(timestampNs, com.librestatic.opencinecam.camera.calibration.RgbaFrame(width, height, bytes))
+                    }
+                } catch (_: java.util.concurrent.RejectedExecutionException) { }
+            }
+
+            override fun onUnavailable(reason: String) { onUnavailable(reason) }
+        }
+        calibrationJoiner = joiner
+        calibrationReadback = listener
+        pipeline.setCalibrationReadback(listener)
+        return true
+    }
+
+    /** The source curve of the GPU pipeline's signal, or null without a pipeline. */
+    fun calibrationSourcePath(): com.librestatic.opencinecam.core.model.CalibrationSourcePath? = logPipeline?.lensSourcePath()
+
+    fun stopCalibrationCapture() {
+        calibrationReadback = null
+        calibrationJoiner = null
+        logPipeline?.setCalibrationReadback(null)
+    }
+
+    /** Feeds the calibration joiner with the frame's capture metadata. */
+    private fun noteCalibrationMeta(result: android.hardware.camera2.CaptureResult) {
+        val joiner = calibrationJoiner ?: return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        val gains = result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_GAINS)
+            ?.let { floatArrayOf(it.red, it.greenEven, it.greenOdd, it.blue) }
+        joiner.offerMeta(
+            com.librestatic.opencinecam.camera.calibration.CalibrationFrameMeta(
+                timestampNs = timestamp,
+                physicalId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                } else null,
+                aeState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE),
+                awbState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_STATE),
+                zoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+                } else null,
+                exposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+                iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY),
+                awbGains = gains,
+            ),
+        )
+    }
+
     /** Forwards the frame's active physical lens to the GPU pipeline's timeline. */
     private fun noteLensForFrame(result: android.hardware.camera2.CaptureResult) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || (lensCorrectionTable == null && lensCalibration == null)) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            (lensCorrectionTable == null && lensCalibration == null && calibrationReadback == null)) return
         val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
         val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID) ?: return
         logPipeline?.notePhysicalForTimestamp(timestamp, physicalId)
@@ -4790,6 +4865,7 @@ class Camera2PreviewEngine(
                     if (disposed.get() || callbackGeneration != generation || armedSession == null ||
                         armedSession !== this@Camera2PreviewEngine.session) return
                     noteLensForFrame(result)
+                    noteCalibrationMeta(result)
                     pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.
@@ -4835,6 +4911,8 @@ class Camera2PreviewEngine(
                                 submittedAfMode = request.get(CaptureRequest.CONTROL_AF_MODE),
                                 submittedFocusDistanceDiopters = request.get(CaptureRequest.LENS_FOCUS_DISTANCE),
                                 rollingShutterSkewNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_ROLLING_SHUTTER_SKEW),
+                                awbGains = result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_GAINS)
+                                    ?.let { listOf(it.red, it.greenEven, it.greenOdd, it.blue) },
                                 awbLocked = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_LOCK),
                                 colorTint = if (Build.VERSION.SDK_INT >= 36) result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_COLOR_TINT) else null,
                                 exposureMode = when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)) {

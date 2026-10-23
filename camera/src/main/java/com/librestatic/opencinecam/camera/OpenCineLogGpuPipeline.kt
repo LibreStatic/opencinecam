@@ -466,15 +466,19 @@ class OpenCineLogGpuPipeline(
         if (!closed.get()) handler.post { applyRequestedLens() }
     }
 
+    /** The source curve of this pipeline's uncorrected signal, as calibrations name it. */
+    fun lensSourcePath(): com.librestatic.opencinecam.core.model.CalibrationSourcePath =
+        if (!passthroughSdr && sourcePath == OpenCineLogSourcePath.HLG10_BT2020)
+            com.librestatic.opencinecam.core.model.CalibrationSourcePath.HLG
+        else com.librestatic.opencinecam.core.model.CalibrationSourcePath.SDR
+
     /**
      * Builds the table for this pipeline's frame aspect from [set] and applies it (null disables).
      * A calibration solved on the other source path (SDR/HLG) still applies, with a warning.
      */
     fun setLensCalibration(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
         if (set == null) { setLensCorrection(null); return }
-        val route = if (!passthroughSdr && sourcePath == OpenCineLogSourcePath.HLG10_BT2020)
-            com.librestatic.opencinecam.core.model.CalibrationSourcePath.HLG
-        else com.librestatic.opencinecam.core.model.CalibrationSourcePath.SDR
+        val route = lensSourcePath()
         if (set.sourcePath != route) {
             android.util.Log.w(LOG_TAG, "Lens calibration was solved on ${set.sourcePath} but this route is $route; applying it anyway.")
         }
@@ -513,6 +517,108 @@ class OpenCineLogGpuPipeline(
         hdr10Output -> pqSignalSha256(shaderYcbcr, lens = true)
         hlgOutput -> hlgSignalSha256(shaderYcbcr, lens = true)
         else -> transformSha256(sourcePath, shaderYcbcr, lens = true)
+    }
+
+    /**
+     * Receives calibration readbacks: the uncorrected camera signal in its source curve, RGBA8 in GL
+     * row order (the orientation the lens alignment is expressed in). [onFrame] runs on the GL
+     * thread with a buffer nobody else touches; copy it off-thread. [onUnavailable] fires once if
+     * the readback cannot be set up or fails, after which no frames follow.
+     */
+    interface CalibrationReadbackListener {
+        fun onFrame(width: Int, height: Int, rgba: ByteBuffer, timestampNs: Long)
+        fun onUnavailable(reason: String)
+    }
+
+    @Volatile private var calibrationListener: CalibrationReadbackListener? = null
+    /** GL thread only: the lazily linked readback program and its offscreen target; all zero while idle. */
+    private var calibrationProgram = 0
+    private var calibrationProgramYcbcr = false
+    private var calibrationFbo = 0
+    private var calibrationRbo = 0
+    private var calibrationWidth = 0
+    private var calibrationHeight = 0
+    private var lastCalibrationAtMs = 0L
+
+    /**
+     * Starts (or with null stops) the calibration readback, at most every [CALIBRATION_PERIOD_MS].
+     * It draws the SurfaceTexture through a separate small program with the plain texture matrix: no
+     * lens alignment or correction, OCLog transform, scene gain or LUT, so the pixels are the
+     * camera's own signal. The program and target exist only while a listener is set.
+     */
+    fun setCalibrationReadback(listener: CalibrationReadbackListener?) {
+        calibrationListener = listener
+        if (listener == null && !closed.get()) handler.post {
+            if (calibrationListener == null && calibrationProgram != 0 && makeCurrent(pbuffer)) freeCalibrationReadback()
+        }
+    }
+
+    private fun renderCalibrationReadbackIfDue(timestampNs: Long) {
+        val listener = calibrationListener ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastCalibrationAtMs < CALIBRATION_PERIOD_MS) return
+        lastCalibrationAtMs = now
+        try {
+            check(makeCurrent(pbuffer)) { "Calibration readback context is unavailable." }
+            if (calibrationProgram == 0 || calibrationProgramYcbcr != shaderYcbcr) {
+                freeCalibrationReadback()
+                calibrationWidth = CALIBRATION_WIDTH
+                calibrationHeight = (CALIBRATION_WIDTH.toLong() * size.height / size.width.coerceAtLeast(1))
+                    .toInt().coerceAtLeast(CALIBRATION_MIN_HEIGHT)
+                calibrationProgram = linkProgram(VERTEX_SHADER, calibrationShader(shaderYcbcr))
+                calibrationProgramYcbcr = shaderYcbcr
+                val ids = IntArray(1)
+                GLES30.glGenFramebuffers(1, ids, 0); calibrationFbo = ids[0]
+                GLES30.glGenRenderbuffers(1, ids, 0); calibrationRbo = ids[0]
+                GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, calibrationRbo)
+                GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_RGBA8, calibrationWidth, calibrationHeight)
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, calibrationFbo)
+                GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, calibrationRbo)
+                check(GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
+                    "Calibration framebuffer is incomplete."
+                }
+            }
+            val width = calibrationWidth
+            val height = calibrationHeight
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, calibrationFbo)
+            GLES30.glViewport(0, 0, width, height)
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            GLES30.glUseProgram(calibrationProgram)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+            GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(calibrationProgram, "uTextureMatrix"), 1, false, textureMatrix, 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(calibrationProgram, "uPositionScale"), 1f, 1f)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(calibrationProgram, "uPreviewRotation"), 0)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(calibrationProgram, "uMirrorPreview"), 0)
+            ycbcrConversion?.takeIf { shaderYcbcr }?.let { conversion ->
+                GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(calibrationProgram, "uYcbcrToRgb"), 1, false, conversion.matrix, 0)
+                GLES30.glUniform3fv(GLES30.glGetUniformLocation(calibrationProgram, "uYcbcrOffset"), 1, conversion.offset, 0)
+            }
+            requireNotNull(quad).draw()
+            val rgba = ByteBuffer.allocateDirect(width * height * 4)
+            GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, rgba)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            val error = GLES30.glGetError()
+            check(error == GLES30.GL_NO_ERROR) { "Calibration readback failed with GL error 0x${error.toString(16)}." }
+            rgba.position(0)
+            listener.onFrame(width, height, rgba, timestampNs)
+        } catch (failure: Exception) {
+            android.util.Log.w(LOG_TAG, "Calibration readback failed; it stays off.", failure)
+            for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+            runCatching { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0) }
+            calibrationListener = null
+            runCatching { freeCalibrationReadback() }
+            runCatching { listener.onUnavailable(failure.message ?: "The calibration readback failed.") }
+        }
+    }
+
+    /** GL thread, context current: frees the readback program and target. */
+    private fun freeCalibrationReadback() {
+        if (calibrationProgram != 0) GLES30.glDeleteProgram(calibrationProgram)
+        if (calibrationFbo != 0) GLES30.glDeleteFramebuffers(1, intArrayOf(calibrationFbo), 0)
+        if (calibrationRbo != 0) GLES30.glDeleteRenderbuffers(1, intArrayOf(calibrationRbo), 0)
+        calibrationProgram = 0; calibrationFbo = 0; calibrationRbo = 0
     }
 
     private var quad: PreviewQuad? = null
@@ -1205,6 +1311,7 @@ class OpenCineLogGpuPipeline(
             frameDiag?.skip()
             renderScopeAnalysisIfDue()
             frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.SCOPES)
+            renderCalibrationReadbackIfDue(timestampNs)
             subjectOutput?.let { output ->
                 check(makeCurrent(pbuffer)) { "Subject producer pbuffer is unavailable." }
                 output.render(sourceReceivedAtMs) { width, height, options ->
@@ -1901,6 +2008,8 @@ class OpenCineLogGpuPipeline(
                     surfaceTexture?.setOnFrameAvailableListener(null)
                     surfaceTexture?.release()
                     inputSurface?.release()
+                    calibrationListener = null
+                    freeCalibrationReadback()
                     if (operatorLutProgram != 0) GLES30.glDeleteProgram(operatorLutProgram)
                     if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
                     if (operatorLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(operatorLutTexture), 0)
@@ -2326,6 +2435,10 @@ class OpenCineLogGpuPipeline(
             return maxOf(MIN_PENDING_MUX_SAMPLES, perWindow(videoFps.coerceAtLeast(1).toDouble()) + perWindow(audioRateHz / 1024.0))
         }
         private const val GL_CALL_TIMEOUT_SECONDS = 8L
+        /** Calibration readback: 640 wide, the height keeps the source aspect (360 for 16:9), about 10 Hz. */
+        private const val CALIBRATION_WIDTH = 640
+        private const val CALIBRATION_MIN_HEIGHT = 64
+        private const val CALIBRATION_PERIOD_MS = 100L
         private const val OUTPUT_OCLOG = 0
         private const val OUTPUT_VIEW_ASSIST = 1
         private const val OUTPUT_FLAT_MONITOR = 2
@@ -2646,6 +2759,26 @@ class OpenCineLogGpuPipeline(
         fun passthroughSha256(lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
             .digest(passthroughShader(lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
+
+        /**
+         * The calibration readback program: the camera's code values and nothing else. With
+         * [shaderYcbcr] it converts raw YCbCr with the same `uYcbcrToRgb`/`uYcbcrOffset` expression
+         * as the tier shaders, so both read the same pixels. Linked only while a calibration runs.
+         */
+        fun calibrationShader(shaderYcbcr: Boolean): String {
+            val base = """
+                #version 300 es
+                #extension GL_OES_EGL_image_external_essl3 : require
+                precision highp float;
+                uniform samplerExternalOES uTexture;
+                in vec2 vTexCoord;
+                out vec4 outColor;
+                void main() {
+                    outColor = vec4(texture(uTexture, vTexCoord).rgb, 1.0);
+                }
+            """.trimIndent()
+            return if (shaderYcbcr) ycbcrVariant(base) else base
+        }
 
         /** The HLG recording shader as linked; it shares the tier shader's YCbCr decoding. */
         fun hlgSignalShader(shaderYcbcr: Boolean, lens: Boolean = false): String {
