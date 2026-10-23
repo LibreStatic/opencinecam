@@ -921,3 +921,17 @@ plans:
     risks: [RISK-001]
     conditional_gates: []
     intended_executor: Claude Code
+
+  - id: OCC-PLAN-070
+    title: "Per-lens software calibration and lens lock"
+    status: InProgress
+    revision: 1
+    milestone: H2
+    path: docs/plans/PLAN-070-lens-calibration-and-lens-lock.md
+    depends_on: [OCC-PLAN-015, OCC-PLAN-038, OCC-PLAN-069]
+    blocks: []
+    requirements: [OCC-CAM-004, OCC-CAM-014, OCC-COLOR-008]
+    adrs: [ADR-0006, ADR-0035, ADR-0036]
+    risks: [RISK-001, RISK-002]
+    conditional_gates: []
+    intended_executor: Claude Code
