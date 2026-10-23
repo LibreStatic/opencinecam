@@ -966,6 +966,33 @@ class CaptureService : Service() {
         }
     }
 
+    /** The last calibration read from the store, keyed by logical camera id; null value = none saved. */
+    @Volatile private var lensCalibrationCache: Pair<String, com.librestatic.opencinecam.core.model.CalibrationSet?>? = null
+
+    /**
+     * The calibration of [cameraId] on this build when the video correction is on. Read lazily so
+     * the GPU-viewfinder decision for a camera being switched to sees its own calibration.
+     */
+    private fun lensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? {
+        if (!settings.lensCorrectionVideo || cameraId == null) return null
+        lensCalibrationCache?.takeIf { it.first == cameraId }?.let { return it.second }
+        val set = runCatching {
+            com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
+                .load(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
+        }.getOrNull()
+        lensCalibrationCache = cameraId to set
+        return set
+    }
+
+    /**
+     * Hands the calibration of [cameraId] (or null) to the engine. Called on camera open and when
+     * the correction settings change; the engine applies it to the current and later pipelines and
+     * freezes it for the length of a take.
+     */
+    private fun refreshLensCorrection(cameraId: String? = cameraState.value.selectedCameraId) {
+        previewEngine.setLensCorrection(lensCalibrationFor(cameraId), settings.lensCorrectionAlignment)
+    }
+
     private fun photoPreviewMode(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
         mode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
 
@@ -980,7 +1007,8 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
         // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
-        (photoPreviewMode(mode) && currentOperatorLut != null))
+        // A lens correction shows only on the GPU path.
+        (photoPreviewMode(mode) && (currentOperatorLut != null || lensCalibrationFor(cameraState.value.selectedCameraId) != null)))
 
     /** Night photo applies to PHOTO only, on a camera that offers the extension (API 31+). */
     private fun nightExtensionActive(mode: CaptureMode = cameraState.value.selectedMode): Boolean {
@@ -1093,6 +1121,7 @@ class CaptureService : Service() {
             }
         }
         override fun onOpening(descriptor: Camera2CameraDescriptor) {
+            refreshLensCorrection(descriptor.cameraId)
             subjectPreviewEpoch.incrementAndGet()
             mainHandler.post { cancelCountdown(); subjectStatus.value = SubjectPreviewStatus() }
             activePreviewKey = null
@@ -1706,9 +1735,13 @@ class CaptureService : Service() {
                                 .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
                                     JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
                         } ?: withTimecode
-                        return withHardwareTruth(withMarker, hardwareTruth)
+                        val withLens = graphEvidence?.lensCorrection?.let { lens ->
+                            (withMarker?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                                .put("lensCorrection", lensCorrectionJson(lens)).toString(2)
+                        } ?: withMarker
+                        return withHardwareTruth(withLens, hardwareTruth)
                     }
-                    fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                    fun timingSidecarFlag() = logEvidence == null && (graphEvidence?.lensCorrection != null || hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
                     // The canonical clip sidecar; evaluated when the video is prepared, after the audio is, so it sees both.
                     val clipSidecar: ClipSidecarProvider? = clipStartedAt?.let { started ->
                         clipSidecarProvider {
@@ -2690,6 +2723,8 @@ class CaptureService : Service() {
                 pendingPresetName = pendingPreset?.name,
             ) }
             audioListeningController?.configure(settings.audioListening, settings.audioListeningOutputDeviceId)
+            if (previous.lensCorrectionVideo != settings.lensCorrectionVideo ||
+                previous.lensCorrectionAlignment != settings.lensCorrectionAlignment) refreshLensCorrection()
             if (!wasLocked && cameraState.value.captureControlsLocked) previewEngine.cancelFocusPull()
             geometrySeeds = GeometrySeeds(
                 videoWidth = settings.videoWidth,
@@ -3942,6 +3977,14 @@ class CaptureService : Service() {
             .put("videoPtsGapsOverThreshold", evidence.videoPtsGapsOverThreshold))
         .apply { avTiming?.let { put("avTiming", com.librestatic.opencinecam.captureEpochJson(it)) } }
         .toString(2)
+
+    /** The lens correction a take was encoded with; present only when one was active. */
+    private fun lensCorrectionJson(lens: com.librestatic.opencinecam.camera.calibration.LensCorrectionEvidence): JSONObject = JSONObject()
+        .put("setSha256", lens.setSha256)
+        .put("splicedTransformSha256", lens.splicedTransformSha256)
+        .put("alignment", lens.alignment)
+        .put("perLensFrameCounts", JSONObject().apply { lens.perLensFrameCounts.forEach { (id, n) -> put(id, n) } })
+        .put("fallbackFrames", lens.fallbackFrames)
 
     private fun logSidecarJson(evidence: OpenCineLogRecordingEvidence, timecodeReport: RecordingTimecodeReport?): String = JSONObject()
         .put("schema", "opencinecam-oclog-sidecar-v2")

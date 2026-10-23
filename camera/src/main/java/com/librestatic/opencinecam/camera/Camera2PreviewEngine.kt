@@ -619,9 +619,13 @@ class Camera2PreviewEngine(
     @Volatile private var subjectLutSelection: MonitorLut? = null
     @Volatile private var monitoringOptions = MonitoringOptions()
     @Volatile private var focusPeakingEnabled = false
+    @Volatile private var lensCorrectionTable: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable? = null
+    @Volatile private var lensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
     private var logPipeline: OpenCineLogGpuPipeline? = null
         set(value) {
             field = value
+            lensCorrectionTable?.let { value?.setLensCorrection(it) }
+            lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
             value?.setMonitoringOptions(monitoringOptions)
             value?.setFocusPeakingEnabled(focusPeakingEnabled)
             value?.setOperatorLut(operatorLutSelection)
@@ -629,6 +633,35 @@ class Camera2PreviewEngine(
             value?.setAnalysisSuspended(analysisSuspended)
             value?.setAnalysisBurst(analysisBurst)
         }
+
+    /**
+     * Sets the per-physical-lens correction for the GPU preview and recording (null disables). It
+     * applies to the current pipeline and to every pipeline the engine creates later. Direct
+     * constrained high-speed recording has no GPU stage before the encoder and is not corrected.
+     */
+    fun setLensCorrection(table: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable?) {
+        lensCalibration = null
+        lensCorrectionTable = table
+        logPipeline?.setLensCorrection(table)
+    }
+
+    /**
+     * Like [setLensCorrection], but each pipeline builds its own table for the aspect of the frames
+     * it renders, so a session restart at another size keeps the margin right.
+     */
+    fun setLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        lensCorrectionTable = null
+        lensCalibration = set?.let { it to alignmentEnabled }
+        logPipeline?.setLensCalibration(set, alignmentEnabled)
+    }
+
+    /** Forwards the frame's active physical lens to the GPU pipeline's timeline. */
+    private fun noteLensForFrame(result: android.hardware.camera2.CaptureResult) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || (lensCorrectionTable == null && lensCalibration == null)) return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID) ?: return
+        logPipeline?.notePhysicalForTimestamp(timestamp, physicalId)
+    }
 
     fun setOperatorLut(lut: MonitorLut?) {
         operatorLutSelection = lut
@@ -4740,6 +4773,15 @@ class Camera2PreviewEngine(
             armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
         }
         return object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureProgressed(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    partialResult: android.hardware.camera2.CaptureResult,
+                ) {
+                    if (disposed.get() || callbackGeneration != generation) return
+                    noteLensForFrame(partialResult)
+                }
+
                 override fun onCaptureCompleted(
                     session: CameraCaptureSession,
                     request: CaptureRequest,
@@ -4747,6 +4789,7 @@ class Camera2PreviewEngine(
                 ) {
                     if (disposed.get() || callbackGeneration != generation || armedSession == null ||
                         armedSession !== this@Camera2PreviewEngine.session) return
+                    noteLensForFrame(result)
                     pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.
