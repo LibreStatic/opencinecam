@@ -148,7 +148,7 @@ Device gates use the `.debug` package with `adb -s <razr-serial>` and `monkey -p
 - [x] G0: the probe records, for each candidate vendor key and for direct opens of physicals 2, 3 and 5, whether it works on the Razr Fold, and the physical-versus-logical descriptor diff is in `docs/device-validation.md`.
 - [ ] The solvers recover the known matrix, shift, scale and rotation of synthetic fixtures within the stated bounds and fall back on degenerate scenes.
 - [ ] The calibration codec and store round-trip and are excluded from the portable preset.
-- [ ] G1: lens lock on each of 2, 3 and 5 records video, JPEG and DNG with zoom 1x to 8x and the active lens reported constant.
+- [x] G1: lens lock on each of 2, 3 and 5 records video, JPEG and DNG with zoom 1x to 8x and the active lens reported constant.
 - [ ] G2: a forced open or configuration failure falls back to the pinned-zoom GPU crop with the correct framing in preview, video and stills.
 - [ ] With correction disabled, shader bytes and the sidecar `transformSha256` are identical to the previous build.
 - [ ] G3: a recorded zoom sweep reviewed frame by frame shows reduced colour, exposure and framing jumps at lens switches, before versus after.
@@ -182,4 +182,5 @@ Not complete. Revision 1 opened 2026-10-23 with the approved design, plan and AD
 ## 21. Execution Record
 
 - 2026-10-23 G0 on the Razr Fold (`motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`): physicals 2, 3 and 5 open directly with preview, 1080p `MediaRecorder` and full-size JPEG at 1x to 8x; 10-bit HLG/HDR10, EIS and AF kept; 3 and 5 lack constrained high speed. Automatic switches up 3->2 at 1.00x and 2->5 at 3.00x, down 5->2 at 2.95x and 2->3 at 0.95x. `MasterCamera` (request 0/1/2/3/5, session 0/1) has no effect. Slice 3 uses direct physical opens. Details in `docs/device-validation.md`; raw log and files kept outside the repository.
-- Slices 1, 2, 5, 6 and 7 are implemented on `feat/lens-calibration` with their host suites passing; the device gates G1 to G5 are pending.
+- Slices 1, 2, 3, 5, 6 and 7 are implemented on `feat/lens-calibration` with their host suites passing; slice 4 and the device gates G2 to G5 are pending.
+- 2026-10-23 G1 on the same build: the lock opened physicals 2, 3 and 5 directly with no withdrawal. JPEG at the top of each range came from the locked lens (2: 4000x3000, 6.57 mm, 8x; 5: 4096x3072, 13.3 mm, 24x on the UI scale; 3: 3840x2880, 1.83 mm, 4.4x). A DNG on 2 at 3.3x kept the 4000x3000 frame with a 1217x912 DefaultCrop. Video on 2 at 1080p30 and on 5 at 4K30 mapped to the same profile; a take zoomed through 3x on 2 shows no jump (largest scene score 0.10). Details in `docs/device-validation.md`.
