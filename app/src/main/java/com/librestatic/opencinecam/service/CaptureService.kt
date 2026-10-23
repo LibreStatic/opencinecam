@@ -988,7 +988,7 @@ class CaptureService : Service() {
 
     /**
      * The lock every preview start of [cameraId] passes to the engine, or null to open the logical
-     * camera: no saved or valid lock, a calibration run, or constrained high speed.
+     * camera: no saved or valid lock, a calibration run, constrained high speed or night photo.
      */
     private fun currentLensLockBinding(cameraId: String? = cameraState.value.selectedCameraId): com.librestatic.opencinecam.camera.LensLockBinding? {
         val current = cameraState.value
@@ -999,6 +999,7 @@ class CaptureService : Service() {
             calibrating = calibrationRun != null,
             highSpeed = lensLockHighSpeed(current.selectedMode, current.activeVideoProfile?.constrainedHighSpeed == true,
                 current.activeLogProfile?.constrainedHighSpeed == true),
+            night = nightExtensionActive(current.selectedMode),
         )
     }
 

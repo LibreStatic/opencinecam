@@ -40,6 +40,10 @@ class LensLockGateTest {
         assertNull(lensLockBindingFor("0", razr, "5", calibrating = false, highSpeed = true))
     }
 
+    @Test fun nightPhotoOpensTheLogicalCamera() {
+        assertNull(lensLockBindingFor("0", razr, "5", calibrating = false, highSpeed = false, night = true))
+    }
+
     @Test fun highSpeedFollowsTheModeAndItsProfile() {
         assertTrue(lensLockHighSpeed(CaptureMode.SLOW_MOTION, videoProfileHighSpeed = false, logProfileHighSpeed = false))
         assertTrue(lensLockHighSpeed(CaptureMode.VIDEO, videoProfileHighSpeed = true, logProfileHighSpeed = false))
