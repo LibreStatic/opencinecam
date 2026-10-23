@@ -1042,4 +1042,17 @@
     <string name="lens_cal_fail_scene_unstable">The exposure or white balance never settled. Use steadier light and hold the phone still.</string>
     <string name="lens_cal_fail_low_quality">No lens gave a trustworthy result. Choose a scene with more texture and colour, farther away and in even light.</string>
     <string name="lens_cal_fail_internal">Something went wrong. Try again.</string>
+    <string name="lens_lock_title">Lens lock</string>
+    <string name="lens_lock_summary">Keep one lens: zoom becomes digital and the camera never switches lens</string>
+    <string name="lens_lock_off">Off</string>
+    <string name="lens_lock_ultra_wide">%1$s ultra-wide</string>
+    <string name="lens_lock_wide">%1$s wide</string>
+    <string name="lens_lock_tele">%1$s tele</string>
+    <string name="lens_lock_toggle_on">Lens lock: on, %1$s</string>
+    <string name="lens_lock_toggle_off">Lens lock: off</string>
+    <string name="lens_lock_short">LENS</string>
+    <string name="lens_lock_notice_crop">Lens lock: digital crop</string>
+    <string name="lens_lock_notice_switched">The camera switched lens in low light</string>
+    <string name="lens_lock_anchor_locked">%1$s lens locked</string>
+    <string name="lens_lock_anchor">Lock to the %1$s lens</string>
 </resources>
