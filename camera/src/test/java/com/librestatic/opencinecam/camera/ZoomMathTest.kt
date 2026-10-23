@@ -31,6 +31,23 @@ class ZoomMathTest {
     }
 
     @Test
+    fun deriveAnchorsPrefersFieldOfViewRatios() {
+        // Razr Fold G0: the tele's field of view puts it at 3x, not the 2x its focal ratio suggests.
+        val anchors = ZoomMath.deriveAnchors(
+            referenceFocalMm = 6.57f,
+            physicalFocals = listOf("3" to 1.826f, "2" to 6.57f, "5" to 13.3f),
+            rangeMin = 0.5f,
+            rangeMax = 10f,
+            fovRatios = mapOf("3" to 0.552f, "2" to 1f, "5" to 3.015f),
+        )
+        assertEquals(listOf(0.552f, 1f, 3.015f), anchors.map { it.ratio })
+        assertEquals(listOf("3", "2", "5"), anchors.map { it.physicalCameraId })
+        // A lens without a field of view keeps its focal ratio.
+        val partial = ZoomMath.deriveAnchors(6.57f, listOf("2" to 6.57f, "5" to 13.3f), fovRatios = mapOf("2" to 1f))
+        assertEquals(2.02f, partial.last().ratio, 0.01f)
+    }
+
+    @Test
     fun deriveAnchorsReturnsOnlyUnityWhenPhysicalMetadataMissing() {
         val anchors = ZoomMath.deriveAnchors(null, emptyList())
         assertEquals(1, anchors.size)
