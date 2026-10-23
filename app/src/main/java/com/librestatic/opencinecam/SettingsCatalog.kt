@@ -117,6 +117,8 @@ fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings
     operation = next.operation,
     haptics = next.haptics,
     fpsLock = next.fpsLock,
+    // lensLock and the lensCorrection* switches are deliberately absent: they are structural and stay
+    // as the take started (the camera session and the render graph are built from them).
     exposure = if (next.operation.lockDuringTake) exposure else next.exposure,
     whiteBalance = if (next.operation.lockDuringTake || recordingWhiteBalance == com.librestatic.opencinecam.camera.RecordingWhiteBalancePolicy.LOCK_ON_RECORD) whiteBalance else next.whiteBalance,
     subjectDisplay = next.subjectDisplay.copy(continueRecordingOnFold = subjectDisplay.continueRecordingOnFold),
