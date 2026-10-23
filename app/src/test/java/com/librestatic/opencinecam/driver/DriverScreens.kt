@@ -53,6 +53,12 @@ import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.CameraCapabilitiesScreen
 import com.librestatic.opencinecam.StorageBenchmarkContent
+import com.librestatic.opencinecam.LensCalibrationContent
+import com.librestatic.opencinecam.LensCalibrationLensRow
+import com.librestatic.opencinecam.LensCalibrationLensStatus
+import com.librestatic.opencinecam.LensCalibrationPhase
+import com.librestatic.opencinecam.LensCalibrationUiState
+import com.librestatic.opencinecam.core.model.CalibrationFlag
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
 import com.librestatic.opencinecam.core.model.BenchmarkResultDocument
@@ -354,6 +360,53 @@ fun StorageBenchmark() = DriverTheme {
     StorageBenchmarkContent(37_500_000L, running = false, last = result, onBack = {}, onChoose = {}, onCancel = {})
 }
 
+private val DriverCalibratedLenses = listOf(
+    LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.DONE, 1f, 6.1f, 1.2f, 9.4f, 0.8f, 0.72f, setOf(CalibrationFlag.PARALLAX_SUSPECT)),
+    LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+    LensCalibrationLensRow("5", 2f, LensCalibrationLensStatus.DONE, 1f, 4.3f, 0.9f, 5.2f, 0.6f, 0.91f),
+)
+
+private val DriverCalibrationSaved = LensCalibrationUiState(
+    logicalCameraId = "0", referencePhysicalId = "2", savedCreatedAtMs = 1_792_000_000_000L, savedLenses = DriverCalibratedLenses,
+)
+
+/** The lens calibration page with a saved three-lens calibration; the switches keep their own state. */
+@Composable
+fun LensCalibration() = LensCalibrationPage(DriverCalibrationSaved)
+
+/** The same page before any calibration is saved. */
+@Composable
+fun LensCalibrationEmpty() = LensCalibrationPage(LensCalibrationUiState())
+
+@Composable
+private fun LensCalibrationPage(state: LensCalibrationUiState) = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(lensCorrectionVideo = true, lensCorrectionPhotos = false, lensCorrectionAlignment = true)) }
+    LensCalibrationContent(state, settings, onSettingsChange = { settings = it }, onBack = {}, onStart = {}, onDelete = {})
+}
+
+/** A run in progress: the ultra-wide is done, the tele is measuring at 40 %. */
+@Composable
+fun LensCalibrationRunning() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.MEASURING, logicalCameraId = "0", referencePhysicalId = "2",
+        lenses = listOf(
+            LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.DONE, 1f),
+            LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+            LensCalibrationLensRow("5", 2f, LensCalibrationLensStatus.MEASURING, 0.4f),
+        ),
+    ),
+)
+
+/** A finished run waiting to be saved or discarded. */
+@Composable
+fun LensCalibrationResult() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.RESULT, logicalCameraId = "0", referencePhysicalId = "2", lenses = DriverCalibratedLenses,
+    ),
+)
+
 /** The media catalog with a mix of video, photo and audio takes; take 1's proxy is ready, take 2's is being made. */
 @Composable
 fun Gallery() = GalleryWith(FakeCatalog(SampleTakes))
@@ -425,6 +478,7 @@ private fun CaptureChrome(
     scopesHidden: Boolean = false,
     hardwareKeyboard: Boolean = false,
     foldState: FoldDisplayState = FoldDisplayState(),
+    lensCalibration: LensCalibrationUiState = LensCalibrationUiState(),
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
@@ -462,6 +516,7 @@ private fun CaptureChrome(
                 onOpenMedia = {},
                 onOpenSettings = {},
                 initialPane = initialPane,
+                lensCalibration = lensCalibration,
             )
         }
     }
