@@ -11,7 +11,7 @@ data class CalibrationVerdict(val score: Float, val issues: Set<CalibrationIssue
  * - LOW_TEXTURE: a geometry fit exists but is not [GeometryFit.usable] (under 5 inlier patches);
  *   a null geometry means geometry was not attempted and raises nothing.
  * - LOW_CHROMA: under 10 % of the reference cells (Y >= 0.01) have saturation (max - min) / max
- *   above 0.15, or the colour condition number exceeds 1000.
+ *   above 0.15, or the condition number of the colour fit's chroma system exceeds 1000.
  * - CLIPPED: more than 25 % of the cells clip over 2 % of their pixels in either frame.
  * - UNSTABLE_AE: [aeStable] is false.
  * - PARALLAX_SUSPECT: the geometry fit says so.

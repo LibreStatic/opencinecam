@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.camera.calibration
 
-import kotlin.math.abs
 import kotlin.math.cbrt
 import kotlin.math.ln
 import kotlin.math.pow
@@ -37,7 +36,11 @@ data class ColorFit(
  * the normal equations. Cells are rejected when either frame clips more than [maxClipFraction],
  * when linear Y is below [minLuma], or when their relative texture (sqrt(variance) / Y, the larger
  * of the two frames) is above the [variancePercentile] of the candidates. The matrix falls back to
- * identity under [minCells] valid cells or a condition number above [maxCondition].
+ * identity under [minCells] valid cells, when the chroma energy of the gain-corrected target (its
+ * R-B and G-B differences) is under [minChromaFraction] of its total energy, or when the condition
+ * number of those chroma differences, the only system [fitMatrix] inverts, is above [maxCondition].
+ * The luma direction is left out of the condition on purpose: in any real scene it dwarfs the
+ * chroma, so including it only measures how grey the scene is, which [minChromaFraction] covers.
  */
 data class ColorSolverParams(
     val ridgeLambda: Float = 1e-3f,
@@ -46,6 +49,7 @@ data class ColorSolverParams(
     val minLuma: Float = 0.01f,
     val variancePercentile: Float = 0.8f,
     val maxCondition: Float = 1e3f,
+    val minChromaFraction: Float = 0.0025f,
     val huberIterations: Int = 3,
     val huberK: Float = 1.345f,
 )
@@ -65,8 +69,9 @@ object ColorSolver {
         // gain-corrected target decides whether a full matrix is trustworthy at all.
         var (ev, g) = evAndGains(r, t, w)
         var s = scaled(t, ev, g)
-        val cond = conditionNumber(s, w)
-        val fallback = n < params.minCells || cond > params.maxCondition || cond.isNaN()
+        val cond = chromaCondition(s, w)
+        val fallback = n < params.minCells || chromaFraction(s, w) < params.minChromaFraction ||
+            cond > params.maxCondition || cond.isNaN()
         var m = identity3()
         if (!fallback) {
             for (iter in 0..params.huberIterations) {
@@ -158,22 +163,27 @@ object ColorSolver {
         return m
     }
 
-    /** cond of SᵀWS from its three eigenvalues (Jacobi iteration). */
-    private fun conditionNumber(s: Array<DoubleArray>, w: DoubleArray): Double {
-        val a = Array(3) { DoubleArray(3) }
-        for (i in s.indices) for (x in 0 until 3) for (y in 0 until 3) a[x][y] += w[i] * s[i][x] * s[i][y]
-        repeat(30) {
-            for ((p, q) in listOf(0 to 1, 0 to 2, 1 to 2)) {
-                if (abs(a[p][q]) < 1e-18) continue
-                val theta = (a[q][q] - a[p][p]) / (2 * a[p][q])
-                val tt = (if (theta >= 0) 1.0 else -1.0) / (abs(theta) + sqrt(theta * theta + 1))
-                val c = 1 / sqrt(tt * tt + 1); val sn = tt * c
-                for (k in 0 until 3) { val akp = a[k][p]; val akq = a[k][q]; a[k][p] = c * akp - sn * akq; a[k][q] = sn * akp + c * akq }
-                for (k in 0 until 3) { val apk = a[p][k]; val aqk = a[q][k]; a[p][k] = c * apk - sn * aqk; a[q][k] = sn * apk + c * aqk }
-            }
+    /** Weighted energy of the R-B and G-B differences over the total energy of [s]. */
+    private fun chromaFraction(s: Array<DoubleArray>, w: DoubleArray): Double {
+        var chroma = 0.0; var total = 0.0
+        for (i in s.indices) {
+            val d0 = s[i][0] - s[i][2]; val d1 = s[i][1] - s[i][2]
+            chroma += w[i] * (d0 * d0 + d1 * d1)
+            total += w[i] * (s[i][0] * s[i][0] + s[i][1] * s[i][1] + s[i][2] * s[i][2])
         }
-        val ev = doubleArrayOf(a[0][0], a[1][1], a[2][2])
-        val max = ev.max(); val min = ev.min()
+        return if (total <= 0.0) 0.0 else chroma / total
+    }
+
+    /** cond of the 2x2 normal matrix of the R-B and G-B differences, the system [fitMatrix] solves. */
+    private fun chromaCondition(s: Array<DoubleArray>, w: DoubleArray): Double {
+        var a00 = 0.0; var a01 = 0.0; var a11 = 0.0
+        for (i in s.indices) {
+            val d0 = s[i][0] - s[i][2]; val d1 = s[i][1] - s[i][2]
+            a00 += w[i] * d0 * d0; a01 += w[i] * d0 * d1; a11 += w[i] * d1 * d1
+        }
+        val mean = (a00 + a11) / 2
+        val radius = sqrt(((a00 - a11) / 2).pow(2) + a01 * a01)
+        val max = mean + radius; val min = mean - radius
         return if (min <= max * 1e-15) Double.POSITIVE_INFINITY else max / min
     }
 
