@@ -57,14 +57,16 @@ class LensCorrectionTable private constructor(
 
         fun build(set: CalibrationSet, alignmentEnabled: Boolean, aspect: Float): LensCorrectionTable {
             val safeAspect = aspect.takeIf { it.isFinite() && it > 0f } ?: 1f
-            fun required(l: LensCorrection) =
-                LensAlignment.requiredZoom(l.align.tx, l.align.ty, l.align.scale, l.align.rotationRad, safeAspect)
+            fun required(l: LensCorrection) = LensAlignment.applied(set, l).let {
+                LensAlignment.requiredZoom(it.tx, it.ty, it.scale, it.rotationRad, safeAspect)
+            }
             val sessionZoom = if (alignmentEnabled) set.lenses.maxOfOrNull(::required)?.coerceAtLeast(1f) ?: 1f else 1f
             val built = LinkedHashMap<String, LensEntry>()
             for (lens in set.lenses) {
                 val uv = if (alignmentEnabled) {
+                    val align = LensAlignment.applied(set, lens)
                     LensAlignment.uvMatrix(
-                        lens.align.tx, lens.align.ty, lens.align.scale, lens.align.rotationRad,
+                        align.tx, align.ty, align.scale, align.rotationRad,
                         extraZoom = sessionZoom / required(lens), aspect = safeAspect,
                     )
                 } else IDENTITY_MATRIX4

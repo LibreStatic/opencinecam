@@ -91,7 +91,7 @@ object PhotoLensCorrection {
         val aspect = width.toFloat() / height
         val table = LensCorrectionTable.build(set, alignmentEnabled, aspect)
         val matrix = if (alignmentEnabled) {
-            val align = lens?.align
+            val align = lens?.let { LensAlignment.applied(set, it) }
             val required = align?.let {
                 LensAlignment.requiredZoom(it.tx, it.ty, it.scale, it.rotationRad, aspect)
             } ?: 1f
