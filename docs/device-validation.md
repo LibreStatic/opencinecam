@@ -243,3 +243,21 @@ Debug package on `motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/rel
 - **Not checked.** HEIC, a JPEG with the aspect crop, and the ultra-wide lock.
 - **Anchor labels.** After 5e03f44 the unlocked bar shows 0.6 / 1.0 / 3.0, matching the locked bar. The first launch after installing showed 0.5 / 1.0 / 2.0 once, and a cold relaunch did not show it again.
 
+### G4: lens calibration on the Razr Fold (2026-10-24)
+
+Debug package on the same build, folded (cover screen), in Photo, SDR source path, with the wide (2) as the reference. The runner held each pair at the switch points (UW at 1.00x and 0.98x, tele at 2.99x and 3.01x), 3 cycles each. Per-cycle frames and fits come from the `LensCalibration` log tag; debuggable builds also keep the frames under the app's `files/calibration-debug/`.
+
+- **Poster at about 1 m with objects at 30 cm (failed).** Both lenses failed with LOW_TEXTURE, LOW_CHROMA, PARALLAX_SUSPECT and DIAGONAL_FALLBACK. The poster aligned between lenses but the foreground did not, so only 3 or 4 of 7 to 10 textured patches agreed. That is a correct rejection.
+- **Colour condition defect (fixed).** In every scene the colour fit fell back to gains only. The solver judged the full RGB normal matrix, which luminance dominates in any real scene (cond 2500 to 8100), instead of the chroma system the fit inverts (cond 24 to 71 on the same frames). The solver now uses that chroma condition, plus a minimum chroma energy of 0.0025 of the total. The Razr frames measured 0.029 to 0.040 in the room and 0.006 to 0.010 on the poster, against about 0.0004 for grey with 1 % noise.
+- **Room at 1 to 3 m (passed, after the fix).**
+
+  | Lens | Score | dE before -> after | Alignment px before -> after | Flags |
+  |---|---|---|---|---|
+  | UW (3) | 0.55 | 3.0 -> 2.3 | 12.2 -> 0.16 | LOW_TEXTURE, PARALLAX_SUSPECT |
+  | Tele (5) | 0.76 | 3.8 -> 3.5 | 3.1 -> 0.51 | PARALLAX_SUSPECT |
+
+  Saved set: UW ev +0.13 and tele ev -0.13; UW align rotation -1.44 degrees and scale 1.011; tele scale 1.009. Applied offline to the dumped tele frames, the correction moves the mean from 131/116/98 to 124/107/87, against 123/106/87 for the reference.
+- **Repeatability.** The pre-fit alignment varied between runs (UW 2.6 to 12.2 px, tele 3.1 to 14.3 px) because the room still has depth, so treat alignment from a parallax-flagged run as scene-specific. The colour numbers were stable within 0.3 dE across cycles.
+- **Not checked yet.** Applying the saved set in preview and video (G3).
+- **UI.** On the cover screen the capture rail draws over the result card's right edge and hides the quality percentages.
+
