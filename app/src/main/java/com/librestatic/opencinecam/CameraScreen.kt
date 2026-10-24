@@ -1514,8 +1514,42 @@ internal fun AdaptiveCaptureChrome(
             onClose = onClose,
         )
     }
+    val currentPinchState by rememberUpdatedState(state)
+    val currentPinchSettings by rememberUpdatedState(settings)
+    val currentPinchBinder by rememberUpdatedState(binder)
+    // The running ratio of the pinch under the fingers; not state, nothing draws it.
+    val pinchRatio = remember { mutableFloatStateOf(1f) }
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // Each pinch starts from the ratio shown at its first step and then follows the fingers
+            // from its own running value, never from the camera's lagging report. It sits on the chrome's
+            // root rather than the viewfinder surface: Compose hit-tests each finger on its own, and a
+            // second finger that landed on a control above the surface never reached a detector there,
+            // so the pinch read as a tap and refocused.
+            .pinchToZoom(previewGesturesEnabled && !state.captureControlsLocked && state.zoomSupported) { first, zoom ->
+                val shown = currentPinchState
+                if (first) pinchRatio.floatValue = shown.zoomRatio
+                val base = pinchRatio.floatValue
+                val candidate = base * zoom
+                val range = if (currentPinchSettings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
+                    zoomSectorAnchors(shown).size > 1) {
+                    ZoomMath.sectorBounds(
+                        base,
+                        zoomSectorAnchors(shown),
+                        currentPinchSettings.zoomLensSwitchMode,
+                        shown.zoomMinRatio,
+                        shown.zoomMaxRatio,
+                        direction = candidate - base,
+                    )
+                } else {
+                    shown.zoomMinRatio..shown.zoomMaxRatio
+                }
+                pinchRatio.floatValue = ZoomMath.coerce(candidate, range)
+                currentPinchBinder?.setZoomRatio(pinchRatio.floatValue)
+            },
+    ) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -1661,11 +1695,6 @@ internal fun AdaptiveCaptureChrome(
         val previewHeight = previewViewport.height
         val previewLeft = previewViewport.left
         val previewTop = previewViewport.top
-        val currentPinchState by rememberUpdatedState(state)
-        val currentPinchSettings by rememberUpdatedState(settings)
-        val currentPinchBinder by rememberUpdatedState(binder)
-        // The running ratio of the pinch under the fingers; not state, nothing draws it.
-        val pinchRatio = remember { mutableFloatStateOf(1f) }
         // SurfaceView owns a native surface, so keep an explicit Compose hit target over it.
         // This is the first child: controls composed later remain the winning hit targets.
         Box(
@@ -1677,29 +1706,6 @@ internal fun AdaptiveCaptureChrome(
                         if (recording) manualReveal = true
                         true
                     }
-                }
-                // Each pinch starts from the ratio shown at its first step and then follows the fingers
-                // from its own running value, never from the camera's lagging report.
-                .pinchToZoom(previewGesturesEnabled && !state.captureControlsLocked && state.zoomSupported) { first, zoom ->
-                    val shown = currentPinchState
-                    if (first) pinchRatio.floatValue = shown.zoomRatio
-                    val base = pinchRatio.floatValue
-                    val candidate = base * zoom
-                    val range = if (currentPinchSettings.zoomLensSwitchMode == ZoomLensSwitchMode.MANUAL_PRESETS &&
-                        zoomSectorAnchors(shown).size > 1) {
-                        ZoomMath.sectorBounds(
-                            base,
-                            zoomSectorAnchors(shown),
-                            currentPinchSettings.zoomLensSwitchMode,
-                            shown.zoomMinRatio,
-                            shown.zoomMaxRatio,
-                            direction = candidate - base,
-                        )
-                    } else {
-                        shown.zoomMinRatio..shown.zoomMaxRatio
-                    }
-                    pinchRatio.floatValue = ZoomMath.coerce(candidate, range)
-                    currentPinchBinder?.setZoomRatio(pinchRatio.floatValue)
                 }
                 .pointerInput(previewGesturesEnabled, state.captureControlsLocked, recording, chromeVisible, ratio, settings.tapExposureMeteringEnabled, state.phase,
                     previewLeft, previewTop, previewWidth, previewHeight) {
