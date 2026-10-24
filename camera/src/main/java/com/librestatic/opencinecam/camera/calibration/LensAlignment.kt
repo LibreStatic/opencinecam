@@ -1,6 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.camera.calibration
 
+import com.librestatic.opencinecam.core.model.CalibrationFlag
+import com.librestatic.opencinecam.core.model.CalibrationSessionKind
+import com.librestatic.opencinecam.core.model.CalibrationSet
+import com.librestatic.opencinecam.core.model.LensCorrection
+import com.librestatic.opencinecam.core.model.Similarity
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -14,6 +19,24 @@ import kotlin.math.sin
  */
 object LensAlignment {
     private const val EPS = 1e-6f
+
+    /**
+     * The part of [lens]' stored alignment that is applied. In a logical session SAT already aligns the
+     * lenses, and the residual rotation a room-scale scene yields is parallax, not the module: on the
+     * Razr it came out at -1.6 and +1.2 degrees for the ultra-wide in two rooms. So a logical set
+     * applies no rotation, and with [CalibrationFlag.PARALLAX_SUSPECT] no shift either, since that only
+     * holds at the distance it was measured at. The scale is kept.
+     */
+    fun applied(set: CalibrationSet, lens: LensCorrection): Similarity {
+        if (set.sessionKind != CalibrationSessionKind.LOGICAL) return lens.align
+        val parallax = CalibrationFlag.PARALLAX_SUSPECT in lens.quality.flags
+        return Similarity(
+            tx = if (parallax) 0f else lens.align.tx,
+            ty = if (parallax) 0f else lens.align.ty,
+            scale = lens.align.scale,
+            rotationRad = 0f,
+        )
+    }
 
     /** Minimal zoom (>= 1) needed so the mapped corners stay inside the unit square. */
     fun requiredZoom(tx: Float, ty: Float, scale: Float, rotationRad: Float, aspect: Float = 1f): Float {

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.camera.calibration
 
+import com.librestatic.opencinecam.core.model.CalibrationFlag
 import com.librestatic.opencinecam.core.model.CalibrationSessionKind
 import com.librestatic.opencinecam.core.model.CalibrationSet
 import com.librestatic.opencinecam.core.model.CalibrationSourcePath
@@ -14,6 +15,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class LensCorrectionRuntimeTest {
     private val matrix = listOf(0.9f, 0.05f, 0.05f, 0.1f, 0.8f, 0.1f, 0.0f, 0.2f, 0.8f)
@@ -21,8 +23,10 @@ class LensCorrectionRuntimeTest {
     private fun lens(id: String, align: Similarity = Similarity.IDENTITY, ev: Float = 0f, m: List<Float> = LensCorrection.IDENTITY_MATRIX) =
         LensCorrection.identity(id).copy(colorMatrix = m, evOffset = ev, align = align, gains = listOf(1.1f, 1f, 0.9f))
 
-    private fun set(vararg lenses: LensCorrection) = CalibrationSet(
-        fingerprint = "fp", logicalId = "0", sessionKind = CalibrationSessionKind.LOGICAL, referencePhysicalId = "2",
+    private fun set(vararg lenses: LensCorrection) = set(CalibrationSessionKind.LOGICAL, *lenses)
+
+    private fun set(kind: CalibrationSessionKind, vararg lenses: LensCorrection) = CalibrationSet(
+        fingerprint = "fp", logicalId = "0", sessionKind = kind, referencePhysicalId = "2",
         sourcePath = CalibrationSourcePath.SDR, createdAtMs = 1L, illuminantHint = null, lenses = lenses.toList(),
     )
 
@@ -64,7 +68,8 @@ class LensCorrectionRuntimeTest {
     @Test fun marginIsUniformAcrossLenses() {
         val shifted = Similarity(tx = 0.05f, ty = -0.02f, scale = 1.04f, rotationRad = 0.02f)
         val aspect = 4f / 3f
-        val table = LensCorrectionTable.build(set(lens("2"), lens("3", shifted), lens("5", Similarity(scale = 0.97f))), true, aspect)
+        val lenses = arrayOf(lens("2"), lens("3", shifted), lens("5", Similarity(scale = 0.97f)))
+        val table = LensCorrectionTable.build(set(CalibrationSessionKind.DIRECT_PHYSICAL, *lenses), true, aspect)
         val expected = LensAlignment.requiredZoom(shifted.tx, shifted.ty, shifted.scale, shifted.rotationRad, aspect)
         assertTrue(expected > 1f)
         assertEquals(expected, table.sessionZoom, 1e-6f)
@@ -83,6 +88,28 @@ class LensCorrectionRuntimeTest {
             assertTrue("u=$su", su in -1e-4f..1f + 1e-4f)
             assertTrue("v=$sv", sv in -1e-4f..1f + 1e-4f)
         }
+    }
+
+    @Test fun aLogicalSetAppliesNoRotation() {
+        val turned = Similarity(tx = 0.01f, ty = -0.02f, scale = 1.02f, rotationRad = 0.03f)
+        val logical = LensCorrectionTable.build(set(lens("2"), lens("3", turned)), true, 1f).entryFor("3").uvMatrix
+        val direct = LensCorrectionTable.build(set(CalibrationSessionKind.DIRECT_PHYSICAL, lens("2"), lens("3", turned)), true, 1f)
+            .entryFor("3").uvMatrix
+        assertEquals("no shear term without rotation", 0f, logical[1], 1e-6f)
+        assertEquals(0f, logical[4], 1e-6f)
+        assertTrue("a direct set keeps the rotation", abs(direct[1]) > 1e-3f)
+        // The shift survives: the centre still samples off-centre.
+        assertTrue(abs(logical[12] + 0.5f * (logical[0] + logical[4]) - 0.5f) > 1e-3f)
+    }
+
+    @Test fun parallaxDropsTheShiftOfALogicalSetButKeepsTheScale() {
+        val turned = Similarity(tx = 0.01f, ty = -0.02f, scale = 1.02f, rotationRad = 0.03f)
+        val flagged = lens("3", turned).let { it.copy(quality = it.quality.copy(flags = setOf(CalibrationFlag.PARALLAX_SUSPECT))) }
+        val s = set(lens("2"), flagged)
+        assertEquals(Similarity(scale = 1.02f), LensAlignment.applied(s, flagged))
+        val m = LensCorrectionTable.build(s, true, 1f).entryFor("3").uvMatrix
+        assertEquals("centre maps to the centre", 0.5f, m[12] + 0.5f * (m[0] + m[4]), 1e-6f)
+        assertEquals(0.5f, m[13] + 0.5f * (m[1] + m[5]), 1e-6f)
     }
 
     @Test fun identityCalibrationAtAspectOneIsAnIdentityMatrix() {
