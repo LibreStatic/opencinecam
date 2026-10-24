@@ -1120,6 +1120,24 @@ class CaptureService : Service() {
             .distinctBy { it.physicalCameraId }
             .map { com.librestatic.opencinecam.camera.calibration.CalibrationLens(it.physicalCameraId!!, it.ratio) }
 
+    /** Logs each calibration cycle and, in debuggable builds, keeps its frames under the app's external files. */
+    private fun logCalibrationCycle(c: com.librestatic.opencinecam.camera.calibration.CalibrationCycle) {
+        val g = c.geometry
+        android.util.Log.i("LensCalibration", "cycle ${c.targetId}#${c.cycle} zoom ${c.referenceZoom}/${c.targetZoom} " +
+            "geometry patches=${g.patchesUsed} inliers=${g.inliers} rms=${g.residualPx} parallax=${g.parallaxSuspect} " +
+            "color cells=${c.color.cellsUsed} cond=${c.color.conditionNumber} fallback=${c.color.diagonalFallback} dE=${c.color.residualDeltaEBefore}->${c.color.residualDeltaE}")
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        val dir = getExternalFilesDir("calibration-debug") ?: return
+        runCatching {
+            for ((name, frame) in listOf("ref" to c.reference, "tgt" to c.target)) {
+                val bitmap = android.graphics.Bitmap.createBitmap(frame.width, frame.height, android.graphics.Bitmap.Config.ARGB_8888)
+                bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(frame.pixels))
+                java.io.File(dir, "${c.targetId}-${c.cycle}-$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
+            }
+        }
+    }
+
     private fun calibrationRows(progress: com.librestatic.opencinecam.camera.calibration.RunProgress) = progress.lenses.map {
         com.librestatic.opencinecam.LensCalibrationLensRow(
             physicalId = it.physicalId,
@@ -1266,6 +1284,7 @@ class CaptureService : Service() {
                             )
                         }
                     },
+                    onCycle = ::logCalibrationCycle,
                 )
                 run.runner = runner
                 // A flag set before the runner existed is carried over.
@@ -1300,6 +1319,11 @@ class CaptureService : Service() {
         refreshLensCorrection()
         val success = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Success
         val failure = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Failure
+        (success?.progress ?: failure?.progress)?.lenses?.forEach {
+            android.util.Log.i("LensCalibration", "lens ${it.physicalId} ${it.status} score=${it.score} dE=${it.colorDeltaEBefore}->${it.colorDeltaEAfter} " +
+                "px=${it.alignPxBefore}->${it.alignPxAfter} flags=${it.flags}")
+        }
+        failure?.let { android.util.Log.i("LensCalibration", "run failed: ${it.failure}") }
         when {
             run.cancelled -> lensCalibrationState.update {
                 it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
