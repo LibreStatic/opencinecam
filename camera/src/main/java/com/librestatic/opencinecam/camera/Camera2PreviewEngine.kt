@@ -499,6 +499,8 @@ class Camera2PreviewEngine(
     private var lastActiveLensReport: Pair<Boolean, String?>? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private val instantAec = InstantAecMachine()
+    private var lensSwitchTraceSession: CameraCaptureSession? = null
+    private var lensSwitchTrace: LensSwitchTrace? = null
     private var instantAecSession: CameraCaptureSession? = null
     private var instantAecKey: CaptureRequest.Key<Int>? = null
     private var instantAecModes: IntArray? = null
@@ -803,6 +805,27 @@ class Camera2PreviewEngine(
         )
     }
 
+    /** Feeds [LensSwitchTrace] when `log.tag.LensSwitch` is DEBUG; a new session starts a new trace. */
+    private fun traceLensSwitch(armedSession: CameraCaptureSession, result: TotalCaptureResult) {
+        if (lensSwitchTraceSession !== armedSession) {
+            lensSwitchTraceSession = armedSession
+            lensSwitchTrace = if (LensSwitchDiagnostics.enabled()) LensSwitchTrace() else null
+        }
+        val trace = lensSwitchTrace ?: return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        trace.onResult(
+            frameNumber = result.frameNumber,
+            timestampNs = timestamp,
+            physicalId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+            } else null,
+            zoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+            } else null,
+            exposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+        )
+    }
+
     /** Forwards the frame's active physical lens to the GPU pipeline's timeline. */
     private fun noteLensForFrame(result: android.hardware.camera2.CaptureResult) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
@@ -1081,13 +1104,21 @@ class Camera2PreviewEngine(
      * Debug builds only: `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` skips the direct
      * physical open so the GPU-crop route can be exercised on a device that opens physicals fine (G2).
      */
-    private fun lensLockCropForced(): Boolean {
-        if (appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return false
-        val value = runCatching {
-            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java)
-                .invoke(null, "debug.opencinecam.lenslock.forcecrop") as? String
+    private fun lensLockCropForced(): Boolean = debugProperty("debug.opencinecam.lenslock.forcecrop").let { it == "1" || it == "true" }
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.instantaec.lens 0` stops Instant AEC
+     * from engaging at a lens switch, for an A/B of the switch hitch.
+     */
+    private fun instantAecOnLensSwitchDisabled(): Boolean =
+        debugProperty("debug.opencinecam.instantaec.lens").let { it == "0" || it == "false" }
+
+    /** A system property on debug builds; null on release builds or when it cannot be read. */
+    private fun debugProperty(name: String): String? {
+        if (appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+        return runCatching {
+            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String
         }.getOrNull()
-        return value == "1" || value == "true"
     }
 
     /** The GPU-crop route for [binding] on [logical], or null when the lens is not a lock candidate. */
@@ -5199,7 +5230,7 @@ class Camera2PreviewEngine(
             val previousPhysicalId = instantAecPhysicalId
             if (physicalId != null) instantAecPhysicalId = physicalId
             if (!instantAec.active) {
-                if (InstantAec.physicalLensSwitched(previousPhysicalId, physicalId)) {
+                if (InstantAec.physicalLensSwitched(previousPhysicalId, physicalId) && !instantAecOnLensSwitchDisabled()) {
                     engageInstantAec(armedSession, builder, now, eligible, "lens $previousPhysicalId->$physicalId")
                 }
                 return
@@ -5270,6 +5301,7 @@ class Camera2PreviewEngine(
                         armedSession !== this@Camera2PreviewEngine.session) return
                     noteLensForFrame(result)
                     noteCalibrationMeta(result)
+                    traceLensSwitch(armedSession, result)
                     pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.

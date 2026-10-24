@@ -389,6 +389,7 @@ class OpenCineLogGpuPipeline(
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
     private val frameDiag = OpenCineLogFrameDiagnostics.createIfEnabled()
+    private val viewfinderGapTrace = if (LensSwitchDiagnostics.enabled()) ViewfinderGapTrace() else null
     /** Set when the latest SDR take fell back from HEVC to H.264; reset by each start. */
     @Volatile private var codecFallbackReason: String? = null
     private val handler = Handler(thread.looper)
@@ -1271,6 +1272,7 @@ class OpenCineLogGpuPipeline(
                 ycbcrDataSpace = frameDataSpace
             }
             val timestampNs = texture.timestamp
+            viewfinderGapTrace?.onFrame(timestampNs, android.os.SystemClock.elapsedRealtimeNanos())
             appliedLens?.let { lens ->
                 val found = lensTimeline.lookup(timestampNs)
                 if (!found.exact) lensFallbackCounter.incrementAndGet()
