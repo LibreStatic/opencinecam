@@ -221,7 +221,7 @@ Same build and fingerprint as G0, debug package, folded (cover screen). The lock
 - **Video sizes.** 1080p30 on the wide and 4K30 on the tele mapped to the same profile on the physical camera, so the size mismatch the engine allows for did not happen on this device.
 - **Anchor labels.** Unlocked, the anchor bar shows 0.5 / 1.0 / 2.0, from the focal ratios. Locked, it shows 0.6 / 1.0 / 3.0, from the fields of view. The logical camera switches to the tele at 3.00x, so the unlocked 2.0 anchor does not match the lens; this predates the lens lock.
 
-### G2 procedure: the GPU-crop fallback (not yet run)
+### G2 procedure: the GPU-crop fallback
 
 The Razr opens every physical directly, so G2 forces the fallback. On the debug package, run `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` and force-stop the app. The engine then skips the direct open and serves every lock by the GPU crop. Release builds ignore the property. Lock each of 2, 3 and 5 and check these points:
 - logcat shows `served by the GPU crop` with the pinned ratio;
@@ -229,4 +229,17 @@ The Razr opens every physical directly, so G2 forces the fallback. On the debug 
 - the UI range is the same as in G1;
 - a photo mode reopens on the GPU viewfinder once and then stays on it.
 Zoom through each range. Then compare preview framing with a 1080p take, a JPEG with and without the aspect crop, and a DNG's DefaultCrop. A HEIC without the aspect crop stays uncropped by design: the log says so. Cover the lens in low light to see the switched-lens warning come and go. Clear the property with `adb shell setprop debug.opencinecam.lenslock.forcecrop 0`.
+
+### G2: GPU-crop fallback on the Razr Fold (2026-10-24)
+
+Debug package on `motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`, folded (cover screen), with `debug.opencinecam.lenslock.forcecrop` set to 1. Checked on the wide (2) and the tele (5). The ultra-wide (3) was not checked.
+
+- **Route.** The wide lock pinned the logical camera at 1.0x over a 1x to 8x range. The tele lock pinned it at 3.015x over a 3.015x to 24.1x range, the same ranges as in G1. The "Lens lock: digital crop" notice showed both times.
+- **Restarts.** Each lock started the session three times and then stayed on the GPU viewfinder; there was no restart loop. The remembered zoom survived the change from Photo to Photo RAW to Video.
+- **JPEG.** Locked to the tele at 6.0x, the JPEG (no aspect crop) is 2006x1506, a centred 1.99x crop of the 4000x3000 frame that matches the preview. At 3.0x it stays 4000x3000.
+- **Video.** A 1080p30 HEVC take at 6.0x (1080x1920, portrait) matches the cropped preview.
+- **DNG.** On the logical camera pinned at 3x, the HAL delivers the RAW from the wide sensor, not the tele. The DefaultCrop marks the right region: 1321x990 at 3.0x, and 663x497 at 6.0x. So the framing is right, but on this route a DNG is a crop of the wide, with far fewer pixels than the direct route's tele RAW.
+- **Lens-switch warning.** It never showed: SAT stayed on the tele while pinned at 3.015x. Low light was not tried.
+- **Not checked.** HEIC, a JPEG with the aspect crop, and the ultra-wide lock.
+- **Anchor labels.** After 5e03f44 the unlocked bar shows 0.6 / 1.0 / 3.0, matching the locked bar. The first launch after installing showed 0.5 / 1.0 / 2.0 once, and a cold relaunch did not show it again.
 
