@@ -49,6 +49,18 @@ data class RunLens(
 )
 
 /** Lenses are in nominal-ratio order. */
+/** One alternating cycle of [targetId] against the reference: the averaged frames and what was fitted to them. */
+class CalibrationCycle(
+    val targetId: String,
+    val cycle: Int,
+    val referenceZoom: Float,
+    val targetZoom: Float,
+    val reference: RgbaFrame,
+    val target: RgbaFrame,
+    val color: ColorFit,
+    val geometry: GeometryFit,
+)
+
 data class RunProgress(val phase: RunPhase, val referencePhysicalId: String?, val lenses: List<RunLens>)
 
 sealed interface RunOutcome {
@@ -82,6 +94,8 @@ class LensCalibrationRunner(
     private val sourcePath: CalibrationSourcePath,
     private val zoomRange: ClosedFloatingPointRange<Float>,
     private val onProgress: (RunProgress) -> Unit = {},
+    /** Each alternating cycle's frames and fits, for diagnostics; called on the runner's thread. */
+    private val onCycle: (CalibrationCycle) -> Unit = {},
     private val wallClockMs: () -> Long = System::currentTimeMillis,
     private val config: Config = Config(),
 ) {
@@ -365,6 +379,7 @@ class LensCalibrationRunner(
             val geometry = GeometrySolver.solve(FrameOps.luma(ref.frame, linear = false), FrameOps.luma(tgt.frame, linear = false))
             // The logical zoom magnifies both lenses; remove the part caused by holding at different ratios.
             geometryFits += geometry.copy(scale = geometry.scale * ref.zoom / tgt.zoom)
+            onCycle(CalibrationCycle(target.physicalId, cycle, ref.zoom, tgt.zoom, ref.frame, tgt.frame, colorFits.last(), geometryFits.last()))
         }
         val color = CalibrationMedian.combine(colorFits)
         val geometry = CalibrationMedian.combineGeometry(geometryFits)

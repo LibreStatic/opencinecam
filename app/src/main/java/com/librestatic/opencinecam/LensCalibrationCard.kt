@@ -106,6 +106,8 @@ private fun FailedBody(state: LensCalibrationUiState, onDiscard: () -> Unit) {
     Text(stringResource(R.string.lens_cal_failed_title), color = LocalCineColors.current.record, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     Text(stringResource((state.failure ?: LensCalibrationFailure.INTERNAL).messageRes()), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp,
         modifier = Modifier.testTag("lens-calibration-failure"))
+    state.lenses.filter { it.status == LensCalibrationLensStatus.FAILED || it.status == LensCalibrationLensStatus.DONE }
+        .forEach { LensCalibrationLensLine(it, state, running = false) }
     OutlinedButton(onDiscard, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("lens-calibration-discard")) {
         Text(stringResource(R.string.lens_cal_close))
     }

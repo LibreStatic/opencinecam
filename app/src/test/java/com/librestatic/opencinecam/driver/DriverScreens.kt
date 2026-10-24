@@ -54,6 +54,7 @@ import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.CameraCapabilitiesScreen
 import com.librestatic.opencinecam.StorageBenchmarkContent
 import com.librestatic.opencinecam.LensCalibrationContent
+import com.librestatic.opencinecam.LensCalibrationFailure
 import com.librestatic.opencinecam.LensCalibrationLensRow
 import com.librestatic.opencinecam.LensCalibrationLensStatus
 import com.librestatic.opencinecam.LensCalibrationPhase
@@ -440,6 +441,23 @@ fun LensCalibrationResult() = CaptureChrome(
     driverCaptureState(CaptureMode.PHOTO),
     lensCalibration = LensCalibrationUiState(
         phase = LensCalibrationPhase.RESULT, logicalCameraId = "0", referencePhysicalId = "2", lenses = DriverCalibratedLenses,
+    ),
+)
+
+/** A run that kept nothing: the ultra-wide failed on parallax and AE, the tele never found its switch. */
+@Composable
+fun LensCalibrationFailed() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.FAILED, logicalCameraId = "0", referencePhysicalId = "2",
+        failure = LensCalibrationFailure.LOW_QUALITY,
+        lenses = listOf(
+            LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.FAILED, 1f, colorDeltaEBefore = 6.8f, colorDeltaEAfter = 4.9f,
+                alignPxBefore = 9.2f, alignPxAfter = 3.4f, score = 0.31f,
+                flags = setOf(CalibrationFlag.PARALLAX_SUSPECT, CalibrationFlag.UNSTABLE_AE)),
+            LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+            LensCalibrationLensRow("5", 3f, LensCalibrationLensStatus.FAILED, 0.25f),
+        ),
     ),
 )
 
