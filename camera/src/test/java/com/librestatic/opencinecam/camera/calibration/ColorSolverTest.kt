@@ -49,6 +49,29 @@ class ColorSolverTest {
         assertTrue(fit.residualDeltaE < 1f)
     }
 
+    /**
+     * A room-like scene: luminance dominates and the chroma runs mostly along warm-cool with a little
+     * green-magenta, as the Razr frames did. The full RGB normal matrix is then ill-conditioned (in
+     * the thousands) while the chroma system is not (tens), and the matrix must still be fitted.
+     */
+    @Test fun lumaDominatedSceneStillFitsTheMatrix() {
+        val rng = java.util.Random(11)
+        val scene = List(96) {
+            val y = 0.05f + 0.55f * rng.nextFloat()
+            val warm = 0.25f * (2f * rng.nextFloat() - 1f)
+            val green = 0.04f * (2f * rng.nextFloat() - 1f)
+            floatArrayOf(y * (1f + warm - green), y * (1f + green), y * (1f - warm - green))
+        }
+        val (ref, tgt) = frames(scene, noise = 0.004f)
+        val fit = ColorSolver.solve(ref, tgt)
+        assertFalse("cond ${fit.conditionNumber}", fit.diagonalFallback)
+        assertTrue("dE ${fit.residualDeltaE} before ${fit.residualDeltaEBefore}", fit.residualDeltaE < fit.residualDeltaEBefore / 2)
+        for (c in listOf(floatArrayOf(0.3f, 0.25f, 0.2f), floatArrayOf(0.2f, 0.25f, 0.3f))) {
+            val want = forward(c); val got = LensColorTransform.apply(c, fit)
+            for (k in 0 until 3) assertEquals(want[k], got[k], 0.05f * want[k] + 0.005f)
+        }
+    }
+
     @Test fun greyOnlySceneFallsBackToDiagonal() {
         val grey = CalibrationTestSupport.greyScene()
         val ref = CellStats.compute(CalibrationTestSupport.cellFrame(grey.map { c -> FloatArray(3) { c[it] * 1.3f } }))
