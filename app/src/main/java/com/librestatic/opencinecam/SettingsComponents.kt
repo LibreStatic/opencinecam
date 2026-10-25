@@ -347,17 +347,22 @@ internal fun <T> SettingsSwatches(
 }
 
 /**
- * Help for one control that has no heading of its own: a small info button rather than a
- * repeated "Show help" line, the explanation under it once opened. With a [tag], the button
- * carries "[tag]-toggle" and the expanded explanation carries [tag]. Section-wide help belongs on
+ * Help for one control that has no heading of its own: a small info button with a one-line
+ * [summary] beside it, so the row says what the help covers before it is opened, and the full
+ * [text] under it once opened. With a [tag], the button carries "[tag]-toggle", the summary
+ * "[tag]-summary" and the expanded explanation [tag]. Section-wide help belongs on
  * [SettingsSectionTitle] or [SettingsHeading].
  */
 @Composable
-internal fun SettingsHelp(text: String, modifier: Modifier = Modifier, tag: String? = null) {
+internal fun SettingsHelp(summary: String, text: String, modifier: Modifier = Modifier, tag: String? = null) {
     var open by rememberSaveable(text) { mutableStateOf(false) }
     Column(modifier) {
         // The glyph lines up with the text edge; the touch target spills into the card padding.
-        SettingsHelpButton(open, tag, Modifier.offset(x = (-14).dp)) { open = !open }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SettingsHelpButton(open, tag, Modifier.offset(x = (-14).dp)) { open = !open }
+            Text(summary, Modifier.weight(1f).offset(x = (-14).dp).then(tag?.let { Modifier.testTag("$it-summary") } ?: Modifier),
+                color = SettingsMuted, fontSize = 13.sp, lineHeight = 18.sp)
+        }
         if (open) SettingsHelpText(text, tag)
     }
 }

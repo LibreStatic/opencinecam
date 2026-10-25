@@ -37,7 +37,7 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
         SettingsSwitchRow(lutLabel, settings.includeReferencedLut, { onSettings(settings.copy(includeReferencedLut = it)) },
             tag = "media-share-lut", labelTag = "media-share-lut-label",
             enabled = enabled && settings.content != MediaShareContent.ORIGINALS_ONLY && settings.metadata != MediaShareMetadata.PRODUCTION)
-        SettingsHelp(stringResource(R.string.media_share_lut_help), tag = "media-share-lut-help")
+        SettingsHelp(stringResource(R.string.media_share_lut_help_summary), stringResource(R.string.media_share_lut_help), tag = "media-share-lut-help")
     }
 }
 

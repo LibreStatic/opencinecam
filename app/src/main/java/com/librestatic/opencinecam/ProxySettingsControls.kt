@@ -40,7 +40,7 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
             label = { stringResource(R.string.proxy_settings_bitrate_value, it) },
             onSelect = { if (settings.videoBitrateMbps != it) onSettings(settings.copy(videoBitrateMbps = it)) },
             tag = { "proxy-settings-bitrate-$it" }, rowTag = "proxy-settings-bitrate-label")
-        SettingsHelp(stringResource(R.string.proxy_policy_help))
+        SettingsHelp(stringResource(R.string.proxy_policy_help_summary), stringResource(R.string.proxy_policy_help))
         SettingsSwitchRow(stringResource(R.string.proxy_policy_charging), policy.requireCharging,
             { update { current -> current.copy(requireCharging = !current.requireCharging) } },
             tag = "proxy-settings-charging", labelTag = "proxy-settings-charging-label")
