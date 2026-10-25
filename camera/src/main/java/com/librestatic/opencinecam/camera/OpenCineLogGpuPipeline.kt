@@ -506,6 +506,23 @@ class OpenCineLogGpuPipeline(
     /** Records which physical camera produced the frame with [timestampNs] (the sensor timestamp). */
     fun notePhysicalForTimestamp(timestampNs: Long, physicalId: String?) = lensTimeline.note(timestampNs, physicalId)
 
+    // Zoom-lag smoothing at a lens switch ([ZoomLagCompensator]). Written from the capture callback, read per frame.
+    private val zoomLagTimeline = ZoomCropTimeline()
+    /** GL thread only: this frame's zoom-lag crop, composed with [cropZoom]. */
+    private var frameZoomCrop = 1f
+
+    /**
+     * Records the zoom-lag crop for the frame with [timestampNs]. Like [setCropZoom] it only scales
+     * the uploaded texture matrix, so preview, subject windows, the encoder and the analysis
+     * readback all see it and the calibration readback does not. While [moving], a frame whose
+     * result is late waits up to [ZOOM_LAG_WAIT_NS] for it, then keeps the previous frame's crop.
+     */
+    fun noteZoomCropForTimestamp(timestampNs: Long, crop: Float, moving: Boolean) =
+        zoomLagTimeline.note(timestampNs, if (crop.isFinite() && crop > 1f) crop else 1f, moving)
+
+    /** Forgets every zoom-lag crop: the next frames draw with the HAL's framing. */
+    fun clearZoomLag() = zoomLagTimeline.clear()
+
     private fun applyRequestedLens() {
         if (closed.get() || recording != null || lensRequestVersion == lensAppliedVersion) return
         val (table, version) = synchronized(lensLock) { requestedLens to lensRequestVersion }
@@ -1273,6 +1290,8 @@ class OpenCineLogGpuPipeline(
             }
             val timestampNs = texture.timestamp
             viewfinderGapTrace?.onFrame(timestampNs, android.os.SystemClock.elapsedRealtimeNanos())
+            frameZoomCrop = zoomLagTimeline.cropFor(timestampNs, ZOOM_LAG_WAIT_NS)
+            viewfinderGapTrace?.onZoomCrop(timestampNs, frameZoomCrop, zoomLagTimeline.lastExact, zoomLagTimeline.lastWaitNs)
             appliedLens?.let { lens ->
                 val found = lensTimeline.lookup(timestampNs)
                 if (!found.exact) lensFallbackCounter.incrementAndGet()
@@ -1555,7 +1574,7 @@ class OpenCineLogGpuPipeline(
         val lens = appliedLens
         // The lens lock crop acts first on the output UV, so it composes after any alignment.
         fun uploadTextureMatrix(matrix: FloatArray) {
-            val zoom = cropZoom
+            val zoom = cropZoom * frameZoomCrop
             val uploaded = if (zoom > 1f) multiplyColumnMajor4(matrix, LensLockCrop.uvMatrix(zoom, cropUvMatrix), cropUvScratch) else matrix
             GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, uploaded, 0)
         }
@@ -2464,6 +2483,8 @@ class OpenCineLogGpuPipeline(
         private const val CALIBRATION_WIDTH = 640
         private const val CALIBRATION_MIN_HEIGHT = 64
         private const val CALIBRATION_PERIOD_MS = 100L
+        /** The longest a frame waits for its own capture result while zooming (a quarter of a 60 fps frame). */
+        private const val ZOOM_LAG_WAIT_NS = 4_000_000L
         private const val OUTPUT_OCLOG = 0
         private const val OUTPUT_VIEW_ASSIST = 1
         private const val OUTPUT_FLAT_MONITOR = 2
