@@ -221,6 +221,7 @@ object CameraPresetCodec {
         lensCorrectionPhotos = current.lensCorrectionPhotos,
         lensCorrectionAlignment = current.lensCorrectionAlignment,
         lensLock = current.lensLock,
+        smoothLensSwitch = current.smoothLensSwitch,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

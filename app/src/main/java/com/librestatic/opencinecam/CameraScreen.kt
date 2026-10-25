@@ -4410,6 +4410,11 @@ internal fun SettingsContent(
                 label = { stringResource(if (it == ZoomLensSwitchMode.MANUAL_PRESETS) R.string.zoom_lens_switch_mode_manual else R.string.zoom_lens_switch_mode_automatic) },
                 tag = { "zoom-lens-switch-$it" }, onSelect = { onSettingsChange(settings.copy(zoomLensSwitchMode = it)) })
         }
+        if ("smooth-lens-switch" in visibleIds) settingsCard("smooth-lens-switch") {
+            SettingsToggleRow(stringResource(R.string.smooth_lens_switch), stringResource(R.string.smooth_lens_switch_summary),
+                settings.smoothLensSwitch, modifier = Modifier.testTag("settings-smooth-lens-switch"),
+                onCheckedChange = { onSettingsChange(settings.copy(smoothLensSwitch = it)) })
+        }
         if ("lens-calibration" in visibleIds && onOpenLensCalibration != null) settingsCard("lens-calibration") {
             SettingsLinkRow(stringResource(R.string.lens_cal_title), stringResource(R.string.lens_cal_settings_summary), onOpenLensCalibration,
                 Modifier.testTag("settings-lens-calibration"))

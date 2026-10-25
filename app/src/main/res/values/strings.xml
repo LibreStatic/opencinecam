@@ -1042,6 +1042,8 @@
     <string name="lens_cal_fail_scene_unstable">The exposure or white balance never settled. Use steadier light and hold the phone still.</string>
     <string name="lens_cal_fail_low_quality">No lens gave a trustworthy result. Choose a scene with more texture and colour, farther away and in even light.</string>
     <string name="lens_cal_fail_internal">Something went wrong. Try again.</string>
+    <string name="smooth_lens_switch">Smooth lens switch</string>
+    <string name="smooth_lens_switch_summary">While you zoom across lenses, crops the frames the camera holds back before switching, so the framing does not jump. Off with lens lock and in high speed.</string>
     <string name="lens_lock_title">Lens lock</string>
     <string name="lens_lock_summary">Keep one lens: zoom becomes digital and the camera never switches lens</string>
     <string name="lens_lock_off">Off</string>

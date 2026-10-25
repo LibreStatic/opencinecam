@@ -78,6 +78,7 @@ object SettingsCatalog {
         SettingEntry("hdr-format", SettingsCategory.RECORDING, R.string.hdr_format, "HDR HLG HDR10 PQ ST 2084 BT.2020 transferencia transfer formato format video Main10"),
         SettingEntry("focus-lock", SettingsCategory.CAPTURE, R.string.af_lock_behavior, "focus enfoque AF bloqueo lock"),
         SettingEntry("zoom-lens", SettingsCategory.CAPTURE, R.string.zoom_lens_switch_mode, "zoom lente lens cambio switch automatico automatic manual preajuste preset tele gran angular wide pellizco pinch"),
+        SettingEntry("smooth-lens-switch", SettingsCategory.CAPTURE, R.string.smooth_lens_switch, "zoom lente lens cambio switch salto jump suavizar smooth fundido blend transicion transition encuadre framing tele gran angular wide ultrawide pellizco pinch"),
         SettingEntry("lens-calibration", SettingsCategory.CAPTURE, R.string.lens_cal_title, "lens lente objetivo calibration calibracion calibrar zoom colour color match igualar sensor multi camera wide ultrawide tele telephoto framing encuadre alineacion alignment correction correccion switch cambio"),
         SettingEntry("lens-lock", SettingsCategory.CAPTURE, R.string.lens_lock_title, "lens lock bloqueo lente objetivo zoom digital zoom digital switch lens cambio cambiar ultra wide ultrawide gran angular tele telephoto fijar pin"),
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),
@@ -119,6 +120,8 @@ fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings
     operation = next.operation,
     haptics = next.haptics,
     fpsLock = next.fpsLock,
+    // Only the render crop changes, never the session, so it follows the switch mid-take.
+    smoothLensSwitch = next.smoothLensSwitch,
     // lensLock and the lensCorrection* switches are deliberately absent: they are structural and stay
     // as the take started (the camera session and the render graph are built from them).
     exposure = if (next.operation.lockDuringTake) exposure else next.exposure,
