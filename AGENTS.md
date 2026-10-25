@@ -108,7 +108,7 @@ Outputs and logs:
 | `CaptureLocked` | `AdaptiveCaptureChrome` | controls locked while a photo saves, with the saved notice |
 | `CaptureOperatorLocked` | `AdaptiveCaptureChrome` | video recording with *lock during take* on: the slots give way to the Locked card with Unlock |
 | `CaptureDesktop` | `AdaptiveCaptureChrome` | video with the scopes and a hardware keyboard (use `--device w1280dp-h800dp-land-mdpi`) |
-| `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes; Capture has the Lens lock row (`settings-lens-lock`, pills `lens-lock-off`/`lens-lock-<id>`) |
+| `Settings` | `SettingsScreen` | home; 840 dp or wider (`--device inner`) shows two panes; Capture has the Lens lock row (`settings-lens-lock`, pills `lens-lock-off`/`lens-lock-<id>`) and the opt-in Smooth lens switch (`settings-smooth-lens-switch`) |
 | `SettingsRecording` | `SettingsScreen` | locked while recording |
 | `SettingsRecordingPolicy` | `SettingsScreen` | the Adaptive recording policy; `textInput policy tag=settings-search` shows the Strict/Adaptive row (`recording-policy-*`) |
 | `CapabilitiesExport` | `CameraCapabilitiesScreen` | the report export dialog open (`capabilities-export-*` tags): redacted or full, consent gate, Save/Share/Copy |

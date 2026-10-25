@@ -1036,6 +1036,8 @@
     <string name="lens_cal_fail_scene_unstable">La exposición o el balance de blancos nunca se estabilizaron. Usa una luz más estable y mantén el teléfono quieto.</string>
     <string name="lens_cal_fail_low_quality">Ninguna lente dio un resultado fiable. Elige una escena con más textura y color, más lejana y con luz uniforme.</string>
     <string name="lens_cal_fail_internal">Algo salió mal. Inténtalo de nuevo.</string>
+    <string name="smooth_lens_switch">Suavizar el cambio de lente</string>
+    <string name="smooth_lens_switch_summary">Al hacer zoom entre lentes, recorta los cuadros que la cámara retiene antes de cambiar, para que el encuadre no salte. No actúa con el bloqueo de lente ni en alta velocidad.</string>
     <string name="lens_lock_title">Bloqueo de lente</string>
     <string name="lens_lock_summary">Mantiene una sola lente: el zoom pasa a ser digital y la cámara nunca cambia de lente</string>
     <string name="lens_lock_off">Desactivado</string>

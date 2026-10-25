@@ -69,3 +69,30 @@ class LensCalibrationSettingsTest {
         assertEquals(mapOf("0" to "2"), live.lensLock)
     }
 }
+
+class SmoothLensSwitchSettingsTest {
+    @Test fun offByDefaultAndStoredUnderItsOwnKey() {
+        assertFalse(CameraSettingsStore(PresetPreferences()).load().smoothLensSwitch)
+        val memory = PresetPreferences()
+        CameraSettingsStore(memory).save(CameraSettings(smoothLensSwitch = true))
+        assertEquals(true, memory.all["smooth-lens-switch"])
+        assertTrue(CameraSettingsStore(memory).load().smoothLensSwitch)
+    }
+
+    @Test fun staysOnTheDevice() {
+        assertFalse("smooth-lens-switch" in CameraPresetCodec.portableKeys)
+        val device = CameraSettings(smoothLensSwitch = true)
+        assertFalse(CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Dark", settings = device))).settings.smoothLensSwitch)
+        assertTrue(CameraPresetCodec.mergeLocal(CameraSettings(), device).smoothLensSwitch)
+    }
+
+    @Test fun followsTheSwitchMidTake() {
+        assertTrue(CameraSettings().withLivePreferencesFrom(CameraSettings(smoothLensSwitch = true)).smoothLensSwitch)
+        assertFalse(CameraSettings(smoothLensSwitch = true).withLivePreferencesFrom(CameraSettings()).smoothLensSwitch)
+    }
+
+    @Test fun isFoundUnderCapture() {
+        val entry = SettingsCatalog.entries.single { it.id == "smooth-lens-switch" }
+        assertEquals(SettingsCategory.CAPTURE, entry.category)
+    }
+}

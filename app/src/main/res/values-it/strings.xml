@@ -1036,6 +1036,8 @@
     <string name="lens_cal_fail_scene_unstable">L’esposizione o il bilanciamento del bianco non si sono mai stabilizzati. Usa una luce più stabile e tieni il telefono fermo.</string>
     <string name="lens_cal_fail_low_quality">Nessun obiettivo ha dato un risultato affidabile. Scegli una scena con più texture e colore, più lontana e con luce uniforme.</string>
     <string name="lens_cal_fail_internal">Qualcosa è andato storto. Riprova.</string>
+    <string name="smooth_lens_switch">Cambio obiettivo morbido</string>
+    <string name="smooth_lens_switch_summary">Durante lo zoom tra obiettivi, ritaglia i fotogrammi che la fotocamera trattiene prima del cambio, così l\'inquadratura non salta. Inattivo con il blocco obiettivo e in alta velocità.</string>
     <string name="lens_lock_title">Blocco obiettivo</string>
     <string name="lens_lock_summary">Mantiene un solo obiettivo: lo zoom diventa digitale e la fotocamera non cambia mai obiettivo</string>
     <string name="lens_lock_off">Disattivo</string>

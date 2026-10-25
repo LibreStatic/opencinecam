@@ -3371,6 +3371,7 @@ class CaptureService : Service() {
                 previewEngine.setTorch(settings.flashEnabled, settings.torchStrengthLevel)
             }
             previewEngine.setMonitoringOptions(settings.monitoring)
+            previewEngine.setSmoothLensSwitch(settings.smoothLensSwitch)
             previewEngine.setFocusPeakingEnabled(settings.peakingEnabled)
             previewEngine.setSubjectFramingEnabled(settings.subjectDisplay.outOfFrameWarning)
             if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.previewViewAssist(cameraState.value.selectedMode))

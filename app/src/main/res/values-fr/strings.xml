@@ -1036,6 +1036,8 @@
     <string name="lens_cal_fail_scene_unstable">L’exposition ou la balance des blancs ne se sont jamais stabilisées. Utilisez une lumière plus stable et gardez le téléphone immobile.</string>
     <string name="lens_cal_fail_low_quality">Aucun objectif n’a donné de résultat fiable. Choisissez une scène avec plus de textures et de couleurs, plus éloignée et sous une lumière uniforme.</string>
     <string name="lens_cal_fail_internal">Un problème est survenu. Réessayez.</string>
+    <string name="smooth_lens_switch">Adoucir le changement d\'objectif</string>
+    <string name="smooth_lens_switch_summary">Pendant un zoom entre objectifs, recadre les images que la caméra retient avant de changer, pour que le cadrage ne saute pas. Inactif avec le verrouillage de l\'objectif et en haute vitesse.</string>
     <string name="lens_lock_title">Verrouillage de l\'objectif</string>
     <string name="lens_lock_summary">Garde un seul objectif : le zoom devient numérique et l\'appareil ne change jamais d\'objectif</string>
     <string name="lens_lock_off">Désactivé</string>

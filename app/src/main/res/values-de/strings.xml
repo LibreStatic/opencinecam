@@ -1036,6 +1036,8 @@
     <string name="lens_cal_fail_scene_unstable">Belichtung oder Weißabgleich haben sich nie eingependelt. Nutze gleichmäßigeres Licht und halte das Telefon ruhig.</string>
     <string name="lens_cal_fail_low_quality">Kein Objektiv lieferte ein verlässliches Ergebnis. Wähle eine Szene mit mehr Textur und Farbe, weiter entfernt und bei gleichmäßigem Licht.</string>
     <string name="lens_cal_fail_internal">Etwas ist schiefgelaufen. Versuche es erneut.</string>
+    <string name="smooth_lens_switch">Weicher Objektivwechsel</string>
+    <string name="smooth_lens_switch_summary">Beim Zoomen über Objektive hinweg beschneidet es die Bilder, die die Kamera vor dem Wechsel zurückhält, damit der Bildausschnitt nicht springt. Aus bei Objektivsperre und Hochgeschwindigkeit.</string>
     <string name="lens_lock_title">Objektivsperre</string>
     <string name="lens_lock_summary">Behält ein Objektiv: Der Zoom wird digital und die Kamera wechselt nie das Objektiv</string>
     <string name="lens_lock_off">Aus</string>
