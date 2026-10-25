@@ -501,6 +501,9 @@ class Camera2PreviewEngine(
     private val instantAec = InstantAecMachine()
     private var lensSwitchTraceSession: CameraCaptureSession? = null
     private var lensSwitchTrace: LensSwitchTrace? = null
+    private val zoomLag = ZoomLagCompensator()
+    private var zoomLagSession: CameraCaptureSession? = null
+    @Volatile private var smoothLensSwitch = false
     private var instantAecSession: CameraCaptureSession? = null
     private var instantAecKey: CaptureRequest.Key<Int>? = null
     private var instantAecModes: IntArray? = null
@@ -806,7 +809,7 @@ class Camera2PreviewEngine(
     }
 
     /** Feeds [LensSwitchTrace] when `log.tag.LensSwitch` is DEBUG; a new session starts a new trace. */
-    private fun traceLensSwitch(armedSession: CameraCaptureSession, result: TotalCaptureResult) {
+    private fun traceLensSwitch(armedSession: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
         if (lensSwitchTraceSession !== armedSession) {
             lensSwitchTraceSession = armedSession
             lensSwitchTrace = if (LensSwitchDiagnostics.enabled()) LensSwitchTrace() else null
@@ -823,7 +826,40 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
             } else null,
             exposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+            requestedZoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                request.get(CaptureRequest.CONTROL_ZOOM_RATIO)
+            } else null,
+            targetZoomRatio = requestedZoomRatio,
         )
+    }
+
+    /**
+     * Hands the GPU pipeline the [ZoomLagCompensator] crop for this frame, which smooths the zoom
+     * the HAL holds back around a lens switch. Opt-in through [setSmoothLensSwitch]; off below
+     * API 30, while lens-locked and in high-speed sessions.
+     */
+    private fun noteZoomLag(armedSession: CameraCaptureSession, result: TotalCaptureResult) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val pipeline = logPipeline ?: return
+        if (zoomLagSession !== armedSession) {
+            zoomLagSession = armedSession
+            zoomLag.reset()
+            pipeline.clearZoomLag()
+        }
+        if (!smoothLensSwitch || lensLockEngaged() || isHighSpeedSession()) {
+            if (zoomLag.moving) pipeline.clearZoomLag()
+            zoomLag.reset()
+            return
+        }
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        // The latest ratio sent, not the one echoed in this frame's request: with the zoom settings
+        // override the HAL applies a ratio about two frames before its own request completes, so
+        // the echo trails the result and would hide the hold.
+        val crop = zoomLag.onResult(
+            requestedZoomRatio,
+            result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO),
+        )
+        pipeline.noteZoomCropForTimestamp(timestamp, crop, zoomLag.moving)
     }
 
     /** Forwards the frame's active physical lens to the GPU pipeline's timeline. */
@@ -3321,6 +3357,14 @@ class Camera2PreviewEngine(
         }
     }
 
+    /**
+     * Turns the lens-switch smoothing ([ZoomLagCompensator]) on or off for the live graph. Only the
+     * viewfinder crop changes, so it needs no session restart and applies mid-take.
+     */
+    fun setSmoothLensSwitch(enabled: Boolean) {
+        smoothLensSwitch = enabled
+    }
+
     /** True when the held shutter would be sent now: wanted, engaged and every precondition still true. */
     private fun cadenceHoldActive(): Boolean = cadenceEngaged && cadenceGuardEligible()
 
@@ -5300,8 +5344,9 @@ class Camera2PreviewEngine(
                     if (disposed.get() || callbackGeneration != generation || armedSession == null ||
                         armedSession !== this@Camera2PreviewEngine.session) return
                     noteLensForFrame(result)
+                    noteZoomLag(armedSession, result)
                     noteCalibrationMeta(result)
-                    traceLensSwitch(armedSession, result)
+                    traceLensSwitch(armedSession, request, result)
                     pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.

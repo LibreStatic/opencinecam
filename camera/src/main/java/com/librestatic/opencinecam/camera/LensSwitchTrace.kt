@@ -36,12 +36,22 @@ internal class LensSwitchTrace(
     private var remaining = 0
     private val recent = ArrayDeque<String>()
 
-    fun onResult(frameNumber: Long, timestampNs: Long, physicalId: String?, zoomRatio: Float?, exposureNs: Long?) {
+    fun onResult(
+        frameNumber: Long,
+        timestampNs: Long,
+        physicalId: String?,
+        zoomRatio: Float?,
+        exposureNs: Long?,
+        requestedZoomRatio: Float? = null,
+        targetZoomRatio: Float? = null,
+    ) {
         val intervalNs = if (lastTimestampNs > 0L) timestampNs - lastTimestampNs else 0L
         val skipped = if (lastFrameNumber >= 0L) frameNumber - lastFrameNumber - 1 else 0L
         val line = String.format(
-            Locale.ROOT, "result frame=%d dt=%.1fms skipped=%d lens=%s zoom=%s exp=%s",
+            Locale.ROOT, "result frame=%d dt=%.1fms skipped=%d lens=%s zoom=%s req=%s target=%s exp=%s",
             frameNumber, intervalNs / 1e6, skipped, physicalId, zoomRatio?.let { "%.3f".format(Locale.ROOT, it) },
+            requestedZoomRatio?.let { "%.3f".format(Locale.ROOT, it) },
+            targetZoomRatio?.let { "%.3f".format(Locale.ROOT, it) },
             exposureNs?.let { "%.2fms".format(Locale.ROOT, it / 1e6) },
         )
         val previous = lastPhysicalId
@@ -89,5 +99,11 @@ internal class ViewfinderGapTrace(
         }
         lastTimestampNs = timestampNs
         lastLatchNs = latchNs
+    }
+
+    /** Logs every frame drawn with a zoom-lag crop, and every one whose capture result came too late. */
+    fun onZoomCrop(timestampNs: Long, crop: Float, exact: Boolean, waitedNs: Long) {
+        if (crop == 1f && (exact || waitedNs < 100_000L)) return
+        log(String.format(Locale.ROOT, "zoomlag ts=%d crop=%.3f exact=%b wait=%.1fms", timestampNs, crop, exact, waitedNs / 1e6))
     }
 }
