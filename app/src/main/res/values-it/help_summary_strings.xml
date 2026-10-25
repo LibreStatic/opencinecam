@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">LUT dedicata all’anteprima del soggetto</string>
+    <string name="operator_startup_help_summary">Applicato una volta all’avvio</string>
+    <string name="proxy_policy_help_summary">Vale dal prossimo tentativo</string>
+    <string name="subject_out_of_frame_unavailable_summary">Richiede il rilevamento volti, assente qui</string>
+    <string name="subject_slate_sync_scope_summary">Scatta una volta per ripresa, al REC</string>
+    <string name="subject_review_help_summary">Mostra le riprese sullo schermo esterno dalla galleria</string>
+    <string name="media_share_lut_help_summary">Una LUT mancante blocca la condivisione se non esclusa</string>
+    <string name="playback_settings_help_summary">Riguarda solo il visualizzatore della galleria</string>
+    <string name="playback_settings_direct_output_help_summary">Pausa più rapida; il colore segue il sistema</string>
+    <string name="pro_flicker_help_summary">Riduce lo sfarfallio delle luci di rete</string>
+    <string name="pro_low_light_boost_help_summary">Schiarisce le scene buie; può ridurre gli fps</string>
+    <string name="pro_metering_help_summary">Quale parte dell’inquadratura regola l’esposizione</string>
+    <string name="pro_wb_record_help_summary">Se il bilanciamento del bianco può cambiare in ripresa</string>
+    <string name="photo_quality_help_summary">Solo compressione JPEG/HEIC, non DNG</string>
+    <string name="image_stabilization_help_summary">L’EIS può ritagliare; controlla il risultato</string>
+    <string name="image_picture_profile_help_summary">Curva tonale della fotocamera: Standard, Piatto o Cine</string>
+    <string name="picture_help_summary">Controlli propri di questa fotocamera</string>
+    <string name="picture_blocked_neutral_summary">Nessun effetto in LOG, HLG, RAW e alta velocità</string>
+    <string name="picture_blocked_edge_off_summary">La nitidezza richiede il miglioramento dei bordi</string>
+</resources>

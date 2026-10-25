@@ -161,7 +161,7 @@ internal fun LutLibraryContent(library: LutLibraryState, state: CameraUiState = 
             OperatorLutState.FAILED -> R.string.lut_status_failed
         }
         Text(stringResource(statusLabel), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.testTag("lut-operator-status"))
-        SettingsHelp(stringResource(R.string.lut_subject_help), tag = "lut-subject-help")
+        SettingsHelp(stringResource(R.string.lut_subject_help_summary), stringResource(R.string.lut_subject_help), tag = "lut-subject-help")
         val subjectStatusLabel = when (state.subjectLutStatus.state) {
             OperatorLutState.DISABLED -> R.string.lut_subject_status_disabled
             OperatorLutState.WAITING_FOR_GPU -> R.string.lut_subject_status_waiting

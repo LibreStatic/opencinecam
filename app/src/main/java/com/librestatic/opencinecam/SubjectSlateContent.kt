@@ -183,7 +183,7 @@ internal fun SubjectSlateSettings(state: CameraUiState, subject: SubjectDisplayS
                 onChange(subject.copy(slateFields = if (shown) subject.slateFields + field else subject.slateFields - field))
             }
         }
-        SettingsHelp(stringResource(R.string.subject_slate_sync_scope))
+        SettingsHelp(stringResource(R.string.subject_slate_sync_scope_summary), stringResource(R.string.subject_slate_sync_scope))
         FoldToggle(stringResource(R.string.subject_slate_sync_flash), subject.slateSyncFlash) { onChange(subject.copy(slateSyncFlash = it)) }
         FoldToggle(stringResource(R.string.subject_slate_sync_beep), subject.slateSyncBeep) { onChange(subject.copy(slateSyncBeep = it)) }
         // Always visible, not behind a help toggle: the beep is recorded into this phone's own audio.

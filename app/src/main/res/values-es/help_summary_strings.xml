@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">LUT propio para la vista del sujeto</string>
+    <string name="operator_startup_help_summary">Se aplica una vez al abrir la app</string>
+    <string name="proxy_policy_help_summary">Los cambios rigen desde el próximo intento</string>
+    <string name="subject_out_of_frame_unavailable_summary">Requiere detección de rostros, no disponible aquí</string>
+    <string name="subject_slate_sync_scope_summary">Se dispara una vez por toma, al grabar</string>
+    <string name="subject_review_help_summary">Mostrá tomas en la pantalla externa desde la galería</string>
+    <string name="media_share_lut_help_summary">Un LUT faltante frena el envío si no se excluye</string>
+    <string name="playback_settings_help_summary">Solo afecta al visor de la galería</string>
+    <string name="playback_settings_direct_output_help_summary">Pausa más rápida; el color lo maneja el sistema</string>
+    <string name="pro_flicker_help_summary">Reduce el parpadeo de la luz de red</string>
+    <string name="pro_low_light_boost_help_summary">Aclara escenas oscuras; puede bajar los FPS</string>
+    <string name="pro_metering_help_summary">Qué parte del encuadre define la exposición</string>
+    <string name="pro_wb_record_help_summary">Si el balance de blancos puede cambiar en la toma</string>
+    <string name="photo_quality_help_summary">Solo compresión JPEG/HEIC, no DNG</string>
+    <string name="image_stabilization_help_summary">EIS puede recortar; revisá el resultado</string>
+    <string name="image_picture_profile_help_summary">Curva de tonos de la cámara: Estándar, Plano o Cine</string>
+    <string name="picture_help_summary">Controles propios de esta cámara</string>
+    <string name="picture_blocked_neutral_summary">Sin efecto en LOG, HLG, RAW y alta velocidad</string>
+    <string name="picture_blocked_edge_off_summary">Requiere Nitidez de imagen activada</string>
+</resources>
