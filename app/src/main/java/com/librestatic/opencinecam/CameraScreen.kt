@@ -2369,6 +2369,8 @@ internal fun AdaptiveCaptureChrome(
         )
 
         // Over the viewfinder, above the deck: a run needs the scene in view, and the card is inert to touches.
+        // Its end edge keeps the instruments' end inset, so it stops short of the zoom rocker and, in the
+        // stacked layouts, the F-key column standing over the frame's end edge.
         if (lensCalibration.phase != LensCalibrationPhase.IDLE) LensCalibrationCard(
             state = lensCalibration,
             onCancel = onLensCalibrationCancel,
@@ -2378,7 +2380,7 @@ internal fun AdaptiveCaptureChrome(
                 .padding(
                     bottom = deckHeight + (if (scopeTray) scopeTrayHeight else 0.dp) + 8.dp,
                     start = (if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp) + 12.dp,
-                    end = endOccupied + 12.dp,
+                    end = endOccupied + with(density) { instrumentEndInset.toDp() },
                 )
                 .widthIn(max = 420.dp).fillMaxWidth(),
             maxHeight = (maxHeight - deckHeight - topBar - 24.dp).coerceAtLeast(160.dp),
