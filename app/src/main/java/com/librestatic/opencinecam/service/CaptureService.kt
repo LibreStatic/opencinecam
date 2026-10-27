@@ -2117,9 +2117,13 @@ class CaptureService : Service() {
                             (withMarker?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
                                 .put("lensCorrection", lensCorrectionJson(lens)).toString(2)
                         } ?: withMarker
-                        return withHardwareTruth(withLens, hardwareTruth)
+                        val withExposure = graphEvidence?.exposureCompensation?.let { compensation ->
+                            (withLens?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                                .put("exposureCompensation", exposureCompensationJson(compensation)).toString(2)
+                        } ?: withLens
+                        return withHardwareTruth(withExposure, hardwareTruth)
                     }
-                    fun timingSidecarFlag() = logEvidence == null && (graphEvidence?.lensCorrection != null || hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                    fun timingSidecarFlag() = logEvidence == null && (graphEvidence?.lensCorrection != null || graphEvidence?.exposureCompensation != null || hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
                     // The canonical clip sidecar; evaluated when the video is prepared, after the audio is, so it sees both.
                     val clipSidecar: ClipSidecarProvider? = clipStartedAt?.let { started ->
                         clipSidecarProvider {
@@ -4630,6 +4634,13 @@ class CaptureService : Service() {
         .put("alignment", lens.alignment)
         .put("perLensFrameCounts", JSONObject().apply { lens.perLensFrameCounts.forEach { (id, n) -> put(id, n) } })
         .put("fallbackFrames", lens.fallbackFrames)
+
+    /** The per-frame exposure gain a take could apply (the FPS LOCK hold over lens switches); present only when it was on. */
+    private fun exposureCompensationJson(compensation: com.librestatic.opencinecam.camera.calibration.ExposureCompensationEvidence): JSONObject = JSONObject()
+        .put("splicedTransformSha256", compensation.splicedTransformSha256)
+        .put("compensatedFrames", compensation.compensatedFrames)
+        .put("minGain", compensation.minGain.toDouble())
+        .put("maxGain", compensation.maxGain.toDouble())
 
     private fun logSidecarJson(evidence: OpenCineLogRecordingEvidence, timecodeReport: RecordingTimecodeReport?): String = JSONObject()
         .put("schema", "opencinecam-oclog-sidecar-v2")

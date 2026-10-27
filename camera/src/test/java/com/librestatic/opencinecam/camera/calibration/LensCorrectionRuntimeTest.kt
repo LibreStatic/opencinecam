@@ -163,4 +163,11 @@ class LensCorrectionRuntimeTest {
         assertEquals(table.setSha256, e.setSha256)
         assertTrue(e.alignment)
     }
+
+    @Test fun exposureCompensationCountsOnlyGainedFrames() {
+        val usage = ExposureCompensationTakeUsage("abc")
+        usage.record(1f); usage.record(0.4f); usage.record(2.5f); usage.record(1f)
+        assertEquals(ExposureCompensationEvidence("abc", 2L, 0.4f, 2.5f), usage.evidence())
+        assertEquals(ExposureCompensationEvidence("abc", 0L, 1f, 1f), ExposureCompensationTakeUsage("abc").evidence())
+    }
 }

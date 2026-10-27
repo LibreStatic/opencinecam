@@ -145,6 +145,33 @@ data class LensCorrectionEvidence(
     companion object { const val UNKNOWN_LENS = "unknown" }
 }
 
+/**
+ * The per-frame exposure gain a take was encoded with (the FPS LOCK hold's bridge over a lens
+ * switch): the spliced program it ran and the frames whose gain was not 1, with the extremes.
+ */
+data class ExposureCompensationEvidence(
+    val splicedTransformSha256: String,
+    val compensatedFrames: Long,
+    val minGain: Float,
+    val maxGain: Float,
+)
+
+/** Counts the frames a take encoded with an exposure gain other than 1. */
+class ExposureCompensationTakeUsage(val splicedTransformSha256: String) {
+    private var frames = 0L
+    private var min = 1f
+    private var max = 1f
+
+    @Synchronized fun record(gain: Float) {
+        if (gain == 1f) return
+        frames++
+        min = minOf(min, gain)
+        max = maxOf(max, gain)
+    }
+
+    @Synchronized fun evidence() = ExposureCompensationEvidence(splicedTransformSha256, frames, min, max)
+}
+
 /** The table frozen at REC start plus the counters of the frames encoded with it. */
 class LensTakeUsage(val table: LensCorrectionTable, val splicedTransformSha256: String) {
     private val counts = LinkedHashMap<String, Long>()

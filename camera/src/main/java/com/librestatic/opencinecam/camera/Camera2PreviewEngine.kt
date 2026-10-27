@@ -285,6 +285,8 @@ data class Camera2Analysis(
     val focusPeaking: FocusPeakingMask? = null,
     /** Where [histogram] (luma only) came from; the red, green and blue ones are always the frame's. */
     val histogramSource: HistogramSource = HistogramSource.FRAME,
+    /** Sensor timestamp of the analysed frame (the same clock as the capture results' SENSOR_TIMESTAMP); null when unknown. */
+    val sensorTimestampNs: Long? = null,
 )
 
 data class Camera2EmbeddedAudioConfig(
@@ -677,6 +679,7 @@ class Camera2PreviewEngine(
             value?.setSubjectLut(subjectLutSelection)
             value?.setAnalysisSuspended(analysisSuspended)
             value?.setAnalysisBurst(analysisBurst)
+            value?.setExposureCompensation(fpsLockRequested)
         }
 
     /**
@@ -1026,6 +1029,13 @@ class Camera2PreviewEngine(
     private var cadenceQcomLogged = true
     /** ISO sent while the emulated hold (AE off) is engaged; null otherwise. Camera executor writes. */
     @Volatile private var cadenceHeldIso: Int? = null
+    /** The physical lens serving the logical streams per the latest result, and the last one the held ISO was measured on. */
+    private var cadenceLensId: String? = null
+    private val cadenceSensorTopCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private var cadenceMeasuredLensId: String? = null
+    /** When the latest lens switch was seen, and the effective ISO of the latest result (for the logs). */
+    private var cadenceLensSwitchAtNs = 0L
+    private var cadenceLastResultIso: String? = null
     private var cadenceEvIndexAtEngage = 0
     private var cadenceFirstFrameLogged = true
     private var activeVideoProfile: Camera2VideoProfile? = null
@@ -3351,6 +3361,7 @@ class Camera2PreviewEngine(
         cameraExecutor.execute {
             if (fpsLockRequested == enabled) return@execute
             fpsLockRequested = enabled
+            logPipeline?.setExposureCompensation(enabled)
             cadenceGuard.reset()
             cadenceFaulted = false
             if (!enabled && cadenceEngaged) setCadenceEngaged(false, null, null)
@@ -3381,6 +3392,7 @@ class Camera2PreviewEngine(
     private fun driveCadenceGuard(result: TotalCaptureResult, sensorTimestampNs: Long?) {
         val aeMode = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)
         lastResultAeMode = aeMode
+        noteCadenceLens(result)
         if (cadenceEngaged && cadenceHeldIso != null && !cadenceSawManual && aeMode == CaptureRequest.CONTROL_AE_MODE_OFF) {
             // The first result that really is manual: the AE frames still in the analysis pipe are AE's final state.
             cadenceSawManual = true
@@ -3393,9 +3405,19 @@ class Camera2PreviewEngine(
             if (cadenceEngaged) setCadenceEngaged(false, null, null)
             cadenceGuard.reset()
             updateAnalysisBurst()
+            noteCadenceFrameGain(sensorTimestampNs, null)
             return
         }
         if (cadenceEngaged && cadenceHeldIso != null) {
+            // A jumped ISO counts from the first result that reports it (before this result can issue another).
+            val sensorIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+            val resultBoost = result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100
+            cadenceLastResultIso = "sensor=$sensorIso boost=$resultBoost"
+            val effectiveIso = sensorIso?.let { (it.toLong() * resultBoost / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() }
+            if (effectiveIso != null && sensorTimestampNs != null && cadenceIsoLoop.noteResult(sensorTimestampNs, effectiveIso)) {
+                Log.i(CADENCE_TAG, "jumped iso in effect ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the lens switch: $cadenceLastResultIso")
+            }
+            noteCadenceFrameGain(sensorTimestampNs, effectiveIso.takeIf { cadenceHoldEmulated() })
             // Walk the planned ISO ramp: one small step per due capture result.
             val nowNs = SystemClock.elapsedRealtimeNanos()
             if (cadenceExposureRamp.active) {
@@ -3411,7 +3433,7 @@ class Camera2PreviewEngine(
                     reapplyRepeating()
                 }
             } else cadenceIsoLoop.tick(nowNs)?.let { cadenceHeldIso = it; reapplyRepeating() }
-        }
+        } else noteCadenceFrameGain(sensorTimestampNs, null)
         if (cadenceFaulted || sensorTimestampNs == null) return
         val frameDuration = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
         var iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
@@ -3430,6 +3452,18 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100)
         }
         updateAnalysisBurst()
+    }
+
+    /**
+     * Tells the GPU pipeline how much to brighten or darken this result's frame (1 without
+     * [effectiveIso]): after a lens switch the frames still in the HAL's pipeline carry the old
+     * lens' ISO, and [CadenceIsoLoop.frameGain] bridges them to the ISO the jump brings in.
+     */
+    private fun noteCadenceFrameGain(sensorTimestampNs: Long?, effectiveIso: Int?) {
+        val pipeline = logPipeline ?: return
+        if (sensorTimestampNs == null || !fpsLockRequested) return
+        val gain = effectiveIso?.let { cadenceIsoLoop.frameGain(it) } ?: 1.0
+        pipeline.noteExposureGainForTimestamp(sensorTimestampNs, gain.toFloat(), waiting = cadenceEngaged && cadenceHoldEmulated())
     }
 
     /** Native priority, else the Qualcomm exposure priority, else the emulated hold (manual exposure and a software ISO). */
@@ -3485,6 +3519,37 @@ class Camera2PreviewEngine(
         return (frameDurationNs - 100_000L).let { if (range != null) it.coerceIn(range.first, range.last) else it }
     }
 
+    /**
+     * Follows the physical lens of the logical camera. With AE off a switch hands the new lens the old
+     * one's ISO, so the loop corrects it at once (see [CadenceIsoLoop.lensChanged]) and the guard forgets
+     * its ISO reference (see [CadenceGuard.lensChanged]); AE frames from the old lens no longer describe
+     * the scene, and a pending hidden-gain measurement would mix two lenses.
+     */
+    private fun noteCadenceLens(result: TotalCaptureResult) {
+        val lens = activeDescriptor?.lensLock?.physicalId ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        } else null
+        val previous = cadenceLensId
+        if (lens == null || lens == previous) return
+        cadenceLensId = lens
+        if (previous == null) return
+        cadenceAeLumas.clear()
+        if (cadenceEngaged) cadenceGuard.lensChanged(SystemClock.elapsedRealtimeNanos())
+        if (!cadenceEngaged || cadenceHeldIso == null) return
+        if (!cadenceGainMeasured) {
+            cadenceGainMeasured = true
+            Log.i(CADENCE_TAG, "hidden gain: not learned, the lens switched $previous -> $lens during the handoff")
+        }
+        if (!cadenceHoldEmulated() || !cadenceSawManual || cadenceExposureRamp.active) return
+        val cameraId = activeDescriptor?.cameraId ?: return
+        val from = cadenceMeasuredLensId ?: previous
+        val expected = processLensIsoRatios.ratio(cameraId, from, lens)
+        cadenceLensSwitchAtNs = SystemClock.elapsedRealtimeNanos()
+        cadenceIsoLoop.lensChanged(cadenceLensSwitchAtNs, expected, result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP))
+        Log.i(CADENCE_TAG, "lens switch $previous -> $lens: iso ratio ${expected?.let { "%.2f".format(it) } ?: "unknown"} from $from")
+        updateAnalysisBurst()
+    }
+
     /** Analysis frame (camera executor, before the UI sees it): learns the luma, and steers the held ISO. */
     private fun observeCadenceLuma(analysis: Camera2Analysis, producer: String) {
         // Always the frame's own histogram: the ISP one, when present, is a different domain than the target.
@@ -3503,10 +3568,10 @@ class Camera2PreviewEngine(
         if (!cadenceGainMeasured && cadenceManualFrames >= 2) {
             cadenceGainMeasured = true
             val goal = cadenceIsoLoop.target
-            val cameraId = activeDescriptor?.cameraId
-            if (goal != null && cameraId != null && cadenceIsoLoop.targetSource == "ae") {
-                val old = processHiddenAeGain.gain(cameraId)
-                val updated = processHiddenAeGain.update(cameraId, goal, luma)
+            val gainKey = cadenceGainKey()
+            if (goal != null && gainKey != null && cadenceIsoLoop.targetSource == "ae") {
+                val old = processHiddenAeGain.gain(gainKey)
+                val updated = processHiddenAeGain.update(gainKey, goal, luma)
                 Log.i(CADENCE_TAG, "hidden gain: target=${"%.4f".format(goal)} manual luma=${"%.4f".format(luma)} G ${"%.2f".format(old)} -> ${"%.2f".format(updated)}")
             }
         }
@@ -3521,8 +3586,32 @@ class Camera2PreviewEngine(
         val evDelta = (requestedAeCompensationIndex ?: 0) - cadenceEvIndexAtEngage
         val scale = if (descriptor != null && descriptor.aeCompensationStep > 0f && evDelta != 0)
             CadenceIsoLoop.evScale(descriptor.aeCompensationStep, evDelta) else 1.0
-        cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale)
+        val lensPending = cadenceIsoLoop.lensPending
+        val awaiting = cadenceIsoLoop.awaitingEffect
+        val measured = cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale, analysis.sensorTimestampNs)
+        if (awaiting && !cadenceIsoLoop.awaitingEffect) {
+            Log.w(CADENCE_TAG, "jumped iso ${cadenceHeldIso} never reported within ${CadenceIsoLoop.EFFECT_TIMEOUT_NS / 1_000_000} ms; last result $cadenceLastResultIso")
+        }
+        if (lensPending && !cadenceIsoLoop.lensPending) {
+            // The new lens' first frame was measured: remember the ratio from the lens measured before.
+            val lens = cadenceLensId
+            val from = cadenceMeasuredLensId
+            val cameraId = descriptor?.cameraId
+            if (measured != null && lens != null && from != null && cameraId != null) {
+                val remembered = processLensIsoRatios.update(cameraId, from, lens, measured)
+                Log.i(CADENCE_TAG, "lens $lens measured ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
+                    "luma=${"%.4f".format(luma)} iso ratio from $from ${"%.2f".format(measured)} " +
+                    "(remembered ${remembered?.let { "%.2f".format(it) }})")
+            }
+            cadenceMeasuredLensId = lens
+        } else if (!lensPending) cadenceMeasuredLensId = cadenceLensId
         updateAnalysisBurst()
+    }
+
+    /** The hidden gain differs per physical lens: keyed by the logical camera and the lens serving it, when known. */
+    private fun cadenceGainKey(): String? {
+        val cameraId = activeDescriptor?.cameraId ?: return null
+        return cadenceLensId?.let { "$cameraId/$it" } ?: cameraId
     }
 
     /** Turns the fast analysis on around the handoff of the emulated hold, off otherwise. */
@@ -3535,6 +3624,7 @@ class Camera2PreviewEngine(
             sinceEngageNs = SystemClock.elapsedRealtimeNanos() - cadenceEngagedAtNs,
             loopLearning = !cadenceIsoLoop.hasTarget,
             loopRamping = cadenceIsoLoop.ramping,
+            lensPending = cadenceIsoLoop.lensPending,
         )
         if (wanted == analysisBurst) return
         analysisBurst = wanted
@@ -3559,7 +3649,7 @@ class Camera2PreviewEngine(
             val aeExposure = exposureNs?.let { if (timeRange != null) it.coerceIn(timeRange.first, timeRange.last) else it }
             val rawEffectiveIso = (aeIso.toLong() * aeBoost.coerceAtLeast(100) / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             // AE ON applies an ISP gain AE OFF loses: start with that much more ISO.
-            val hiddenGain = activeDescriptor?.cameraId?.let { processHiddenAeGain.gain(it) } ?: HiddenAeGain.HIDDEN_AE_GAIN_PRIOR
+            val hiddenGain = cadenceGainKey()?.let { processHiddenAeGain.gain(it) } ?: HiddenAeGain.HIDDEN_AE_GAIN_PRIOR
             val aeEffectiveIso = HiddenAeGain.startIso(rawEffectiveIso, hiddenGain, range)
             // Start where AE is (its exposure and total gain), so the first held frames match it by construction.
             val ramping = aeExposure != null && cadenceExposureRamp.start(aeExposure, aeEffectiveIso, heldExposure, range, nowNs)
@@ -3572,7 +3662,8 @@ class Camera2PreviewEngine(
             cadenceSawManual = false
             cadenceManualFrames = 0
             cadenceGainMeasured = false
-            Log.i(CADENCE_TAG, "handoff: aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
+            cadenceMeasuredLensId = cadenceLensId
+            Log.i(CADENCE_TAG, "handoff: lens=$cadenceLensId aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
                 "heldExposure=${"%.2f ms".format(heldExposure / 1e6)} startExposure=${"%.2f ms".format(cadenceHoldExposureNs() / 1e6)} startIso=$initial " +
                 "exposureRamp=${if (ramping) "${cadenceExposureRamp.totalSteps} steps ~400 ms" else "none"}")
             cadenceHeldIso = initial
@@ -5615,6 +5706,26 @@ class Camera2PreviewEngine(
      * FPS LOCK engaged: AE stays on and still picks the ISO, but the shutter is held a hair under the
      * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
      */
+    /**
+     * The sensor part of the held ISO stops at the lowest sensor maximum of the logical camera's
+     * lenses, the boost making up the rest. The HAL hands the next lens the request as it is, and a
+     * lens clamps what its sensor cannot reach (the Razr Fold's ultrawide and tele stop at 6400, the
+     * 1x at the logical camera's 12800), so a split one lens cannot follow would darken the frames
+     * after every switch to it.
+     */
+    private fun cadenceSensorIsoRange(range: IntRange): IntRange {
+        val descriptor = activeDescriptor ?: return range
+        if (descriptor.lensLock != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return range
+        val top = cadenceSensorTopCache.getOrPut(descriptor.cameraId) {
+            runCatching {
+                manager.getCameraCharacteristics(descriptor.cameraId).physicalCameraIds.mapNotNull { id ->
+                    runCatching { manager.getCameraCharacteristics(id).get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper }.getOrNull()
+                }
+            }.getOrDefault(emptyList()).let { CadenceIsoLoop.sharedSensorTop(range.last, it) }
+        }
+        return range.first..top
+    }
+
     private fun applyCadenceHold(builder: CaptureRequest.Builder) {
         val heldIso = cadenceHeldIso
         val exposureNs = cadenceHoldExposureNs()
@@ -5623,7 +5734,7 @@ class Camera2PreviewEngine(
             // Manual exposure at 1/fps; CONTROL_MODE stays whatever the auto branch set.
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             val caps = activeDescriptor?.exposureCapabilities
-            val sensorRange = caps?.isoRange
+            val sensorRange = caps?.isoRange?.let { cadenceSensorIsoRange(it) }
             if (sensorRange != null) {
                 // Above the sensor maximum the rest comes from the post-raw boost, where the camera has one.
                 val (sensorIso, boost) = CadenceIsoLoop.split(heldIso, sensorRange, caps.postRawBoostRange)
@@ -6896,6 +7007,8 @@ class Camera2PreviewEngine(
         analysisBurst = false
         logPipeline?.setAnalysisBurst(false)
         cadenceHeldIso = null
+        cadenceLensId = null
+        cadenceMeasuredLensId = null
         cadenceEngaged = false
         cadenceFaulted = false
         timelapseTake = false
@@ -7136,6 +7249,7 @@ class Camera2PreviewEngine(
             capturedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
             scopes = analyzeMonitoringRgb(sampledWidth, sampledHeight, rgbSamples, options, MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR),
             focusPeaking = if (focusPeakingEnabled) focusPeakingMask(image, options.peakingThreshold) else null,
+            sensorTimestampNs = image.timestamp,
         )
     }
 
