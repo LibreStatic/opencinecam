@@ -999,7 +999,8 @@
     <string name="lens_cal_corrections_title">Korrekturen</string>
     <string name="lens_cal_toggles_hint">Gelten, sobald eine Kalibrierung gespeichert ist</string>
     <string name="lens_cal_toggle_video">Vorschau und Video korrigieren</string>
-    <string name="lens_cal_toggle_photos">Fotos korrigieren (JPEG/HEIC)</string>
+    <string name="lens_cal_toggle_photos">Fotos korrigieren (JPEG/HEIC, experimentell)</string>
+    <string name="lens_cal_photos_note">Auf dem Razr Fold werden Fotos je Objektiv mit anderer Belichtung und Farbe verarbeitet als Videos, daher passt ein korrigiertes Foto womöglich nicht zu einem korrigierten Video.</string>
     <string name="lens_cal_toggle_alignment">Bildausschnitt zwischen Objektiven angleichen</string>
     <string name="lens_cal_alignment_note">Die Angleichung des Bildausschnitts ist nur nahe der kalibrierten Entfernung exakt.</string>
     <string name="lens_cal_ratio_reference">%1$s (Referenz)</string>

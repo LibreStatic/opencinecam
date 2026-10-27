@@ -92,6 +92,7 @@ internal fun LensCalibrationContent(
                         { onSettingsChange(settings.copy(lensCorrectionVideo = it)) }, "lens-calibration-toggle-video")
                     SettingsSwitchRow(stringResource(R.string.lens_cal_toggle_photos), settings.lensCorrectionPhotos,
                         { onSettingsChange(settings.copy(lensCorrectionPhotos = it)) }, "lens-calibration-toggle-photos")
+                    Text(stringResource(R.string.lens_cal_photos_note), color = SettingsMuted, fontSize = 12.sp)
                     SettingsSwitchRow(stringResource(R.string.lens_cal_toggle_alignment), settings.lensCorrectionAlignment,
                         { onSettingsChange(settings.copy(lensCorrectionAlignment = it)) }, "lens-calibration-toggle-alignment")
                     Text(stringResource(R.string.lens_cal_alignment_note), color = SettingsMuted, fontSize = 12.sp)

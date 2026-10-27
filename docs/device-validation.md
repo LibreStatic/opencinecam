@@ -258,6 +258,29 @@ Debug package on the same build, folded (cover screen), in Photo, SDR source pat
 
   Saved set: UW ev +0.13 and tele ev -0.13; UW align rotation -1.44 degrees and scale 1.011; tele scale 1.009. Applied offline to the dumped tele frames, the correction moves the mean from 131/116/98 to 124/107/87, against 123/106/87 for the reference.
 - **Repeatability.** The pre-fit alignment varied between runs (UW 2.6 to 12.2 px, tele 3.1 to 14.3 px) because the room still has depth, so treat alignment from a parallax-flagged run as scene-specific. The colour numbers were stable within 0.3 dE across cycles.
-- **Not checked yet.** Applying the saved set in preview and video (G3).
-- **UI.** On the cover screen the capture rail draws over the result card's right edge and hides the quality percentages.
+- **Applied in preview and video.** See G3 below.
+- **UI.** On the cover screen the capture rail drew over the result card's right edge and hid the quality percentages. Fixed in 6f98dc9: the card now clears the zoom rocker and the F-keys. Checked in Compose Driver on `phone` and `landscape`; not yet re-checked on the Razr cover.
+
+### G3: zoom sweep with the saved calibration (2026-10-27)
+
+Debug build of df6ebd3 on the Razr Fold, unfolded, in Video, in a dark room so the FPS LOCK emulated hold was engaged (AE off, software ISO). The G4 set was saved. Each take recorded a scripted rocker sweep through 0.6x, 1x and 3x and back, and then the take was analysed frame by frame in Lab: luma and chroma steps at each switch, plus an ECC fit for the framing residual. Before each measured take, a warm-up anchor cycle let the cadence loop learn its per-lens ISO ratios. Without it, the first switch of each pair comes from a cold start and is not comparable.
+
+| Take | Correction | Smooth lens switch | Luma dip at the switch | Max chroma step dC | Framing residual |
+|---|---|---|---|---|---|
+| A2 | off | off | -14.5 L*, back in about 11 frames (180 ms) | 3.34 | 3.5 % |
+| B2 | on | off | -14.5 L*, back in about 11 frames (180 ms) | 2.82 | 4.3 % |
+
+- **Result: not demonstrated.** The calibration's corrections are small: ±0.13 to 0.2 EV, about 1 % scale and gains within a few percent. The switch transients are larger and are not caused by the calibration, so the takes with and without correction are within noise. G3 stays open as worded. It would need a scene and a hold where the transients are smaller than the correction.
+- **The framing jump** is the HAL's zoom hold at the switch: for about 3 frames before every switch the HAL keeps reporting the old zoom, then the new lens lands on the latest request. The opt-in Smooth lens switch is aimed at it. A take with it on was not recorded in this run.
+- **The luma dip** comes from the cadence hold, not the calibration. On each switch the loop jumps straight to the remembered ISO ratio and then corrects once it has measured the new lens (about 170 to 200 ms later), and the frame-gain bridge only covers the frames in flight between the jump and its effect. The remembered ratios were off by up to 50 % in B2's log: 3 -> 2 was applied at 0.24 against 0.37 measured, and 2 -> 3 at 3.41 against 2.91 measured. A low ratio darkens the frames until the measured correction lands. The ratios learnt in each direction are not reciprocal (2 -> 3 about 4.2, 3 -> 2 about 0.3), so the ISO the loop starts from on each lens drifts between switches. That is a follow-up for the cadence loop, not for the calibration.
+- **Thermal.** After about 20 minutes of 60 fps sweeps the Razr reached thermal status 2 (skin about 39 °C). Stop and let it cool between batches.
+
+### G5: corrected stills against corrected video (2026-10-24)
+
+Same build family, same saved G4 set, in a dark room. JPEG and DNG pairs were taken on each lens with photo correction off and then on, and compared with corrected video frames of the same scene.
+
+- **Applied as calibrated.** With photo correction on, each JPEG shifts by the saved offset and nothing else: UW +0.18 EV, tele -0.21 EV, the wide 0.
+- **RAW untouched.** The DNG CFA means and the metadata are identical with correction off and on.
+- **Does not match the video.** The calibration is measured on the preview stream, and the HAL processes stills with different per-lens exposure and colour. On stills the correction makes the gap wider: the tele gap goes from -0.35 to -0.59 EV against the wide, and the UW chroma error goes from 1.6 to 2.5.
+- **Decision.** G5 fails as worded. Photo correction stays off by default, and Settings marks it experimental with a note that a corrected photo may not match a corrected video. A still-specific calibration measured on JPEG captures would be needed to pass it.
 
