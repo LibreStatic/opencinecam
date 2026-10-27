@@ -239,6 +239,27 @@ class CadenceGuardTest {
         assertFalse(guard.feed(nominal, 3_000, 2016, 2100))
     }
 
+    @Test fun aLensSwitchToAMoreSensitiveLensDoesNotRelease() {
+        val guard = CadenceGuard()
+        assertTrue(guard.feed(stretched, 25_600, 0, 300))   // engaged at 256 ms
+        assertTrue(guard.feed(nominal, 12_000, 316, 2000))  // the ultrawide's held ISO: the reference
+        // The 1x is 2.5x as sensitive: the held ISO follows it down to 4800, well under half the reference.
+        guard.lensChanged(2000 * ms)
+        assertTrue(guard.feed(nominal, 12_000, 2016, 2100)) // still the old lens' ISO in flight
+        assertTrue(guard.feed(nominal, 4_800, 2116, 8000))
+        // Light to spare on the new lens still releases, against its own reference.
+        assertTrue(guard.feed(nominal, 2_000, 8016, 9000))
+        assertFalse(guard.feed(nominal, 2_000, 9016, 9100))
+    }
+
+    @Test fun aLensSwitchLeavesADisengagedGuardAlone() {
+        val guard = CadenceGuard()
+        guard.update(0, fps, stretched, darkIso)
+        guard.lensChanged(100 * ms)
+        assertFalse(guard.engaged)
+        assertTrue(guard.pending)
+    }
+
     @Test fun oscillationFromThePostEngageIsoDropIsGone() {
         val guard = CadenceGuard()
         assertTrue(guard.feed(stretched, 25_600, 0, 300))
