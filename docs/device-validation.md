@@ -259,7 +259,7 @@ Debug package on the same build, folded (cover screen), in Photo, SDR source pat
   Saved set: UW ev +0.13 and tele ev -0.13; UW align rotation -1.44 degrees and scale 1.011; tele scale 1.009. Applied offline to the dumped tele frames, the correction moves the mean from 131/116/98 to 124/107/87, against 123/106/87 for the reference.
 - **Repeatability.** The pre-fit alignment varied between runs (UW 2.6 to 12.2 px, tele 3.1 to 14.3 px) because the room still has depth, so treat alignment from a parallax-flagged run as scene-specific. The colour numbers were stable within 0.3 dE across cycles.
 - **Applied in preview and video.** See G3 below.
-- **UI.** On the cover screen the capture rail drew over the result card's right edge and hid the quality percentages. Fixed in 6f98dc9: the card now clears the zoom rocker and the F-keys. Checked in Compose Driver on `phone` and `landscape`; not yet re-checked on the Razr cover.
+- **UI.** On the cover screen the capture rail drew over the result card's right edge and hid the quality percentages. Fixed in 6f98dc9: the card now clears the zoom rocker and the F-keys. On the Razr cover (2026-10-27) the right column was then clear, but a tall result card ran up over the zoom anchors. Its height is now capped below the instruments' first row, so it scrolls instead. Re-checked on the cover: card 32..912 x 489..1438 px, anchors end at 458, F-keys start at 933.
 
 ### G3: zoom sweep with the saved calibration (2026-10-27)
 
@@ -269,9 +269,10 @@ Debug build of df6ebd3 on the Razr Fold, unfolded, in Video, in a dark room so t
 |---|---|---|---|---|---|
 | A2 | off | off | -14.5 L*, back in about 11 frames (180 ms) | 3.34 | 3.5 % |
 | B2 | on | off | -14.5 L*, back in about 11 frames (180 ms) | 2.82 | 4.3 % |
+| C | on | on | -23.5 L* at the first switch, back in about 13 frames | 5.98 | 5.1 % |
 
 - **Result: not demonstrated.** The calibration's corrections are small: ±0.13 to 0.2 EV, about 1 % scale and gains within a few percent. The switch transients are larger and are not caused by the calibration, so the takes with and without correction are within noise. G3 stays open as worded. It would need a scene and a hold where the transients are smaller than the correction.
-- **The framing jump** is the HAL's zoom hold at the switch: for about 3 frames before every switch the HAL keeps reporting the old zoom, then the new lens lands on the latest request. The opt-in Smooth lens switch is aimed at it. A take with it on was not recorded in this run.
+- **The framing jump** is the HAL's zoom hold at the switch: for about 3 frames before every switch the HAL keeps reporting the old zoom, then the new lens lands on the latest request. The opt-in Smooth lens switch is aimed at it, but take C, with it on, did not lower the residual on this scripted rocker sweep. Take C ran on a darker scene than B2: the UW needed an ISO ratio of 7.5 against the 4.0 it applied, and the sensor capped at ISO 6400 with a post-raw boost, which explains its deeper first dip.
 - **The luma dip** comes from the cadence hold, not the calibration. On each switch the loop jumps straight to the remembered ISO ratio and then corrects once it has measured the new lens (about 170 to 200 ms later), and the frame-gain bridge only covers the frames in flight between the jump and its effect. The remembered ratios were off by up to 50 % in B2's log: 3 -> 2 was applied at 0.24 against 0.37 measured, and 2 -> 3 at 3.41 against 2.91 measured. A low ratio darkens the frames until the measured correction lands. The ratios learnt in each direction are not reciprocal (2 -> 3 about 4.2, 3 -> 2 about 0.3), so the ISO the loop starts from on each lens drifts between switches. That is a follow-up for the cadence loop, not for the calibration.
 - **Thermal.** After about 20 minutes of 60 fps sweeps the Razr reached thermal status 2 (skin about 39 °C). Stop and let it cool between batches.
 
