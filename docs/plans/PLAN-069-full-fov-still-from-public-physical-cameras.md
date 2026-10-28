@@ -69,12 +69,12 @@ RAW full-FOV (RAW_PHOTO stays at the logical readout), the vendor 50 MP remosaic
 
 ```mermaid
 flowchart LR
-    L[Logical camera "0"<br/>preview + analysis] --> S[Session]
-    P[Physical "5" map:<br/>4096x3072 only it advertises] --> R[RES panel 13 MP<br/>above 12 MP]
-    R --> S2[compressedStillPlan:<br/>size + owning physical]
-    S2 -->|setPhysicalCameraId "5"| S
-    S -->|rejected once| F[logical-only retry,<br/>physical routing retired for the graph]
-    Z[zoom crosses 0.95x..1.05x] --> G[graph rebuild;<br/>RES list drops physical sizes]
+    L["Logical camera 0<br/>preview + analysis"] --> S[Session]
+    P["Physical 5 map:<br/>4096x3072 only it advertises"] --> R["RES panel 13 MP<br/>above 12 MP"]
+    R --> S2["compressedStillPlan:<br/>size + owning physical"]
+    S2 -->|"setPhysicalCameraId(5)"| S
+    S -->|rejected once| F["logical-only retry,<br/>physical routing retired for the graph"]
+    Z["zoom crosses 0.95x..1.05x"] --> G["graph rebuild,<br/>RES list drops physical sizes"]
 ```
 
 The physical size enters only the still output; the graph negotiator, preview and analysis stay untouched. The zoom window exists because a physical still stream is fixed to its sensor and cannot follow logical lens switches.
