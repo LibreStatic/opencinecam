@@ -164,10 +164,15 @@ sequenceDiagram
 - Plans: [PLAN-007](../plans/PLAN-007-camera-enumeration-and-characteristics-probe.md), [PLAN-015](../plans/PLAN-015-logical-physical-routing-and-graph-negotiation.md), [PLAN-016](../plans/PLAN-016-lifecycle-recreation-disconnection-recovery.md), [PLAN-024](../plans/PLAN-024-deterministic-capturerequest-composition.md), [PLAN-025](../plans/PLAN-025-captureresult-auditing-and-evidence-events.md), [PLAN-028](../plans/PLAN-028-foldable-activity-and-camera-continuity.md), [PLAN-069](../plans/PLAN-069-full-fov-still-from-public-physical-cameras.md), [PLAN-070](../plans/PLAN-070-lens-calibration-and-lens-lock.md).
 - Requirements: OCC-CAM-001 to OCC-CAM-004 and OCC-LIFE-006 in [requirements.md](../requirements.md).
 
+### ADR amendments
+
+The 2026-10-28 amendments to ADR-0007, ADR-0008, ADR-0009 and ADR-0015 record what the code does:
+
+- **ADR-0007.** The engine promotes a graph through `fallbackGraphs` and `PreviewGraphFallback`, the `PreviewStartedReceipt` first-frame gate, the take's `SustainedCadenceGuard` and the file gates (`VideoFileGeometryValidator`, the Main10 file check). `GraphSessionController` and `GraphNegotiator.negotiate` stay tested library code that production does not call.
+- **ADR-0015.** Dropping ANALYSIS and RAW from the preview graph, retrying without stream use cases and the logical-only still retry are allowed under both policies. The drops that change what the operator gets are disclosed: `onPreviewGraphLoss` reports a `PreviewGraphLoss`, the instrument stack shows the `graph-fallback-notice` when the mode wants RAW or a monitor wants the analysis stream, and a DNG shutter with RAW dropped fails with that reason instead of saving something else. The stream-use retry and the physical-still retry have no notice; after the latter the RES list still offers the physical still size.
+- **ADR-0008.** The engine applies the fixed `composeEngineRequest` blocks and enforces the policy in its own appliers (`setControlPolicy`). `CaptureRequestComposer.compose(CaptureIntent, …)` stays library code.
+- **ADR-0009.** The auditor runs in `DIAGNOSTIC` mode, because STRICT would stop takes on a single outlier. Requests and results are not correlated by frame number until `submitRequest` is wired.
+
 ### Where the code differs from the ADRs
 
-- **ADR-0007** describes one candidate graph promoted by session, first-frame, sustained and file gates. `GraphSessionController` and `GraphNegotiator.negotiate` implement the full check and the physical-route audit, but production code does not call them. The engine uses only `fallbackGraphs` and `PreviewGraphFallback` for the regular graph. The first-frame gate is the `PreviewStartedReceipt`; the sustained gate is the take's `SustainedCadenceGuard`; the file gate is `VideoFileGeometryValidator` and the Main10 file check.
-- **ADR-0015** ties fallbacks to Adaptive. Dropping ANALYSIS and RAW from the preview graph, retrying without stream use cases, and the logical-only still retry all happen under Strict too. `GraphNegotiationPolicy` is used only by the unused `GraphSessionController`.
-- **ADR-0008** describes intent composition with Strict rejection and Adaptive clamping. `CaptureRequestComposer.compose(CaptureIntent, …)` is not called in production. The engine applies the fixed `composeEngineRequest` blocks and enforces the policy in its own appliers (`setControlPolicy`).
-- **ADR-0009** correlates requests and results by frame number. The engine never calls `CaptureResultAuditor.submitRequest`; it runs the auditor in `DIAGNOSTIC` mode, because STRICT would stop takes on a single outlier.
 - **ADR-0036** excludes the lens lock from direct high-speed sessions. The code refuses it for every constrained high-speed profile, including the GPU high-speed preview.

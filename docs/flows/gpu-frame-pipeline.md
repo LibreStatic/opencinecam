@@ -31,7 +31,8 @@ on the host through CMake. It is not a Gradle module (`settings.gradle.kts` incl
 `external fun` exists. Every frame on a device goes through Kotlin `EGL14`/`GLES30` code. Camera2
 writes into a `SurfaceTexture` that is sampled as `GL_TEXTURE_EXTERNAL_OES`, and the platform's
 BufferQueue handles the hardware buffers behind it. The ADR's "OpenGL ES 3 first, keep a direct
-encoder fallback" does hold.
+encoder fallback" does hold. The ADR's 2026-10-28 amendment records this Kotlin path as the shipped
+backend.
 
 ## Frame graph
 
