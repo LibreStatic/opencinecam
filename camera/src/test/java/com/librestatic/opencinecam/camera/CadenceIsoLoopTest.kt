@@ -268,8 +268,9 @@ class CadenceIsoLoopTest {
         assertFalse(wanted(engaged = true, since = 100, learning = true, suspended = true))
     }
 
-    /** Engaged on the old lens at ISO 10000 and on target, with no settle except the lens one. */
-    private fun onTarget(iso: Int = 10_000) = CadenceIsoLoop(settleNs = 0, rampSettleNs = 0, lensSettleNs = 150 * ms).also {
+    /** Engaged on the old lens at ISO 10000 and on target, with no settle except the lens one (and no HAL transition). */
+    private fun onTarget(iso: Int = 10_000, contentSettle: Long = 0) =
+        CadenceIsoLoop(settleNs = 0, rampSettleNs = 0, lensSettleNs = 150 * ms, lensContentSettleNs = contentSettle).also {
         it.engage(iso, range)
         repeat(4) { _ -> it.update(0, 0.30, frameNs = 0) }
         assertFalse(it.ramping)
@@ -283,10 +284,10 @@ class CadenceIsoLoopTest {
         // Frames still in flight from the old lens are ignored, by their sensor timestamp.
         assertNull(loop.update(1010 * ms, 0.30, frameNs = 970 * ms))
         assertTrue(loop.lensPending)
-        // The 1x comes out 1.5x too bright in luma (2.25x in linear): one jump to 10000 / 2.25.
-        val ratio = loop.update(1020 * ms, 0.45, frameNs = 980 * ms)!!
+        // The 1x comes out 1.5x too bright in luma (2.25x in linear): one jump to 10000 / 2.25, but no
+        // ratio yet: a first frame off target only steers the jump.
+        assertNull(loop.update(1020 * ms, 0.45, frameNs = 980 * ms))
         assertFalse(loop.lensPending)
-        assertEquals(1.0 / 2.25, ratio, 1e-6)
         assertEquals(4_444, loop.tick(1030 * ms))            // at once, not 4 % at a time
         assertTrue(loop.awaitingEffect)
         // Frames until a result reports the new ISO still show the old one: ignored, however late.
@@ -302,7 +303,7 @@ class CadenceIsoLoopTest {
         assertEquals(4_622, loop.tick(1301 * ms))
     }
 
-    @Test fun aKnownRatioIsAppliedAtTheSwitchAndMeasuredOnceInEffect() {
+    @Test fun aKnownRatioIsAppliedAtTheSwitchAndLearnedOnceTheNewLensIsOnTarget() {
         val loop = onTarget()
         loop.lensChanged(1000 * ms, expectedRatio = 0.4, switchFrameNs = 980 * ms)
         assertEquals(4_000, loop.tick(1000 * ms))
@@ -311,10 +312,46 @@ class CadenceIsoLoopTest {
         assertNull(loop.update(1100 * ms, 0.80, frameNs = 1000 * ms))
         assertTrue(loop.lensPending)
         loop.noteResult(1120 * ms, 4_000)
-        // A little bright once in effect: the measurement corrects it and reports the real ratio.
-        val ratio = loop.update(1200 * ms, 0.30 * 1.1, frameNs = 1120 * ms)!!
-        assertEquals(4_000 / 1.21 / 10_000, ratio, 1e-3)
+        // A little bright once in effect: the measurement corrects it, and reports nothing yet.
+        assertNull(loop.update(1200 * ms, 0.30 * 1.1, frameNs = 1120 * ms))
         assertEquals(3_305, loop.tick(1201 * ms))
+        loop.noteResult(1300 * ms, 3_305)
+        // On target: the ratio between the ISOs that held it on each lens, reported once.
+        assertEquals(0.3305, loop.update(1400 * ms, 0.30, frameNs = 1300 * ms)!!, 1e-3)
+        assertNull(loop.update(1450 * ms, 0.30, frameNs = 1350 * ms))
+    }
+
+    @Test fun framesOfTheHalsTransitionAfterTheSwitchAreIgnored() {
+        val loop = onTarget(contentSettle = 250 * ms)
+        loop.lensChanged(1000 * ms, switchFrameNs = 980 * ms)
+        // The HAL still matches the new lens to the old one's brightness: on target, but not real.
+        assertNull(loop.update(1100 * ms, 0.30, frameNs = 1100 * ms))
+        assertNull(loop.update(1200 * ms, 0.30, frameNs = 1229 * ms))
+        assertTrue(loop.lensPending)
+        // From 250 ms of sensor time after the switch frame, the new lens shows its own brightness.
+        assertNull(loop.update(1300 * ms, 0.45, frameNs = 1230 * ms))
+        assertFalse(loop.lensPending)
+        assertEquals(4_444, loop.tick(1301 * ms))
+    }
+
+    @Test fun aRatioPastTheJumpLimitIsLearnedOnceTheRampLands() {
+        // The ultra-wide on a lit screen: 13x darker than the wide, past the 4x one-shot jump.
+        val loop = onTarget(iso = 1_000)
+        val needed = 13_000.0
+        loop.lensChanged(1000 * ms, switchFrameNs = 980 * ms)
+        fun luma(iso: Int) = 0.30 * kotlin.math.sqrt(iso / needed)
+        assertNull(loop.update(1010 * ms, luma(1_000), frameNs = 980 * ms))
+        assertEquals(4_000, loop.tick(1011 * ms))
+        loop.noteResult(1100 * ms, 4_000)
+        var iso = 4_000
+        var t = 1100L
+        var learned: Double? = null
+        while (learned == null && t < 10_000) {
+            t += 70
+            learned = loop.update(t * ms, luma(iso), frameNs = t * ms)
+            loop.tick(t * ms)?.let { iso = it }
+        }
+        assertEquals(13.0, learned!!, 13.0 * 0.15)
     }
 
     @Test fun framesAtTheOldIsoAreBridgedUntilTheJumpIsInEffect() {
@@ -360,7 +397,7 @@ class CadenceIsoLoopTest {
         val loop = onTarget()
         loop.lensChanged(1000 * ms)
         assertNull(loop.update(1100 * ms, 0.45))
-        assertEquals(1.0 / 2.25, loop.update(1150 * ms, 0.45)!!, 1e-6)
+        assertNull(loop.update(1150 * ms, 0.45))
         assertEquals(4_444, loop.tick(1151 * ms))
         loop.noteResult(1200 * ms, 4_444)
         assertNull(loop.update(1250 * ms, 0.27))             // the 150 ms after the jump
@@ -369,7 +406,7 @@ class CadenceIsoLoopTest {
     }
 
     @Test fun theRampSettleStillAppliesToTimestampedFrames() {
-        val loop = CadenceIsoLoop(settleNs = 0, rampSettleNs = 250 * ms)
+        val loop = CadenceIsoLoop(settleNs = 0, rampSettleNs = 250 * ms, lensContentSettleNs = 0)
         loop.engage(10_000, range)
         repeat(3) { loop.update(0, 0.30, frameNs = 0) }
         loop.lensChanged(100 * ms, switchFrameNs = 90 * ms)
@@ -394,15 +431,15 @@ class CadenceIsoLoopTest {
         assertFalse(loop.awaitingEffect)
     }
 
-    @Test fun theJumpIsBoundedAndAClampedMeasurementIsNotReported() {
+    @Test fun theJumpIsBoundedByFactorAndRange() {
         val loop = onTarget()
         loop.lensChanged(1000 * ms, switchFrameNs = 980 * ms)
-        // Far too dark (a 9x linear error): the jump stops at 4x and the ratio is not trusted.
+        // Far too dark (a 9x linear error): the jump stops at 4x.
         assertNull(loop.update(1150 * ms, 0.10, frameNs = 1000 * ms))
         assertEquals(range.last, loop.tick(1151 * ms))       // 40000, then the ISO range
         val top = onTarget(iso = 15_000)
         top.lensChanged(1000 * ms, switchFrameNs = 980 * ms)
-        // Within 4x but past the ISO ceiling: clamped to the range, not reported either.
+        // Within 4x but past the ISO ceiling: clamped to the range.
         assertNull(top.update(1150 * ms, 0.20, frameNs = 1000 * ms))
         assertEquals(range.last, top.tick(1151 * ms))
     }
@@ -415,10 +452,13 @@ class CadenceIsoLoopTest {
         // The new lens is brighter and lands within the range, but the ratio would be against an extrapolation.
         assertNull(loop.update(1150 * ms, 0.40, frameNs = 1000 * ms))
         assertFalse(loop.lensPending)
-        assertTrue(loop.tick(1151 * ms)!! < range.last)       // the jump itself still happens
+        val jumped = loop.tick(1151 * ms)!!
+        assertTrue(jumped < range.last)                       // the jump itself still happens
+        loop.noteResult(1200 * ms, jumped)
+        assertNull(loop.update(1250 * ms, 0.30, frameNs = 1200 * ms))
     }
 
-    @Test fun aSecondSwitchBeforeTheFirstWasMeasuredKeepsTheOldBase() {
+    @Test fun aSecondSwitchBeforeTheFirstWasMeasuredKeepsTheOldBaseAndLearnsNothing() {
         val loop = onTarget()
         loop.lensChanged(1000 * ms, expectedRatio = 0.4, switchFrameNs = 980 * ms)
         assertEquals(4_000, loop.tick(1000 * ms))
@@ -428,7 +468,8 @@ class CadenceIsoLoopTest {
         assertEquals(16_000, loop.tick(1050 * ms))
         assertFalse(loop.noteResult(1060 * ms, 4_000))
         loop.noteResult(1150 * ms, 16_000)
-        assertEquals(1.6, loop.update(1200 * ms, 0.30, frameNs = 1150 * ms)!!, 1e-9)
+        // The middle lens never held the target, so there is no ratio to either side of it.
+        assertNull(loop.update(1200 * ms, 0.30, frameNs = 1150 * ms))
     }
 
     @Test fun theBaseIsTheIsoThatHeldTheTargetNotTheOneMidRamp() {
@@ -442,7 +483,7 @@ class CadenceIsoLoopTest {
     }
 
     @Test fun aSwitchWithoutATargetOnlyRestartsTheLearning() {
-        val loop = CadenceIsoLoop(settleNs = 0, lensSettleNs = 150 * ms)
+        val loop = CadenceIsoLoop(settleNs = 0, lensSettleNs = 150 * ms, lensContentSettleNs = 0)
         loop.engage(10_000, range)
         loop.update(0, 0.30, frameNs = 0); loop.update(1, 0.30, frameNs = 1)
         loop.lensChanged(1000 * ms, expectedRatio = 0.4, switchFrameNs = 980 * ms)
