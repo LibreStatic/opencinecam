@@ -158,6 +158,26 @@ class PreviewGraphFallbackTest {
         assertTrue(walk.retries.isEmpty() && walk.failures.isEmpty())
     }
 
+    @Test
+    fun graphLossNamesWhatEachFallbackGraphDropped() {
+        val graphs = ids(plan(previewGraphRequest("0", 30, preview, jpeg, raw, yuv), probe(yuvSizes = listOf(yuv), rawSizes = listOf(raw))))
+        val requested = graphs.first()
+        assertEquals(PreviewGraphLoss.NONE, PreviewGraphLoss.of(requested, graphs[0], physicalStillFallback = false))
+        assertFalse(PreviewGraphLoss.of(requested, graphs[0], physicalStillFallback = false).any)
+        assertEquals(PreviewGraphLoss(analysis = true), PreviewGraphLoss.of(requested, graphs[1], physicalStillFallback = false))
+        assertEquals(PreviewGraphLoss(analysis = true, raw = true), PreviewGraphLoss.of(requested, graphs[2], physicalStillFallback = false))
+        assertEquals(PreviewGraphLoss(physicalStill = true), PreviewGraphLoss.of(requested, graphs[0], physicalStillFallback = true))
+        assertTrue(PreviewGraphLoss(physicalStill = true).any)
+    }
+
+    @Test
+    fun aGraphThatNeverAskedForAnOutputDidNotLoseIt() {
+        // A video graph carries no still or RAW, and a HEIC photo no RAW: nothing to lose there.
+        val video = ids(plan(previewGraphRequest("0", 30, preview, null, null, yuv), probe()))
+        assertEquals(PreviewGraphLoss(analysis = true), PreviewGraphLoss.of(video.first(), video.last(), physicalStillFallback = false))
+        assertEquals(PreviewGraphLoss.NONE, PreviewGraphLoss.of(listOf("preview", "still"), listOf("preview", "still"), physicalStillFallback = false))
+    }
+
     /** Records what [PreviewGraphFallback] does with an engine-shaped [attempt]. */
     private class Walk(graphCount: Int, owns: Boolean = true, attempt: (Int) -> Boolean) {
         val attempts = mutableListOf<Int>()

@@ -901,6 +901,7 @@
     <string name="storage_reserve_insufficient">Spazio libero insufficiente per iniziare: questa ripresa richiede %1$s liberi e ne sono disponibili %2$s.</string>
     <string name="video_hardware_encoder_unavailable">Per questa ripresa va bene solo un encoder video software. Rigoroso richiede un encoder hardware; Adattivo consente un encoder software.</string>
     <string name="software_video_encoder_warning">Encoder video software: %1$s; possibili fotogrammi persi</string>
+    <string name="video_codec_fallback_warning">Registrazione in H.264: encoder HEVC non disponibile</string>
     <string name="storage_unknown_refused">Non è stato possibile leggere lo spazio libero, quindi la ripresa non è iniziata. Scegli il criterio di registrazione adattivo per registrare senza controllo dello spazio.</string>
     <string name="storage_unknown_warning">Spazio libero non leggibile; registrazione senza controllo dello spazio</string>
     <string name="take_stopped_reason">Ripresa interrotta: %1$s · %2$s</string>
@@ -1050,6 +1051,9 @@
     <string name="lens_lock_short">OBIET</string>
     <string name="lens_lock_notice_crop">Blocco obiettivo: ritaglio digitale</string>
     <string name="lens_lock_notice_switched">La fotocamera ha cambiato obiettivo con poca luce</string>
+    <string name="graph_fallback_raw">RAW non disponibile con questa configurazione</string>
+    <string name="graph_fallback_scopes">Scope non disponibili con questa configurazione</string>
+    <string name="graph_fallback_raw_scopes">RAW e scope non disponibili con questa configurazione</string>
     <string name="lens_lock_anchor_locked">Obiettivo %1$s bloccato</string>
     <string name="lens_lock_anchor">Blocca sull\'obiettivo %1$s</string>
 </resources>

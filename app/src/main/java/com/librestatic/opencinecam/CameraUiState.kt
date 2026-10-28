@@ -135,6 +135,8 @@ data class CameraUiState(
      * times its anchor ratio, and the anchors are the lock options (tapping one changes the lock).
      */
     val lensLock: LensLockUiState = LensLockUiState(),
+    /** What the running preview session's graph lost to the engine's fallbacks; reset by every opening. */
+    val previewGraphLoss: com.librestatic.opencinecam.camera.PreviewGraphLoss = com.librestatic.opencinecam.camera.PreviewGraphLoss.NONE,
     val recordingPauseStatus: com.librestatic.opencinecam.camera.TimelapsePauseStatus? = null,
     val recordingPausePending: Boolean = false,
     val recordingAvTiming: com.librestatic.opencinecam.camera.CaptureEpochReport? = null,

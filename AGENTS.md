@@ -96,6 +96,8 @@ Outputs and logs:
 | `CaptureFpsLock` / `CaptureFpsLockHolding` | `AdaptiveCaptureChrome` | video on a camera with exposure-time priority: the FPS LOCK key (`capture-fps-lock`) beside the lock keys, on, or amber while it is holding the shutter at 1/fps |
 | `CaptureLensLocked` | `AdaptiveCaptureChrome` | video locked to the tele (lenses "3" 0.55, "2" 1.0, "5" 3.0; zoom 3–24×, at 4.5×; direct physical): the anchor bar is the lock bar (`zoom-anchor-bar-locked`, padlock on 3.0) and LENS LOCK (`capture-lens-lock`) is on; check `phone`, `inner` and `landscape` |
 | `CaptureLensLockAvailable` / `CaptureLensLockCrop` | `AdaptiveCaptureChrome` | the lens lock offered but off (LENS LOCK beside the lock keys, normal anchors), or locked on the GPU-crop fallback with the "Lens lock: digital crop" notice (`lens-lock-crop`) under the zoom |
+| `CaptureGraphFallback` | `AdaptiveCaptureChrome` | RAW photo whose session lost the RAW and analysis streams to the graph fallbacks: the "RAW and scopes unavailable with this configuration" notice (`graph-fallback-notice`) under the zoom; check `phone` and `landscape` |
+| `CaptureCodecFallback` | `AdaptiveCaptureChrome` | a video take that asked for HEVC recording H.264: "Recording in H.264: HEVC encoder unavailable" as the `recording-warning` |
 | `CaptureRecording` | `AdaptiveCaptureChrome` | video take recording at 01:23; `click tag=recording-reveal-surface` reveals the chrome |
 | `CaptureRecordingWarning` | `AdaptiveCaptureChrome` | the same take with the Adaptive policy's live warning (`recording-warning`) under the REC strip; check it on `phone` and `inner` |
 | `CaptureLandscape` | `AdaptiveCaptureChrome` | video, previewing (use `--device landscape` for the side rails) |

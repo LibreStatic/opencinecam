@@ -206,6 +206,19 @@ fun CaptureLensLockAvailable() = CaptureChrome(driverLensLockState(null))
 @Composable
 fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.GPU_CROP))
 
+/** RAW photo on a camera that rejected the full graph: RAW and the analysis stream dropped, the notice under the zoom. */
+@Composable
+fun CaptureGraphFallback() = CaptureChrome(
+    driverCaptureState(CaptureMode.RAW_PHOTO).copy(previewGraphLoss = com.librestatic.opencinecam.camera.PreviewGraphLoss(analysis = true, raw = true)),
+)
+
+/** A take that asked for HEVC records H.264: the fallback is the recording warning. */
+@Composable
+fun CaptureCodecFallback() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 83_000L,
+        recordingWarning = stringResource(R.string.video_codec_fallback_warning)),
+)
+
 /** Capture chrome while a video take is recording at 01:23. */
 @Composable
 fun CaptureRecording() = CaptureChrome(

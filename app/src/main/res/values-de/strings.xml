@@ -901,6 +901,7 @@
     <string name="storage_reserve_insufficient">Nicht genug freier Speicher zum Start: Diese Aufnahme braucht %1$s frei, verfügbar sind %2$s.</string>
     <string name="video_hardware_encoder_unavailable">Für diese Aufnahme passt nur ein Software-Videoencoder. Streng verlangt einen Hardware-Encoder; Adaptiv erlaubt einen Software-Encoder.</string>
     <string name="software_video_encoder_warning">Software-Videoencoder: %1$s; Bilder können ausfallen</string>
+    <string name="video_codec_fallback_warning">Aufnahme in H.264: HEVC-Encoder nicht verfügbar</string>
     <string name="storage_unknown_refused">Der freie Speicher konnte nicht gelesen werden, daher wurde die Aufnahme nicht gestartet. Wähle die adaptive Aufnahmerichtlinie, um ohne Speicherprüfung aufzunehmen.</string>
     <string name="storage_unknown_warning">Freier Speicher nicht lesbar; Aufnahme ohne Speicherprüfung</string>
     <string name="take_stopped_reason">Aufnahme beendet: %1$s · %2$s</string>
@@ -1050,6 +1051,9 @@
     <string name="lens_lock_short">OBJ</string>
     <string name="lens_lock_notice_crop">Objektivsperre: digitaler Ausschnitt</string>
     <string name="lens_lock_notice_switched">Die Kamera hat bei wenig Licht das Objektiv gewechselt</string>
+    <string name="graph_fallback_raw">RAW mit dieser Konfiguration nicht verfügbar</string>
+    <string name="graph_fallback_scopes">Scopes mit dieser Konfiguration nicht verfügbar</string>
+    <string name="graph_fallback_raw_scopes">RAW und Scopes mit dieser Konfiguration nicht verfügbar</string>
     <string name="lens_lock_anchor_locked">Objektiv %1$s gesperrt</string>
     <string name="lens_lock_anchor">Auf das Objektiv %1$s sperren</string>
 </resources>

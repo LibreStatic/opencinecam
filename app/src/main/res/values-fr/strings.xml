@@ -901,6 +901,7 @@
     <string name="storage_reserve_insufficient">Pas assez d’espace libre pour démarrer : cette prise demande %1$s libres et %2$s sont disponibles.</string>
     <string name="video_hardware_encoder_unavailable">Seul un encodeur vidéo logiciel convient à cette prise. Stricte exige un encodeur matériel ; Adaptative autorise un encodeur logiciel.</string>
     <string name="software_video_encoder_warning">Encodeur vidéo logiciel : %1$s ; des images peuvent être perdues</string>
+    <string name="video_codec_fallback_warning">Enregistrement en H.264 : encodeur HEVC indisponible</string>
     <string name="storage_unknown_refused">L’espace libre n’a pas pu être lu, la prise n’a donc pas démarré. Choisissez la politique d’enregistrement adaptative pour enregistrer sans vérification d’espace.</string>
     <string name="storage_unknown_warning">Espace libre illisible ; enregistrement sans vérification d’espace</string>
     <string name="take_stopped_reason">Prise arrêtée : %1$s · %2$s</string>
@@ -1050,6 +1051,9 @@
     <string name="lens_lock_short">OBJ</string>
     <string name="lens_lock_notice_crop">Verrouillage de l\'objectif : recadrage numérique</string>
     <string name="lens_lock_notice_switched">L\'appareil a changé d\'objectif en faible lumière</string>
+    <string name="graph_fallback_raw">RAW indisponible avec cette configuration</string>
+    <string name="graph_fallback_scopes">Scopes indisponibles avec cette configuration</string>
+    <string name="graph_fallback_raw_scopes">RAW et scopes indisponibles avec cette configuration</string>
     <string name="lens_lock_anchor_locked">Objectif %1$s verrouillé</string>
     <string name="lens_lock_anchor">Verrouiller sur l\'objectif %1$s</string>
 </resources>

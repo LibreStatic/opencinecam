@@ -402,6 +402,16 @@ interface Camera2PreviewListener {
      * the locked lens, debounced over [LensSwitchDebounce.DEFAULT_THRESHOLD] results. Camera thread.
      */
     fun onLensLockSwitched(switched: Boolean) = Unit
+    /**
+     * Once the regular preview session is configured: what its graph lost to the fallbacks, or
+     * [PreviewGraphLoss.NONE]. The HFR, LOG and night sessions do not report it. Camera thread.
+     */
+    fun onPreviewGraphLoss(loss: PreviewGraphLoss) = Unit
+    /**
+     * A take that asked for HEVC records H.264 because the encoder refused the exact configuration
+     * ([reason] is for logs); before [onRecordingStarted].
+     */
+    fun onVideoCodecFallback(reason: String) = Unit
     /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
     fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
@@ -1875,6 +1885,9 @@ class Camera2PreviewEngine(
             encoderPolicy = encoderPolicy,
             onSoftwareEncoder = { name ->
                 if (generation == cameraGeneration && logPipeline === pipeline) listener?.onSoftwareVideoEncoder(name)
+            },
+            onCodecFallback = { reason ->
+                if (generation == cameraGeneration && logPipeline === pipeline) listener?.onVideoCodecFallback(reason)
             },
             onStartRefused = { code, message ->
                 if (generation == cameraGeneration && logPipeline === pipeline) listener?.onRecordingStartRefused(code, message)
@@ -4127,7 +4140,7 @@ class Camera2PreviewEngine(
                     recorder = null
                     recorderCodecFallback = "HEVC recorder prepare failed (${failure.message ?: failure.javaClass.simpleName}); fell back to H.264."
                     Log.w(TAG, requireNotNull(recorderCodecFallback))
-                    configureRecorder(VideoCodec.H264)
+                    configureRecorder(VideoCodec.H264).also { listener?.onVideoCodecFallback(requireNotNull(recorderCodecFallback)) }
                 }
                 recorderVideoCodec = if (recorderCodecFallback == null) chosenCodec else VideoCodec.H264
                 recorder = configuredRecorder
@@ -4234,6 +4247,9 @@ class Camera2PreviewEngine(
                     separateAudioClock = separateAudioClock,
                     recordingLut = recordingLut,
                     videoCodec = videoCodec,
+                    onCodecFallback = { reason ->
+                        if (generation == cameraGeneration && logPipeline === pipeline) listener?.onVideoCodecFallback(reason)
+                    },
                     onRecordingLutApplied = { evidence ->
                         if (generation == cameraGeneration && logPipeline === pipeline && recording) listener?.onRecordingLutApplied(evidence)
                     },
@@ -5309,6 +5325,7 @@ class Camera2PreviewEngine(
                             return
                         }
                         session = configured
+                        listener?.onPreviewGraphLoss(PreviewGraphLoss.of(graphs[0].outputs.map { it.id }, ids, physicalStillFallbackTaken))
                         startRepeating(device, configured, descriptor)
                     }
 
@@ -7005,7 +7022,7 @@ class Camera2PreviewEngine(
         val heic = activeStillFormat == StillPhotoFormat.HEIC
         val logicalSizes = if (heic) descriptor.heicSizes else descriptor.jpegSizes
         val physicalSizes = if (heic) descriptor.physicalHeicSizes else descriptor.physicalJpegSizes
-        val chosen = activeStillSize?.takeIf { it in logicalSizes || physicalSizes.values.any { s -> it in s } }
+        val chosen = activeStillSize?.takeIf { it in logicalSizes || !physicalStillFallbackTaken && physicalSizes.values.any { s -> it in s } }
             ?: logicalSizes.firstOrNull()
         val size = chosen ?: return null
         val routed = physicalStillRouting(

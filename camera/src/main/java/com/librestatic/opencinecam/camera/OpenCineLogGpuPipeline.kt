@@ -870,6 +870,8 @@ class OpenCineLogGpuPipeline(
         encoderPolicy: PolicyMode = PolicyMode.STRICT,
         /** Called before [onStarted] when a take records with a software encoder under Adaptive (codec name). */
         onSoftwareEncoder: ((String) -> Unit)? = null,
+        /** Called before [onStarted] when HEVC was asked for but the encoder refused the format and the take records H.264 (reason). */
+        onCodecFallback: ((String) -> Unit)? = null,
         /** A policy refusal of the start (stable code, message); replaces [onFailure] so the engine stays healthy. */
         onStartRefused: ((String, String) -> Unit)? = null,
     ): Boolean {
@@ -1086,6 +1088,7 @@ class OpenCineLogGpuPipeline(
                 runCatching {
                     // Before onStarted, which resets the take's warning surface from what was disclosed so far.
                     softwareEncoderToDisclose?.let { name -> onSoftwareEncoder?.invoke(name) }
+                    codecFallbackReason?.let { reason -> onCodecFallback?.invoke(reason) }
                     active.reportEncodedProgress(); onStarted(); active.reportPauseStatus()
                 }.onFailure { active.failure = it; stopRecording() }
               } finally {
