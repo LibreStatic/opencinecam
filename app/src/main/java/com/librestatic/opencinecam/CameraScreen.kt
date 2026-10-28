@@ -537,6 +537,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
 
 private const val HandoffWaitMillis = 1_500L
 
+/** The instruments' first row (the 48 dp zoom anchors) plus a gap of about 8 dp: the calibration card stays below it. */
+private val CALIBRATION_CARD_TOP_CLEARANCE = 64.dp
+
 /** Returns after three frames in a row arrive on time, or after a second whatever happens. */
 private suspend fun awaitSmoothFrames() {
     val start = withFrameNanos { it }
@@ -2383,7 +2386,13 @@ internal fun AdaptiveCaptureChrome(
                     end = endOccupied + with(density) { instrumentEndInset.toDp() },
                 )
                 .widthIn(max = 420.dp).fillMaxWidth(),
-            maxHeight = (maxHeight - deckHeight - topBar - 24.dp).coerceAtLeast(160.dp),
+            // Its top stops under the instruments' first row (the zoom anchors and the lock keys
+            // beside them), so a tall result scrolls instead of running over them.
+            maxHeight = minOf(
+                maxHeight - deckHeight - topBar - 24.dp,
+                with(density) { (height - instrumentTop).toDp() } - CALIBRATION_CARD_TOP_CLEARANCE -
+                    deckHeight - (if (scopeTray) scopeTrayHeight else 0.dp) - 8.dp,
+            ).coerceAtLeast(160.dp),
         )
 
     }
