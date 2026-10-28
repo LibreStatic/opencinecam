@@ -1,17 +1,20 @@
 OpenCineCam est une caméra cinéma manuelle open source pour Android. Elle vous donne la main sur le matériel Camera2 de votre téléphone, avec les outils de monitoring et les métadonnées de fichier attendus par les cinéastes. Sans compte, sans publicité, sans statistiques.
 
-BÊTA PRÉCOCE
-OpenCineCam est en bêta précoce. La capture de base fonctionne, mais certaines fonctions sont expérimentales et restent indisponibles sur les téléphones qui ne les prennent pas en charge. Vos retours sont les bienvenus et orientent la suite : ouvrez un ticket sur la page du projet sur GitHub.
+VERSION 1.0
+Voici OpenCineCam 1.0. Certains modes sont expérimentaux et restent masqués si votre téléphone n'est pas qualifié, et les résultats varient d'un téléphone à l'autre. Vos retours sont les bienvenus et orientent la suite : ouvrez un ticket sur la page du projet sur GitHub.
 
 CONTRÔLE MANUEL
 • ISO, vitesse ou angle d'obturation, balance des blancs en Kelvin avec teinte, mise au point manuelle et zoom
 • Valeurs demandées et valeurs rapportées côte à côte, pour voir ce que la caméra a réellement appliqué
 • Verrouillage de l'exposition et de la balance des blancs, torche, suggestions de vitesse 50/60 Hz contre le scintillement
 • Choix de stabilisation, de réduction du bruit et de netteté des contours lorsque le téléphone les propose
+• FPS LOCK (verrouillage de cadence) : garde la cadence en basse lumière en maintenant l'obturation à 1/fps
+• Verrouillage de l'objectif : reste sur un seul objectif avec zoom numérique, sur les téléphones à plusieurs objectifs
+• Calibration des objectifs : harmonise couleur et exposition entre objectifs dans l'aperçu et la vidéo
 
 MODES DE CAPTURE
 • Photo, rafale, bracketing, traînées lumineuses, vidéo, ralenti et time-lapse
-• La photo RAW (DNG) et la vidéo LOG sont des modes expérimentaux restreints, disponibles uniquement sur les téléphones qualifiés
+• La photo RAW (DNG), la vidéo LOG et la vidéo HLG sont des modes expérimentaux restreints, disponibles uniquement sur les téléphones qualifiés
 • Désanamorphose pour objectifs d'adaptation
 • Retardateur et boutons assignables, y compris les touches de volume
 
@@ -26,6 +29,7 @@ VIDÉO ET AUDIO
 • Audio AAC dans le MP4, ou fichiers WAV ou FLAC sans perte séparés
 • Vumètres audio en direct, réglage du gain et écoute au casque
 • Pause et reprise au sein d'une même prise
+• Micro USB et autres entrées audio externes
 
 FLUX DE PRODUCTION
 • Timecode SMPTE enregistré dans un fichier JSON annexe
@@ -36,11 +40,12 @@ FLUX DE PRODUCTION
 MÉDIAS ET TRANSFERT
 • Galerie intégrée avec lecture, renommage, partage et suppression
 • Proxys de montage générés sur l'appareil à votre demande
-• Envoi facultatif des prises terminées vers votre propre serveur WebDAV en HTTPS, uniquement quand vous le lancez
+• Envoi facultatif des prises vers votre propre serveur WebDAV en HTTPS, lancé par vous ou automatique pour les nouvelles prises (désactivé par défaut, en Wi-Fi uniquement sauf si vous autorisez les données mobiles)
 
 ADAPTÉ AUX PLIABLES
 • Interfaces adaptées aux téléphones, tablettes et pliables, charnière comprise
 • Aperçu facultatif sur l'écran extérieur pour le sujet
+• Modes pour l'écran extérieur : téléprompteur, écran partagé avec la caméra et auto-enregistrement avec la caméra arrière
 
 CE QUE VOTRE TÉLÉPHONE PEUT FAIRE
 Les capacités dépendent de ce que l'implémentation Camera2 de votre téléphone expose. OpenCineCam affiche ce que le matériel rapporte réellement, et les options que votre téléphone ne peut pas offrir apparaissent comme indisponibles au lieu d'être simulées.
