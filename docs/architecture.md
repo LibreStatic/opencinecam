@@ -1,5 +1,7 @@
 # OpenCineCam Architecture
 
+This page states the architectural decisions. The [runtime flows](flows/README.md) show how they play out in the code, step by step, with diagrams.
+
 ## Platform and repository
 
 The portable application is `com.librestatic.opencinecam`, minSdk 29, compile/target 37, AGP 9.3.1, Gradle 9.5, JDK 17, built-in Kotlin 2.2.10, Compose BOM 2026.08.00, Kotlin DSL, and a version catalog. Release dependencies are pinned and verified. No product flavor exists initially. The Internet permission is not declared for capture; `INTERNET` and `ACCESS_NETWORK_STATE` are allowed only for the opt-in WebDAV transfers (ADR-0027, amended 2026-09-26; ADR-0034), as described under Privacy. Debug, release, and benchmark build types are planned. NDK 28.2.13676358 and CMake 3.22.1 enter only at M11; release native ABI is arm64-v8a and test/emulator ABI is x86_64.
