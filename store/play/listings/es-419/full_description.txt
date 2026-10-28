@@ -10,10 +10,10 @@ CONTROL MANUAL
 • Opciones de estabilización, ruido y nitidez de bordes cuando el teléfono las ofrece
 • FPS LOCK (bloqueo de cadencia): mantiene la cadencia con poca luz fijando el obturador en 1/fps
 • Bloqueo de lente: quedate en una sola lente con zoom digital, en teléfonos con varias lentes
-• Calibración de lentes: iguala color y exposición entre lentes en la vista previa y el video
+• Calibración de lentes: iguala color, exposición y encuadre entre lentes en la vista previa y el video
 
 MODOS DE CAPTURA
-• Foto, ráfaga, bracketing, estela de luz, video, cámara lenta y time-lapse
+• Foto, ráfaga, bracketing, light painting, video, cámara lenta y time-lapse
 • La foto RAW (DNG), el video LOG y el video HLG son modos experimentales restringidos, disponibles solo en teléfonos que los califican
 • Desanamorfosis para lentes adaptadores
 • Temporizador y botones asignables, incluidas las teclas de volumen
@@ -44,8 +44,8 @@ MEDIOS Y TRANSFERENCIA
 
 PENSADA PARA PLEGABLES
 • Diseños que se adaptan a teléfonos, tablets y plegables, incluida la bisagra
-• Vista previa opcional en la pantalla exterior para el sujeto
-• Modos de pantalla exterior: teleprompter, pantalla dividida con la cámara y autograbación con la cámara trasera
+• Modos de pantalla exterior para el sujeto: estado, teleprompter, vista previa, luz de relleno, revisión de tomas, preguntas de entrevista y claqueta digital, con pantalla dividida opcional con la cámara
+• Autograbación con la cámara trasera, controlada desde la pantalla exterior
 
 LO QUE PUEDE HACER TU TELÉFONO
 Las capacidades dependen de lo que exponga la implementación de Camera2 de tu teléfono. OpenCineCam muestra lo que el hardware realmente informa, y las opciones que tu teléfono no puede hacer aparecen como no disponibles en lugar de simularse.

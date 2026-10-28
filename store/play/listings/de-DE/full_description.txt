@@ -10,10 +10,10 @@ MANUELLE KONTROLLE
 • Optionen für Stabilisierung, Rauschen und Kantenverarbeitung, wenn das Smartphone sie anbietet
 • FPS LOCK (Kadenzsperre): hält bei wenig Licht die Bildrate, indem der Verschluss bei 1/fps bleibt
 • Objektivsperre: bleib bei einem Objektiv mit digitalem Zoom, auf Geräten mit mehreren Objektiven
-• Objektivkalibrierung: gleicht Farbe und Belichtung zwischen den Objektiven in Vorschau und Video an
+• Objektivkalibrierung: gleicht Farbe, Belichtung und Bildausschnitt zwischen den Objektiven in Vorschau und Video an
 
 AUFNAHMEMODI
-• Foto, Serienbild, Belichtungsreihe, Lichtspuren, Video, Zeitlupe und Zeitraffer
+• Foto, Serienbild, Belichtungsreihe, Light Painting, Video, Zeitlupe und Zeitraffer
 • RAW-Foto (DNG), LOG-Video und HLG-Video sind eingeschränkte experimentelle Modi, nur auf qualifizierten Geräten verfügbar
 • Anamorphot-Entzerrung für Adapterobjektive
 • Selbstauslöser und belegbare Tasten, auch die Lautstärketasten
@@ -44,8 +44,8 @@ MEDIEN UND ÜBERTRAGUNG
 
 FÜR FOLDABLES GEMACHT
 • Layouts für Smartphones, Tablets und Foldables, einschließlich Scharnier
-• Optionale Vorschau auf dem Außendisplay für die gefilmte Person
-• Modi für das Außendisplay: Teleprompter, geteiltes Display mit Kamera und Selbstaufnahme mit der Rückkamera
+• Modi des Außendisplays für die gefilmte Person: Status, Teleprompter, Vorschau, Fülllicht, Take-Ansicht, Interviewfragen und digitale Klappe, optional geteilt mit der Kameravorschau
+• Selbstaufnahme mit der Rückkamera, gesteuert über das Außendisplay
 
 WAS DEIN SMARTPHONE KANN
 Die Fähigkeiten hängen davon ab, was die Camera2-Implementierung deines Smartphones bereitstellt. OpenCineCam zeigt, was die Hardware tatsächlich meldet; Optionen, die dein Gerät nicht beherrscht, erscheinen als nicht verfügbar, statt vorgetäuscht zu werden.

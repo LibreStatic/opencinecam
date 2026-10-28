@@ -10,10 +10,10 @@ MANUAL CONTROL
 • Stabilization, noise and edge processing choices when the phone offers them
 • FPS LOCK: keeps the frame rate in low light by holding the shutter at 1/fps
 • Lens lock: stay on one lens with digital zoom, on phones with several lenses
-• Lens calibration: match color and exposure between lenses in preview and video
+• Lens calibration: match color, exposure and framing between lenses in preview and video
 
 CAPTURE MODES
-• Photo, burst, bracket, light trail, video, slow motion and time-lapse
+• Photo, burst, bracket, light painting, video, slow motion and time-lapse
 • RAW photo (DNG), LOG video and HLG video are gated experimental modes, available only on phones that qualify
 • Anamorphic de-squeeze for adapter lenses
 • Self-timer and assignable buttons, including the volume keys
@@ -44,8 +44,8 @@ MEDIA AND TRANSFER
 
 FOLDABLE AWARE
 • Layouts that adapt to phones, tablets and foldables, including the hinge
-• Optional preview on the outer display for the subject
-• Cover-screen modes: teleprompter, split screen with the camera preview, and self-recording with the rear camera
+• Cover-screen modes for the subject: status, teleprompter, camera preview, fill light, take review, interview questions and digital slate, optionally split with the camera preview
+• Self-recording with the rear camera, controlled from the cover screen
 
 WHAT YOUR PHONE CAN DO
 Capabilities depend on what your phone's Camera2 implementation exposes. OpenCineCam shows what the hardware really reports, and options your phone cannot do are shown as unavailable instead of being faked.

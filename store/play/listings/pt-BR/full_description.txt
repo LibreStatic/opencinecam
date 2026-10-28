@@ -10,10 +10,10 @@ CONTROLE MANUAL
 • Opções de estabilização, ruído e nitidez de bordas quando o celular as oferece
 • FPS LOCK (bloqueio de cadência): mantém a taxa de quadros com pouca luz segurando o obturador em 1/fps
 • Bloqueio de lente: fique em uma só lente com zoom digital, em celulares com várias lentes
-• Calibração das lentes: iguala cor e exposição entre as lentes na pré-visualização e no vídeo
+• Calibração das lentes: iguala cor, exposição e enquadramento entre as lentes na pré-visualização e no vídeo
 
 MODOS DE CAPTURA
-• Foto, rajada, bracketing, rastro de luz, vídeo, câmera lenta e time-lapse
+• Foto, rajada, bracketing, light painting, vídeo, câmera lenta e time-lapse
 • Foto RAW (DNG), vídeo LOG e vídeo HLG são modos experimentais restritos, disponíveis apenas em celulares que se qualificam
 • Desanamorfose para lentes adaptadoras
 • Temporizador e botões atribuíveis, incluindo as teclas de volume
@@ -44,8 +44,8 @@ MÍDIA E TRANSFERÊNCIA
 
 PENSADO PARA DOBRÁVEIS
 • Layouts que se adaptam a celulares, tablets e dobráveis, incluindo a dobradiça
-• Pré-visualização opcional na tela externa para o sujeito
-• Modos para a tela externa: teleprompter, tela dividida com a câmera e autogravação com a câmera traseira
+• Modos da tela externa para o sujeito: status, teleprompter, pré-visualização, luz de preenchimento, revisão de tomadas, perguntas de entrevista e claquete digital, com tela dividida opcional com a câmera
+• Autogravação com a câmera traseira, controlada pela tela externa
 
 O QUE O SEU CELULAR PODE FAZER
 Os recursos dependem do que a implementação Camera2 do seu celular expõe. O OpenCineCam mostra o que o hardware realmente informa, e as opções que o seu celular não consegue oferecer aparecem como indisponíveis em vez de serem simuladas.
