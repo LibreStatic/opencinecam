@@ -95,6 +95,7 @@ class WebDavTransferRuntime internal constructor(
     private var work: Work? = null
     private var closed = false
     private val processToken = UUID.randomUUID().toString()
+    private var deadProcessesRecovered = false
     private val idleListeners = CopyOnWriteArrayList<() -> Unit>()
 
     private class Work(val bundleId: String?) {
@@ -317,6 +318,9 @@ class WebDavTransferRuntime internal constructor(
             checkWork(current)
             WebDavSqliteOutbox(context, databaseName).use { store ->
                 checkWork(current)
+                // A PUT cut by process death stays UPLOADING, with no Send and no automatic retry, until
+                // this marks it uncertain so the next run reconciles it.
+                if (!deadProcessesRecovered) { store.recoverOtherProcesses(processToken); deadProcessesRecovered = true }
                 if (current.bundleId == null) {
                     val bundles = store.list(1024).filter { it.sealed }
                     checkWork(current)

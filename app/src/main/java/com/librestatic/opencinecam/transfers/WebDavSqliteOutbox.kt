@@ -178,6 +178,19 @@ class WebDavSqliteOutbox(context: Context, databaseName: String = "webdav-outbox
         }
     }
 
+    /**
+     * Recovers every attempt left by another process. Only the process-wide runtime may call it, with
+     * its own token: the outbox has one live process, so any other token belongs to a dead one.
+     */
+    fun recoverOtherProcesses(liveProcessToken: String): Int {
+        requireOutboxUuid(liveProcessToken)
+        val dead = helper.readableDatabase.rawQuery(
+            "SELECT DISTINCT process_token FROM artifacts WHERE process_token IS NOT NULL AND process_token<>? LIMIT 1025",
+            arrayOf(liveProcessToken)).use { cursor -> buildList { while (cursor.moveToNext()) add(string(cursor, 0)) } }
+        if (dead.size > 1024) throw WebDavOutboxCorruptData()
+        return dead.sumOf { recoverProcess(it) }
+    }
+
     override fun close() { helper.close() }
 
     private fun <T> transaction(block: (SQLiteDatabase) -> T): T {
