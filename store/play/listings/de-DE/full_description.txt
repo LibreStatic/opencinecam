@@ -1,17 +1,20 @@
 OpenCineCam ist eine quelloffene manuelle Kinokamera für Android. Sie gibt dir die Kontrolle über die Camera2-Hardware deines Smartphones, mit den Monitoring-Werkzeugen und Datei-Metadaten, die Filmemacher erwarten. Kein Konto, keine Werbung, keine Analysen.
 
-FRÜHE BETA
-OpenCineCam befindet sich in einer frühen Beta. Die Kernaufnahme funktioniert, einige Funktionen sind jedoch experimentell und bleiben auf Geräten nicht verfügbar, die sie nicht unterstützen. Dein Feedback ist willkommen und bestimmt, was als Nächstes kommt: Eröffne ein Issue auf der Projektseite bei GitHub.
+VERSION 1.0
+Das ist OpenCineCam 1.0. Einige Modi sind experimentell und bleiben ausgeblendet, wenn sich dein Gerät nicht qualifiziert, und die Ergebnisse unterscheiden sich von Gerät zu Gerät. Dein Feedback ist willkommen und bestimmt, was als Nächstes kommt: Eröffne ein Issue auf der Projektseite bei GitHub.
 
 MANUELLE KONTROLLE
 • ISO, Verschlusszeit oder Shutter Angle, Weißabgleich in Kelvin mit Tint, manueller Fokus und Zoom
 • Angefragte und gemeldete Werte nebeneinander, damit du siehst, was die Kamera wirklich angewendet hat
 • Belichtungs- und Weißabgleichsspeicher, Taschenlampe, 50/60-Hz-Verschlussvorschläge gegen Flimmern
 • Optionen für Stabilisierung, Rauschen und Kantenverarbeitung, wenn das Smartphone sie anbietet
+• FPS LOCK (Kadenzsperre): hält bei wenig Licht die Bildrate, indem der Verschluss bei 1/fps bleibt
+• Objektivsperre: bleib bei einem Objektiv mit digitalem Zoom, auf Geräten mit mehreren Objektiven
+• Objektivkalibrierung: gleicht Farbe und Belichtung zwischen den Objektiven in Vorschau und Video an
 
 AUFNAHMEMODI
 • Foto, Serienbild, Belichtungsreihe, Lichtspuren, Video, Zeitlupe und Zeitraffer
-• RAW-Foto (DNG) und LOG-Video sind eingeschränkte experimentelle Modi, nur auf qualifizierten Geräten verfügbar
+• RAW-Foto (DNG), LOG-Video und HLG-Video sind eingeschränkte experimentelle Modi, nur auf qualifizierten Geräten verfügbar
 • Anamorphot-Entzerrung für Adapterobjektive
 • Selbstauslöser und belegbare Tasten, auch die Lautstärketasten
 
@@ -26,6 +29,7 @@ VIDEO UND AUDIO
 • AAC-Audio im MP4 oder separate verlustfreie WAV- oder FLAC-Dateien
 • Live-Audiopegel, Gain-Regelung und Kopfhörer-Monitoring
 • Pause und Fortsetzen innerhalb einer Einstellung
+• USB-Mikrofon und andere externe Audioeingänge
 
 PRODUKTIONS-WORKFLOW
 • SMPTE-Timecode in einer JSON-Begleitdatei
@@ -36,11 +40,12 @@ PRODUKTIONS-WORKFLOW
 MEDIEN UND ÜBERTRAGUNG
 • Integrierte Galerie mit Wiedergabe, Umbenennen, Teilen und Löschen
 • Schnitt-Proxys, die auf dem Gerät erzeugt werden, wenn du sie anforderst
-• Optionaler Upload fertiger Takes auf deinen eigenen WebDAV-Server per HTTPS, nur wenn du ihn startest
+• Optionaler Upload von Takes auf deinen eigenen WebDAV-Server per HTTPS, von dir gestartet oder automatisch für neue Takes (standardmäßig aus, nur über WLAN, außer du erlaubst mobile Daten)
 
 FÜR FOLDABLES GEMACHT
 • Layouts für Smartphones, Tablets und Foldables, einschließlich Scharnier
 • Optionale Vorschau auf dem Außendisplay für die gefilmte Person
+• Modi für das Außendisplay: Teleprompter, geteiltes Display mit Kamera und Selbstaufnahme mit der Rückkamera
 
 WAS DEIN SMARTPHONE KANN
 Die Fähigkeiten hängen davon ab, was die Camera2-Implementierung deines Smartphones bereitstellt. OpenCineCam zeigt, was die Hardware tatsächlich meldet; Optionen, die dein Gerät nicht beherrscht, erscheinen als nicht verfügbar, statt vorgetäuscht zu werden.

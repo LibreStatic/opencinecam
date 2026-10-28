@@ -1,17 +1,20 @@
 O OpenCineCam é uma câmara de cinema manual de código aberto para Android. Coloca o hardware Camera2 do seu telemóvel sob o seu controlo, com as ferramentas de monitorização e os metadados de ficheiro que os cineastas esperam. Sem conta, sem anúncios, sem análises.
 
-BETA INICIAL
-O OpenCineCam está numa beta inicial. A captura principal funciona, mas algumas funcionalidades são experimentais e ficam indisponíveis em telemóveis que não as suportam. Os seus comentários são bem-vindos e definem o que vem a seguir: abra uma issue na página do projeto no GitHub.
+VERSÃO 1.0
+Esta é a versão 1.0 do OpenCineCam. Alguns modos são experimentais e ficam ocultos se o seu telemóvel não se qualificar, e os resultados variam de telemóvel para telemóvel. Os seus comentários são bem-vindos e definem o que vem a seguir: abra uma issue na página do projeto no GitHub.
 
 CONTROLO MANUAL
 • ISO, tempo ou ângulo de obturação, equilíbrio de brancos em Kelvin com matiz, foco manual e zoom
 • Valores pedidos e reportados lado a lado, para ver o que a câmara realmente aplicou
 • Bloqueio de exposição e de equilíbrio de brancos, lanterna, sugestões de obturador a 50/60 Hz contra a cintilação
 • Opções de estabilização, ruído e nitidez de contornos quando o telemóvel as oferece
+• FPS LOCK (bloqueio de cadência): mantém a cadência de imagens com pouca luz, fixando o obturador em 1/fps
+• Bloqueio de lente: fica numa só lente com zoom digital, em telemóveis com várias lentes
+• Calibração das lentes: iguala cor e exposição entre as lentes na pré-visualização e no vídeo
 
 MODOS DE CAPTURA
 • Foto, rajada, bracketing, rasto de luz, vídeo, câmara lenta e time-lapse
-• A foto RAW (DNG) e o vídeo LOG são modos experimentais restritos, disponíveis apenas em telemóveis que se qualificam
+• A foto RAW (DNG), o vídeo LOG e o vídeo HLG são modos experimentais restritos, disponíveis apenas em telemóveis que se qualificam
 • Desanamorfose para lentes adaptadoras
 • Temporizador e botões atribuíveis, incluindo as teclas de volume
 
@@ -26,6 +29,7 @@ VÍDEO E ÁUDIO
 • Áudio AAC dentro do MP4, ou ficheiros WAV ou FLAC sem perdas em separado
 • Medidores de áudio em direto, controlo de ganho e escuta com auscultadores
 • Pausa e retoma dentro de uma mesma tomada
+• Microfone USB e outras entradas de áudio externas
 
 FLUXO DE PRODUÇÃO
 • Timecode SMPTE guardado num ficheiro JSON auxiliar
@@ -36,11 +40,12 @@ FLUXO DE PRODUÇÃO
 MULTIMÉDIA E TRANSFERÊNCIA
 • Galeria integrada com reprodução, mudança de nome, partilha e eliminação
 • Proxies de edição gerados no dispositivo quando os pede
-• Envio opcional das tomadas concluídas para o seu próprio servidor WebDAV por HTTPS, apenas quando o iniciar
+• Envio opcional das tomadas para o seu próprio servidor WebDAV por HTTPS, iniciado por si ou automático para as novas tomadas (desativado por predefinição, só por Wi-Fi, exceto se permitir dados móveis)
 
 PENSADO PARA DOBRÁVEIS
 • Layouts que se adaptam a telemóveis, tablets e dobráveis, incluindo a dobradiça
 • Pré-visualização opcional no ecrã exterior para o sujeito
+• Modos para o ecrã exterior: teleprompter, ecrã dividido com a câmara e autogravação com a câmara traseira
 
 O QUE O SEU TELEMÓVEL CONSEGUE FAZER
 As capacidades dependem do que a implementação Camera2 do seu telemóvel expõe. O OpenCineCam mostra o que o hardware realmente reporta, e as opções que o seu telemóvel não consegue oferecer aparecem como indisponíveis em vez de serem simuladas.
