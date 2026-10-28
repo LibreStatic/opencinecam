@@ -10,10 +10,10 @@ CONTROLO MANUAL
 • Opções de estabilização, ruído e nitidez de contornos quando o telemóvel as oferece
 • FPS LOCK (bloqueio de cadência): mantém a cadência de imagens com pouca luz, fixando o obturador em 1/fps
 • Bloqueio de lente: fica numa só lente com zoom digital, em telemóveis com várias lentes
-• Calibração das lentes: iguala cor e exposição entre as lentes na pré-visualização e no vídeo
+• Calibração das lentes: iguala cor, exposição e enquadramento entre as lentes na pré-visualização e no vídeo
 
 MODOS DE CAPTURA
-• Foto, rajada, bracketing, rasto de luz, vídeo, câmara lenta e time-lapse
+• Foto, rajada, bracketing, light painting, vídeo, câmara lenta e time-lapse
 • A foto RAW (DNG), o vídeo LOG e o vídeo HLG são modos experimentais restritos, disponíveis apenas em telemóveis que se qualificam
 • Desanamorfose para lentes adaptadoras
 • Temporizador e botões atribuíveis, incluindo as teclas de volume
@@ -44,8 +44,8 @@ MULTIMÉDIA E TRANSFERÊNCIA
 
 PENSADO PARA DOBRÁVEIS
 • Layouts que se adaptam a telemóveis, tablets e dobráveis, incluindo a dobradiça
-• Pré-visualização opcional no ecrã exterior para o sujeito
-• Modos para o ecrã exterior: teleprompter, ecrã dividido com a câmara e autogravação com a câmara traseira
+• Modos do ecrã exterior para o sujeito: estado, teleprompter, pré-visualização, luz de preenchimento, revisão de takes, perguntas de entrevista e claquete digital, com ecrã dividido opcional com a câmara
+• Autogravação com a câmara traseira, controlada a partir do ecrã exterior
 
 O QUE O SEU TELEMÓVEL CONSEGUE FAZER
 As capacidades dependem do que a implementação Camera2 do seu telemóvel expõe. O OpenCineCam mostra o que o hardware realmente reporta, e as opções que o seu telemóvel não consegue oferecer aparecem como indisponíveis em vez de serem simuladas.

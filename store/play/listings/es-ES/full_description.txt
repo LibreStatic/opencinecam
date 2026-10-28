@@ -10,10 +10,10 @@ CONTROL MANUAL
 • Opciones de estabilización, ruido y nitidez de bordes cuando el móvil las ofrece
 • FPS LOCK (bloqueo de cadencia): mantiene la cadencia con poca luz fijando el obturador en 1/fps
 • Bloqueo de lente: quédate en una sola lente con zoom digital, en móviles con varias lentes
-• Calibración de lentes: iguala color y exposición entre lentes en la vista previa y el vídeo
+• Calibración de lentes: iguala color, exposición y encuadre entre lentes en la vista previa y el vídeo
 
 MODOS DE CAPTURA
-• Foto, ráfaga, bracketing, estela de luz, vídeo, cámara lenta y time-lapse
+• Foto, ráfaga, bracketing, light painting, vídeo, cámara lenta y time-lapse
 • La foto RAW (DNG), el vídeo LOG y el vídeo HLG son modos experimentales restringidos, disponibles solo en móviles que los cualifican
 • Desanamorfosis para lentes adaptadoras
 • Temporizador y botones asignables, incluidas las teclas de volumen
@@ -44,8 +44,8 @@ MEDIOS Y TRANSFERENCIA
 
 PENSADA PARA PLEGABLES
 • Diseños que se adaptan a móviles, tablets y plegables, incluida la bisagra
-• Vista previa opcional en la pantalla exterior para el sujeto
-• Modos de pantalla exterior: teleprompter, pantalla dividida con la cámara y autograbación con la cámara trasera
+• Modos de pantalla exterior para el sujeto: estado, teleprompter, vista previa, luz de relleno, revisión de tomas, preguntas de entrevista y claqueta digital, con pantalla dividida opcional con la cámara
+• Autograbación con la cámara trasera, controlada desde la pantalla exterior
 
 LO QUE PUEDE HACER TU MÓVIL
 Las capacidades dependen de lo que exponga la implementación de Camera2 de tu móvil. OpenCineCam muestra lo que el hardware informa realmente, y las opciones que tu móvil no puede hacer aparecen como no disponibles en lugar de simularse.
