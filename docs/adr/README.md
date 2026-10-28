@@ -39,4 +39,4 @@ IDs are permanent; superseded records remain indexed and point to their replacem
 
 - [ADR-0034: Opt-in transfer ownership](ADR-0034-opt-in-transfer-ownership.md) — Accepted
 - [ADR-0035: Full-FOV still from public physical streams](ADR-0035-full-fov-still-from-public-physical-streams.md) — Accepted
-- [ADR-0036: Lens lock by opening reported physical cameras](ADR-0036-lens-lock-by-opening-reported-physical-cameras.md) — Proposed
+- [ADR-0036: Lens lock by opening reported physical cameras](ADR-0036-lens-lock-by-opening-reported-physical-cameras.md) — Accepted

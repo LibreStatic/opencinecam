@@ -1,6 +1,6 @@
 # ADR-0036: Lens lock by opening reported physical cameras
 
-- Status: Proposed
+- Status: Accepted (2026-10-28: gate G0 of OCC-PLAN-070 passed on the Razr Fold, and lens lock shipped in 1.0.0)
 - Date: 2026-10-23
 - Related requirements: OCC-CAM-003, OCC-CAM-004, OCC-CAM-014
 - Related plan: OCC-PLAN-070
