@@ -21,13 +21,19 @@ import kotlin.math.pow
  * frames, the ISO stays where it is. Pure; the caller supplies the clock and the mean luma (0..1).
  *
  * A physical lens switch of the logical camera ([lensChanged]) is different: with AE off the new lens
- * gets the same manual ISO, and the lenses differ in sensitivity by up to 2.5x on the Razr Fold. The
+ * gets the same manual ISO, and the lenses differ in sensitivity by over 10x on the Razr Fold. The
  * loop jumps straight to the ISO a remembered ratio predicts, then corrects once, in one jump within
- * [lensJumpMin]..[lensJumpMax], from the first analysis frame of the new lens, and reports the ISO
- * ratio it measured so the caller can remember it (see [LensIsoRatios]). A jump reaches the sensor
- * only after the HAL's in-flight requests (8 on the Razr Fold, over 130 ms at 60 fps), so after one
- * the loop waits for the capture result that reports it ([noteResult]) and measures only frames
- * exposed from then on; frames without a sensor timestamp fall back to [lensSettleNs].
+ * [lensJumpMin]..[lensJumpMax], from the first analysis frame of the new lens. Frames of the
+ * [lensContentSettleNs] after the switch frame are not measured: the HAL still matches the new lens'
+ * brightness to the old one's then, so they do not follow the ISO. A jump reaches the sensor only
+ * after the HAL's in-flight requests (8 on the Razr Fold, over 130 ms at 60 fps), so after one the
+ * loop waits for the capture result that reports it ([noteResult]) and measures only frames exposed
+ * from then on; frames without a sensor timestamp fall back to [lensSettleNs].
+ *
+ * The ratio the caller remembers (see [LensIsoRatios]) is only learned between two lenses that each
+ * held the target: the ISO of the old lens' last frame on target against the new lens' first one.
+ * A first frame far off target says little about the ratio (the luma model is coarse there, and a
+ * jump may hit [lensJumpMax] or the ISO range), so it only steers the jump.
  */
 class CadenceIsoLoop(
     private val deadband: Double = 0.06,
@@ -40,6 +46,7 @@ class CadenceIsoLoop(
     private val rampSettleNs: Long = 250_000_000L,
     private val settleNs: Long = 200_000_000L,
     private val lensSettleNs: Long = 150_000_000L,
+    private val lensContentSettleNs: Long = 250_000_000L,
     private val lensJumpMin: Double = 0.25,
     private val lensJumpMax: Double = 4.0,
 ) {
@@ -62,6 +69,10 @@ class CadenceIsoLoop(
     private var lensBaseIso: Double? = null
     /** ISO x (target / luma)^gamma of the last settled frame: what would have held the target then. */
     private var isoAtTarget: Double? = null
+    /** The same, from the current lens' latest frame if it was within the deadband; null otherwise. */
+    private var convergedIso: Double? = null
+    /** The old lens' [convergedIso] at the last switch, until the new lens holds the target too. */
+    private var ratioBaseIso: Double? = null
     /** A jumped ISO not yet reported by a capture result, and when it was issued. */
     private var awaitingIso: Int? = null
     private var awaitingSinceNs = 0L
@@ -92,6 +103,8 @@ class CadenceIsoLoop(
         validFromFrameNs = Long.MIN_VALUE
         lensSettleUntilNs = 0L
         isoAtTarget = null
+        convergedIso = null
+        ratioBaseIso = null
     }
 
     /**
@@ -138,6 +151,8 @@ class CadenceIsoLoop(
         validFromFrameNs = Long.MIN_VALUE
         lensSettleUntilNs = 0L
         isoAtTarget = null
+        convergedIso = null
+        ratioBaseIso = null
     }
 
     @Synchronized
@@ -145,10 +160,11 @@ class CadenceIsoLoop(
 
     /**
      * The logical camera switched physical lens. Any ramp is dropped and frames are ignored for
-     * [lensSettleNs] and those exposed before [switchFrameNs], the switch's own frame (those still in
-     * flight are the old lens'). [expectedRatio] (ISO on the new lens / ISO on the old one for the
-     * same brightness), when known, is applied at once from the ISO that held the target on the old
-     * lens. Without a target the lens' frames only restart the learning.
+     * [lensSettleNs] and those exposed before [lensContentSettleNs] past [switchFrameNs], the switch's
+     * own frame (those still in flight are the old lens', and the HAL's transition follows).
+     * [expectedRatio] (ISO on the new lens / ISO on the old one for the same brightness), when known,
+     * is applied at once from the ISO that held the target on the old lens. Without a target the
+     * lens' frames only restart the learning.
      */
     @Synchronized
     fun lensChanged(nowNs: Long, expectedRatio: Double? = null, switchFrameNs: Long? = null) {
@@ -156,7 +172,10 @@ class CadenceIsoLoop(
         lastIssueNs = null
         lensSettleUntilNs = nowNs + lensSettleNs
         awaitingIso = null
-        validFromFrameNs = switchFrameNs ?: Long.MIN_VALUE
+        validFromFrameNs = switchFrameNs?.plus(lensContentSettleNs) ?: Long.MIN_VALUE
+        // A second switch before the new lens held the target leaves no base: nothing is learned.
+        ratioBaseIso = convergedIso
+        convergedIso = null
         if (targetLuma == null) { learned.clear(); return }
         val base = lensBaseIso ?: isoAtTarget ?: iso
         lensBaseIso = base
@@ -205,7 +224,8 @@ class CadenceIsoLoop(
     /**
      * Feeds one analysis frame. After the settle window the first [LEARN_FRAMES] valid frames only
      * teach the target (their median, so one outlier is rejected); then a frame off target plans a
-     * ramp for [tick]. [targetScale] scales the target (exposure compensation: 2^EV).
+     * ramp for [tick]. [targetScale] scales the target (exposure compensation: 2^EV). Returns the ISO
+     * ratio from the lens before the last switch, once, at the new lens' first frame on target.
      */
     @Synchronized
     fun update(nowNs: Long, luma: Double, targetScale: Double = 1.0, frameNs: Long? = null): Double? {
@@ -231,27 +251,28 @@ class CadenceIsoLoop(
             return null
         }
         val ratio = learnedTarget.times(targetScale).coerceIn(MIN_LUMA, 1.0) / luma
-        val base = lensBaseIso
-        if (base != null) {
-            // First frame of the new lens: one jump to the ISO that holds the target, and the ratio it implies.
+        if (lensBaseIso != null) {
+            // First frame of the new lens: one jump to the ISO that holds the target.
             lensBaseIso = null
-            val factor = ratio.pow(gamma)
-            val needed = iso * factor.coerceIn(lensJumpMin, lensJumpMax)
-            // A ratio needs both ends to hold the target: an old lens already out of ISO was darker
-            // than the target, and the ISO it would have needed is only an extrapolation.
-            val reachable = isoRange.first.toDouble()..isoRange.last.toDouble()
-            val bounded = factor in lensJumpMin..lensJumpMax && needed in reachable && base in reachable
-            isoAtTarget = needed
             if (abs(ratio - 1.0) > deadband) {
+                val needed = iso * ratio.pow(gamma).coerceIn(lensJumpMin, lensJumpMax)
+                isoAtTarget = needed
                 jump(needed)
                 lensSettleUntilNs = nowNs + lensSettleNs
                 // Until the jump is reported, nothing newer than this frame is known to show it.
                 validFromFrameNs = Long.MAX_VALUE
+                return null
             }
-            return if (bounded) needed / base else null
         }
         isoAtTarget = iso * ratio.pow(gamma)
-        if (abs(ratio - 1.0) <= deadband) return null
+        if (abs(ratio - 1.0) <= deadband) {
+            convergedIso = isoAtTarget
+            val base = ratioBaseIso ?: return null
+            ratioBaseIso = null
+            return isoAtTarget!! / base
+        }
+        // Off target: the ISO that held it no longer does (the scene changed, or a ramp is under way).
+        convergedIso = null
         val planned = (iso * ratio.pow(gamma).coerceIn(minPlan, maxPlan)).coerceIn(isoRange.first.toDouble(), isoRange.last.toDouble())
         if (abs(planned / iso - 1.0) > finishWithin) {
             desiredIso = planned

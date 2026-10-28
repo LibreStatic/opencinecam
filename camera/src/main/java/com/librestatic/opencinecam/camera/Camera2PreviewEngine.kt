@@ -1033,6 +1033,9 @@ class Camera2PreviewEngine(
     private var cadenceLensId: String? = null
     private val cadenceSensorTopCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private var cadenceMeasuredLensId: String? = null
+    /** The lens the loop was last told about (engage or [CadenceIsoLoop.lensChanged]), and the one a ratio it reports starts from. */
+    private var cadenceLoopLensId: String? = null
+    private var cadenceRatioFromLensId: String? = null
     /** When the latest lens switch was seen, and the effective ISO of the latest result (for the logs). */
     private var cadenceLensSwitchAtNs = 0L
     /** Until when [cadenceTrace] logs every result and analysed luma after a lens switch (debug builds, opt-in). */
@@ -3562,6 +3565,10 @@ class Camera2PreviewEngine(
         cadenceLensSwitchAtNs = SystemClock.elapsedRealtimeNanos()
         cadenceTraceUntilNs = if (cadenceTraceEnabled()) cadenceLensSwitchAtNs + 1_500_000_000L else 0L
         cadenceIsoLoop.lensChanged(cadenceLensSwitchAtNs, expected, result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP))
+        // The loop's frames on target belong to the lens it was last told about; a switch it missed
+        // (during the handoff or the exposure ramp) leaves them on another lens, so nothing is learned.
+        cadenceRatioFromLensId = cadenceLoopLensId.takeIf { it == previous }
+        cadenceLoopLensId = lens
         Log.i(CADENCE_TAG, "lens switch $previous -> $lens: iso ratio ${expected?.let { "%.2f".format(it) } ?: "unknown"} from $from")
         updateAnalysisBurst()
     }
@@ -3611,18 +3618,23 @@ class Camera2PreviewEngine(
             Log.w(CADENCE_TAG, "jumped iso ${cadenceHeldIso} never reported within ${CadenceIsoLoop.EFFECT_TIMEOUT_NS / 1_000_000} ms; last result $cadenceLastResultIso")
         }
         if (lensPending && !cadenceIsoLoop.lensPending) {
-            // The new lens' first frame was measured: remember the ratio from the lens measured before.
-            val lens = cadenceLensId
-            val from = cadenceMeasuredLensId
+            Log.i(CADENCE_TAG, "lens $cadenceLensId first frame ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
+                "luma=${"%.4f".format(luma)} iso ${cadenceHeldIso}")
+            cadenceMeasuredLensId = cadenceLensId
+        } else if (!lensPending) cadenceMeasuredLensId = cadenceLensId
+        if (measured != null) {
+            // Both lenses held the target: remember the ratio between the ISOs that did.
+            val lens = cadenceLoopLensId
+            val from = cadenceRatioFromLensId
             val cameraId = descriptor?.cameraId
-            if (measured != null && lens != null && from != null && cameraId != null) {
+            cadenceRatioFromLensId = null
+            if (lens != null && from != null && cameraId != null) {
                 val remembered = processLensIsoRatios.update(cameraId, from, lens, measured)
-                Log.i(CADENCE_TAG, "lens $lens measured ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
+                Log.i(CADENCE_TAG, "lens $lens on target ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
                     "luma=${"%.4f".format(luma)} iso ratio from $from ${"%.2f".format(measured)} " +
                     "(remembered ${remembered?.let { "%.2f".format(it) }})")
             }
-            cadenceMeasuredLensId = lens
-        } else if (!lensPending) cadenceMeasuredLensId = cadenceLensId
+        }
         updateAnalysisBurst()
     }
 
@@ -3681,6 +3693,8 @@ class Camera2PreviewEngine(
             cadenceManualFrames = 0
             cadenceGainMeasured = false
             cadenceMeasuredLensId = cadenceLensId
+            cadenceLoopLensId = cadenceLensId
+            cadenceRatioFromLensId = null
             Log.i(CADENCE_TAG, "handoff: lens=$cadenceLensId aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
                 "heldExposure=${"%.2f ms".format(heldExposure / 1e6)} startExposure=${"%.2f ms".format(cadenceHoldExposureNs() / 1e6)} startIso=$initial " +
                 "exposureRamp=${if (ramping) "${cadenceExposureRamp.totalSteps} steps ~400 ms" else "none"}")
@@ -7027,6 +7041,8 @@ class Camera2PreviewEngine(
         cadenceHeldIso = null
         cadenceLensId = null
         cadenceMeasuredLensId = null
+        cadenceLoopLensId = null
+        cadenceRatioFromLensId = null
         cadenceEngaged = false
         cadenceFaulted = false
         timelapseTake = false
