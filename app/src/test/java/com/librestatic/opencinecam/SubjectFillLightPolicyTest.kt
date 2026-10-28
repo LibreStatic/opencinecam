@@ -58,24 +58,22 @@ class SubjectFillLightPolicyTest {
 
     @Test fun coolPhoneWithoutTimeoutKeepsTheRequestedBrightness() {
         val output = fillLightOutput(settings, 10_000_000, PowerManager.THERMAL_STATUS_LIGHT)
-        assertEquals(FillLightOutput(0.9f, 1f, null), output)
+        assertEquals(FillLightOutput(1f, null), output)
     }
 
     @Test fun thermalStatusCapsBrightnessAndShowsANotice() {
-        assertEquals(FillLightOutput(0.5f, 0.8f, FillLightNotice.THERMAL_WARM), fillLightOutput(settings, 0, PowerManager.THERMAL_STATUS_MODERATE))
-        assertEquals(FillLightOutput(0.3f, 0.6f, FillLightNotice.THERMAL_HOT), fillLightOutput(settings, 0, PowerManager.THERMAL_STATUS_SEVERE))
+        assertEquals(FillLightOutput(0.8f, FillLightNotice.THERMAL_WARM), fillLightOutput(settings, 0, PowerManager.THERMAL_STATUS_MODERATE))
+        assertEquals(FillLightOutput(0.6f, FillLightNotice.THERMAL_HOT), fillLightOutput(settings, 0, PowerManager.THERMAL_STATUS_SEVERE))
         for (status in listOf(PowerManager.THERMAL_STATUS_CRITICAL, PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN)) {
-            assertEquals(FillLightOutput(0.1f, 0.3f, FillLightNotice.THERMAL_HOT), fillLightOutput(settings, 0, status))
+            assertEquals(FillLightOutput(0.3f, FillLightNotice.THERMAL_HOT), fillLightOutput(settings, 0, status))
         }
-        // A request already below the cap is never raised.
-        assertEquals(0.2f, fillLightOutput(settings.copy(brightness = 0.2f), 0, PowerManager.THERMAL_STATUS_MODERATE).windowBrightness)
     }
 
     @Test fun timeoutDimsAtTheDeadlineAndTakesPrecedence() {
         val timed = settings.copy(fillLightTimeoutSeconds = 60)
         assertNull(fillLightOutput(timed, 59_999, PowerManager.THERMAL_STATUS_NONE).notice)
         val expired = fillLightOutput(timed, 60_000, PowerManager.THERMAL_STATUS_NONE)
-        assertEquals(FillLightOutput(FILL_LIGHT_TIMEOUT_BRIGHTNESS, FILL_LIGHT_TIMEOUT_COLOR_SCALE, FillLightNotice.TIMED_OUT), expired)
+        assertEquals(FillLightOutput(FILL_LIGHT_TIMEOUT_COLOR_SCALE, FillLightNotice.TIMED_OUT), expired)
         assertEquals(FillLightNotice.TIMED_OUT, fillLightOutput(timed, 61_000, PowerManager.THERMAL_STATUS_SEVERE).notice)
         assertNull(fillLightOutput(settings, Long.MAX_VALUE, PowerManager.THERMAL_STATUS_NONE).notice)
         // A backwards clock never counts as elapsed time.
@@ -119,9 +117,9 @@ class SubjectFillLightPolicyTest {
         harness.monitor.update(true, settings.copy(fillLightKelvin = 3200))
         assertEquals(1, thermal.registrations)
         thermal.listener!!(PowerManager.THERMAL_STATUS_SEVERE)
-        assertEquals(0.3f, harness.monitor.output?.windowBrightness)
+        assertEquals(0.6f, harness.monitor.output?.colorScale)
         thermal.listener!!(PowerManager.THERMAL_STATUS_NONE)
-        assertEquals(FillLightOutput(0.9f, 1f, null), harness.monitor.output)
+        assertEquals(FillLightOutput(1f, null), harness.monitor.output)
         harness.monitor.update(false, settings)
         assertNull(thermal.listener)
         assertNull(harness.monitor.output)

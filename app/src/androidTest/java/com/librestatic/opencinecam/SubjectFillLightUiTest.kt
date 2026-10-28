@@ -30,7 +30,7 @@ class SubjectFillLightUiTest {
         val notice = mutableStateOf(FillLightNotice.THERMAL_WARM)
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f),
-                LocalSubjectFillLightOutput provides FillLightOutput(0.3f, 0.6f, notice.value)) {
+                LocalSubjectFillLightOutput provides FillLightOutput(0.6f, notice.value)) {
                 MaterialTheme { SubjectDisplayScreen(CameraUiState(phase = CameraUiPhase.RECORDING), fill) }
             }
         }

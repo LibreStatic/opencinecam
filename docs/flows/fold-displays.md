@@ -202,5 +202,5 @@ In a transfer, the activity window itself is on the cover. The ordinary operator
 
 ### Differences from the ADRs
 
-- ADR-0031 says that brightness is a window request in all cases. In the code, only a transfer sets the window brightness. A presentation follows the inner screen, and the fill light dims by `colorScale`. `FillLightOutput.windowBrightness` is computed but never applied.
+- ADR-0031 says that brightness is a window request in all cases. In the code, only a transfer sets the window brightness. A presentation follows the inner screen (Razr: `reason=follower`) and ignores the window's request, so the fill light dims only by `FillLightOutput.colorScale`.
 - ADR-0031's first text limits presentation content to `STATUS` and `TELEPROMPTER`. Its later amendments and PLAN-068 add `PREVIEW`, `FILL_LIGHT`, `REVIEW`, `INTERVIEW` and `SLATE`, and the code has all seven.
