@@ -11,6 +11,7 @@ system `openssl`. The service-account key is the organisation-wide one in
   tools/play-publish.py publish --aab app.aab [--mapping mapping.txt] [--track alpha]
                                 [--notes store/play/release-notes/X.txt] [--rollout 0.2]
                                 [--dry-run] [--no-review]
+  tools/play-publish.py listings [--dir store/play/listings] [--dry-run] [--no-review]
 
 `publish` uploads the bundle (and the R8 mapping, if given), puts one release on the
 track with the per-locale notes and the name "<versionCode> (<versionName>)", and
@@ -22,6 +23,10 @@ in Publishing overview for someone to send from the Console.
 country: the API cannot set that, so the check runs before the upload and points to
 the Console. `--rollout F` (0 < F < 1) makes a staged rollout to that fraction of users
 instead of a full one.
+
+`listings` sets the store listing text (title, short and full description) of every
+locale folder under store/play/listings/<language>/, leaving images and the other
+locales alone, and prints which ones changed. It commits only when something did.
 """
 import argparse
 import base64
@@ -206,6 +211,64 @@ def cmd_publish(play, args):
             play.call("DELETE", play.edit_url(edit))
 
 
+LISTING_FILES = {"title": ("title.txt", 30), "shortDescription": ("short_description.txt", 80),
+                 "fullDescription": ("full_description.txt", 4000)}
+
+
+def read_listings(folder):
+    listings = {}
+    for language in sorted(os.listdir(folder)):
+        path = os.path.join(folder, language)
+        if not os.path.isdir(path):
+            continue
+        listing = {}
+        for field, (name, limit) in LISTING_FILES.items():
+            file = os.path.join(path, name)
+            if not os.path.exists(file):
+                die(f"{language}/{name} is missing")
+            text = open(file, encoding="utf-8").read().strip()
+            if not text or len(text) > limit:
+                die(f"{language}/{name} is {len(text)} characters; Play allows 1 to {limit}")
+            listing[field] = text
+        listings[language] = listing
+    if not listings:
+        die(f"no locale folders in {folder}")
+    return listings
+
+
+def cmd_listings(play, args):
+    listings = read_listings(args.dir)
+    edit = play.call("POST", f"{API}/{play.package}/edits")["id"]
+    committed = False
+    try:
+        current = {item["language"]: item for item in play.call("GET", play.edit_url(edit, "/listings")).get("listings", [])}
+        changed = []
+        for language, listing in listings.items():
+            old = current.get(language, {})
+            fields = [field for field in LISTING_FILES if old.get(field, "").strip() != listing[field]]
+            if not fields:
+                print(f"{language}: unchanged")
+                continue
+            play.call("PUT", play.edit_url(edit, f"/listings/{language}"), body={"language": language, **listing})
+            changed.append(language)
+            print(f"{language}: {'new' if not old else 'updated ' + ', '.join(fields)}")
+        if not changed:
+            print("nothing to change: edit discarded")
+            return
+        play.call("POST", play.edit_url(edit, ":validate"))
+        print("edit validated")
+        if args.dry_run:
+            print("dry run: edit discarded")
+            return
+        query = "?changesNotSentForReview=true" if args.no_review else ""
+        play.call("POST", play.edit_url(edit, ":commit") + query)
+        committed = True
+        print("committed: left in Publishing overview" if args.no_review else "committed and sent for review")
+    finally:
+        if not committed:
+            play.call("DELETE", play.edit_url(edit))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--package", help="default: applicationId in app/build.gradle.kts")
@@ -220,12 +283,16 @@ def main():
     pub.add_argument("--version-name", help="default: versionName in app/build.gradle.kts")
     pub.add_argument("--dry-run", action="store_true", help="validate, then discard the edit")
     pub.add_argument("--no-review", action="store_true", help="commit without sending for review")
+    lst = sub.add_parser("listings", help="set the store listing text of every locale in store/play/listings")
+    lst.add_argument("--dir", default=os.path.join(ROOT, "store/play/listings"))
+    lst.add_argument("--dry-run", action="store_true", help="validate, then discard the edit")
+    lst.add_argument("--no-review", action="store_true", help="commit without sending for review")
     args = parser.parse_args()
     package = args.package or gradle_value(r'applicationId\s*=\s*"([^"]+)"')
     if not package:
         die("could not read applicationId; pass --package")
     play = Play(package)
-    {"status": cmd_status, "publish": cmd_publish}[args.cmd](play, args)
+    {"status": cmd_status, "publish": cmd_publish, "listings": cmd_listings}[args.cmd](play, args)
 
 
 if __name__ == "__main__":
