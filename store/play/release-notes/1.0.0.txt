@@ -1,0 +1,72 @@
+<en-US>
+OpenCineCam 1.0:
+- Lens calibration: match the colour and exposure of every lens in preview and video
+- Lens lock: keep a take on one lens while you zoom
+- Smooth lens switch (optional) softens the framing jump between lenses
+- FPS LOCK keeps the exposure steady when the lens switches
+- Pinch zoom works even with a finger over a control
+Report problems at github.com/LibreStatic/opencinecam/issues
+</en-US>
+<es-419>
+OpenCineCam 1.0:
+- Calibración de lentes: igualá el color y la exposición de cada lente en la vista previa y el video
+- Bloqueo de lente: mantené la toma en una lente mientras hacés zoom
+- Suavizar el cambio de lente (opcional) disimula el salto de encuadre entre lentes
+- FPS LOCK mantiene la exposición estable al cambiar de lente
+- El zoom con dos dedos funciona aunque un dedo esté sobre un control
+Reportá problemas en github.com/LibreStatic/opencinecam/issues
+</es-419>
+<es-ES>
+OpenCineCam 1.0:
+- Calibración de lentes: iguala el color y la exposición de cada lente en la vista previa y el vídeo
+- Bloqueo de lente: mantén la toma en una lente mientras haces zoom
+- Suavizar el cambio de lente (opcional) disimula el salto de encuadre entre lentes
+- FPS LOCK mantiene la exposición estable al cambiar de lente
+- El zoom con dos dedos funciona aunque un dedo esté sobre un control
+Informa de problemas en github.com/LibreStatic/opencinecam/issues
+</es-ES>
+<pt-BR>
+OpenCineCam 1.0:
+- Calibração das lentes: iguale a cor e a exposição de cada lente na pré-visualização e no vídeo
+- Bloqueio de lente: mantenha a gravação em uma lente enquanto faz zoom
+- Suavizar troca de lente (opcional) disfarça o salto de enquadramento entre lentes
+- FPS LOCK mantém a exposição estável ao trocar de lente
+- O zoom com dois dedos funciona mesmo com um dedo sobre um controle
+Informe problemas em github.com/LibreStatic/opencinecam/issues
+</pt-BR>
+<pt-PT>
+OpenCineCam 1.0:
+- Calibração das lentes: iguale a cor e a exposição de cada lente na pré-visualização e no vídeo
+- Bloqueio de lente: mantenha a gravação numa lente enquanto faz zoom
+- Suavizar troca de lente (opcional) disfarça o salto de enquadramento entre lentes
+- FPS LOCK mantém a exposição estável ao trocar de lente
+- O zoom com dois dedos funciona mesmo com um dedo sobre um controlo
+Comunique problemas em github.com/LibreStatic/opencinecam/issues
+</pt-PT>
+<fr-FR>
+OpenCineCam 1.0 :
+- Calibration des objectifs : harmonisez la couleur et l'exposition de chaque objectif en aperçu et en vidéo
+- Verrouillage de l'objectif : gardez une prise sur un seul objectif pendant le zoom
+- Adoucir le changement d'objectif (optionnel) atténue le saut de cadrage
+- FPS LOCK garde une exposition stable au changement d'objectif
+- Le zoom à deux doigts fonctionne même avec un doigt sur une commande
+Signalez les problèmes sur github.com/LibreStatic/opencinecam/issues
+</fr-FR>
+<de-DE>
+OpenCineCam 1.0:
+- Objektivkalibrierung: gleicht Farbe und Belichtung jedes Objektivs in Vorschau und Video an
+- Objektivsperre: hält eine Aufnahme beim Zoomen auf einem Objektiv
+- Weicher Objektivwechsel (optional) mildert den Bildsprung zwischen Objektiven
+- FPS LOCK hält die Belichtung beim Objektivwechsel stabil
+- Zoomen mit zwei Fingern klappt auch mit einem Finger auf einem Bedienelement
+Probleme melden unter github.com/LibreStatic/opencinecam/issues
+</de-DE>
+<it-IT>
+OpenCineCam 1.0:
+- Calibrazione degli obiettivi: uniforma colore ed esposizione di ogni obiettivo in anteprima e video
+- Blocco obiettivo: mantieni una ripresa su un solo obiettivo mentre zoomi
+- Cambio obiettivo morbido (facoltativo) attenua il salto d'inquadratura
+- FPS LOCK mantiene stabile l'esposizione al cambio di obiettivo
+- Lo zoom con due dita funziona anche con un dito su un controllo
+Segnala i problemi su github.com/LibreStatic/opencinecam/issues
+</it-IT>
