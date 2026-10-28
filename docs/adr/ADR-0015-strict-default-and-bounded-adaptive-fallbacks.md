@@ -51,3 +51,30 @@ OCC-PLAN-006, OCC-PLAN-020, OCC-PLAN-023, OCC-PLAN-029
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-28)
+
+- Status: Accepted
+- Date: 2026-10-28
+
+### Context
+
+Some fallbacks run under Strict too:
+
+- When the camera rejects the preview session graph, the engine retries without the analysis output, then without RAW.
+- It retries without stream use cases.
+- When the physical still routing of OCC-PLAN-069 is refused, it retries with logical-only still sizes.
+- The SDR video route falls back from HEVC to H.264 when the HEVC encoder refuses the format.
+
+Until now these were recorded only in the log; the take's `.clip.json` sidecar did record the real codec. Failing the whole preview instead would leave the camera unusable on hardware that rejects one optional stream.
+
+### Decision
+
+Allow these fallbacks under both policies. Strict still forbids a silent change:
+
+- **Analysis or RAW dropped.** The capture UI shows a notice for the lost function: scopes when an analysis-backed monitor is on, RAW when the mode wants a DNG.
+- **HEVC to H.264.** The take shows a notice and records the real codec in its sidecar.
+- **Stream use cases removed.** This changes no output, so it needs no notice.
+- **Physical still sizes refused.** The still uses the logical sizes. There is no notice yet, and the RES list still offers the physical size; that gap stays open.
+
+Camera, HLG and bit depth still never change. A dropped RAW stream is reported, never replaced by another format.

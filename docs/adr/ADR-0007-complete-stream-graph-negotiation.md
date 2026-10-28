@@ -51,3 +51,24 @@ OCC-PLAN-008, OCC-PLAN-015, OCC-PLAN-020, OCC-PLAN-034, OCC-PLAN-040
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-28)
+
+- Status: Accepted
+- Date: 2026-10-28
+
+### Context
+
+The engine does not run graphs through `GraphSessionController` or `GraphNegotiator.negotiate`; neither has a production caller. The gates exist, but in other places:
+
+- Candidates: `GraphNegotiator.fallbackGraphs` with `PREVIEW_GRAPH_DROP_ORDER` (analysis, then RAW).
+- Session gate: `PreviewGraphFallback`, with `isSessionConfigurationSupported` as a pre-check, then `onConfigured`/`onConfigureFailed`.
+- First-frame gate: `PreviewStartedReceipt` on the first completed capture.
+- Sustained gate: `SustainedCadenceGuard`.
+- File gate: `VideoFileGeometryValidator` and the Main10 file check.
+
+See [session negotiation](../flows/session-negotiation.md).
+
+### Decision
+
+The decision stands: one candidate graph, promoted by session, first-frame, sustained and file gates. The gates above are its implementation. `GraphSessionController` and `GraphNegotiator.negotiate` stay as tested library code. They must not be described as the engine's path until the engine calls them.

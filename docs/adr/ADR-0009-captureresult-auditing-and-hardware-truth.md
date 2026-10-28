@@ -51,3 +51,20 @@ OCC-PLAN-025-026
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-28)
+
+- Status: Accepted
+- Date: 2026-10-28
+
+### Context
+
+The engine never calls `submitRequest`, so requests are not correlated with results by frame number. `CaptureResultAuditor` runs in `CaptureAuditPolicy.DIAGNOSTIC` mode, where a cadence or value discrepancy produces a warning event instead of STOP. Hardware truth is exposed through other paths:
+
+- Reported values shown beside requested ones in the UI.
+- `SustainedCadenceGuard`, which stops a take under Strict.
+- The clip sidecar's reported facts.
+
+### Decision
+
+Keep DIAGNOSTIC auditing. Under STRICT auditing, a single outlier frame would stop a take; stopping on sustained loss is `SustainedCadenceGuard`'s job. Requested-versus-result correlation by frame number stays a goal and not a claim. Until `submitRequest` is wired, no document or report may state that the engine correlates them.

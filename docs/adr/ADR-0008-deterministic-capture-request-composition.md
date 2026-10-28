@@ -50,3 +50,16 @@ OCC-PLAN-024
 ## Revisit conditions
 
 Revisit only when official platform contracts, measured device evidence, release policy, or an accepted superseding ADR invalidate an assumption. Evidence contradiction blocks the affected plan until review.
+
+## Amendment (2026-10-28)
+
+- Status: Accepted
+- Date: 2026-10-28
+
+### Context
+
+`CaptureRequestComposer.compose(CaptureIntent, …)` with `CompositionPolicy` has no production caller. The engine builds requests from the `composeEngineRequest` base blocks in `CaptureRequestComposition.kt`, then applies its own stateful appliers on top: exposure ramps, the FPS LOCK hold, the lens-lock zoom and the torch. The policy reaches it through `Camera2PreviewEngine.setControlPolicy`.
+
+### Decision
+
+The precedence rules stand: AE versus manual, AF versus distance, AWB versus gains or matrix, and explicit processing and stabilization. They are implemented by `composeEngineRequest` and the engine's appliers. `compose(CaptureIntent, …)` stays as tested library code. A new control enters through `composeEngineRequest`, or through an applier that documents its precedence, never as an ad-hoc request key.
