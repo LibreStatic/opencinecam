@@ -1035,6 +1035,8 @@ class Camera2PreviewEngine(
     private var cadenceMeasuredLensId: String? = null
     /** When the latest lens switch was seen, and the effective ISO of the latest result (for the logs). */
     private var cadenceLensSwitchAtNs = 0L
+    /** Until when [cadenceTrace] logs every result and analysed luma after a lens switch (debug builds, opt-in). */
+    private var cadenceTraceUntilNs = 0L
     private var cadenceLastResultIso: String? = null
     private var cadenceEvIndexAtEngage = 0
     private var cadenceFirstFrameLogged = true
@@ -1158,6 +1160,17 @@ class Camera2PreviewEngine(
      */
     private fun instantAecOnLensSwitchDisabled(): Boolean =
         debugProperty("debug.opencinecam.instantaec.lens").let { it == "0" || it == "false" }
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.cadence.trace 1` logs, for 1.5 s after
+     * each lens switch under the emulated hold, every capture result (lens, ISO, boost) and every
+     * analysed luma under the `CadenceTrace` tag, to measure the lenses' real ISO ratio offline.
+     */
+    private fun cadenceTraceEnabled(): Boolean = debugProperty("debug.opencinecam.cadence.trace").let { it == "1" || it == "true" }
+
+    private fun cadenceTrace(line: () -> String) {
+        if (cadenceTraceUntilNs != 0L && SystemClock.elapsedRealtimeNanos() < cadenceTraceUntilNs) Log.d(CADENCE_TRACE_TAG, line())
+    }
 
     /** A system property on debug builds; null on release builds or when it cannot be read. */
     private fun debugProperty(name: String): String? {
@@ -3413,6 +3426,8 @@ class Camera2PreviewEngine(
             val sensorIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
             val resultBoost = result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100
             cadenceLastResultIso = "sensor=$sensorIso boost=$resultBoost"
+            cadenceTrace { "result ts=$sensorTimestampNs lens=$cadenceLensId sensor=$sensorIso boost=$resultBoost " +
+                "exp=${result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)} held=$cadenceHeldIso" }
             val effectiveIso = sensorIso?.let { (it.toLong() * resultBoost / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() }
             if (effectiveIso != null && sensorTimestampNs != null && cadenceIsoLoop.noteResult(sensorTimestampNs, effectiveIso)) {
                 Log.i(CADENCE_TAG, "jumped iso in effect ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the lens switch: $cadenceLastResultIso")
@@ -3545,6 +3560,7 @@ class Camera2PreviewEngine(
         val from = cadenceMeasuredLensId ?: previous
         val expected = processLensIsoRatios.ratio(cameraId, from, lens)
         cadenceLensSwitchAtNs = SystemClock.elapsedRealtimeNanos()
+        cadenceTraceUntilNs = if (cadenceTraceEnabled()) cadenceLensSwitchAtNs + 1_500_000_000L else 0L
         cadenceIsoLoop.lensChanged(cadenceLensSwitchAtNs, expected, result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP))
         Log.i(CADENCE_TAG, "lens switch $previous -> $lens: iso ratio ${expected?.let { "%.2f".format(it) } ?: "unknown"} from $from")
         updateAnalysisBurst()
@@ -3556,6 +3572,8 @@ class Camera2PreviewEngine(
         val luma = CadenceIsoLoop.meanLuma(analysis.histogram) ?: return
         // One producer only: the GPU readback and the YUV reader are in different luma domains.
         if (!cadenceLumaProducerAccepted(logPipeline != null, producer)) return
+        cadenceTrace { "luma ts=${analysis.sensorTimestampNs} producer=$producer luma=${"%.4f".format(luma)} " +
+            "hist=${analysis.histogram.joinToString(",") { "%.4f".format(it) }}" }
         // AE's own final brightness: the last frames analysed while the results still said AE was on.
         if (lastResultAeMode != null && lastResultAeMode != CaptureRequest.CONTROL_AE_MODE_OFF && cadenceGuardEligible() && cadenceHoldEmulated()) {
             cadenceAeLumas.addLast(luma)
@@ -7343,6 +7361,7 @@ class Camera2PreviewEngine(
         private const val MAX_BURST_IMAGES = 10
         private const val TAG = "Camera2PreviewEngine"
         private const val CADENCE_TAG = "CadenceGuard"
+        private const val CADENCE_TRACE_TAG = "CadenceTrace"
     }
 }
 
