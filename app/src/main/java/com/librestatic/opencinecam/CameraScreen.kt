@@ -2715,7 +2715,9 @@ private fun InstrumentStack(
     val showSuspension = !dedicatedPane && state.analysisSuspension != AnalysisSuspension.NONE
     // The lens lock's crop route and its lens-switch warning sit where the scopes notice does.
     val showLensNotice = lensLockNoticeText(state.lensLock) != null
-    val showNotice = showSuspension || showLensNotice
+    // So does what the session's graph lost (RAW, the scopes) when the mode or monitors want it.
+    val graphNotice = graphFallbackNoticeText(state.selectedMode, settings, state.previewGraphLoss)
+    val showNotice = showSuspension || showLensNotice || graphNotice != null
     if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
@@ -2726,6 +2728,7 @@ private fun InstrumentStack(
             val width = Modifier.widthIn(max = minOf(maxWidth, if (horizontal) 360.dp else 280.dp))
             if (showSuspension) AnalysisSuspensionNotice(state, width)
             if (showLensNotice) LensLockNotice(state.lensLock, width)
+            if (graphNotice != null) GraphFallbackNotice(graphNotice, width)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,

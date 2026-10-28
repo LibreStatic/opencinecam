@@ -907,6 +907,7 @@
     <string name="storage_reserve_insufficient">Not enough free space to start: this take needs %1$s free and %2$s is available.</string>
     <string name="video_hardware_encoder_unavailable">Only a software video encoder fits this take. Strict needs a hardware encoder; Adaptive allows a software one.</string>
     <string name="software_video_encoder_warning">Software video encoder: %1$s; frames may drop</string>
+    <string name="video_codec_fallback_warning">Recording in H.264: HEVC encoder unavailable</string>
     <string name="storage_unknown_refused">Free space could not be read, so the take was not started. Choose the Adaptive recording policy to record without a space check.</string>
     <string name="storage_unknown_warning">Free space could not be read; recording without a space check</string>
     <string name="take_stopped_reason">Take stopped: %1$s · %2$s</string>
@@ -1056,6 +1057,9 @@
     <string name="lens_lock_short">LENS</string>
     <string name="lens_lock_notice_crop">Lens lock: digital crop</string>
     <string name="lens_lock_notice_switched">The camera switched lens in low light</string>
+    <string name="graph_fallback_raw">RAW unavailable with this configuration</string>
+    <string name="graph_fallback_scopes">Scopes unavailable with this configuration</string>
+    <string name="graph_fallback_raw_scopes">RAW and scopes unavailable with this configuration</string>
     <string name="lens_lock_anchor_locked">%1$s lens locked</string>
     <string name="lens_lock_anchor">Lock to the %1$s lens</string>
 </resources>

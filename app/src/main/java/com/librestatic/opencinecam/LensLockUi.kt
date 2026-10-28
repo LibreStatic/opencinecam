@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -99,7 +100,14 @@ internal fun lensLockOptionLabel(option: LensLockOption): String {
 internal fun LensLockNotice(lock: LensLockUiState, modifier: Modifier = Modifier) {
     val text = lensLockNoticeText(lock) ?: return
     val warning = lock.lensSwitchedWarning
-    val stripe = if (warning) LocalCineColors.current.pending else MaterialTheme.colorScheme.primary
+    InstrumentNotice(stringResource(text), if (warning) CineIcon.WARNING else CineIcon.LOCK,
+        if (warning) LocalCineColors.current.pending else MaterialTheme.colorScheme.primary,
+        if (warning) "lens-lock-switched" else "lens-lock-crop", modifier)
+}
+
+/** A compact notice of the instrument stack: a striped chrome panel with a glyph and up to two lines. */
+@Composable
+internal fun InstrumentNotice(text: String, icon: CineIcon, stripe: Color, tag: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .clip(RoundedCornerShape(6.dp))
@@ -107,12 +115,12 @@ internal fun LensLockNotice(lock: LensLockUiState, modifier: Modifier = Modifier
             .drawBehind { drawRect(stripe, size = Size(3.dp.toPx(), size.height)) }
             .padding(start = 9.dp, end = 10.dp, top = 5.dp, bottom = 5.dp)
             .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
-            .testTag(if (warning) "lens-lock-switched" else "lens-lock-crop"),
+            .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        CineGlyph(if (warning) CineIcon.WARNING else CineIcon.LOCK, stripe, Modifier.size(14.dp))
-        Text(stringResource(text), color = MaterialTheme.colorScheme.onSurface,
+        CineGlyph(icon, stripe, Modifier.size(14.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurface,
             fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

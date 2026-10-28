@@ -205,6 +205,26 @@ const val PREVIEW_GRAPH_RAW = "raw"
 const val PREVIEW_GRAPH_ANALYSIS = "analysis"
 
 /**
+ * What a configured preview session lost to the fallbacks of Camera2PreviewEngine.configureSession:
+ * the analysis stream (scopes, peaking, zebra, histogram), the RAW stream (DNG capture) and the
+ * physical still routing (physical-only still sizes). [NONE] for the graph as requested.
+ */
+data class PreviewGraphLoss(val analysis: Boolean = false, val raw: Boolean = false, val physicalStill: Boolean = false) {
+    val any: Boolean get() = analysis || raw || physicalStill
+
+    companion object {
+        val NONE = PreviewGraphLoss()
+
+        /** The loss of a session that runs [kept] of the [requested] output ids. */
+        fun of(requested: Collection<String>, kept: Collection<String>, physicalStillFallback: Boolean) = PreviewGraphLoss(
+            analysis = PREVIEW_GRAPH_ANALYSIS in requested && PREVIEW_GRAPH_ANALYSIS !in kept,
+            raw = PREVIEW_GRAPH_RAW in requested && PREVIEW_GRAPH_RAW !in kept,
+            physicalStill = physicalStillFallback,
+        )
+    }
+}
+
+/**
  * Walks the fallback graphs of Camera2PreviewEngine.configureSession. [attempt] configures graph
  * `index` and submits its session, returning false when the session pre-check ruled it out
  * ([skipBySessionPreCheck]). Everything it does may throw: CameraService rejects the graph, or a

@@ -901,6 +901,7 @@
     <string name="storage_reserve_insufficient">No hay espacio libre suficiente para empezar: esta toma necesita %1$s libres y hay %2$s disponibles.</string>
     <string name="video_hardware_encoder_unavailable">Solo cabe un codificador de vídeo por software en esta toma. Estricta exige uno por hardware; Adaptativa permite uno por software.</string>
     <string name="software_video_encoder_warning">Codificador de vídeo por software: %1$s; pueden perderse fotogramas</string>
+    <string name="video_codec_fallback_warning">Grabando en H.264: codificador HEVC no disponible</string>
     <string name="storage_unknown_refused">No se pudo leer el espacio libre, así que la toma no empezó. Elige la política de grabación adaptativa para grabar sin comprobar el espacio.</string>
     <string name="storage_unknown_warning">No se pudo leer el espacio libre; grabando sin comprobar el espacio</string>
     <string name="take_stopped_reason">Toma detenida: %1$s · %2$s</string>
@@ -1050,6 +1051,9 @@
     <string name="lens_lock_short">LENTE</string>
     <string name="lens_lock_notice_crop">Bloqueo de lente: recorte digital</string>
     <string name="lens_lock_notice_switched">La cámara cambió de lente con poca luz</string>
+    <string name="graph_fallback_raw">RAW no disponible con esta configuración</string>
+    <string name="graph_fallback_scopes">Scopes no disponibles con esta configuración</string>
+    <string name="graph_fallback_raw_scopes">RAW y scopes no disponibles con esta configuración</string>
     <string name="lens_lock_anchor_locked">Lente %1$s bloqueada</string>
     <string name="lens_lock_anchor">Bloquear en la lente %1$s</string>
 </resources>

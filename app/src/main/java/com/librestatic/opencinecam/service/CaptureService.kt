@@ -582,6 +582,8 @@ class CaptureService : Service() {
     @Volatile private var admissionWarning: String? = null
     /** Codec of the software AVC encoder the running Adaptive take records with; null for a hardware take. */
     @Volatile private var takeSoftwareEncoder: String? = null
+    /** The running take asked for HEVC and the engine fell back to H.264. */
+    @Volatile private var takeCodecFallback = false
     /** What the running take was asked to do, its wall-clock start and the codec the engine reported; the clip sidecar's intent. */
     @Volatile private var takeClipIntent: ClipIntent? = null
     @Volatile private var takeClipStartedAt: java.time.Instant? = null
@@ -645,7 +647,9 @@ class CaptureService : Service() {
     }
 
     private fun recordingWarningText(): String? {
-        return listOfNotNull(admissionWarning, takeSoftwareEncoder?.let { getString(R.string.software_video_encoder_warning, it) }, runtimeNotice?.let { getString(runtimeNoticeText(it)) }, avNotice?.let { getString(runtimeNoticeText(it)) }, cadenceNotice?.let { getString(runtimeNoticeText(it)) }).joinToString(" · ").ifEmpty { null }
+        return recordingWarningLine(admissionWarning, takeSoftwareEncoder?.let { getString(R.string.software_video_encoder_warning, it) },
+            getString(R.string.video_codec_fallback_warning).takeIf { takeCodecFallback },
+            listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { getString(runtimeNoticeText(it)) })
     }
 
     private fun runtimeNoticeText(notice: RuntimeNotice): Int = when (notice) {
@@ -1515,6 +1519,7 @@ class CaptureService : Service() {
                 photoFlashReport = null,
                 torchStrengthReported = null,
                 selectedCameraId = descriptor.cameraId,
+                previewGraphLoss = com.librestatic.opencinecam.camera.PreviewGraphLoss.NONE,
                 histogram = emptyList(),
                 redHistogram = emptyList(),
                 greenHistogram = emptyList(),
@@ -2394,6 +2399,16 @@ class CaptureService : Service() {
                     cameraState.value.structuralSettingsFrozen || previewEngine.usesGpuViewfinder() || !desiredGpuViewfinder()) return@post
                 attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
             }
+        }
+
+        override fun onPreviewGraphLoss(loss: com.librestatic.opencinecam.camera.PreviewGraphLoss) {
+            cameraState.update { if (it.previewGraphLoss == loss) it else it.copy(previewGraphLoss = loss) }
+        }
+
+        override fun onVideoCodecFallback(reason: String) {
+            android.util.Log.w("CaptureService", "Take records H.264: $reason")
+            takeCodecFallback = true
+            publishRecordingWarning()
         }
 
         override fun onLensLockSwitched(switched: Boolean) {
@@ -3787,6 +3802,7 @@ class CaptureService : Service() {
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
             admissionWarning = null
             takeSoftwareEncoder = null
+            takeCodecFallback = false
             pendingStartRefusal = null
             takeProjectedBytesPerMinute = projectedBytesPerMinute
             when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, recordingVolumeFreeBytes())) {
@@ -3927,7 +3943,10 @@ class CaptureService : Service() {
                         photoFlashReport = null, lastStillPublication = null, stillCapturePending = true, nightProgressPercent = null)
                     previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect,
                         zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
-                        if (!accepted) finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")
+                        if (!accepted) {
+                            if (com.librestatic.opencinecam.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
+                            else finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")
+                        }
                     }
                 }
                 CaptureMode.BURST -> {
