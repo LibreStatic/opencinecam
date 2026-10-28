@@ -70,6 +70,20 @@ class WebDavSqliteOutboxDeviceTest {
         }
     }
 
+    @Test fun recoveryOfOtherProcessesSparesTheLiveOne() = database { fixture ->
+        fixture.open().use { store ->
+            val ready = prepare(store)
+            requireNotNull(store.claim(ready.id, id(2), ready.artifacts.single().revision, id(20), WebDavAttemptKind.PUT, admission))
+        }
+        fixture.open().use { store ->
+            assertEquals(0, store.recoverOtherProcesses(process))
+            assertEquals(WebDavBundleState.ACTIVE, store.load(id(1))?.state)
+            assertEquals(1, store.recoverOtherProcesses(id(11)))
+            assertEquals(WebDavBundleState.UNCERTAIN, store.load(id(1))?.state)
+            assertNull(store.load(id(1))?.artifacts?.single()?.attempt)
+        }
+    }
+
     @Test fun retiredProcessRecoveryIsDurableAndFencesLateCallbacks() = database { fixture ->
         val lease = fixture.open().use { store ->
             val ready = prepare(store)
