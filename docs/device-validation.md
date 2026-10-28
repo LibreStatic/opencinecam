@@ -167,3 +167,122 @@ Verify (native path): record 4K60 in a very dark room with FPS LOCK on, then:
 - `adb shell dumpsys media.camera`, "Last request sent": `android.control.aePriorityMode` is exposure-time priority and `android.sensor.exposureTime` ~16.57 ms; the latest result's `android.sensor.frameDuration` is ~16.67 ms.
 - The file is a true 60 fps (no ~33 fps stretch). With the setting off the same scene should show the 30 ms frame duration again.
 - In bright light the key stays white (on, not holding) and no `engaged` line appears.
+
+## Lens calibration and lens lock (PLAN-070 G0)
+
+Razr Fold probe, 2026-10-23, `motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`. The probe was a throwaway debug app; it ran in a dim room (ISO ~4500 at 40 ms).
+
+**Logical camera.** Camera `0` lists the physicals `[2, 3, 5]` and has a zoom range of 0.5–10×.
+
+**Direct physical opens.** `openCamera` works for each of `2` (wide), `3` (ultra-wide) and `5` (tele). Each one configures a three-stream session (preview, `MediaRecorder` at 1080p, full-size JPEG) and records about 3 s of video. Each shoots JPEG at 1×, 2×, 4× and 8×, at 4000x3000, 3840x2880 and 4096x3072 respectively. On a direct open `LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID` is absent.
+
+What each physical keeps, compared with the logical camera:
+
+| | Logical `0` | Wide `2` | Ultra-wide `3` | Tele `5` |
+|---|---|---|---|---|
+| Zoom range | 0.5–10× | 1–8× | 1–8× | 1–8× |
+| HLG10 and HDR10 | yes | yes | yes | yes |
+| EIS (off, on, preview) | yes | yes | yes | yes |
+| Autofocus | yes | yes | yes | yes |
+| Minimum focus distance | 8.3 D | 8.3 D | 40 D | 6.7 D |
+| Constrained high speed | yes | yes | no | no |
+| `[15, 60]` fps range | yes | yes | no | no |
+| `[60, 60]` fps range | yes | yes | yes | yes |
+| Request keys | 132 | 122 | 122 | 122 |
+| Session keys | 72 | 63 | 63 | 63 |
+
+Neither the ultra-wide nor the tele has constrained high speed. A lens-locked high-speed take therefore needs the wide, or the lock has to be refused.
+
+**Where the lenses sit.** The field-of-view ratios (`RawZoomCrop.fovWidth`) put the lenses at 0.55× (ultra-wide), 1× and 3.0× (tele). The focal ratio would suggest about 2× for the tele, but its sensor is smaller.
+
+**Automatic switch points.** In this light the switches happen at:
+
+- going up: 3 to 2 at 1.00× and 2 to 5 at 3.00×;
+- going down: 5 to 2 at 2.95× and 2 to 3 at 0.95×.
+
+This is about 5 % hysteresis. The tele switch matches its field-of-view anchor.
+
+**Vendor keys.** `com.qti.chi.multicamerainfo.MasterCamera` was tried with the values 0, 1, 2, 3 and 5 as a repeating request key, and with 0 and 1 as a session parameter. It is accepted but changes nothing: the switch points and the reported lenses are unchanged. It is also missing from both the available request keys and the available session keys. The other candidates (`ForceFullFOV`, `SATFallback.W2UW`, `TransitionMode`, `manualWB`) were not reached before the probe was stopped to spare the device the heat.
+
+**Conclusion.** The lens lock opens the physical directly (ADR-0036). No vendor key is used.
+
+### G1: lens lock on the Razr Fold (2026-10-23)
+
+Same build and fingerprint as G0, debug package, folded (cover screen). The lock was set with the LENS key and moved between lenses with the locked anchor bar. Each lock opened the physical camera directly; no lock was withdrawn.
+
+| Lens | Zoom range on the UI scale | JPEG at the top of the range | Video |
+|---|---|---|---|
+| 3 (ultra-wide) | 0.55x to 4.4x | 3840x2880, 1.83 mm, digital zoom 8.0 | not recorded |
+| 2 (wide) | 1x to 8x | 4000x3000, 6.57 mm, digital zoom 8.0 | 1080p30 HEVC |
+| 5 (tele) | 3x to 24x | 4096x3072, 13.3 mm, digital zoom 8.0 | 4K30 HEVC |
+
+- **The lens never switched.** Locked to the wide, the zoom passed the 3.00x point where the logical camera hands over to the tele, and the JPEG at 8x still came from the wide. A take zoomed from about 3x to 8x on the wide shows no colour or framing jump: the largest frame-to-frame scene score was 0.10.
+- **RAW.** A DNG on the wide at 3.3x kept the full 4000x3000 frame with a 1217x912 DefaultCrop.
+- **Video sizes.** 1080p30 on the wide and 4K30 on the tele mapped to the same profile on the physical camera, so the size mismatch the engine allows for did not happen on this device.
+- **Anchor labels.** Unlocked, the anchor bar shows 0.5 / 1.0 / 2.0, from the focal ratios. Locked, it shows 0.6 / 1.0 / 3.0, from the fields of view. The logical camera switches to the tele at 3.00x, so the unlocked 2.0 anchor does not match the lens; this predates the lens lock.
+
+### G2 procedure: the GPU-crop fallback
+
+The Razr opens every physical directly, so G2 forces the fallback. On the debug package, run `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` and force-stop the app. The engine then skips the direct open and serves every lock by the GPU crop. Release builds ignore the property. Lock each of 2, 3 and 5 and check these points:
+- logcat shows `served by the GPU crop` with the pinned ratio;
+- the "Lens lock: digital crop" notice is shown;
+- the UI range is the same as in G1;
+- a photo mode reopens on the GPU viewfinder once and then stays on it.
+Zoom through each range. Then compare preview framing with a 1080p take, a JPEG with and without the aspect crop, and a DNG's DefaultCrop. A HEIC without the aspect crop stays uncropped by design: the log says so. Cover the lens in low light to see the switched-lens warning come and go. Clear the property with `adb shell setprop debug.opencinecam.lenslock.forcecrop 0`.
+
+### G2: GPU-crop fallback on the Razr Fold (2026-10-24)
+
+Debug package on `motorola/blanc_g/blanc:16/W3WB36.36-123-2/a0723-edb3f:user/release-keys`, folded (cover screen), with `debug.opencinecam.lenslock.forcecrop` set to 1. Checked on the wide (2) and the tele (5). The ultra-wide (3) was not checked.
+
+- **Route.** The wide lock pinned the logical camera at 1.0x over a 1x to 8x range. The tele lock pinned it at 3.015x over a 3.015x to 24.1x range, the same ranges as in G1. The "Lens lock: digital crop" notice showed both times.
+- **Restarts.** Each lock started the session three times and then stayed on the GPU viewfinder; there was no restart loop. The remembered zoom survived the change from Photo to Photo RAW to Video.
+- **JPEG.** Locked to the tele at 6.0x, the JPEG (no aspect crop) is 2006x1506, a centred 1.99x crop of the 4000x3000 frame that matches the preview. At 3.0x it stays 4000x3000.
+- **Video.** A 1080p30 HEVC take at 6.0x (1080x1920, portrait) matches the cropped preview.
+- **DNG.** On the logical camera pinned at 3x, the HAL delivers the RAW from the wide sensor, not the tele. The DefaultCrop marks the right region: 1321x990 at 3.0x, and 663x497 at 6.0x. So the framing is right, but on this route a DNG is a crop of the wide, with far fewer pixels than the direct route's tele RAW.
+- **Lens-switch warning.** It never showed: SAT stayed on the tele while pinned at 3.015x. Low light was not tried.
+- **Not checked.** HEIC, a JPEG with the aspect crop, and the ultra-wide lock.
+- **Anchor labels.** After 5e03f44 the unlocked bar shows 0.6 / 1.0 / 3.0, matching the locked bar. The first launch after installing showed 0.5 / 1.0 / 2.0 once, and a cold relaunch did not show it again.
+
+### G4: lens calibration on the Razr Fold (2026-10-24)
+
+Debug package on the same build, folded (cover screen), in Photo, SDR source path, with the wide (2) as the reference. The runner held each pair at the switch points (UW at 1.00x and 0.98x, tele at 2.99x and 3.01x), 3 cycles each. Per-cycle frames and fits come from the `LensCalibration` log tag; debuggable builds also keep the frames under the app's `files/calibration-debug/`.
+
+- **Poster at about 1 m with objects at 30 cm (failed).** Both lenses failed with LOW_TEXTURE, LOW_CHROMA, PARALLAX_SUSPECT and DIAGONAL_FALLBACK. The poster aligned between lenses but the foreground did not, so only 3 or 4 of 7 to 10 textured patches agreed. That is a correct rejection.
+- **Colour condition defect (fixed).** In every scene the colour fit fell back to gains only. The solver judged the full RGB normal matrix, which luminance dominates in any real scene (cond 2500 to 8100), instead of the chroma system the fit inverts (cond 24 to 71 on the same frames). The solver now uses that chroma condition, plus a minimum chroma energy of 0.0025 of the total. The Razr frames measured 0.029 to 0.040 in the room and 0.006 to 0.010 on the poster, against about 0.0004 for grey with 1 % noise.
+- **Room at 1 to 3 m (passed, after the fix).**
+
+  | Lens | Score | dE before -> after | Alignment px before -> after | Flags |
+  |---|---|---|---|---|
+  | UW (3) | 0.55 | 3.0 -> 2.3 | 12.2 -> 0.16 | LOW_TEXTURE, PARALLAX_SUSPECT |
+  | Tele (5) | 0.76 | 3.8 -> 3.5 | 3.1 -> 0.51 | PARALLAX_SUSPECT |
+
+  Saved set: UW ev +0.13 and tele ev -0.13; UW align rotation -1.44 degrees and scale 1.011; tele scale 1.009. Applied offline to the dumped tele frames, the correction moves the mean from 131/116/98 to 124/107/87, against 123/106/87 for the reference.
+- **Repeatability.** The pre-fit alignment varied between runs (UW 2.6 to 12.2 px, tele 3.1 to 14.3 px) because the room still has depth, so treat alignment from a parallax-flagged run as scene-specific. The colour numbers were stable within 0.3 dE across cycles.
+- **Applied in preview and video.** See G3 below.
+- **UI.** On the cover screen the capture rail drew over the result card's right edge and hid the quality percentages. Fixed in 6f98dc9: the card now clears the zoom rocker and the F-keys. On the Razr cover (2026-10-27) the right column was then clear, but a tall result card ran up over the zoom anchors. Its height is now capped below the instruments' first row, so it scrolls instead. Re-checked on the cover: card 32..912 x 489..1438 px, anchors end at 458, F-keys start at 933.
+
+### G3: zoom sweep with the saved calibration (2026-10-27)
+
+Debug build of df6ebd3 on the Razr Fold, unfolded, in Video, in a dark room so the FPS LOCK emulated hold was engaged (AE off, software ISO). The G4 set was saved. Each take recorded a scripted rocker sweep through 0.6x, 1x and 3x and back, and then the take was analysed frame by frame in Lab: luma and chroma steps at each switch, plus an ECC fit for the framing residual. Before each measured take, a warm-up anchor cycle let the cadence loop learn its per-lens ISO ratios. Without it, the first switch of each pair comes from a cold start and is not comparable.
+
+| Take | Correction | Smooth lens switch | Luma dip at the switch | Max chroma step dC | Framing residual |
+|---|---|---|---|---|---|
+| A2 | off | off | -14.5 L*, back in about 11 frames (180 ms) | 3.34 | 3.5 % |
+| B2 | on | off | -14.5 L*, back in about 11 frames (180 ms) | 2.82 | 4.3 % |
+| C | on | on | -23.5 L* at the first switch, back in about 13 frames | 5.98 | 5.1 % |
+
+- **Result: not demonstrated.** The calibration's corrections are small: ±0.13 to 0.2 EV, about 1 % scale and gains within a few percent. The switch transients are larger and are not caused by the calibration, so the takes with and without correction are within noise. G3 stays open as worded. It would need a scene and a hold where the transients are smaller than the correction.
+- **The framing jump** is the HAL's zoom hold at the switch: for about 3 frames before every switch the HAL keeps reporting the old zoom, then the new lens lands on the latest request. The opt-in Smooth lens switch is aimed at it, but take C, with it on, did not lower the residual on this scripted rocker sweep. Take C ran on a darker scene than B2: the UW needed an ISO ratio of 7.5 against the 4.0 it applied, and the sensor capped at ISO 6400 with a post-raw boost, which explains its deeper first dip.
+- **The luma dip** comes from the cadence hold, not the calibration. On each switch the loop jumps straight to the remembered ISO ratio and then corrects once it has measured the new lens (about 170 to 200 ms later), and the frame-gain bridge only covers the frames in flight between the jump and its effect. The remembered ratios were off by up to 50 % in B2's log: 3 -> 2 was applied at 0.24 against 0.37 measured, and 2 -> 3 at 3.41 against 2.91 measured. A low ratio darkens the frames until the measured correction lands. The ratios learnt in each direction are not reciprocal (2 -> 3 about 4.2, 3 -> 2 about 0.3), so the ISO the loop starts from on each lens drifts between switches. That is a follow-up for the cadence loop, not for the calibration.
+- **Fixed on 2026-10-28.** Traces with `debug.opencinecam.cadence.trace=1` (every result and analysed luma for 1.5 s after a switch) showed two faults. First, for 150 to 250 ms after the result that reports the new lens, the HAL still matches its brightness to the old lens', so the first frames do not follow the ISO: one dark run learnt 0.51 for 2 -> 3, the wrong way. Second, the ultra-wide's first frame was up to 13x off, past the 4x one-shot jump, so its ratio was never reported, and every switch to and from it was "unknown". The loop now ignores frames from 250 ms of sensor time after the switch frame, steers the jump only from the first frame, and learns the ratio between the ISOs that held the target on each lens (the old lens' last frame on target against the new lens' first one). A ratio past 4x is learnt once the ramp lands. On the screen scene, t2 (before) against t3 (after), with 11 anchor switches each: every pair is learnt on its first pass (2 -> 3 about 1.8, 2 -> 5 about 5.2). From the second pass on, a switch shows 0 or 1 frames more than 15 % off its settled luma. Before, an unlearnt ultra-wide switch showed 3 to 7 frames, from 0.06 to 0.59 luma, for up to 940 ms.
+- **Thermal.** After about 20 minutes of 60 fps sweeps the Razr reached thermal status 2 (skin about 39 °C). Stop and let it cool between batches.
+
+### G5: corrected stills against corrected video (2026-10-24)
+
+Same build family, same saved G4 set, in a dark room. JPEG and DNG pairs were taken on each lens with photo correction off and then on, and compared with corrected video frames of the same scene.
+
+- **Applied as calibrated.** With photo correction on, each JPEG shifts by the saved offset and nothing else: UW +0.18 EV, tele -0.21 EV, the wide 0.
+- **RAW untouched.** The DNG CFA means and the metadata are identical with correction off and on.
+- **Does not match the video.** The calibration is measured on the preview stream, and the HAL processes stills with different per-lens exposure and colour. On stills the correction makes the gap wider: the tele gap goes from -0.35 to -0.59 EV against the wide, and the UW chroma error goes from 1.6 to 2.5.
+- **Decision.** G5 fails as worded. Photo correction stays off by default, and Settings marks it experimental with a note that a corrected photo may not match a corrected video. A still-specific calibration measured on JPEG captures would be needed to pass it.
+

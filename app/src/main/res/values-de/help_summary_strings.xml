@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">Eigene LUT für die Motivvorschau</string>
+    <string name="operator_startup_help_summary">Wird einmal beim Start angewendet</string>
+    <string name="proxy_policy_help_summary">Gilt ab dem nächsten Versuch</string>
+    <string name="subject_out_of_frame_unavailable_summary">Braucht Gesichtserkennung, hier nicht verfügbar</string>
+    <string name="subject_slate_sync_scope_summary">Löst einmal pro Take beim REC aus</string>
+    <string name="subject_review_help_summary">Takes aus der Galerie auf dem Außendisplay zeigen</string>
+    <string name="media_share_lut_help_summary">Eine fehlende LUT stoppt das Teilen, außer sie ist ausgeschlossen</string>
+    <string name="playback_settings_help_summary">Betrifft nur den Galerie-Viewer</string>
+    <string name="playback_settings_direct_output_help_summary">Schnellere Pause; Farbe folgt dem System</string>
+    <string name="pro_flicker_help_summary">Mindert Flimmern durch Netzbeleuchtung</string>
+    <string name="pro_low_light_boost_help_summary">Hellt dunkle Szenen auf; kann die Bildrate senken</string>
+    <string name="pro_metering_help_summary">Welcher Bildteil die Belichtung bestimmt</string>
+    <string name="pro_wb_record_help_summary">Ob sich der Weißabgleich im Take ändern darf</string>
+    <string name="photo_quality_help_summary">Nur JPEG/HEIC-Kompression, nicht DNG</string>
+    <string name="image_stabilization_help_summary">EIS kann beschneiden; Ergebnis prüfen</string>
+    <string name="image_picture_profile_help_summary">Tonkurve der Kamera: Standard, Flach oder Cine</string>
+    <string name="picture_help_summary">Eigene Regler dieser Kamera</string>
+    <string name="picture_blocked_neutral_summary">Ohne Wirkung bei LOG, HLG, RAW und Highspeed</string>
+    <string name="picture_blocked_edge_off_summary">Schärfe braucht aktive Kantenverstärkung</string>
+</resources>

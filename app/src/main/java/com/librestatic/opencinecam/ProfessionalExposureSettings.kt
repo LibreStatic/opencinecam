@@ -93,11 +93,11 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
         SettingsChips(stringResource(R.string.pro_antibanding), Antibanding.entries, exposure.antibanding,
             label = { it.displayLabel() }, onSelect = { updateExposure(exposure.copy(antibanding = it)) },
             tag = { "pro-antibanding-${it.name}" }, enabled = { it in caps.antibanding })
-        SettingsHelp(stringResource(R.string.pro_flicker_help))
+        SettingsHelp(stringResource(R.string.pro_flicker_help_summary), stringResource(R.string.pro_flicker_help))
         if (descriptor?.lowLightBoostSupported == true) {
             SettingsSwitchRow(stringResource(R.string.pro_low_light_boost), exposure.lowLightBoost,
                 { updateExposure(exposure.copy(lowLightBoost = it)) }, tag = "pro-low-light-boost")
-            SettingsHelp(stringResource(R.string.pro_low_light_boost_help))
+            SettingsHelp(stringResource(R.string.pro_low_light_boost_help_summary), stringResource(R.string.pro_low_light_boost_help))
             val boost = lowLightBoostFor(state, exposure, resolved, hfr)
             boost.inactive?.let { Text(stringResource(it.explanationResource()), color = pending, fontSize = 14.sp, modifier = Modifier.testTag("pro-low-light-boost-inactive")) }
         }
@@ -107,7 +107,7 @@ internal fun ProfessionalExposureSettings(state: CameraUiState, settings: Camera
                 exposure.metering, label = { it?.displayLabel() ?: stringResource(R.string.pro_metering_default) },
                 onSelect = { updateExposure(exposure.copy(metering = it)) },
                 tag = { "pro-metering-${it?.name ?: "DEFAULT"}" }, rowEnabled = exposure.mode != ExposureMode.MANUAL)
-            SettingsHelp(stringResource(R.string.pro_metering_help))
+            SettingsHelp(stringResource(R.string.pro_metering_help_summary), stringResource(R.string.pro_metering_help))
         }
         RecordingWhiteBalanceSettings(state, settings, onChange)
         val presets = if (hfr) emptySet() else descriptor?.availableAwbModes.orEmpty()
@@ -213,7 +213,7 @@ internal fun RecordingWhiteBalanceSettings(state: CameraUiState, settings: Camer
         SettingsChips(stringResource(R.string.pro_wb_record_policy), RecordingWhiteBalancePolicy.entries, settings.recordingWhiteBalance,
             label = { stringResource(if (it == RecordingWhiteBalancePolicy.CONTINUOUS) R.string.pro_wb_continuous else R.string.pro_wb_lock_record) },
             onSelect = { onChange(settings.copy(recordingWhiteBalance = it)) }, tag = { "pro-wb-policy-${it.name}" })
-        SettingsHelp(stringResource(R.string.pro_wb_record_help))
+        SettingsHelp(stringResource(R.string.pro_wb_record_help_summary), stringResource(R.string.pro_wb_record_help))
         if (state.descriptor?.awbLockSupported != true || state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true) {
             Text(stringResource(R.string.pro_wb_lock_unavailable), color = LocalCineColors.current.pending, fontSize = 14.sp)
         }

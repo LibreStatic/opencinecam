@@ -2,6 +2,8 @@
 package com.librestatic.opencinecam.camera
 
 import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.ln
 import kotlin.math.pow
 
 /**
@@ -17,6 +19,21 @@ import kotlin.math.pow
  * one lands exactly on the plan once within [finishWithin]. Analysis frames are ignored while ramping
  * and for [rampSettleNs] after it, and for [settleNs] after engaging. With no learned target, or no
  * frames, the ISO stays where it is. Pure; the caller supplies the clock and the mean luma (0..1).
+ *
+ * A physical lens switch of the logical camera ([lensChanged]) is different: with AE off the new lens
+ * gets the same manual ISO, and the lenses differ in sensitivity by over 10x on the Razr Fold. The
+ * loop jumps straight to the ISO a remembered ratio predicts, then corrects once, in one jump within
+ * [lensJumpMin]..[lensJumpMax], from the first analysis frame of the new lens. Frames of the
+ * [lensContentSettleNs] after the switch frame are not measured: the HAL still matches the new lens'
+ * brightness to the old one's then, so they do not follow the ISO. A jump reaches the sensor only
+ * after the HAL's in-flight requests (8 on the Razr Fold, over 130 ms at 60 fps), so after one the
+ * loop waits for the capture result that reports it ([noteResult]) and measures only frames exposed
+ * from then on; frames without a sensor timestamp fall back to [lensSettleNs].
+ *
+ * The ratio the caller remembers (see [LensIsoRatios]) is only learned between two lenses that each
+ * held the target: the ISO of the old lens' last frame on target against the new lens' first one.
+ * A first frame far off target says little about the ratio (the luma model is coarse there, and a
+ * jump may hit [lensJumpMax] or the ISO range), so it only steers the jump.
  */
 class CadenceIsoLoop(
     private val deadband: Double = 0.06,
@@ -28,6 +45,10 @@ class CadenceIsoLoop(
     private val minTickNs: Long = 66_000_000L,
     private val rampSettleNs: Long = 250_000_000L,
     private val settleNs: Long = 200_000_000L,
+    private val lensSettleNs: Long = 150_000_000L,
+    private val lensContentSettleNs: Long = 250_000_000L,
+    private val lensJumpMin: Double = 0.25,
+    private val lensJumpMax: Double = 4.0,
 ) {
     private var settleUntilNs = 0L
     private var targetLuma: Double? = null
@@ -42,6 +63,23 @@ class CadenceIsoLoop(
     val target: Double? @Synchronized get() = targetLuma
     private var lastIssueNs: Long? = null
     private var isoRange: IntRange = 1..Int.MAX_VALUE
+    /** An ISO to issue at the next [tick] at once, past the ramp's pacing (a lens switch). */
+    private var jumpIso: Int? = null
+    /** The ISO that held the target on the lens before the switch, while the new lens is still unmeasured. */
+    private var lensBaseIso: Double? = null
+    /** ISO x (target / luma)^gamma of the last settled frame: what would have held the target then. */
+    private var isoAtTarget: Double? = null
+    /** The same, from the current lens' latest frame if it was within the deadband; null otherwise. */
+    private var convergedIso: Double? = null
+    /** The old lens' [convergedIso] at the last switch, until the new lens holds the target too. */
+    private var ratioBaseIso: Double? = null
+    /** A jumped ISO not yet reported by a capture result, and when it was issued. */
+    private var awaitingIso: Int? = null
+    private var awaitingSinceNs = 0L
+    /** Frames exposed before this sensor timestamp are ignored: the old lens', or the ISO before a jump. */
+    private var validFromFrameNs = Long.MIN_VALUE
+    /** The same for frames without a timestamp, by the clock. */
+    private var lensSettleUntilNs = 0L
 
     /**
      * Starts holding at [initialIso], which already keeps the automatic exposure's ISO x time, so the
@@ -59,6 +97,14 @@ class CadenceIsoLoop(
         settleUntilNs = nowNs + settleNs
         targetLuma = null
         targetSource = null
+        jumpIso = null
+        lensBaseIso = null
+        awaitingIso = null
+        validFromFrameNs = Long.MIN_VALUE
+        lensSettleUntilNs = 0L
+        isoAtTarget = null
+        convergedIso = null
+        ratioBaseIso = null
     }
 
     /**
@@ -72,6 +118,11 @@ class CadenceIsoLoop(
         desiredIso = null
         lastIssueNs = null
         settleUntilNs = nowNs + settleNs
+        jumpIso = null
+        lensBaseIso = null
+        awaitingIso = null
+        validFromFrameNs = Long.MIN_VALUE
+        lensSettleUntilNs = 0L
     }
 
     /** Sets the luma to hold from outside (measured on AE's last frames), instead of learning it. */
@@ -94,22 +145,101 @@ class CadenceIsoLoop(
         desiredIso = null
         learned.clear()
         lastIssueNs = null
+        jumpIso = null
+        lensBaseIso = null
+        awaitingIso = null
+        validFromFrameNs = Long.MIN_VALUE
+        lensSettleUntilNs = 0L
+        isoAtTarget = null
+        convergedIso = null
+        ratioBaseIso = null
     }
 
     @Synchronized
     fun reset() { release() }
+
+    /**
+     * The logical camera switched physical lens. Any ramp is dropped and frames are ignored for
+     * [lensSettleNs] and those exposed before [lensContentSettleNs] past [switchFrameNs], the switch's
+     * own frame (those still in flight are the old lens', and the HAL's transition follows).
+     * [expectedRatio] (ISO on the new lens / ISO on the old one for the same brightness), when known,
+     * is applied at once from the ISO that held the target on the old lens. Without a target the
+     * lens' frames only restart the learning.
+     */
+    @Synchronized
+    fun lensChanged(nowNs: Long, expectedRatio: Double? = null, switchFrameNs: Long? = null) {
+        desiredIso = null
+        lastIssueNs = null
+        lensSettleUntilNs = nowNs + lensSettleNs
+        awaitingIso = null
+        validFromFrameNs = switchFrameNs?.plus(lensContentSettleNs) ?: Long.MIN_VALUE
+        // A second switch before the new lens held the target leaves no base: nothing is learned.
+        ratioBaseIso = convergedIso
+        convergedIso = null
+        if (targetLuma == null) { learned.clear(); return }
+        val base = lensBaseIso ?: isoAtTarget ?: iso
+        lensBaseIso = base
+        isoAtTarget = null
+        if (expectedRatio != null && expectedRatio.isFinite() && expectedRatio > 0.0) jump(base * expectedRatio)
+    }
+
+    /**
+     * A capture result: once one exposed at [frameNs] reports the jumped ISO (the effective one, sensor
+     * x post-raw boost, within [EFFECT_TOLERANCE]), frames from [frameNs] on show it. True at that one.
+     */
+    @Synchronized
+    fun noteResult(frameNs: Long, effectiveIso: Int): Boolean {
+        val awaited = awaitingIso ?: return false
+        if (abs(effectiveIso.toDouble() / awaited - 1.0) > EFFECT_TOLERANCE) return false
+        awaitingIso = null
+        validFromFrameNs = if (validFromFrameNs == Long.MAX_VALUE) frameNs else maxOf(validFromFrameNs, frameNs)
+        return true
+    }
+
+    /** True while a jump has been issued but no capture result has reported it yet. */
+    val awaitingEffect: Boolean @Synchronized get() = awaitingIso != null
+
+    /** True while the lens just switched to has not been measured yet. */
+    val lensPending: Boolean @Synchronized get() = lensBaseIso != null
+
+    /**
+     * Gain that makes a frame shot at [effectiveIso] look shot at the ISO a jump is bringing in,
+     * while the jump is on its way (1 otherwise): the frames a lens switch hands over still carry
+     * the old lens' ISO for the HAL's pipeline depth. Call it after [noteResult] for the same result.
+     */
+    @Synchronized fun frameGain(effectiveIso: Int): Double {
+        val wanted = jumpIso ?: awaitingIso ?: return 1.0
+        if (effectiveIso <= 0) return 1.0
+        return (wanted.toDouble() / effectiveIso).coerceIn(MIN_FRAME_GAIN, MAX_FRAME_GAIN)
+    }
+
+    private fun jump(to: Double) {
+        iso = to.coerceIn(isoRange.first.toDouble(), isoRange.last.toDouble())
+        val next = iso.toInt().coerceIn(isoRange)
+        if (next != issuedIso) jumpIso = next
+    }
 
     val hasTarget: Boolean @Synchronized get() = targetLuma != null
 
     /**
      * Feeds one analysis frame. After the settle window the first [LEARN_FRAMES] valid frames only
      * teach the target (their median, so one outlier is rejected); then a frame off target plans a
-     * ramp for [tick]. [targetScale] scales the target (exposure compensation: 2^EV).
+     * ramp for [tick]. [targetScale] scales the target (exposure compensation: 2^EV). Returns the ISO
+     * ratio from the lens before the last switch, once, at the new lens' first frame on target.
      */
     @Synchronized
-    fun update(nowNs: Long, luma: Double, targetScale: Double = 1.0) {
-        if (nowNs < settleUntilNs || desiredIso != null) return
-        if (!luma.isFinite() || luma < MIN_LUMA || luma > 1.0) return
+    fun update(nowNs: Long, luma: Double, targetScale: Double = 1.0, frameNs: Long? = null): Double? {
+        if (desiredIso != null || jumpIso != null) return null
+        if (awaitingIso != null) {
+            // Never reported (a HAL that rounds or caps the ISO): after a while, go by the clock alone.
+            if (nowNs - awaitingSinceNs < EFFECT_TIMEOUT_NS) return null
+            awaitingIso = null
+            validFromFrameNs = Long.MIN_VALUE
+            lensSettleUntilNs = 0L
+        }
+        if (nowNs < settleUntilNs) return null
+        if (frameNs != null) { if (frameNs < validFromFrameNs) return null } else if (nowNs < lensSettleUntilNs) return null
+        if (!luma.isFinite() || luma < MIN_LUMA || luma > 1.0) return null
         val learnedTarget = targetLuma
         if (learnedTarget == null) {
             learned.add(luma)
@@ -118,19 +248,49 @@ class CadenceIsoLoop(
                 targetSource = "learned"
                 learned.clear()
             }
-            return
+            return null
         }
         val ratio = learnedTarget.times(targetScale).coerceIn(MIN_LUMA, 1.0) / luma
-        if (abs(ratio - 1.0) <= deadband) return
+        if (lensBaseIso != null) {
+            // First frame of the new lens: one jump to the ISO that holds the target.
+            lensBaseIso = null
+            if (abs(ratio - 1.0) > deadband) {
+                val needed = iso * ratio.pow(gamma).coerceIn(lensJumpMin, lensJumpMax)
+                isoAtTarget = needed
+                jump(needed)
+                lensSettleUntilNs = nowNs + lensSettleNs
+                // Until the jump is reported, nothing newer than this frame is known to show it.
+                validFromFrameNs = Long.MAX_VALUE
+                return null
+            }
+        }
+        isoAtTarget = iso * ratio.pow(gamma)
+        if (abs(ratio - 1.0) <= deadband) {
+            convergedIso = isoAtTarget
+            val base = ratioBaseIso ?: return null
+            ratioBaseIso = null
+            return isoAtTarget!! / base
+        }
+        // Off target: the ISO that held it no longer does (the scene changed, or a ramp is under way).
+        convergedIso = null
         val planned = (iso * ratio.pow(gamma).coerceIn(minPlan, maxPlan)).coerceIn(isoRange.first.toDouble(), isoRange.last.toDouble())
         if (abs(planned / iso - 1.0) > finishWithin) {
             desiredIso = planned
         }
+        return null
     }
 
     /** The next ISO of the ramp to re-issue, or null when there is nothing to send now. Call per capture result. */
     @Synchronized
     fun tick(nowNs: Long): Int? {
+        jumpIso?.let { next ->
+            jumpIso = null
+            issuedIso = next
+            lastIssueNs = nowNs
+            awaitingIso = next
+            awaitingSinceNs = nowNs
+            return next
+        }
         val goal = desiredIso ?: return null
         val last = lastIssueNs
         if (last != null && nowNs - last < minTickNs) return null
@@ -157,6 +317,12 @@ class CadenceIsoLoop(
         const val BURST_AFTER_ENGAGE_NS = 1_500_000_000L
         const val MIN_LUMA = 0.002
         const val LEARN_FRAMES = 3
+        /** A capture result "reports" a jumped ISO within this fraction (the sensor and boost split rounds). */
+        const val EFFECT_TOLERANCE = 0.03
+        const val MIN_FRAME_GAIN = 0.25
+        const val MAX_FRAME_GAIN = 4.0
+        /** How long a jump may go unreported before the loop measures by the clock alone. */
+        const val EFFECT_TIMEOUT_NS = 500_000_000L
 
         /** Sensitivity range extended by the post-raw boost, never beyond 8x the sensor maximum. */
         fun extendedRange(isoRange: IntRange, boostRange: IntRange?): IntRange {
@@ -164,6 +330,10 @@ class CadenceIsoLoop(
             val top = (isoRange.last.toLong() * boostRange.last / 100).coerceAtMost(8L * isoRange.last).toInt()
             return isoRange.first..top
         }
+
+        /** The highest sensor ISO every lens reaches: [logicalTop], lowered to the lowest of [physicalTops] at or above [floor]. */
+        fun sharedSensorTop(logicalTop: Int, physicalTops: List<Int>, floor: Int = 800): Int =
+            physicalTops.filter { it >= floor }.minOrNull()?.coerceAtMost(logicalTop) ?: logicalTop
 
         /** Splits an effective ISO into SENSOR_SENSITIVITY and CONTROL_POST_RAW_SENSITIVITY_BOOST (null: no boost key). */
         fun split(iso: Int, isoRange: IntRange, boostRange: IntRange?): Pair<Int, Int?> {
@@ -197,7 +367,8 @@ class CadenceIsoLoop(
 /**
  * Whether analysis should run at the burst rate: only for the emulated hold on a live pipeline, from
  * the moment the guard is timing a stretch until the loop has learned its target and landed its ramp
- * (at most [CadenceIsoLoop.BURST_AFTER_ENGAGE_NS] after engaging).
+ * (at most [CadenceIsoLoop.BURST_AFTER_ENGAGE_NS] after engaging), and while a lens just switched to
+ * is still unmeasured.
  */
 internal fun cadenceBurstWanted(
     emulatedEligible: Boolean,
@@ -207,8 +378,9 @@ internal fun cadenceBurstWanted(
     sinceEngageNs: Long,
     loopLearning: Boolean,
     loopRamping: Boolean,
+    lensPending: Boolean = false,
 ): Boolean = emulatedEligible && !suspended &&
-    if (engaged) sinceEngageNs < CadenceIsoLoop.BURST_AFTER_ENGAGE_NS && (loopLearning || loopRamping) else guardPending
+    if (engaged) lensPending || sinceEngageNs < CadenceIsoLoop.BURST_AFTER_ENGAGE_NS && (loopLearning || loopRamping) else guardPending
 
 /** Analysis period: the burst period when bursting, never slower than [normalMs]. */
 internal fun analysisPeriodMs(normalMs: Long, burst: Boolean): Long =
@@ -324,3 +496,34 @@ class HiddenAeGain {
 }
 
 internal val processHiddenAeGain = HiddenAeGain()
+
+/**
+ * ISO ratios between the physical lenses of a logical camera under the emulated hold: the ISO on lens
+ * `to` over the ISO on lens `from` for the same brightness, as [CadenceIsoLoop.update] measures it at
+ * each switch. Kept per logical camera id in memory, folded in log space with weight [WEIGHT], each
+ * measurement within [MIN_RATIO]..[MAX_RATIO]; the reverse direction is the inverse.
+ */
+class LensIsoRatios {
+    private val logRatios = java.util.concurrent.ConcurrentHashMap<String, Double>()
+
+    fun ratio(cameraId: String, from: String, to: String): Double? = logRatios[key(cameraId, from, to)]?.let { exp(it) }
+
+    /** Folds one measurement in; returns the remembered ratio. */
+    fun update(cameraId: String, from: String, to: String, measured: Double): Double? {
+        if (from == to || !measured.isFinite() || measured < MIN_RATIO || measured > MAX_RATIO) return ratio(cameraId, from, to)
+        val next = logRatios[key(cameraId, from, to)]?.let { it + (ln(measured) - it) * WEIGHT } ?: ln(measured)
+        logRatios[key(cameraId, from, to)] = next
+        logRatios[key(cameraId, to, from)] = -next
+        return exp(next)
+    }
+
+    private fun key(cameraId: String, from: String, to: String) = "$cameraId|$from|$to"
+
+    companion object {
+        const val WEIGHT = 0.5
+        const val MIN_RATIO = 0.125
+        const val MAX_RATIO = 8.0
+    }
+}
+
+internal val processLensIsoRatios = LensIsoRatios()

@@ -84,6 +84,19 @@ class CadenceGuard(
         return engagedState
     }
 
+    /**
+     * The logical camera switched physical lens while engaged. The lenses differ in sensitivity, so the
+     * ISO reference of the old one would read the new one's lower ISO as light to spare: it is forgotten
+     * and seeded again after [settleNs], once the held ISO has followed the switch. The verdict is kept.
+     */
+    @Synchronized
+    fun lensChanged(nowNs: Long) {
+        if (!engagedState) return
+        referenceIso = 0
+        pendingSinceNs = null
+        engagedAtNs = nowNs
+    }
+
     /** Back to "not engaged" with no history: camera, target rate or session changed, or the lock was turned off. */
     @Synchronized
     fun reset() {

@@ -391,7 +391,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
             onSelect = { onChange(settings.copy(operation = operation.copy(startupMode = it))) }, tag = { "operator-startup-$it" })
         OperatorToggle(R.string.operator_restore_manual, "operator-restore-manual", operation.restoreExposureWhiteBalance) { onChange(settings.copy(operation = operation.copy(restoreExposureWhiteBalance = it))) }
         OperatorToggle(R.string.operator_restore_torch, "operator-restore-torch", operation.restoreTorch) { onChange(settings.copy(operation = operation.copy(restoreTorch = it))) }
-        SettingsHelp(stringResource(R.string.operator_startup_help))
+        SettingsHelp(stringResource(R.string.operator_startup_help_summary), stringResource(R.string.operator_startup_help))
         OperatorToggle(R.string.operator_lock, "operator-lock", operation.lockDuringTake) { onChange(settings.copy(operation = operation.copy(lockDuringTake = it))) }
         Text(stringResource(if (state.captureControlsLocked) R.string.operator_locked else R.string.operator_lock_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         OutlinedButton({ onChange(settings.copy(operation = OperatorPreferences())) }, Modifier.heightIn(min = 48.dp).testTag("operator-reset")) { Text(stringResource(R.string.operator_reset)) }

@@ -53,6 +53,13 @@ import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
 import com.librestatic.opencinecam.CameraCapabilitiesScreen
 import com.librestatic.opencinecam.StorageBenchmarkContent
+import com.librestatic.opencinecam.LensCalibrationContent
+import com.librestatic.opencinecam.LensCalibrationFailure
+import com.librestatic.opencinecam.LensCalibrationLensRow
+import com.librestatic.opencinecam.LensCalibrationLensStatus
+import com.librestatic.opencinecam.LensCalibrationPhase
+import com.librestatic.opencinecam.LensCalibrationUiState
+import com.librestatic.opencinecam.core.model.CalibrationFlag
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
 import com.librestatic.opencinecam.core.model.BenchmarkResultDocument
@@ -164,6 +171,40 @@ fun CaptureFpsLock() = CaptureChrome(driverFpsLockState(holding = false))
 /** Video with FPS LOCK holding the shutter at 1/fps in the dark: the key is amber. */
 @Composable
 fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
+
+/** The Razr Fold's three lenses as lock options: ultra-wide "3", wide "2" and tele "5" (anchors 0.55, 1 and 3). */
+private val DriverLensLockOptions = listOf(
+    com.librestatic.opencinecam.LensLockOption("3", 0.55f, 2.2f),
+    com.librestatic.opencinecam.LensLockOption("2", 1.0f, 6.9f),
+    com.librestatic.opencinecam.LensLockOption("5", 3.0f, 20.6f),
+)
+
+private fun driverLensLockState(
+    lockedId: String?,
+    route: com.librestatic.opencinecam.LensLockRoute? = null,
+    switched: Boolean = false,
+): CameraUiState {
+    val lock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedId, route, switched)
+    val base = driverCaptureState(CaptureMode.VIDEO)
+    val anchors = DriverLensLockOptions.map { com.librestatic.opencinecam.camera.ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }
+    // Locked to the tele: its 1-8x digital range times its 3x anchor; unlocked: the logical 0.55-24x scale at 1x.
+    return if (lockedId != null) base.copy(lensLock = lock, opticalAnchors = anchors, zoomMinRatio = 3f, zoomMaxRatio = 24f, zoomRatio = 4.5f,
+        hardwareTruth = base.hardwareTruth.withActiveLens(lockedId))
+    else base.copy(lensLock = lock, opticalAnchors = anchors, zoomMinRatio = 0.55f, zoomMaxRatio = 24f, zoomRatio = 1f,
+        hardwareTruth = base.hardwareTruth.withActiveLens("2"))
+}
+
+/** Video locked to the tele ("5", served directly): the anchor bar is the lock bar and LENS LOCK is on. */
+@Composable
+fun CaptureLensLocked() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL))
+
+/** Video with the lens lock offered but off: the LENS LOCK key beside the lock keys, the normal anchors. */
+@Composable
+fun CaptureLensLockAvailable() = CaptureChrome(driverLensLockState(null))
+
+/** Locked to the tele on the fallback route: the "Lens lock: digital crop" notice under the zoom. */
+@Composable
+fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.GPU_CROP))
 
 /** Capture chrome while a video take is recording at 01:23. */
 @Composable
@@ -277,10 +318,12 @@ fun CaptureDesktop() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), driv
 /** The settings hub, home page. 840 dp or wider (`--device inner`) shows the two-pane layout. */
 @Composable
 fun Settings() = DriverTheme {
-    // Keeps its own settings so toggles and pills reflect clicks.
+    // Keeps its own settings so toggles and pills reflect clicks; the lens lock row answers like the service.
     var settings by remember { mutableStateOf(CameraSettings()) }
-    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = false,
-        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+    var lockedLens by remember { mutableStateOf<String?>(null) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING,
+        lensLock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedLens)), settings, audioPermissionGranted = false,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it }, onSetLensLock = { lockedLens = it })
 }
 
 /** The settings hub on a camera that offers the low-light auto frame rate switch (Qualcomm/Motorola IQdynamicFPS). */
@@ -354,6 +397,70 @@ fun StorageBenchmark() = DriverTheme {
     StorageBenchmarkContent(37_500_000L, running = false, last = result, onBack = {}, onChoose = {}, onCancel = {})
 }
 
+private val DriverCalibratedLenses = listOf(
+    LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.DONE, 1f, 6.1f, 1.2f, 9.4f, 0.8f, 0.72f, setOf(CalibrationFlag.PARALLAX_SUSPECT)),
+    LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+    LensCalibrationLensRow("5", 2f, LensCalibrationLensStatus.DONE, 1f, 4.3f, 0.9f, 5.2f, 0.6f, 0.91f),
+)
+
+private val DriverCalibrationSaved = LensCalibrationUiState(
+    logicalCameraId = "0", referencePhysicalId = "2", savedCreatedAtMs = 1_792_000_000_000L, savedLenses = DriverCalibratedLenses,
+)
+
+/** The lens calibration page with a saved three-lens calibration; the switches keep their own state. */
+@Composable
+fun LensCalibration() = LensCalibrationPage(DriverCalibrationSaved)
+
+/** The same page before any calibration is saved. */
+@Composable
+fun LensCalibrationEmpty() = LensCalibrationPage(LensCalibrationUiState())
+
+@Composable
+private fun LensCalibrationPage(state: LensCalibrationUiState) = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(lensCorrectionVideo = true, lensCorrectionPhotos = false, lensCorrectionAlignment = true)) }
+    LensCalibrationContent(state, settings, onSettingsChange = { settings = it }, onBack = {}, onStart = {}, onDelete = {})
+}
+
+/** A run in progress: the ultra-wide is done, the tele is measuring at 40 %. */
+@Composable
+fun LensCalibrationRunning() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.MEASURING, logicalCameraId = "0", referencePhysicalId = "2",
+        lenses = listOf(
+            LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.DONE, 1f),
+            LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+            LensCalibrationLensRow("5", 2f, LensCalibrationLensStatus.MEASURING, 0.4f),
+        ),
+    ),
+)
+
+/** A finished run waiting to be saved or discarded. */
+@Composable
+fun LensCalibrationResult() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.RESULT, logicalCameraId = "0", referencePhysicalId = "2", lenses = DriverCalibratedLenses,
+    ),
+)
+
+/** A run that kept nothing: the ultra-wide failed on parallax and AE, the tele never found its switch. */
+@Composable
+fun LensCalibrationFailed() = CaptureChrome(
+    driverCaptureState(CaptureMode.PHOTO),
+    lensCalibration = LensCalibrationUiState(
+        phase = LensCalibrationPhase.FAILED, logicalCameraId = "0", referencePhysicalId = "2",
+        failure = LensCalibrationFailure.LOW_QUALITY,
+        lenses = listOf(
+            LensCalibrationLensRow("3", 0.5f, LensCalibrationLensStatus.FAILED, 1f, colorDeltaEBefore = 6.8f, colorDeltaEAfter = 4.9f,
+                alignPxBefore = 9.2f, alignPxAfter = 3.4f, score = 0.31f,
+                flags = setOf(CalibrationFlag.PARALLAX_SUSPECT, CalibrationFlag.UNSTABLE_AE)),
+            LensCalibrationLensRow("2", 1f, LensCalibrationLensStatus.REFERENCE),
+            LensCalibrationLensRow("5", 3f, LensCalibrationLensStatus.FAILED, 0.25f),
+        ),
+    ),
+)
+
 /** The media catalog with a mix of video, photo and audio takes; take 1's proxy is ready, take 2's is being made. */
 @Composable
 fun Gallery() = GalleryWith(FakeCatalog(SampleTakes))
@@ -425,6 +532,7 @@ private fun CaptureChrome(
     scopesHidden: Boolean = false,
     hardwareKeyboard: Boolean = false,
     foldState: FoldDisplayState = FoldDisplayState(),
+    lensCalibration: LensCalibrationUiState = LensCalibrationUiState(),
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
@@ -462,6 +570,7 @@ private fun CaptureChrome(
                 onOpenMedia = {},
                 onOpenSettings = {},
                 initialPane = initialPane,
+                lensCalibration = lensCalibration,
             )
         }
     }

@@ -40,6 +40,16 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.ArrayDeque
+import com.librestatic.opencinecam.camera.calibration.ExposureCompensationEvidence
+import com.librestatic.opencinecam.camera.calibration.ExposureCompensationTakeUsage
+import com.librestatic.opencinecam.camera.calibration.LensCorrectionEvidence
+import com.librestatic.opencinecam.camera.calibration.LensCorrectionTable
+import com.librestatic.opencinecam.camera.calibration.LensEntry
+import com.librestatic.opencinecam.camera.calibration.LensShaderSplice
+import com.librestatic.opencinecam.camera.calibration.LensTakeUsage
+import com.librestatic.opencinecam.camera.calibration.PhysicalTimeline
+import com.librestatic.opencinecam.camera.calibration.TransferCurve
+import com.librestatic.opencinecam.camera.calibration.multiplyColumnMajor4
 import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.media.video.SdrAvcCaptureKind
 import com.librestatic.opencinecam.media.video.SdrAvcEncoderDecision
@@ -176,6 +186,10 @@ data class OpenCineLogRecordingEvidence(
     val encoderVuiTransfer: Int? = null,
     /** H.273 transfer the file carries after the app rewrote it; 2 (unspecified) for OCLog2. */
     val containerVuiTransfer: Int? = null,
+    /** The lens correction the take was encoded with; null when none was active. */
+    val lensCorrection: LensCorrectionEvidence? = null,
+    /** The per-frame exposure gain the take could apply ([setExposureCompensation]); null when off. */
+    val exposureCompensation: ExposureCompensationEvidence? = null,
 )
 
 internal data class OpenCineLogPreviewGeometry(
@@ -379,6 +393,7 @@ class OpenCineLogGpuPipeline(
 ) : AutoCloseable {
     private val thread = HandlerThread("OpenCineLogGL").apply { start() }
     private val frameDiag = OpenCineLogFrameDiagnostics.createIfEnabled()
+    private val viewfinderGapTrace = if (LensSwitchDiagnostics.enabled()) ViewfinderGapTrace() else null
     /** Set when the latest SDR take fell back from HEVC to H.264; reset by each start. */
     @Volatile private var codecFallbackReason: String? = null
     private val handler = Handler(thread.looper)
@@ -428,6 +443,254 @@ class OpenCineLogGpuPipeline(
         if (lastOperatorLutStatus == status) return
         lastOperatorLutStatus = status
         runCatching { onOperatorLutStatus?.invoke(status) }
+    }
+
+    // Lens correction. The request is written from any thread; the GL thread applies it between takes.
+    private val lensLock = Any()
+    private var requestedLens: LensCorrectionTable? = null
+    @Volatile private var lensRequestVersion = 0
+    private var lensAppliedVersion = 0
+    /** GL thread only. When non-null every linked program is the lens-spliced variant. */
+    private var appliedLens: LensCorrectionTable? = null
+    private var requestedFrameGain = false
+    /** GL thread only. When true every linked program is the lens-spliced variant, for its exposure term. */
+    private var appliedFrameGain = false
+    private val lensSpliced: Boolean get() = appliedLens != null || appliedFrameGain
+    // Per-frame exposure gain ([setExposureCompensation]). Written from the capture callback, read per frame.
+    private val frameGainTimeline = ZoomCropTimeline()
+    /** GL thread only: this frame's exposure gain. */
+    private var frameGain = 1f
+    private var frameLensEntry: LensEntry? = null
+    private var frameLensLookup: PhysicalTimeline.Lookup? = null
+    private val lensTimeline = PhysicalTimeline()
+    private val lensUvScratch = FloatArray(16)
+    private val lensFallbackCounter = java.util.concurrent.atomic.AtomicLong()
+    /**
+     * Whether the scope/analysis readback sees the corrected frame (scopes show what is recorded).
+     * A calibration readback switches it off to read the camera's own pixels.
+     */
+    @Volatile internal var correctionEnabledForReadback = true
+    /** Frames drawn with a physical id found by a non-exact timestamp lookup. */
+    val lensFallbackFrames: Long get() = lensFallbackCounter.get()
+
+    /** Sets the lens correction (null disables). Applied on the GL thread; a running take keeps the table it started with. */
+    fun setLensCorrection(table: LensCorrectionTable?) {
+        synchronized(lensLock) { requestedLens = table; lensRequestVersion++ }
+        if (!closed.get()) handler.post { applyRequestedLens() }
+    }
+
+    /**
+     * Lets [noteExposureGainForTimestamp] scale each frame's linear light, through the lens splice's
+     * exposure term (so the programs are the spliced variant while it is on, lens table or not).
+     * Applied on the GL thread between takes, like [setLensCorrection].
+     */
+    fun setExposureCompensation(enabled: Boolean) {
+        synchronized(lensLock) {
+            if (requestedFrameGain == enabled) return
+            requestedFrameGain = enabled
+            lensRequestVersion++
+        }
+        frameGainTimeline.clear()
+        if (!closed.get()) handler.post { applyRequestedLens() }
+    }
+
+    /**
+     * Records the exposure gain for the frame with [timestampNs]: the FPS LOCK hold bridges the
+     * frames a lens switch hands over with the old lens' ISO. While [waiting], a frame whose result
+     * is late waits up to [ZOOM_LAG_WAIT_NS] for it, then keeps the previous frame's gain.
+     */
+    fun noteExposureGainForTimestamp(timestampNs: Long, gain: Float, waiting: Boolean) =
+        frameGainTimeline.note(timestampNs, if (gain.isFinite() && gain > 0f) gain else 1f, waiting)
+
+    /** The source curve of this pipeline's uncorrected signal, as calibrations name it. */
+    fun lensSourcePath(): com.librestatic.opencinecam.core.model.CalibrationSourcePath =
+        if (!passthroughSdr && sourcePath == OpenCineLogSourcePath.HLG10_BT2020)
+            com.librestatic.opencinecam.core.model.CalibrationSourcePath.HLG
+        else com.librestatic.opencinecam.core.model.CalibrationSourcePath.SDR
+
+    /**
+     * Builds the table for this pipeline's frame aspect from [set] and applies it (null disables).
+     * A calibration solved on the other source path (SDR/HLG) still applies, with a warning.
+     */
+    fun setLensCalibration(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        if (set == null) { setLensCorrection(null); return }
+        val route = lensSourcePath()
+        if (set.sourcePath != route) {
+            android.util.Log.w(LOG_TAG, "Lens calibration was solved on ${set.sourcePath} but this route is $route; applying it anyway.")
+        }
+        setLensCorrection(LensCorrectionTable.build(set, alignmentEnabled, size.width.toFloat() / size.height.coerceAtLeast(1)))
+    }
+
+    // Lens lock GPU crop (PLAN-070 slice 4). Written from any thread, read on the GL thread per draw.
+    @Volatile private var cropZoom = 1f
+    /** GL thread only. */
+    private val cropUvMatrix = FloatArray(16)
+    private val cropUvScratch = FloatArray(16)
+
+    /**
+     * Crops every output about its centre by [factor] (1 = none): the lens lock's GPU-crop route
+     * zooms here while the HAL zoom stays pinned. Only the uploaded texture matrix changes
+     * (`T x C`, after the lens alignment `T x A x C`), never the shader, so the sidecar
+     * `transformSha256` is unaffected. Preview, subject windows, the encoder and the scope/peaking
+     * analysis readback all see the crop; the calibration readback does not.
+     */
+    fun setCropZoom(factor: Float) {
+        cropZoom = if (factor.isFinite() && factor > 1f) factor else 1f
+    }
+
+    /** Records which physical camera produced the frame with [timestampNs] (the sensor timestamp). */
+    fun notePhysicalForTimestamp(timestampNs: Long, physicalId: String?) = lensTimeline.note(timestampNs, physicalId)
+
+    // Zoom-lag smoothing at a lens switch ([ZoomLagCompensator]). Written from the capture callback, read per frame.
+    private val zoomLagTimeline = ZoomCropTimeline()
+    /** GL thread only: this frame's zoom-lag crop, composed with [cropZoom]. */
+    private var frameZoomCrop = 1f
+
+    /**
+     * Records the zoom-lag crop for the frame with [timestampNs]. Like [setCropZoom] it only scales
+     * the uploaded texture matrix, so preview, subject windows, the encoder and the analysis
+     * readback all see it and the calibration readback does not. While [moving], a frame whose
+     * result is late waits up to [ZOOM_LAG_WAIT_NS] for it, then keeps the previous frame's crop.
+     */
+    fun noteZoomCropForTimestamp(timestampNs: Long, crop: Float, moving: Boolean) =
+        zoomLagTimeline.note(timestampNs, if (crop.isFinite() && crop > 1f) crop else 1f, moving)
+
+    /** Forgets every zoom-lag crop: the next frames draw with the HAL's framing. */
+    fun clearZoomLag() = zoomLagTimeline.clear()
+
+    private fun applyRequestedLens() {
+        if (closed.get() || recording != null || lensRequestVersion == lensAppliedVersion) return
+        val (table, gain, version) = synchronized(lensLock) { Triple(requestedLens, requestedFrameGain, lensRequestVersion) }
+        lensAppliedVersion = version
+        val spliced = table != null || gain
+        val relink = spliced != lensSpliced
+        if (relink) {
+            try {
+                check(makeCurrent(pbuffer)) { "Lens correction context is unavailable." }
+                val fresh = if (passthroughSdr) linkProgram(VERTEX_SHADER, passthroughShader(spliced))
+                    else linkProgram(VERTEX_SHADER, transformShader(sourcePath, shaderYcbcr, spliced))
+                if (program != 0) GLES30.glDeleteProgram(program)
+                program = fresh
+                refreshMainProgramLocations()
+                if (operatorLutProgram != 0) { GLES30.glDeleteProgram(operatorLutProgram); operatorLutProgram = 0 }
+                if (hlgSignalProgram != 0) { GLES30.glDeleteProgram(hlgSignalProgram); hlgSignalProgram = 0 }
+            } catch (failure: Exception) {
+                android.util.Log.w(LOG_TAG, "Lens correction shader did not link; the correction stays off.", failure)
+                for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+                return
+            }
+        }
+        appliedLens = table
+        appliedFrameGain = gain
+    }
+
+    private fun lensSplicedSha(hlgOutput: Boolean, hdr10Output: Boolean): String = when {
+        passthroughSdr -> passthroughSha256(lens = true)
+        hdr10Output -> pqSignalSha256(shaderYcbcr, lens = true)
+        hlgOutput -> hlgSignalSha256(shaderYcbcr, lens = true)
+        else -> transformSha256(sourcePath, shaderYcbcr, lens = true)
+    }
+
+    /**
+     * Receives calibration readbacks: the uncorrected camera signal in its source curve, RGBA8 in GL
+     * row order (the orientation the lens alignment is expressed in). [onFrame] runs on the GL
+     * thread with a buffer nobody else touches; copy it off-thread. [onUnavailable] fires once if
+     * the readback cannot be set up or fails, after which no frames follow.
+     */
+    interface CalibrationReadbackListener {
+        fun onFrame(width: Int, height: Int, rgba: ByteBuffer, timestampNs: Long)
+        fun onUnavailable(reason: String)
+    }
+
+    @Volatile private var calibrationListener: CalibrationReadbackListener? = null
+    /** GL thread only: the lazily linked readback program and its offscreen target; all zero while idle. */
+    private var calibrationProgram = 0
+    private var calibrationProgramYcbcr = false
+    private var calibrationFbo = 0
+    private var calibrationRbo = 0
+    private var calibrationWidth = 0
+    private var calibrationHeight = 0
+    private var lastCalibrationAtMs = 0L
+
+    /**
+     * Starts (or with null stops) the calibration readback, at most every [CALIBRATION_PERIOD_MS].
+     * It draws the SurfaceTexture through a separate small program with the plain texture matrix: no
+     * lens alignment or correction, OCLog transform, scene gain or LUT, so the pixels are the
+     * camera's own signal. The program and target exist only while a listener is set.
+     */
+    fun setCalibrationReadback(listener: CalibrationReadbackListener?) {
+        calibrationListener = listener
+        if (listener == null && !closed.get()) handler.post {
+            if (calibrationListener == null && calibrationProgram != 0 && makeCurrent(pbuffer)) freeCalibrationReadback()
+        }
+    }
+
+    private fun renderCalibrationReadbackIfDue(timestampNs: Long) {
+        val listener = calibrationListener ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastCalibrationAtMs < CALIBRATION_PERIOD_MS) return
+        lastCalibrationAtMs = now
+        try {
+            check(makeCurrent(pbuffer)) { "Calibration readback context is unavailable." }
+            if (calibrationProgram == 0 || calibrationProgramYcbcr != shaderYcbcr) {
+                freeCalibrationReadback()
+                calibrationWidth = CALIBRATION_WIDTH
+                calibrationHeight = (CALIBRATION_WIDTH.toLong() * size.height / size.width.coerceAtLeast(1))
+                    .toInt().coerceAtLeast(CALIBRATION_MIN_HEIGHT)
+                calibrationProgram = linkProgram(VERTEX_SHADER, calibrationShader(shaderYcbcr))
+                calibrationProgramYcbcr = shaderYcbcr
+                val ids = IntArray(1)
+                GLES30.glGenFramebuffers(1, ids, 0); calibrationFbo = ids[0]
+                GLES30.glGenRenderbuffers(1, ids, 0); calibrationRbo = ids[0]
+                GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, calibrationRbo)
+                GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_RGBA8, calibrationWidth, calibrationHeight)
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, calibrationFbo)
+                GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_RENDERBUFFER, calibrationRbo)
+                check(GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE) {
+                    "Calibration framebuffer is incomplete."
+                }
+            }
+            val width = calibrationWidth
+            val height = calibrationHeight
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, calibrationFbo)
+            GLES30.glViewport(0, 0, width, height)
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            GLES30.glUseProgram(calibrationProgram)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+            GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(calibrationProgram, "uTextureMatrix"), 1, false, textureMatrix, 0)
+            GLES30.glUniform2f(GLES30.glGetUniformLocation(calibrationProgram, "uPositionScale"), 1f, 1f)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(calibrationProgram, "uPreviewRotation"), 0)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(calibrationProgram, "uMirrorPreview"), 0)
+            ycbcrConversion?.takeIf { shaderYcbcr }?.let { conversion ->
+                GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(calibrationProgram, "uYcbcrToRgb"), 1, false, conversion.matrix, 0)
+                GLES30.glUniform3fv(GLES30.glGetUniformLocation(calibrationProgram, "uYcbcrOffset"), 1, conversion.offset, 0)
+            }
+            requireNotNull(quad).draw()
+            val rgba = ByteBuffer.allocateDirect(width * height * 4)
+            GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, rgba)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            val error = GLES30.glGetError()
+            check(error == GLES30.GL_NO_ERROR) { "Calibration readback failed with GL error 0x${error.toString(16)}." }
+            rgba.position(0)
+            listener.onFrame(width, height, rgba, timestampNs)
+        } catch (failure: Exception) {
+            android.util.Log.w(LOG_TAG, "Calibration readback failed; it stays off.", failure)
+            for (attempt in 0 until 8) if (GLES30.glGetError() == GLES30.GL_NO_ERROR) break
+            runCatching { GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0) }
+            calibrationListener = null
+            runCatching { freeCalibrationReadback() }
+            runCatching { listener.onUnavailable(failure.message ?: "The calibration readback failed.") }
+        }
+    }
+
+    /** GL thread, context current: frees the readback program and target. */
+    private fun freeCalibrationReadback() {
+        if (calibrationProgram != 0) GLES30.glDeleteProgram(calibrationProgram)
+        if (calibrationFbo != 0) GLES30.glDeleteFramebuffers(1, intArrayOf(calibrationFbo), 0)
+        if (calibrationRbo != 0) GLES30.glDeleteRenderbuffers(1, intArrayOf(calibrationRbo), 0)
+        calibrationProgram = 0; calibrationFbo = 0; calibrationRbo = 0
     }
 
     private var quad: PreviewQuad? = null
@@ -658,7 +921,8 @@ class OpenCineLogGpuPipeline(
                     if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
                     hlgSignalProgram = 0
                     // Mandatory output processing, like a recording LUT: no fallback to OCLog2 pixels.
-                    hlgSignalProgram = linkProgram(VERTEX_SHADER, if (hdr10Output) pqSignalShader(shaderYcbcr) else hlgSignalShader(shaderYcbcr))
+                    val lensOn = lensSpliced
+                    hlgSignalProgram = linkProgram(VERTEX_SHADER, if (hdr10Output) pqSignalShader(shaderYcbcr, lensOn) else hlgSignalShader(shaderYcbcr, lensOn))
                     hlgSignalProgramPq = hdr10Output
                 }
                 val projectRate = timelapse?.projectRate ?: projectRateOverride ?: CaptureFrameRate(targetFps)
@@ -780,7 +1044,9 @@ class OpenCineLogGpuPipeline(
                             !passthroughSdr && recordingLut == null -> HevcVuiTransfer.UNSPECIFIED
                             else -> null
                         },
-                        hlgOutput = hlgOutput, hdr10Output = hdr10Output)
+                        hlgOutput = hlgOutput, hdr10Output = hdr10Output,
+                        lens = appliedLens?.let { LensTakeUsage(it, lensSplicedSha(hlgOutput, hdr10Output)) },
+                        exposureCompensation = if (appliedFrameGain) ExposureCompensationTakeUsage(lensSplicedSha(hlgOutput, hdr10Output)) else null)
                     recording = active
                     codec.start()
                     codecStarted = true
@@ -1005,6 +1271,16 @@ class OpenCineLogGpuPipeline(
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
         program = if (passthroughSdr) linkProgram(VERTEX_SHADER, PASSTHROUGH_FRAGMENT_SHADER) else linkTransformProgram()
         quad = PreviewQuad()
+        refreshMainProgramLocations()
+        val createdTexture = SurfaceTexture(textureId).apply {
+            setDefaultBufferSize(size.width, size.height)
+            setOnFrameAvailableListener({ renderLatestFrame() }, handler)
+        }
+        surfaceTexture = createdTexture
+        inputSurface = Surface(createdTexture)
+    }
+
+    private fun refreshMainProgramLocations() {
         textureMatrixLocation = GLES30.glGetUniformLocation(program, "uTextureMatrix")
         outputModeLocation = GLES30.glGetUniformLocation(program, "uOutputMode")
         positionScaleLocation = GLES30.glGetUniformLocation(program, "uPositionScale")
@@ -1013,12 +1289,6 @@ class OpenCineLogGpuPipeline(
         sceneGainLocation = GLES30.glGetUniformLocation(program, "uSceneGain")
         ycbcrToRgbLocation = GLES30.glGetUniformLocation(program, "uYcbcrToRgb")
         ycbcrOffsetLocation = GLES30.glGetUniformLocation(program, "uYcbcrOffset")
-        val createdTexture = SurfaceTexture(textureId).apply {
-            setDefaultBufferSize(size.width, size.height)
-            setOnFrameAvailableListener({ renderLatestFrame() }, handler)
-        }
-        surfaceTexture = createdTexture
-        inputSurface = Surface(createdTexture)
     }
 
     /**
@@ -1045,6 +1315,7 @@ class OpenCineLogGpuPipeline(
         try {
             frameDiag?.frameStart()
             makeCurrent(pbuffer)
+            applyRequestedLens()
             texture.updateTexImage()
             frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.LATCH)
             val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
@@ -1056,6 +1327,16 @@ class OpenCineLogGpuPipeline(
                 ycbcrDataSpace = frameDataSpace
             }
             val timestampNs = texture.timestamp
+            viewfinderGapTrace?.onFrame(timestampNs, android.os.SystemClock.elapsedRealtimeNanos())
+            frameZoomCrop = zoomLagTimeline.cropFor(timestampNs, ZOOM_LAG_WAIT_NS)
+            viewfinderGapTrace?.onZoomCrop(timestampNs, frameZoomCrop, zoomLagTimeline.lastExact, zoomLagTimeline.lastWaitNs)
+            frameGain = if (appliedFrameGain) frameGainTimeline.cropFor(timestampNs, ZOOM_LAG_WAIT_NS) else 1f
+            appliedLens?.let { lens ->
+                val found = lensTimeline.lookup(timestampNs)
+                if (!found.exact) lensFallbackCounter.incrementAndGet()
+                frameLensLookup = found
+                frameLensEntry = lens.entryFor(found.physicalId)
+            }
             recording?.takeIf { it.acceptFrames.get() && recordingFrameMeetsWhiteBalanceBoundary(timestampNs, it.minimumSensorTimestampNs) }?.let { active ->
                 active.noteSourceDataSpace(frameDataSpace, sourcePath)
                 if (active.ycbcrConversion == null) active.ycbcrConversion = ycbcrConversion?.label
@@ -1083,6 +1364,8 @@ class OpenCineLogGpuPipeline(
                         hlgSignal = active.hlgOutput,
                     )
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_DRAW)
+                    frameLensLookup?.let { found -> active.lens?.record(found.physicalId, found.exact) }
+                    active.exposureCompensation?.record(frameGain)
                     check(EGLExt.eglPresentationTimeANDROID(display, encoderEglSurface, selectedPts)) { "Encoder rejected presentation timestamp." }
                     check(EGL14.eglSwapBuffers(display, encoderEglSurface)) { "Encoder EGL swap failed." }
                     frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.ENCODER_SWAP)
@@ -1104,8 +1387,9 @@ class OpenCineLogGpuPipeline(
                 }
             }
             frameDiag?.skip()
-            renderScopeAnalysisIfDue()
+            renderScopeAnalysisIfDue(timestampNs)
             frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.SCOPES)
+            renderCalibrationReadbackIfDue(timestampNs)
             subjectOutput?.let { output ->
                 check(makeCurrent(pbuffer)) { "Subject producer pbuffer is unavailable." }
                 output.render(sourceReceivedAtMs) { width, height, options ->
@@ -1142,7 +1426,7 @@ class OpenCineLogGpuPipeline(
         }
     }
 
-    private fun renderScopeAnalysisIfDue() {
+    private fun renderScopeAnalysisIfDue(frameTimestampNs: Long) {
         val callback = onAnalysis ?: return
         val now = android.os.SystemClock.elapsedRealtime()
         val options = monitoringOptions
@@ -1159,6 +1443,7 @@ class OpenCineLogGpuPipeline(
             height = height,
             previewOutput = false,
             recordingGeometry = null,
+            lensCorrected = correctionEnabledForReadback,
         )
         val rgba = ByteBuffer.allocateDirect(width * height * 4)
         GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, rgba)
@@ -1169,7 +1454,7 @@ class OpenCineLogGpuPipeline(
         rgba.get(bytes)
         callback(analyzeRgbaFrame(width, height, bytes, now, options,
             if (passthroughSdr) MonitoringSignalDomain.SDR_BT709_CODE else MonitoringSignalDomain.OCLOG2_CODE,
-            scopeStep = scale, focusPeaking = peaking))
+            scopeStep = scale, focusPeaking = peaking).copy(sensorTimestampNs = frameTimestampNs))
     }
 
     // This boundary returns the encoded 16-bit payload, not an integer conversion of its value.
@@ -1187,7 +1472,8 @@ class OpenCineLogGpuPipeline(
     private fun operatorProgram(lut: MonitorLut, forSubject: Boolean = false, forRecording: Boolean = false): Int {
         check(!forSubject || !forRecording)
         if (operatorLutProgram == 0) {
-            val source = if (passthroughSdr) PASSTHROUGH_FRAGMENT_SHADER else transformShader(sourcePath, shaderYcbcr)
+            val lensOn = lensSpliced
+            val source = if (passthroughSdr) passthroughShader(lensOn) else transformShader(sourcePath, shaderYcbcr, lensOn)
             val declarations = """
                 uniform highp sampler3D uOperatorLut;
                 uniform vec3 uLutMin;
@@ -1213,7 +1499,9 @@ class OpenCineLogGpuPipeline(
                 }
             """.trimIndent()
             val augmented = source.replace("void main() {", declarations + "\nvoid main() {")
-            val signal = if (passthroughSdr) "texture(uTexture, vTexCoord).rgb" else "ocLog"
+            val signal = if (passthroughSdr) {
+                if (lensOn) "${LensShaderSplice.FUNCTION}(texture(uTexture, vTexCoord).rgb)" else "texture(uTexture, vTexCoord).rgb"
+            } else "ocLog"
             val end = augmented.lastIndexOf('}')
             operatorLutProgram = linkProgram(VERTEX_SHADER, augmented.substring(0, end) +
                 "outColor = vec4(applyOperatorLut($signal), 1.0);\n}")
@@ -1276,6 +1564,7 @@ class OpenCineLogGpuPipeline(
         subjectLutOutput: Boolean = false,
         recordingLut: MonitorLut? = null,
         hlgSignal: Boolean = false,
+        lensCorrected: Boolean = true,
     ): OperatorLutStatus? {
         check(!previewOutput || !subjectLutOutput)
         check(!hlgSignal || recordingLut == null && !previewOutput && !subjectLutOutput)
@@ -1322,7 +1611,26 @@ class OpenCineLogGpuPipeline(
         }
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-        GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, textureMatrix, 0)
+        val lens = appliedLens
+        // The lens lock crop acts first on the output UV, so it composes after any alignment.
+        fun uploadTextureMatrix(matrix: FloatArray) {
+            val zoom = cropZoom * frameZoomCrop
+            val uploaded = if (zoom > 1f) multiplyColumnMajor4(matrix, LensLockCrop.uvMatrix(zoom, cropUvMatrix), cropUvScratch) else matrix
+            GLES30.glUniformMatrix4fv(location("uTextureMatrix", textureMatrixLocation), 1, false, uploaded, 0)
+        }
+        if (lensSpliced) {
+            // The alignment acts on the output-space UV before the SurfaceTexture transform: T * A.
+            val entry = if (lens != null && lensCorrected) frameLensEntry ?: lens.defaultEntry else LensCorrectionTable.IDENTITY_ENTRY
+            multiplyColumnMajor4(textureMatrix, entry.uvMatrix, lensUvScratch)
+            uploadTextureMatrix(lensUvScratch)
+            // The exposure gain follows the correction: readbacks that skip it see the camera's frame.
+            val ev = entry.evOffset + if (lensCorrected && frameGain != 1f) kotlin.math.log2(frameGain) else 0f
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(selectedProgram, "uLensEv"), ev)
+            GLES30.glUniformMatrix3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensMatrix"), 1, false, entry.colorMatrix, 0)
+            GLES30.glUniform3fv(GLES30.glGetUniformLocation(selectedProgram, "uLensGains"), 1, entry.gains, 0)
+        } else {
+            uploadTextureMatrix(textureMatrix)
+        }
         GLES30.glUniform1i(location("uOutputMode", outputModeLocation), outputMode)
         // Monitors, scopes and the encoder see the same scaled light; a take freezes its gain.
         GLES30.glUniform1f(location("uSceneGain", sceneGainLocation), recording?.sceneGain ?: sceneGain(greyReference))
@@ -1683,9 +1991,13 @@ class OpenCineLogGpuPipeline(
                     ycbcrConversion = if (shaderYcbcr) active.ycbcrConversion else null,
                     encoderVuiTransfer = active.encoderVuiTransfer,
                     containerVuiTransfer = active.containerVuiTransfer,
+                    lensCorrection = active.lens?.evidence(),
+                    exposureCompensation = active.exposureCompensation?.evidence(),
                 )
             } else null
             if (recording === active) recording = null
+            // A correction change requested during the take takes effect now.
+            if (!closed.get()) handler.post { applyRequestedLens() }
             active.onStopped(success && active.failure == null, evidence)
         }
     }
@@ -1783,6 +2095,8 @@ class OpenCineLogGpuPipeline(
                     surfaceTexture?.setOnFrameAvailableListener(null)
                     surfaceTexture?.release()
                     inputSurface?.release()
+                    calibrationListener = null
+                    freeCalibrationReadback()
                     if (operatorLutProgram != 0) GLES30.glDeleteProgram(operatorLutProgram)
                     if (hlgSignalProgram != 0) GLES30.glDeleteProgram(hlgSignalProgram)
                     if (operatorLutTexture != 0) GLES30.glDeleteTextures(1, intArrayOf(operatorLutTexture), 0)
@@ -2117,6 +2431,10 @@ class OpenCineLogGpuPipeline(
         val hlgOutput: Boolean,
         /** With [hlgOutput]: the signal is converted to PQ and the encoder runs in the HDR10 profile. */
         val hdr10Output: Boolean = false,
+        /** The lens table frozen at REC start with the counters of the frames encoded through it; null when no correction. */
+        val lens: LensTakeUsage? = null,
+        /** The per-frame exposure gain, on for the whole take when it was on at REC start; null when off. */
+        val exposureCompensation: ExposureCompensationTakeUsage? = null,
     ) {
         val clearsVuiTransfer: Boolean get() = vuiTransfer != null
         val lutEvidence = recordingLut?.let(::BakedLutEvidence)
@@ -2206,6 +2524,12 @@ class OpenCineLogGpuPipeline(
             return maxOf(MIN_PENDING_MUX_SAMPLES, perWindow(videoFps.coerceAtLeast(1).toDouble()) + perWindow(audioRateHz / 1024.0))
         }
         private const val GL_CALL_TIMEOUT_SECONDS = 8L
+        /** Calibration readback: 640 wide, the height keeps the source aspect (360 for 16:9), about 10 Hz. */
+        private const val CALIBRATION_WIDTH = 640
+        private const val CALIBRATION_MIN_HEIGHT = 64
+        private const val CALIBRATION_PERIOD_MS = 100L
+        /** The longest a frame waits for its own capture result while zooming (a quarter of a 60 fps frame). */
+        private const val ZOOM_LAG_WAIT_NS = 4_000_000L
         private const val OUTPUT_OCLOG = 0
         private const val OUTPUT_VIEW_ASSIST = 1
         private const val OUTPUT_FLAT_MONITOR = 2
@@ -2508,19 +2832,59 @@ class OpenCineLogGpuPipeline(
          * ([OpenCineLogYcbcrConversion]), clamped to [0, 1] like a normalized sampler result.
          * Derived textually so both variants share one transform body.
          */
-        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(fragmentShader(sourcePath)) else fragmentShader(sourcePath)
+        fun transformShader(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(fragmentShader(sourcePath)) else fragmentShader(sourcePath)
+            return if (lens) LensShaderSplice.splice(base, sourceCurve(sourcePath)) else base
+        }
+
+        /** The transfer the tier's camera signal carries; the lens correction decodes and re-encodes with it. */
+        private fun sourceCurve(sourcePath: OpenCineLogSourcePath): TransferCurve = when (sourcePath) {
+            OpenCineLogSourcePath.HLG10_BT2020 -> TransferCurve.HLG
+            OpenCineLogSourcePath.SDR_BT709_ISP -> TransferCurve.SDR
+        }
+
+        /** The SDR passthrough shader (the camera's code values straight to the output). */
+        fun passthroughShader(lens: Boolean = false): String =
+            if (lens) LensShaderSplice.splice(PASSTHROUGH_FRAGMENT_SHADER, TransferCurve.SDR) else PASSTHROUGH_FRAGMENT_SHADER
+
+        fun passthroughSha256(lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(passthroughShader(lens).toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+        /**
+         * The calibration readback program: the camera's code values and nothing else. With
+         * [shaderYcbcr] it converts raw YCbCr with the same `uYcbcrToRgb`/`uYcbcrOffset` expression
+         * as the tier shaders, so both read the same pixels. Linked only while a calibration runs.
+         */
+        fun calibrationShader(shaderYcbcr: Boolean): String {
+            val base = """
+                #version 300 es
+                #extension GL_OES_EGL_image_external_essl3 : require
+                precision highp float;
+                uniform samplerExternalOES uTexture;
+                in vec2 vTexCoord;
+                out vec4 outColor;
+                void main() {
+                    outColor = vec4(texture(uTexture, vTexCoord).rgb, 1.0);
+                }
+            """.trimIndent()
+            return if (shaderYcbcr) ycbcrVariant(base) else base
+        }
 
         /** The HLG recording shader as linked; it shares the tier shader's YCbCr decoding. */
-        fun hlgSignalShader(shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
+        fun hlgSignalShader(shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(HLG_SIGNAL_FRAGMENT_SHADER) else HLG_SIGNAL_FRAGMENT_SHADER
+            return if (lens) LensShaderSplice.splice(base, TransferCurve.HLG) else base
+        }
 
         /**
          * The HLG recording shader with a PQ output: HLG scene light through the 1000 cd/m2 HLG OOTF
          * and the ST 2084 inverse EOTF. [HlgToPq] is its host-testable mirror.
          */
-        fun pqSignalShader(shaderYcbcr: Boolean): String =
-            if (shaderYcbcr) ycbcrVariant(PQ_SIGNAL_FRAGMENT_SHADER) else PQ_SIGNAL_FRAGMENT_SHADER
+        fun pqSignalShader(shaderYcbcr: Boolean, lens: Boolean = false): String {
+            val base = if (shaderYcbcr) ycbcrVariant(PQ_SIGNAL_FRAGMENT_SHADER) else PQ_SIGNAL_FRAGMENT_SHADER
+            return if (lens) LensShaderSplice.splice(base, TransferCurve.HLG) else base
+        }
 
         private fun ycbcrVariant(base: String): String {
             for (anchor in YCBCR_ANCHORS) check(base.split(anchor).size == 2) { "YCbCr shader anchor drifted: $anchor" }
@@ -2546,18 +2910,18 @@ class OpenCineLogGpuPipeline(
         )
 
         /** Identity of the linked transform; the shader-YCbCr variant is the qualified one. */
-        fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(transformShader(sourcePath, shaderYcbcr).toByteArray())
+        fun transformSha256(sourcePath: OpenCineLogSourcePath, shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(transformShader(sourcePath, shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Identity of the linked HLG recording shader. */
-        fun hlgSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(hlgSignalShader(shaderYcbcr).toByteArray())
+        fun hlgSignalSha256(shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(hlgSignalShader(shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Identity of the linked PQ recording shader. */
-        fun pqSignalSha256(shaderYcbcr: Boolean = true): String = MessageDigest.getInstance("SHA-256")
-            .digest(pqSignalShader(shaderYcbcr).toByteArray())
+        fun pqSignalSha256(shaderYcbcr: Boolean = true, lens: Boolean = false): String = MessageDigest.getInstance("SHA-256")
+            .digest(pqSignalShader(shaderYcbcr, lens).toByteArray())
             .joinToString("") { "%02x".format(it) }
 
         /** Backward-compatible identity of the qualified HLG transform. */

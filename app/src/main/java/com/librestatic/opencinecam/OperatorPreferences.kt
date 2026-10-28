@@ -87,7 +87,7 @@ fun operatorActionToggleState(action: OperatorAction, settings: CameraSettings, 
     }
 }
 
-private fun CameraUiState.operatorHighSpeed(): Boolean =
+internal fun CameraUiState.operatorHighSpeed(): Boolean =
     if (selectedMode.usesLogGraph) activeLogProfile?.constrainedHighSpeed == true
     else selectedMode in CameraUiState.videoProfileModes && activeVideoProfile?.constrainedHighSpeed == true
 

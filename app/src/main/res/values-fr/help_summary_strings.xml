@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">LUT propre à l’aperçu du sujet</string>
+    <string name="operator_startup_help_summary">Appliqué une fois au démarrage</string>
+    <string name="proxy_policy_help_summary">S’applique dès la prochaine tentative</string>
+    <string name="subject_out_of_frame_unavailable_summary">Requiert la détection des visages, absente ici</string>
+    <string name="subject_slate_sync_scope_summary">Se déclenche une fois par prise, au REC</string>
+    <string name="subject_review_help_summary">Montrez des prises sur l’écran externe depuis la galerie</string>
+    <string name="media_share_lut_help_summary">Une LUT manquante bloque le partage sauf exclusion</string>
+    <string name="playback_settings_help_summary">N’affecte que la visionneuse de la galerie</string>
+    <string name="playback_settings_direct_output_help_summary">Pause plus rapide ; couleur gérée par le système</string>
+    <string name="pro_flicker_help_summary">Réduit le scintillement de l’éclairage secteur</string>
+    <string name="pro_low_light_boost_help_summary">Éclaircit les scènes sombres ; peut baisser les i/s</string>
+    <string name="pro_metering_help_summary">Quelle partie de l’image règle l’exposition</string>
+    <string name="pro_wb_record_help_summary">Si la balance des blancs peut changer en prise</string>
+    <string name="photo_quality_help_summary">Compression JPEG/HEIC uniquement, pas DNG</string>
+    <string name="image_stabilization_help_summary">L’EIS peut recadrer ; vérifiez le résultat</string>
+    <string name="image_picture_profile_help_summary">Courbe de tons de la caméra : Standard, Plat ou Ciné</string>
+    <string name="picture_help_summary">Réglages propres à cette caméra</string>
+    <string name="picture_blocked_neutral_summary">Sans effet en LOG, HLG, RAW et haute vitesse</string>
+    <string name="picture_blocked_edge_off_summary">La netteté requiert l’accentuation des contours</string>
+</resources>

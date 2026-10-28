@@ -73,12 +73,17 @@ object ZoomMath {
      *
      * If [physicalFocals] is empty or the reference is unavailable, only the 1x anchor is
      * returned, leaving the rest of the range to digital zoom.
+     *
+     * [fovRatios] overrides the focal ratio per physical id with the field-of-view ratio
+     * ([lensAnchorRatio]). Sensors differ in size, so the focal ratio can misplace a lens: the
+     * Razr Fold's tele is 2x by focal length but 3x by field of view, where the HAL switches to it.
      */
     fun deriveAnchors(
         referenceFocalMm: Float?,
         physicalFocals: List<Pair<String, Float>>,
         rangeMin: Float = Float.NEGATIVE_INFINITY,
         rangeMax: Float = Float.POSITIVE_INFINITY,
+        fovRatios: Map<String, Float> = emptyMap(),
     ): List<ZoomAnchor> {
         if (referenceFocalMm == null || referenceFocalMm <= 0f || physicalFocals.isEmpty()) {
             return listOf(ZoomAnchor(1f.coerceIn(rangeMin, rangeMax), referenceFocalMm ?: 0f, null))
@@ -86,7 +91,7 @@ object ZoomMath {
         val ratios = physicalFocals.mapNotNull { (id, focal) ->
             if (focal <= 0f) return@mapNotNull null
             // A shorter physical focal = wider field of view = lower zoom ratio.
-            val ratio = focal / referenceFocalMm
+            val ratio = fovRatios[id]?.takeIf { it > 0f && it.isFinite() } ?: (focal / referenceFocalMm)
             ZoomAnchor(ratio.coerceIn(rangeMin, rangeMax), focal, id)
         }
         val withUnity = (ratios + ZoomAnchor(1f, referenceFocalMm, null))
@@ -237,4 +242,36 @@ object ZoomMath {
     }
 
     private fun roundAnchors(ratio: Float): Int = (ratio * 100f).toInt()
+}
+
+/**
+ * Where a physical lens sits on its logical camera's zoom scale (PLAN-070, ADR-0036): the
+ * logical field-of-view width over the physical one, both from [RawZoomCrop.fovWidth]. The
+ * focal ratio alone is wrong for a lens on a smaller sensor (the Razr Fold's tele reads 2x by
+ * focal length but sits at 3x). Null when either width is unusable.
+ */
+fun lensAnchorRatio(logicalFovWidth: Double?, physicalFovWidth: Double?): Float? {
+    if (logicalFovWidth == null || physicalFovWidth == null) return null
+    if (!logicalFovWidth.isFinite() || !physicalFovWidth.isFinite() || logicalFovWidth <= 0.0 || physicalFovWidth <= 0.0) return null
+    return (logicalFovWidth / physicalFovWidth).toFloat()
+}
+
+/**
+ * Zoom conversion for a lens-locked session. The app keeps the logical scale (UI ratio); the
+ * opened physical camera takes its own ratio. UI = anchor x physical.
+ */
+object LensLockZoom {
+    /** The physical ratio for the logical-scale [ui] ratio, coerced into [physicalRange]. */
+    fun toPhysical(ui: Float, anchor: Float, physicalRange: ClosedFloatingPointRange<Float>): Float {
+        val raw = if (anchor > 0f && anchor.isFinite()) ui / anchor else ui
+        return ZoomMath.coerce(if (raw.isFinite()) raw else physicalRange.start, physicalRange)
+    }
+
+    /** The logical-scale ratio for the physical ratio [physical]. */
+    fun toUi(physical: Float, anchor: Float): Float =
+        if (anchor > 0f && anchor.isFinite()) physical * anchor else physical
+
+    /** The physical range on the logical scale. */
+    fun uiRange(anchor: Float, physicalRange: ClosedFloatingPointRange<Float>): ClosedFloatingPointRange<Float> =
+        toUi(physicalRange.start, anchor)..toUi(physicalRange.endInclusive, anchor)
 }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">LUT próprio para a prévia do sujeito</string>
+    <string name="operator_startup_help_summary">Aplicado uma vez ao abrir o app</string>
+    <string name="proxy_policy_help_summary">As mudanças valem na próxima tentativa</string>
+    <string name="subject_out_of_frame_unavailable_summary">Requer detecção de rostos, indisponível aqui</string>
+    <string name="subject_slate_sync_scope_summary">Dispara uma vez por tomada, ao gravar</string>
+    <string name="subject_review_help_summary">Mostre tomadas na tela externa pela galeria</string>
+    <string name="media_share_lut_help_summary">Um LUT ausente impede o envio se não for excluído</string>
+    <string name="playback_settings_help_summary">Afeta apenas o visualizador da galeria</string>
+    <string name="playback_settings_direct_output_help_summary">Pausa mais rápida; a cor segue o sistema</string>
+    <string name="pro_flicker_help_summary">Reduz a cintilação da iluminação da rede</string>
+    <string name="pro_low_light_boost_help_summary">Clareia cenas escuras; pode reduzir os FPS</string>
+    <string name="pro_metering_help_summary">Que parte do quadro define a exposição</string>
+    <string name="pro_wb_record_help_summary">Se o balanço de branco pode mudar na tomada</string>
+    <string name="photo_quality_help_summary">Só compressão JPEG/HEIC, não DNG</string>
+    <string name="image_stabilization_help_summary">EIS pode cortar; confira o resultado</string>
+    <string name="image_picture_profile_help_summary">Curva de tons da câmera: Padrão, Plano ou Cine</string>
+    <string name="picture_help_summary">Controles próprios desta câmera</string>
+    <string name="picture_blocked_neutral_summary">Sem efeito em LOG, HLG, RAW e alta velocidade</string>
+    <string name="picture_blocked_edge_off_summary">A nitidez requer o realce de bordas ativo</string>
+</resources>

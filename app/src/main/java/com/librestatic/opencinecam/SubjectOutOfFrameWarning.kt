@@ -174,7 +174,7 @@ internal fun SubjectOutOfFrameSettings(state: CameraUiState, subject: SubjectDis
                 Text(stringResource(R.string.subject_out_of_frame), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 16.sp, modifier = Modifier.weight(1f))
                 Switch(subject.outOfFrameWarning, onCheckedChange = null, enabled = false)
             }
-            SettingsHelp(stringResource(R.string.subject_out_of_frame_unavailable))
+            SettingsHelp(stringResource(R.string.subject_out_of_frame_unavailable_summary), stringResource(R.string.subject_out_of_frame_unavailable))
         }
     }
 }
