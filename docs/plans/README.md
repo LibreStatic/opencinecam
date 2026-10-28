@@ -101,7 +101,7 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 - [OCC-PLAN-059: F-Droid direct Google Play release and SBOM](PLAN-059-f-droid-direct-google-play-release-and-sbom.md) — M17 / Done
 - [OCC-PLAN-060: Release candidate certification checklist](PLAN-060-release-candidate-certification-checklist.md) — M17 / ConditionalReady
 - [OCC-PLAN-061: OCLog2 specification interchange and device qualification](PLAN-061-oclog2-specification-interchange-and-device-qualification.md) — M14 follow-up / ConditionalReady
-- [OCC-PLAN-062: F-Droid and Google Play channel activation](PLAN-062-f-droid-and-google-play-channel-activation.md) — M17 follow-up / ConditionalReady
+- [OCC-PLAN-062: F-Droid and Google Play channel activation](PLAN-062-f-droid-and-google-play-channel-activation.md) — M17 follow-up / ConditionalReady; Google Play is operational (closed `alpha` track through 0.5.0-beta, production 1.0.0 submitted for review on 2026-10-28), F-Droid acceptance remains.
 
 ## Approved camera and foldable program
 
@@ -110,8 +110,9 @@ Conditional-gate identity evidence can be collected with `python3 tools/device_g
 [OCC-PLAN-064](PLAN-064-fold-display-sessions-and-continuity.md) is InProgress for public fold-display sessions and roles. The [active goal ledger](GOAL-PROGRESS.md) records remaining H1–H5 work and evidence without presenting a partial APK as the final release.
 
 - [OCC-PLAN-065: Professional control intent and operation](PLAN-065-professional-control-intent-and-operation.md) — H3 / InProgress
+- [OCC-PLAN-066: Capture and project timelines](PLAN-066-capture-and-project-timelines.md) — H4 / InProgress
 
-- [OCC-PLAN-067: Opt-in WebDAV transfers and finalized capture bundles](PLAN-067-opt-in-webdav-transfers.md) — InProgress; transport exists, app wiring and full H5 acceptance remain open.
+- [OCC-PLAN-067: Opt-in WebDAV transfers and finalized capture bundles](PLAN-067-opt-in-webdav-transfers.md) — H5 / InProgress; transport, app wiring (per-bundle send/verify/cancel) and opt-in automatic upload of new takes shipped in 0.5.0-beta; real TLS/vendor interoperability, a device check of foreground-service and background-restriction behaviour, local remote control and RTMP/SRT remain open.
 - [OCC-PLAN-068: Exterior screen subject features and Razr Fold qualification](PLAN-068-exterior-screen-subject-features.md) — H2 / InProgress; W0–W2 integrated (tally, self-monitor, fill light, review, interview, slate and out-of-frame modes, host and emulator verified); U8 Razr Fold physical qualification remains.
 - [OCC-PLAN-069: Full-FOV still from public physical cameras](PLAN-069-full-fov-still-from-public-physical-cameras.md) — H2 / Done; descriptor, routing, fallback, zoom gate, tests and the Razr Fold physical gate all verified (13 MP 4096x3072 above 12 MP 4000x3000). Revision 2 (2026-10-05) added a focal-length gate: only physical cameras within 5% of the logical 1x focal length are routed, so the Razr Fold no longer offers 13 MP at 1x (its physical "5" is the 13.3 mm telephoto).
 - [OCC-PLAN-070: Per-lens software calibration and lens lock](PLAN-070-lens-calibration-and-lens-lock.md) — H2 / InProgress; ADR-0036 proposed, slices 0-7 (Razr Fold probe, model and store, solvers, direct-physical lens lock, GPU-crop fallback, GL correction, calibration screen, JPEG/HEIC) and device gates G0-G5 all open.

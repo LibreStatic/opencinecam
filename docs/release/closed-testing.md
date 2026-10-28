@@ -1,5 +1,10 @@
 # Google Play closed test (production gate)
 
+> **Status (2026-10-28):** closed testing ran on the `alpha` track from
+> 0.2.0-beta to 0.5.0-beta (versionCode 119). Production 1.0.0 (versionCode 120)
+> was submitted for review on 2026-10-28. The text below is kept as the record
+> of the closed-test gate.
+
 The Play developer account is a personal account created after 13 November 2023. Before Play Console unlocks the Production track, it requires:
 
 1. a published closed-testing release;

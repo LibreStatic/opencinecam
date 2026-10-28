@@ -5,6 +5,11 @@ keystore is stored as an encrypted repository secret and reconstructed only in
 the ephemeral release runner. Its passwords and alias are separate secrets.
 A recovery copy exists outside the repository with owner-only permissions.
 
+The GitHub Actions workflows are currently disabled, so releases are gated with
+the CI command and built locally. The Play bundle is built and signed with the
+upload key (`~/.android/opencinecam/keystore.properties`, outside the
+repository) by `tools/build-play-bundle.sh`.
+
 Each release provides:
 
 - source tag and commit/archive digest;

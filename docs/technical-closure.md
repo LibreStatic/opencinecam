@@ -17,7 +17,7 @@ Official 2026-08-20 baselines close API 37, AGP 9.3.1, Gradle 9.5, JDK 17, built
 | Media | Deterministic codec, muxer actor, explicit audio clocks/effects, MediaStore/SAF | ADR-0010–0013 | Valid finalization and A/V evidence | File/device tests |
 | Schemas/policy/performance | JSON 2020-12, Strict default, bounded queues and degradation | ADR-0014–0016 | Inspectable state and no silent downgrade | Schema major/performance evidence |
 | UX/color/future | Accessible original UI, HLG gates, RAW, `.ocraw`, GL, Log process, APV | ADR-0017–0023 | Future modes remain unavailable until proof | Mode-specific gates |
-| Trust/release | Narrow profiles, local logs, evidence pyramid, no Internet except opt-in WebDAV transfers (ADR-0027 amendment 2026-09-26), Apache-2.0, three channels | ADR-0024–0028 | Portable private FOSS build | Policy/license changes |
+| Trust/release | Narrow profiles, local logs, evidence pyramid, no Internet except opt-in WebDAV transfers (ADR-0027 amendment 2026-09-26), including the opt-in automatic upload of new takes (OCC-PRIV-001 and ADR-0034 amendments 2026-10-19), Apache-2.0, three channels | ADR-0024–0028 | Portable private FOSS build | Policy/license changes |
 
 ## Conditional runtime decisions
 

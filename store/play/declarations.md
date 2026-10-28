@@ -1,6 +1,6 @@
 # Play Console "App content" and store settings: draft answers
 
-Draft for OpenCineCam (`com.librestatic.opencinecam`), version 0.1.0-beta (`release/play-beta`). Every answer below is derived from the repository (`app/src/main/AndroidManifest.xml`, `gradle/libs.versions.toml`, `app/build.gradle.kts`, `docs/security-and-privacy.md`, ADR-0027 and ADR-0034, README). Items tagged **[CONFIRM]** need an owner decision or a check against the release build before submitting.
+Draft for OpenCineCam (`com.librestatic.opencinecam`), first written for 0.1.0-beta and kept current through 1.0.0 (versionCode 120, the first production release). Every answer below is derived from the repository (`app/src/main/AndroidManifest.xml`, `gradle/libs.versions.toml`, `app/build.gradle.kts`, `docs/security-and-privacy.md`, ADR-0027 and ADR-0034, README). Items tagged **[CONFIRM]** need an owner decision or a check against the release build before submitting.
 
 ## Store listing basics
 
@@ -12,7 +12,7 @@ Draft for OpenCineCam (`com.librestatic.opencinecam`), version 0.1.0-beta (`rele
 | Free or paid | Paid: Argentina ARS 3500, rest of the world USD 6.5. Cannot be switched to free later. Testers get it free plus 25 promo codes (set up under Testing / license testing and Promotions in the Console). |
 | Category | Photography (alternative: Video Players & Editors) |
 | Tags (pick up to 5 that Play offers) | Camera, Video, Photography, Filmmaking, Professional tools (map to the closest available tags in the Console) |
-| Release track | Closed or open testing for the beta (see "Beta and testing" below) |
+| Release track | Production since 1.0.0 (sent for review 2026-10-28); 0.2.0-beta to 0.5.0-beta ran on Closed testing - Alpha (see "Beta and testing" below) |
 | Contact email | support@librestatic.com |
 | Contact website | https://github.com/LibreStatic/opencinecam |
 | Contact phone | Optional, leave empty |
@@ -90,7 +90,7 @@ Summary answer: **no user data is collected or shared with the developer or any 
 | Financial info | No | No | Purchase is handled by Google Play |
 | Health and fitness | No | No | |
 | Messages | No | No | |
-| Photos and videos | No | No | Captured and stored locally. Uploading to a user-configured WebDAV server is an explicit user action to a destination the user controls; the developer never receives it. |
+| Photos and videos | No | No | Captured and stored locally. Uploading to a user-configured WebDAV server happens only after the user opts in (per transfer, or through the opt-in *Upload new takes automatically* switch, see the data sync declaration below) and only to a destination the user controls; the developer never receives it. |
 | Audio files | No | No | Microphone audio is encoded into the local capture; same WebDAV note as above |
 | Files and docs | No | No | Imported `.cube` LUT files and preset JSON stay on device |
 | Calendar / Contacts | No | No | No permission requested |
@@ -104,7 +104,7 @@ Summary answer: **no user data is collected or shared with the developer or any 
 
 1. **Location.** Decided (owner, 2026-09-30): declare nothing, since no data leaves the device on its own. Background: geotagging is opt-in and local. However, coordinates written into capture metadata can leave the device if the user shares the metadata package or uploads it to their WebDAV server. Play treats user-initiated transfers to a user-chosen destination as not "sharing", but a conservative alternative is to declare Location (approximate and precise) as collected, not shared, optional, purpose "App functionality", which would require the privacy policy wording already present. Owner decision.
 2. **WebDAV.** Files and credentials go only to a server the user configures. The destination host sees the IP address and the uploaded files; no developer-operated server exists. Declare nothing; the privacy policy explains it.
-3. **Play services / libraries.** No Firebase, ML Kit, Google Play services or other proprietary SDK is in the dependency list. **[CONFIRM]** by inspecting the merged release manifest and APK/AAB dependency report once (the `release/play-beta` bundle may differ from debug).
+3. **Play services / libraries.** No Firebase, ML Kit, Google Play services or other proprietary SDK is in the dependency list. **[CONFIRM]** by inspecting the merged release manifest and APK/AAB dependency report once (the release bundle may differ from debug).
 4. **Crash data from Android vitals** is collected by Google for opted-in users, not by the app. No declaration needed.
 
 ## Sensitive permissions and declarations
@@ -149,7 +149,7 @@ Declared in the manifest: `CaptureService` with `android:foregroundServiceType="
 
 ## Beta and testing
 
-- The full description says the app is an early beta; the title and short description carry no store-status words (Play metadata policy). Use a closed or open testing track while it is a beta. Testers receive the paid app free and 25 promo codes. **[CONFIRM]** which track (Early access has extra requirements such as a feedback channel).
+- The beta ran on Closed testing - Alpha from 0.2.0-beta to 0.5.0-beta (see `docs/release/closed-testing.md`). 1.0.0 (versionCode 120) is the first production release, sent for review on 2026-10-28 with a full rollout to 173 countries. Releases are published with `tools/play-publish.py`; alpha versions keep the `-beta` suffix and production versions carry none. The title and short description carry no store-status words (Play metadata policy).
 - Feedback channel: GitHub issues at https://github.com/LibreStatic/opencinecam/issues (**[CONFIRM]** issues are enabled).
 - Experimental modes (RAW photo/DNG, LOG video, APV, RAW video) are gated and unavailable unless the device qualifies; README and the in-app text say so. The listing describes them as gated experimental modes.
 
