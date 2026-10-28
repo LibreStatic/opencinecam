@@ -65,33 +65,30 @@ enum class FillLightPreset(val kelvin: Int, val tint: Int) {
 enum class FillLightNotice { TIMED_OUT, THERMAL_WARM, THERMAL_HOT }
 
 /**
- * What the fill light should do now. [windowBrightness] is a window-attribute request to the system, never
- * measured luminance; [colorScale] also dims the pixels so an OLED cover draws less power even when the
- * system ignores the brightness request.
+ * What the fill light should do now. [colorScale] dims the pixels, which is the only dimming that reaches
+ * the cover: a presentation's window brightness is ignored there, because the cover follows the inner
+ * screen (Razr: reason=follower). On an OLED cover the dimmer pixels also draw less power.
  */
-data class FillLightOutput(val windowBrightness: Float, val colorScale: Float, val notice: FillLightNotice?)
+data class FillLightOutput(val colorScale: Float, val notice: FillLightNotice?)
 
-/** Window brightness ceiling and pixel scale for a timed-out light: dim, but still visibly on. */
-internal const val FILL_LIGHT_TIMEOUT_BRIGHTNESS = 0.05f
+/** Pixel scale for a timed-out light: dim, but still visibly on. */
 internal const val FILL_LIGHT_TIMEOUT_COLOR_SCALE = 0.08f
 
 /**
- * Pure fill-light policy. The requested brightness is the subject display's shared brightness preference.
- * Thermal status (PowerManager.THERMAL_STATUS_*) caps it: MODERATE 0.5, SEVERE 0.3, CRITICAL or above 0.1.
- * After [SubjectDisplaySettings.fillLightTimeoutSeconds] of monotonic [elapsedMs] (0 = no timeout) the light
- * drops to a dim, labelled level. The dimmest applicable rule wins; the timeout notice takes precedence.
+ * Pure fill-light policy. Thermal status (PowerManager.THERMAL_STATUS_*) scales the pixels: MODERATE 0.8,
+ * SEVERE 0.6, CRITICAL or above 0.3. After [SubjectDisplaySettings.fillLightTimeoutSeconds] of monotonic
+ * [elapsedMs] (0 = no timeout) the light drops to a dim, labelled level, and that notice takes precedence.
  */
 fun fillLightOutput(settings: SubjectDisplaySettings, elapsedMs: Long, thermalStatus: Int): FillLightOutput {
-    val requested = settings.brightness
-    val (thermalBrightness, thermalScale, thermalNotice) = when {
-        thermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL -> Triple(0.1f, 0.3f, FillLightNotice.THERMAL_HOT)
-        thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE -> Triple(0.3f, 0.6f, FillLightNotice.THERMAL_HOT)
-        thermalStatus >= PowerManager.THERMAL_STATUS_MODERATE -> Triple(0.5f, 0.8f, FillLightNotice.THERMAL_WARM)
-        else -> Triple(1f, 1f, null)
+    val (thermalScale, thermalNotice) = when {
+        thermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL -> 0.3f to FillLightNotice.THERMAL_HOT
+        thermalStatus >= PowerManager.THERMAL_STATUS_SEVERE -> 0.6f to FillLightNotice.THERMAL_HOT
+        thermalStatus >= PowerManager.THERMAL_STATUS_MODERATE -> 0.8f to FillLightNotice.THERMAL_WARM
+        else -> 1f to null
     }
     val timedOut = settings.fillLightTimeoutSeconds > 0 && elapsedMs.coerceAtLeast(0) >= settings.fillLightTimeoutSeconds * 1000L
-    return if (timedOut) FillLightOutput(minOf(requested, FILL_LIGHT_TIMEOUT_BRIGHTNESS), FILL_LIGHT_TIMEOUT_COLOR_SCALE, FillLightNotice.TIMED_OUT)
-    else FillLightOutput(minOf(requested, thermalBrightness), thermalScale, thermalNotice)
+    return if (timedOut) FillLightOutput(FILL_LIGHT_TIMEOUT_COLOR_SCALE, FillLightNotice.TIMED_OUT)
+    else FillLightOutput(thermalScale, thermalNotice)
 }
 
 /** Milliseconds until the timeout fires, or null when there is no pending timeout. */
