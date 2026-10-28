@@ -4,6 +4,7 @@
 - Date: 2026-10-04
 - Related requirements: OCC-CAM-003, OCC-CAM-004, OCC-CAM-005, OCC-CAM-013
 - Related plan: OCC-PLAN-069
+- Superseded in part by ADR-0036: the "Opening the hidden physical camera id directly" rejected alternative no longer holds for ids the logical camera reports.
 - Extends ADR-0006 without changing public enumeration or the preview graph.
 
 ## Decision
@@ -20,6 +21,6 @@ On the Razr Fold the logical back camera ("0") tops at 4000x3000 JPEG while its 
 
 ## Rejected alternatives
 
-- Opening the hidden physical camera id directly with `openCamera`: the numeric id has no public contract tying it to the logical, unlike the ids the logical itself reports.
+- Opening the hidden physical camera id directly with `openCamera`: the numeric id has no public contract tying it to the logical, unlike the ids the logical itself reports. (Superseded in part by ADR-0036, which allows it for ids listed by `getPhysicalCameraIds()`.)
 - Vendor remosaic or client-identity keys (`com.lenovo.moto.quadra_cfa.*`, `com.lenovo.moto.clientapp.*`): the HAL ignores or degrades them for unlisted third-party packages.
 - Upscaling the logical 4000x3000 frame to 4096x3072 in-app: fabricates pixels the sensor does deliver through the public physical stream.

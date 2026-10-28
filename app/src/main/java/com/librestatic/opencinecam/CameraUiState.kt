@@ -127,6 +127,14 @@ data class CameraUiState(
     val targetStillSize: Pair<Int, Int>? = null,
     val effectiveFps: Double? = null,
     val recordingFinalizing: Boolean = false,
+    /** A lens calibration run owns the camera: mode, zoom, lens, recording and structural settings are locked. */
+    val lensCalibrationRunning: Boolean = false,
+    /**
+     * The lens lock of the selected camera. While locked, [zoomMinRatio], [zoomMaxRatio], [zoomRatio]
+     * and [opticalAnchors] stay on the logical scale: the range is the locked lens' digital range
+     * times its anchor ratio, and the anchors are the lock options (tapping one changes the lock).
+     */
+    val lensLock: LensLockUiState = LensLockUiState(),
     val recordingPauseStatus: com.librestatic.opencinecam.camera.TimelapsePauseStatus? = null,
     val recordingPausePending: Boolean = false,
     val recordingAvTiming: com.librestatic.opencinecam.camera.CaptureEpochReport? = null,
@@ -216,11 +224,11 @@ data class CameraUiState(
 
     val capturePreparationCancelable: Boolean get() = phase == CameraUiPhase.CAPTURING && (transferRetirementPending || audioRetirementPending || whiteBalancePreparing)
 
-    val captureControlsLocked: Boolean get() = stillCapturePending || (phase == CameraUiPhase.CAPTURING && selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)) ||
+    val captureControlsLocked: Boolean get() = stillCapturePending || lensCalibrationRunning || (phase == CameraUiPhase.CAPTURING && selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)) ||
         ((structuralSettingsFrozen || phase == CameraUiPhase.CAPTURING) && effectiveSettings?.operation?.lockDuringTake == true)
 
     val structuralSettingsFrozen: Boolean
-        get() = stillCapturePending || recordingFinalizing || phase == CameraUiPhase.RECORDING ||
+        get() = stillCapturePending || lensCalibrationRunning || recordingFinalizing || phase == CameraUiPhase.RECORDING ||
             (phase == CameraUiPhase.CAPTURING && selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL, CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG,
                 CaptureMode.TIME_LAPSE, CaptureMode.SLOW_MOTION, CaptureMode.APV, CaptureMode.RAW_VIDEO))
 

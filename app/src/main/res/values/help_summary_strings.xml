@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">Its own LUT for the subject preview</string>
+    <string name="operator_startup_help_summary">Applied once when the app starts</string>
+    <string name="proxy_policy_help_summary">Changes apply from the next attempt</string>
+    <string name="subject_out_of_frame_unavailable_summary">Needs face detection, not offered here</string>
+    <string name="subject_slate_sync_scope_summary">Fires once per take, at REC</string>
+    <string name="subject_review_help_summary">Show takes on the cover from the gallery</string>
+    <string name="media_share_lut_help_summary">A missing LUT stops the share unless excluded</string>
+    <string name="playback_settings_help_summary">Only affects the gallery viewer</string>
+    <string name="playback_settings_direct_output_help_summary">Faster paused frames; colour follows the system</string>
+    <string name="pro_flicker_help_summary">Reduces flicker from mains lighting</string>
+    <string name="pro_low_light_boost_help_summary">Brightens dark scenes; may lower the frame rate</string>
+    <string name="pro_metering_help_summary">Which part of the frame sets the exposure</string>
+    <string name="pro_wb_record_help_summary">Whether white balance may change during a take</string>
+    <string name="photo_quality_help_summary">JPEG/HEIC compression only, not DNG</string>
+    <string name="image_stabilization_help_summary">EIS may crop; check the reported result</string>
+    <string name="image_picture_profile_help_summary">Camera tone curve: Standard, Flat or Cine</string>
+    <string name="picture_help_summary">Vendor controls for this camera</string>
+    <string name="picture_blocked_neutral_summary">No effect in LOG, HLG, RAW and high speed</string>
+    <string name="picture_blocked_edge_off_summary">Sharpness needs edge enhancement on</string>
+</resources>

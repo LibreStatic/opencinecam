@@ -148,6 +148,8 @@ import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.AudioListeningStatus
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -190,6 +192,7 @@ class CaptureService : Service() {
     private val state = MutableStateFlow<CaptureState>(CaptureState.Stopped)
     private val stateCommands = CaptureStateCommands(OWNER_ID)
     private val cameraState = MutableStateFlow(CameraUiState())
+    private val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.LensCalibrationUiState())
     private val localBinder = LocalBinder()
     private val foreground = RecordingForegroundController(this)
     private val previewEngine by lazy { CaptureStartup.adoptEngine(this) }
@@ -966,6 +969,396 @@ class CaptureService : Service() {
         }
     }
 
+    /** The last calibration read from the store, keyed by logical camera id; null value = none saved. */
+    @Volatile private var lensCalibrationCache: Pair<String, com.librestatic.opencinecam.core.model.CalibrationSet?>? = null
+
+    // ---- Lens lock (PLAN-070 slice 3a, ADR-0036) ----
+
+    /**
+     * The engine refused the lock of the session being opened (high speed, night, or a lens it
+     * cannot serve at all): that session runs on the logical camera unlocked. A failed physical
+     * open or configuration is not a fallback here: the engine serves it by the GPU crop
+     * (`onLensLockCrop`), which still counts as a locked session. Reset by every opening.
+     */
+    @Volatile private var lensLockFallback = false
+
+    /** The lenses [cameraId] can be locked to, widest first (the engine caches the characteristics read). */
+    private fun lensLockOptions(cameraId: String?): List<com.librestatic.opencinecam.LensLockOption> =
+        cameraId?.let { id ->
+            previewEngine.lensLockCandidates(id).map { com.librestatic.opencinecam.LensLockOption(it.physicalId, it.anchorRatio, it.focalMm) }
+        }.orEmpty()
+
+    /**
+     * The lock every preview start of [cameraId] passes to the engine, or null to open the logical
+     * camera: no saved or valid lock, a calibration run, constrained high speed or night photo.
+     */
+    private fun currentLensLockBinding(cameraId: String? = cameraState.value.selectedCameraId): com.librestatic.opencinecam.camera.LensLockBinding? {
+        val current = cameraState.value
+        return lensLockBindingFor(
+            cameraId,
+            lensLockOptions(cameraId),
+            cameraId?.let { settings.lensLock[it] },
+            calibrating = calibrationRun != null,
+            highSpeed = lensLockHighSpeed(current.selectedMode, current.activeVideoProfile?.constrainedHighSpeed == true,
+                current.activeLogProfile?.constrainedHighSpeed == true),
+            night = nightExtensionActive(current.selectedMode),
+        )
+    }
+
+    /** True while [cameraId]'s session opens (or runs on) a locked physical lens. */
+    private fun lensLockedSession(cameraId: String?): Boolean = !lensLockFallback && currentLensLockBinding(cameraId) != null
+
+    /**
+     * Ends a direct-physical or GPU-crop route: puts back the logical camera's zoom range and anchors
+     * that a locked session replaced, and drops the switched-lens warning. A no-op when no lock was
+     * being served.
+     */
+    private fun clearLensLockRoute() {
+        cameraState.update { state ->
+            if (state.lensLock.route == null && !state.lensLock.lensSwitchedWarning) return@update state
+            if (state.lensLock.route == null) return@update state.copy(lensLock = state.lensLock.copy(lensSwitchedWarning = false))
+            val range = state.descriptor?.effectiveZoomRange
+            state.copy(
+                lensLock = state.lensLock.copy(route = null, lensSwitchedWarning = false),
+                zoomMinRatio = range?.start ?: state.zoomMinRatio,
+                zoomMaxRatio = range?.endInclusive ?: state.zoomMaxRatio,
+                zoomSupported = range?.let { it.start < it.endInclusive } ?: state.zoomSupported,
+                opticalAnchors = state.descriptor?.opticalAnchors ?: state.opticalAnchors,
+                zoomRatio = range?.let { state.zoomRatio.coerceIn(it.start, it.endInclusive) } ?: state.zoomRatio,
+            )
+        }
+    }
+
+    /** Publishes the lock options of [cameraId] and its saved lock when it is one of them. */
+    private fun refreshLensLockState(cameraId: String? = cameraState.value.selectedCameraId) {
+        val options = lensLockOptions(cameraId)
+        val locked = cameraId?.let { settings.lensLock[it] }?.takeIf { id -> options.size >= 2 && options.any { it.physicalId == id } }
+        cameraState.update { state ->
+            val route = state.lensLock.route.takeIf { locked != null && state.lensLock.lockedPhysicalId == locked }
+            val next = state.lensLock.copy(options = options, lockedPhysicalId = locked, route = route,
+                lensSwitchedWarning = lensLockSwitchedWarning(state.lensLock.lensSwitchedWarning, route))
+            if (next == state.lensLock) state else state.copy(lensLock = next)
+        }
+    }
+
+    /**
+     * The calibration of [cameraId] on this build when the video correction is on. Read lazily so
+     * the GPU-viewfinder decision for a camera being switched to sees its own calibration.
+     */
+    private fun lensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? =
+        if (settings.lensCorrectionVideo) loadLensCalibration(cameraId) else null
+
+    /** Like [lensCalibrationFor] for still photos, gated by the separate "apply to photos" setting. */
+    private fun photoLensCalibrationFor(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? =
+        if (settings.lensCorrectionPhotos) loadLensCalibration(cameraId) else null
+
+    /** The cached store read shared by the video and photo gates; null while a calibration run is active. */
+    private fun loadLensCalibration(cameraId: String?): com.librestatic.opencinecam.core.model.CalibrationSet? {
+        // A run measures the uncorrected signal, so nothing is applied while it is going.
+        if (calibrationRun != null) return null
+        if (cameraId == null) return null
+        // The logical calibration describes the HAL's lens switching; a locked lens is not corrected by it.
+        if (lensLockedSession(cameraId)) return null
+        lensCalibrationCache?.takeIf { it.first == cameraId }?.let { return it.second }
+        val set = runCatching {
+            com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
+                .load(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
+        }.getOrNull()
+        lensCalibrationCache = cameraId to set
+        return set
+    }
+
+    /**
+     * Hands the calibration of [cameraId] (or null) to the engine. Called on camera open and when
+     * the correction settings change; the engine applies it to the current and later pipelines and
+     * freezes it for the length of a take.
+     */
+    private fun refreshLensCorrection(cameraId: String? = cameraState.value.selectedCameraId) {
+        previewEngine.setLensCorrection(lensCalibrationFor(cameraId), settings.lensCorrectionAlignment)
+        previewEngine.setPhotoLensCorrection(photoLensCalibrationFor(cameraId), settings.lensCorrectionAlignment)
+    }
+
+    // ---- Lens calibration run (PLAN-070) ----
+
+    private class CalibrationRestore(val cameraId: String, val mode: CaptureMode, val zoom: Float)
+
+    /** One run, from the binder call to its end. Fields are written by main and by the worker thread. */
+    private class CalibrationRun(val restore: CalibrationRestore) {
+        @Volatile var runner: com.librestatic.opencinecam.camera.calibration.LensCalibrationRunner? = null
+        @Volatile var thread: Thread? = null
+        @Volatile var cancelled = false
+        /** The camera went away, reopened under the run or the service is being destroyed. */
+        @Volatile var lost = false
+        /** The GPU readback could not be provided. */
+        @Volatile var unsupported = false
+        /** True once the session the run measures is up; a reopen after that ends the run. */
+        @Volatile var sessionLocked = false
+    }
+
+    /** Non-null from the start call until the run's outcome has been applied (main thread writes). */
+    @Volatile private var calibrationRun: CalibrationRun? = null
+    /** The finished run's set, waiting for Save or Discard. Main thread only. */
+    private var calibrationPending: com.librestatic.opencinecam.core.model.CalibrationSet? = null
+    /** The calibration saved for the selected camera on this build, loaded whether or not the correction is on. */
+    @Volatile private var savedCalibration: com.librestatic.opencinecam.core.model.CalibrationSet? = null
+    @Volatile private var liveRedBlueRatio: Float? = null
+    private val openingCount = AtomicInteger()
+
+    private val calibrationPrepareTimeoutMs = 15_000L
+    private val calibrationCaptureTimeoutMs = 10_000L
+    private val calibrationModeSwitchGraceMs = 2_000L
+    private val calibrationQueueSize = 8
+    /** How long a start waits for the viewfinder to attach and preview; 0 when no start is waiting. Main thread. */
+    private var calibrationStartDeadlineMs = 0L
+    private val calibrationStartWaitMs = 10_000L
+    private val calibrationStartRetry = Runnable { localBinder.beginLensCalibration() }
+    private val illuminantMismatchLimit = 0.15f
+
+    private fun calibrationLensesOf(descriptor: Camera2CameraDescriptor?): List<com.librestatic.opencinecam.camera.calibration.CalibrationLens> =
+        descriptor?.opticalAnchors.orEmpty()
+            .filter { it.physicalCameraId != null }
+            .distinctBy { it.physicalCameraId }
+            .map { com.librestatic.opencinecam.camera.calibration.CalibrationLens(it.physicalCameraId!!, it.ratio) }
+
+    /** Logs each calibration cycle and, in debuggable builds, keeps its frames under the app's external files. */
+    private fun logCalibrationCycle(c: com.librestatic.opencinecam.camera.calibration.CalibrationCycle) {
+        val g = c.geometry
+        android.util.Log.i("LensCalibration", "cycle ${c.targetId}#${c.cycle} zoom ${c.referenceZoom}/${c.targetZoom} " +
+            "geometry patches=${g.patchesUsed} inliers=${g.inliers} rms=${g.residualPx} parallax=${g.parallaxSuspect} " +
+            "color cells=${c.color.cellsUsed} cond=${c.color.conditionNumber} fallback=${c.color.diagonalFallback} dE=${c.color.residualDeltaEBefore}->${c.color.residualDeltaE}")
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return
+        val dir = getExternalFilesDir("calibration-debug") ?: return
+        runCatching {
+            for ((name, frame) in listOf("ref" to c.reference, "tgt" to c.target)) {
+                val bitmap = android.graphics.Bitmap.createBitmap(frame.width, frame.height, android.graphics.Bitmap.Config.ARGB_8888)
+                bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(frame.pixels))
+                java.io.File(dir, "${c.targetId}-${c.cycle}-$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                bitmap.recycle()
+            }
+        }
+    }
+
+    private fun calibrationRows(progress: com.librestatic.opencinecam.camera.calibration.RunProgress) = progress.lenses.map {
+        com.librestatic.opencinecam.LensCalibrationLensRow(
+            physicalId = it.physicalId,
+            nominalRatio = it.nominalRatio,
+            status = com.librestatic.opencinecam.LensCalibrationLensStatus.valueOf(it.status.name),
+            progress = it.progress,
+            colorDeltaEBefore = it.colorDeltaEBefore,
+            colorDeltaEAfter = it.colorDeltaEAfter,
+            alignPxBefore = it.alignPxBefore,
+            alignPxAfter = it.alignPxAfter,
+            score = it.score,
+            flags = it.flags,
+        )
+    }
+
+    private fun savedCalibrationRows(
+        set: com.librestatic.opencinecam.core.model.CalibrationSet,
+        anchors: List<ZoomAnchor>,
+    ) = set.lenses.map { lens ->
+        val reference = lens.physicalId == set.referencePhysicalId
+        com.librestatic.opencinecam.LensCalibrationLensRow(
+            physicalId = lens.physicalId,
+            nominalRatio = anchors.firstOrNull { it.physicalCameraId == lens.physicalId }?.ratio ?: 0f,
+            status = if (reference) com.librestatic.opencinecam.LensCalibrationLensStatus.REFERENCE
+                else com.librestatic.opencinecam.LensCalibrationLensStatus.DONE,
+            progress = 1f,
+            colorDeltaEAfter = lens.quality.colorResidualDeltaE.takeIf { !reference },
+            alignPxAfter = lens.quality.alignResidualPx.takeIf { !reference },
+            score = lens.quality.score.takeIf { !reference },
+            flags = lens.quality.flags,
+        )
+    }.sortedBy { it.nominalRatio }
+
+    /**
+     * Reads the saved calibration of [descriptor]'s camera for the saved-state fields and the
+     * illuminant check, whatever the video correction setting. A separate read from
+     * [lensCalibrationFor], which stays gated by that setting.
+     */
+    private fun refreshSavedCalibration(descriptor: Camera2CameraDescriptor?) {
+        val cameraId = descriptor?.cameraId
+        val set = cameraId?.let {
+            runCatching {
+                com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
+                    .load(Build.FINGERPRINT, it, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
+            }.getOrNull()
+        }
+        savedCalibration = set
+        liveRedBlueRatio = null
+        lensCalibrationState.update {
+            it.copy(
+                savedCreatedAtMs = set?.createdAtMs,
+                savedLenses = if (set != null && descriptor != null) savedCalibrationRows(set, descriptor.opticalAnchors) else emptyList(),
+                illuminantMismatch = false,
+            )
+        }
+    }
+
+    /** Compares the scene's AWB red/blue gain ratio with the saved calibration's; more than 15% apart is a mismatch. */
+    private fun noteLiveIlluminant(gains: List<Float>) {
+        if (calibrationRun != null || gains.size < 4) return
+        val saved = savedCalibration?.illuminantHint?.awbGains?.takeIf { it.size >= 4 && it[3] > 0f && it[0] > 0f }
+        val live = gains[0] / gains[3]
+        val mismatch = if (saved == null || !live.isFinite() || live <= 0f) false else {
+            val smoothed = liveRedBlueRatio?.let { it * 0.9f + live * 0.1f } ?: live
+            liveRedBlueRatio = smoothed
+            kotlin.math.abs(smoothed / (saved[0] / saved[3]) - 1f) > illuminantMismatchLimit
+        }
+        if (lensCalibrationState.value.illuminantMismatch != mismatch) lensCalibrationState.update { it.copy(illuminantMismatch = mismatch) }
+    }
+
+    /** The camera went away (or a reopen invalidated the measurement) while a run was going. */
+    private fun calibrationCameraLost() {
+        val run = calibrationRun ?: return
+        run.lost = true
+        run.runner?.abort(com.librestatic.opencinecam.camera.calibration.RunFailure.CAMERA_LOST)
+    }
+
+    private fun calibrationWaitUntil(run: CalibrationRun, timeoutMs: Long, condition: () -> Boolean): Boolean {
+        val deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs
+        while (!run.lost && !run.cancelled && !serviceDestroyed) {
+            if (condition()) return true
+            if (android.os.SystemClock.elapsedRealtime() >= deadline) return false
+            try { Thread.sleep(50) } catch (_: InterruptedException) { return false }
+        }
+        return false
+    }
+
+    private inner class ServiceCalibrationRig(
+        private val queue: LinkedBlockingQueue<com.librestatic.opencinecam.camera.calibration.CalibrationSample>,
+    ) : com.librestatic.opencinecam.camera.calibration.CalibrationRig {
+        override fun setZoom(ratio: Float) {
+            queue.clear()
+            previewEngine.setZoomRatio(ratio)
+        }
+
+        override fun nextSample(timeoutMs: Long): com.librestatic.opencinecam.camera.calibration.CalibrationSample? =
+            try { queue.poll(timeoutMs, TimeUnit.MILLISECONDS) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); null }
+
+        override fun nowMs(): Long = android.os.SystemClock.elapsedRealtime()
+    }
+
+    /** Worker thread: waits for the video graph, runs the solver, then hands the outcome to main. */
+    private fun runCalibration(
+        run: CalibrationRun,
+        lenses: List<com.librestatic.opencinecam.camera.calibration.CalibrationLens>,
+        mode: CaptureMode,
+        zoomRange: ClosedFloatingPointRange<Float>,
+        openedBefore: Int,
+        switched: Boolean,
+    ) {
+        var outcome: com.librestatic.opencinecam.camera.calibration.RunOutcome? = null
+        try {
+            if (switched) calibrationWaitUntil(run, calibrationModeSwitchGraceMs) { openingCount.get() > openedBefore }
+            val ready = calibrationWaitUntil(run, calibrationPrepareTimeoutMs) {
+                val s = cameraState.value
+                s.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) && s.selectedMode == mode &&
+                    s.selectedCameraId == run.restore.cameraId && previewEngine.usesGpuViewfinder()
+            }
+            val queue = LinkedBlockingQueue<com.librestatic.opencinecam.camera.calibration.CalibrationSample>(calibrationQueueSize)
+            val started = ready && calibrationWaitUntil(run, calibrationCaptureTimeoutMs) {
+                previewEngine.startCalibrationCapture(
+                    sink = { sample -> while (!queue.offer(sample)) queue.poll() },
+                    onUnavailable = {
+                        run.unsupported = true
+                        run.runner?.abort(com.librestatic.opencinecam.camera.calibration.RunFailure.INTERNAL)
+                    },
+                )
+            }
+            if (started && !run.lost && !run.cancelled) {
+                run.sessionLocked = true
+                val runner = com.librestatic.opencinecam.camera.calibration.LensCalibrationRunner(
+                    rig = ServiceCalibrationRig(queue),
+                    lenses = lenses,
+                    logicalId = run.restore.cameraId,
+                    fingerprint = Build.FINGERPRINT,
+                    sourcePath = previewEngine.calibrationSourcePath() ?: com.librestatic.opencinecam.core.model.CalibrationSourcePath.SDR,
+                    zoomRange = zoomRange,
+                    onProgress = { progress ->
+                        if (calibrationRun === run && !run.cancelled) lensCalibrationState.update {
+                            it.copy(
+                                phase = com.librestatic.opencinecam.LensCalibrationPhase.valueOf(progress.phase.name),
+                                referencePhysicalId = progress.referencePhysicalId,
+                                lenses = calibrationRows(progress),
+                            )
+                        }
+                    },
+                    onCycle = ::logCalibrationCycle,
+                )
+                run.runner = runner
+                // A flag set before the runner existed is carried over.
+                if (run.lost) runner.abort(com.librestatic.opencinecam.camera.calibration.RunFailure.CAMERA_LOST)
+                if (run.cancelled) runner.cancel()
+                outcome = runner.run()
+            }
+        } catch (_: Throwable) {
+            outcome = null
+        } finally {
+            previewEngine.stopCalibrationCapture()
+        }
+        mainHandler.post { finishCalibration(run, outcome) }
+    }
+
+    /**
+     * Main thread. Ends [run]: releases the controls, restores the mode, zoom and lens correction
+     * the operator had, and publishes the outcome (a result waiting for Save, a failure, or idle).
+     */
+    private fun finishCalibration(run: CalibrationRun, outcome: com.librestatic.opencinecam.camera.calibration.RunOutcome?) {
+        if (calibrationRun !== run || serviceDestroyed) return
+        calibrationRun = null
+        run.runner = null
+        cameraState.update { it.copy(lensCalibrationRunning = false) }
+        val restore = run.restore
+        // The camera may be gone; the mode and zoom are still put back, without a reopen then.
+        // A saved lens lock was set aside for the run; it returns with one restart.
+        val relock = !run.lost && currentLensLockBinding() != null
+        if (cameraState.value.selectedMode != restore.mode) localBinder.selectMode(restore.mode, reopen = !run.lost && !relock)
+        if (relock) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+        localBinder.setZoomRatio(restore.zoom)
+        refreshLensCorrection()
+        val success = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Success
+        val failure = outcome as? com.librestatic.opencinecam.camera.calibration.RunOutcome.Failure
+        (success?.progress ?: failure?.progress)?.lenses?.forEach {
+            android.util.Log.i("LensCalibration", "lens ${it.physicalId} ${it.status} score=${it.score} dE=${it.colorDeltaEBefore}->${it.colorDeltaEAfter} " +
+                "px=${it.alignPxBefore}->${it.alignPxAfter} flags=${it.flags}")
+        }
+        failure?.let { android.util.Log.i("LensCalibration", "run failed: ${it.failure}") }
+        when {
+            run.cancelled -> lensCalibrationState.update {
+                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+            }
+            success != null && !run.lost -> {
+                calibrationPending = success.set
+                lensCalibrationState.update {
+                    it.copy(
+                        phase = com.librestatic.opencinecam.LensCalibrationPhase.RESULT,
+                        logicalCameraId = restore.cameraId,
+                        referencePhysicalId = success.set.referencePhysicalId,
+                        lenses = calibrationRows(success.progress),
+                        failure = null,
+                    )
+                }
+            }
+            else -> {
+                val reason = when {
+                    run.lost -> com.librestatic.opencinecam.LensCalibrationFailure.CAMERA_LOST
+                    run.unsupported || outcome == null -> com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE
+                    failure != null -> com.librestatic.opencinecam.LensCalibrationFailure.valueOf(failure.failure.name)
+                    else -> com.librestatic.opencinecam.LensCalibrationFailure.INTERNAL
+                }
+                lensCalibrationState.update {
+                    it.copy(
+                        phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED,
+                        logicalCameraId = restore.cameraId,
+                        lenses = failure?.let { f -> calibrationRows(f.progress) } ?: it.lenses,
+                        failure = reason,
+                    )
+                }
+            }
+        }
+    }
+
     private fun photoPreviewMode(mode: CaptureMode = cameraState.value.selectedMode): Boolean =
         mode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
 
@@ -980,7 +1373,11 @@ class CaptureService : Service() {
         mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
         // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
-        (photoPreviewMode(mode) && currentOperatorLut != null))
+        // A lens correction shows only on the GPU path.
+        (photoPreviewMode(mode) && (currentOperatorLut != null || lensCalibrationFor(cameraState.value.selectedCameraId) != null)) ||
+        // The lens lock's GPU crop zooms only on the GPU path. The restart this causes reopens on
+        // the same route: the engine remembers the failed lens and the route survives onOpening.
+        lensLockCropNeedsGpuViewfinder(photoPreviewMode(mode), cameraState.value.lensLock.route))
 
     /** Night photo applies to PHOTO only, on a camera that offers the extension (API 31+). */
     private fun nightExtensionActive(mode: CaptureMode = cameraState.value.selectedMode): Boolean {
@@ -1010,7 +1407,7 @@ class CaptureService : Service() {
         ?.activeStillSize?.let { (width, height) -> Size(width, height) }
 
     private fun previewKey(): List<Any?> = cameraState.value.let {
-        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive(), lowLightFpsActive(it, settings))
+        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive(), lowLightFpsActive(it, settings), currentLensLockBinding())
     }
 
     private fun updateSubjectTarget() {
@@ -1087,12 +1484,21 @@ class CaptureService : Service() {
             mainHandler.post { cameraState.value = cameraState.value.copy(message = getString(com.librestatic.opencinecam.R.string.pro_controls_rejected, message)) }
         }
         override fun onPreviewSurfaceLost(message: String) {
+            calibrationCameraLost()
             mainHandler.post {
                 cancelCountdown()
                 cameraState.value = cameraState.value.copy(message = getString(R.string.operator_preview_lost))
             }
         }
         override fun onOpening(descriptor: Camera2CameraDescriptor) {
+            openingCount.incrementAndGet()
+            if (calibrationRun?.sessionLocked == true) calibrationCameraLost()
+            lensLockFallback = false
+            // An unlocked start: a night session never reports a zoom range, so the logical one returns now.
+            if (currentLensLockBinding(descriptor.cameraId) == null) clearLensLockRoute()
+            refreshLensLockState(descriptor.cameraId)
+            refreshLensCorrection(descriptor.cameraId)
+            refreshSavedCalibration(descriptor)
             subjectPreviewEpoch.incrementAndGet()
             mainHandler.post { cancelCountdown(); subjectStatus.value = SubjectPreviewStatus() }
             activePreviewKey = null
@@ -1181,6 +1587,7 @@ class CaptureService : Service() {
         }
 
         override fun onMetadata(metadata: Camera2PreviewMetadata) {
+            metadata.awbGains?.let { noteLiveIlluminant(it) }
             metadata.rollingShutterSkewNs?.let { skew ->
                 latestRollingShutterSkewNs = skew
                 synchronized(takeOwnershipLock) { videoOutput?.motionRecorder() }?.updateRollingShutterSkew(skew)
@@ -1706,9 +2113,17 @@ class CaptureService : Service() {
                                 .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
                                     JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
                         } ?: withTimecode
-                        return withHardwareTruth(withMarker, hardwareTruth)
+                        val withLens = graphEvidence?.lensCorrection?.let { lens ->
+                            (withMarker?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                                .put("lensCorrection", lensCorrectionJson(lens)).toString(2)
+                        } ?: withMarker
+                        val withExposure = graphEvidence?.exposureCompensation?.let { compensation ->
+                            (withLens?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
+                                .put("exposureCompensation", exposureCompensationJson(compensation)).toString(2)
+                        } ?: withLens
+                        return withHardwareTruth(withExposure, hardwareTruth)
                     }
-                    fun timingSidecarFlag() = logEvidence == null && (hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
+                    fun timingSidecarFlag() = logEvidence == null && (graphEvidence?.lensCorrection != null || graphEvidence?.exposureCompensation != null || hlgEvidence != null || bakedEvidence != null || recordingGain?.enabled == true || timing != null || avTiming != null || timecodeReport?.config?.enabled == true || subjectSyncMarker != null || hardwareTruth != null)
                     // The canonical clip sidecar; evaluated when the video is prepared, after the audio is, so it sees both.
                     val clipSidecar: ClipSidecarProvider? = clipStartedAt?.let { started ->
                         clipSidecarProvider {
@@ -1956,8 +2371,65 @@ class CaptureService : Service() {
                 opticalAnchors = anchors,
                 zoomSupported = min < max,
                 zoomHfrSupported = current.descriptor?.supportsHfrZoom == true,
-                zoomRatio = perCameraZoom[current.selectedCameraId] ?: 1f,
+                zoomRatio = (perCameraZoom[current.selectedCameraId] ?: 1f).coerceIn(min, max),
             )
+        }
+
+        override fun onLensLock(physicalId: String?, uiZoomRange: ClosedFloatingPointRange<Float>?) {
+            if (physicalId == null || uiZoomRange == null) {
+                clearLensLockRoute()
+                return
+            }
+            serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL)
+        }
+
+        override fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) {
+            android.util.Log.i("CaptureService", "Lens lock on $physicalId served by the GPU crop over $uiZoomRange")
+            // The lock is served, so this is not a fallback: the logical calibration stays off.
+            lensLockFallback = false
+            serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.GPU_CROP)
+            // Photo previews straight to the window by default; the crop needs the GPU viewfinder.
+            mainHandler.post {
+                if (cameraState.value.lensLock.route != com.librestatic.opencinecam.LensLockRoute.GPU_CROP ||
+                    cameraState.value.structuralSettingsFrozen || previewEngine.usesGpuViewfinder() || !desiredGpuViewfinder()) return@post
+                attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+            }
+        }
+
+        override fun onLensLockSwitched(switched: Boolean) {
+            cameraState.update { state ->
+                val warning = lensLockSwitchedWarning(switched, state.lensLock.route)
+                if (state.lensLock.lensSwitchedWarning == warning) state
+                else state.copy(lensLock = state.lensLock.copy(lensSwitchedWarning = warning))
+            }
+        }
+
+        /** Publishes a served lock: the locked lens' own range on the logical scale; the anchors are the lock options. */
+        private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.LensLockRoute) {
+            refreshLensLockState()
+            cameraState.update { state ->
+                val anchors = state.lensLock.options.map { ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }
+                state.copy(
+                    lensLock = state.lensLock.copy(lockedPhysicalId = physicalId, route = route, lensSwitchedWarning = false),
+                    zoomMinRatio = uiZoomRange.start,
+                    zoomMaxRatio = uiZoomRange.endInclusive,
+                    opticalAnchors = anchors,
+                    zoomSupported = uiZoomRange.start < uiZoomRange.endInclusive,
+                    zoomHfrSupported = false,
+                    zoomRatio = (perCameraZoom[state.selectedCameraId] ?: 1f).coerceIn(uiZoomRange.start, uiZoomRange.endInclusive),
+                )
+            }
+        }
+
+        override fun onLensLockUnavailable(physicalId: String, reason: String) {
+            android.util.Log.i("CaptureService", "Lens lock on $physicalId unavailable ($reason); the logical camera is open")
+            // The session now runs on the logical camera, so its calibration applies again. The
+            // saved lock is kept and tried again by the next start.
+            lensLockFallback = true
+            refreshLensCorrection()
+            pendingStatusMessage = getString(R.string.lens_lock_unavailable)
+            clearLensLockRoute()
+            cameraState.update { it.copy(messageTransient = true) }
         }
 
         override fun onZoomEffective(ratio: Float) {
@@ -2015,6 +2487,7 @@ class CaptureService : Service() {
         }
 
         override fun onFailure(code: String, message: String, recoverable: Boolean) {
+            calibrationCameraLost()
             retireAudioLevelConsumer()
             submitCaptureState(stateCommands.engineFailed(code, message, recoverable))
             stillOwner.get()?.takeUnless { it.publishing.get() }?.let { owner ->
@@ -2052,6 +2525,187 @@ class CaptureService : Service() {
 
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
+        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
+
+        /**
+         * Locks the selected logical camera to [physicalId] (one of `CameraUiState.lensLock.options`),
+         * or unlocks it with null. Persisted per logical camera in `CameraSettings.lensLock`; refused
+         * while recording or while the capture controls are locked. Implemented by PLAN-070 slice 3a.
+         */
+        fun setLensLock(physicalId: String?) {
+            if (serviceDestroyed) return
+            val current = cameraState.value
+            val cameraId = current.selectedCameraId ?: return
+            // The lens is structural: never changed under a take or a calibration run.
+            if (current.phase == CameraUiPhase.RECORDING || current.structuralSettingsFrozen || calibrationRun != null) return
+            if (rejectLockedControl()) return
+            if (physicalId != null && (!current.lensLock.available || current.lensLock.options.none { it.physicalId == physicalId })) return
+            if (settings.lensLock[cameraId] == physicalId) return
+            val repository = SettingsRepositories.get(this@CaptureService)
+            repository.update {
+                it.copy(lensLock = if (physicalId == null) it.lensLock - cameraId else it.lensLock + (cameraId to physicalId))
+            }
+            // applySettings sees the change and restarts the preview on the new lens.
+            applySettings(repository.states.value)
+        }
+        /** Starts a calibration run on the selected logical camera; the capture screen must be showing. */
+        fun startLensCalibration() {
+            if (serviceDestroyed || calibrationRun != null) return
+            calibrationStartDeadlineMs = android.os.SystemClock.elapsedRealtime() + calibrationStartWaitMs
+            mainHandler.removeCallbacks(calibrationStartRetry)
+            beginLensCalibration()
+        }
+
+        /** Stops a start that is still waiting for the viewfinder, or the run in progress. */
+        fun cancelLensCalibration() {
+            if (calibrationStartDeadlineMs != 0L) {
+                calibrationStartDeadlineMs = 0L
+                mainHandler.removeCallbacks(calibrationStartRetry)
+                lensCalibrationState.update {
+                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                }
+            }
+            val run = calibrationRun ?: return
+            run.cancelled = true
+            run.runner?.cancel()
+        }
+
+        /**
+         * The start proper. The page that asks for a run hands over to the capture screen in the same
+         * gesture, so the viewfinder is usually still attaching: a camera that is not yet previewing
+         * (or has no surface) is waited for, showing PREPARING, until [calibrationStartDeadlineMs].
+         */
+        internal fun beginLensCalibration() {
+            if (serviceDestroyed || calibrationRun != null || calibrationStartDeadlineMs == 0L) return
+            val current = cameraState.value
+            val cameraId = current.selectedCameraId
+            val lenses = calibrationLensesOf(current.descriptor)
+            fun refuse(reason: com.librestatic.opencinecam.LensCalibrationFailure) {
+                calibrationPending = null
+                lensCalibrationState.update {
+                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, logicalCameraId = cameraId,
+                        referencePhysicalId = null, lenses = emptyList(), failure = reason)
+                }
+            }
+            if (cameraId == null || !current.zoomSupported || lenses.size < 2) {
+                if (current.descriptor == null && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
+                    mainHandler.postDelayed(calibrationStartRetry, 250L)
+                    return
+                }
+                calibrationStartDeadlineMs = 0L
+                refuse(com.librestatic.opencinecam.LensCalibrationFailure.NO_MULTI_CAMERA)
+                return
+            }
+            val idle = current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) && !current.structuralSettingsFrozen &&
+                !current.captureControlsLocked && stillOwner.get() == null && transferCapture.get() == null && !recordingWbPreparing &&
+                captureCountdown.active == null
+            if (!idle || attachedPreviewSurface?.isValid != true) {
+                val waiting = current.phase !in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING) && !current.structuralSettingsFrozen
+                if (waiting && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
+                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
+                        it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
+                            referencePhysicalId = null, lenses = emptyList(), failure = null)
+                    }
+                    mainHandler.postDelayed(calibrationStartRetry, 250L)
+                    return
+                }
+                calibrationStartDeadlineMs = 0L
+                refuse(com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE)
+                return
+            }
+            calibrationStartDeadlineMs = 0L
+            val run = CalibrationRun(CalibrationRestore(cameraId, current.selectedMode, current.zoomRatio))
+            // A locked lens is set aside: the run measures the logical camera (currentLensLockBinding
+            // is null from here until finishCalibration).
+            val wasLensLocked = currentLensLockBinding() != null
+            calibrationRun = run
+            calibrationPending = null
+            lensCalibrationState.update {
+                it.copy(
+                    phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING,
+                    logicalCameraId = cameraId,
+                    referencePhysicalId = null,
+                    lenses = lenses.sortedBy { lens -> lens.nominalRatio }.map { lens ->
+                        com.librestatic.opencinecam.LensCalibrationLensRow(lens.physicalId, lens.nominalRatio,
+                            com.librestatic.opencinecam.LensCalibrationLensStatus.PENDING)
+                    },
+                    failure = null,
+                    illuminantMismatch = false,
+                )
+            }
+            // The run reads the uncorrected signal.
+            previewEngine.setLensCorrection(null as com.librestatic.opencinecam.core.model.CalibrationSet?, settings.lensCorrectionAlignment)
+            val mode = if (current.selectedMode == CaptureMode.HLG) CaptureMode.HLG else CaptureMode.VIDEO
+            val openedBefore = openingCount.get()
+            val switched = current.selectedMode != mode
+            // The mode changes before the controls lock, since the lock freezes mode changes.
+            // A locked session always reopens once, on the logical camera, whatever the mode change does.
+            if (switched) selectMode(mode, reopen = !wasLensLocked)
+            if (cameraState.value.selectedMode != mode) {
+                finishCalibration(run, null)
+                return
+            }
+            val relocked = wasLensLocked
+            if (relocked) attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+            // While locked the state holds the locked lens' range; the run sweeps the logical one.
+            val zoomRange = current.descriptor?.effectiveZoomRange?.takeIf { wasLensLocked } ?: (current.zoomMinRatio..current.zoomMaxRatio)
+            cameraState.update { it.copy(lensCalibrationRunning = true) }
+            run.thread = Thread({
+                runCalibration(run, lenses, mode, zoomRange, openedBefore, switched || relocked)
+            }, "lens-calibration").also { it.isDaemon = true; it.start() }
+        }
+
+        /** Saves the run's result for this build and camera, and applies it when the correction is on. */
+        fun saveLensCalibration() {
+            val set = calibrationPending ?: return
+            if (calibrationRun != null || lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.RESULT) return
+            calibrationPending = null
+            try {
+                storageExecutor.execute {
+                    val saved = runCatching { com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService).save(set) }.isSuccess
+                    mainHandler.post {
+                        if (serviceDestroyed) return@post
+                        lensCalibrationCache = null
+                        lensCalibrationState.update {
+                            if (saved) it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                            else it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, failure = com.librestatic.opencinecam.LensCalibrationFailure.INTERNAL)
+                        }
+                        refreshSavedCalibration(cameraState.value.descriptor)
+                        refreshLensCorrection()
+                    }
+                }
+            } catch (_: RejectedExecutionException) {
+                calibrationPending = set
+            }
+        }
+
+        fun discardLensCalibration() {
+            if (calibrationRun != null) return
+            calibrationPending = null
+            lensCalibrationState.update {
+                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+            }
+        }
+
+        /** Deletes the saved calibration of the selected camera. */
+        fun deleteLensCalibration() {
+            if (calibrationRun != null) return
+            val cameraId = cameraState.value.selectedCameraId ?: return
+            try {
+                storageExecutor.execute {
+                    runCatching {
+                        com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService)
+                            .delete(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
+                    }
+                    mainHandler.post {
+                        if (serviceDestroyed) return@post
+                        lensCalibrationCache = null
+                        refreshSavedCalibration(cameraState.value.descriptor)
+                        refreshLensCorrection()
+                    }
+                }
+            } catch (_: RejectedExecutionException) { }
+        }
         /** A/V clock drift of the last separate WAV/FLAC take, or null (no such take, or not measurable). Diagnostic only. */
         val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
 
@@ -2137,6 +2791,7 @@ class CaptureService : Service() {
                 val available = cameraState.value.modeGates.filterValues { it == com.librestatic.opencinecam.ModeGateState.AVAILABLE }.keys
                 selectMode(settings.operation.startupCaptureMode(last, available), reopen = false)
             }
+            refreshLensLockState()
             refreshAudioCapabilities()
         }
 
@@ -2238,6 +2893,7 @@ class CaptureService : Service() {
                 logProfile = cameraState.value.activeLogProfile.takeIf {
                     cameraState.value.selectedMode.usesLogGraph
                 },
+                lensLock = currentLensLockBinding(),
             )
             return true
         }
@@ -2354,6 +3010,7 @@ class CaptureService : Service() {
                     CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                 ),
             )
+            refreshLensLockState(cameraId)
             if (surface?.isValid != true) return
             pendingSwitchPrevious = previous
             pendingSwitchTarget = cameraId
@@ -2379,6 +3036,7 @@ class CaptureService : Service() {
                 logProfile = cameraState.value.activeLogProfile.takeIf {
                     cameraState.value.selectedMode.usesLogGraph
                 },
+                lensLock = currentLensLockBinding(),
             )
             mainHandler.postDelayed({
                 if (switchToken != cameraSwitchGeneration || pendingSwitchTarget != cameraId) return@postDelayed
@@ -2389,6 +3047,7 @@ class CaptureService : Service() {
                 cameraSwitchGeneration++
                 pendingStatusMessage = getString(R.string.camera_switch_timeout, cameraId, fallbackId)
                 cameraState.value = cameraState.value.copy(selectedCameraId = fallbackId, phase = CameraUiPhase.OPENING)
+                refreshLensLockState(fallbackId)
                 attachedPreviewSurface?.takeIf { it.isValid }?.let {
                     previewEngine.startPreview(
                         fallback,
@@ -2411,6 +3070,7 @@ class CaptureService : Service() {
                         logProfile = cameraState.value.activeLogProfile.takeIf {
                             cameraState.value.selectedMode.usesLogGraph
                         },
+                        lensLock = currentLensLockBinding(),
                     )
                 }
             }, CAMERA_SWITCH_TIMEOUT_MS)
@@ -2493,6 +3153,7 @@ class CaptureService : Service() {
                             mode in CameraUiState.videoProfileModes
                         },
                         logProfile = cameraState.value.activeLogProfile.takeIf { mode.usesLogGraph },
+                        lensLock = currentLensLockBinding(),
                     )
                     }
                     // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
@@ -2571,6 +3232,7 @@ class CaptureService : Service() {
                         logProfile = cameraState.value.activeLogProfile.takeIf {
                             current.selectedMode.usesLogGraph
                         },
+                        lensLock = currentLensLockBinding(),
                     )
                 }
             }
@@ -2660,6 +3322,7 @@ class CaptureService : Service() {
                         viewAssist = settings.previewViewAssist(current.selectedMode),
                         targetFps = selectedFps,
                         logProfile = cameraState.value.activeLogProfile,
+                        lensLock = currentLensLockBinding(),
                     )
                 }
             }
@@ -2690,7 +3353,13 @@ class CaptureService : Service() {
                 pendingPresetName = pendingPreset?.name,
             ) }
             audioListeningController?.configure(settings.audioListening, settings.audioListeningOutputDeviceId)
+            if (previous.lensCorrectionVideo != settings.lensCorrectionVideo ||
+                previous.lensCorrectionPhotos != settings.lensCorrectionPhotos ||
+                previous.lensCorrectionAlignment != settings.lensCorrectionAlignment) refreshLensCorrection()
             if (!wasLocked && cameraState.value.captureControlsLocked) previewEngine.cancelFocusPull()
+            // The lens lock is frozen with the structural settings, so it changes only between takes.
+            val lensLockChanged = previous.lensLock[cameraState.value.selectedCameraId] != settings.lensLock[cameraState.value.selectedCameraId]
+            if (previous.lensLock != settings.lensLock) refreshLensLockState()
             geometrySeeds = GeometrySeeds(
                 videoWidth = settings.videoWidth,
                 videoHeight = settings.videoHeight,
@@ -2706,6 +3375,7 @@ class CaptureService : Service() {
                 previewEngine.setTorch(settings.flashEnabled, settings.torchStrengthLevel)
             }
             previewEngine.setMonitoringOptions(settings.monitoring)
+            previewEngine.setSmoothLensSwitch(settings.smoothLensSwitch)
             previewEngine.setFocusPeakingEnabled(settings.peakingEnabled)
             previewEngine.setSubjectFramingEnabled(settings.subjectDisplay.outOfFrameWarning)
             if (previous.logViewAssistEnabled != settings.logViewAssistEnabled) previewEngine.setOpenCineLogViewAssist(settings.previewViewAssist(cameraState.value.selectedMode))
@@ -2738,7 +3408,7 @@ class CaptureService : Service() {
                 if (attachedPreviewSurface == null && subjectSurfaces.current == null &&
                     cameraState.value.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)) detachPreview()
                 if (settings.nightPhotoMode != com.librestatic.opencinecam.camera.NightPhotoMode.AUTO && nightTransientEngaged) clearNightTransient()
-                if (cameraState.value.gpuViewfinder != desiredGpuViewfinder() ||
+                if ((lensLockChanged && calibrationRun == null) || cameraState.value.gpuViewfinder != desiredGpuViewfinder() ||
                     (cameraState.value.selectedMode == CaptureMode.PHOTO &&
                         (previous.photoFormat != settings.photoFormat || nightBefore != nightExtensionActive())) ||
                     (cameraState.value.selectedMode == CaptureMode.VIDEO && previous.lowLightAutoFps != settings.lowLightAutoFps)) {
@@ -2952,6 +3622,8 @@ class CaptureService : Service() {
          * loses the physical sizes and the session falls back to logical ones on its own.
          */
         private fun rebuildGraphWhenPhysicalStillZoomWindowCrosses(previous: CameraUiState, ratio: Float) {
+            // A lens-locked session (direct or GPU crop, whose HAL zoom is pinned) has no physical still routing.
+            if (lensLockSkipsStillZoomRebuild(previous.lensLock.route)) return
             if ((previous.zoomRatio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW) ==
                 (ratio in CameraUiState.PHYSICAL_STILL_ZOOM_WINDOW)
             ) return
@@ -3670,6 +4342,18 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        calibrationRun?.let { run ->
+            run.lost = true
+            run.runner?.abort(com.librestatic.opencinecam.camera.calibration.RunFailure.CAMERA_LOST)
+            run.thread?.interrupt()
+            calibrationRun = null
+            lensCalibrationState.update {
+                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED,
+                    failure = com.librestatic.opencinecam.LensCalibrationFailure.CAMERA_LOST)
+            }
+            cameraState.update { it.copy(lensCalibrationRunning = false) }
+        }
+        previewEngine.stopCalibrationCapture()
         audioInputMonitor?.unregister()
         audioInputMonitor = null
         audioRouteOwner = null
@@ -3942,6 +4626,21 @@ class CaptureService : Service() {
             .put("videoPtsGapsOverThreshold", evidence.videoPtsGapsOverThreshold))
         .apply { avTiming?.let { put("avTiming", com.librestatic.opencinecam.captureEpochJson(it)) } }
         .toString(2)
+
+    /** The lens correction a take was encoded with; present only when one was active. */
+    private fun lensCorrectionJson(lens: com.librestatic.opencinecam.camera.calibration.LensCorrectionEvidence): JSONObject = JSONObject()
+        .put("setSha256", lens.setSha256)
+        .put("splicedTransformSha256", lens.splicedTransformSha256)
+        .put("alignment", lens.alignment)
+        .put("perLensFrameCounts", JSONObject().apply { lens.perLensFrameCounts.forEach { (id, n) -> put(id, n) } })
+        .put("fallbackFrames", lens.fallbackFrames)
+
+    /** The per-frame exposure gain a take could apply (the FPS LOCK hold over lens switches); present only when it was on. */
+    private fun exposureCompensationJson(compensation: com.librestatic.opencinecam.camera.calibration.ExposureCompensationEvidence): JSONObject = JSONObject()
+        .put("splicedTransformSha256", compensation.splicedTransformSha256)
+        .put("compensatedFrames", compensation.compensatedFrames)
+        .put("minGain", compensation.minGain.toDouble())
+        .put("maxGain", compensation.maxGain.toDouble())
 
     private fun logSidecarJson(evidence: OpenCineLogRecordingEvidence, timecodeReport: RecordingTimecodeReport?): String = JSONObject()
         .put("schema", "opencinecam-oclog-sidecar-v2")

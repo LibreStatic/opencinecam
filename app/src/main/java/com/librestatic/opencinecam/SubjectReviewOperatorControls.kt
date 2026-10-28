@@ -79,7 +79,7 @@ internal fun SubjectReviewOperatorBar(modifier: Modifier = Modifier, help: Boole
     val state by (review?.states ?: fallback).collectAsState()
     val pick = state.pick
     if (review == null || pick == null) {
-        if (help) SettingsHelp(stringResource(R.string.subject_review_help))
+        if (help) SettingsHelp(stringResource(R.string.subject_review_help_summary), stringResource(R.string.subject_review_help))
         return
     }
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsSurface).heightIn(min = 48.dp)

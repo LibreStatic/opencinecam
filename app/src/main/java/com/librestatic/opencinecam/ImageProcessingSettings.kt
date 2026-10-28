@@ -41,7 +41,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
                     StabilizationMode.PREVIEW -> R.string.image_mode_preview }) },
                 onSelect = { onChange(settings.copy(imageProcessing = selected.copy(stabilization = it))) },
                 tag = { "stabilization-${it?.name ?: "DEFAULT"}" }, enabled = { it == null || (!hfr && caps.supports(it)) })
-            SettingsHelp(stringResource(R.string.image_stabilization_help))
+            SettingsHelp(stringResource(R.string.image_stabilization_help_summary), stringResource(R.string.image_stabilization_help))
         }
         IspModeChoices(stringResource(R.string.image_noise), "image-noise", selected.noiseReduction,
             { !hfr && caps.supports(it, ImageProcessingControl.NOISE_REDUCTION) },
@@ -55,7 +55,7 @@ internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSetti
                     label = { stringResource(it.titleResource()) },
                     onSelect = { onChange(settings.copy(imageProcessing = selected.copy(pictureProfile = it))) },
                     tag = { "image-profile-${it.name}" }, enabled = { it == PictureProfile.STANDARD || !hfr })
-                SettingsHelp(stringResource(R.string.image_picture_profile_help))
+                SettingsHelp(stringResource(R.string.image_picture_profile_help_summary), stringResource(R.string.image_picture_profile_help))
             }
         }
         PictureControls(state, caps.pictureControls, selected, hfr, selected.resolve(caps, reported, hfr).values.edge) { onChange(settings.copy(imageProcessing = it)) }
@@ -103,7 +103,7 @@ private fun PictureControls(state: CameraUiState, caps: PictureControlCapabiliti
                 pictureControlBlock(true, state.selectedMode, hfr, edgeMode),
                 reportedDefault = templateSharpness(state.pictureControlReadback)) { onChange(selected.copy(sharpness = it)) }
         }
-        SettingsHelp(stringResource(R.string.picture_help))
+        SettingsHelp(stringResource(R.string.picture_help_summary), stringResource(R.string.picture_help))
     }
 }
 
@@ -124,8 +124,8 @@ private fun PictureControlSlider(title: String, tag: String, range: PictureContr
         onValueChangeFinished = { onChange(pictureControlSelection(range, range.snap(draft.toInt()))) })
     when (block) {
         PictureControlBlock.NONE -> Unit
-        PictureControlBlock.NEUTRAL -> SettingsHelp(stringResource(R.string.picture_blocked_neutral))
-        PictureControlBlock.EDGE_OFF -> SettingsHelp(stringResource(R.string.picture_blocked_edge_off))
+        PictureControlBlock.NEUTRAL -> SettingsHelp(stringResource(R.string.picture_blocked_neutral_summary), stringResource(R.string.picture_blocked_neutral))
+        PictureControlBlock.EDGE_OFF -> SettingsHelp(stringResource(R.string.picture_blocked_edge_off_summary), stringResource(R.string.picture_blocked_edge_off))
     }
 }
 

@@ -53,7 +53,7 @@ internal fun PhotoFormatSettings(state: CameraUiState, settings: CameraSettings,
                         .testTag(if (delta < 0) "photo-quality-decrease" else "photo-quality-increase")) { Text(if (delta < 0) "−" else "+") }
             }
         }
-        SettingsHelp(stringResource(R.string.photo_quality_help))
+        SettingsHelp(stringResource(R.string.photo_quality_help_summary), stringResource(R.string.photo_quality_help))
         if (state.settingsPending) Text(stringResource(R.string.photo_format_pending), color = LocalCineColors.current.pending)
         state.lastStillPublication?.let { publication ->
             Text(stringResource(R.string.photo_capture_saved, publication.images.joinToString(" + ") { it.kind.name }),

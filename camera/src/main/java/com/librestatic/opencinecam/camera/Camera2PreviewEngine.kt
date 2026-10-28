@@ -156,7 +156,15 @@ data class Camera2CameraDescriptor(
     val nightExtension: NightExtensionCapability? = null,
     /** Qualcomm/Motorola auto frame rate (IQdynamicFPS) can be switched both ways; see [DynamicFps]. */
     val lowLightAutoFps: Boolean = false,
+    /** Set on the descriptor of a lens-locked session, built from the physical camera (PLAN-070); null otherwise. */
+    val lensLock: LensLockBinding? = null,
 ) {
+    /** The id the app knows this camera by: the logical id of a lens-locked session, else [cameraId]. */
+    val logicalCameraId: String get() = lensLock?.logicalId ?: cameraId
+
+    /** The id device-profile quirks resolve against; they are keyed by the logical id. */
+    val quirkCameraId: String get() = quirkCameraIdOf(cameraId, lensLock)
+
     /** The first focal length as a 35 mm equivalent; inferred from the sensor size, null without it. */
     val equivalentFocalLengthMm: Float? get() = focalLengthsMm.firstOrNull()?.let { equivalentFocalLengthMm(it, sensorSizeMm?.first, sensorSizeMm?.second) }
 
@@ -259,6 +267,8 @@ data class Camera2PreviewMetadata(
     val submittedFocusDistanceDiopters: Float? = null,
     /** Time the sensor takes to read the frame out, from first to last row; null when not reported. */
     val rollingShutterSkewNs: Long? = null,
+    /** COLOR_CORRECTION_GAINS (R, Geven, Godd, B) of the frame; the lens calibration compares them with the calibrated scene's. */
+    val awbGains: List<Float>? = null,
 )
 
 data class Camera2Analysis(
@@ -275,6 +285,8 @@ data class Camera2Analysis(
     val focusPeaking: FocusPeakingMask? = null,
     /** Where [histogram] (luma only) came from; the red, green and blue ones are always the frame's. */
     val histogramSource: HistogramSource = HistogramSource.FRAME,
+    /** Sensor timestamp of the analysed frame (the same clock as the capture results' SENSOR_TIMESTAMP); null when unknown. */
+    val sensorTimestampNs: Long? = null,
 )
 
 data class Camera2EmbeddedAudioConfig(
@@ -367,6 +379,29 @@ interface Camera2PreviewListener {
      * zoom and is never a discrepancy. Only on change, camera thread.
      */
     fun onActiveLens(physicalId: String?) = Unit
+    /**
+     * Once the session is configured: the lens-locked physical camera [physicalId] and its zoom
+     * range on the logical scale (anchor x physical range), or both null when the session is not
+     * lens-locked. While locked, [onZoomRangeAvailable] is not called. Camera thread.
+     */
+    fun onLensLock(physicalId: String?, uiZoomRange: ClosedFloatingPointRange<Float>?) = Unit
+    /**
+     * A lens lock was requested but the logical camera was opened instead; [reason] is one of
+     * [LensLockUnavailable]. Camera thread.
+     */
+    fun onLensLockUnavailable(physicalId: String, reason: String) = Unit
+    /**
+     * Once the session is configured on the lens lock's GPU-crop route (PLAN-070 slice 4): the
+     * logical camera runs with its zoom pinned at [physicalId]'s anchor and zooms by a GPU crop over
+     * [uiZoomRange], the same logical-scale range as the direct route. Replaces [onLensLock] and
+     * [onZoomRangeAvailable] for that session; [onLensLockUnavailable] is not called. Camera thread.
+     */
+    fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) = Unit
+    /**
+     * On the GPU-crop route, the HAL's active physical camera left (true) or came back to (false)
+     * the locked lens, debounced over [LensSwitchDebounce.DEFAULT_THRESHOLD] results. Camera thread.
+     */
+    fun onLensLockSwitched(switched: Boolean) = Unit
     /** A capture-result audit finding at WARNING level (cadence, dropped frames); repeats are the listener's to deduplicate. Camera thread. */
     fun onAuditWarning(message: String) = Unit
     /** FPS LOCK is holding the shutter at 1/fps because auto exposure was stretching the frame time. Camera thread. */
@@ -466,6 +501,11 @@ class Camera2PreviewEngine(
     private var lastActiveLensReport: Pair<Boolean, String?>? = null
     private var repeatingBuilder: CaptureRequest.Builder? = null
     private val instantAec = InstantAecMachine()
+    private var lensSwitchTraceSession: CameraCaptureSession? = null
+    private var lensSwitchTrace: LensSwitchTrace? = null
+    private val zoomLag = ZoomLagCompensator()
+    private var zoomLagSession: CameraCaptureSession? = null
+    @Volatile private var smoothLensSwitch = false
     private var instantAecSession: CameraCaptureSession? = null
     private var instantAecKey: CaptureRequest.Key<Int>? = null
     private var instantAecModes: IntArray? = null
@@ -490,6 +530,8 @@ class Camera2PreviewEngine(
         val aspect: PhotoAspectSelection = PhotoAspectSelection(),
         val burst: BurstRequest? = null,
         val zeroShutterLag: Boolean = false,
+        /** The lens lock's GPU crop at the shutter (PLAN-070 slice 4); null off that route. */
+        val lensCropFactor: Float? = null,
     ) {
         val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
         /** Engine admission time, the closest the camera layer gets to the shutter press. */
@@ -619,16 +661,218 @@ class Camera2PreviewEngine(
     @Volatile private var subjectLutSelection: MonitorLut? = null
     @Volatile private var monitoringOptions = MonitoringOptions()
     @Volatile private var focusPeakingEnabled = false
+    @Volatile private var lensCorrectionTable: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable? = null
+    @Volatile private var lensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
     private var logPipeline: OpenCineLogGpuPipeline? = null
         set(value) {
             field = value
+            // The logical calibration never applies to a lens-locked session (PLAN-070).
+            if (!lensLockEngaged()) {
+                lensCorrectionTable?.let { value?.setLensCorrection(it) }
+                lensCalibration?.let { (set, alignment) -> value?.setLensCalibration(set, alignment) }
+            }
+            calibrationReadback?.let { value?.setCalibrationReadback(it) }
+            value?.setCropZoom(lensLockCrop?.factor ?: 1f)
             value?.setMonitoringOptions(monitoringOptions)
             value?.setFocusPeakingEnabled(focusPeakingEnabled)
             value?.setOperatorLut(operatorLutSelection)
             value?.setSubjectLut(subjectLutSelection)
             value?.setAnalysisSuspended(analysisSuspended)
             value?.setAnalysisBurst(analysisBurst)
+            value?.setExposureCompensation(fpsLockRequested)
         }
+
+    /**
+     * Sets the per-physical-lens correction for the GPU preview and recording (null disables). It
+     * applies to the current pipeline and to every pipeline the engine creates later. Direct
+     * constrained high-speed recording has no GPU stage before the encoder and is not corrected.
+     */
+    fun setLensCorrection(table: com.librestatic.opencinecam.camera.calibration.LensCorrectionTable?) {
+        lensCalibration = null
+        lensCorrectionTable = table
+        logPipeline?.setLensCorrection(table.takeIf { !lensLockEngaged() })
+    }
+
+    /**
+     * Like [setLensCorrection], but each pipeline builds its own table for the aspect of the frames
+     * it renders, so a session restart at another size keeps the margin right.
+     */
+    fun setLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        lensCorrectionTable = null
+        lensCalibration = set?.let { it to alignmentEnabled }
+        logPipeline?.setLensCalibration(set.takeIf { !lensLockEngaged() }, alignmentEnabled)
+    }
+
+    @Volatile private var photoLensCalibration: Pair<com.librestatic.opencinecam.core.model.CalibrationSet, Boolean>? = null
+
+    /**
+     * Sets the calibration applied to JPEG (and aspect-cropped HEIC) stills, or null for none. Each
+     * still is corrected by the physical lens its own result names. DNG pixels and night-extension
+     * stills are never corrected.
+     */
+    fun setPhotoLensCorrection(set: com.librestatic.opencinecam.core.model.CalibrationSet?, alignmentEnabled: Boolean) {
+        photoLensCalibration = set?.let { it to alignmentEnabled }
+    }
+
+    /** The physical lens that took the still of [owner], from its own result; null when unknown. */
+    private fun stillPhysicalId(owner: PhotoRequest): String? {
+        val result = owner.result ?: return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)?.let { return it }
+        if (routedStillPhysicalId == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        return result.physicalCameraTotalResults?.keys?.singleOrNull()
+    }
+
+    /** The lens correction plan for one compressed still, or null (with the reason logged). */
+    private fun photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int):
+        com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
+        if (owner.descriptor.lensLock != null || owner.lensCropFactor != null) return null
+        val (set, alignment) = photoLensCalibration ?: return null
+        val physicalId = stillPhysicalId(owner)
+        val resolution = com.librestatic.opencinecam.camera.calibration.PhotoLensCorrection.resolve(set, alignment, physicalId, width, height)
+        resolution.note?.let { Log.w(TAG, "Lens correction for the $kind still: $it") }
+        val plan = resolution.plan ?: return null
+        if (kind == StillImageKind.HEIC && !owner.aspect.enabled) {
+            // The container rotation is already applied by the decoder, so the sensor grid is not available.
+            Log.w(TAG, "Lens correction skipped: HEIC stills are corrected only with the aspect crop on")
+            return null
+        }
+        return plan
+    }
+
+    @Volatile private var calibrationReadback: OpenCineLogGpuPipeline.CalibrationReadbackListener? = null
+    /** Touched on [cameraExecutor] only, except for the volatile read in the capture callbacks (same thread). */
+    @Volatile private var calibrationJoiner: com.librestatic.opencinecam.camera.calibration.CalibrationFrameJoiner? = null
+
+    /**
+     * Starts delivering calibration samples to [sink] (about 10 Hz): the uncorrected camera signal
+     * in its source curve, 640 px wide, joined with the frame's capture metadata by sensor
+     * timestamp. Needs the GPU pipeline; returns false without one. [onUnavailable] fires if the
+     * readback fails. The sink runs on the camera executor; keep it short. Survives a pipeline
+     * rebuild but not [stopCalibrationCapture].
+     */
+    fun startCalibrationCapture(
+        sink: (com.librestatic.opencinecam.camera.calibration.CalibrationSample) -> Unit,
+        onUnavailable: (String) -> Unit,
+    ): Boolean {
+        val pipeline = logPipeline ?: return false
+        val joiner = com.librestatic.opencinecam.camera.calibration.CalibrationFrameJoiner { sink(it) }
+        val listener = object : OpenCineLogGpuPipeline.CalibrationReadbackListener {
+            override fun onFrame(width: Int, height: Int, rgba: java.nio.ByteBuffer, timestampNs: Long) {
+                // The GL thread only reads pixels; the copy and the join happen on the camera executor.
+                try {
+                    cameraExecutor.execute {
+                        if (calibrationJoiner !== joiner) return@execute
+                        val bytes = ByteArray(width * height * 4)
+                        rgba.get(bytes)
+                        joiner.offerFrame(timestampNs, com.librestatic.opencinecam.camera.calibration.RgbaFrame(width, height, bytes))
+                    }
+                } catch (_: java.util.concurrent.RejectedExecutionException) { }
+            }
+
+            override fun onUnavailable(reason: String) { onUnavailable(reason) }
+        }
+        calibrationJoiner = joiner
+        calibrationReadback = listener
+        pipeline.setCalibrationReadback(listener)
+        return true
+    }
+
+    /** The source curve of the GPU pipeline's signal, or null without a pipeline. */
+    fun calibrationSourcePath(): com.librestatic.opencinecam.core.model.CalibrationSourcePath? = logPipeline?.lensSourcePath()
+
+    fun stopCalibrationCapture() {
+        calibrationReadback = null
+        calibrationJoiner = null
+        logPipeline?.setCalibrationReadback(null)
+    }
+
+    /** Feeds the calibration joiner with the frame's capture metadata. */
+    private fun noteCalibrationMeta(result: android.hardware.camera2.CaptureResult) {
+        val joiner = calibrationJoiner ?: return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        val gains = result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_GAINS)
+            ?.let { floatArrayOf(it.red, it.greenEven, it.greenOdd, it.blue) }
+        joiner.offerMeta(
+            com.librestatic.opencinecam.camera.calibration.CalibrationFrameMeta(
+                timestampNs = timestamp,
+                physicalId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                } else null,
+                aeState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_STATE),
+                awbState = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_STATE),
+                zoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+                } else null,
+                exposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+                iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY),
+                awbGains = gains,
+            ),
+        )
+    }
+
+    /** Feeds [LensSwitchTrace] when `log.tag.LensSwitch` is DEBUG; a new session starts a new trace. */
+    private fun traceLensSwitch(armedSession: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+        if (lensSwitchTraceSession !== armedSession) {
+            lensSwitchTraceSession = armedSession
+            lensSwitchTrace = if (LensSwitchDiagnostics.enabled()) LensSwitchTrace() else null
+        }
+        val trace = lensSwitchTrace ?: return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        trace.onResult(
+            frameNumber = result.frameNumber,
+            timestampNs = timestamp,
+            physicalId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+            } else null,
+            zoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO)
+            } else null,
+            exposureNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME),
+            requestedZoomRatio = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                request.get(CaptureRequest.CONTROL_ZOOM_RATIO)
+            } else null,
+            targetZoomRatio = requestedZoomRatio,
+        )
+    }
+
+    /**
+     * Hands the GPU pipeline the [ZoomLagCompensator] crop for this frame, which smooths the zoom
+     * the HAL holds back around a lens switch. Opt-in through [setSmoothLensSwitch]; off below
+     * API 30, while lens-locked and in high-speed sessions.
+     */
+    private fun noteZoomLag(armedSession: CameraCaptureSession, result: TotalCaptureResult) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val pipeline = logPipeline ?: return
+        if (zoomLagSession !== armedSession) {
+            zoomLagSession = armedSession
+            zoomLag.reset()
+            pipeline.clearZoomLag()
+        }
+        if (!smoothLensSwitch || lensLockEngaged() || isHighSpeedSession()) {
+            if (zoomLag.moving) pipeline.clearZoomLag()
+            zoomLag.reset()
+            return
+        }
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        // The latest ratio sent, not the one echoed in this frame's request: with the zoom settings
+        // override the HAL applies a ratio about two frames before its own request completes, so
+        // the echo trails the result and would hide the hold.
+        val crop = zoomLag.onResult(
+            requestedZoomRatio,
+            result.get(android.hardware.camera2.CaptureResult.CONTROL_ZOOM_RATIO),
+        )
+        pipeline.noteZoomCropForTimestamp(timestamp, crop, zoomLag.moving)
+    }
+
+    /** Forwards the frame's active physical lens to the GPU pipeline's timeline. */
+    private fun noteLensForFrame(result: android.hardware.camera2.CaptureResult) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            (lensCorrectionTable == null && lensCalibration == null && calibrationReadback == null)) return
+        val timestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP) ?: return
+        val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID) ?: return
+        logPipeline?.notePhysicalForTimestamp(timestamp, physicalId)
+    }
 
     fun setOperatorLut(lut: MonitorLut?) {
         operatorLutSelection = lut
@@ -785,6 +1029,18 @@ class Camera2PreviewEngine(
     private var cadenceQcomLogged = true
     /** ISO sent while the emulated hold (AE off) is engaged; null otherwise. Camera executor writes. */
     @Volatile private var cadenceHeldIso: Int? = null
+    /** The physical lens serving the logical streams per the latest result, and the last one the held ISO was measured on. */
+    private var cadenceLensId: String? = null
+    private val cadenceSensorTopCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private var cadenceMeasuredLensId: String? = null
+    /** The lens the loop was last told about (engage or [CadenceIsoLoop.lensChanged]), and the one a ratio it reports starts from. */
+    private var cadenceLoopLensId: String? = null
+    private var cadenceRatioFromLensId: String? = null
+    /** When the latest lens switch was seen, and the effective ISO of the latest result (for the logs). */
+    private var cadenceLensSwitchAtNs = 0L
+    /** Until when [cadenceTrace] logs every result and analysed luma after a lens switch (debug builds, opt-in). */
+    private var cadenceTraceUntilNs = 0L
+    private var cadenceLastResultIso: String? = null
     private var cadenceEvIndexAtEngage = 0
     private var cadenceFirstFrameLogged = true
     private var activeVideoProfile: Camera2VideoProfile? = null
@@ -844,9 +1100,228 @@ class Camera2PreviewEngine(
     @Volatile private var lastLogRecordingEvidence: OpenCineLogRecordingEvidence? = null
     @Volatile private var lastRecordingLutEvidence: BakedLutEvidence? = null
 
-    fun descriptors(targetWidth: Int, targetHeight: Int): List<Camera2CameraDescriptor> =
-        manager.cameraIdList.mapNotNull { cameraId -> descriptor(cameraId, targetWidth, targetHeight) }
+    fun descriptors(targetWidth: Int, targetHeight: Int): List<Camera2CameraDescriptor> {
+        descriptorTarget = targetWidth to targetHeight
+        return manager.cameraIdList.mapNotNull { cameraId -> descriptor(cameraId, targetWidth, targetHeight) }
             .sortedWith(compareBy<Camera2CameraDescriptor> { lensOrder(it.lensFacing) }.thenBy { it.cameraId })
+    }
+
+    // ---- Lens lock (PLAN-070 slice 3, ADR-0036) ----
+
+    /** The target size the app's descriptors were built for; a lens-locked physical descriptor uses the same. */
+    @Volatile private var descriptorTarget: Pair<Int, Int>? = null
+    private val lensLockCandidateCache = java.util.concurrent.ConcurrentHashMap<String, List<LensLockCandidate>>()
+    private val physicalDescriptorCache = java.util.concurrent.ConcurrentHashMap<Triple<String, Int, Int>, java.util.Optional<Camera2CameraDescriptor>>()
+    /** The logical descriptor the app passed for the current lens-locked session; null when not locked. */
+    @Volatile private var lockedLogicalDescriptor: Camera2CameraDescriptor? = null
+    /**
+     * Set by a lens-locked start until its session is configured. The single fallback point: a
+     * failed physical open or configuration reopens the logical camera on the GPU-crop route
+     * (slice 4) in the same generation. cameraExecutor only.
+     */
+    private var lensLockWithdraw: ((String) -> Unit)? = null
+
+    /**
+     * The lens lock's GPU-crop route (PLAN-070 slice 4): the logical camera with its HAL zoom pinned
+     * at [pinnedRatio] so SAT selects [binding]'s lens, and every zoom a GPU crop of [factor].
+     */
+    private class LensLockCropRoute(
+        val binding: LensLockBinding,
+        val physicalZoomRange: ClosedFloatingPointRange<Float>,
+        val pinnedRatio: Float,
+    ) {
+        /** The direct route's range on the logical scale: anchor x physical range. */
+        val uiRange: ClosedFloatingPointRange<Float> = LensLockZoom.uiRange(binding.anchorRatio, physicalZoomRange)
+        @Volatile var factor = 1f
+    }
+
+    /** The current session's GPU-crop route; null off it. Written on cameraExecutor. */
+    @Volatile private var lensLockCrop: LensLockCropRoute? = null
+
+    /**
+     * Physical ids whose direct open or configuration failed in this engine. Later starts of the
+     * same lock (a mode change, the service forcing the GPU viewfinder) go straight to the GPU crop
+     * instead of retrying the failing open each time. Cleared only with the engine ([close]).
+     */
+    private val lensLockCropFallbacks: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** The GPU-crop route's lens-switch debounce; touched on the capture callback thread only. */
+    private val lensSwitchDebounce = LensSwitchDebounce()
+
+    /** True while the session serves a lens lock, directly or by the GPU crop. */
+    private fun lensLockEngaged(): Boolean = activeDescriptor?.lensLock != null || lensLockCrop != null
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.lenslock.forcecrop 1` skips the direct
+     * physical open so the GPU-crop route can be exercised on a device that opens physicals fine (G2).
+     */
+    private fun lensLockCropForced(): Boolean = debugProperty("debug.opencinecam.lenslock.forcecrop").let { it == "1" || it == "true" }
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.instantaec.lens 0` stops Instant AEC
+     * from engaging at a lens switch, for an A/B of the switch hitch.
+     */
+    private fun instantAecOnLensSwitchDisabled(): Boolean =
+        debugProperty("debug.opencinecam.instantaec.lens").let { it == "0" || it == "false" }
+
+    /**
+     * Debug builds only: `adb shell setprop debug.opencinecam.cadence.trace 1` logs, for 1.5 s after
+     * each lens switch under the emulated hold, every capture result (lens, ISO, boost) and every
+     * analysed luma under the `CadenceTrace` tag, to measure the lenses' real ISO ratio offline.
+     */
+    private fun cadenceTraceEnabled(): Boolean = debugProperty("debug.opencinecam.cadence.trace").let { it == "1" || it == "true" }
+
+    private fun cadenceTrace(line: () -> String) {
+        if (cadenceTraceUntilNs != 0L && SystemClock.elapsedRealtimeNanos() < cadenceTraceUntilNs) Log.d(CADENCE_TRACE_TAG, line())
+    }
+
+    /** A system property on debug builds; null on release builds or when it cannot be read. */
+    private fun debugProperty(name: String): String? {
+        if (appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+        return runCatching {
+            Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String
+        }.getOrNull()
+    }
+
+    /** The GPU-crop route for [binding] on [logical], or null when the lens is not a lock candidate. */
+    private fun lensLockCropRoute(binding: LensLockBinding, logical: Camera2CameraDescriptor): LensLockCropRoute? {
+        val candidate = lensLockCandidates(binding.logicalId).firstOrNull { it.physicalId == binding.physicalId } ?: return null
+        return LensLockCropRoute(binding, candidate.physicalZoomRange,
+            LensLockCrop.pinnedRatio(binding.anchorRatio, logical.effectiveZoomRange))
+    }
+
+    /**
+     * The lenses [logicalCameraId] can be locked to, sorted by anchor ratio: ids listed by its
+     * `getPhysicalCameraIds()` that face the same way and have a computable field of view. Empty for
+     * a camera that is not a logical multi-camera, or below API 28.
+     */
+    fun lensLockCandidates(logicalCameraId: String): List<LensLockCandidate> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return emptyList()
+        lensLockCandidateCache[logicalCameraId]?.let { return it }
+        val candidates = runCatching {
+            val logical = manager.getCameraCharacteristics(logicalCameraId)
+            val facing = logical.get(CameraCharacteristics.LENS_FACING)
+            val logicalFov = fovWidth(logical)
+            logical.physicalCameraIds.filter { it != logicalCameraId }.mapNotNull { id ->
+                val physical = runCatching { manager.getCameraCharacteristics(id) }.getOrNull() ?: return@mapNotNull null
+                if (physical.get(CameraCharacteristics.LENS_FACING) != facing) return@mapNotNull null
+                val anchor = lensAnchorRatio(logicalFov, fovWidth(physical)) ?: return@mapNotNull null
+                LensLockCandidate(
+                    physicalId = id,
+                    anchorRatio = anchor,
+                    focalMm = physical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull() ?: 0f,
+                    physicalZoomRange = zoomRangeOf(physical) ?: (1f..1f),
+                )
+            }.sortedBy { it.anchorRatio }
+        }.getOrDefault(emptyList())
+        lensLockCandidateCache[logicalCameraId] = candidates
+        return candidates
+    }
+
+    private fun zoomRangeOf(c: CameraCharacteristics): ClosedFloatingPointRange<Float>? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.takeIf { it.lower < it.upper }?.let { return it.lower..it.upper }
+        }
+        return c.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)?.takeIf { it > 1f }?.let { 1f..it }
+    }
+
+    /** The physical camera's own descriptor for [binding], built for the app's target size; null when it cannot be. */
+    private fun physicalDescriptor(binding: LensLockBinding, logical: Camera2CameraDescriptor): Camera2CameraDescriptor? {
+        // ADR-0036: only an id the logical camera itself reports is ever opened.
+        if (lensLockCandidates(binding.logicalId).none { it.physicalId == binding.physicalId }) return null
+        val (width, height) = descriptorTarget ?: (logical.previewSize.width to logical.previewSize.height)
+        return physicalDescriptorCache.getOrPut(Triple(binding.physicalId, width, height)) {
+            java.util.Optional.ofNullable(descriptor(binding.physicalId, width, height))
+        }.orElse(null)?.copy(lensLock = binding)
+    }
+
+    private class LensLockPlan(
+        val descriptor: Camera2CameraDescriptor,
+        val videoProfile: Camera2VideoProfile?,
+        val logProfile: Camera2LogProfile?,
+        val stillSize: Size?,
+    )
+
+    /**
+     * Resolves a lens lock for one start: the physical descriptor and the requested profiles and
+     * still size mapped onto it, or null. High speed and night photo refuse (reported as
+     * unavailable); a physical that cannot serve the session (descriptor, HEIC, LOG), a lens that
+     * already failed to open or configure, or the debug override hands [onCrop] the GPU-crop route.
+     */
+    private fun lensLockPlan(
+        binding: LensLockBinding,
+        logical: Camera2CameraDescriptor,
+        listener: Camera2PreviewListener,
+        openCineLog: Boolean,
+        nightExtension: Boolean,
+        gpuPhotoPreview: Boolean,
+        videoProfile: Camera2VideoProfile?,
+        logProfile: Camera2LogProfile?,
+        stillFormat: StillPhotoFormat,
+        stillSize: Size?,
+        targetFps: Int,
+        onCrop: (LensLockCropRoute) -> Unit,
+    ): LensLockPlan? {
+        fun refuse(reason: String): LensLockPlan? {
+            Log.i(TAG, "Lens lock on ${binding.physicalId} not applied ($reason); opening camera ${logical.cameraId}")
+            listener.onLensLockUnavailable(binding.physicalId, reason)
+            return null
+        }
+        fun crop(reason: String): LensLockPlan? {
+            val route = lensLockCropRoute(binding, logical) ?: return refuse(reason)
+            Log.i(TAG, "Lens lock on ${binding.physicalId} served by the GPU crop ($reason); camera ${logical.cameraId} pinned at ${route.pinnedRatio}x")
+            onCrop(route)
+            return null
+        }
+        val highSpeed = (!gpuPhotoPreview && videoProfile?.constrainedHighSpeed == true) ||
+            (openCineLog && logProfile?.constrainedHighSpeed == true)
+        if (highSpeed) return refuse(LensLockUnavailable.HIGH_SPEED)
+        if (nightExtensionEngaged(nightExtension, Build.VERSION.SDK_INT, logical.nightExtension) && !openCineLog &&
+            videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG) return refuse(LensLockUnavailable.NIGHT)
+        if (binding.physicalId in lensLockCropFallbacks) return crop("failed before")
+        if (lensLockCropForced()) return crop("forced by debug.opencinecam.lenslock.forcecrop")
+        val physical = physicalDescriptor(binding, logical) ?: return crop(LensLockUnavailable.DESCRIPTOR)
+        if (stillFormat == StillPhotoFormat.HEIC && physical.heicSize == null) return crop(LensLockUnavailable.FORMAT)
+        if (openCineLog && !physical.supportsOpenCineLog) return crop(LensLockUnavailable.LOG)
+        val mappedVideo = videoProfile?.let { requested ->
+            val candidates = physical.videoProfiles.filterNot { it.constrainedHighSpeed }
+            LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
+                candidates.map { Triple(it.size.width, it.size.height, it.fps) })?.let(candidates::get)
+        }
+        val mappedLog = if (!openCineLog) null else {
+            val regular = physical.logProfiles.filterNot { it.constrainedHighSpeed }
+            val fps = logProfile?.fps ?: targetFps
+            logProfile?.let { requested ->
+                val candidates = regular.filter { it.sourcePath == requested.sourcePath }
+                LensLockMapping.profileIndex(requested.size.width, requested.size.height, requested.fps,
+                    candidates.map { Triple(it.size.width, it.size.height, it.fps) }, anyRate = false)?.let(candidates::get)
+            } ?: preferredLogProfile(regular.filter { it.fps == fps }, fps) ?: preferredLogProfile(regular, fps)
+        }
+        val mappedStill = stillSize?.let { requested ->
+            val sizes = if (stillFormat == StillPhotoFormat.HEIC) physical.heicSizes else physical.jpegSizes
+            LensLockMapping.stillSize(requested.width, requested.height, sizes.map { it.width to it.height })
+                ?.let { (w, h) -> Size(w, h) }
+        }
+        Log.i(TAG, "Lens lock: camera ${logical.cameraId} opens physical ${binding.physicalId} (anchor ${binding.anchorRatio}); " +
+            "video ${videoProfile?.let { "${it.size}@${it.fps}" }} -> ${mappedVideo?.let { "${it.size}@${it.fps}" }}, " +
+            "log ${logProfile?.let { "${it.size}@${it.fps}" }} -> ${mappedLog?.let { "${it.size}@${it.fps}" }}, still $stillSize -> $mappedStill")
+        return LensLockPlan(physical, mappedVideo, mappedLog, mappedStill)
+    }
+
+    /** Hands a failed lens-locked open or configuration to the fallback; false when the session is not a pending lock. */
+    private fun withdrawLensLock(reason: String): Boolean {
+        val withdraw = lensLockWithdraw ?: return false
+        withdraw(reason)
+        return true
+    }
+
+    /** The descriptor the app knows: the logical one for a lens-locked session. */
+    private fun appDescriptor(descriptor: Camera2CameraDescriptor): Camera2CameraDescriptor =
+        if (descriptor.lensLock != null) lockedLogicalDescriptor ?: descriptor else descriptor
+
+    /** A physical zoom ratio on the logical scale while lens-locked. */
+    private fun uiZoom(physical: Float): Float =
+        activeDescriptor?.lensLock?.let { LensLockZoom.toUi(physical, it.anchorRatio) } ?: physical
 
     fun preferredDescriptor(targetWidth: Int, targetHeight: Int): Camera2CameraDescriptor? =
         descriptors(targetWidth, targetHeight).firstOrNull()
@@ -882,6 +1357,7 @@ class Camera2PreviewEngine(
         nightExtension: Boolean = false,
         lowLightAutoFps: Boolean = false,
         fpsLock: Boolean = false,
+        lensLock: LensLockBinding? = null,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -902,16 +1378,64 @@ class Camera2PreviewEngine(
             listener.onAfLockChanged(LockState.OFF)
             // A listener that joins while the scopes are suspended (or missed a resume) learns it once.
             notifyAnalysisSuspension(listener)
-            if (requestedFocusCameraId != descriptor.cameraId) {
+            // A lock for another camera is ignored. Manual focus distances belong to the lens that is opened.
+            val requestedLock = lensLock?.takeIf { it.logicalId == descriptor.cameraId }
+            if (requestedFocusCameraId != (requestedLock?.physicalId ?: descriptor.cameraId)) {
                 requestedFocusDiopters = null
                 requestedFocusCameraId = null
             }
             listener.onFocusSelectionChanged(requestedFocusDiopters)
+            // The app's per-camera state stays on the logical camera, locked or not.
             listener.onOpening(descriptor)
+            // The lock plan is resolved once per start; a failed physical open or configuration
+            // withdraws it, and the start runs again on the logical camera in the same generation.
+            var lockResolved = requestedLock == null
+            var lockPlan: LensLockPlan? = null
+            var cropRoute: LensLockCropRoute? = null
             lateinit var start: Runnable
             start = Runnable {
                 if (disposed.get() || currentGeneration != generation || !surface.isValid) return@Runnable
                 this.listener = listener
+                if (!lockResolved) {
+                    lockResolved = true
+                    lockPlan = lensLockPlan(requestedLock!!, descriptor, listener, openCineLog, nightExtension,
+                        gpuPhotoPreview, videoProfile, logProfile, stillFormat, stillSize, targetFps) { cropRoute = it }
+                }
+                val plan = lockPlan
+                val logicalDescriptor = descriptor
+                // From here the session runs on the physical descriptor when the lock applies.
+                @Suppress("NAME_SHADOWING") val descriptor = plan?.descriptor ?: logicalDescriptor
+                @Suppress("NAME_SHADOWING") val videoProfile = if (plan != null) plan.videoProfile else videoProfile
+                @Suppress("NAME_SHADOWING") val logProfile = if (plan != null) plan.logProfile else logProfile
+                @Suppress("NAME_SHADOWING") val stillSize = if (plan != null) plan.stillSize else stillSize
+                this.lockedLogicalDescriptor = logicalDescriptor.takeIf { plan != null }
+                val crop = cropRoute.takeIf { plan == null }
+                this.lensLockCrop = crop
+                if (crop != null) {
+                    // The HAL zoom stays at the anchor for the whole session; setZoomRatio only moves the GPU crop.
+                    requestedZoomRatio = crop.pinnedRatio
+                    lastAcceptedZoomRatio = crop.pinnedRatio
+                }
+                this.lensLockWithdraw = if (plan == null) null else { reason ->
+                    if (!disposed.get() && currentGeneration == generation && lockPlan === plan) {
+                        lensLockWithdraw = null
+                        lockPlan = null
+                        val fallback = lensLockCropRoute(requestedLock!!, logicalDescriptor)
+                        if (fallback != null) {
+                            Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} failed ($reason); camera ${logicalDescriptor.cameraId} serves it by the GPU crop")
+                            // Remembered, so the next start of this lock does not retry the failing open.
+                            lensLockCropFallbacks += requestedLock.physicalId
+                            cropRoute = fallback
+                        } else {
+                            Log.w(TAG, "Lens lock on ${plan.descriptor.cameraId} withdrawn ($reason); opening camera ${logicalDescriptor.cameraId}")
+                            listener.onLensLockUnavailable(plan.descriptor.cameraId, reason)
+                        }
+                        closeResources()
+                        this.listener = listener
+                        pendingPreviewStart = start
+                        runPendingPreviewStart()
+                    }
+                }
                 if (stillFormat == StillPhotoFormat.HEIC && descriptor.heicSize == null) {
                     listener.onFailure("still-format-unavailable", "This camera does not advertise a native HEIC output.", true)
                     return@Runnable
@@ -945,7 +1469,7 @@ class Camera2PreviewEngine(
                     Camera2VideoProfile(it.size, it.fps, true)
                 } ?: activeVideoProfile?.takeIf { it.constrainedHighSpeed }
                 val cameraIdToOpen = if (highSpeedProfile != null) {
-                    if (deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
+                    if (deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA)) {
                         preferredHighSpeedPhysicalId(descriptor, highSpeedProfile)
                             ?: descriptor.cameraId
                     } else descriptor.cameraId
@@ -1062,6 +1586,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
                         }
@@ -1079,6 +1604,7 @@ class Camera2PreviewEngine(
                     }
                 } catch (failure: Exception) {
                     cameraOpening = false
+                    if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return@Runnable
                     listener.onFailure("camera-open-exception", failure.message ?: "Camera open failed.", true)
                     finishCloseIfIdle()
                 }
@@ -1287,6 +1813,7 @@ class Camera2PreviewEngine(
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
         val input = pipeline.cameraInputSurface
         fun sessionException(failure: Throwable) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
@@ -1315,12 +1842,13 @@ class Camera2PreviewEngine(
                         } else configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, callback)
                         notifyZoomRange()
                     } catch (failure: Throwable) {
+                        if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                         listener?.onFailure("video-preview-gpu-request-failed", failure.message ?: "GPU preview request failed.", true)
                     }
                 }
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
-                    if (currentGeneration == generation) listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
+                    if (currentGeneration == generation && !withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
                 }
             },
         )
@@ -1455,7 +1983,8 @@ class Camera2PreviewEngine(
         if (reader.imageFormat != expectedFormat || raw?.imageFormat?.let { it != ImageFormat.RAW_SENSOR } == true) return false
         val request = PhotoRequest(photoIds.incrementAndGet(), generation, camera ?: return false,
             session ?: return false, reader, activeDescriptor ?: return false,
-            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst, zeroShutterLag)
+            listener ?: return false, flash, format, quality, raw, legacy, bracket, bracket?.frames?.size ?: 0, accumulation, aspect, burst, zeroShutterLag,
+            lensCropFactor = lensLockCrop?.factor)
         synchronized(stillAdmissionLock) {
             if (bracketRequest.get() !== bracket || accumulationRequest.get() !== accumulation || burstRequest.get() !== burst || legacyStillRequest.get() != null || recording || recorderRequest.get() != null ||
                 bracket != null && !ownsBracket(bracket) || accumulation != null && !ownsAccumulation(accumulation) ||
@@ -1788,10 +2317,39 @@ class Camera2PreviewEngine(
                         if (it.kind == StillImageKind.HEIC && android.os.SystemClock.uptimeMillis() >= owner.deadlineUptimeMs)
                             throw java.util.concurrent.TimeoutException("HEIC processing exceeded the still request deadline")
                     }
-                    add(if (!owner.aspect.enabled) StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                    val lens = photoLensPlan(owner, it.kind, it.width, it.height)
+                    // The lens lock's GPU crop (PLAN-070 slice 4): the still matches the cropped viewfinder.
+                    val zoomCrop = owner.lensCropFactor?.takeIf { factor -> factor > LensLockCrop.RECODE_THRESHOLD } ?: 1f
+                    add(if (!owner.aspect.enabled) {
+                        if (zoomCrop > 1f && it.kind == StillImageKind.JPEG) {
+                            try {
+                                cropPhotoZoomJpeg(it.bytes, zoomCrop, owner.quality, java.io.File(appContext.cacheDir, "photo-lens"), checkRunning)
+                            } catch (failure: java.util.concurrent.CancellationException) { throw failure
+                            } catch (failure: java.util.concurrent.TimeoutException) { throw failure
+                            } catch (failure: Exception) {
+                                Log.w(TAG, "Lens lock crop failed; keeping the uncropped still", failure)
+                                StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                            }
+                        } else if (zoomCrop > 1f) {
+                            // The re-encoded HEIC would lose the container metadata (EXIF, orientation
+                            // source), so only the aspect-crop path, which already re-encodes, crops it.
+                            Log.w(TAG, "Lens lock crop skipped: HEIC stills are cropped only with the aspect crop on")
+                            StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                        } else if (lens != null) {
+                            // Same pixel grid and size: re-encode with the EXIF carried over; on any failure keep the original.
+                            try {
+                                correctPhotoLensJpeg(it.bytes, lens, owner.quality, java.io.File(appContext.cacheDir, "photo-lens"), checkRunning)
+                            } catch (failure: java.util.concurrent.CancellationException) { throw failure
+                            } catch (failure: java.util.concurrent.TimeoutException) { throw failure
+                            } catch (failure: Exception) {
+                                Log.w(TAG, "Lens correction failed; keeping the uncorrected still", failure)
+                                StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                            }
+                        } else StillImagePayload.owned(it.kind, it.bytes, it.width, it.height)
+                    }
                     else if (it.kind == StillImageKind.HEIC) cropPhotoAspectHeic(it.bytes, owner.aspect,
-                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), checkRunning)
-                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, checkRunning))
+                        owner.desiredOrientationDegrees, owner.quality, java.io.File(appContext.cacheDir, "photo-aspect"), lens, checkRunning, zoomCrop)
+                    else cropPhotoAspectJpeg(it.bytes, owner.aspect, owner.desiredOrientationDegrees, owner.quality, lens, checkRunning, zoomCrop))
                 }
                 raw?.let { image ->
                     pendingRawFrames.remove(timestamp)
@@ -2448,13 +3006,13 @@ class Camera2PreviewEngine(
         val minDistance = descriptor.minimumFocusDistance ?: return false
         if (!diopters.isFinite() || label !in setOf("A", "B", "C", "D") || !minDistance.isFinite() || minDistance <= 0f) return false
         val clamped = diopters.coerceIn(0f, minDistance)
-        perCameraFocusMarks.compute(descriptor.cameraId) { _, marks -> (marks ?: emptyMap()) + (label to clamped) }
+        perCameraFocusMarks.compute(descriptor.logicalCameraId) { _, marks -> (marks ?: emptyMap()) + (label to clamped) }
         return true
     }
 
     /** Removes a single focus mark. Returns false when the mark does not exist. */
     fun clearFocusMark(label: String): Boolean {
-        val cameraId = activeDescriptor?.cameraId ?: return false
+        val cameraId = activeDescriptor?.logicalCameraId ?: return false
         var removed = false
         perCameraFocusMarks.computeIfPresent(cameraId) { _, marks ->
             removed = label in marks
@@ -2465,7 +3023,7 @@ class Camera2PreviewEngine(
 
     /** Returns the focus marks saved for the active camera, or an empty map when none exist. */
     fun getFocusMarks(): Map<String, Float> {
-        val cameraId = activeDescriptor?.cameraId ?: return emptyMap()
+        val cameraId = activeDescriptor?.logicalCameraId ?: return emptyMap()
         return perCameraFocusMarks[cameraId] ?: emptyMap()
     }
 
@@ -2819,10 +3377,19 @@ class Camera2PreviewEngine(
         cameraExecutor.execute {
             if (fpsLockRequested == enabled) return@execute
             fpsLockRequested = enabled
+            logPipeline?.setExposureCompensation(enabled)
             cadenceGuard.reset()
             cadenceFaulted = false
             if (!enabled && cadenceEngaged) setCadenceEngaged(false, null, null)
         }
+    }
+
+    /**
+     * Turns the lens-switch smoothing ([ZoomLagCompensator]) on or off for the live graph. Only the
+     * viewfinder crop changes, so it needs no session restart and applies mid-take.
+     */
+    fun setSmoothLensSwitch(enabled: Boolean) {
+        smoothLensSwitch = enabled
     }
 
     /** True when the held shutter would be sent now: wanted, engaged and every precondition still true. */
@@ -2841,6 +3408,7 @@ class Camera2PreviewEngine(
     private fun driveCadenceGuard(result: TotalCaptureResult, sensorTimestampNs: Long?) {
         val aeMode = result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)
         lastResultAeMode = aeMode
+        noteCadenceLens(result)
         if (cadenceEngaged && cadenceHeldIso != null && !cadenceSawManual && aeMode == CaptureRequest.CONTROL_AE_MODE_OFF) {
             // The first result that really is manual: the AE frames still in the analysis pipe are AE's final state.
             cadenceSawManual = true
@@ -2853,9 +3421,21 @@ class Camera2PreviewEngine(
             if (cadenceEngaged) setCadenceEngaged(false, null, null)
             cadenceGuard.reset()
             updateAnalysisBurst()
+            noteCadenceFrameGain(sensorTimestampNs, null)
             return
         }
         if (cadenceEngaged && cadenceHeldIso != null) {
+            // A jumped ISO counts from the first result that reports it (before this result can issue another).
+            val sensorIso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
+            val resultBoost = result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100
+            cadenceLastResultIso = "sensor=$sensorIso boost=$resultBoost"
+            cadenceTrace { "result ts=$sensorTimestampNs lens=$cadenceLensId sensor=$sensorIso boost=$resultBoost " +
+                "exp=${result.get(android.hardware.camera2.CaptureResult.SENSOR_EXPOSURE_TIME)} held=$cadenceHeldIso" }
+            val effectiveIso = sensorIso?.let { (it.toLong() * resultBoost / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() }
+            if (effectiveIso != null && sensorTimestampNs != null && cadenceIsoLoop.noteResult(sensorTimestampNs, effectiveIso)) {
+                Log.i(CADENCE_TAG, "jumped iso in effect ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the lens switch: $cadenceLastResultIso")
+            }
+            noteCadenceFrameGain(sensorTimestampNs, effectiveIso.takeIf { cadenceHoldEmulated() })
             // Walk the planned ISO ramp: one small step per due capture result.
             val nowNs = SystemClock.elapsedRealtimeNanos()
             if (cadenceExposureRamp.active) {
@@ -2871,7 +3451,7 @@ class Camera2PreviewEngine(
                     reapplyRepeating()
                 }
             } else cadenceIsoLoop.tick(nowNs)?.let { cadenceHeldIso = it; reapplyRepeating() }
-        }
+        } else noteCadenceFrameGain(sensorTimestampNs, null)
         if (cadenceFaulted || sensorTimestampNs == null) return
         val frameDuration = result.get(android.hardware.camera2.CaptureResult.SENSOR_FRAME_DURATION)
         var iso = result.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY)
@@ -2890,6 +3470,18 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100)
         }
         updateAnalysisBurst()
+    }
+
+    /**
+     * Tells the GPU pipeline how much to brighten or darken this result's frame (1 without
+     * [effectiveIso]): after a lens switch the frames still in the HAL's pipeline carry the old
+     * lens' ISO, and [CadenceIsoLoop.frameGain] bridges them to the ISO the jump brings in.
+     */
+    private fun noteCadenceFrameGain(sensorTimestampNs: Long?, effectiveIso: Int?) {
+        val pipeline = logPipeline ?: return
+        if (sensorTimestampNs == null || !fpsLockRequested) return
+        val gain = effectiveIso?.let { cadenceIsoLoop.frameGain(it) } ?: 1.0
+        pipeline.noteExposureGainForTimestamp(sensorTimestampNs, gain.toFloat(), waiting = cadenceEngaged && cadenceHoldEmulated())
     }
 
     /** Native priority, else the Qualcomm exposure priority, else the emulated hold (manual exposure and a software ISO). */
@@ -2945,12 +3537,50 @@ class Camera2PreviewEngine(
         return (frameDurationNs - 100_000L).let { if (range != null) it.coerceIn(range.first, range.last) else it }
     }
 
+    /**
+     * Follows the physical lens of the logical camera. With AE off a switch hands the new lens the old
+     * one's ISO, so the loop corrects it at once (see [CadenceIsoLoop.lensChanged]) and the guard forgets
+     * its ISO reference (see [CadenceGuard.lensChanged]); AE frames from the old lens no longer describe
+     * the scene, and a pending hidden-gain measurement would mix two lenses.
+     */
+    private fun noteCadenceLens(result: TotalCaptureResult) {
+        val lens = activeDescriptor?.lensLock?.physicalId ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        } else null
+        val previous = cadenceLensId
+        if (lens == null || lens == previous) return
+        cadenceLensId = lens
+        if (previous == null) return
+        cadenceAeLumas.clear()
+        if (cadenceEngaged) cadenceGuard.lensChanged(SystemClock.elapsedRealtimeNanos())
+        if (!cadenceEngaged || cadenceHeldIso == null) return
+        if (!cadenceGainMeasured) {
+            cadenceGainMeasured = true
+            Log.i(CADENCE_TAG, "hidden gain: not learned, the lens switched $previous -> $lens during the handoff")
+        }
+        if (!cadenceHoldEmulated() || !cadenceSawManual || cadenceExposureRamp.active) return
+        val cameraId = activeDescriptor?.cameraId ?: return
+        val from = cadenceMeasuredLensId ?: previous
+        val expected = processLensIsoRatios.ratio(cameraId, from, lens)
+        cadenceLensSwitchAtNs = SystemClock.elapsedRealtimeNanos()
+        cadenceTraceUntilNs = if (cadenceTraceEnabled()) cadenceLensSwitchAtNs + 1_500_000_000L else 0L
+        cadenceIsoLoop.lensChanged(cadenceLensSwitchAtNs, expected, result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP))
+        // The loop's frames on target belong to the lens it was last told about; a switch it missed
+        // (during the handoff or the exposure ramp) leaves them on another lens, so nothing is learned.
+        cadenceRatioFromLensId = cadenceLoopLensId.takeIf { it == previous }
+        cadenceLoopLensId = lens
+        Log.i(CADENCE_TAG, "lens switch $previous -> $lens: iso ratio ${expected?.let { "%.2f".format(it) } ?: "unknown"} from $from")
+        updateAnalysisBurst()
+    }
+
     /** Analysis frame (camera executor, before the UI sees it): learns the luma, and steers the held ISO. */
     private fun observeCadenceLuma(analysis: Camera2Analysis, producer: String) {
         // Always the frame's own histogram: the ISP one, when present, is a different domain than the target.
         val luma = CadenceIsoLoop.meanLuma(analysis.histogram) ?: return
         // One producer only: the GPU readback and the YUV reader are in different luma domains.
         if (!cadenceLumaProducerAccepted(logPipeline != null, producer)) return
+        cadenceTrace { "luma ts=${analysis.sensorTimestampNs} producer=$producer luma=${"%.4f".format(luma)} " +
+            "hist=${analysis.histogram.joinToString(",") { "%.4f".format(it) }}" }
         // AE's own final brightness: the last frames analysed while the results still said AE was on.
         if (lastResultAeMode != null && lastResultAeMode != CaptureRequest.CONTROL_AE_MODE_OFF && cadenceGuardEligible() && cadenceHoldEmulated()) {
             cadenceAeLumas.addLast(luma)
@@ -2963,10 +3593,10 @@ class Camera2PreviewEngine(
         if (!cadenceGainMeasured && cadenceManualFrames >= 2) {
             cadenceGainMeasured = true
             val goal = cadenceIsoLoop.target
-            val cameraId = activeDescriptor?.cameraId
-            if (goal != null && cameraId != null && cadenceIsoLoop.targetSource == "ae") {
-                val old = processHiddenAeGain.gain(cameraId)
-                val updated = processHiddenAeGain.update(cameraId, goal, luma)
+            val gainKey = cadenceGainKey()
+            if (goal != null && gainKey != null && cadenceIsoLoop.targetSource == "ae") {
+                val old = processHiddenAeGain.gain(gainKey)
+                val updated = processHiddenAeGain.update(gainKey, goal, luma)
                 Log.i(CADENCE_TAG, "hidden gain: target=${"%.4f".format(goal)} manual luma=${"%.4f".format(luma)} G ${"%.2f".format(old)} -> ${"%.2f".format(updated)}")
             }
         }
@@ -2981,8 +3611,37 @@ class Camera2PreviewEngine(
         val evDelta = (requestedAeCompensationIndex ?: 0) - cadenceEvIndexAtEngage
         val scale = if (descriptor != null && descriptor.aeCompensationStep > 0f && evDelta != 0)
             CadenceIsoLoop.evScale(descriptor.aeCompensationStep, evDelta) else 1.0
-        cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale)
+        val lensPending = cadenceIsoLoop.lensPending
+        val awaiting = cadenceIsoLoop.awaitingEffect
+        val measured = cadenceIsoLoop.update(SystemClock.elapsedRealtimeNanos(), luma, scale, analysis.sensorTimestampNs)
+        if (awaiting && !cadenceIsoLoop.awaitingEffect) {
+            Log.w(CADENCE_TAG, "jumped iso ${cadenceHeldIso} never reported within ${CadenceIsoLoop.EFFECT_TIMEOUT_NS / 1_000_000} ms; last result $cadenceLastResultIso")
+        }
+        if (lensPending && !cadenceIsoLoop.lensPending) {
+            Log.i(CADENCE_TAG, "lens $cadenceLensId first frame ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
+                "luma=${"%.4f".format(luma)} iso ${cadenceHeldIso}")
+            cadenceMeasuredLensId = cadenceLensId
+        } else if (!lensPending) cadenceMeasuredLensId = cadenceLensId
+        if (measured != null) {
+            // Both lenses held the target: remember the ratio between the ISOs that did.
+            val lens = cadenceLoopLensId
+            val from = cadenceRatioFromLensId
+            val cameraId = descriptor?.cameraId
+            cadenceRatioFromLensId = null
+            if (lens != null && from != null && cameraId != null) {
+                val remembered = processLensIsoRatios.update(cameraId, from, lens, measured)
+                Log.i(CADENCE_TAG, "lens $lens on target ${(SystemClock.elapsedRealtimeNanos() - cadenceLensSwitchAtNs) / 1_000_000} ms after the switch: " +
+                    "luma=${"%.4f".format(luma)} iso ratio from $from ${"%.2f".format(measured)} " +
+                    "(remembered ${remembered?.let { "%.2f".format(it) }})")
+            }
+        }
         updateAnalysisBurst()
+    }
+
+    /** The hidden gain differs per physical lens: keyed by the logical camera and the lens serving it, when known. */
+    private fun cadenceGainKey(): String? {
+        val cameraId = activeDescriptor?.cameraId ?: return null
+        return cadenceLensId?.let { "$cameraId/$it" } ?: cameraId
     }
 
     /** Turns the fast analysis on around the handoff of the emulated hold, off otherwise. */
@@ -2995,6 +3654,7 @@ class Camera2PreviewEngine(
             sinceEngageNs = SystemClock.elapsedRealtimeNanos() - cadenceEngagedAtNs,
             loopLearning = !cadenceIsoLoop.hasTarget,
             loopRamping = cadenceIsoLoop.ramping,
+            lensPending = cadenceIsoLoop.lensPending,
         )
         if (wanted == analysisBurst) return
         analysisBurst = wanted
@@ -3019,7 +3679,7 @@ class Camera2PreviewEngine(
             val aeExposure = exposureNs?.let { if (timeRange != null) it.coerceIn(timeRange.first, timeRange.last) else it }
             val rawEffectiveIso = (aeIso.toLong() * aeBoost.coerceAtLeast(100) / 100).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             // AE ON applies an ISP gain AE OFF loses: start with that much more ISO.
-            val hiddenGain = activeDescriptor?.cameraId?.let { processHiddenAeGain.gain(it) } ?: HiddenAeGain.HIDDEN_AE_GAIN_PRIOR
+            val hiddenGain = cadenceGainKey()?.let { processHiddenAeGain.gain(it) } ?: HiddenAeGain.HIDDEN_AE_GAIN_PRIOR
             val aeEffectiveIso = HiddenAeGain.startIso(rawEffectiveIso, hiddenGain, range)
             // Start where AE is (its exposure and total gain), so the first held frames match it by construction.
             val ramping = aeExposure != null && cadenceExposureRamp.start(aeExposure, aeEffectiveIso, heldExposure, range, nowNs)
@@ -3032,7 +3692,10 @@ class Camera2PreviewEngine(
             cadenceSawManual = false
             cadenceManualFrames = 0
             cadenceGainMeasured = false
-            Log.i(CADENCE_TAG, "handoff: aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
+            cadenceMeasuredLensId = cadenceLensId
+            cadenceLoopLensId = cadenceLensId
+            cadenceRatioFromLensId = null
+            Log.i(CADENCE_TAG, "handoff: lens=$cadenceLensId aeIso=$iso aeBoost=$aeBoost hiddenGain=${"%.2f".format(hiddenGain)} aeExposure=${exposureNs?.let { "%.2f ms".format(it / 1e6) }} " +
                 "heldExposure=${"%.2f ms".format(heldExposure / 1e6)} startExposure=${"%.2f ms".format(cadenceHoldExposureNs() / 1e6)} startIso=$initial " +
                 "exposureRamp=${if (ramping) "${cadenceExposureRamp.totalSteps} steps ~400 ms" else "none"}")
             cadenceHeldIso = initial
@@ -3118,9 +3781,18 @@ class Camera2PreviewEngine(
     fun setZoomRatio(ratio: Float): Boolean {
         val descriptor = activeDescriptor ?: return false
         val range = descriptor.effectiveZoomRange ?: return false
+        // The GPU-crop route keeps the HAL zoom pinned at the anchor; the ratio moves the crop only.
+        lensLockCrop?.let { crop ->
+            val factor = LensLockCrop.cropFactor(ratio, crop.pinnedRatio, crop.uiRange)
+            crop.factor = factor
+            cameraExecutor.execute { if (lensLockCrop === crop) logPipeline?.setCropZoom(factor) }
+            return true
+        }
+        // A lens-locked session takes the ratio on the logical scale; the physical camera gets its own.
+        val target = descriptor.lensLock?.let { LensLockZoom.toPhysical(ratio, it.anchorRatio, range) } ?: ratio
         cameraExecutor.execute {
             val previousRatio = requestedZoomRatio
-            requestedZoomRatio = ZoomMath.coerce(ratio, range)
+            requestedZoomRatio = ZoomMath.coerce(target, range)
             if (ZoomSettingsOverride.shouldArm(zoomOverrideEligible(descriptor), previousRatio, requestedZoomRatio)) {
                 zoomOverrideArmed = true
                 lastZoomChangeAtMs = SystemClock.elapsedRealtime()
@@ -3132,7 +3804,7 @@ class Camera2PreviewEngine(
         return true
     }
 
-    /** Current effective (last-accepted) zoom ratio, or 1f when no session is active. */
+    /** Current effective (last-accepted) zoom ratio, or 1f when no session is active; on the logical scale while lens-locked. */
     fun currentEffectiveZoomRatio(): Float = effectiveZoomRatio
 
     private fun zoomOverrideEligible(descriptor: Camera2CameraDescriptor): Boolean =
@@ -3211,7 +3883,7 @@ class Camera2PreviewEngine(
         } catch (failure: Throwable) {
             if (isZoomRejection(failure, zoomChanged = requestedZoomRatio != lastAcceptedZoomRatio)) {
                 requestedZoomRatio = lastAcceptedZoomRatio
-                listener?.onZoomRejected(requestedZoomRatio, lastAcceptedZoomRatio)
+                listener?.onZoomRejected(uiZoom(requestedZoomRatio), uiZoom(lastAcceptedZoomRatio))
             } else {
                 listener?.onControlRejected("zoom-request-failed", failure.message ?: "Zoom update failed.")
             }
@@ -3227,7 +3899,9 @@ class Camera2PreviewEngine(
         } else null
         val region = result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION)
             ?.let { CropRect(it.left, it.top, it.right, it.bottom) }
-        val fov = RawZoomCrop.processedFieldOfView(active.width(), active.height(), region, zoomRatio)
+        // The GPU-crop route narrows what the operator saw about the processed frame's centre.
+        val fov = RawZoomCrop.digitalCrop(RawZoomCrop.processedFieldOfView(active.width(), active.height(), region, zoomRatio),
+            owner.lensCropFactor?.toDouble() ?: 1.0)
         var scale = 1.0
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val physicalId = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
@@ -3250,13 +3924,25 @@ class Camera2PreviewEngine(
 
     /** Tells the listener which physical lens serves the logical preview streams, when that changes. */
     private fun reportActiveLens(result: TotalCaptureResult) {
-        val active = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // A direct physical open carries no active-physical key: the locked lens is the active one.
+        val active = activeDescriptor?.lensLock?.physicalId ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
         } else null
         val report = true to active
         if (report == lastActiveLensReport) return
         lastActiveLensReport = report
         listener?.onActiveLens(active)
+    }
+
+    /** On the GPU-crop route, warns (debounced) while the HAL serves the streams from another lens. */
+    private fun reportLensLockSwitch(result: TotalCaptureResult) {
+        val crop = lensLockCrop ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val active = result.get(android.hardware.camera2.CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+        lensSwitchDebounce.offer(active, crop.binding.physicalId)?.let { switched ->
+            Log.w(TAG, "Lens lock crop on ${crop.binding.physicalId}: the HAL ${if (switched) "switched to $active" else "is back on the locked lens"}")
+            listener?.onLensLockSwitched(switched)
+        }
     }
 
     /**
@@ -3287,15 +3973,33 @@ class Camera2PreviewEngine(
                 result.get(android.hardware.camera2.CaptureResult.SCALER_CROP_REGION),
             )
         } ?: return
-        val coerced = ZoomMath.coerce(ratio, range)
+        val crop = lensLockCrop
+        val coerced = if (crop != null) LensLockCrop.uiRatio(ZoomMath.coerce(ratio, range), crop.factor)
+            else descriptor.lensLock?.let { LensLockZoom.toUi(ZoomMath.coerce(ratio, range), it.anchorRatio) }
+            ?: ZoomMath.coerce(ratio, range)
         effectiveZoomRatio = coerced
         listener?.onZoomEffective(coerced)
     }
 
     private fun notifyZoomRange() {
         val descriptor = activeDescriptor ?: return
-        val range = descriptor.effectiveZoomRange ?: return
-        listener?.onZoomRangeAvailable(range.start, range.endInclusive, descriptor.opticalAnchors)
+        lensLockCrop?.let { crop ->
+            lensLockWithdraw = null
+            listener?.onLensLockCrop(crop.binding.physicalId, crop.uiRange)
+            return
+        }
+        val lock = descriptor.lensLock
+        if (lock != null) {
+            // The locked session is configured: later failures are ordinary failures, not a fallback.
+            lensLockWithdraw = null
+            val range = descriptor.effectiveZoomRange ?: (1f..1f)
+            listener?.onLensLock(lock.physicalId, LensLockZoom.uiRange(lock.anchorRatio, range))
+            return
+        }
+        descriptor.effectiveZoomRange?.let { range ->
+            listener?.onZoomRangeAvailable(range.start, range.endInclusive, descriptor.opticalAnchors)
+        }
+        listener?.onLensLock(null, null)
     }
 
     fun startVideo(
@@ -4096,7 +4800,7 @@ class Camera2PreviewEngine(
                         repeatingBuilder = builder
                         val burst = configured.createHighSpeedRequestList(builder.build())
                         configured.setRepeatingBurstRequests(burst, cameraExecutor, previewCaptureCallback(descriptor, false))
-                        listener?.onPreviewStarted(descriptor)
+                        listener?.onPreviewStarted(appDescriptor(descriptor))
                         notifyZoomRange()
                     } catch (failure: Throwable) {
                         listener?.onFailure("high-speed-preview-request-failed", failure.message ?: "High-speed preview request failed.", true)
@@ -4248,6 +4952,7 @@ class Camera2PreviewEngine(
             return
         }
         fun sessionException(failure: Throwable) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("log-session-exception", failure.message ?: "The HLG10 OCLog graph could not be created.", false)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
@@ -4281,6 +4986,7 @@ class Camera2PreviewEngine(
                         )
                         notifyZoomRange()
                     } catch (failure: Throwable) {
+                        if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                         listener?.onFailure("log-request-failed", failure.message ?: "The HLG10 source request failed.", false)
                     }
                 }
@@ -4288,6 +4994,7 @@ class Camera2PreviewEngine(
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
                     if (currentGeneration != generation || !logPreviewEnabled) return
+                    if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
                     listener?.onFailure("log-session-failed", "CameraService rejected the HLG10 OCLog graph.", false)
                 }
             },
@@ -4399,7 +5106,7 @@ class Camera2PreviewEngine(
         val photoPipeline = logPipeline.takeIf { gpuPhotoPreviewEnabled }
         if (gpuPhotoPreviewEnabled) check(photoPipeline != null && surface === photoPipeline.cameraInputSurface)
         val previewOutput = sessionOutput(surface) { failure ->
-            listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
+            if (!withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) listener?.onFailure("preview-session-exception", failure.message ?: "Camera preview configuration failed.", true)
         } ?: return
         applyStreamUse(previewOutput, descriptor, StreamRole.PREVIEW)
         val outputs = mutableListOf(previewOutput)
@@ -4577,7 +5284,7 @@ class Camera2PreviewEngine(
                     physicalStillFallbackTaken = true
                     retireGraphReaders()
                     configureSession(device, descriptor, surface, currentGeneration)
-                } else {
+                } else if (!withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) {
                     listener?.onFailure(code, message, true)
                 }
             },
@@ -4645,6 +5352,7 @@ class Camera2PreviewEngine(
             configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, previewCaptureCallback(descriptor, true))
             notifyZoomRange()
         } catch (failure: Exception) {
+            if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
             listener?.onFailure("preview-request-failed", failure.message ?: "Camera preview request failed.", true)
         }
     }
@@ -4657,6 +5365,8 @@ class Camera2PreviewEngine(
      * no-op without the vendor request key and an advertised boost mode.
      */
     private fun driveInstantAec(armedSession: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+        // A lens-locked session never switches lens, and its vendor keys belong to the physical camera.
+        if (activeDescriptor?.lensLock != null) return
         runCatching {
             val builder = repeatingBuilder ?: return
             val eligible = InstantAec.eligible(
@@ -4687,7 +5397,7 @@ class Camera2PreviewEngine(
             val previousPhysicalId = instantAecPhysicalId
             if (physicalId != null) instantAecPhysicalId = physicalId
             if (!instantAec.active) {
-                if (InstantAec.physicalLensSwitched(previousPhysicalId, physicalId)) {
+                if (InstantAec.physicalLensSwitched(previousPhysicalId, physicalId) && !instantAecOnLensSwitchDisabled()) {
                     engageInstantAec(armedSession, builder, now, eligible, "lens $previousPhysicalId->$physicalId")
                 }
                 return
@@ -4740,6 +5450,15 @@ class Camera2PreviewEngine(
             armedSession?.let { pendingPreviewStartedReceipt = PreviewStartedReceipt(it, callbackGeneration, descriptor) }
         }
         return object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureProgressed(
+                    session: CameraCaptureSession,
+                    request: CaptureRequest,
+                    partialResult: android.hardware.camera2.CaptureResult,
+                ) {
+                    if (disposed.get() || callbackGeneration != generation) return
+                    noteLensForFrame(partialResult)
+                }
+
                 override fun onCaptureCompleted(
                     session: CameraCaptureSession,
                     request: CaptureRequest,
@@ -4747,11 +5466,15 @@ class Camera2PreviewEngine(
                 ) {
                     if (disposed.get() || callbackGeneration != generation || armedSession == null ||
                         armedSession !== this@Camera2PreviewEngine.session) return
+                    noteLensForFrame(result)
+                    noteZoomLag(armedSession, result)
+                    noteCalibrationMeta(result)
+                    traceLensSwitch(armedSession, request, result)
                     pendingPreviewStartedReceipt?.takeIf { it.generation == callbackGeneration && it.session === armedSession }?.let { receipt ->
                         // Consume before notifying: reentrant callbacks or a late original
                         // request cannot announce the same armed graph a second time.
                         pendingPreviewStartedReceipt = null
-                        listener?.onPreviewStarted(receipt.descriptor)
+                        listener?.onPreviewStarted(appDescriptor(receipt.descriptor))
                     }
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
@@ -4762,6 +5485,7 @@ class Camera2PreviewEngine(
                     reportRecordingWhiteBalance(request, result)
                     reportEffectiveZoom(result)
                     reportActiveLens(result)
+                    reportLensLockSwitch(result)
                     releaseZoomOverrideIfIdle(result)
                     reportSubjectFraming(request, result)
                     readIspHistogram(result)
@@ -4792,6 +5516,8 @@ class Camera2PreviewEngine(
                                 submittedAfMode = request.get(CaptureRequest.CONTROL_AF_MODE),
                                 submittedFocusDistanceDiopters = request.get(CaptureRequest.LENS_FOCUS_DISTANCE),
                                 rollingShutterSkewNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_ROLLING_SHUTTER_SKEW),
+                                awbGains = result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_GAINS)
+                                    ?.let { listOf(it.red, it.greenEven, it.greenOdd, it.blue) },
                                 awbLocked = result.get(android.hardware.camera2.CaptureResult.CONTROL_AWB_LOCK),
                                 colorTint = if (Build.VERSION.SDK_INT >= 36) result.get(android.hardware.camera2.CaptureResult.COLOR_CORRECTION_COLOR_TINT) else null,
                                 exposureMode = when (result.get(android.hardware.camera2.CaptureResult.CONTROL_AE_MODE)) {
@@ -5012,6 +5738,26 @@ class Camera2PreviewEngine(
      * FPS LOCK engaged: AE stays on and still picks the ISO, but the shutter is held a hair under the
      * frame time so the HAL cannot stretch the frame. Compensation and antibanding stay as set above.
      */
+    /**
+     * The sensor part of the held ISO stops at the lowest sensor maximum of the logical camera's
+     * lenses, the boost making up the rest. The HAL hands the next lens the request as it is, and a
+     * lens clamps what its sensor cannot reach (the Razr Fold's ultrawide and tele stop at 6400, the
+     * 1x at the logical camera's 12800), so a split one lens cannot follow would darken the frames
+     * after every switch to it.
+     */
+    private fun cadenceSensorIsoRange(range: IntRange): IntRange {
+        val descriptor = activeDescriptor ?: return range
+        if (descriptor.lensLock != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return range
+        val top = cadenceSensorTopCache.getOrPut(descriptor.cameraId) {
+            runCatching {
+                manager.getCameraCharacteristics(descriptor.cameraId).physicalCameraIds.mapNotNull { id ->
+                    runCatching { manager.getCameraCharacteristics(id).get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper }.getOrNull()
+                }
+            }.getOrDefault(emptyList()).let { CadenceIsoLoop.sharedSensorTop(range.last, it) }
+        }
+        return range.first..top
+    }
+
     private fun applyCadenceHold(builder: CaptureRequest.Builder) {
         val heldIso = cadenceHeldIso
         val exposureNs = cadenceHoldExposureNs()
@@ -5020,7 +5766,7 @@ class Camera2PreviewEngine(
             // Manual exposure at 1/fps; CONTROL_MODE stays whatever the auto branch set.
             builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             val caps = activeDescriptor?.exposureCapabilities
-            val sensorRange = caps?.isoRange
+            val sensorRange = caps?.isoRange?.let { cadenceSensorIsoRange(it) }
             if (sensorRange != null) {
                 // Above the sensor maximum the rest comes from the post-raw boost, where the camera has one.
                 val (sensorIso, boost) = CadenceIsoLoop.split(heldIso, sensorRange, caps.postRawBoostRange)
@@ -5768,7 +6514,7 @@ class Camera2PreviewEngine(
      */
     private fun applyMotorolaHighSpeedSessionControls(builder: CaptureRequest.Builder) {
         val descriptor = activeDescriptor ?: return
-        if (!deviceQuirks.resolve(descriptor.cameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
+        if (!deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS)) return
         val keys = runCatching {
             manager.getCameraCharacteristics(descriptor.cameraId).availableCaptureRequestKeys
         }.getOrNull().orEmpty()
@@ -5965,10 +6711,13 @@ class Camera2PreviewEngine(
                             ?.firstOrNull()
                     }.getOrNull()?.let { focal -> id to focal }
                 }
+            // The lens lock's anchors (field of view), so the bar matches where the HAL switches lens.
+            val fovRatios = lensLockCandidates(cameraId).associate { it.physicalId to it.anchorRatio }
             val anchors = ZoomMath.deriveAnchors(
                 logicalFocal, physicalFocals,
                 rangeMin = zoomRange?.start ?: Float.NEGATIVE_INFINITY,
                 rangeMax = zoomRange?.endInclusive ?: Float.POSITIVE_INFINITY,
+                fovRatios = fovRatios,
             )
             // HFR zoom is only safe when the camera uses the CONTROL_ZOOM_RATIO API (API 30+)
             // and the key is present in availableCaptureRequestKeys. Constrained sessions reject
@@ -6264,7 +7013,9 @@ class Camera2PreviewEngine(
             logicalSizes.map { it.width to it.height },
             physicalSizes.mapValues { entry -> entry.value.map { it.width to it.height } },
         )
-        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken })
+        // A lens-locked session already runs on one physical camera: no physical still routing (OCC-PLAN-069).
+        // The GPU-crop route pins one lens through the logical streams, so it has none either.
+        return CompressedStillPlan(size, routed?.takeIf { !physicalStillFallbackTaken && descriptor.lensLock == null && lensLockCrop == null })
     }
 
     private fun compressedStillSize(descriptor: Camera2CameraDescriptor): Size? = compressedStillPlan(descriptor)?.size
@@ -6288,6 +7039,10 @@ class Camera2PreviewEngine(
         analysisBurst = false
         logPipeline?.setAnalysisBurst(false)
         cadenceHeldIso = null
+        cadenceLensId = null
+        cadenceMeasuredLensId = null
+        cadenceLoopLensId = null
+        cadenceRatioFromLensId = null
         cadenceEngaged = false
         cadenceFaulted = false
         timelapseTake = false
@@ -6335,6 +7090,10 @@ class Camera2PreviewEngine(
         activeLogProfile = null
         previewSurface = null
         activeDescriptor = null
+        lockedLogicalDescriptor = null
+        lensLockWithdraw = null
+        lensLockCrop = null
+        lensSwitchDebounce.reset()
         requestedAeCompensationIndex = null
         requestedWhiteBalance = WhiteBalanceSelection.Auto
         requestedZoomRatio = 1f
@@ -6524,6 +7283,7 @@ class Camera2PreviewEngine(
             capturedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
             scopes = analyzeMonitoringRgb(sampledWidth, sampledHeight, rgbSamples, options, MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR),
             focusPeaking = if (focusPeakingEnabled) focusPeakingMask(image, options.peakingThreshold) else null,
+            sensorTimestampNs = image.timestamp,
         )
     }
 
@@ -6562,6 +7322,7 @@ class Camera2PreviewEngine(
             pendingPreviewStart = null
             subjectTarget = null
             listener = null
+            lensLockCropFallbacks.clear()
             try {
                 closeResources()
                 finishCloseIfIdle()
@@ -6616,6 +7377,7 @@ class Camera2PreviewEngine(
         private const val MAX_BURST_IMAGES = 10
         private const val TAG = "Camera2PreviewEngine"
         private const val CADENCE_TAG = "CadenceGuard"
+        private const val CADENCE_TRACE_TAG = "CadenceTrace"
     }
 }
 

@@ -216,6 +216,12 @@ object CameraPresetCodec {
         lowLightAutoFps = current.lowLightAutoFps,
         recordingPolicy = current.recordingPolicy,
         fpsLock = current.fpsLock,
+        // Per-lens calibration and the lens lock describe this device's cameras, not a look.
+        lensCorrectionVideo = current.lensCorrectionVideo,
+        lensCorrectionPhotos = current.lensCorrectionPhotos,
+        lensCorrectionAlignment = current.lensCorrectionAlignment,
+        lensLock = current.lensLock,
+        smoothLensSwitch = current.smoothLensSwitch,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,
