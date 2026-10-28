@@ -6,16 +6,23 @@ Review baseline for the portable OpenCineCam release:
   foreground-service permissions for capture. `INTERNET` and
   `ACCESS_NETWORK_STATE` are declared only for opt-in WebDAV transfers
   (OCC-PLAN-067, ADR-0034): off by default, never enabled by presets, HTTPS
-  only, started by an explicit per-bundle user action, with no background
-  scheduler. `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` are declared
-  only for opt-in photo/take geotagging: off by default and requested at
-  runtime while the camera activity is resumed. No broad storage, analytics,
+  only, and started by an explicit per-bundle user action unless the separate
+  opt-in *Upload new takes automatically* switch (off by default, device-local,
+  never in a preset) is on. That switch lets WorkManager upload takes recorded
+  after it was turned on, on Wi-Fi unless cellular is allowed and never during a
+  recording; `FOREGROUND_SERVICE_DATA_SYNC` covers its visible `dataSync`
+  foreground service (ADR-0034 amendment 2026-10-19), and WorkManager's library
+  manifest adds `RECEIVE_BOOT_COMPLETED` and `WAKE_LOCK`.
+  `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` are declared only for
+  opt-in photo/take geotagging: off by default and requested at runtime while
+  the camera activity is resumed. No broad storage, analytics,
   account, or remote-crash permission.
-- **Opt-in network/location (OCC-PRIV-001, amended 2026-09-26; ADR-0027
-  amendment):** network and location permissions are allowed only for the named
-  opt-in features above, each off by default, with no background or automatic
-  network use, no analytics/telemetry/accounts, HTTPS-only transfers and no
-  third-party SDKs. The `SEC-NETWORK`/`SEC-PERMISSIONS` checks in
+- **Opt-in network/location (OCC-PRIV-001, amended 2026-09-26 and 2026-10-19;
+  ADR-0027 and ADR-0034 amendments):** network and location permissions are
+  allowed only for the named opt-in features above, each off by default, with no
+  background or automatic network use other than the opt-in WebDAV automatic
+  upload of new takes, no analytics/telemetry/accounts, HTTPS-only transfers and
+  no third-party SDKs. The `SEC-NETWORK`/`SEC-PERMISSIONS` checks in
   `SecurityAudit.kt` accept those permissions only when their `OptInFeature` is
   declared, and `SecurityAuditManifestTest` audits the real manifest. A separate
   no-network flavor was considered and rejected for now.

@@ -1,6 +1,6 @@
 # OpenCineCam Privacy Policy
 
-Last updated: 2026-09-30. Applies to the Android app OpenCineCam (package `com.librestatic.opencinecam`), version 0.1.0-beta and later.
+Last updated: 2026-10-19. Applies to the Android app OpenCineCam (package `com.librestatic.opencinecam`), version 0.1.0-beta and later.
 
 ## Summary
 
