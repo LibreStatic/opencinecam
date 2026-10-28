@@ -9,14 +9,19 @@ system `openssl`. The service-account key is the organisation-wide one in
 
   tools/play-publish.py status
   tools/play-publish.py publish --aab app.aab [--mapping mapping.txt] [--track alpha]
-                                [--notes store/play/release-notes/X.txt] [--dry-run]
-                                [--no-review]
+                                [--notes store/play/release-notes/X.txt] [--rollout 0.2]
+                                [--dry-run] [--no-review]
 
 `publish` uploads the bundle (and the R8 mapping, if given), puts one release on the
 track with the per-locale notes and the name "<versionCode> (<versionName>)", and
 commits the edit, which sends it for review. `--dry-run` validates and discards the
 edit instead. `--no-review` commits with changesNotSentForReview, leaving the change
 in Publishing overview for someone to send from the Console.
+
+`--track production` publishes to production. The track must already target at least one
+country: the API cannot set that, so the check runs before the upload and points to
+the Console. `--rollout F` (0 < F < 1) makes a staged rollout to that fraction of users
+instead of a full one.
 """
 import argparse
 import base64
@@ -140,7 +145,8 @@ def cmd_status(play, args):
         for track in play.call("GET", play.edit_url(edit, "/tracks")).get("tracks", []):
             releases = track.get("releases", [])
             summary = "; ".join(
-                f"{r.get('name', '?')} {r.get('versionCodes', [])} {r.get('status')}" for r in releases
+                f"{r.get('name', '?')} {r.get('versionCodes', [])} {r.get('status')}"
+                + (f" {r['userFraction']:.0%}" if "userFraction" in r else "") for r in releases
             ) or "empty"
             print(f"{track['track']}: {summary}")
         codes = [b["versionCode"] for b in play.call("GET", play.edit_url(edit, "/bundles")).get("bundles", [])]
@@ -153,9 +159,16 @@ def cmd_publish(play, args):
     version_name = args.version_name or gradle_value(r'versionName\s*=\s*"([^"]+)"')
     notes_path = args.notes or os.path.join(ROOT, f"store/play/release-notes/{version_name}.txt")
     notes = parse_notes(notes_path)
+    if args.rollout is not None and not 0 < args.rollout < 1:
+        die("--rollout must be a fraction between 0 and 1 (exclusive); omit it for a full rollout")
     edit = play.call("POST", f"{API}/{play.package}/edits")["id"]
     committed = False
     try:
+        countries = play.call("GET", play.edit_url(edit, f"/countryAvailability/{args.track}")).get("countries", [])
+        if not countries:
+            die(f"track {args.track} targets no countries: add them in the Play Console "
+                f"(the track's Countries / regions tab) first; the API cannot set them")
+        print(f"track {args.track} targets {len(countries)} countries")
         print(f"uploading {os.path.basename(args.aab)} ...", flush=True)
         with open(args.aab, "rb") as f:
             bundle = play.call("POST", play.upload_url(edit, "/bundles"),
@@ -173,9 +186,12 @@ def cmd_publish(play, args):
             "status": "completed",
             "releaseNotes": notes,
         }
+        if args.rollout is not None:
+            release.update(status="inProgress", userFraction=args.rollout)
         play.call("PUT", play.edit_url(edit, f"/tracks/{args.track}"),
                   body={"track": args.track, "releases": [release]})
-        print(f"track {args.track}: {release['name']}, notes for {len(notes)} languages")
+        rollout = f"staged rollout {args.rollout:.0%}" if args.rollout is not None else "full rollout"
+        print(f"track {args.track}: {release['name']}, {rollout}, notes for {len(notes)} languages")
         play.call("POST", play.edit_url(edit, ":validate"))
         print("edit validated")
         if args.dry_run:
@@ -198,7 +214,8 @@ def main():
     pub = sub.add_parser("publish", help="upload an AAB and release it on a track")
     pub.add_argument("--aab", required=True)
     pub.add_argument("--mapping", help="R8 mapping.txt to attach to the bundle")
-    pub.add_argument("--track", default="alpha", help="API track id (default: alpha, the closed track)")
+    pub.add_argument("--track", default="alpha", help="API track id: alpha (default, the closed track) or production")
+    pub.add_argument("--rollout", type=float, help="staged rollout: the fraction of users, 0 < F < 1 (default: full)")
     pub.add_argument("--notes", help="default: store/play/release-notes/<versionName>.txt")
     pub.add_argument("--version-name", help="default: versionName in app/build.gradle.kts")
     pub.add_argument("--dry-run", action="store_true", help="validate, then discard the edit")

@@ -170,7 +170,7 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 
 ## Versioning
 
-- Bump `versionName` in `app/build.gradle.kts` in its own commit before every store release; never upload a new build under the previous version. Patch (`x.y.Z`) for fixes and small, self-contained changes (including a single small feature), minor (`x.Y.0`) for medium changes (several features, a reworked screen or flow), major (`X.0.0`) for a large overhaul; keep the pre-release suffix (e.g. `-beta`). The `versionCode` must also be higher than the last uploaded one.
+- Bump `versionName` in `app/build.gradle.kts` in its own commit before every store release; never upload a new build under the previous version. Patch (`x.y.Z`) for fixes and small, self-contained changes (including a single small feature), minor (`x.Y.0`) for medium changes (several features, a reworked screen or flow), major (`X.0.0`) for a large overhaul; keep the pre-release suffix (e.g. `-beta`) on alpha releases, and drop it for production (the first was `1.0.0`). The `versionCode` must also be higher than the last uploaded one.
 
 ## Publishing to Google Play
 
@@ -185,5 +185,5 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
   3. commits the edit, which sends it for review.
 - Run `--dry-run` first: it validates the edit and discards it.
 - If the commit says the changes cannot be sent automatically, rerun with `--no-review`, then send them from Publishing overview.
-- The closed track is `alpha`.
+- The closed track is `alpha`; production is `--track production` (add `--rollout 0.2` for a staged rollout). Production must target countries first, which only the Console can set; `publish` checks it before uploading.
 - If the API answers 403, the service account lacks access in Play Console > Users and permissions. Ask the user; do not grant it yourself.
