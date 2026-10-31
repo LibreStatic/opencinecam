@@ -142,6 +142,7 @@ All monitoring tools are display only. They never change the recorded file.
 - Quick keys in the capture row turn zebra, peaking, false colour and the scopes on and off.
 - **LUTs**: separate operator, subject and recording LUTs, managed in **Color and monitoring › Preview and recording LUT library**.
 - **LOG View Assist** shows LOG footage as Rec.709 while you shoot.
+- Some cameras cannot run the preview, the scopes and RAW at the same time. OpenCineCam then drops the scopes first and RAW second, and a notice under the zoom says what was lost ("Scopes unavailable with this configuration", "RAW unavailable with this configuration", or both). In RAW photo mode the shutter then fails with that reason instead of saving a different format.
 - The thermal indicator shows the device's heat load. When the device is too hot, the scopes pause ("Scopes paused: device is too hot") and come back by themselves. Recording is not affected.
 - **Gyro data for Gyroflow** (in **Video and photography**, off by default) saves the phone's motion next to each Video, LOG or HLG take as a `.gcsv` file with the same name. Turn off the camera's own stabilization for the best match. It is not used for slow motion or time lapse.
 
@@ -188,6 +189,8 @@ A take never changes microphone silently. The badge turns amber and the change i
 
 - **Strict** (the default on new installs) stops the take and states the reason. The file is saved.
 - **Adaptive** keeps recording, reduces monitoring work and shows a warning under the REC strip.
+
+If the device's HEVC encoder refuses the chosen format when a take starts, the take records H.264 instead under either policy, and the warning under the REC strip says "Recording in H.264: HEVC encoder unavailable".
 
 The policy applies to the next take.
 
