@@ -142,7 +142,7 @@ Add `--require-evidence` to the plan validator for release certification (`evide
 
 The same source ships through three channels ([release contract](docs/release/three-channel-release.md)):
 
-- **Google Play:** `tools/build-play-bundle.sh` builds the bundle signed with a separate upload key, and `tools/play-publish.py` publishes it through the Play Developer API (`status`, then `publish --aab … --mapping … --track alpha|production`, with `--rollout` for a staged rollout and `--dry-run` to validate first). See "Publishing to Google Play" in [AGENTS.md](AGENTS.md). Production versions carry no pre-release suffix; closed-testing (`alpha`) builds keep `-beta`.
+- **Google Play:** `tools/build-play-bundle.sh` builds the bundle signed with a separate upload key, and `tools/play-publish.py` publishes it through the Play Developer API (`status`, then `publish --aab … --mapping … --track alpha|production`, with `--rollout` for a staged rollout and `--dry-run` to validate first). `listings` sets the store title and descriptions from `store/play/listings/`. See "Publishing to Google Play" in [AGENTS.md](AGENTS.md). Production versions carry no pre-release suffix; closed-testing (`alpha`) builds keep `-beta`.
 - **GitHub:** tagged releases with signed ARM64 APKs and checksums.
 - **F-Droid:** reproducible build from the tagged source and lockfiles (pending, see above).
 

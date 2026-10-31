@@ -5,6 +5,11 @@ Package: `com.librestatic.opencinecam`
 Releases are published through the Play Developer API with
 `tools/play-publish.py` (see "Publishing to Google Play" in `AGENTS.md`).
 
+The listing text (title, short and full description per locale) lives in
+`store/play/listings/<locale>/`. Check it with `python3 store/play/check_listings.py`,
+then push it with `tools/play-publish.py listings` (`--dry-run` first); only
+changed locales are committed. Images and other locales stay in the Console.
+
 - **Internal:** not used.
 - **Closed testing - Alpha (`alpha`):** staged testers; used for 0.2.0-beta
   through 0.5.0-beta (versionCode 119). Alpha versions keep the `-beta` suffix.
