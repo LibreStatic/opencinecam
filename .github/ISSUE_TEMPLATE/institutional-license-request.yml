@@ -1,0 +1,36 @@
+name: Institutional license request
+description: Request a complimentary license for educational, scientific or public-interest use.
+title: "[Institutional license] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        People affiliated with public institutions, student organizations,
+        schools, universities or scientific/research groups may request a free license.
+        Do not post private contact details or verification documents here.
+        For private requests, email support@librestatic.com.
+        Requests are reviewed individually, without automatic approval.
+  - type: dropdown
+    id: affiliation
+    attributes:
+      label: Affiliation
+      options:
+        - Public institution
+        - Student organization
+        - School or university
+        - Scientific or research group
+        - Other public-interest group
+    validations:
+      required: true
+  - type: input
+    id: organization
+    attributes:
+      label: Organization (public name)
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: Intended use
+    validations:
+      required: true
