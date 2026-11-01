@@ -12,7 +12,7 @@ OpenCineCam is a native, open-source cinema camera for Android. It keeps four th
 
 People affiliated with **public institutions, student unions or student organizations, schools, universities, and scientific or research groups** may **request a free OpenCineCam license** for educational, scientific or public-interest work.
 
-To request one, [open an institutional license issue](https://github.com/LibreStatic/opencinecam/issues/new?template=institutional-license-request.yml) or email [support@librestatic.com](mailto:support@librestatic.com). You can also use [GitHub Discussions](https://github.com/LibreStatic/opencinecam/discussions) if enabled. Please don't post personal contact information or verification documents in a public issue. Requests are reviewed individually; approval isn't automatic.
+To request one, [open an institutional license issue](https://github.com/LibreStatic/opencinecam/issues/new?template=institutional-license-request.yml) or email [support@librestatic.com](mailto:support@librestatic.com). You can also [start a GitHub Discussion](https://github.com/LibreStatic/opencinecam/discussions) to request a license. Please don't post personal contact information or verification documents in a public issue. Requests are reviewed individually; approval isn't automatic.
 
 - **User guide:** [docs/user-guide.md](docs/user-guide.md)
 
