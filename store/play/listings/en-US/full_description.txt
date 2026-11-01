@@ -1,5 +1,8 @@
 OpenCineCam is an open-source manual cinema camera for Android. It puts your phone's Camera2 hardware under your control, with the monitoring tools and file metadata filmmakers expect. No account, no ads, no analytics.
 
+INSTITUTIONAL LICENSING
+Public institutions, student groups and research teams: inquire via GitHub Discussions, Issues or support@librestatic.com.
+
 VERSION 1.0
 This is OpenCineCam 1.0. Some modes are experimental and stay hidden unless your phone qualifies, and results vary from phone to phone. Your feedback is welcome and shapes what comes next: open an issue on the project page on GitHub.
 
