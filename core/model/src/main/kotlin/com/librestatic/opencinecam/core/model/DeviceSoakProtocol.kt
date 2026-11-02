@@ -17,6 +17,9 @@ enum class SoakObservationStatus {
     FAIL,
     UNKNOWN,
     NOT_RUN,
+
+    /** Only valid for [SoakScenario.FOLD_TRANSITION] on a target declared non-foldable. */
+    NOT_APPLICABLE,
 }
 
 data class SoakObservation(
@@ -37,6 +40,8 @@ data class SoakTarget(
     val fingerprint: String,
     val protocolVersion: Int,
     val profileId: String,
+    /** Whether the device folds; null means not declared. */
+    val foldable: Boolean? = null,
 ) {
     init {
         require(fingerprint.isNotBlank()) { "device fingerprint is required" }
@@ -79,6 +84,11 @@ object SoakProtocol {
         require(observations.size <= MAX_OBSERVATIONS) { "too many soak observations" }
         val unique = observations.map { it.scenario }.toSet()
         val missing = SoakScenario.entries.toSet() - unique
+        val nonFoldable = target?.foldable == false
+        fun validNotApplicable(it: SoakObservation) =
+            it.status == SoakObservationStatus.NOT_APPLICABLE &&
+                it.scenario == SoakScenario.FOLD_TRANSITION &&
+                nonFoldable
         val failures = buildList {
             if (target == null) add("physical target not identified")
             if (durationSeconds < REQUIRED_DURATION_SECONDS) add("30-minute soak requirement not met")
@@ -87,11 +97,15 @@ object SoakProtocol {
                 .forEach { add("${it.scenario}: ${it.safeMessage}") }
             observations.filter { it.status == SoakObservationStatus.UNKNOWN || it.status == SoakObservationStatus.NOT_RUN }
                 .forEach { add("${it.scenario}: evidence not run or unknown") }
+            observations.filter { it.status == SoakObservationStatus.NOT_APPLICABLE && !validNotApplicable(it) }
+                .forEach { add("${it.scenario}: not applicable requires a non-foldable target") }
             if (observations.size != unique.size) add("duplicate scenario observations")
         }
         val hasHardFailure = observations.any { it.status == SoakObservationStatus.FAIL }
         val hasUnknown = observations.any {
-            it.status == SoakObservationStatus.UNKNOWN || it.status == SoakObservationStatus.NOT_RUN
+            it.status == SoakObservationStatus.UNKNOWN ||
+                it.status == SoakObservationStatus.NOT_RUN ||
+                (it.status == SoakObservationStatus.NOT_APPLICABLE && !validNotApplicable(it))
         }
         val status = when {
             target == null || durationSeconds < REQUIRED_DURATION_SECONDS || missing.isNotEmpty() -> SoakGateStatus.NOT_RUN
