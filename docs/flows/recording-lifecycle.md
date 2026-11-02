@@ -154,7 +154,7 @@ sequenceDiagram
 - **Process death.** `CaptureService.onCreate` runs `RecordingCaptureRecovery.recover()`. It publishes rows that hold bytes as incomplete and discards empty ones.
 - **Incomplete marker.** `IncompleteTake.mark` adds `takeStatus: "incomplete"` and `failureReasons` (for example `recording-interrupted`, `muxer-not-finalized`, `native-retirement-pending`). Only zero-length outputs are deleted (`deleteOwned`).
 - **Clip sidecar.** It is best effort. If building or writing it fails, the take publishes without it.
-- **Thermal.** `evaluateRuntimePolicy` reads `PowerManager.currentThermalStatus` on every tick. Scope analysis may be suspended for heat (`onAnalysisSuspended`); that never stops the take.
+- **Thermal.** `evaluateRuntimePolicy` reads `PowerManager.currentThermalStatus` on every tick. At critical, Strict stops the take; Adaptive keeps recording with monitoring reduced. Emergency or shutdown stops the take in both policies. Scope analysis may be suspended for heat (`onAnalysisSuspended`); that alone never stops the take.
 - **Storage full.** The tick compares free space with the projected reserve. A single unreadable sample reuses the last good one.
 - **Audio input lost.** `audioInputLostFailure` stops the take; the file is still finalized.
 - **Fold closed.** `FoldClosureTracker` calls `stopRecording` unless `subjectDisplay.continueRecordingOnFold` is set.

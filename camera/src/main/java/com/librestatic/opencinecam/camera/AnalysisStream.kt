@@ -55,7 +55,7 @@ class AnalysisPerformanceGovernor(
     fun observe(queueDepth: Int, thermal: ThermalStatus, storage: StoragePressure): AnalysisGovernorDecision {
         require(queueDepth >= 0)
         if (disabled) return AnalysisGovernorDecision(AnalysisGovernorAction.DISABLE, "Analysis was disabled after a pressure event.", RuntimeAction.DEGRADE_MONITORING)
-        if (thermal == ThermalStatus.CRITICAL || storage == StoragePressure.INSUFFICIENT) {
+        if (thermal == ThermalStatus.CRITICAL || thermal == ThermalStatus.EMERGENCY || storage == StoragePressure.INSUFFICIENT) {
             disabled = true
             return AnalysisGovernorDecision(AnalysisGovernorAction.DISABLE, "Analysis disabled before critical recording pressure.", RuntimeAction.DEGRADE_MONITORING)
         }
@@ -74,8 +74,8 @@ fun thermalStatusFromPlatform(status: Int): ThermalStatus = when (status) {
     PowerManager.THERMAL_STATUS_NONE, PowerManager.THERMAL_STATUS_LIGHT -> ThermalStatus.NORMAL
     PowerManager.THERMAL_STATUS_MODERATE -> ThermalStatus.MODERATE
     PowerManager.THERMAL_STATUS_SEVERE -> ThermalStatus.SEVERE
-    PowerManager.THERMAL_STATUS_CRITICAL, PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN ->
-        ThermalStatus.CRITICAL
+    PowerManager.THERMAL_STATUS_CRITICAL -> ThermalStatus.CRITICAL
+    PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN -> ThermalStatus.EMERGENCY
     else -> ThermalStatus.UNKNOWN
 }
 
@@ -93,7 +93,7 @@ class ThermalAnalysisGovernor {
     /** Feeds one `PowerManager.THERMAL_STATUS_*` value; returns the new state only when it changed. */
     fun observePlatformStatus(platformThermalStatus: Int): AnalysisSuspension? {
         val next = when (thermalStatusFromPlatform(platformThermalStatus)) {
-            ThermalStatus.SEVERE, ThermalStatus.CRITICAL -> AnalysisSuspension.THERMAL
+            ThermalStatus.SEVERE, ThermalStatus.CRITICAL, ThermalStatus.EMERGENCY -> AnalysisSuspension.THERMAL
             ThermalStatus.NORMAL -> AnalysisSuspension.NONE
             else -> state
         }
