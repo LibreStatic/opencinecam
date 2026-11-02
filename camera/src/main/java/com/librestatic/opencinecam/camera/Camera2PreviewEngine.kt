@@ -1587,6 +1587,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                endTakeOnCameraLoss()
                                 listener.onFailure("camera-disconnected", "The selected camera disconnected.", true)
                             }
                         }
@@ -1596,6 +1597,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                endTakeOnCameraLoss()
                                 if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
@@ -1920,6 +1922,7 @@ class Camera2PreviewEngine(
                     recording = false
                     timelapseTake = false
                     reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                    settleOutputRetirements()
                 }
             })
     }
@@ -4287,6 +4290,7 @@ class Camera2PreviewEngine(
                                 }
                             }
                             reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                            settleOutputRetirements()
                         }
                     },
                 )
@@ -4295,6 +4299,7 @@ class Camera2PreviewEngine(
                     logPipeline = null
                     passthroughVideoPipeline = false
                     recording = false
+                    settleOutputRetirements()
                     // Still this generation's take (checked above on this executor): the caller was
                     // already told `true`, so a rejected start must terminate it via onFailure.
                     if (!pipelineFailureReported.get()) {
@@ -4309,6 +4314,7 @@ class Camera2PreviewEngine(
                 logPipeline = null
                 passthroughVideoPipeline = false
                 recording = false
+                settleOutputRetirements()
                 listener?.onFailure("video-gpu-prepare-failed", failure.message ?: "GPU video recording could not be prepared.", true)
             }
         }
@@ -4374,6 +4380,7 @@ class Camera2PreviewEngine(
                     recording = false
                     lastLogRecordingEvidence = evidence
                     reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                    settleOutputRetirements()
                 }
             },
         )
@@ -4588,8 +4595,17 @@ class Camera2PreviewEngine(
         listener?.onRecordingStopped(success && retired)
     }
 
-    /** Observer only: call after stopPreview (or a failed recording has already retired).
-     * A closed PFD wrapper, timeout, or queued stop is not a native retirement receipt. */
+    /** Receipts asked for while a recorder or GPU take still owned its output; camera executor only. */
+    private val pendingOutputRetirements = mutableListOf<CompletableFuture<Unit>>()
+
+    private fun recordingOutputLive(): Boolean = recorder != null || recorderRequest.get() != null || recording
+
+    /**
+     * Observer only. Completes once no recorder or GPU take owns the output and the retiring
+     * pipelines have closed; asked while a take is still ending (a failure reported mid-take, such
+     * as camera loss), it waits for that take to retire instead of failing (ADR-0033). A closed PFD
+     * wrapper, timeout, or queued stop is not a native retirement receipt.
+     */
     fun recordingOutputRetirement(): CompletableFuture<Unit> {
         val completion = CompletableFuture<Unit>()
         // close may retire/shut down the executor before this observer gets its queued turn.
@@ -4599,17 +4615,43 @@ class Camera2PreviewEngine(
         if (!disposed.get()) cameraExecutor.execute {
             val failure = retirementFailure
             if (failure != null) completion.completeExceptionally(failure)
-            else if (recorder != null || recorderRequest.get() != null || recording) {
-                completion.completeExceptionally(IllegalStateException("Recording output still has a native owner"))
-            } else {
-                val receipts = retiringPipelines.map { it.closeAsync() } + initializationRetirements.toList() +
-                    listOfNotNull(logPipeline?.recordingFileRetirement())
-                CompletableFuture.allOf(*receipts.toTypedArray()).whenComplete { _, error ->
-                    if (error == null) completion.complete(Unit) else completion.completeExceptionally(error)
-                }
-            }
+            else if (recordingOutputLive()) pendingOutputRetirements += completion
+            else completeOutputRetirement(completion)
         }
         return completion.thenApply { it }
+    }
+
+    private fun completeOutputRetirement(completion: CompletableFuture<Unit>) {
+        val receipts = retiringPipelines.map { it.closeAsync() } + initializationRetirements.toList() +
+            listOfNotNull(logPipeline?.recordingFileRetirement())
+        CompletableFuture.allOf(*receipts.toTypedArray()).whenComplete { _, error ->
+            if (error == null) completion.complete(Unit) else completion.completeExceptionally(error)
+        }
+    }
+
+    /**
+     * Settles waiting receipts once the output has no live owner. Deferred to the next executor
+     * turn so a close in progress has queued its pipeline retirement first.
+     */
+    private fun settleOutputRetirements() {
+        if (pendingOutputRetirements.isEmpty()) return
+        cameraExecutor.execute {
+            if (pendingOutputRetirements.isEmpty()) return@execute
+            val failure = retirementFailure
+            if (failure == null && recordingOutputLive()) return@execute
+            val waiting = pendingOutputRetirements.toList()
+            pendingOutputRetirements.clear()
+            waiting.forEach { if (failure != null) it.completeExceptionally(failure) else completeOutputRetirement(it) }
+        }
+    }
+
+    /** Camera loss ends the take where it stands, so its output can retire and publish as incomplete (ADR-0033). */
+    private fun endTakeOnCameraLoss() {
+        if (recording) logPipeline?.stopRecording()
+        recorderRequest.get()?.let { request ->
+            if (recording) runCatching { recorder?.stop() }.onFailure { Log.w(TAG, "MediaRecorder stop after camera loss failed", it) }
+            releaseRecorder(request)
+        }
     }
 
     fun stopPreview() {
@@ -7004,6 +7046,7 @@ class Camera2PreviewEngine(
     private fun failNativeRetirement(failure: Throwable) {
         if (retirementFailure == null) retirementFailure = failure
         nativeRetirement.completeExceptionally(requireNotNull(retirementFailure))
+        settleOutputRetirements()
     }
 
     private fun closeCameraDevice(device: CameraDevice) {
@@ -7168,6 +7211,7 @@ class Camera2PreviewEngine(
         recorderOverGpuPreview = false
         // Release the acceptance fence last, never while MediaRecorder still owns native I/O.
         recorderRequest.compareAndSet(expected, null)
+        settleOutputRetirements()
     }
 
     private class BoundedDngOutput : ByteArrayOutputStream() {
