@@ -3105,17 +3105,19 @@ class CaptureService : Service() {
                 cameraState.value = current.copy(message = getString(R.string.gate_requires_preflight, modeDisplayName(mode)))
                 return
             }
+            val descriptor = current.descriptor
+            val selectedLogProfile = descriptor?.let {
+                normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
+            }.takeIf { mode.usesLogGraph }
             val changedSignalPath =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
                 nightExtensionActive(current.selectedMode) != nightExtensionActive(mode) ||
                 (current.selectedMode.usesLogGraph) != (mode.usesLogGraph) ||
                     (settings.subjectDisplay.wantsCameraPreview && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
-                    (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes)
-            val descriptor = current.descriptor
-            val selectedLogProfile = descriptor?.let {
-                normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
-            }.takeIf { mode.usesLogGraph }
+                    (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes) ||
+                    // HLG takes only the HLG10 profiles, so LOG's ISP-derived ones need a new session.
+                    (current.selectedMode.usesLogGraph && mode.usesLogGraph && current.activeLogProfile != selectedLogProfile)
             val selectedVideoProfile = descriptor?.let {
                 normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
@@ -3147,6 +3149,8 @@ class CaptureService : Service() {
                 message = null,
             )
             getSharedPreferences("operator-session", MODE_PRIVATE).edit().putString("last-mode", mode.name).apply()
+            // LOG and HLG share the session; HLG always monitors through the Rec.709 view, LOG as set.
+            if (mode.usesLogGraph) previewEngine.setOpenCineLogViewAssist(settings.previewViewAssist(mode))
             if (changedSignalPath && reopen) {
                 val descriptor = cameraState.value.descriptor
                 val surface = attachedPreviewSurface
