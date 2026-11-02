@@ -346,8 +346,8 @@ class CaptureAdaptiveUiTest {
         val components = loadThirdPartyComponents(context)
         // The authority is verifyThirdPartyLicenses, which re-derives this catalog from
         // app/gradle.lockfile on every preBuild; this number is the deliberate review tripwire,
-        // so bump it only together with the dependency that moved it.
-        assertEquals(126, components.size)
+        // so bump it only together with the dependency that moved it (141 since WorkManager 2.12.0, fb068c9).
+        assertEquals(141, components.size)
         assertEquals(components.size, components.map { it.coordinate }.toSet().size)
         assertTrue(components.all { it.licenseId.isNotBlank() && it.licenseTextAsset.isNotBlank() })
 

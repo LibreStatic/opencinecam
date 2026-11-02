@@ -464,17 +464,30 @@ class PhotoFormatServiceTest {
                 node("member").performScrollTo().assertTextEquals(context.getString(R.string.media_playback_member,index+1,members.size,artifact.name))
                 for(tag in listOf("play-pause","exact","next-frame","previous-frame","native-frame-mode")) node(tag).assertDoesNotExist()
                 val content=originals.getValue(artifact.uri)
-                val decoded=requireNotNull(BitmapFactory.decodeByteArray(content,0,content.size))
+                // Decode a DNG at the preview's sample, as decodeDngPhotoPreview does: the platform RAW codec may
+                // take another path at full size (Samsung's DNGs render visibly differently there).
+                val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true}
+                BitmapFactory.decodeByteArray(content,0,content.size,bounds)
+                val sample=if(artifact.mimeType=="image/x-adobe-dng") dngPreviewSampleSize(bounds.outWidth,bounds.outHeight) else 1
+                val decoded=requireNotNull(BitmapFactory.decodeByteArray(content,0,content.size,BitmapFactory.Options().apply {inSampleSize=sample;inScaled=false}))
                 val exifType=Class.forName("androidx.exifinterface.media.ExifInterface")
                 val exif=exifType.getConstructor(java.io.InputStream::class.java).newInstance(java.io.ByteArrayInputStream(content))
                 val orientation=exifType.getMethod("getAttributeInt",String::class.java,java.lang.Integer.TYPE).invoke(exif,"Orientation",1) as Int
                 val rotation=mapOf(1 to 0,6 to 90,3 to 180,8 to 270).getValue(orientation)
                 val oriented=android.graphics.Bitmap.createBitmap(decoded,0,0,decoded.width,decoded.height,
                     android.graphics.Matrix().apply {postRotate(rotation.toFloat())},true)
-                if(artifact.mimeType=="image/x-adobe-dng") node("dng-preview").performScrollTo().assertTextEquals(
-                    context.getString(R.string.media_playback_dng_preview,oriented.width,oriented.height))
+                if(artifact.mimeType=="image/x-adobe-dng") {
+                    // The note names the shown preview, which decodeDngPhotoPreview caps at a 2048 px long edge with a
+                    // power-of-two inSampleSize (dngPreviewSampleSize); decoded already uses that sample.
+                    val quarterTurn=rotation==90 || rotation==270
+                    val shownWidth=if(quarterTurn) decoded.height else decoded.width
+                    val shownHeight=if(quarterTurn) decoded.width else decoded.height
+                    assertTrue(maxOf(shownWidth,shownHeight)<=2048)
+                    node("dng-preview").performScrollTo().assertTextEquals(
+                        context.getString(R.string.media_playback_dng_preview,shownWidth,shownHeight))
+                }
                 else node("dng-preview").assertDoesNotExist()
-                compose.closePlaybackDetails()
+                compose.closePlaybackDetailsAndSettle()
                 var screenshot:android.graphics.Bitmap?=null
                 var reference:android.graphics.Bitmap?=null
                 try {

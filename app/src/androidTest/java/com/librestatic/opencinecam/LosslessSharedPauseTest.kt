@@ -44,8 +44,8 @@ class LosslessSharedPauseTest {
             else WavAudioSidecarRecorder.create(context,videoName,settings,clock){levels.incrementAndGet()}
         val statuses=CopyOnWriteArrayList<TimelapsePauseStatus>();val stopped=CountDownLatch(1)
         val saved=AtomicBoolean();val evidence=AtomicReference<OpenCineLogRecordingEvidence?>()
-        try { SubjectPreviewGpuTest.Fixture(embeddedAudio=true,comparableEpoch=comparable).use { fixture ->
-            val frame=RecordingFrameSize(128,96);val geometry=RecordingGeometry(RecordingGeometryMode.COMPATIBLE,0,0,0,0,0,frame,frame,frame)
+        try { SubjectPreviewGpuTest.Fixture(embeddedAudio=true,comparableEpoch=comparable,size=SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { fixture ->
+            val frame=RecordingFrameSize(192,144);val geometry=RecordingGeometry(RecordingGeometryMode.COMPATIBLE,0,0,0,0,0,frame,frame,frame)
             ParcelFileDescriptor.open(video,ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE or ParcelFileDescriptor.MODE_READ_WRITE).use { output ->
                 assertTrue(fixture.pipeline.startRecording(output,2000000,geometry,separateAudioClock=clock,
                     onTimelapsePauseChanged={statuses+=it},onStarted={audio.start()},

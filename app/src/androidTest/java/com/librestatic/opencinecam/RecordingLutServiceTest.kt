@@ -238,7 +238,7 @@ class RecordingLutServiceTest {
             val receipt = receipt(uri)
             ownedRows += receipt.artifacts.map { it.uri }
             assertEquals(CapturePublicationState.COMMITTED, receipt.state)
-            assertEquals(setOf(CaptureArtifactRole.VIDEO, CaptureArtifactRole.VIDEO_METADATA), receipt.artifacts.map { it.role }.toSet())
+            assertEquals(setOf(CaptureArtifactRole.VIDEO, CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.CLIP_METADATA), receipt.artifacts.map { it.role }.toSet())
             for (artifact in receipt.artifacts) {
                 requireNotNull(context.contentResolver.query(artifact.uri.toUri(), arrayOf(MediaStore.MediaColumns.IS_PENDING), null, null, null)).use {
                     assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0))

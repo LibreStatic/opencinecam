@@ -24,9 +24,12 @@ internal object ServiceAudioMatrixAssertions {
     fun assertPublished(context: Context, publication: CapturePublicationReceipt,
         format: AudioOutputFormat, silent: Boolean): String {
         assertEquals(CapturePublicationState.COMMITTED, publication.state)
+        // Every service video take also carries its canonical `<stem>.clip.json` (CLIP_METADATA,
+        // CaptureService clipSidecarProvider -> VideoOutput.prepareOwned); a separate audio file adds AUDIO and AUDIO_METADATA.
         val expectedRoles = if (silent || format == AudioOutputFormat.AAC_MP4) {
-            setOf(CaptureArtifactRole.VIDEO, CaptureArtifactRole.VIDEO_METADATA)
-        } else CaptureArtifactRole.entries.toSet()
+            setOf(CaptureArtifactRole.VIDEO, CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.CLIP_METADATA)
+        } else setOf(CaptureArtifactRole.VIDEO, CaptureArtifactRole.VIDEO_METADATA, CaptureArtifactRole.AUDIO,
+            CaptureArtifactRole.AUDIO_METADATA, CaptureArtifactRole.CLIP_METADATA)
         assertEquals(expectedRoles, publication.artifacts.map { it.role }.toSet())
         assertEquals(expectedRoles.size, publication.artifacts.size)
         assertEquals(publication.artifacts.size, publication.artifacts.map { it.uri }.toSet().size)

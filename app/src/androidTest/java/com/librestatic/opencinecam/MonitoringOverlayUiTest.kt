@@ -48,7 +48,8 @@ class MonitoringOverlayUiTest {
         compose.runOnIdle { fresh.value = false }
         compose.onNodeWithTag("monitoring-waveform-graph").assertDoesNotExist()
         compose.onNodeWithTag("monitoring-vector-graph").assertDoesNotExist()
-        compose.onNodeWithTag("monitoring-freshness").assertIsDisplayed()
+        // The chip sits inside its help tooltip, whose long-press node merges it.
+        compose.onNodeWithTag("monitoring-freshness", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag("monitoring-enlarge").performClick()
         compose.runOnIdle { assertFalse(expanded.value) }
         assertEquals(before, compose.onNodeWithTag("monitoring-panel").getUnclippedBoundsInRoot().width)

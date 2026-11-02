@@ -330,10 +330,27 @@ class MediaRecorderAdmissionDeviceTest {
             assertSame(owner[0], field(engine, "recorder"))
             assertSame(owner[1], field(engine, "recordSurface"))
             assertSame(owner[2], field(engine, "session"))
-            val checkpoint = CompletableFuture<Unit>()
+            // The stop runnable (queued first) only stops the repeating request and detaches the
+            // recorder session at once; MediaRecorder stops later, in finishRecorderStop, from the
+            // session's onReady or after RECORDER_STOP_DRAIN_TIMEOUT_MS (Camera2PreviewEngine.stopVideo, 34f5cfb).
+            val stopRunnableRan = CompletableFuture<Unit>()
             executor.execute {
                 try {
                     holdFailure.get()?.let { throw it }
+                    assertEquals(1, probe.recordings.get())
+                    assertNotSame("The stop runnable detaches the recorder session immediately", owner[2], field(engine, "session"))
+                    stopRunnableRan.complete(Unit)
+                } catch (failure: Throwable) { stopRunnableRan.completeExceptionally(failure) }
+            }
+            compose.onNodeWithTag("recorder-admission-heartbeat").performClick()
+            compose.runOnIdle { assertEquals(1, clicks.get()) }
+            release.countDown()
+            stopRunnableRan.get(15, TimeUnit.SECONDS)
+            compose.waitUntil(15_000) { probe.stopped.get() == 1 || probe.failures.isNotEmpty() }
+            assertTrue(probe.failures.toString(), probe.failures.isEmpty())
+            val checkpoint = CompletableFuture<Unit>()
+            executor.execute {
+                try {
                     assertEquals(1, probe.recordings.get())
                     assertEquals(1, probe.stopped.get())
                     assertEquals(listOf(true), probe.stopResults.toList())
@@ -341,13 +358,11 @@ class MediaRecorderAdmissionDeviceTest {
                     assertNull(field(engine, "recordSurface"))
                     assertFalse(field(engine, "recording") as Boolean)
                     assertNull((field(engine, "recorderRequest") as AtomicReference<*>).get())
+                    assertNotSame(owner[2], field(engine, "session"))
                     assertTrue(borrowed.fileDescriptor.valid())
                     checkpoint.complete(Unit)
                 } catch (failure: Throwable) { checkpoint.completeExceptionally(failure) }
             }
-            compose.onNodeWithTag("recorder-admission-heartbeat").performClick()
-            compose.runOnIdle { assertEquals(1, clicks.get()) }
-            release.countDown()
             checkpoint.get(15, TimeUnit.SECONDS)
             compose.waitUntil(15_000) { probe.previews.get() >= 2 || probe.failures.isNotEmpty() }
             assertTrue(probe.failures.toString(), probe.failures.isEmpty())

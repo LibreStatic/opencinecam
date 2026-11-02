@@ -80,7 +80,7 @@ class ProxyAudioDeviceTest {
             assertTrue("Short real AAC evidence ends before the complete video", measuredAudio.durationUs < measured.video.durationUs)
             val sourceHash = hash(source)
             val report = withTimeout(90_000) {
-                ProxyTranscoder(context).transcode(Uri.fromFile(source), output, 96, 64, 1_000_000)
+                ProxyTranscoder(context).transcode(Uri.fromFile(source), output, 192, 128, 1_000_000)
             }
             val actual = probeProxyMedia(context, Uri.fromFile(output))
             Log.i("E17ProxyAudioProbe", "originalAacOriginUs=$origin fixtureSampleGridPtsUs=$audioPts sourceAudio=$measuredAudio outputAudio=${actual.audio} report=$report")
@@ -90,7 +90,7 @@ class ProxyAudioDeviceTest {
             assertNull(report.audioEncoderName)
             assertEquals(12, report.videoFrameCount)
             assertEquals(output.length(), report.fileSizeBytes)
-            verifyProxyCorrespondence(measured, actual, VideoDisplayGeometry(96, 64))
+            verifyProxyCorrespondence(measured, actual, VideoDisplayGeometry(192, 128))
             assertEquals("Exact final-frame duration", measured.video.durationUs, actual.video.durationUs)
             assertEquals("Every AAC packet, CSD, PTS, duration and channel/rate preserved", measuredAudio, actual.audio)
             assertEquals(sourceHash, hash(source)); assertEquals(videoHash, hash(video))

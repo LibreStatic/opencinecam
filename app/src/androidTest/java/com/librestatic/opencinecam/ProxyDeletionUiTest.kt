@@ -38,8 +38,8 @@ class ProxyDeletionUiTest {
         val token = "proxy-delete-ui-${UUID.randomUUID()}"
         val proxyId = UUID.randomUUID().toString()
         val bytes = instrumentation.context.assets.open("e1-video.mp4").use { it.readBytes() }
-        assertEquals(5404, bytes.size)
-        assertEquals("a32963539eefe4fc0d14e76770d51e49c25108a31b9eda9176a022a94a9a99b6", hash(bytes))
+        assertEquals(2998, bytes.size)
+        assertEquals("ef61686b95a888116d97336057cedbb87463e16a7a4946f2d2331a1387b669dc", hash(bytes))
         val original = requireNotNull(resolver.insert(video, ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$token.mp4")
             put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/OpenCineCam/")

@@ -70,7 +70,11 @@ class PresetServiceTest {
             assertEquals(profile.size.width, state.targetVideoWidth); assertEquals(profile.fps, state.targetFps)
             assertTrue(requireNotNull(state.effectiveSettings).zebraEnabled)
             assertNull(state.pendingPresetName)
-            if (manual) assertEquals(400, state.sensitivityIso)
+            if (manual) {
+                assertEquals(400, state.requestedIso)
+                // HALs quantise sensitivity to gain steps (the S24 reports 398): judge it as production does.
+                assertTrue("ISO ${state.sensitivityIso}", isoWithinTolerance(400, requireNotNull(state.sensitivityIso)))
+            }
             android.util.Log.i("PresetServiceProbe", "mode=${state.selectedMode} target=${state.targetVideoWidth}x${state.targetVideoHeight}@${state.targetFps} manual=$manual reported=${state.reportedExposureMode} ISO=${state.sensitivityIso} zebra=${state.effectiveSettings?.zebraEnabled} pending=${state.pendingPresetName}")
         } finally {
             compose.runOnUiThread { binder.get()?.detachPreview(); repository.set(before) }
