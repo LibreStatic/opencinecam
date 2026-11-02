@@ -22,12 +22,20 @@ class RuntimePolicyDecisionTest {
         }
     }
 
-    @Test fun criticalHeatStopsInBothPolicies() {
-        for (policy in PolicyMode.entries) for (status in listOf(PowerManager.THERMAL_STATUS_CRITICAL, PowerManager.THERMAL_STATUS_EMERGENCY)) {
+    @Test fun thermalEmergencyStopsInBothPolicies() {
+        for (policy in PolicyMode.entries) for (status in listOf(PowerManager.THERMAL_STATUS_EMERGENCY, PowerManager.THERMAL_STATUS_SHUTDOWN)) {
             val verdict = evaluateRuntimePolicy(policy, status, roomy, perMinute)
             assertEquals(FailureCode.THERMAL_CRITICAL, verdict.stop?.code)
             assertEquals(TakeStopReason.THERMAL, takeStopReason(verdict.stop!!))
         }
+    }
+
+    @Test fun criticalHeatStopsStrictWhileAdaptiveKeepsRecording() {
+        val strict = evaluateRuntimePolicy(PolicyMode.STRICT, PowerManager.THERMAL_STATUS_CRITICAL, roomy, perMinute)
+        assertEquals(FailureCode.THERMAL_CRITICAL, strict.stop?.code)
+        assertEquals(TakeStopReason.THERMAL, takeStopReason(strict.stop!!))
+        assertEquals(RuntimeVerdict(null, RuntimeNotice.MONITORING_REDUCED),
+            evaluateRuntimePolicy(PolicyMode.ADAPTIVE, PowerManager.THERMAL_STATUS_CRITICAL, roomy, perMinute))
     }
 
     @Test fun severeHeatAndLowSpaceReduceMonitoringWithoutStopping() {

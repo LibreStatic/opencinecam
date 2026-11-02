@@ -58,7 +58,7 @@ AudioTimestamp TIMEBASE_BOOTTIME maps frame position to time. PCM frame zero is 
 
 MediaStore with `IS_PENDING` is the default; SAF enables selected local/USB destinations. The owner retains each descriptor. Reserve is the greater of 1 GiB or two minutes of projected data. Sequential benchmark writes use 8 MiB buffers for 30 seconds or 1 GiB, after a five-second warmup, record one-second windows, flush at completion, and delete the fixture. RAW qualification requires p01 throughput ≥ 1.25 × projected stream rate and no write error/window below stream rate.
 
-Runtime degradation order is UI animation → vectorscope/waveform → false color/peaking → histogram/zebra → analysis stream → preview resolution/frame rate. Recording format does not change in-place. Strict stops on cadence, audio, storage, route, thermal-critical, or integrity failure. Adaptive can continue video after audio failure and can reduce monitoring, but logs the exact transition; it also stops rather than changing camera/RAW/bit depth/dynamic range.
+Runtime degradation order is UI animation → vectorscope/waveform → false color/peaking → histogram/zebra → analysis stream → preview resolution/frame rate. Recording format does not change in-place. Strict stops on cadence, audio, storage, route, thermal-critical, or integrity failure. Adaptive can continue video after audio failure and through thermal-critical (it stops at thermal emergency), and can reduce monitoring, but logs the exact transition; it also stops rather than changing camera/RAW/bit depth/dynamic range.
 
 ## Color, native, RAW, and APV
 

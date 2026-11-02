@@ -18,8 +18,8 @@ class AnalysisThermalGovernorTest {
         assertEquals(ThermalStatus.MODERATE, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_MODERATE))
         assertEquals(ThermalStatus.SEVERE, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_SEVERE))
         assertEquals(ThermalStatus.CRITICAL, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_CRITICAL))
-        assertEquals(ThermalStatus.CRITICAL, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_EMERGENCY))
-        assertEquals(ThermalStatus.CRITICAL, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_SHUTDOWN))
+        assertEquals(ThermalStatus.EMERGENCY, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_EMERGENCY))
+        assertEquals(ThermalStatus.EMERGENCY, thermalStatusFromPlatform(PowerManager.THERMAL_STATUS_SHUTDOWN))
         // The engine passes -1 when PowerManager is unavailable.
         assertEquals(ThermalStatus.UNKNOWN, thermalStatusFromPlatform(-1))
         assertEquals(ThermalStatus.UNKNOWN, thermalStatusFromPlatform(99))
