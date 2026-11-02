@@ -86,7 +86,7 @@ class PreciseHdrFramesDeviceTest {
                             assertEquals(index, decoded.index)
                             assertEquals(hdrPts[index], decoded.presentationTimeUs)
                             assertEquals(256, decoded.bitmap.width)
-                            assertEquals(64, decoded.bitmap.height)
+                            assertEquals(128, decoded.bitmap.height)
                             assertEquals(Bitmap.Config.ARGB_8888, decoded.bitmap.config)
                             assertNull("HDR must not masquerade as interpreted SDR source", decoded.color)
                             assertEquals(transfer, decoded.hdrPreview?.transfer)
@@ -112,7 +112,7 @@ class PreciseHdrFramesDeviceTest {
                     val decoded = reader.frame(0)
                     try {
                         assertEquals(0L, decoded.presentationTimeUs)
-                        assertEquals(64, decoded.bitmap.width)
+                        assertEquals(128, decoded.bitmap.width)
                         assertEquals(256, decoded.bitmap.height)
                         assertEquals(transfer, decoded.hdrPreview?.transfer)
                         assertEquals(10, decoded.hdrPreview?.decodedBitDepth)
@@ -179,7 +179,7 @@ class PreciseHdrFramesDeviceTest {
             assumeTrue("No advertised decoder for $mime on this device; run on hardware with VP9/AV1 decoders", candidates.isNotEmpty())
             for (candidate in candidates) {
                 val caps = candidate.getCapabilitiesForType(mime)
-                val format = MediaFormat.createVideoFormat(mime, 256, 64).apply {
+                val format = MediaFormat.createVideoFormat(mime, 256, 128).apply {
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUVP010)
                     setInteger(MediaFormat.KEY_PROFILE, profiles.first)
                     setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
@@ -284,7 +284,7 @@ class PreciseHdrFramesDeviceTest {
         assertEquals(listOf(2, 4, 4), image.planes.map { it.pixelStride })
         val crop = image.cropRect
         assertEquals(256, crop.width())
-        assertEquals(64, crop.height())
+        assertEquals(128, crop.height())
         image.planes.forEachIndexed { planeIndex, plane ->
             val bytes = plane.buffer.duplicate()
             val scale = if (planeIndex == 0) 1 else 2
@@ -327,19 +327,19 @@ class PreciseHdrFramesDeviceTest {
     }
 }
 
-/** SHA-bound independently generated lossless Main10 asset. Rotation remux preserves every sample
+/** SHA-bound independently generated lossless Main10 asset (256x128, tools/fixtures/generate_precise_assets.sh). Rotation remux preserves every sample
  * and CSD byte; no missing or contradictory color tags are repaired by this fixture. */
 internal fun createPreciseHdrPlaybackFixture(context: Context, transfer: PreciseHdrTransfer, rotation: Int = 0): File {
     require(rotation in setOf(0, 90))
     val key = if (transfer == PreciseHdrTransfer.PQ) "pq" else "hlg"
     val expectedHash = if (transfer == PreciseHdrTransfer.PQ)
-        "cb5b094f7751f77eca4472f5624441ed1226d45611bb39a22c0d3f6ea813aad3"
-    else "1eb17ddff33a7c3118d28158608e9ab3ff0eed5f78995612d8c8ba35450c5b05"
+        "9a9ce76aecd5b6795acc45cda28f9070ca55225b63a911f9885cb69e988c8d18"
+    else "a8ccfa5919ae992c98b99d275a8541146948f1dec4fb31d770a1078f0afe13a8"
     val file = File(context.cacheDir, "precise-hdr-$key-${UUID.randomUUID()}.mp4")
     val rotated = File(context.cacheDir, "precise-hdr-$key-rotated-${UUID.randomUUID()}.mp4")
     try {
         val asset = InstrumentationRegistry.getInstrumentation().context.assets.open("e16-precise-${key}10.mp4").use { input ->
-            val bytes = ByteArray(12_298)
+            val bytes = ByteArray(19_857)
             var total = 0
             while (total < bytes.size) {
                 val count = input.read(bytes, total, bytes.size - total)
@@ -347,7 +347,7 @@ internal fun createPreciseHdrPlaybackFixture(context: Context, transfer: Precise
                 check(count > 0)
                 total += count
             }
-            assertEquals(12_297, total)
+            assertEquals(19_856, total)
             bytes.copyOf(total)
         }
         assertEquals(expectedHash, hdrDigest(asset))
@@ -412,7 +412,7 @@ private fun hdrSampleIdentity(file: File, transfer: PreciseHdrTransfer, rotation
         assertEquals(MediaFormat.MIMETYPE_VIDEO_HEVC, format.getString(MediaFormat.KEY_MIME))
         assertHdrTags(format, transfer)
         assertEquals(256, format.getInteger(MediaFormat.KEY_WIDTH))
-        assertEquals(64, format.getInteger(MediaFormat.KEY_HEIGHT))
+        assertEquals(128, format.getInteger(MediaFormat.KEY_HEIGHT))
         assertEquals(rotation, if (format.containsKey(MediaFormat.KEY_ROTATION)) format.getInteger(MediaFormat.KEY_ROTATION) else 0)
         val identity = ArrayList<String>()
         for (key in listOf("csd-0", "csd-1", "csd-2")) {

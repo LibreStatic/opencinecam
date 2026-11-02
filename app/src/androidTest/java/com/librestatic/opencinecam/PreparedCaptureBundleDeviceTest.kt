@@ -32,7 +32,7 @@ import org.junit.Test
 class PreparedCaptureBundleDeviceTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val resolver get() = context.contentResolver
-    private val frame = RecordingFrameSize(128, 96)
+    private val frame = RecordingFrameSize(192, 144)
     private val geometry = RecordingGeometry(RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
 
     @Test fun videoOnlyPreparesOnePendingIdentityBeforePublishing() = successfulBundle("video", null, metadata = false)
@@ -98,7 +98,8 @@ class PreparedCaptureBundleDeviceTest {
         val before = journal.allRows(group.id)
         assertEquals(2, before.size)
         try {
-            take.video.finish(false)
+            // A video that holds bytes is kept since ADR-0011; a full discard needs a never-recorded one.
+            take.video.discardNeverRecorded()
             take.audio!!.finish(false)
             assertEquals(before, journal.allRows(group.id))
             assertEquals(RecordingRecoveryReport(), RecordingCaptureRecovery(context).recover())
@@ -304,14 +305,18 @@ class PreparedCaptureBundleDeviceTest {
         verifyRows(take.artifacts, pending = 1)
         assertEquals(2, audio.artifacts.size)
         assertNull(take.video.finish(false)); assertNull(take.audio!!.finish(false))
-        assertAllAbsent(take.artifacts)
+        // ADR-0011: the video's bytes stay pending, owned by the recovery journal; the aborted audio goes.
+        val (kept, gone) = take.artifacts.partition { it.role == CaptureArtifactRole.VIDEO || it.role == CaptureArtifactRole.VIDEO_METADATA }
+        assertAllAbsent(gone)
+        verifyRows(kept, pending = 1)
         assertNull(take.video.prepareCompletion("{}", geometry, true))
         assertNull(take.audio!!.prepareCompletion())
         assertNull(take.video.publishPrepared()); assertNull(take.audio!!.publishPrepared())
         assertNull(take.video.finish(true)); assertNull(take.audio!!.finish(true))
         assertThrows(IllegalStateException::class.java) { take.audio!!.start() }
-        assertAllAbsent(take.artifacts)
-        android.util.Log.i("PreparedBundleProbe", "case=$format-abort preparedArtifacts=4 abortedBeforePublish=true allRowsAbsent=true latePrepare=null latePublish=null duplicateStartRejected=true")
+        assertAllAbsent(gone)
+        verifyRows(kept, pending = 1)
+        android.util.Log.i("PreparedBundleProbe", "case=$format-abort preparedArtifacts=4 abortedBeforePublish=true audioRowsAbsent=true videoKeptPending=true latePrepare=null latePublish=null duplicateStartRejected=true")
     }
 
     private fun withTake(format: String?, queueEnabled: Boolean = false, queueFailure: String? = null, duringRecording: ((Take) -> Unit)? = null, productionSlate: ProductionSlateSettings? = null,captureNames:CaptureNameSnapshot?=null, block: (Take) -> Unit) {
@@ -552,7 +557,7 @@ class PreparedCaptureBundleDeviceTest {
         val callbackFailure = AtomicReference<Throwable?>()
         val lastEncoded = AtomicReference<EncodedRecordingProgress?>()
         val evidence = AtomicReference<OpenCineLogRecordingEvidence?>()
-        SubjectPreviewGpuTest.Fixture(embeddedAudio = true).use { fixture ->
+        SubjectPreviewGpuTest.Fixture(embeddedAudio = true, size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { fixture ->
             val guard = take.video.recoveryGroup.retainNativeWriter()
             try {
                 accepted.set(fixture.pipeline.startRecording(take.video.descriptor, 2_000_000, geometry,
@@ -722,7 +727,7 @@ class PreparedCaptureBundleDeviceTest {
         try {
             retriever.setDataSource(context, uri)
             val decoded = requireNotNull(retriever.getFrameAtTime(0))
-            try { assertEquals(128, decoded.width); assertEquals(96, decoded.height) } finally { decoded.recycle() }
+            try { assertEquals(192, decoded.width); assertEquals(144, decoded.height) } finally { decoded.recycle() }
         } finally { retriever.release() }
     }
 }

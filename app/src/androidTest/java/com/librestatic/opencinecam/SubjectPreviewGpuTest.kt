@@ -23,15 +23,18 @@ import org.junit.Test
 
 /** Actual GLES textures/fences/window buffers; synthetic pixels, not a physical-foldable verdict. */
 class SubjectPreviewGpuTest {
-    internal class Fixture(operatorPreview: Boolean = false, analysisCallback: (() -> Unit)? = null, embeddedAudio: Boolean = false, comparableEpoch: Boolean = true, onEncoderSelection: (() -> Unit)? = null, onRecordingFailure: (() -> Unit)? = null, onAnalysisFrame: ((com.librestatic.opencinecam.camera.Camera2Analysis) -> Unit)? = null, onLutStatus: ((com.librestatic.opencinecam.camera.OperatorLutStatus) -> Unit)? = null) : AutoCloseable {
+    internal class Fixture(operatorPreview: Boolean = false, analysisCallback: (() -> Unit)? = null, embeddedAudio: Boolean = false, comparableEpoch: Boolean = true, onEncoderSelection: (() -> Unit)? = null, onRecordingFailure: (() -> Unit)? = null, onAnalysisFrame: ((com.librestatic.opencinecam.camera.Camera2Analysis) -> Unit)? = null, onLutStatus: ((com.librestatic.opencinecam.camera.OperatorLutStatus) -> Unit)? = null,
+        /** Source, subject and operator size. Recording tests use [RECORDING_SIZE]: c2.qti AVC encoders refuse frames below 128x128. */
+        val size: Size = Size(128, 96)) : AutoCloseable {
+        companion object { val RECORDING_SIZE = Size(192, 144) }
         val failures = CopyOnWriteArrayList<String>()
         val operatorFailures = CopyOnWriteArrayList<String>()
         val statuses = CopyOnWriteArrayList<SubjectPreviewStatus>()
         val analysis = AtomicInteger()
-        val reader = ImageReader.newInstance(128, 96, PixelFormat.RGBA_8888, 3)
-        val operator = if (operatorPreview) ImageReader.newInstance(128, 96, PixelFormat.RGBA_8888, 3) else null
+        val reader = ImageReader.newInstance(size.width, size.height, PixelFormat.RGBA_8888, 3)
+        val operator = if (operatorPreview) ImageReader.newInstance(size.width, size.height, PixelFormat.RGBA_8888, 3) else null
         val pipeline = OpenCineLogGpuPipeline(
-            Size(128, 96), OpenCineLogSourcePath.SDR_BT709_ISP, preview = operator?.surface,
+            size, OpenCineLogSourcePath.SDR_BT709_ISP, preview = operator?.surface,
             sensorOrientationDegrees = 0, displayRotationDegrees = 0, frontFacing = false,
             viewAssist = false, targetFps = 30, passthroughSdr = true,
             appContext = if (embeddedAudio) androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext else null,
@@ -59,7 +62,7 @@ class SubjectPreviewGpuTest {
             GLES30.glClearColor(1f, 0f, 0f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
-            GLES30.glScissor(64, 0, 64, 96)
+            GLES30.glScissor(size.width / 2, 0, size.width - size.width / 2, size.height)
             GLES30.glClearColor(0f, 0f, 1f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
@@ -284,9 +287,9 @@ class SubjectPreviewGpuTest {
         val file=java.io.File(context.cacheDir,when { videoFirst -> "AV_VIDEO_FIRST.mp4"; comparable -> "AV_SHARED.mp4"; else -> "AV_UNKNOWN.mp4" })
         val stopped=CountDownLatch(1);val saved=java.util.concurrent.atomic.AtomicBoolean(false)
         val evidence=java.util.concurrent.atomic.AtomicReference<com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence?>()
-        Fixture(embeddedAudio=true,comparableEpoch=comparable).use { fixture ->
+        Fixture(embeddedAudio=true,comparableEpoch=comparable,size=Fixture.RECORDING_SIZE).use { fixture ->
             android.os.ParcelFileDescriptor.open(file,android.os.ParcelFileDescriptor.MODE_CREATE or android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
-                val frame=com.librestatic.opencinecam.camera.RecordingFrameSize(128,96)
+                val frame=com.librestatic.opencinecam.camera.RecordingFrameSize(192,144)
                 val geometry=com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE,0,0,0,0,0,frame,frame,frame)
                 val audio=com.librestatic.opencinecam.camera.Camera2EmbeddedAudioConfig(android.media.MediaRecorder.AudioSource.MIC,48000,1,96000,null)
                 assertTrue(fixture.pipeline.startRecording(descriptor,2000000,geometry,audio=audio,onStarted={},
@@ -378,10 +381,10 @@ class SubjectPreviewGpuTest {
         val file = java.io.File(context.cacheDir, if (blockedClose) "GPU_OWNER_CLOSED.mp4" else "GPU_OWNER.mp4")
         val entered = CountDownLatch(1); val resume = CountDownLatch(1)
         val stopped = CountDownLatch(1); val saved = java.util.concurrent.atomic.AtomicBoolean(false)
-        Fixture(analysisCallback = if (blockedClose) ({ entered.countDown(); check(resume.await(10, TimeUnit.SECONDS)) }) else null).use { fixture ->
+        Fixture(analysisCallback = if (blockedClose) ({ entered.countDown(); check(resume.await(10, TimeUnit.SECONDS)) }) else null, size = Fixture.RECORDING_SIZE).use { fixture ->
             val descriptor = android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_CREATE or android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE)
             try {
-                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
                 val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
                 assertTrue(fixture.pipeline.startRecording(descriptor, 12000000, geometry,
                     timelapse = com.librestatic.opencinecam.camera.TimelapseCapture(100000000, com.librestatic.opencinecam.camera.CaptureFrameRate(30), 3),
@@ -421,8 +424,8 @@ class SubjectPreviewGpuTest {
         val statuses = CopyOnWriteArrayList<com.librestatic.opencinecam.camera.TimelapsePauseStatus>()
         val report = java.util.concurrent.atomic.AtomicReference<com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence?>()
         val stopped = CountDownLatch(1); val saved = java.util.concurrent.atomic.AtomicBoolean(); val levels = AtomicInteger()
-        Fixture(embeddedAudio = true).use { fixture ->
-            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+        Fixture(embeddedAudio = true, size = Fixture.RECORDING_SIZE).use { fixture ->
+            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
             val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
             android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_CREATE or android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
                 val audio = com.librestatic.opencinecam.camera.Camera2EmbeddedAudioConfig(android.media.MediaRecorder.AudioSource.MIC, 48000, 1, 96000, null, onAudioLevel = { levels.incrementAndGet() })
@@ -476,8 +479,8 @@ class SubjectPreviewGpuTest {
         val entered = CountDownLatch(1); val release = CountDownLatch(1); val stopped = CountDownLatch(1)
         val file = java.io.File(context.cacheDir, "START_FAILURE_RETIRING.mp4")
         Fixture(onEncoderSelection = { if (selected.incrementAndGet() == 1) error("Injected encoder-selection failure") },
-            onRecordingFailure = { if (failures.incrementAndGet() == 1) { entered.countDown(); check(release.await(15, TimeUnit.SECONDS)) } }).use { fixture ->
-            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+            onRecordingFailure = { if (failures.incrementAndGet() == 1) { entered.countDown(); check(release.await(15, TimeUnit.SECONDS)) } }, size = Fixture.RECORDING_SIZE).use { fixture ->
+            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
             val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
             android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_CREATE or android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE).use { output ->
                 fun begin() = fixture.pipeline.startRecording(output, 12000000, geometry,
@@ -512,8 +515,8 @@ class SubjectPreviewGpuTest {
         val aborted = java.io.File(context.cacheDir, "START_ABORTED.mp4")
         Fixture(onEncoderSelection = if (committed) null else ({
             if (selected.incrementAndGet() == 1) { entered.countDown(); check(release.await(20, TimeUnit.SECONDS)) }
-        })).use { fixture ->
-            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+        }), size = Fixture.RECORDING_SIZE).use { fixture ->
+            val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
             val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
             val interval = com.librestatic.opencinecam.camera.TimelapseCapture(100000000, com.librestatic.opencinecam.camera.CaptureFrameRate(30), frameLimit = 3)
             fun begin(descriptor: android.os.ParcelFileDescriptor, blockedCallback: Boolean): Boolean = fixture.pipeline.startRecording(
@@ -569,10 +572,10 @@ class SubjectPreviewGpuTest {
         val file = java.io.File(context.cacheDir, "GPU_OWNER_REJECTED.mp4")
         val entered = CountDownLatch(1); val resume = CountDownLatch(1); val stopped = CountDownLatch(1)
         val saved = java.util.concurrent.atomic.AtomicBoolean(true)
-        Fixture(analysisCallback = { entered.countDown(); check(resume.await(20, TimeUnit.SECONDS)) }).use { fixture ->
+        Fixture(analysisCallback = { entered.countDown(); check(resume.await(20, TimeUnit.SECONDS)) }, size = Fixture.RECORDING_SIZE).use { fixture ->
             val descriptor = android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_CREATE or android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE)
             try {
-                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
                 val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
                 assertTrue(fixture.pipeline.startRecording(descriptor, 12000000, geometry,
                     timelapse = com.librestatic.opencinecam.camera.TimelapseCapture(100000000, com.librestatic.opencinecam.camera.CaptureFrameRate(30)),

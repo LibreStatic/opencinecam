@@ -72,7 +72,7 @@ class ProxyQueuedSourceRenameDeviceTest {
             result = MediaProxyRepository(context).existing(take)
             val proxy = requireNotNull(result)
             assertEquals(id, proxy.proxyId)
-            verifyProxyCorrespondence(probeProxyMedia(context, uri), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(128, 96))
+            verifyProxyCorrespondence(probeProxyMedia(context, uri), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(192, 144))
             assertArrayEquals(bytes, resolver.openInputStream(uri)!!.use { it.readBytes() })
             val metadata = resolver.openInputStream(proxy.metadataUri.toUri())!!.bufferedReader().use { it.readText() }
             assertEquals(take.primary.name, org.json.JSONObject(metadata).getString("originalDisplayName"))

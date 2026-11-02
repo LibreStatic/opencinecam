@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
@@ -81,6 +82,9 @@ class OperatorServiceTest {
 
     @Test fun gpuPreviewReattachmentKeepsConfiguredCameraAndAdmitsTheNextTake() =
         exerciseTake(CaptureMode.TIME_LAPSE,frameLimit=3,reattachGpuPreview=true)
+
+    private fun assumeAnalysisLive(state: CameraUiState) =
+        Assume.assumeTrue("Analysis suspended for heat", state.analysisSuspension != AnalysisSuspension.THERMAL)
 
     private fun verifyGpuReattachment(owner: CaptureService.LocalBinder) {
         fun field(target:Any,name:String):Any?=target.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(target)
@@ -241,7 +245,13 @@ class OperatorServiceTest {
             assertEquals(30000, tc.getInt("rateNumerator")); assertEquals(1001, tc.getInt("rateDenominator"))
             assertFalse(tc.getBoolean("containerTimecodeTrackWritten")); assertFalse(tc.getBoolean("sourceClockSynchronizationVerified"))
             val publication = verifyPublicationReceipt(uri)
-            assertEquals(setOf(uri.toString(), sidecar.toString()), publication.artifacts.map { it.uri }.toSet())
+            // The take also publishes its canonical clip sidecar (CLIP_METADATA).
+            assertEquals(setOf(com.librestatic.opencinecam.storage.CaptureArtifactRole.VIDEO, com.librestatic.opencinecam.storage.CaptureArtifactRole.VIDEO_METADATA,
+                com.librestatic.opencinecam.storage.CaptureArtifactRole.CLIP_METADATA), publication.artifacts.map { it.role }.toSet())
+            assertEquals(3, publication.artifacts.size)
+            assertEquals(uri.toString(), publication.artifacts.single { it.role == com.librestatic.opencinecam.storage.CaptureArtifactRole.VIDEO }.uri)
+            assertEquals(sidecar.toString(), publication.artifacts.single { it.role == com.librestatic.opencinecam.storage.CaptureArtifactRole.VIDEO_METADATA }.uri)
+            assertEquals(3, publication.artifacts.map { it.uri }.toSet().size)
             java.io.File(context.noBackupFilesDir, "capture-publication/${publication.bundleId}.json")
                 .copyTo(java.io.File(context.cacheDir, "timecode-${timecodeMode.name}-$suffix.publication.json"), overwrite = true)
             java.io.File(context.cacheDir, "timecode-${timecodeMode.name}-$suffix.json").writeText(text)
@@ -463,6 +473,7 @@ class OperatorServiceTest {
                     assertEquals(CameraUiPhase.RECORDING, held.phase)
                     assertEquals(paused.timelapseFramesCaptured, held.timelapseFramesCaptured)
                     assertEquals(paused.recordingElapsedMs, held.recordingElapsedMs)
+                    assumeAnalysisLive(paused); assumeAnalysisLive(held)
                     assertTrue("Paused preview must remain live", held.analysisUpdatedAtMs > paused.analysisUpdatedAtMs)
                     if (!stopWhilePaused) {
                         compose.runOnUiThread { assertTrue(owner.setRecordingPaused(false)) }
@@ -473,6 +484,7 @@ class OperatorServiceTest {
                 if (stopWhilePaused) compose.runOnUiThread { assertTrue(owner.stopRecording()) }
             }
             if (manualStop) {
+            assumeAnalysisLive(owner.cameraStates.value)
             compose.runOnUiThread {
                 repository.update { it.copy(exposure = it.exposure.copy(iso = 800, mode = ExposureMode.MANUAL), timelapseFps = 25, timelapseFpsDenominator = 1) }
                 owner.setManualFocus(1f); owner.setZoomRatio(2f)
@@ -870,6 +882,9 @@ class OperatorServiceTest {
             assertTrue("No new reader may remain after review dismissal", (readers() - oldReaders).isEmpty())
             members.forEach { artifact -> assertArrayEquals("Review changed owned bytes: ${artifact.uri}", originalBytes.getValue(artifact.uri), bytes(artifact)) }
             assertEquals(take, media.page(GallerySettings(), name, null, 60).takes.single { it.primary.uri == uri.toString() })
+            // The search left the IME up, and the shell hides its navigation while the IME shows.
+            Espresso.closeSoftKeyboard()
+            awaitFrames(10_000) { compose.onAllNodesWithText(context.getString(R.string.capture_tab)).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText(context.getString(R.string.capture_tab)).performClick()
             awaitFrames(20_000) { compose.onAllNodesWithTag("media-action").fetchSemanticsNodes().isNotEmpty() }
             val previousAnalysis = owner.cameraStates.value.analysisUpdatedAtMs

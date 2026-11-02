@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -30,6 +31,17 @@ fun SemanticsNodeInteractionsProvider.openPlaybackDetails() {
 /** Closes the details sheet or column so the controls beneath it take touches again. */
 fun SemanticsNodeInteractionsProvider.closePlaybackDetails() {
     if (present("media-playback-details-close")) onNodeWithTag("media-playback-details-close", useUnmergedTree = true).performClick()
+}
+
+/**
+ * Closes the details and waits out the sheet's exit animation, so a capture of the picture beneath carries no
+ * scrim. The inspector has no close button and stays docked beside the picture, so nothing is awaited there.
+ */
+fun ComposeTestRule.closePlaybackDetailsAndSettle() {
+    if (!present("media-playback-details-close")) return
+    onNodeWithTag("media-playback-details-close", useUnmergedTree = true).performClick()
+    waitUntil(10_000) { !present("media-playback-details") }
+    waitForIdle()
 }
 
 /** The short counter on the player, e.g. "2 / 4". */

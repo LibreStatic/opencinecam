@@ -28,7 +28,8 @@ class WebDavQueueSettingsDeviceTest {
         assertEquals(changed, reopened.preferences)
         assertFalse(reopened.storageFailed)
         assertTrue(reopened.preferences.activeEndpoint!!.ignoreTlsErrors)
-        assertTrue(file.readText().startsWith("{\"version\":2,"))
+        // Saves always write the current schema (WebDavQueuePreferencesCodec.encode, v3 since 8a84786).
+        assertTrue(file.readText().startsWith("{\"version\":3,"))
         assertFalse(WebDavQueueSettings(file).save(url, true, false, ignoreTlsErrors = false).activeEndpoint!!.ignoreTlsErrors)
     }
 
@@ -191,11 +192,13 @@ class WebDavQueueSettingsDeviceTest {
 
     @Test fun corruptionFutureSchemaInvalidUtf8AndOversizeFailClosedAndPreserveEvidence() = fixture { _, file ->
         assertTrue(file.parentFile!!.mkdirs())
+        // The canonical encoding is schema v3 (8a84786); versions 1-3 decode, a future version must fail closed.
         val canonical = String(WebDavQueuePreferencesCodec.encode(WebDavQueuePreferences()), Charsets.UTF_8)
-        val corruptions = listOf("broken".toByteArray(), canonical.replace("\"version\":2", "\"version\":3").toByteArray(),
+        assertTrue(canonical.startsWith("{\"version\":3,"))
+        val corruptions = listOf("broken".toByteArray(), canonical.replace("\"version\":3", "\"version\":4").toByteArray(),
             canonical.replace("\"revision\":0", "\"revision\":\"0\"").toByteArray(),
             canonical.replace("\"enabled\":false", "\"enabled\":\"false\"").toByteArray(),
-            canonical.replace("\"version\":2", "\"unknown\":1,\"version\":2").toByteArray(),
+            canonical.replace("\"version\":3", "\"unknown\":1,\"version\":3").toByteArray(),
             byteArrayOf(0xC3.toByte(), 0x28), ByteArray(WebDavQueuePreferencesCodec.MAX_BYTES + 1))
         for (bytes in corruptions) {
             file.writeBytes(bytes)

@@ -43,7 +43,7 @@ class ProxyTranscoderDeviceTest {
         try {
             DebugTraceUtil.reset()
             DebugTraceUtil.enableTracing = true
-            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(Uri.fromFile(source), output, 96, 64, 1_000_000) }
+            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(Uri.fromFile(source), output, 192, 128, 1_000_000) }
             Log.i("E17ProxyProbe", "gop12BeforeAssertions report=$report expectedPtsUs=$preciseGopPtsUs")
             logGopOutputBeforeAssertions(output)
             // Stop tracing before the independent CPU reader so its decoder cannot contaminate
@@ -60,9 +60,9 @@ class ProxyTranscoderDeviceTest {
                     val frame = reader.frame(index)
                     try {
                         assertEquals(preciseGopPtsUs[index], frame.presentationTimeUs)
-                        assertEquals(96, frame.bitmap.width); assertEquals(64, frame.bitmap.height)
-                        assertGray(preciseGopExpectedGray[index], frame.bitmap.getPixel(24, 32), 4)
-                        assertGray(255, frame.bitmap.getPixel(72, 32), 4)
+                        assertEquals(192, frame.bitmap.width); assertEquals(128, frame.bitmap.height)
+                        assertGray(preciseGopExpectedGray[index], frame.bitmap.getPixel(48, 64), 4)
+                        assertGray(255, frame.bitmap.getPixel(144, 64), 4)
                     } finally { frame.bitmap.recycle() }
                 }
             }
@@ -195,11 +195,11 @@ class ProxyTranscoderDeviceTest {
         val existingBefore = digest(existing)
         val oldWorkers = workers()
         try {
-            val existingFailure = failure { ProxyTranscoder(context).transcode(Uri.fromFile(source), existing, 96, 64, 1_000_000) }
+            val existingFailure = failure { ProxyTranscoder(context).transcode(Uri.fromFile(source), existing, 192, 128, 1_000_000) }
             assertTrue(existingFailure is IllegalArgumentException)
             assertEquals("Proxy candidate already exists", existingFailure.message)
             assertEquals(existingBefore, digest(existing))
-            failure { ProxyTranscoder(context).transcode(Uri.fromFile(corrupt), output, 96, 64, 1_000_000) }
+            failure { ProxyTranscoder(context).transcode(Uri.fromFile(corrupt), output, 192, 128, 1_000_000) }
             assertFalse(output.exists()); assertEquals(corruptBefore, digest(corrupt))
             for (transfer in PreciseHdrTransfer.entries) {
                 val hdr = createPreciseHdrPlaybackFixture(context, transfer)
@@ -211,7 +211,7 @@ class ProxyTranscoderDeviceTest {
                     assertFalse(output.exists()); assertEquals(hdrBefore, digest(hdr))
                 } finally { assertTrue(hdr.delete()) }
             }
-            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(Uri.fromFile(source), next, 96, 64, 1_000_000) }
+            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(Uri.fromFile(source), next, 192, 128, 1_000_000) }
             assertReport(report, next, 12); assertSamplePts(next, preciseGopPtsUs)
             assertVideoDuration(source, next)
             assertRetired(oldWorkers); assertEquals(before, digest(source))

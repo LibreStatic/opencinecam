@@ -84,7 +84,7 @@ class ProxyQueueDeviceTest {
                 assertNull(result); assertEquals(0, exports.get())
             } else {
                 val proxy = requireNotNull(result)
-                verifyProxyCorrespondence(probeProxyMedia(context, original), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(128, 96))
+                verifyProxyCorrespondence(probeProxyMedia(context, original), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(192, 144))
                 assertEquals(1, exports.get())
                 val relation = resolver.openInputStream(proxy.metadataUri.toUri())!!.use { it.readBytes().decodeToString() }
                 assertTrue(relation.contains(id))
