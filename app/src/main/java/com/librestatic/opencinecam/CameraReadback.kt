@@ -38,12 +38,19 @@ internal sealed interface ReadbackDifference {
 
 /** Sensors round exposure to whole lines, so a report this close to the request is the same shutter. */
 private const val TIME_TOLERANCE = 0.01
+/** Some HALs quantise sensitivity to their gain steps (Samsung reports 398 for 400); this close (relative, at least [ISO_TOLERANCE_MIN]) it is the requested ISO. */
+private const val ISO_TOLERANCE = 0.01
+private const val ISO_TOLERANCE_MIN = 2
 /** The reported colour temperature is an estimate; this close it matches the request. */
 private const val TEMPERATURE_TOLERANCE_K = 100
 /** The lens settles on a manual focus distance over several frames; this close (in diopters) it is the requested focus. */
 private const val FOCUS_TOLERANCE_DIOPTERS = 0.3f
 /** The measured frame rate is a smoothed estimate from sensor timestamps; this close (relative) it is the requested rate. */
 private const val FPS_TOLERANCE = 0.05
+
+/** Whether a reported ISO is the requested one, within [ISO_TOLERANCE] or [ISO_TOLERANCE_MIN], whichever is wider. */
+internal fun isoWithinTolerance(requested: Int, reported: Int): Boolean =
+    abs(reported - requested) <= maxOf(ISO_TOLERANCE_MIN.toDouble(), requested * ISO_TOLERANCE)
 
 internal fun antibandingOf(code: Int?): Antibanding? = when (code) {
     CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> Antibanding.AUTO
@@ -67,7 +74,7 @@ internal fun exposureReadbackDifferences(
 ): List<ReadbackDifference> = buildList {
     if (reportedMode != null && reportedMode != requested.mode) add(ReadbackDifference.Mode(reportedMode))
     val iso = requested.iso
-    if (iso != null && reportedIso != null && reportedIso != iso) add(ReadbackDifference.Iso(reportedIso))
+    if (iso != null && reportedIso != null && !isoWithinTolerance(iso, reportedIso)) add(ReadbackDifference.Iso(reportedIso))
     val time = requested.timeNs
     if (time != null && reportedTimeNs != null && abs(reportedTimeNs - time) > time * TIME_TOLERANCE) {
         add(ReadbackDifference.ExposureTime(reportedTimeNs))
@@ -110,8 +117,8 @@ internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?
 }
 
 /**
- * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO and time
- * (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
+ * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO (within
+ * [ISO_TOLERANCE], at least [ISO_TOLERANCE_MIN]) and time (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
  * [TEMPERATURE_TOLERANCE_K]), the AF mode and, under manual focus, the focus distance (within
  * [FOCUS_TOLERANCE_DIOPTERS]), the frame rate (within [FPS_TOLERANCE]), the processing modes actually submitted, and the vendor picture
  * controls. Automatic values, unknown reports and cleared requests produce no pair.
@@ -121,7 +128,9 @@ internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = build
         if (requested != null && reported != null) add(ReadbackSample(key, requested.toString(), reported.toString(), within))
     }
     state.reportedExposureMode?.let { add("android.control.aeMode", state.requestedExposureMode.name, it.name, it == state.requestedExposureMode) }
-    add("android.sensor.sensitivity", state.requestedIso, state.sensitivityIso, state.requestedIso == state.sensitivityIso)
+    val iso = state.requestedIso
+    val reportedIso = state.sensitivityIso
+    if (iso != null && reportedIso != null) add("android.sensor.sensitivity", iso, reportedIso, isoWithinTolerance(iso, reportedIso))
     val time = state.requestedExposureTimeNs
     val reportedTime = state.exposureTimeNs
     if (time != null && reportedTime != null) add("android.sensor.exposureTime", "$time ns", "$reportedTime ns", abs(reportedTime - time) <= time * TIME_TOLERANCE)
