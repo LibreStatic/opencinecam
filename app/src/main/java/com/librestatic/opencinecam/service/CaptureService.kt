@@ -2932,7 +2932,13 @@ class CaptureService : Service() {
             // A live subject lease keeps the GPU graph (photo modes included) for the cover window.
             if (subjectSurfaces.current != null && settings.subjectDisplay.wantsCameraPreview &&
                 subjectPreviewBlock(cameraState.value.selectedMode) == null &&
-                previewEngine.detachOperatorFromActiveGpuPreview()) return
+                previewEngine.detachOperatorFromActiveGpuPreview()) {
+                // A still cancelled above has no owner left, so CAPTURING would stick without this.
+                if (photoPreparing && stillOwner.get() == null) {
+                    cameraState.update { it.copy(phase = CameraUiPhase.READY, stillCapturePending = false) }
+                }
+                return
+            }
             previewEngine.stopPreview()
             activePreviewKey = null
             submitCaptureState(stateCommands.previewStopped())
