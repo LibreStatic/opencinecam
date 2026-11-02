@@ -144,9 +144,9 @@ class MonitoringGpuDeviceTest {
         val stopped = CountDownLatch(1); val error = AtomicReference<Throwable?>()
         val file = File.createTempFile("monitoring-sdr-", ".mp4", InstrumentationRegistry.getInstrumentation().targetContext.cacheDir)
         try {
-            SubjectPreviewGpuTest.Fixture(embeddedAudio = true, onAnalysisFrame = { frames += it }).use { fixture ->
+            SubjectPreviewGpuTest.Fixture(embeddedAudio = true, onAnalysisFrame = { frames += it }, size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { fixture ->
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_TRUNCATE).use { output ->
-                    val size = RecordingFrameSize(128, 96)
+                    val size = RecordingFrameSize(192, 144)
                     val geometry = RecordingGeometry(RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, size, size, size)
                     try {
                         assertTrue(fixture.pipeline.startRecording(output, 2_000_000, geometry, onStarted = {}, onStopped = { success, evidence ->
@@ -177,9 +177,9 @@ class MonitoringGpuDeviceTest {
                 for (time in listOf(times.first(), times.last())) {
                     val bitmap = requireNotNull(retriever.getFrameAtTime(time, MediaMetadataRetriever.OPTION_CLOSEST))
                     try {
-                        assertEquals(128, bitmap.width); assertEquals(96, bitmap.height)
-                        for ((x, expected) in listOf(16 to Color.RED, 112 to Color.BLUE)) {
-                            val actual = bitmap.getPixel(x, 48)
+                        assertEquals(192, bitmap.width); assertEquals(144, bitmap.height)
+                        for ((x, expected) in listOf(24 to Color.RED, 168 to Color.BLUE)) {
+                            val actual = bitmap.getPixel(x, 72)
                             for (shift in listOf(0, 8, 16)) assertTrue(kotlin.math.abs((expected shr shift and 255) - (actual shr shift and 255)) <= 35)
                         }
                     } finally { bitmap.recycle() }

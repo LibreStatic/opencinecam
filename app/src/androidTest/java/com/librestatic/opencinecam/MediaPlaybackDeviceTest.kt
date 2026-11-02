@@ -33,7 +33,7 @@ class MediaPlaybackDeviceTest {
         val file = createPrecisePlaybackFixture(context)
         val hash = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
         val state = AtomicReference(PlaybackObservation())
-        val sink = ImageReader.newInstance(96,64,ImageFormat.PRIVATE,3)
+        val sink = ImageReader.newInstance(192,128,ImageFormat.PRIVATE,3)
         sink.setOnImageAvailableListener({ reader -> reader.acquireLatestImage()?.close() }, Handler(Looper.getMainLooper()))
         var session: MediaPlaybackSession? = null
         try {
@@ -64,7 +64,7 @@ class MediaPlaybackDeviceTest {
     @Test fun surfaceRetirementCancelsPendingStartAndCloseFencesReaderCallbacks() {
         val file = createPrecisePlaybackFixture(context)
         val state = AtomicReference(PlaybackObservation())
-        val sink = ImageReader.newInstance(96,64,ImageFormat.PRIVATE,3)
+        val sink = ImageReader.newInstance(192,128,ImageFormat.PRIVATE,3)
         var session: MediaPlaybackSession? = null
         try {
             main { session=MediaPlaybackSession(context,artifact(file),PlaybackSettings(muted=true)) { state.set(it) };session!!.setSurface(sink.surface) }
@@ -87,20 +87,20 @@ class MediaPlaybackDeviceTest {
     @Test fun loopRestartsRotatedVideoWithoutChangingPausedGeometry() {
         val file = createPrecisePlaybackFixture(context, rotation=90)
         val state = AtomicReference(PlaybackObservation())
-        val sink = ImageReader.newInstance(64,96,ImageFormat.PRIVATE,3)
+        val sink = ImageReader.newInstance(128,192,ImageFormat.PRIVATE,3)
         sink.setOnImageAvailableListener({ it.acquireLatestImage()?.close() },Handler(Looper.getMainLooper()))
         var session: MediaPlaybackSession? = null
         try {
             main { session=MediaPlaybackSession(context,artifact(file),PlaybackSettings(muted=true,loop=true)) { state.set(it) };session!!.setSurface(sink.surface) }
             val first=waitFor(state) { it.phase==PlaybackPhase.PAUSED && it.videoWidth>0 && it.durationUs>0 }
-            assertEquals(64,first.bitmap!!.width);assertEquals(96,first.bitmap.height)
+            assertEquals(128,first.bitmap!!.width);assertEquals(192,first.bitmap.height)
             assertEquals(first.bitmap.width,first.videoWidth);assertEquals(first.bitmap.height,first.videoHeight)
             main { session!!.play() }
             waitFor(state) { it.phase==PlaybackPhase.PLAYING && it.positionUs>1_100_000 }
             waitFor(state) { it.phase==PlaybackPhase.PLAYING && it.positionUs<400_000 }
             main { session!!.update(PlaybackSettings(muted=true,loop=false));session!!.pause() }
             val paused=waitFor(state) { it.phase==PlaybackPhase.PAUSED && it.frameIndex!=null }
-            assertEquals(64,paused.bitmap!!.width);assertEquals(96,paused.bitmap.height)
+            assertEquals(128,paused.bitmap!!.width);assertEquals(192,paused.bitmap.height)
             assertEquals(paused.timeline!!.timestampsUs[paused.frameIndex!!],paused.positionUs)
         } finally { main { session?.close() };sink.close();assertTrue(file.delete()) }
     }

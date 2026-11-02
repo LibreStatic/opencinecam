@@ -115,7 +115,7 @@ class ProxyDeathRecoveryDeviceTest {
             val entry = MediaProxyRepository(context).catalog().single { it.takeId == take.id }
             val after = probeProxyMedia(context, proxy.proxyUri.toUri())
             verifyProxyVideoCorrespondence(probeProxyMedia(context, Uri.parse(take.primary.uri)), after,
-                VideoDisplayGeometry(96, 64))
+                VideoDisplayGeometry(192, 128))
             assertEquals("audio/mp4a-latm", after.audio!!.mime)
             val receipt = resolver.openInputStream(proxy.metadataUri.toUri())!!.use {
                 Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject }

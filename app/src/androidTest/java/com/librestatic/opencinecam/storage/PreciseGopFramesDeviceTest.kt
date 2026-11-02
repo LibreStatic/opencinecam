@@ -88,17 +88,17 @@ class PreciseGopFramesDeviceTest {
         try {
             assertEquals(index, frame.index)
             assertEquals(preciseGopPtsUs[index], frame.presentationTimeUs)
-            assertEquals(96, frame.bitmap.width)
-            assertEquals(64, frame.bitmap.height)
-            assertEquals(96, frame.displayWidth)
-            assertEquals(64, frame.displayHeight)
+            assertEquals(192, frame.bitmap.width)
+            assertEquals(128, frame.bitmap.height)
+            assertEquals(192, frame.displayWidth)
+            assertEquals(128, frame.displayHeight)
             assertNull(frame.hdrPreview)
             assertNotNull(frame.color)
             assertFalse("Strict original needs no manual color interpretation", frame.color!!.interpreted)
             // Adjacent references differ by >=20 RGB codes; tolerance3 cannot confuse frames.
-            for (y in listOf(8, 32, 56)) {
-                for (x in listOf(12, 24, 36)) assertGray(preciseGopExpectedGray[index], frame.bitmap.getPixel(x, y))
-                for (x in listOf(60, 72, 84)) assertGray(255, frame.bitmap.getPixel(x, y))
+            for (y in listOf(16, 64, 112)) {
+                for (x in listOf(24, 48, 72)) assertGray(preciseGopExpectedGray[index], frame.bitmap.getPixel(x, y))
+                for (x in listOf(120, 144, 168)) assertGray(255, frame.bitmap.getPixel(x, y))
             }
             Log.i("E16GopProbe", "index=$index exactPtsUs=${frame.presentationTimeUs} independentGray=${preciseGopExpectedGray[index]} white=255 tolerance=3")
         } finally { frame.bitmap.recycle() }

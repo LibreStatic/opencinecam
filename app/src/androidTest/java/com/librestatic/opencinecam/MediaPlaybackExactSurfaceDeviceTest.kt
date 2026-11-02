@@ -184,7 +184,7 @@ class MediaPlaybackExactSurfaceDeviceTest {
                     assertEquals(1, reader.timeline.indexAt(1_099_999L))
                     assertEquals(transfer, reader.hdrTransfer)
                     assertEquals(256, reader.displayWidth)
-                    assertEquals(64, reader.displayHeight)
+                    assertEquals(128, reader.displayHeight)
                     if (Build.VERSION.SDK_INT == 30) {
                         val failure = assertThrows(IllegalArgumentException::class.java) { reader.frame(0).bitmap.recycle() }
                         assertEquals("Precise HDR10 requires Android 13+ and a CPU-readable P010 decoder", failure.message)
@@ -198,7 +198,7 @@ class MediaPlaybackExactSurfaceDeviceTest {
         }
     }
 
-    private fun drainedSink(): ImageReader = ImageReader.newInstance(96, 64, ImageFormat.PRIVATE, 3).also { sink ->
+    private fun drainedSink(): ImageReader = ImageReader.newInstance(192, 128, ImageFormat.PRIVATE, 3).also { sink ->
         sink.setOnImageAvailableListener({ it.acquireLatestImage()?.close() }, Handler(Looper.getMainLooper()))
     }
     private fun player(session: MediaPlaybackSession): MediaPlayer? = MediaPlaybackSession::class.java

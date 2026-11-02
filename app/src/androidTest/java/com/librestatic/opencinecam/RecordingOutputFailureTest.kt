@@ -34,8 +34,21 @@ class RecordingOutputFailureTest {
             throw java.io.IOException("Injected failure after a timing write")
         })
         assertNotNull(failure);assertEquals(8,changed)
-        assertNull(output.finish(failure==null));assertNull(output.finish(true));assertEquals(0,rows(output.uri))
-        android.util.Log.i("OutputCommitProbe","partialWriteBytes=$changed successfulUri=null rows=0")
+        try {
+            assertNull(output.finish(failure==null));assertNull(output.finish(true))
+            // ADR-0011 / ADR-0033 amendment (2026-10-19): only zero-length outputs are deleted. A plain
+            // finish(false) has no encoded-sample count, so the byte count decides (VideoOutput.deleteOwned):
+            // these 8 bytes keep the row, still pending and journalled for incomplete publication, never published here.
+            requireNotNull(context.contentResolver.query(output.uri,
+                arrayOf(MediaStore.MediaColumns.IS_PENDING),null,null,null)).use {
+                assertEquals(1,it.count);assertTrue(it.moveToFirst());assertEquals(1,it.getInt(0))
+            }
+            requireNotNull(context.contentResolver.openFileDescriptor(output.uri,"r")).use { assertEquals(8L,it.statSize) }
+            android.util.Log.i("OutputCommitProbe","partialWriteBytes=$changed successfulUri=null rows=1 pending=1")
+        } finally {
+            // Remove this fixture's retained row; RecordingCaptureRecovery.recover() then finds nothing to publish and discards the entry.
+            context.contentResolver.delete(output.uri,null,null)
+        }
     }
     @Test fun missingVideoPublicationRollsBackItsCreatedSidecar() {
         val output=VideoOutput.create(context)

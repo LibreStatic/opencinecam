@@ -24,7 +24,7 @@ import org.junit.Test
 /** File receipts observe real duplicated descriptors and codec cleanup, not fabricated releases. */
 class RecordingFileRetirementDeviceTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
-    private fun geometry(width: Int = 128, height: Int = 96): RecordingGeometry {
+    private fun geometry(width: Int = 192, height: Int = 144): RecordingGeometry {
         val frame = RecordingFrameSize(width, height)
         return RecordingGeometry(RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
     }
@@ -79,7 +79,7 @@ class RecordingFileRetirementDeviceTest {
         val callbackFailure = AtomicReference<Throwable?>()
         try {
             // Existing fixture selects an advertised AVC codec; no media capability is fabricated.
-            SubjectPreviewGpuTest.Fixture(embeddedAudio = true, onEncoderSelection = {
+            SubjectPreviewGpuTest.Fixture(embeddedAudio = true, size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE, onEncoderSelection = {
                 entered.countDown(); check(release.await(15, TimeUnit.SECONDS))
             }).use { fixture ->
                 descriptor(file).use { output ->
@@ -136,7 +136,7 @@ class RecordingFileRetirementDeviceTest {
             try {
                 retriever.setDataSource(file.path)
                 val bitmap = requireNotNull(retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC))
-                try { assertEquals(128, bitmap.width); assertEquals(96, bitmap.height) }
+                try { assertEquals(192, bitmap.width); assertEquals(144, bitmap.height) }
                 finally { bitmap.recycle() }
             } finally { retriever.release() }
         } finally { release.countDown(); check(file.delete() || !file.exists()) }

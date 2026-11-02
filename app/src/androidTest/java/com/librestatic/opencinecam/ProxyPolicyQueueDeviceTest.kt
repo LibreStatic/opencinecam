@@ -71,7 +71,7 @@ class ProxyPolicyQueueDeviceTest {
             result = MediaProxyRepository(context).existing(take)
             val proxy = requireNotNull(result)
             assertEquals(id, proxy.proxyId)
-            verifyProxyCorrespondence(probeProxyMedia(context, uri), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(128, 96))
+            verifyProxyCorrespondence(probeProxyMedia(context, uri), probeProxyMedia(context, proxy.proxyUri.toUri()), VideoDisplayGeometry(192, 144))
             assertArrayEquals(bytes, resolver.openInputStream(uri)!!.use { it.readBytes() })
             compose.waitUntil(20_000) { compose.onAllNodesWithTag("media-proxy-result", true).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("media-proxy-error", true).assertDoesNotExist()
