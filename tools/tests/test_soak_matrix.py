@@ -3,6 +3,7 @@
 # Copyright 2026 OpenCineCam contributors
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -131,6 +132,56 @@ class SoakMatrixTest(unittest.TestCase):
             soak.write_bundle(report, root / "bundle")
             self.assertEqual("NOT_RUN", report["status"])
             self.assertTrue(any("evidence path missing" in failure for failure in report["failures"]))
+
+    def not_applicable_manifest(self, scenario="FOLD_TRANSITION", **target_fields):
+        observations = complete()
+        for observation in observations:
+            if observation["scenario"] == scenario:
+                observation["status"] = "NOT_APPLICABLE"
+        return {
+            "target": {"fingerprint": "fixture/device", "protocolVersion": 1, "profileId": "p1", **target_fields},
+            "durationSeconds": soak.REQUIRED_DURATION_SECONDS,
+            "observations": observations,
+        }
+
+    def test_non_foldable_target_qualifies_with_fold_not_applicable(self):
+        report = soak.evaluate(self.not_applicable_manifest(foldable=False))
+        self.assertEqual("QUALIFIED", report["status"])
+        self.assertEqual([], report["failures"])
+
+    def test_foldable_target_cannot_skip_fold_transition(self):
+        report = soak.evaluate(self.not_applicable_manifest(foldable=True))
+        self.assertEqual("NOT_RUN", report["status"])
+        self.assertIn("FOLD_TRANSITION: not applicable requires a non-foldable target", report["failures"])
+
+    def test_undeclared_foldability_cannot_skip_fold_transition(self):
+        report = soak.evaluate(self.not_applicable_manifest())
+        self.assertEqual("NOT_RUN", report["status"])
+        self.assertIn("FOLD_TRANSITION: not applicable requires a non-foldable target", report["failures"])
+
+    def test_non_bool_foldability_cannot_skip_fold_transition(self):
+        report = soak.evaluate(self.not_applicable_manifest(foldable="false"))
+        self.assertEqual("NOT_RUN", report["status"])
+
+    def test_not_applicable_is_rejected_for_other_scenarios(self):
+        report = soak.evaluate(self.not_applicable_manifest(scenario="THERMAL", foldable=False))
+        self.assertEqual("NOT_RUN", report["status"])
+        self.assertIn("THERMAL: not applicable requires a non-foldable target", report["failures"])
+
+    def test_bundle_with_not_applicable_fold_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = soak.evaluate(self.not_applicable_manifest(foldable=False))
+            files = soak.write_bundle(report, root / "bundle")
+            self.assertEqual("QUALIFIED", report["status"])
+            self.assertIn("scenario-01-fold_transition.json", files)
+            summary = json.loads((root / "bundle" / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual("QUALIFIED", summary["status"])
+            self.assertIs(False, summary["target"]["foldable"])
+            scenario = json.loads(
+                (root / "bundle" / "scenario-01-fold_transition.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual("NOT_APPLICABLE", scenario["status"])
 
 
 if __name__ == "__main__":
