@@ -48,4 +48,49 @@ class DeviceSoakProtocolTest {
         val report = SoakProtocol.evaluate(target, SoakProtocol.REQUIRED_DURATION_SECONDS, observations)
         assertEquals(SoakGateStatus.NOT_RUN, report.status)
     }
+
+    private fun notApplicable(scenario: SoakScenario = SoakScenario.FOLD_TRANSITION) =
+        observations().map {
+            if (it.scenario == scenario) it.copy(status = SoakObservationStatus.NOT_APPLICABLE, evidenceId = null) else it
+        }
+
+    @Test
+    fun nonFoldableTargetQualifiesWithFoldNotApplicable() {
+        val report = SoakProtocol.evaluate(
+            target.copy(foldable = false),
+            SoakProtocol.REQUIRED_DURATION_SECONDS,
+            notApplicable(),
+        )
+        assertEquals(SoakGateStatus.QUALIFIED, report.status)
+        assertTrue(report.failures.isEmpty())
+    }
+
+    @Test
+    fun foldableTargetCannotSkipFoldTransition() {
+        val report = SoakProtocol.evaluate(
+            target.copy(foldable = true),
+            SoakProtocol.REQUIRED_DURATION_SECONDS,
+            notApplicable(),
+        )
+        assertEquals(SoakGateStatus.NOT_RUN, report.status)
+        assertTrue(report.failures.contains("FOLD_TRANSITION: not applicable requires a non-foldable target"))
+    }
+
+    @Test
+    fun undeclaredFoldabilityCannotSkipFoldTransition() {
+        val report = SoakProtocol.evaluate(target, SoakProtocol.REQUIRED_DURATION_SECONDS, notApplicable())
+        assertEquals(SoakGateStatus.NOT_RUN, report.status)
+        assertTrue(report.failures.contains("FOLD_TRANSITION: not applicable requires a non-foldable target"))
+    }
+
+    @Test
+    fun notApplicableIsRejectedForOtherScenarios() {
+        val report = SoakProtocol.evaluate(
+            target.copy(foldable = false),
+            SoakProtocol.REQUIRED_DURATION_SECONDS,
+            notApplicable(SoakScenario.THERMAL),
+        )
+        assertEquals(SoakGateStatus.NOT_RUN, report.status)
+        assertTrue(report.failures.contains("THERMAL: not applicable requires a non-foldable target"))
+    }
 }

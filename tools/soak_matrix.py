@@ -26,7 +26,8 @@ SCENARIOS = (
 )
 REQUIRED_DURATION_SECONDS = 30 * 60
 MAX_OBSERVATIONS = 128
-OBSERVATION_STATUSES = {"PASS", "FAIL", "UNKNOWN", "NOT_RUN"}
+OBSERVATION_STATUSES = {"PASS", "FAIL", "UNKNOWN", "NOT_RUN", "NOT_APPLICABLE"}
+NOT_APPLICABLE_SCENARIOS = {"FOLD_TRANSITION"}
 
 
 def non_negative_int(value: object) -> int | None:
@@ -41,8 +42,20 @@ def non_negative_int(value: object) -> int | None:
     return parsed if parsed >= 0 else None
 
 
+def valid_not_applicable(item: dict[str, object], non_foldable: bool) -> bool:
+    """A NOT_APPLICABLE row only stands in for FOLD_TRANSITION on a target
+    that explicitly declares it is not foldable."""
+    return (
+        item.get("status") == "NOT_APPLICABLE"
+        and item.get("scenario") in NOT_APPLICABLE_SCENARIOS
+        and non_foldable
+    )
+
+
 def evaluate(manifest: dict[str, object]) -> dict[str, object]:
     target = manifest.get("target")
+    # Only a real JSON boolean false declares a non-foldable target.
+    non_foldable = isinstance(target, dict) and target.get("foldable") is False
     parsed_duration = non_negative_int(manifest.get("durationSeconds", 0))
     duration = parsed_duration if parsed_duration is not None else 0
     raw_observations = manifest.get("observations", [])
@@ -101,13 +114,18 @@ def evaluate(manifest: dict[str, object]) -> dict[str, object]:
             failures.append(f"{scenario}: {message}")
         elif status in {"UNKNOWN", "NOT_RUN"}:
             failures.append(f"{scenario}: evidence not run or unknown")
+        elif status == "NOT_APPLICABLE":
+            if not valid_not_applicable(item, non_foldable):
+                failures.append(f"{scenario}: not applicable requires a non-foldable target")
         elif status != "PASS":
             failures.append(f"{scenario}: invalid status {status}")
     hard_failure = any(
         isinstance(item, dict) and item.get("status") == "FAIL" for item in observations
     )
     unknown = any(
-        isinstance(item, dict) and item.get("status") not in {"PASS", "FAIL"}
+        isinstance(item, dict)
+        and item.get("status") not in {"PASS", "FAIL"}
+        and not valid_not_applicable(item, non_foldable)
         for item in observations
     )
     structurally_invalid = (
