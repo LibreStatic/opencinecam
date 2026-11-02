@@ -24,7 +24,8 @@ internal enum class RuntimeNotice { MONITORING_REDUCED, STATE_UNKNOWN, AV_DRIFT,
  * One pass of the live thermal and storage policy (ADR-0016). [platformThermal] is
  * `PowerManager.currentThermalStatus` (null when it could not be read); [freeBytes] the free space
  * on the volume the take writes to. Strict stops on critical heat, on less than a minute of
- * space left, and on a state it cannot read; Adaptive keeps recording and warns.
+ * space left, and on a state it cannot read; Adaptive keeps recording and warns. Both stop on less
+ * than a minute of space and once the platform reports thermal emergency or shutdown.
  */
 internal fun evaluateRuntimePolicy(policy: PolicyMode, platformThermal: Int?, freeBytes: Long?, projectedBytesPerMinute: Long): RuntimeVerdict {
     val projected = projectedBytesPerMinute.coerceAtLeast(1L)

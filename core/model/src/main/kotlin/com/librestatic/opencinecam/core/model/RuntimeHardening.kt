@@ -3,7 +3,8 @@
 
 package com.librestatic.opencinecam.core.model
 
-enum class ThermalStatus { UNKNOWN, NORMAL, MODERATE, SEVERE, CRITICAL }
+/** CRITICAL is the platform's throttling ceiling; EMERGENCY means components are shutting down. */
+enum class ThermalStatus { UNKNOWN, NORMAL, MODERATE, SEVERE, CRITICAL, EMERGENCY }
 enum class StoragePressure { UNKNOWN, SUFFICIENT, LOW, INSUFFICIENT }
 enum class RuntimeAction { CONTINUE, WARNING, DEGRADE_MONITORING, STOP }
 
@@ -68,11 +69,17 @@ class RuntimeHardeningPolicy(
             val failure = failure(it.code, if (it.code == FailureCode.THERMAL_CRITICAL) FailureSeverity.CRITICAL else FailureSeverity.ERROR, Recoverability.RETRYABLE, "Injected runtime fault ${it.id}.")
             return if (it.code == FailureCode.AUDIO_RUNTIME_FAILED && mode == PolicyMode.ADAPTIVE) RuntimeHardeningDecision.Continue(RuntimeAction.WARNING, "Audio stopped; video continues without audio.") else RuntimeHardeningDecision.Stopped(failure)
         }
-        if (thermal == ThermalStatus.CRITICAL) return RuntimeHardeningDecision.Stopped(failure(FailureCode.THERMAL_CRITICAL, FailureSeverity.CRITICAL, Recoverability.RETRYABLE, "Thermal state is critical; recording stopped."))
+        // ADR-0016: critical heat stops Strict; Adaptive records on until the platform reaches emergency.
+        if (thermal == ThermalStatus.EMERGENCY || (thermal == ThermalStatus.CRITICAL && mode == PolicyMode.STRICT)) {
+            return RuntimeHardeningDecision.Stopped(failure(FailureCode.THERMAL_CRITICAL, FailureSeverity.CRITICAL, Recoverability.RETRYABLE, "Thermal state is critical; recording stopped."))
+        }
         if (storage == StoragePressure.INSUFFICIENT) return RuntimeHardeningDecision.Stopped(failure(FailureCode.STORAGE_WRITE_FAILED, FailureSeverity.CRITICAL, Recoverability.RETRYABLE, "Free storage is insufficient; recording stopped."))
         if (thermal == ThermalStatus.UNKNOWN || storage == StoragePressure.UNKNOWN) {
             return if (mode == PolicyMode.STRICT) RuntimeHardeningDecision.Stopped(failure(FailureCode.UNKNOWN_CAPABILITY, FailureSeverity.WARNING, Recoverability.USER_ACTION, "Runtime thermal or storage state is unknown."))
             else RuntimeHardeningDecision.Continue(RuntimeAction.WARNING, "Runtime thermal or storage state is unknown.")
+        }
+        if (thermal == ThermalStatus.CRITICAL) {
+            return RuntimeHardeningDecision.Continue(RuntimeAction.DEGRADE_MONITORING, "Thermal state is critical; monitoring reduced, recording format is unchanged.")
         }
         if (thermal == ThermalStatus.SEVERE || storage == StoragePressure.LOW) {
             return RuntimeHardeningDecision.Continue(RuntimeAction.DEGRADE_MONITORING, "Monitoring reduced in documented order; recording format is unchanged.")
