@@ -29,6 +29,17 @@ class CameraReadbackTest {
         assertTrue(exposureReadbackDifferences(manual, null, null, null, null).isEmpty())
     }
 
+    @Test fun quantisedIsoStaysQuietButARealMissIsListed() {
+        // Samsung's HAL reports 398 for a requested 400: within max(2, 1 %).
+        assertTrue(exposureReadbackDifferences(manual, ExposureMode.MANUAL, 398, 10_000_000L, 1).isEmpty())
+        assertEquals(listOf(ReadbackDifference.Iso(390)), exposureReadbackDifferences(manual, ExposureMode.MANUAL, 390, 10_000_000L, 1))
+        assertTrue(isoWithinTolerance(100, 102))
+        assertFalse(isoWithinTolerance(100, 103))
+        val samples = { reported: Int -> readbackSamples(CameraUiState(requestedIso = 400, sensitivityIso = reported)).first { it.key == "android.sensor.sensitivity" } }
+        assertTrue(samples(398).withinTolerance)
+        assertFalse(samples(390).withinTolerance)
+    }
+
     @Test fun eachDisagreementIsListedOnce() {
         assertEquals(
             listOf(ReadbackDifference.Mode(ExposureMode.AUTO), ReadbackDifference.Iso(800), ReadbackDifference.ExposureTime(20_000_000L),
