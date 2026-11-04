@@ -27,6 +27,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -43,8 +45,10 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontFamily
@@ -52,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -93,6 +98,13 @@ internal fun playbackTimecode(positionUs: Long, frame: Long?, fps: Double?): Str
 }
 
 private const val FILMSTRIP_FRAMES = 10
+
+/**
+ * Plain video (the decoder straight to the SurfaceView, which keeps HDR) zooms by a graphicsLayer on the
+ * SurfaceView itself. That relies on the SurfaceView following its RenderNode's transform and clip, which
+ * is validated on devices; false keeps the zoom to the bitmap frames and disables it while the surface plays.
+ */
+private const val PLAIN_VIDEO_SURFACE_ZOOM = true
 
 /** Longest edge of the still shown while the first exact frame decodes. */
 private const val POSTER_EDGE_PX = 1280
@@ -472,6 +484,26 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
         val source = histogramSource
         if (logClip != null && source != null) histogram = withContext(Dispatchers.Default) { runCatching { bitmapLumaHistogram(source) }.getOrNull() }
     }
+    // Pinch-to-zoom; key(member.uri) above starts every member at 1x.
+    val density = LocalDensity.current
+    val zoom = remember(artifact) { MediaZoomState(density) }
+    val zoomScope = rememberCoroutineScope()
+    // OCLog2 and RAW draw the zoom in their GL stage; plain video by transforming the SurfaceView, if allowed.
+    val glZoom = raw || logClip != null
+    val zoomEnabled = state.phase != PlaybackPhase.ERROR && (photo && shown != null ||
+        video && (glZoom || PLAIN_VIDEO_SURFACE_ZOOM || shown != null || poster != null))
+    LaunchedEffect(zoom, renderer, session) {
+        val stage = renderer
+        val controller = session
+        if (stage == null && controller == null) return@LaunchedEffect
+        snapshotFlow { Triple(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value) }.collect { (scale, x, y) ->
+            val box = zoom.content
+            val fractionX = if (box.width > 0f) x / box.width else 0f
+            val fractionY = if (box.height > 0f) y / box.height else 0f
+            stage?.setZoom(scale, fractionX, fractionY)
+            controller?.setZoom(scale, fractionX, fractionY)
+        }
+    }
     if (fullscreen && !(video || photo)) LaunchedEffect(Unit) { onFullscreen(false) }
     LaunchedEffect(state.phase == PlaybackPhase.ERROR) { if (state.phase == PlaybackPhase.ERROR) onFullscreen(false) }
 
@@ -494,6 +526,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     fun toggleLogView() = onSettings(settings.copy(logView =
         if (settings.logView == PreciseLogView.FLAT_LOG) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG))
     var chromeVisible by remember(fullscreen) { mutableStateOf(true) }
+    val currentToggleChrome by rememberUpdatedState<() -> Unit> { chromeVisible = !chromeVisible }
     val stacked = layout == PlaybackLayout.STACKED
     val keyState = PlaybackKeyState(canTogglePlay = canTogglePlay, canStepBack = canStepBack, canStepForward = canStepForward,
         seekable = seekable, logView = logAvailable, detailsOpen = detailsOpen && layout != PlaybackLayout.INSPECTOR, fullscreen = fullscreen)
@@ -682,6 +715,9 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                 if (stacked && !fullscreen) Modifier.weight(1f, fill = false).aspectRatio(stageAspect ?: if (video || photo) 16f / 9f else 3f)
                                 else Modifier.weight(1f).fillMaxWidth(),
                                 artifact, video, photo, stageAspect, state, shown, poster.takeIf { video && !firstFrame && !firstFrameNow }, fullscreen,
+                                zoom, zoomScope, zoomEnabled, surfaceZoom = !glZoom && PLAIN_VIDEO_SURFACE_ZOOM,
+                                // In full screen a tap shows or hides the chrome; a double tap zooms.
+                                onTap = if (fullscreen) ({ currentToggleChrome() }) else null,
                                 onSurfaceView = { surfaceView = it },
                                 onSurfaceCreated = { holder ->
                                     surface = holder.surface; updateDisplay()
@@ -709,8 +745,12 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                 }
                                 if (fullscreen) {
                                     val toggle = stringResource(if (chromeVisible) R.string.playback_layout_hide_controls else R.string.playback_layout_show_controls)
-                                    Box(Modifier.matchParentSize().clickable(interactionSource = null, indication = null, onClickLabel = toggle,
-                                        role = Role.Button) { chromeVisible = !chromeVisible }.testTag("media-playback-chrome-toggle"))
+                                    // Taps reach the stage's gesture detector (so a double tap can zoom); this keeps the action
+                                    // for accessibility services and tests.
+                                    Box(Modifier.matchParentSize().semantics {
+                                        role = Role.Button
+                                        onClick(label = toggle) { chromeVisible = !chromeVisible; true }
+                                    }.testTag("media-playback-chrome-toggle"))
                                     if (chromeVisible) {
                                         val overlay = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
                                         Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing
@@ -855,16 +895,31 @@ private val SEEK_HEIGHT = 40.dp
 /**
  * The picture sized to its own aspect inside [modifier]'s area: a 4:3 photo never sits in a 16:9 black box and
  * a 16:9 clip fills a 16:9 screen edge to edge. [overlay] covers the whole area (error card, full-screen chrome).
+ *
+ * The whole area takes the zoom gestures ([mediaZoomGestures], with [onTap] for a single tap) while [zoomEnabled].
+ * A photo zooms against the whole area and is clipped to it; a video is clipped to its fitted rectangle (see
+ * [PlaybackStage]). A new area size (full screen, rotation) settles the zoom back to 1x.
  */
 @Composable
-private fun PlaybackStageArea(modifier: Modifier, artifact: LocalMediaArtifact, video: Boolean, photo: Boolean, aspect: Float?,
-    state: PlaybackObservation, shown: Bitmap?, poster: Bitmap?, fullscreen: Boolean, onSurfaceView: (SurfaceView) -> Unit,
-    onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit, onSurfaceDestroyed: () -> Unit,
-    overlay: @Composable BoxScope.() -> Unit) {
-    BoxWithConstraints(modifier.background(if (fullscreen) Color.Black else Color.Transparent)) {
+internal fun PlaybackStageArea(modifier: Modifier, artifact: LocalMediaArtifact, video: Boolean, photo: Boolean, aspect: Float?,
+    state: PlaybackObservation, shown: Bitmap?, poster: Bitmap?, fullscreen: Boolean, zoom: MediaZoomState,
+    zoomScope: kotlinx.coroutines.CoroutineScope, zoomEnabled: Boolean, surfaceZoom: Boolean, onTap: (() -> Unit)?,
+    onSurfaceView: (SurfaceView) -> Unit, onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit,
+    onSurfaceDestroyed: () -> Unit, overlay: @Composable BoxScope.() -> Unit) {
+    BoxWithConstraints(modifier.background(if (fullscreen) Color.Black else Color.Transparent).clipToBounds()
+        .mediaZoomGestures(zoom, zoomScope, zoomEnabled, onTap)) {
+        val area = IntSize(constraints.maxWidth, constraints.maxHeight)
+        SideEffect {
+            zoom.area = area
+            zoom.fitContent = photo
+            if (photo) zoom.content = shown?.let { Size(it.width.toFloat(), it.height.toFloat()) } ?: Size.Zero
+        }
+        LaunchedEffect(zoom, area) { zoom.reset() }
+        LaunchedEffect(zoom, zoomEnabled) { if (!zoomEnabled) zoom.reset() }
         val (width, height) = fitInside(if (video || photo) aspect else null, maxWidth.value, maxHeight.value)
         Box(Modifier.align(Alignment.Center).size(width.dp, height.dp).background(if (video || photo) Color.Black else SettingsSurface)) {
-            if (video || photo) PlaybackStage(artifact, video, state, shown, poster, onSurfaceView, onSurfaceCreated, onSurfaceChanged, onSurfaceDestroyed)
+            if (video || photo) PlaybackStage(artifact, video, state, shown, poster, zoom, surfaceZoom, onSurfaceView, onSurfaceCreated,
+                onSurfaceChanged, onSurfaceDestroyed)
             else Text(artifact.name, Modifier.align(Alignment.Center).padding(16.dp), color = SettingsMuted, fontSize = 13.sp,
                 textAlign = TextAlign.Center)
         }
@@ -872,11 +927,16 @@ private fun PlaybackStageArea(modifier: Modifier, artifact: LocalMediaArtifact, 
     }
 }
 
-/** Video fitted inside the black stage; photos fill it with their own fit. */
+/**
+ * Video fitted inside the black stage; photos fill it with their own fit. Every bitmap takes the zoom as a
+ * graphics layer. A video's layers sit in a box of its fitted rectangle, clipped to it and bounding the pan,
+ * so the bitmaps match what a GL stage draws zoomed into the surface; with [surfaceZoom] (plain video) the
+ * SurfaceView itself takes the layer too.
+ */
 @Composable
 private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean, state: PlaybackObservation, shown: Bitmap?,
-    poster: Bitmap?, onSurfaceView: (SurfaceView) -> Unit, onSurfaceCreated: (SurfaceHolder) -> Unit,
-    onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit, onSurfaceDestroyed: () -> Unit) {
+    poster: Bitmap?, zoom: MediaZoomState, surfaceZoom: Boolean, onSurfaceView: (SurfaceView) -> Unit,
+    onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit, onSurfaceDestroyed: () -> Unit) {
     val created by rememberUpdatedState(onSurfaceCreated)
     val changed by rememberUpdatedState(onSurfaceChanged)
     val destroyed by rememberUpdatedState(onSurfaceDestroyed)
@@ -884,28 +944,41 @@ private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean,
         val density = LocalDensity.current
         val scale = playbackFitScale(state.videoWidth, state.videoHeight,
             with(density) { maxWidth.roundToPx() }, with(density) { maxHeight.roundToPx() })
-        val fitted = Modifier.align(Alignment.Center).size(maxWidth * scale.first, maxHeight * scale.second)
-        // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
-        // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
-        if (video) AndroidView(factory = { ctx ->
-            SurfaceView(ctx).apply {
-                tag = "media-playback-native-surface"
-                onSurfaceView(this)
-                holder.addCallback(object : SurfaceHolder.Callback {
-                    override fun surfaceCreated(holder: SurfaceHolder) = created(holder)
-                    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(holder, width, height)
-                    override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
-                })
+        if (video) {
+            val fittedWidth = maxWidth * scale.first
+            val fittedHeight = maxHeight * scale.second
+            val box = with(density) { Size(fittedWidth.toPx(), fittedHeight.toPx()) }
+            SideEffect { zoom.content = box }
+            Box(Modifier.align(Alignment.Center).size(fittedWidth, fittedHeight).clipToBounds()) {
+                // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
+                // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
+                AndroidView(factory = { ctx ->
+                    SurfaceView(ctx).apply {
+                        tag = "media-playback-native-surface"
+                        onSurfaceView(this)
+                        holder.addCallback(object : SurfaceHolder.Callback {
+                            override fun surfaceCreated(holder: SurfaceHolder) = created(holder)
+                            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(holder, width, height)
+                            override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
+                        })
+                    }
+                }, modifier = Modifier.fillMaxSize().then(if (surfaceZoom) Modifier.mediaZoomLayer(zoom) else Modifier)
+                    .testTag("media-playback-surface"))
+                poster?.let {
+                    Image(it.asImageBitmap(), null, Modifier.fillMaxSize().mediaZoomLayer(zoom).testTag("media-playback-poster"),
+                        contentScale = ContentScale.Fit)
+                }
+                shown?.let {
+                    // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
+                    // so non-square pixels stretch exactly once.
+                    Image(it.asImageBitmap(), artifact.name, Modifier.fillMaxSize().mediaZoomLayer(zoom).testTag("media-playback-frame"),
+                        contentScale = ContentScale.FillBounds)
+                }
             }
-        }, modifier = fitted.testTag("media-playback-surface"))
-        poster?.let {
-            Image(it.asImageBitmap(), null, Modifier.fillMaxSize().testTag("media-playback-poster"), contentScale = ContentScale.Fit)
-        }
-        shown?.let {
-            // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
-            // so non-square pixels stretch exactly once; photos retain their original fit.
-            Image(it.asImageBitmap(), artifact.name, (if (video) fitted else Modifier.fillMaxSize()).testTag("media-playback-frame"),
-                contentScale = if (video) ContentScale.FillBounds else ContentScale.Fit)
+        } else shown?.let {
+            // A photo keeps its own fit; it zooms against the whole area, which clips it.
+            Image(it.asImageBitmap(), artifact.name, Modifier.fillMaxSize().mediaZoomLayer(zoom).testTag("media-playback-frame"),
+                contentScale = ContentScale.Fit)
         }
     }
 }

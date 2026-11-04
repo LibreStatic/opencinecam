@@ -20,6 +20,13 @@ internal interface PlaybackController : Closeable {
     /** The Surface's size in pixels (surfaceChanged). Only sessions that draw with their own GL stage need it. */
     fun setSurfaceSize(width: Int, height: Int) {}
 
+    /**
+     * The review's zoom for sessions that draw with their own GL stage: [scale] around the surface centre,
+     * then the pan [offsetX]/[offsetY] as fractions of the surface's width and height (y down). Others
+     * are zoomed by the dialog itself.
+     */
+    fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {}
+
     /** The host is paused or stopped: stop moving and give up output that cannot survive it. */
     fun suspendOutput()
 

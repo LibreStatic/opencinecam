@@ -73,6 +73,8 @@ internal interface RawFrameProvider : Closeable {
 internal interface RawFrameSink {
     fun attach(surface: Surface, width: Int, height: Int)
     fun detach()
+    /** The review's zoom (see [PlaybackController.setZoom]); any thread, applied to the next and the last frame. */
+    fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {}
     fun render(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, quality: RawDevelopQuality,
         onDone: (renderNanos: Long, drawn: Boolean) -> Unit)
     fun release()
@@ -138,6 +140,9 @@ internal class RawPlaybackSession(
     private var attachedWidth = 0
     private var attachedHeight = 0
     @Volatile private var sink: RawFrameSink? = null
+    private val zoomLock = Any()
+    /** The latest zoom, (scale, offsetX, offsetY); a sink made later starts from it. Guarded by zoomLock. */
+    private var zoom = floatArrayOf(1f, 0f, 0f)
 
     // Loop thread only from here on.
     private var options = settings
@@ -229,6 +234,14 @@ internal class RawPlaybackSession(
         if (closed) return
         synchronized(surfaceLock) { surfaceWidth = width; surfaceHeight = height }
         loop.post { guarded { attachIfReady() } }
+    }
+
+    override fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {
+        if (closed) return
+        synchronized(zoomLock) {
+            zoom = floatArrayOf(scale, offsetX, offsetY)
+            sink?.setZoom(scale, offsetX, offsetY)
+        }
     }
 
     override fun suspendOutput() = pause()
@@ -340,7 +353,9 @@ internal class RawPlaybackSession(
         colour = RawStaticColour.from(index.metadata)
         audioPlan = rawAudioPlan(index, timesUs)
         val size = index.frames.firstNotNullOfOrNull { it.header }
-        sink = createSink()
+        val made = createSink()
+        // Under the lock, so a zoom set meanwhile reaches the sink either here or through setZoom, never lost.
+        synchronized(zoomLock) { sink = made; made.setZoom(zoom[0], zoom[1], zoom[2]) }
         publish(state.copy(phase = PlaybackPhase.LOADING, timeline = line, durationUs = timesUs.last() + intervalNs / 1000,
             videoWidth = size?.width ?: 0, videoHeight = size?.height ?: 0, rawCodec = rawCodecLabel(index),
             rawAudioSampleRate = audioPlan?.format?.sampleRate))
@@ -852,6 +867,7 @@ internal class OcrawFileFrameProvider private constructor(
 private class RendererSink(private val renderer: RawPlaybackRenderer) : RawFrameSink {
     override fun attach(surface: Surface, width: Int, height: Int) = renderer.attach(surface, width, height)
     override fun detach() = renderer.detach()
+    override fun setZoom(scale: Float, offsetX: Float, offsetY: Float) = renderer.setZoom(scale, offsetX, offsetY)
     override fun render(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, quality: RawDevelopQuality,
         onDone: (renderNanos: Long, drawn: Boolean) -> Unit) = renderer.render(buffer, header, params, quality, onDone)
     override fun release() = renderer.release()
