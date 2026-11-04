@@ -152,6 +152,14 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
+import com.librestatic.opencinecam.MediaZoomState
+import com.librestatic.opencinecam.PlaybackObservation
+import com.librestatic.opencinecam.PlaybackPhase
+import com.librestatic.opencinecam.PlaybackStageArea
 
 /*
  * Zero-argument Compose Driver entry points (AGENTS.md). Each one feeds fake state to the real
@@ -1473,4 +1481,43 @@ private fun NetworkDriveRunningScreen(revealed: Boolean) = DriverTheme {
         onBack = {},
         initialPasswordRevealed = revealed,
     )
+}
+
+/** A 4:3 test chart: a gradient under a 12x9 grid with a ring in the middle, so zoom and pan read at a glance. */
+private fun zoomChart(): Bitmap {
+    val width = 1200
+    val height = 900
+    val bitmap = gradientThumbnail(7).let { Bitmap.createScaledBitmap(it, width, height, true) }
+    val canvas = Canvas(bitmap)
+    val line = Paint().apply { color = android.graphics.Color.WHITE; strokeWidth = 3f; isAntiAlias = true }
+    for (i in 0..12) canvas.drawLine(i * 100f, 0f, i * 100f, height.toFloat(), line)
+    for (j in 0..9) canvas.drawLine(0f, j * 100f, width.toFloat(), j * 100f, line)
+    val ring = Paint().apply { color = android.graphics.Color.YELLOW; style = Paint.Style.STROKE; strokeWidth = 12f; isAntiAlias = true }
+    canvas.drawCircle(width / 2f, height / 2f, 160f, ring)
+    val dot = Paint().apply { color = android.graphics.Color.RED; isAntiAlias = true }
+    canvas.drawCircle(300f, 200f, 40f, dot)
+    return bitmap
+}
+
+/**
+ * The review's photo stage in full screen ([PlaybackStageArea], which the dialog draws; the dialog itself is
+ * a window screenshots leave out and opens real sessions). Pinch with two `pointerInput` pointers on
+ * `media-playback-zoom-area`, drag with one while zoomed, double tap to toggle 2.5x; a single tap counts in
+ * the readout (`media-playback-zoom-readout`), as it would show or hide the full-screen chrome.
+ */
+@Composable
+fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
+    val chart = remember { zoomChart() }
+    val density = LocalDensity.current
+    val zoom = remember { MediaZoomState(density) }
+    val scope = rememberCoroutineScope()
+    var taps by remember { mutableIntStateOf(0) }
+    PlaybackStageArea(Modifier.fillMaxSize().testTag("media-playback-zoom-area"),
+        artifact(9001, "IMG_20261104_101500.jpg", "image/jpeg", 2_400_000, 1_793_000_000), video = false, photo = true,
+        aspect = chart.width.toFloat() / chart.height, state = PlaybackObservation(phase = PlaybackPhase.PAUSED, bitmap = chart),
+        shown = chart, poster = null, fullscreen = true, zoom = zoom, zoomScope = scope, zoomEnabled = true, surfaceZoom = false,
+        onTap = { taps++ }, onSurfaceView = {}, onSurfaceCreated = {}, onSurfaceChanged = { _, _, _ -> }, onSurfaceDestroyed = {}) {
+        Text("scale=%.2f x=%.0f y=%.0f taps=%d".format(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value, taps),
+            Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
+    }
 }

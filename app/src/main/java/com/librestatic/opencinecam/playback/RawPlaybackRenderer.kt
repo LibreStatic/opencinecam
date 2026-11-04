@@ -14,6 +14,7 @@ import android.os.SystemClock
 import android.view.Surface
 import com.librestatic.opencinecam.camera.GpuEglDisplayLease
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
+import com.librestatic.opencinecam.zoomedQuad
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -57,6 +58,9 @@ internal class RawPlaybackRenderer : Closeable {
     /** The developed frame's aspect, kept so a resized or re-attached window redraws without a new upload. */
     private var frameWidth = 0
     private var frameHeight = 0
+    private var zoomScale = 1f
+    private var zoomX = 0f
+    private var zoomY = 0f
     private var closed = false
 
     init {
@@ -83,6 +87,20 @@ internal class RawPlaybackRenderer : Closeable {
             // new size in, so draw again or a paused frame stays at the stale size.
             val stale = windowSize().let { it[0] != width || it[1] != height }
             if (present() && stale) present()
+        }
+    }
+
+    /**
+     * The review's zoom, as a `graphicsLayer` on the surface would apply it: [scale] around the surface
+     * centre, then the pan [offsetX]/[offsetY] as fractions of the surface's width and height (y down).
+     * Redraws the last developed frame, so a paused frame follows the fingers too.
+     */
+    fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {
+        handler.post {
+            if (closed) return@post
+            zoomScale = scale; zoomX = offsetX; zoomY = offsetY
+            try { makeCurrent(); present() }
+            catch (failure: Exception) { android.util.Log.w(TAG, "RAW review zoom was not drawn.", failure) }
         }
     }
 
@@ -153,7 +171,7 @@ internal class RawPlaybackRenderer : Closeable {
             maxTextureSize = size[0]
             halfProgram = linkProgram(VERTEX_SHADER, developFragmentShader(full = false))
             fullProgram = linkProgram(VERTEX_SHADER, developFragmentShader(full = true))
-            blitProgram = linkProgram(VERTEX_SHADER, BLIT_FRAGMENT_SHADER)
+            blitProgram = linkProgram(BLIT_VERTEX_SHADER, BLIT_FRAGMENT_SHADER)
             val names = IntArray(1)
             GLES30.glGenFramebuffers(1, names, 0)
             framebuffer = names[0]
@@ -227,11 +245,15 @@ internal class RawPlaybackRenderer : Closeable {
         frameHeight = header.height
     }
 
-    /** Draws the developed image letterboxed to the window and swaps; false when there is nothing to show it on. */
+    /**
+     * Draws the developed image letterboxed and zoomed to the window and swaps; false when there is
+     * nothing to show it on. The viewport stays the whole surface and the letterbox becomes the quad's
+     * own scale and offset ([zoomedQuad]), so a zoomed picture fills the surface and the clip volume crops it.
+     */
     private fun present(): Boolean {
         if (window == EGL14.EGL_NO_SURFACE || surfaceWidth <= 0 || surfaceHeight <= 0) return false
         // The buffer being drawn, which can lag surfaceChanged by a frame; its size, not the
-        // reported one, keeps the letterbox in place.
+        // reported one, keeps the letterbox and the zoom in place.
         val (bufferWidth, bufferHeight) = windowSize().let { if (it[0] > 0 && it[1] > 0) it[0] to it[1] else surfaceWidth to surfaceHeight }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, bufferWidth, bufferHeight)
@@ -239,11 +261,12 @@ internal class RawPlaybackRenderer : Closeable {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         if (imageTexture != 0 && frameWidth > 0) {
             val box = RawDevelop.letterbox(frameWidth, frameHeight, bufferWidth, bufferHeight)
-            GLES30.glViewport(box[0], box[1], box[2], box[3])
             GLES30.glUseProgram(blitProgram)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, imageTexture)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(blitProgram, "uImage"), 0)
+            GLES30.glUniform4fv(GLES30.glGetUniformLocation(blitProgram, "uZoom"), 1,
+                zoomedQuad(box, bufferWidth, bufferHeight, zoomScale, zoomX, zoomY), 0)
             drawQuad()
         }
         return EGL14.eglSwapBuffers(display, window)
@@ -351,6 +374,18 @@ internal class RawPlaybackRenderer : Closeable {
             out vec2 vTexCoord;
             void main() {
                 gl_Position = vec4(aPosition, 0.0, 1.0);
+                vTexCoord = (aPosition + 1.0) * 0.5;
+            }
+        """.trimIndent()
+
+        /** The develop passes' quad with the letterbox and zoom of [zoomedQuad]; texture coordinates stay on the plain quad. */
+        private val BLIT_VERTEX_SHADER = """
+            #version 300 es
+            uniform vec4 uZoom;
+            layout(location = 0) in vec2 aPosition;
+            out vec2 vTexCoord;
+            void main() {
+                gl_Position = vec4(aPosition * uZoom.xy + uZoom.zw, 0.0, 1.0);
                 vTexCoord = (aPosition + 1.0) * 0.5;
             }
         """.trimIndent()
