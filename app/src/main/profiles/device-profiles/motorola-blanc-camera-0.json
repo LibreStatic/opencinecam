@@ -16,7 +16,7 @@
   "signature": {
     "algorithm": "SHA-256",
     "keyId": "release",
-    "digest": "9179d3ef58a4d9990842e8a553fad76637fde9779a4f6951783b901d2685fb6f"
+    "digest": "0e7bba83bbbbab1f8ae17e5fe03a23073bac1bb73dfb2c593b244cef295eb4ed"
   },
   "quirks": [
     {
@@ -27,6 +27,11 @@
     {
       "quirkId": "OCC-QUIRK-0002",
       "effect": "moto-high-speed-session-keys",
+      "enabled": true
+    },
+    {
+      "quirkId": "OCC-QUIRK-0003",
+      "effect": "qti-raw-frame-rate-override",
       "enabled": true
     }
   ]

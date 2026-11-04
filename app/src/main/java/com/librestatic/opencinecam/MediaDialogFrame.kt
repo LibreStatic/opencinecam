@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -62,10 +61,10 @@ internal fun MediaDialogFrame(tag: String, onDismiss: () -> Unit, placement: Med
 internal fun MediaDialogTake(take: LocalMediaTake, tag: String) {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("$tag-label"), color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Text(take.primary.name, Modifier.fillMaxWidth().testTag("$tag-file"), color = SettingsMuted, fontSize = 12.sp,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        FitText(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("$tag-label"), color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+        FitText(take.primary.name, Modifier.fillMaxWidth().testTag("$tag-file"), color = SettingsMuted, fontSize = 12.sp,
+            maxLines = 2)
     }
 }
 

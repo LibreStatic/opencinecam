@@ -15,8 +15,8 @@ class ProxyJobStoreTest {
     @get:Rule val temporary = TemporaryFolder()
     private fun folder() = temporary.newFolder()
     private fun job(index: Int = 1, kind: LocalMediaKind = LocalMediaKind.VIDEO): ProxyJob {
-        val collection = when (kind) { LocalMediaKind.VIDEO -> "video"; LocalMediaKind.PHOTO -> "images"; LocalMediaKind.AUDIO -> "audio" }
-        val mime = when (kind) { LocalMediaKind.VIDEO -> "video/mp4"; LocalMediaKind.PHOTO -> "image/jpeg"; LocalMediaKind.AUDIO -> "audio/flac" }
+        val collection = when (kind) { LocalMediaKind.VIDEO -> "video"; LocalMediaKind.PHOTO -> "images"; LocalMediaKind.AUDIO -> "audio"; LocalMediaKind.RAW_VIDEO -> "file" }
+        val mime = when (kind) { LocalMediaKind.VIDEO -> "video/mp4"; LocalMediaKind.PHOTO -> "image/jpeg"; LocalMediaKind.AUDIO -> "audio/flac"; LocalMediaKind.RAW_VIDEO -> "application/octet-stream" }
         val primary = LocalMediaArtifact("content://media/external_primary/$collection/media/$index", "Take ñ $index", mime, 999L + index, 123L + index)
         val metadata = LocalMediaArtifact("content://media/external_primary/downloads/$index", "Take $index.json", "application/json", 512, 123)
         return ProxyJob(UUID(0, index.toLong()).toString(), LocalMediaTake("take:${UUID(1, index.toLong())}", primary,

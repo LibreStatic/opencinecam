@@ -92,6 +92,8 @@ class CameraReadbackTest {
         val lines = discrepancyLines(mismatched.hardwareTruth)
         assertEquals(1, lines.size)
         assertEquals("physicalCameraId", lines.single().first)
+        assertEquals("2 → 3", lines.single().second)
+        assertEquals("2 → 3 · note", discrepancyLines(mismatched.hardwareTruth, "note").single().second)
         assertEquals(emptyList<Pair<String, String>>(), discrepancyLines(logical.hardwareTruth))
     }
 

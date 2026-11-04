@@ -15,4 +15,9 @@ data class PlaybackSettings(
      * A per-device choice: presets never carry it, and it starts off.
      */
     val nativeSurfaceFrames: Boolean = false,
+    /** How `.ocraw` takes play (PLAN-071 §7 decision 5). A per-device choice: presets never carry it. */
+    val rawPlayback: RawPlaybackMode = RawPlaybackMode.AUTOMATIC,
 )
+
+/** RAW review: real time with an automatic fall back to the frame viewer, or the frame viewer only. */
+enum class RawPlaybackMode { AUTOMATIC, FRAME_VIEWER }

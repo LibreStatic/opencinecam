@@ -61,7 +61,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
@@ -102,8 +101,8 @@ internal fun CaptureModeButton(label: String, onClick: () -> Unit, modifier: Mod
         Column(Modifier.weight(1f, fill = false)) {
             Text(stringResource(R.string.mode_title), color = colors.onSurfaceVariant, fontSize = 11.sp, lineHeight = 12.sp,
                 fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, maxLines = 1)
-            Text(label, color = colors.primary, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(label, color = colors.primary, fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                maxLines = 1)
         }
         CineGlyph(if (expanded) CineIcon.COLLAPSE else CineIcon.EXPAND, colors.onSurfaceVariant, Modifier.size(18.dp))
     }
@@ -153,7 +152,8 @@ internal fun CaptureModeContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Text(
+                        // Only the current mode's tile may scroll; a sheet full of moving names would be noise.
+                        FitText(
                             choice.label,
                             color = when {
                                 choice.selected -> colors.onPrimaryContainer
@@ -163,7 +163,7 @@ internal fun CaptureModeContent(
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            scroll = choice.selected,
                         )
                         choice.gateLabel?.let { Text(it, color = choice.gateColor, fontSize = 12.sp, maxLines = 1) }
                     }

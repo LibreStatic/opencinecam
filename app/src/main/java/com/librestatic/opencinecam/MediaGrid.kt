@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam
 
 import android.graphics.Bitmap
+import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -70,7 +71,22 @@ internal fun LocalMediaKind.galleryKind(): GalleryMediaKind = when (this) {
     LocalMediaKind.PHOTO -> GalleryMediaKind.PHOTO
     LocalMediaKind.VIDEO -> GalleryMediaKind.VIDEO
     LocalMediaKind.AUDIO -> GalleryMediaKind.AUDIO
+    LocalMediaKind.RAW_VIDEO -> GalleryMediaKind.VIDEO
 }
+
+/** What a take is, in words: the filter's name, except a RAW take, which is not an ordinary video. */
+internal fun LocalMediaKind.kindLabel(): Int =
+    if (this == LocalMediaKind.RAW_VIDEO) R.string.gallery_raw_video else galleryKindLabel(galleryKind())
+
+/** Every take opens in the app's review; a RAW take plays through its own developed preview (PLAN-071 §7). */
+@Suppress("UnusedReceiverParameter")
+internal fun LocalMediaKind.opensInApp(): Boolean = true
+
+/** A RAW take has no system thumbnail: it gets a neutral placeholder, never a load request. */
+internal fun LocalMediaKind.hasSystemThumbnail(): Boolean = this != LocalMediaKind.RAW_VIDEO
+
+/** Rename and delete re-observe a take through the media collections, which a RAW take is not in. */
+internal fun LocalMediaKind.renamesAndDeletes(): Boolean = this != LocalMediaKind.RAW_VIDEO
 
 /** A photo opens to be looked at; only clips and recordings play. */
 internal fun LocalMediaKind.primaryActionLabel(): Int =
@@ -82,6 +98,7 @@ internal fun LocalMediaKind.glyph(): CineIcon = when (this) {
     LocalMediaKind.PHOTO -> CineIcon.CAMERA
     LocalMediaKind.VIDEO -> CineIcon.VIDEO
     LocalMediaKind.AUDIO -> CineIcon.AUDIO
+    LocalMediaKind.RAW_VIDEO -> CineIcon.VIDEO
 }
 
 /** Facts are read once per file and kept while the gallery is open; a failed read stays unknown. */
@@ -122,10 +139,11 @@ internal class GalleryThumbnailState(initial: Bitmap?) {
  */
 @Composable
 internal fun rememberGalleryThumbnail(artifact: LocalMediaArtifact, source: MediaCatalogSource, automatic: Boolean,
-    cache: GalleryThumbnailCache): GalleryThumbnailState {
+    cache: GalleryThumbnailCache, loadable: Boolean = true): GalleryThumbnailState {
     val state = remember(artifact.uri) { GalleryThumbnailState(cache[artifact.uri]) }
     LaunchedEffect(source, artifact.uri, state.request, automatic) {
-        if (state.request == 0 && !automatic) return@LaunchedEffect
+        // A RAW take has no picture MediaStore can decode; its tile keeps the placeholder.
+        if (!loadable || state.request == 0 && !automatic) return@LaunchedEffect
         if (state.bitmap != null) return@LaunchedEffect
         state.loading = true; state.unavailable = false
         try {
@@ -163,14 +181,16 @@ internal fun GalleryDayHeader(day: LocalDate, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
 }
 
-/** Everything the gallery can do with one take; a null action is not offered. */
+/** Everything the gallery can do with one take; a null action is not offered (a RAW take has no play). */
 internal class GalleryTakeActions(
-    val play: () -> Unit,
+    val play: (() -> Unit)?,
     val details: () -> Unit,
     val share: (() -> Unit)?,
     val rename: (() -> Unit)?,
     val proxy: (() -> Unit)?,
     val delete: (() -> Unit)?,
+    /** Export CinemaDNG: RAW takes only (PLAN-071 §8). */
+    val export: (() -> Unit)? = null,
 )
 
 /**
@@ -180,7 +200,7 @@ internal class GalleryTakeActions(
 @Composable
 internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, selected: Boolean, clickLabel: String,
-    actions: GalleryTakeActions, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    actions: GalleryTakeActions, modifier: Modifier = Modifier, footer: (@Composable () -> Unit)? = null, onClick: () -> Unit) {
     val context = LocalContext.current
     val shape = RoundedCornerShape(12.dp)
     val title = takeTitleText(context, take)
@@ -195,17 +215,18 @@ internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, so
             .semantics { this.selected = selected }
             .testTag("gallery-take-${take.id}"),
     ) {
-        val thumbnail = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
+        val thumbnail = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails, loadable = take.kind.hasSystemThumbnail())
         GalleryThumbnailTile(take, thumbnail, settings.autoThumbnails, facts, Modifier.fillMaxWidth().aspectRatio(16f / 10f), badges = badges)
         Row(Modifier.fillMaxWidth().padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, Modifier.fillMaxWidth().testTag("gallery-name-${take.id}"), color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Only the selected take's card may scroll its long texts; the rest of the list keeps the ellipsis.
+                FitText(title, Modifier.fillMaxWidth().testTag("gallery-name-${take.id}"), color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, scroll = selected)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // A slated take shows when it was shot underneath; a dated one says what it is.
                     val subtitle = if (slated) remember(take.primary.modifiedSeconds) { takeTimeText(context, take.primary.modifiedSeconds) }
-                        else stringResource(galleryKindLabel(take.kind.galleryKind()))
-                    Text(subtitle, Modifier.weight(1f, fill = false), color = SettingsMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        else stringResource(take.kind.kindLabel())
+                    FitText(subtitle, Modifier.weight(1f, fill = false), color = SettingsMuted, fontSize = 12.sp, maxLines = 1, scroll = selected)
                     if (take.slate?.goodTake == true) {
                         val good = stringResource(R.string.gallery_good_take)
                         CineGlyph(CineIcon.STAR, SettingsAccent, Modifier.size(14.dp).semantics { contentDescription = good })
@@ -220,9 +241,11 @@ internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, so
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CineGlyph(CineIcon.WARNING, GalleryWarning, Modifier.size(14.dp))
-            Text(stringResource(relationLabel(take.relationStatus, badges.incompleteReasons.isNotEmpty())), color = GalleryWarning, fontSize = 12.sp, maxLines = 2,
-                overflow = TextOverflow.Ellipsis)
+            FitText(stringResource(relationLabel(take.relationStatus, badges.incompleteReasons.isNotEmpty())), color = GalleryWarning, fontSize = 12.sp, maxLines = 2,
+                scroll = selected)
         }
+        // Work on the take in progress, such as a CinemaDNG export, with its own Cancel.
+        footer?.let { Box(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, bottom = 8.dp)) { it() } }
     }
 }
 
@@ -245,9 +268,10 @@ private fun GalleryTakeMenu(take: LocalMediaTake, title: String, actions: Galler
         DropdownMenu(open, { open = false }, Modifier.testTag("gallery-menu-${take.id}-items")) {
             val close = { open = false }
             val plain = MaterialTheme.colorScheme.onSurface
-            GalleryMenuItem("gallery-primary-${take.id}", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), plain, close, actions.play)
+            actions.play?.let { GalleryMenuItem("gallery-primary-${take.id}", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), plain, close, it) }
             GalleryMenuItem("gallery-info-${take.id}", CineIcon.INFO, R.string.media_action_details, plain, close, actions.details)
             actions.share?.let { GalleryMenuItem("gallery-share-${take.id}", CineIcon.SHARE, R.string.media_action_share, plain, close, it) }
+            actions.export?.let { GalleryMenuItem("gallery-export-${take.id}", CineIcon.FILES, R.string.cinemadng_export_action, plain, close, it) }
             actions.rename?.let { GalleryMenuItem("gallery-rename-${take.id}", CineIcon.RENAME, R.string.media_action_rename, plain, close, it) }
             actions.proxy?.let { GalleryMenuItem("gallery-proxy-${take.id}", CineIcon.PROXY, R.string.media_action_proxy, plain, close, it) }
             actions.delete?.let { GalleryMenuItem("gallery-delete-${take.id}", CineIcon.DELETE, R.string.media_action_delete,
@@ -340,13 +364,16 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
     val id = take.id
     val bitmap = state.bitmap
     val requestLabel = stringResource(R.string.gallery_thumbnail)
+    // A RAW take never has a thumbnail: a neutral placeholder, not a button that loads one.
+    val placeholder = !take.kind.hasSystemThumbnail()
+    val context = LocalContext.current
     Box(
         modifier
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             .then(
                 // Without automatic thumbnails the empty tile is the button that loads the picture;
                 // otherwise a tap anywhere on the card belongs to the card.
-                if (bitmap != null || automatic) Modifier
+                if (bitmap != null || automatic || placeholder) Modifier
                 else Modifier
                     .clickable(enabled = !state.loading, onClickLabel = requestLabel) { state.request++ }
                     .semantics { contentDescription = requestLabel }
@@ -360,6 +387,7 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
         } else if (!state.loading) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             CineGlyph(take.kind.glyph(), SettingsMuted, Modifier.size(28.dp))
             when {
+                placeholder -> Unit
                 state.unavailable -> Text(stringResource(R.string.gallery_thumbnail_unavailable), Modifier.testTag("$tag-thumbnail-error-$id"),
                     color = SettingsMuted, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
                 !automatic -> Text(stringResource(R.string.gallery_thumbnail_tap), color = SettingsMuted, fontSize = 11.sp,
@@ -389,7 +417,10 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
             Box(Modifier.weight(1f).padding(end = 4.dp)) {
                 badges?.codec?.let { GalleryBadge(codecBadgeText(it), Modifier.testTag("$tag-codec-$id")) }
             }
-            formatTakeDuration(facts?.durationMs)?.let { GalleryBadge(it, Modifier.testTag("$tag-duration-$id")) }
+            // A RAW take has no duration MediaStore reads: its size says how much there is.
+            if (placeholder) GalleryBadge(remember(take.primary.sizeBytes) { Formatter.formatShortFileSize(context, take.primary.sizeBytes) },
+                Modifier.testTag("$tag-size-$id"))
+            else formatTakeDuration(facts?.durationMs)?.let { GalleryBadge(it, Modifier.testTag("$tag-duration-$id")) }
         }
     }
 }

@@ -45,6 +45,8 @@ internal fun codecBadge(kind: LocalMediaKind, mime: String, name: String, encodi
     LocalMediaKind.VIDEO -> videoCodecBadge(encoding?.videoMime, encoding?.videoProfile)
     LocalMediaKind.PHOTO -> photoCodecBadge(mime, name)
     LocalMediaKind.AUDIO -> audioCodecBadge(mime, name, encoding?.audioContainer, encoding?.audioSamples)
+    // Every OpenCine RAW v1 take so far is packed RAW10 (PLAN-071); a compressed encoding would get its own badge.
+    LocalMediaKind.RAW_VIDEO -> CodecBadge("RAW10")
 }
 
 /** The OCLog sidecar names the profile as "Main10" for HEVC or "AVC_<CodecProfileLevel>" for H.264. */

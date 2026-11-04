@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 RAW video takes: refusals, end reasons and outcomes. -->
+    <string name="raw_video_not_qualified">RAW video is not qualified on this camera yet. Run the RAW video qualification first.</string>
+    <string name="raw_video_unsupported">This camera has no RAW10 output, so it cannot record RAW video.</string>
+    <string name="raw_video_failed">This camera refused the RAW video stream. RAW video is unavailable on it until the app restarts.</string>
+    <string name="raw_video_unavailable">The camera refused the RAW video stream. Switched to %1$s.</string>
+    <string name="raw_video_memory">Not enough free memory for the RAW frame buffer. Close other apps and try again.</string>
+    <string name="raw_video_codec_unavailable">The RAW encoder could not start. Choose an uncompressed RAW configuration.</string>
+    <string name="raw_video_storage">Not enough free storage for a RAW take: %1$s needed for 10 seconds, %2$s free.</string>
+    <string name="raw_video_storage_unknown">Free space could not be read, so the RAW take was not started.</string>
+    <string name="raw_video_start_failed">The RAW take could not start.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
+    <string name="raw_video_saved">RAW take saved: %1$d frames, %2$s s</string>
+    <string name="raw_video_not_finalised">The RAW take was not finalised; it will be recovered at the next start.</string>
+    <string name="raw_video_empty">The RAW take recorded no frame.</string>
+    <string name="raw_video_end_ring_full">storage could not keep up with the RAW stream</string>
+    <string name="raw_video_end_writer">the RAW file could not be written</string>
+    <string name="raw_video_end_stream">the camera stopped delivering RAW frames</string>
+    <string name="raw_video_end_frame">a RAW frame was lost</string>
+    <string name="raw_video_end_stalled">the RAW writer stopped responding</string>
+    <string name="raw_video_end_other">the RAW take failed</string>
+</resources>

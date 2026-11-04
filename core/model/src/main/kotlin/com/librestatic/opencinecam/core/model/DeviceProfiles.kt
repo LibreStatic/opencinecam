@@ -35,6 +35,13 @@ enum class QuirkEffect(val id: String) {
 
     /** Supply the Motorola slow-motion client keys on constrained high-speed requests. */
     MOTO_HIGH_SPEED_SESSION_KEYS("moto-high-speed-session-keys"),
+
+    /**
+     * Run RAW video above the RAW stream's declared frame-rate limit on a Qualcomm CamX HAL: keep the
+     * AE target range within the declared limit and supply the `org.quic.camera.manualExposure`
+     * vendor keys that lift the limit and override the sensor frame duration to 1/fps.
+     */
+    QTI_RAW_FRAME_RATE_OVERRIDE("qti-raw-frame-rate-override"),
     ;
 
     companion object {

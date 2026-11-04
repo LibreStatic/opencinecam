@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_video_not_qualified">Il video RAW non è ancora qualificato su questa fotocamera. Esegui prima la qualificazione video RAW.</string>
+    <string name="raw_video_unsupported">Questa fotocamera non ha un’uscita RAW10, quindi non può registrare video RAW.</string>
+    <string name="raw_video_failed">Questa fotocamera ha rifiutato il flusso video RAW. Il video RAW non è disponibile su di essa fino al riavvio dell’app.</string>
+    <string name="raw_video_unavailable">La fotocamera ha rifiutato il flusso video RAW. Passato a %1$s.</string>
+    <string name="raw_video_memory">Memoria libera insufficiente per il buffer dei fotogrammi RAW. Chiudi altre app e riprova.</string>
+    <string name="raw_video_codec_unavailable">Impossibile avviare l’encoder RAW. Scegli una configurazione RAW non compressa.</string>
+    <string name="raw_video_storage">Spazio libero insufficiente per una ripresa RAW: servono %1$s per 10 secondi, %2$s liberi.</string>
+    <string name="raw_video_storage_unknown">Non è stato possibile leggere lo spazio libero, quindi la ripresa RAW non è partita.</string>
+    <string name="raw_video_start_failed">Non è stato possibile avviare la ripresa RAW.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
+    <string name="raw_video_saved">Ripresa RAW salvata: %1$d fotogrammi, %2$s s</string>
+    <string name="raw_video_not_finalised">La ripresa RAW non è stata finalizzata; verrà recuperata al prossimo avvio.</string>
+    <string name="raw_video_empty">La ripresa RAW non ha registrato alcun fotogramma.</string>
+    <string name="raw_video_end_ring_full">la memoria di archiviazione non ha tenuto il passo del flusso RAW</string>
+    <string name="raw_video_end_writer">non è stato possibile scrivere il file RAW</string>
+    <string name="raw_video_end_stream">la fotocamera ha smesso di fornire fotogrammi RAW</string>
+    <string name="raw_video_end_frame">un fotogramma RAW è andato perso</string>
+    <string name="raw_video_end_stalled">la scrittura RAW ha smesso di rispondere</string>
+    <string name="raw_video_end_other">la ripresa RAW non è riuscita</string>
+</resources>

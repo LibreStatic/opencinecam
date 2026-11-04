@@ -137,6 +137,8 @@
     <string name="mode_selector_summary">Choisissez une molette tactile ou une grille de boutons adaptative.</string>
     <string name="translucent_chrome">Interface translucide</string>
     <string name="translucent_chrome_summary">Laisse le viseur occuper tout l\'écran et fait flotter les commandes par-dessus.</string>
+    <string name="scroll_long_text">Faire défiler les textes longs</string>
+    <string name="scroll_long_text_summary">Le texte qui ne tient pas défile lentement au lieu d\'être coupé par des points de suspension.</string>
     <string name="viewfinder_scale">Viseur</string>
     <string name="viewfinder_scale_fit">Ajuster</string>
     <string name="viewfinder_scale_fill">Remplir</string>
@@ -364,6 +366,7 @@
     <string name="image_mode_video">EIS · électronique</string>
     <string name="image_mode_preview">EIS · aligné sur l\'aperçu</string>
     <string name="image_stabilization_help">OIS et EIS sont sélectionnés séparément ; la prise en charge simultanée n\'est pas déduite. L\'EIS peut rogner ou modifier le champ de vision. Le fonctionnement réel dépend de la résolution, des FPS et des surfaces de sortie ; vérifiez les résultats signalés, pas seulement les modes annoncés.</string>
+    <string name="scroll_long_text_help">Le texte sur une ligne qui ne tient pas dans son espace, comme la ligne d\'état de la capture, défile lentement pour que vous puissiez le lire en entier, comme sur les caméras professionnelles. Seul le texte qui ne tient pas bouge ; celui qui tient reste fixe. Il attend environ 1,5 seconde avant de défiler et entre deux passages. Si les animations du système sont désactivées, il ne bouge jamais. Désactivez l\'option pour couper les textes longs par des points de suspension (…).</string>
     <string name="image_noise">Réduction du bruit de l\'image</string>
     <string name="image_edge">Accentuation des contours</string>
     <string name="image_mode_fast">Rapide</string>
@@ -961,6 +964,7 @@
     <string name="caps_profile_quirk_off">%1$s (désactivée)</string>
     <string name="caps_quirk_high_speed_physical">La capture haute vitesse ouvre la caméra physique qui possède le mode</string>
     <string name="caps_quirk_moto_keys">Clés de ralenti Motorola sur les requêtes haute vitesse</string>
+    <string name="caps_quirk_qti_raw_fps">RAW au-delà de la limite de fréquence d’images déclarée (Qualcomm)</string>
     <string name="caps_section_main10">Dernier contrôle de fichier Main10</string>
     <string name="caps_main10_none">Aucune prise HLG ou LOG n’a encore été contrôlée.</string>
     <string name="caps_main10_summary">Prise %1$s, contrôlée %2$s</string>

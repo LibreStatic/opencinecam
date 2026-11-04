@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Capture service notices. Technical tokens (Main10, BT.2020, HLG, OCLog2, HEVC, fps…) stay untranslated. -->
+    <string name="capture_audio_monitor_unavailable">Audio monitor unavailable: %1$s</string>
+    <string name="capture_audio_probe_failed">Audio capability probe failed: %1$s</string>
+    <string name="capture_audio_probe_busy">Audio capability probe is busy.</string>
+    <string name="capture_no_audio">no audio</string>
+    <string name="capture_lossless_audio_start_failed">Lossless audio could not start.</string>
+    <string name="capture_jpeg_saved">JPEG saved: %1$d×%2$d</string>
+    <string name="capture_jpeg_save_failed">JPEG could not be saved.</string>
+    <string name="capture_dng_saved">DNG saved: %1$d×%2$d</string>
+    <string name="capture_dng_save_failed">DNG could not be saved.</string>
+    <string name="capture_still_writer_busy">The still-image writer is busy.</string>
+    <string name="capture_still_save_failed">The still capture could not be saved.</string>
+    <string name="capture_burst_save_failed">The burst could not be saved.</string>
+    <string name="capture_bracket_save_failed">The bracket could not be saved.</string>
+    <string name="capture_accumulation_save_failed">The accumulation could not be saved.</string>
+    <string name="capture_still_not_ready">The selected still format is not ready on this camera.</string>
+    <string name="capture_burst_not_ready">Burst capture is not ready.</string>
+    <string name="capture_bracket_not_ready">The selected bracket is not available on this camera.</string>
+    <string name="capture_accumulation_not_ready">Accumulation is not ready on this camera.</string>
+    <!-- %1$s: audio summary (may be empty); %2$.1f: take duration in seconds. -->
+    <string name="capture_video_saved">Video saved%1$s · %2$.1f s</string>
+    <!-- %1$s: HLG or HDR10; %2$s: audio summary (may be empty); %3$.1f: duration in seconds. -->
+    <string name="capture_hdr_video_saved">%1$s HDR Main10 saved · BT.2020%2$s · %3$.1f s</string>
+    <!-- %1$s: OCLog2 or LUT → SDR BT.709; %2$s: source path; %3$s: audio summary (may be empty); %4$.1f: duration in seconds. -->
+    <string name="capture_log_video_saved">%1$s Main10 saved · %2$s + provenance%3$s · %4$.1f s</string>
+    <string name="capture_video_finalize_failed">Video could not be finalized with verified provenance.</string>
+    <string name="capture_video_save_failed">Video could not be saved.</string>
+    <string name="capture_source_isp_derived">ISP-derived</string>
+    <string name="capture_source_hfr_isp_derived">HFR ISP-derived</string>
+    <string name="capture_source_hlg_derived">HLG-derived 10-bit</string>
+    <string name="capture_source_depth_not_claimed">source depth not claimed</string>
+    <string name="capture_high_speed">HIGH SPEED</string>
+    <string name="capture_zoom_rejected">Zoom %1$s× not accepted; kept %2$s×</string>
+    <string name="capture_no_public_camera">No public Camera2 camera is available.</string>
+    <string name="capture_camera_selected">Camera %1$s selected</string>
+    <string name="capture_target_fps">Target FPS %1$d · fixed Camera2 range %1$d–%1$d</string>
+    <string name="capture_fps_unavailable">%1$d fps unavailable at this resolution · using %2$d fps</string>
+    <string name="capture_preview_surface_unavailable">The camera surface is not available yet.</string>
+    <string name="capture_preview_recovery_timeout">The camera could not recover the preview.</string>
+    <string name="capture_recording_geometry_unavailable">Recording geometry is not available yet.</string>
+    <string name="capture_log_geometry_unavailable">LOG geometry is not available yet.</string>
+    <string name="capture_microphone_permission_required">Grant microphone permission or disable audio before recording.</string>
+    <string name="capture_video_surface_not_ready">The video surface is not ready.</string>
+    <string name="capture_video_output_failed">Video output could not be created.</string>
+    <string name="capture_log_pipeline_not_ready">The experimental OCLog2 pipeline is not ready.</string>
+    <string name="capture_log_output_failed">OCLog2 output could not be created.</string>
+    <string name="capture_timelapse_surface_not_ready">The timelapse surface is not ready.</string>
+    <string name="capture_timelapse_output_failed">Timelapse output could not be created.</string>
+    <!-- %1$s: audio summary. -->
+    <string name="capture_preparing_video">Preparing video · %1$s…</string>
+    <!-- %1$d: fps; %2$s: audio summary. -->
+    <string name="capture_preparing_hdr10">Preparing HDR10 · %1$d fps · HLG10 → BT.2020 PQ → HEVC Main10 HDR10 · %2$s…</string>
+    <string name="capture_preparing_hlg">Preparing HLG · %1$d fps · HLG10 → BT.2020 HLG → HEVC Main10 · %2$s…</string>
+    <string name="capture_preparing_oclog_hfr">Preparing OCLog2 HFR · %1$d fps · ISP SDR → GLES → HEVC Main10 · source depth not claimed · %2$s…</string>
+    <string name="capture_preparing_oclog">Preparing OCLog2 · %1$d fps · HLG10 → scene-linear BT.2020 → HEVC Main10 · %2$s…</string>
+    <string name="recording_camera_permission_required">Camera permission is required to record.</string>
+    <string name="recording_microphone_permission_required">Microphone permission is required for audio recording.</string>
+    <string name="recording_foreground_denied">Foreground recording permission was denied.</string>
+    <string name="recording_foreground_failed">Foreground recording could not be started.</string>
+    <string name="engine_failure_camera_permission">Camera permission is required.</string>
+    <string name="engine_failure_camera_disconnected">The camera disconnected.</string>
+    <string name="engine_failure_camera_open">The camera could not be opened.</string>
+    <string name="engine_failure_retiring">The previous camera session has not released its resources yet. Try again, or restart the app if it persists.</string>
+    <string name="engine_failure_preview">The camera preview could not be started.</string>
+    <string name="engine_failure_high_speed_preview">The high-speed preview could not be started.</string>
+    <string name="engine_failure_log_unavailable">OCLog2 is not available with this camera configuration.</string>
+    <string name="engine_failure_log_failed">The OCLog2 pipeline failed.</string>
+    <string name="engine_failure_video_prepare">Video recording could not be prepared.</string>
+    <string name="engine_failure_manual_gain_route">Manual recording gain is not available with this audio route.</string>
+    <string name="engine_failure_video_start">Video recording could not start.</string>
+    <string name="engine_failure_video_stop">The recording was too short or could not be finalized.</string>
+    <string name="engine_failure_still_format">This camera does not offer the selected photo format.</string>
+    <string name="engine_failure_still_sequence_busy">A photo sequence is still using the camera.</string>
+    <string name="engine_failure_photo">The photo could not be taken.</string>
+    <string name="engine_failure_bracket_exposure">Exposure bracketing requires automatic exposure.</string>
+    <string name="engine_failure_sequence_too_large">The sequence is too large to save.</string>
+    <string name="engine_failure_accumulation_frames">Accumulation needs at least two completed frames.</string>
+    <string name="engine_failure_burst">The burst could not be completed.</string>
+    <string name="engine_failure_bracket">The bracket could not be completed.</string>
+    <string name="engine_failure_accumulation">The accumulation could not be completed.</string>
+    <string name="engine_failure_night">The night photo could not be taken.</string>
+    <string name="presets_review_mode">Mode: %1$s → %2$s</string>
+    <string name="presets_review_focus">Focus: %1$s → %2$s</string>
+    <string name="presets_review_zoom">Zoom: %1$s → %2$s</string>
+    <string name="presets_review_autofocus">Autofocus</string>
+    <string name="presets_review_change">%1$s: %2$s → %3$s</string>
+    <string name="presets_issue_camera">no camera</string>
+    <string name="presets_issue_mode">mode</string>
+    <string name="presets_issue_format">resolution and frame rate</string>
+    <string name="presets_issue_exposure">exposure</string>
+    <string name="presets_issue_white_balance">white balance</string>
+    <string name="presets_issue_wb_lock">white balance lock</string>
+    <string name="presets_issue_image_processing">image processing</string>
+    <string name="presets_issue_torch">torch</string>
+    <string name="presets_issue_photo_flash">photo flash</string>
+    <string name="presets_issue_focus">focus</string>
+    <string name="presets_issue_zoom">zoom</string>
+    <string name="presets_issue_audio">audio</string>
+    <string name="caps_route_mismatch">The still\'s result names a different physical camera than the one it was routed to.</string>
+</resources>

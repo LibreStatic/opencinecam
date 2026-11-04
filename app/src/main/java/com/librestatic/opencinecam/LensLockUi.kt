@@ -21,7 +21,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -120,8 +119,8 @@ internal fun InstrumentNotice(text: String, icon: CineIcon, stripe: Color, tag: 
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         CineGlyph(icon, stripe, Modifier.size(14.dp))
-        Text(text, color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        FitText(text, color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2)
     }
 }
 

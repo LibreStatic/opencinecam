@@ -221,9 +221,13 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
 internal fun routeLine(hud: HardwareTruthHudState): String =
     "${readback(hud.requested[ROUTE_KEY] ?: "logical", hud.reported[ROUTE_KEY])} · ${hud.routeTruth.name}"
 
-/** One line per recorded requested/reported mismatch, oldest first. */
-internal fun discrepancyLines(hud: HardwareTruthHudState): List<Pair<String, String>> =
-    hud.discrepancyHistory.map { it.key to "${readback(it.requested, it.reported)} · ${it.explanation}" }
+/**
+ * One line per recorded requested/reported mismatch, oldest first. The card's heading already says
+ * the values differ, so only the still route, whose mismatch means something else, adds [routeNote]
+ * (localized by the caller; the English explanation stays in the take sidecar).
+ */
+internal fun discrepancyLines(hud: HardwareTruthHudState, routeNote: String? = null): List<Pair<String, String>> =
+    hud.discrepancyHistory.map { it.key to readback(it.requested, it.reported) + if (it.key == ROUTE_KEY && routeNote != null) " · $routeNote" else "" }
 
 private fun readback(requested: String?, reported: String?): String = "${requested ?: "—"} → ${reported ?: "—"}"
 

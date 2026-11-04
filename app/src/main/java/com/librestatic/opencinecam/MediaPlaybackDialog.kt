@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -63,6 +64,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.librestatic.opencinecam.media.ocraw.OcrawMissingReason
 import com.librestatic.opencinecam.playback.*
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
@@ -153,7 +155,8 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
                     val page = onPage(next)
                     check(page.next == null || page.next !== next)
                     next = page.next
-                    added = page.takes.filter { candidate -> takes.none { it.id == candidate.id } }
+                    // Every kind reviews here, RAW takes included (PLAN-071 §7 decision 7).
+                    added = page.takes.filter { candidate -> candidate.kind.opensInApp() && takes.none { it.id == candidate.id } }
                     kotlinx.coroutines.yield()
                 }
                 cursor = next
@@ -267,10 +270,10 @@ private fun PlaybackTopBar(chrome: PlaybackChrome, position: Boolean) {
 @Composable
 private fun PlaybackTitle(chrome: PlaybackChrome, modifier: Modifier, lines: Int) {
     Column(modifier) {
-        Text(chrome.title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = lines, overflow = TextOverflow.Ellipsis)
+        FitText(chrome.title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = lines)
         (if (chrome.busy) stringResource(R.string.media_playback_loading) else chrome.subtitle)?.let {
-            Text(it, color = SettingsMuted, fontSize = 12.sp, maxLines = lines, overflow = TextOverflow.Ellipsis)
+            FitText(it, color = SettingsMuted, fontSize = 12.sp, maxLines = lines)
         }
     }
 }
@@ -282,9 +285,9 @@ private fun MemberSwitcher(members: List<LocalMediaArtifact>, memberIndex: Int, 
         verticalAlignment = Alignment.CenterVertically) {
         CineIconButton("media-playback-previous-member", CineIcon.CHEVRON_LEFT, R.string.media_playback_previous_member,
             enabled = memberIndex > 0 && !pageBusy, onClick = onPrevious)
-        Text(stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name),
+        FitText(stringResource(R.string.media_playback_member, memberIndex + 1, members.size, members[memberIndex].name),
             Modifier.weight(1f).testTag("media-playback-member"), color = SettingsMuted, fontSize = 13.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+            maxLines = 1)
         CineIconButton("media-playback-next-member", CineIcon.CHEVRON_RIGHT, R.string.media_playback_next_member,
             enabled = memberIndex < members.lastIndex && !pageBusy, onClick = onNext)
     }
@@ -295,8 +298,8 @@ private fun MemberSwitcher(members: List<LocalMediaArtifact>, memberIndex: Int, 
 private fun PlaybackFacts(take: LocalMediaTake, members: List<LocalMediaArtifact>, memberIndex: Int, title: String,
     subtitle: String?, position: String) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        FitText(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 2)
         subtitle?.let { Text(it, color = SettingsMuted, fontSize = 13.sp) }
         Fact(R.string.playback_layout_file_name, take.primary.name, "media-playback-take")
         Fact(R.string.playback_layout_review_position, position)
@@ -333,13 +336,15 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     onFullscreen: (Boolean) -> Unit, detailsOpen: Boolean, onDetailsOpen: (Boolean) -> Unit, onClose: () -> Unit,
     chrome: PlaybackChrome, settingsOpen: Boolean, onSettingsOpen: (Boolean) -> Unit) {
     val context = LocalContext.current
-    val video = artifact.mimeType.startsWith("video/")
-    val photo = artifact.mimeType.startsWith("image/")
+    // A RAW take (PLAN-071 §7) plays through its own session and GL stage: no sidecar, probe, poster or filmstrip.
+    val raw = take.kind == LocalMediaKind.RAW_VIDEO
+    val video = raw || artifact.mimeType.startsWith("video/")
+    val photo = !raw && artifact.mimeType.startsWith("image/")
     // OCLog2 is declared only by the sidecar; the session waits for that answer so it never starts as SDR.
-    var logResolved by remember(artifact) { mutableStateOf(!video) }
+    var logResolved by remember(artifact) { mutableStateOf(!video || raw) }
     var logClip by remember(artifact) { mutableStateOf<OcLogClip?>(null) }
     LaunchedEffect(take, artifact) {
-        if (video) {
+        if (video && !raw) {
             logClip = withContext(Dispatchers.IO) { runCatching { readOcLogClip(context.contentResolver, take, artifact) }.getOrNull() }
             logResolved = true
         }
@@ -361,11 +366,13 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     // Direct display output is a device setting; the error card can still switch it for this member alone.
     var nativeOverride by remember(artifact, settings.nativeSurfaceFrames) { mutableStateOf<Boolean?>(null) }
-    val nativeFrames = video && (nativeOverride ?: settings.nativeSurfaceFrames)
+    val nativeFrames = video && !raw && (nativeOverride ?: settings.nativeSurfaceFrames)
     // Another output starts from a blank observation and strict colour, as switching it always did.
     var state by remember(artifact, nativeFrames) { mutableStateOf(PlaybackObservation()) }
-    var session by remember(artifact) { mutableStateOf<MediaPlaybackSession?>(null) }
+    var session by remember(artifact) { mutableStateOf<PlaybackController?>(null) }
     var surface by remember(artifact) { mutableStateOf<Surface?>(null) }
+    // RAW draws with its own GL stage, which letterboxes to the holder's size.
+    var surfaceSize by remember(artifact) { mutableStateOf<Pair<Int, Int>?>(null) }
     var surfaceView by remember(artifact) { mutableStateOf<SurfaceView?>(null) }
     var displayHdrTypes by remember(artifact) { mutableStateOf(emptySet<Int>()) }
     val retiring = remember { arrayOf<java.util.concurrent.CompletableFuture<Unit>?>(null) }
@@ -390,7 +397,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     DisposableEffect(artifact, retry, colorPolicy, nativeFrames, lifecycle, logResolved) {
         if (!logResolved) return@DisposableEffect onDispose { }
         var disposed = false
-        var reader: MediaPlaybackSession? = null
+        var reader: PlaybackController? = null
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) reader?.suspendOutput()
             if (event == Lifecycle.Event.ON_RESUME) reader?.resumeOutput()
@@ -398,9 +405,11 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
         lifecycle.addObserver(observer)
         fun attach() {
             if (!disposed) {
-                val next = MediaPlaybackSession(context, artifact, settings, colorPolicy, nativeFrames, logClip?.signal) { state = it }
+                val next = if (raw) RawPlaybackSession.open(context, artifact, settings) { state = it }
+                    else MediaPlaybackSession(context, artifact, settings, colorPolicy, nativeFrames, logClip?.signal) { state = it }
                 reader = next; session = next
                 if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) next.suspendOutput()
+                surfaceSize?.let { (width, height) -> next.setSurfaceSize(width, height) }
                 next.setSurface(output(surface))
             }
         }
@@ -421,12 +430,12 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
 
     var metadata by remember(artifact) { mutableStateOf<ClipMetadata?>(null) }
     LaunchedEffect(artifact, logResolved) {
-        if (video && logResolved) metadata = withContext(Dispatchers.IO) { probeClipMetadata(context, artifact.uri, logClip) }
+        if (video && !raw && logResolved) metadata = withContext(Dispatchers.IO) { probeClipMetadata(context, artifact.uri, logClip) }
     }
     // The first exact frame can take seconds; a key-frame still holds the stage meanwhile instead of black.
     var poster by remember(artifact) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(artifact, logResolved) {
-        if (video && logResolved) poster = withContext(Dispatchers.IO) {
+        if (video && !raw && logResolved) poster = withContext(Dispatchers.IO) {
             loadPoster(context, artifact.uri, POSTER_EDGE_PX, logClip, currentSettings.logView)
         }
     }
@@ -451,7 +460,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     LaunchedEffect(artifact, started, logClip, settings.logView, durationUs > 0) {
         // A strip rendered in the other LOG view would misrepresent the clip while the new one decodes.
         if (logClip != null) filmstrip = emptyList()
-        if (video && started && durationUs > 0) filmstrip = runInterruptible(Dispatchers.IO) {
+        if (video && !raw && started && durationUs > 0) filmstrip = runInterruptible(Dispatchers.IO) {
             loadFilmstrip(context, artifact.uri, durationUs, FILMSTRIP_FRAMES, stripHeight, logClip, settings.logView)
         }
     }
@@ -473,6 +482,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val exact = state.frameIndex
     val paused = state.phase == PlaybackPhase.PAUSED || state.phase == PlaybackPhase.ENDED
     val pauseIntent = state.phase == PlaybackPhase.PLAYING
+    val rawFrames = raw && state.rawMode == RawPlaybackRunMode.FRAMES
     val stepping = video && paused && exact != null && timestamps != null
     val canStepBack = stepping && exact!! > 0
     val canStepForward = stepping && exact!! < timestamps!!.lastIndex
@@ -507,7 +517,8 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     @Composable fun Counter(modifier: Modifier = Modifier) {
         when {
             photo -> Unit
-            video && settings.showFramePosition && exact != null && timestamps != null && paused -> {
+            // RAW reports the shown frame exactly while it plays, too.
+            video && settings.showFramePosition && exact != null && timestamps != null && (paused || raw) -> {
                 // Spoken in full, with the frame's own time, so the short counter is never ambiguous.
                 val sentence = stringResource(R.string.media_playback_exact, exact + 1, timestamps.size, playbackSeconds(timestamps[exact], locale))
                 Text(stringResource(R.string.playback_screen_frame_counter, exact + 1, timestamps.size),
@@ -526,14 +537,14 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     /** The reader's own words; a photo only says something while it loads or when it fails. */
     @Composable fun Status(modifier: Modifier = Modifier) {
         if (photo && state.phase != PlaybackPhase.LOADING && state.phase != PlaybackPhase.ERROR) return
-        Text(stringResource(when (state.phase) {
+        FitText(stringResource(when (state.phase) {
             PlaybackPhase.LOADING, PlaybackPhase.SEEKING -> R.string.media_playback_loading
             PlaybackPhase.PAUSED -> R.string.media_playback_paused
             PlaybackPhase.PLAYING -> R.string.media_playback_playing
             PlaybackPhase.ENDED -> R.string.media_playback_ended
             PlaybackPhase.ERROR -> R.string.media_playback_error
             PlaybackPhase.CLOSED -> R.string.media_playback_closed
-        }), modifier.testTag("media-playback-status"), color = SettingsMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }), modifier.testTag("media-playback-status"), color = SettingsMuted, fontSize = 12.sp, maxLines = 1)
     }
     @Composable fun TimecodeRow() {
         if (photo) return
@@ -558,7 +569,10 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
             }
             if (video) PlaybackKey("media-playback-previous-frame", CineIcon.FRAME_BACK, stringResource(R.string.media_playback_previous_frame),
                 ShortcutAction.FRAME_BACK, keyboard, canStepBack) { session?.step(-1) }
-            PlaybackKey("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
+            // The RAW frame viewer has no real-time play; it offers to try real time instead.
+            if (rawFrames) SettingsPill(stringResource(R.string.raw_playback_try_realtime), "media-playback-try-realtime", role = Role.Button) {
+                (session as? RawPlaybackSession)?.tryRealtime()
+            } else PlaybackKey("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
                 stringResource(if (pauseIntent) R.string.media_playback_pause else R.string.media_playback_play),
                 ShortcutAction.PLAY_PAUSE, keyboard, canTogglePlay, primary, togglePlay)
             if (video) PlaybackKey("media-playback-next-frame", CineIcon.FRAME_FORWARD, stringResource(R.string.media_playback_next_frame),
@@ -576,6 +590,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     }
     /** LOG/Rec.709, the luma histogram, and the badge that says frames bypass the verified colour preview. */
     @Composable fun Views() {
+        if (raw) RawNotes(state, rawFrames)
         if (logAvailable) {
             val monitoring = stringResource(R.string.playback_screen_monitoring)
             val spoken = if (keyboard) withShortcut(monitoring, ShortcutAction.LOG_VIEW) else monitoring
@@ -601,6 +616,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                 Fact(R.string.playback_layout_size, stringResource(R.string.playback_layout_photo_size, it.width, it.height), "media-playback-photo-size")
             }
             metadata?.let { DetailsSection(R.string.playback_layout_section_format) { ClipChips(it, logAvailable) } }
+            if (raw) DetailsSection(R.string.playback_layout_section_format) { RawClipChips(state, fps) }
             if (video) DetailsSection(R.string.playback_layout_section_accuracy) {
                 if (exact != null && timestamps != null && paused) Text(stringResource(R.string.media_playback_exact, exact + 1, timestamps.size,
                     playbackSeconds(timestamps[exact], locale)), Modifier.fillMaxWidth().testTag("media-playback-exact-detail"),
@@ -614,7 +630,8 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
             }
             SignalNotes(artifact, video, state, shown, nativeFrames, displayHdrTypes, colorPolicy,
                 onStrict = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.STRICT })
-            if (!photo) PlaybackSettingsSection(settingsOpen, onSettingsOpen, settings, onSettings)
+            if (!photo) PlaybackSettingsSection(settingsOpen, onSettingsOpen, settings, onSettings,
+                showMute = !raw || state.rawAudioSampleRate != null)
         }
     }
     @Composable fun InfoRow() {
@@ -622,7 +639,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
             .testTag("media-playback-info").padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             CineGlyph(CineIcon.INFO, SettingsMuted, Modifier.size(20.dp))
-            Text(detailsTitle, Modifier.weight(1f), color = onSurface, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(detailsTitle, Modifier.weight(1f), color = onSurface, fontSize = 15.sp, maxLines = 1)
             CineGlyph(CineIcon.CHEVRON_RIGHT, SettingsMuted, Modifier.size(20.dp))
         }
     }
@@ -666,20 +683,27 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                 else Modifier.weight(1f).fillMaxWidth(),
                                 artifact, video, photo, stageAspect, state, shown, poster.takeIf { video && !firstFrame && !firstFrameNow }, fullscreen,
                                 onSurfaceView = { surfaceView = it },
-                                onSurfaceCreated = { holder -> surface = holder.surface; updateDisplay(); session?.setSurface(output(holder.surface)) },
+                                onSurfaceCreated = { holder ->
+                                    surface = holder.surface; updateDisplay()
+                                    holder.surfaceFrame.takeIf { !it.isEmpty }?.let { frame ->
+                                        surfaceSize = frame.width() to frame.height(); session?.setSurfaceSize(frame.width(), frame.height())
+                                    }
+                                    session?.setSurface(output(holder.surface))
+                                },
                                 onSurfaceChanged = { holder, width, height ->
                                     surface = holder.surface; updateDisplay(); renderer?.resize(width, height)
+                                    surfaceSize = width to height; session?.setSurfaceSize(width, height)
                                     session?.setSurface(output(holder.surface))
                                 },
                                 onSurfaceDestroyed = {
                                     // Producers first, then the GL stage's window, before the holder destroys its Surface.
-                                    session?.setSurface(null); retireStage(); surface = null; displayHdrTypes = emptySet()
+                                    session?.setSurface(null); retireStage(); surface = null; surfaceSize = null; displayHdrTypes = emptySet()
                                 }) {
                                 // A failure takes the stage itself, where the missing picture is, rather than a card below the fold.
                                 if (state.phase == PlaybackPhase.ERROR) Box(Modifier.matchParentSize()
                                     .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)).verticalScroll(rememberScrollState())
                                     .padding(12.dp), contentAlignment = Alignment.Center) {
-                                    PlaybackErrorCard(state, video, nativeFrames, colorPolicy, onRetry = { state = PlaybackObservation(); retry++ },
+                                    PlaybackErrorCard(state, video && !raw, nativeFrames, colorPolicy, onRetry = { state = PlaybackObservation(); retry++ },
                                         onNativeFrames = { nativeOverride = !nativeFrames },
                                         onInterpret = { state = PlaybackObservation(); colorPolicy = PreciseVideoColorPolicy.INTERPRET_TRACK_SDR })
                                 }
@@ -762,6 +786,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                 PlaybackTitle(chrome, Modifier.fillMaxWidth(), lines = 2)
                                 chrome.members()
                                 metadata?.let { ClipChips(it, logAvailable) }
+                                if (raw) RawClipChips(state, fps)
                                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) { Views() }
                             }
@@ -801,8 +826,8 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
 @Composable
 private fun DetailsHeader(title: String, icon: CineIcon, onClose: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FitText(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1)
         CineIconButton("media-playback-details-close", icon, R.string.playback_layout_close_info, onClick = onClose)
     }
 }
@@ -883,6 +908,47 @@ private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean,
                 contentScale = if (video) ContentScale.FillBounds else ContentScale.Fit)
         }
     }
+}
+
+/** A RAW take's format, read from its own frame index rather than a container probe. */
+@Composable
+private fun RawClipChips(state: PlaybackObservation, fps: Double?) {
+    FlowRow(Modifier.fillMaxWidth().testTag("media-playback-raw-chips"), horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (state.videoWidth > 0 && state.videoHeight > 0) MetadataChip(resolutionLabel(state.videoWidth, state.videoHeight))
+        fps?.let { MetadataChip(frameRateLabel(it)) }
+        state.rawCodec?.let { MetadataChip(it) }
+        state.rawAudioSampleRate?.let { MetadataChip(audioRateLabel(it), Modifier.testTag("media-playback-raw-audio")) }
+        state.timeline?.timestampsUs?.size?.takeIf { it > 0 }?.let {
+            MetadataChip(pluralStringResource(R.plurals.raw_playback_frames, it, it))
+        }
+    }
+}
+
+/** "48 kHz", "44.1 kHz". */
+@Composable
+private fun audioRateLabel(sampleRate: Int): String {
+    val locale = LocalConfiguration.current.locales[0]
+    val kilohertz = if (sampleRate % 1000 == 0) "${sampleRate / 1000}" else String.format(locale, "%.1f", sampleRate / 1000.0)
+    return "$kilohertz kHz"
+}
+
+/** The RAW reader's live notes: dropped frames, a frame it could not show, and why it is stepping frame by frame. */
+@Composable
+private fun RawNotes(state: PlaybackObservation, frames: Boolean) {
+    if (state.droppedFrames > 0) MetadataChip(stringResource(R.string.raw_playback_dropped, state.droppedFrames),
+        Modifier.testTag("media-playback-raw-dropped"))
+    state.missingFrame?.let { reason ->
+        Text(stringResource(when (reason) {
+            OcrawMissingReason.CORRUPT -> R.string.raw_playback_missing_corrupt
+            OcrawMissingReason.UNREADABLE_HEADER -> R.string.raw_playback_missing_unreadable
+            OcrawMissingReason.UNSUPPORTED_ENCODING -> R.string.raw_playback_missing_unsupported
+            OcrawMissingReason.CODEC_UNAVAILABLE -> R.string.raw_playback_missing_codec
+            OcrawMissingReason.DECODE_FAILED -> R.string.raw_playback_missing_decode
+        }), Modifier.fillMaxWidth().testTag("media-playback-raw-missing"), color = LocalCineColors.current.pending, fontSize = 12.sp)
+    }
+    if (frames) Text(stringResource(if (state.rawFallback) R.string.raw_playback_fallback_notice else R.string.raw_playback_frame_viewer),
+        Modifier.fillMaxWidth().testTag("media-playback-raw-frames"), color = SettingsMuted, fontSize = 12.sp)
 }
 
 @Composable
@@ -989,7 +1055,7 @@ private fun SignalNotes(artifact: LocalMediaArtifact, video: Boolean, state: Pla
 
 @Composable
 private fun PlaybackSettingsSection(open: Boolean, onOpen: (Boolean) -> Unit, settings: PlaybackSettings, onSettings: (PlaybackSettings) -> Unit,
-    modifier: Modifier = Modifier) {
+    modifier: Modifier = Modifier, showMute: Boolean = true) {
     SettingsCard(modifier) {
         val title = stringResource(R.string.playback_screen_settings)
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(8.dp))
@@ -998,7 +1064,7 @@ private fun PlaybackSettingsSection(open: Boolean, onOpen: (Boolean) -> Unit, se
             Text(title, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             CineGlyph(if (open) CineIcon.COLLAPSE else CineIcon.EXPAND, SettingsMuted, Modifier.size(20.dp))
         }
-        if (open) PlaybackSettingsControls(settings, showTitle = false, onSettings = onSettings)
+        if (open) PlaybackSettingsControls(settings, showTitle = false, showMute = showMute, onSettings = onSettings)
     }
 }
 

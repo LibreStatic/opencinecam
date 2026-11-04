@@ -9,7 +9,8 @@ import java.util.Locale
 import java.util.UUID
 import kotlinx.serialization.json.*
 
-enum class LocalMediaKind { PHOTO, VIDEO, AUDIO }
+/** [RAW_VIDEO] is an OpenCine RAW take (PLAN-071): one `.ocraw` file in MediaStore.Files, never grouped; it plays as a developed preview in the review (PLAN-071 §7). */
+enum class LocalMediaKind { PHOTO, VIDEO, AUDIO, RAW_VIDEO }
 enum class LocalMediaRelationStatus { DECLARED, LEGACY, MISSING_METADATA, INVALID_METADATA, INCOMPLETE }
 data class LocalMediaArtifact(val uri: String, val name: String, val mimeType: String,
     val sizeBytes: Long, val modifiedSeconds: Long)
@@ -67,21 +68,41 @@ internal fun mediaNamespace(path: String): MediaNamespace? {
 }
 internal fun canonicalMediaId(id: String): Boolean = id.length == 36 &&
     runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false)
-internal fun isCatalogPath(path: String): Boolean =
-    path in setOf("DCIM/OpenCineCam/", "Music/OpenCineCam/", "Download/OpenCineCam/") || mediaNamespace(path) != null
+internal fun isCatalogPath(path: String): Boolean = !isCinemaDngExportPath(path) &&
+    (path in setOf("DCIM/OpenCineCam/", "Music/OpenCineCam/", "Download/OpenCineCam/", RAW_VIDEO_PATH) || mediaNamespace(path) != null)
+
+/** Where the in-app CinemaDNG export writes its take folders (PLAN-071 §8); the gallery never lists them. */
+internal const val CINEMADNG_EXPORT_PATH = "Documents/OpenCineCam/CinemaDNG/"
+
+/** True for the export folder and everything under it, whatever the case MediaStore reports it in. */
+internal fun isCinemaDngExportPath(path: String): Boolean = path.startsWith(CINEMADNG_EXPORT_PATH, ignoreCase = true)
+
+/** Where RAW takes live (PLAN-071 decision 7); mirrors `RawVideoOutput.RELATIVE_PATH`. */
+internal const val RAW_VIDEO_PATH = "Documents/OpenCineCam/RAW/"
+internal const val RAW_VIDEO_EXTENSION = ".ocraw"
+
+/** A Files row the gallery lists as a RAW take: an `.ocraw` directly in [RAW_VIDEO_PATH]. Ownership and pending are checked by the caller. */
+internal fun isRawVideoRow(path: String, name: String): Boolean =
+    path == RAW_VIDEO_PATH && name.length > RAW_VIDEO_EXTENSION.length && name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)
+
+/** A RAW take is its one file: no sidecar, no grouping, the relationship of a legacy file. */
+internal fun rawVideoTake(artifact: LocalMediaArtifact): LocalMediaTake =
+    LocalMediaTake("raw:${artifact.uri}", artifact, listOf(artifact), emptyList(), LocalMediaKind.RAW_VIDEO, null, LocalMediaRelationStatus.LEGACY)
 internal fun catalogFilter(settings: GallerySettings, query: String): String =
     "${settings.kind}|${settings.newestFirst}|${settings.goodTakesOnly}|${query.trim().lowercase(Locale.ROOT)}"
 internal fun catalogComparator(newestFirst: Boolean): Comparator<CatalogRow> {
     val date = if (newestFirst) compareByDescending<CatalogRow> { it.artifact.modifiedSeconds }
         else compareBy { it.artifact.modifiedSeconds }
-    return date.thenBy { it.kind?.ordinal ?: 3 }.thenBy { it.id }
+    return date.thenBy { it.kind?.ordinal ?: LocalMediaKind.entries.size }.thenBy { it.id }
 }
 internal fun catalogPrimary(rows: List<CatalogRow>): CatalogRow? =
     rows.filter { it.kind == LocalMediaKind.VIDEO }.minByOrNull { it.id }
         ?: rows.filter { it.kind == LocalMediaKind.PHOTO }.minByOrNull { it.id }
         ?: rows.filter { it.kind == LocalMediaKind.AUDIO }.minByOrNull { it.id }
 internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, query: String): Boolean {
-    if (settings.kind != GalleryMediaKind.ALL && settings.kind.name != take.kind.name) return false
+    // A RAW take is a video to the gallery filter.
+    val kindName = if (take.kind == LocalMediaKind.RAW_VIDEO) LocalMediaKind.VIDEO.name else take.kind.name
+    if (settings.kind != GalleryMediaKind.ALL && settings.kind.name != kindName) return false
     if (settings.goodTakesOnly && take.slate?.goodTake != true) return false
     val needle = query.trim().lowercase(Locale.ROOT)
     if (needle.isEmpty()) return true
@@ -151,7 +172,7 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
             require(declared.isNotEmpty() && declared.map { it.first }.distinct().size == declared.size)
             for ((uri, details) in declared) {
                 val expectedKind = if (still) LocalMediaKind.PHOTO else if (schema == "opencinecam-audio-sidecar-v1") LocalMediaKind.AUDIO else LocalMediaKind.VIDEO
-                val segment = when (expectedKind) { LocalMediaKind.PHOTO -> "/images/media/"; LocalMediaKind.VIDEO -> "/video/media/"; LocalMediaKind.AUDIO -> "/audio/media/" }
+                val segment = when (expectedKind) { LocalMediaKind.PHOTO -> "/images/media/"; LocalMediaKind.VIDEO -> "/video/media/"; LocalMediaKind.AUDIO -> "/audio/media/"; LocalMediaKind.RAW_VIDEO -> error("RAW takes declare no sidecar") }
                 require(segment in uri)
                 val existing = known[uri]
                 if (existing == null) missing = true else {

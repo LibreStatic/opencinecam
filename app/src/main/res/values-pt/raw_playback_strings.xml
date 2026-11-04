@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_playback_setting">Reprodução RAW</string>
+    <string name="raw_playback_automatic">Automática</string>
+    <string name="raw_playback_frame_viewer">Visualizador de quadros</string>
+    <string name="raw_playback_realtime">Tempo real</string>
+    <string name="raw_playback_help_summary">Tempo real, ou um quadro de cada vez em resolução total</string>
+    <string name="raw_playback_help">Automática reproduz as tomadas RAW em tempo real a meia resolução e pula quadros para não se atrasar. Se este dispositivo não acompanhar, o visualizador passa sozinho para quadro a quadro. O visualizador de quadros pula o tempo real e mostra um quadro de cada vez em resolução total, que você pode avançar ou percorrer. Aplica-se apenas a este dispositivo.</string>
+    <string name="raw_playback_fallback_notice">Mostrando quadro a quadro: este dispositivo não consegue reproduzir esta tomada RAW em tempo real</string>
+    <string name="raw_playback_try_realtime">Tentar em tempo real</string>
+    <string name="raw_playback_dropped">%1$d pulados</string>
+    <string name="raw_playback_missing_corrupt">Quadro danificado</string>
+    <string name="raw_playback_missing_unreadable">Quadro ilegível</string>
+    <string name="raw_playback_missing_unsupported">Codificação de quadro não suportada</string>
+    <string name="raw_playback_missing_codec">Codec RAW indisponível neste dispositivo</string>
+    <string name="raw_playback_missing_decode">Não foi possível decodificar o quadro</string>
+    <plurals name="raw_playback_frames">
+        <item quantity="one">%1$d quadro</item>
+        <item quantity="many">%1$d quadros</item>
+        <item quantity="other">%1$d quadros</item>
+    </plurals>
+</resources>

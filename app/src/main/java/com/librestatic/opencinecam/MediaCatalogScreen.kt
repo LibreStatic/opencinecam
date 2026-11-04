@@ -58,6 +58,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import com.librestatic.opencinecam.export.CinemaDngExportControl
+import com.librestatic.opencinecam.export.CinemaDngExportDialog
+import com.librestatic.opencinecam.export.CinemaDngExportNotice
+import com.librestatic.opencinecam.export.CinemaDngExportProgressRow
+import com.librestatic.opencinecam.export.CinemaDngExportRuntime
+import com.librestatic.opencinecam.export.CinemaDngExportState
+import com.librestatic.opencinecam.export.rememberCinemaDngExportEnvironment
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -92,6 +99,8 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     var proxyCatalog by remember { mutableStateOf(false) }
     var proxyTake by remember { mutableStateOf<LocalMediaTake?>(null) }
     var renamingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    var exportingTake by remember { mutableStateOf<LocalMediaTake?>(null) }
+    val exportEnvironment = rememberCinemaDngExportEnvironment()
     var deletionRefresh by remember { mutableIntStateOf(0) }
     var deletedTakeIds by remember { mutableStateOf(emptySet<String>()) }
     val scope = rememberCoroutineScope()
@@ -114,9 +123,11 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
                 }
         }
     }
-    MediaCatalogContent(settings, onSettings, source, onShare = { sharingTake = it },
+    // A RAW take is one opaque file outside the media collections: it goes straight to the share sheet.
+    MediaCatalogContent(settings, onSettings, source, onShare = { take -> if (take.kind == LocalMediaKind.RAW_VIDEO) shareRawTake(context, take) else sharingTake = take },
         onDelete = { deletingTake = it }, onRename = { renamingTake = it }, refreshGeneration = deletionRefresh,
-        onReview = { deletedTakeIds = emptySet(); review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true }) { artifact ->
+        onReview = { deletedTakeIds = emptySet(); review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true },
+        exports = CinemaDngExportRuntime, onExport = { exportingTake = it }) { artifact ->
         context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(artifact.uri.toUri(), artifact.mimeType)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
     }
@@ -134,6 +145,17 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
         }) }
     proxyTake?.let { MediaProxyDialog(it, proxySettings, onProxySettings, onDismiss = { proxyTake = null }) }
     renamingTake?.let { MediaRenameDialog(it, onDismiss = { renamingTake = null }, onCompleted = { deletionRefresh++ }) }
+    exportingTake?.let { CinemaDngExportDialog(it, exportEnvironment, onDismiss = { exportingTake = null }) }
+}
+
+/** Shares a RAW take's `.ocraw` as it is, through its MediaStore Uri (PLAN-071: conversion happens on a computer). */
+private fun shareRawTake(context: Context, take: LocalMediaTake) {
+    val send = Intent(Intent.ACTION_SEND).setType(take.primary.mimeType)
+        .putExtra(Intent.EXTRA_STREAM, take.primary.uri.toUri())
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    runCatching {
+        context.startActivity(Intent.createChooser(send, take.primary.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 }
 
 private fun artifactGone(context: Context, uri: String): Boolean =
@@ -178,8 +200,16 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     onDelete: ((LocalMediaTake) -> Unit)? = null, refreshGeneration: Int = 0,
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
     onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null,
-    initialSelection: String? = null, onOpen: (LocalMediaArtifact) -> Unit) {
+    initialSelection: String? = null, exports: CinemaDngExportControl? = null, onExport: ((LocalMediaTake) -> Unit)? = null,
+    onOpen: (LocalMediaArtifact) -> Unit) {
     val reducedMotion = LocalReducedMotion.current
+    val idleExports = remember { MutableStateFlow<CinemaDngExportState>(CinemaDngExportState.Idle) }
+    val exportState by (exports?.states ?: idleExports).collectAsState()
+    /** The running CinemaDNG export's progress and Cancel, on the take it reads. */
+    fun exportProgress(take: LocalMediaTake): (@Composable () -> Unit)? {
+        val running = (exportState as? CinemaDngExportState.Running)?.takeIf { it.takeUri == take.primary.uri } ?: return null
+        return { CinemaDngExportProgressRow(running, onCancel = { exports?.cancel() }) }
+    }
     var query by rememberSaveable { mutableStateOf("") }
     // What the operator typed, which is not always what we search for. Keeping it lets the field
     // show a rejected edit long enough to explain it: a controlled field that silently discards the
@@ -250,8 +280,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
 
     fun open(artifact: LocalMediaArtifact) {
         try {
-            if (onReview != null && artifact.mimeType.substringBefore('/') in setOf("video", "audio", "image"))
-                onReview(MediaReviewSelection(visible.takes.toList(), artifact, settings, query, visible.next))
+            if (onReview != null && opensInReview(artifact, visible.takes))
+                onReview(MediaReviewSelection(visible.takes.filter { it.kind.opensInApp() }, artifact, settings, query, visible.next))
             else onOpen(artifact)
             openFailed = false
         }
@@ -259,12 +289,14 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
     /** [before] runs ahead of every action, so an on-demand sheet can get out of the way first. */
     fun actions(take: LocalMediaTake, before: () -> Unit = {}): GalleryTakeActions = GalleryTakeActions(
-        play = { before(); open(take.primary) },
+        play = if (take.kind.opensInApp()) { { before(); open(take.primary) } } else null,
         details = { selectedId = take.id; detailsOpen = true },
         share = onShare?.let { action -> { before(); action(take) } },
-        rename = onRename?.let { action -> { before(); action(take) } },
+        // Rename and delete re-observe a take through the media collections, which a RAW take is not in.
+        rename = onRename?.takeIf { take.kind.renamesAndDeletes() }?.let { action -> { before(); action(take) } },
         proxy = onProxy?.takeIf { take.kind == LocalMediaKind.VIDEO }?.let { action -> { before(); action(take) } },
-        delete = onDelete?.let { action -> { before(); action(take) } },
+        delete = onDelete?.takeIf { take.kind.renamesAndDeletes() }?.let { action -> { before(); action(take) } },
+        export = onExport?.takeIf { take.kind == LocalMediaKind.RAW_VIDEO }?.let { action -> { before(); action(take) } },
     )
 
     val controls: @Composable () -> Unit = {
@@ -303,6 +335,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             if (filters) SettingsCard { GallerySettingsControls(settings, onSettings, showKinds = false) }
             if (openFailed) Text(stringResource(R.string.gallery_open_failed), Modifier.fillMaxWidth().testTag("gallery-open-failed"),
                 color = GalleryWarning, fontSize = 13.sp)
+            (exportState as? CinemaDngExportState.Finished)?.let { CinemaDngExportNotice(it, onDismiss = { exports?.acknowledge() }) }
         }
     }
     val status: @Composable () -> Unit = {
@@ -340,7 +373,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             if (it.codec == null && take.kind == LocalMediaKind.VIDEO) it.copy(codec = rememberProbedCodec(take, source, probedCodecs)) else it
         }
         MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), shown,
-            if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier)
+            if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier,
+            progress = exportProgress(take))
     }
 
     val coordinator = LocalFoldDisplayCoordinator.current
@@ -366,10 +400,12 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         val card: @Composable (LocalMediaTake, Modifier) -> Unit = { take, modifier ->
             GalleryTakeCard(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), badges(take),
                 selected = side && take.id == selectedId,
-                clickLabel = stringResource(if (side) R.string.media_action_details else take.kind.primaryActionLabel()),
-                actions = actions(take), modifier = modifier) {
+                clickLabel = stringResource(if (side || !take.kind.opensInApp()) R.string.media_action_details else take.kind.primaryActionLabel()),
+                actions = actions(take), modifier = modifier, footer = exportProgress(take)) {
                 // Beside an inspector a tap shows the take; on its own the grid plays it.
-                if (side) selectedId = take.id else open(take.primary)
+                if (side) selectedId = take.id
+                else if (take.kind.opensInApp()) open(take.primary)
+                else { selectedId = take.id; detailsOpen = true }
             }
         }
         val inspector: @Composable (Modifier) -> Unit = { modifier ->
@@ -436,3 +472,11 @@ private fun GalleryButton(tag: String, label: Int, enabled: Boolean = true, acti
         Text(stringResource(label), Modifier.weight(1f).testTag("gallery-$tag-label"), textAlign = TextAlign.Center)
     }
 }
+
+/**
+ * Whether [artifact] opens in the app's review rather than another app: video, audio and images by their type, and a RAW
+ * take's `.ocraw` file, whose octet-stream type says nothing, by its take's kind (PLAN-071 §7).
+ */
+internal fun opensInReview(artifact: LocalMediaArtifact, takes: List<LocalMediaTake>): Boolean =
+    artifact.mimeType.substringBefore('/') in setOf("video", "audio", "image") ||
+        takes.any { it.kind == LocalMediaKind.RAW_VIDEO && it.primary.uri == artifact.uri }

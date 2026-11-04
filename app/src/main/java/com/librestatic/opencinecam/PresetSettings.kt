@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.service.ratioText
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.Locale
 
 internal fun readPresetDocument(input: InputStream): String {
     val bytes = ByteArrayOutputStream()
@@ -145,9 +147,18 @@ internal fun PresetReviewDialog(preset: CameraPreset, state: CameraUiState, curr
         text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).testTag("preset-review"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.presets_review_help), fontSize = 16.sp)
             if (state.structuralSettingsFrozen) Text(stringResource(R.string.presets_pending), fontSize = 16.sp)
-            if (issues.isNotEmpty()) Text(stringResource(R.string.presets_incompatible, issues.joinToString(", ")), fontSize = 16.sp)
-            Text("${state.selectedMode} → ${preset.mode}\nFocus: ${state.requestedFocusDiopters} → ${preset.focusDiopters}\nZoom: ${state.zoomRatio} → ${preset.zoomRatio}", fontSize = 16.sp)
-            CameraPresetCodec.differences(current, preset.settings).forEach { Text(it, fontSize = 16.sp) }
+            if (issues.isNotEmpty()) Text(stringResource(R.string.presets_incompatible, issues.map { presetIssueText(it)?.let { id -> stringResource(id) } ?: it }.joinToString(", ")), fontSize = 16.sp)
+            val autofocus = stringResource(R.string.presets_review_autofocus)
+            val focus = { d: Float? -> d?.let(::formatDiopters) ?: autofocus }
+            Text(stringResource(R.string.presets_review_mode, modeLabel(state.selectedMode), modeLabel(preset.mode)) + "\n" +
+                stringResource(R.string.presets_review_focus, focus(state.requestedFocusDiopters), focus(preset.focusDiopters)) + "\n" +
+                stringResource(R.string.presets_review_zoom, zoomText(state.zoomRatio), zoomText(preset.zoomRatio)), fontSize = 16.sp)
+            val on = stringResource(R.string.settings_on)
+            val off = stringResource(R.string.settings_off)
+            val value = { v: Any? -> if (v is Boolean) (if (v) on else off) else v.toString() }
+            CameraPresetCodec.differenceEntries(current, preset.settings).forEach {
+                Text(stringResource(R.string.presets_review_change, it.key, value(it.before), value(it.after)), fontSize = 16.sp)
+            }
         } },
         confirmButton = { TextButton(onApply, enabled = state.descriptor != null && !state.captureControlsLocked) { Text(stringResource(R.string.presets_apply)) } },
         dismissButton = { TextButton(onDismiss) { Text(stringResource(android.R.string.cancel)) } })
@@ -166,4 +177,23 @@ internal fun PresetQuickAccess(state: CameraUiState, settings: CameraSettings, o
         } }
     }
     review?.let { preset -> PresetReviewDialog(preset, state, settings, { review = null }) { onApply?.invoke(preset); review = null } }
+}
+
+private fun zoomText(ratio: Float): String = ratioText(ratio, Locale.getDefault()) + "×"
+
+/** The review's name for a [compatibilityIssues] code, or null for a code it does not know. */
+internal fun presetIssueText(code: String): Int? = when (code) {
+    "camera" -> R.string.presets_issue_camera
+    "mode" -> R.string.presets_issue_mode
+    "format" -> R.string.presets_issue_format
+    "exposure" -> R.string.presets_issue_exposure
+    "white-balance" -> R.string.presets_issue_white_balance
+    "wb-lock" -> R.string.presets_issue_wb_lock
+    "image-processing" -> R.string.presets_issue_image_processing
+    "torch" -> R.string.presets_issue_torch
+    "photo-flash" -> R.string.presets_issue_photo_flash
+    "focus" -> R.string.presets_issue_focus
+    "zoom" -> R.string.presets_issue_zoom
+    "audio" -> R.string.presets_issue_audio
+    else -> null
 }

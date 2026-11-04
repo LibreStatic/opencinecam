@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The network drive (OCC-PLAN-071 §8, route 3): settings page, notification. -->
+<resources>
+    <string name="network_share_title">Network drive</string>
+    <string name="network_share_settings_summary">Mount RAW takes on a computer as CinemaDNG folders</string>
+    <string name="network_share_intro">Open the RAW takes from a computer on the same Wi-Fi, hotspot or USB tethering. Each take is a folder with its CinemaDNG frames, its WAV and the original .ocraw. Nothing can be changed or deleted from the computer.</string>
+    <string name="network_share_switch">Share over network</string>
+    <string name="network_share_state_stopped">Off</string>
+    <string name="network_share_state_starting">Starting…</string>
+    <string name="network_share_state_running">On: the computer can connect now</string>
+    <string name="network_share_stopped_idle">Stopped after 15 minutes without copying.</string>
+    <string name="network_share_no_network">No Wi-Fi, hotspot or USB tethering network, or the one it was using is gone. Connect to a local network and turn it on again.</string>
+    <string name="network_share_stopped_recording">Stopped because a take started recording.</string>
+    <string name="network_share_refused_recording">Not available while recording.</string>
+    <string name="network_share_port_busy">No free port. Try again in a moment.</string>
+    <string name="network_share_stopped_timeout">Stopped: Android\'s time limit for background transfers was reached.</string>
+    <string name="network_share_failed">The network drive could not start.</string>
+    <string name="network_share_addresses_title">Connect with</string>
+    <string name="network_share_address">Address</string>
+    <string name="network_share_user">User</string>
+    <string name="network_share_password">Password</string>
+    <string name="network_share_copy">Copy</string>
+    <string name="network_share_copy_label">Copy %1$s</string>
+    <string name="network_share_copied">Copied</string>
+    <string name="network_share_connect_title">How to connect</string>
+    <string name="network_share_connect_windows">Windows: File Explorer › This PC › Map network drive, then enter the address as the folder.</string>
+    <string name="network_share_connect_macos">macOS: Finder › Go › Connect to Server, then enter the address.</string>
+    <string name="network_share_connect_linux">Linux: Files › Other Locations › Connect to Server, then enter %1$s.</string>
+    <string name="network_share_windows_limit_help_summary">Windows copies files up to 50 MB by default</string>
+    <string name="network_share_windows_limit_help">Windows\' WebDAV client refuses files larger than 50 MB unless its limit is raised. The DNG frames and the WAV are smaller, but the original .ocraw usually is not. To copy it on Windows, set FileSizeLimitInBytes under HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters to 4294967295 and restart the WebClient service, or copy it over USB.</string>
+    <string name="network_share_copy_advice">Copy a take\'s folder to the computer\'s disk before editing: frames are generated as they are read, which is too slow to play from the network.</string>
+    <string name="network_share_auto_stop">It stops on its own after 15 minutes without copying, when the phone leaves the network it started on and when a take starts recording. To use another network, turn it off and on again.</string>
+    <string name="network_share_security_help_summary">Local networks only, a new password each time</string>
+    <string name="network_share_security_help">The drive listens only on Wi-Fi, hotspot and USB tethering addresses, never on mobile data or a VPN, and only on the networks that were there when it started. It asks for the user and password shown here, and the password changes every time it starts. It is read-only. Nothing is encrypted: the files you copy travel in the clear and anyone on the network could see them, so use it only on networks you trust.</string>
+    <string name="network_share_channel">Network drive</string>
+    <string name="network_share_notification_title">Network drive on</string>
+    <string name="network_share_notification_stop">Stop</string>
+    <string name="network_share_show_password">Show password</string>
+    <string name="network_share_hide_password">Hide password</string>
+</resources>

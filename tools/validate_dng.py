@@ -24,6 +24,10 @@ TAG_NAMES = {
     277: "SamplesPerPixel",
     278: "RowsPerStrip",
     279: "StripByteCounts",
+    322: "TileWidth",
+    323: "TileLength",
+    324: "TileOffsets",
+    325: "TileByteCounts",
     33421: "CFARepeatPatternDim",
     33422: "CFAPattern",
     50706: "DNGVersion",
@@ -83,12 +87,15 @@ def read_dng(path: Path) -> dict[str, Any]:
         )
     width = tags.get("ImageWidth", [0])[0]
     height = tags.get("ImageLength", [0])[0]
-    strip_bytes = tags.get("StripByteCounts", [0])
+    # Compressed CFA (LJ92, Compression 7) is stored in tiles; either layout carries the payload.
+    tiled = "TileOffsets" in tags or "TileByteCounts" in tags
+    strip_bytes = tags.get("TileByteCounts" if tiled else "StripByteCounts", [0])
     if isinstance(strip_bytes, dict):
         payload_bytes = strip_bytes["count"] * int(strip_bytes["first"][0])
     else:
         payload_bytes = sum(strip_bytes) if isinstance(strip_bytes, list) else int(strip_bytes)
-    required = {"ImageWidth", "ImageLength", "BitsPerSample", "StripOffsets", "StripByteCounts", "CFARepeatPatternDim", "CFAPattern", "DNGVersion"}
+    layout = {"TileWidth", "TileLength", "TileOffsets", "TileByteCounts"} if tiled else {"StripOffsets", "StripByteCounts"}
+    required = {"ImageWidth", "ImageLength", "BitsPerSample", "CFARepeatPatternDim", "CFAPattern", "DNGVersion"} | layout
     missing = sorted(required.difference(tags))
     status = "PASS" if width > 0 and height > 0 and payload_bytes > 0 and not missing else "FAIL"
     return {

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_playback_setting">Lecture RAW</string>
+    <string name="raw_playback_automatic">Automatique</string>
+    <string name="raw_playback_frame_viewer">Visionneuse d’images</string>
+    <string name="raw_playback_realtime">Temps réel</string>
+    <string name="raw_playback_help_summary">Temps réel, ou une image à la fois en pleine résolution</string>
+    <string name="raw_playback_help">Automatique lit les prises RAW en temps réel à mi-résolution et saute des images pour garder le rythme. Si cet appareil ne suit pas, la visionneuse passe d’elle-même à l’image par image. La visionneuse d’images ignore le temps réel et affiche une image à la fois en pleine résolution, que vous pouvez faire avancer ou parcourir. S’applique à cet appareil uniquement.</string>
+    <string name="raw_playback_fallback_notice">Affichage image par image : cet appareil ne peut pas lire cette prise RAW en temps réel</string>
+    <string name="raw_playback_try_realtime">Essayer le temps réel</string>
+    <string name="raw_playback_dropped">%1$d sautées</string>
+    <string name="raw_playback_missing_corrupt">Image endommagée</string>
+    <string name="raw_playback_missing_unreadable">Image illisible</string>
+    <string name="raw_playback_missing_unsupported">Encodage d’image non pris en charge</string>
+    <string name="raw_playback_missing_codec">Codec RAW indisponible sur cet appareil</string>
+    <string name="raw_playback_missing_decode">Impossible de décoder l’image</string>
+    <plurals name="raw_playback_frames">
+        <item quantity="one">%1$d image</item>
+        <item quantity="many">%1$d images</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
+</resources>

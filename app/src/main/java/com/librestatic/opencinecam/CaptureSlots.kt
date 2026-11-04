@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -38,9 +39,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
@@ -54,13 +57,13 @@ import kotlinx.coroutines.launch
 internal enum class CaptureSlot { RESOLUTION, FPS, INTERVAL, SHUTTER, ISO, EV, WB, FOCUS }
 
 /**
- * RES always leads. Video and LOG: RES · FPS · SHUTTER · ISO · WB · FOCUS. Stills: RES · SHUTTER ·
+ * RES always leads. Video, LOG and RAW video: RES · FPS · SHUTTER · ISO · WB · FOCUS. Stills: RES · SHUTTER ·
  * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval.
  */
 internal fun captureSlots(mode: CaptureMode): List<CaptureSlot> = when {
     mode == CaptureMode.TIME_LAPSE ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.INTERVAL, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
-    mode in CameraUiState.frameRateModes || mode == CaptureMode.SLOW_MOTION ->
+    mode in CameraUiState.frameRateModes || mode == CaptureMode.SLOW_MOTION || mode == CaptureMode.RAW_VIDEO ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
     else -> listOf(CaptureSlot.RESOLUTION, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS)
 }
@@ -270,7 +273,7 @@ private fun SlotCell(
         ) {
             if (active) Box(Modifier.width(3.dp).height(24.dp).background(colors.primary))
             Column(Modifier.weight(1f)) {
-                Text(model.name, color = colors.onSurface, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FitText(model.name, color = colors.onSurface, fontSize = 14.sp, maxLines = 1)
                 // The strip's short code helps only where it differs from the name: "WB", not "SHUTTER".
                 if (!model.label.equals(model.name, ignoreCase = true)) SlotLabel(model.label, labelColor, TextAlign.Start)
             }
@@ -284,15 +287,32 @@ private fun SlotCell(
 
 @Composable
 private fun SlotLabel(text: String, color: Color, align: TextAlign = TextAlign.Center) {
-    BasicText(
+    val style = TextStyle(color = color, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.4.sp, textAlign = align)
+    @Composable
+    fun Stepped() = BasicText(
         text,
-        style = TextStyle(color = color, fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.4.sp, textAlign = align),
+        style = style,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 12.sp),
+        autoSize = TextAutoSize.StepBased(minFontSize = SLOT_LABEL_MIN_SP.sp, maxFontSize = 12.sp),
     )
+    if (!rememberMarqueeActive()) {
+        Stepped()
+        return
+    }
+    // The size steps down first; only a label too wide even at the smallest size scrolls, at that size.
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints {
+        val smallest = style.copy(fontSize = SLOT_LABEL_MIN_SP.sp)
+        val fits = constraints.maxWidth == Constraints.Infinity ||
+            measurer.measure(text, smallest, softWrap = false, maxLines = 1).size.width <= constraints.maxWidth
+        if (fits) Stepped()
+        else BasicText(text, Modifier.cineMarquee(), style = smallest, softWrap = false, maxLines = 1)
+    }
 }
+
+private const val SLOT_LABEL_MIN_SP = 10
 
 /** Values stay between 14 and 16 sp: the size steps down before a value such as 1/8000 is cut. */
 @Composable

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">RAW-Videokonfiguration</string>
+    <string name="raw_video_automatic">Automatisch</string>
+    <string name="raw_video_automatic_detail">Höchste qualifizierte Rate</string>
+    <string name="raw_video_group_full">GANZER SENSOR</string>
+    <string name="raw_video_group_crop">MITTENAUSSCHNITT</string>
+    <string name="raw_video_crop_note">Ein Ausschnitt speichert nur die Sensormitte: gleiche Auslesung, engerer Bildwinkel.</string>
+    <string name="raw_video_config_frozen">Die Konfiguration lässt sich zwischen Aufnahmen ändern.</string>
+    <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_and_time">%1$s · noch %2$s</string>
+    <string name="raw_video_label_crop">%1$s · Ausschnitt</string>
+    <string name="raw_video_label_compressed">Komprimiert</string>
+    <string name="raw_video_settings_active">Aktiv: %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">Auf dieser Kamera ist noch keine Konfiguration qualifiziert.</string>
+    <string name="raw_video_requalify">Erneut qualifizieren</string>
+    <string name="raw_video_requalify_note">Das dauert einige Minuten, und die Kamera ist währenddessen nicht verfügbar.</string>
+    <string name="raw_video_ring">PUFFER %1$d%%</string>
+    <string name="raw_video_frames">%1$d B.</string>
+    <string name="raw_video_ring_description">RAW-Puffer zu %1$d%% gefüllt, %2$d Bilder geschrieben</string>
+    <string name="raw_video_config_help">RAW-Video schreibt jedes Bild unkomprimiert nach Documents/OpenCineCam/RAW. Angeboten werden nur Größen und Bildraten, die dieses Telefon auf seinem Speicher qualifiziert hat: Jede hat einen langen Speichertest und eine Live-Aufnahme ohne verlorenes Bild bestanden. Automatisch wählt die höchste qualifizierte Rate. Ein Ausschnitt liest den ganzen Sensor aus, speichert aber nur die Mitte, das Bild wird also enger. Die angezeigte Zeit gibt an, wie lange der freie Speicher bei dieser Rate reicht.</string>
+    <string name="gallery_raw_video">RAW-Video</string>
+    <string name="media_integrity_raw">Eine OpenCine-RAW-Aufnahme. Der Player zeigt eine entwickelte Vorschau; für die volle Qualität kopiere oder teile sie auf einen Computer und wandle sie dort mit dem DNG-Konverter für den Desktop um.</string>
+    <string name="raw_video_audio_incomplete">Der Ton hat Lücken</string>
+    <string name="raw_video_risky_notice">Riskante Rate: mögliche Mikroruckler, Verzögerung oder eine beschädigte Datei</string>
+    <string name="raw_video_risky_label">%1$s, riskante Rate</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · erreicht %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Erreicht %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">Das Warnzeichen kennzeichnet eine riskante Rate: Der Speicher ist dafür zu langsam, eine Aufnahme kann also ruckeln, verzögern oder beschädigt werden. Automatisch wählt sie nie.</string>
+    <string name="raw_video_burst_minutes">%1$d Min.</string>
+    <string name="raw_video_burst_seconds">%1$d Sek.</string>
+    <string name="raw_video_risky_notice_burst">Riskante Rate: nach etwa %1$s können Bilder verloren gehen (bei ausgeruhtem Telefon)</string>
+</resources>

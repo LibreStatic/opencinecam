@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="cinemadng_export_action">Esporta CinemaDNG</string>
+    <string name="cinemadng_export_title">Esporta CinemaDNG</string>
+    <string name="cinemadng_export_help">Un DNG per fotogramma, più un WAV se la ripresa ha l\'audio, in una cartella che DaVinci Resolve apre direttamente. Il .ocraw resta com\'è.</string>
+    <string name="cinemadng_export_destination">Destinazione</string>
+    <string name="cinemadng_export_documents">Documenti</string>
+    <string name="cinemadng_export_choose_folder">Scegli cartella…</string>
+    <string name="cinemadng_export_compress">Comprimi con LJ92</string>
+    <string name="cinemadng_export_compress_help">Senza perdita. Dimezza circa le dimensioni, ma l\'esportazione richiede più tempo.</string>
+    <string name="cinemadng_export_measuring">Lettura della ripresa…</string>
+    <string name="cinemadng_export_unreadable">Questa ripresa non si può esportare: il suo file è illeggibile.</string>
+    <string name="cinemadng_export_no_frames">Nessun fotogramma di questa ripresa si può convertire.</string>
+    <string name="cinemadng_export_frames">Fotogrammi: %1$d</string>
+    <string name="cinemadng_export_frames_audio">Fotogrammi: %1$d · con audio</string>
+    <string name="cinemadng_export_frames_skipped">%1$d fotogrammi non si possono convertire (danneggiati) e verranno saltati.</string>
+    <string name="cinemadng_export_space">Servono %1$s · %2$s liberi</string>
+    <string name="cinemadng_export_space_estimate">Servono circa %1$s · %2$s liberi</string>
+    <string name="cinemadng_export_space_unknown">Servono %1$s. Lo spazio libero qui è sconosciuto, quindi assicurati che l\'unità abbia posto.</string>
+    <string name="cinemadng_export_space_short">Spazio insufficiente: servono %1$s, %2$s liberi.</string>
+    <string name="cinemadng_export_recording">Interrompi la registrazione per esportare.</string>
+    <string name="cinemadng_export_busy">È già in corso un\'altra esportazione.</string>
+    <string name="cinemadng_export_start">Avvia</string>
+    <string name="cinemadng_export_cancel">Annulla</string>
+    <string name="cinemadng_export_cancelling">Annullamento dell\'esportazione…</string>
+    <string name="cinemadng_export_preparing">Preparazione dell\'esportazione CinemaDNG…</string>
+    <string name="cinemadng_export_running">Esportazione CinemaDNG · %1$d/%2$d · %3$d%%</string>
+    <string name="cinemadng_export_dismiss">OK</string>
+    <string name="cinemadng_export_channel">Esportazioni</string>
+    <string name="cinemadng_export_notification_title">Esportazione di %1$s</string>
+    <string name="cinemadng_export_notification_progress">%1$d di %2$d fotogrammi · %3$d%%</string>
+    <string name="cinemadng_export_done">Esportato in %1$s</string>
+    <string name="cinemadng_export_done_frames">%1$d fotogrammi DNG, %2$s.</string>
+    <string name="cinemadng_export_done_frames_audio">%1$d fotogrammi DNG e il WAV, %2$s.</string>
+    <string name="cinemadng_export_skipped">%1$d fotogrammi saltati (danneggiati).</string>
+    <string name="cinemadng_export_audio_omitted">L\'audio è troppo lungo per un WAV ed è stato escluso.</string>
+    <string name="cinemadng_export_nomedia_failed">La cartella non ha un .nomedia, quindi altre app galleria possono mostrare i fotogrammi.</string>
+    <string name="cinemadng_export_refused_recording">Esportazione non avviata: una ripresa è in registrazione.</string>
+    <string name="cinemadng_export_cancelled">Esportazione annullata.</string>
+    <string name="cinemadng_export_stopped_recording">Esportazione interrotta perché è iniziata la registrazione di una ripresa.</string>
+    <string name="cinemadng_export_failed">Esportazione non riuscita.</string>
+    <string name="cinemadng_export_partial_deleted">La cartella incompleta è stata eliminata.</string>
+    <string name="cinemadng_export_partial_left">Non è stato possibile eliminare la cartella incompleta %1$s; eliminala a mano.</string>
+</resources>
