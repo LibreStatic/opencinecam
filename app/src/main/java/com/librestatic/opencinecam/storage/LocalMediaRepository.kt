@@ -53,7 +53,8 @@ class LocalMediaRepository(context: Context) {
             val take = candidate.namespace?.let { namespace ->
                 if (!groups.containsKey(namespace)) groups[namespace] = readTake(namespace, candidate) { encodings[namespace.key] = it }
                 groups[namespace]
-            } ?: if (candidate.namespace == null) LocalMediaTake(
+            } ?: if (kind == LocalMediaKind.RAW_VIDEO) rawVideoTake(candidate.artifact)
+            else if (candidate.namespace == null) LocalMediaTake(
                 "legacy:${candidate.artifact.uri}", candidate.artifact, listOf(candidate.artifact), emptyList(),
                 kind, null, LocalMediaRelationStatus.LEGACY,
             ) else null
@@ -192,9 +193,12 @@ class LocalMediaRepository(context: Context) {
     }
 
     private fun candidates(kind: LocalMediaKind, position: MediaPosition?, newestFirst: Boolean): List<CatalogRow> {
-        val path = "${root(kind)}/OpenCineCam/"
+        val raw = kind == LocalMediaKind.RAW_VIDEO
+        val path = if (raw) RAW_VIDEO_PATH else "${root(kind)}/OpenCineCam/"
         val args = mutableListOf(context.packageName, "$path%")
         var selection = "owner_package_name = ? AND is_pending = 0 AND relative_path LIKE ?"
+        // RAW takes share MediaStore.Files with every other document: only the .ocraw files count.
+        if (raw) { selection += " AND _display_name LIKE ?"; args += "%$RAW_VIDEO_EXTENSION" }
         if (position != null) {
             selection += " AND (date_modified ${if (newestFirst) "<" else ">"} ? OR (date_modified = ? AND _id > ?))"
             args += listOf(position.modified.toString(), position.modified.toString(), position.id.toString())
@@ -264,6 +268,7 @@ class LocalMediaRepository(context: Context) {
                         LocalMediaKind.PHOTO -> namespace?.recording != true && mime.startsWith("image/")
                         LocalMediaKind.VIDEO -> namespace?.recording != false && mime.startsWith("video/")
                         LocalMediaKind.AUDIO -> namespace?.recording != false && mime.startsWith("audio/")
+                        LocalMediaKind.RAW_VIDEO -> isRawVideoRow(path, name)
                         null -> true
                     }
                     add(CatalogRow(LocalMediaArtifact(uri, name, mime, cursor.getLong(3), cursor.getLong(4)),
@@ -328,6 +333,7 @@ class LocalMediaRepository(context: Context) {
         LocalMediaKind.PHOTO -> MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         LocalMediaKind.VIDEO -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         LocalMediaKind.AUDIO -> MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        LocalMediaKind.RAW_VIDEO -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
     }
     private fun escapeLike(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     companion object {

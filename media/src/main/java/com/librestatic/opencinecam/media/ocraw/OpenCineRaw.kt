@@ -15,6 +15,7 @@ enum class OcrawChunkId(val wireId: Int) {
     AUDIO_PCM16(0x0020),
     PERIODIC_INDEX(0x0030),
     FINAL_INDEX(0x0031),
+    FRAME_METADATA(0x0040),
     END(0x00ff),
 }
 
@@ -328,19 +329,6 @@ object OcrawCodec {
         return output.array()
     }
 
-    /** Castagnoli CRC32C kept in Kotlin so minSdk 29 does not call API 34. */
-    private fun crc32c(bytes: ByteArray): Int {
-        var crc = -1
-        bytes.forEach { value ->
-            crc = crc xor (value.toInt() and 0xff)
-            repeat(8) {
-                crc = if ((crc and 1) != 0) {
-                    (crc ushr 1) xor 0x82f63b78.toInt()
-                } else {
-                    crc ushr 1
-                }
-            }
-        }
-        return crc.inv()
-    }
+    /** Castagnoli CRC32C; [Crc32c] avoids calling the API 34 class on older devices. */
+    private fun crc32c(bytes: ByteArray): Int = Crc32c.compute(bytes)
 }

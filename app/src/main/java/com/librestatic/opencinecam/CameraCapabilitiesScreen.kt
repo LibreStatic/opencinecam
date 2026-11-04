@@ -241,7 +241,7 @@ internal fun CameraCapabilitiesScreen(
                 item(key = "main10-check") { Main10FileCheckCard(main10Check) }
                 // Live values only belong to the camera in use; Settings shows a one-line summary of them.
                 val live = liveState?.takeIf { it.selectedCameraId == selected.cameraId }
-                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live), discrepancyLines(live.hardwareTruth), live.hardwareTruth.warnings) }
+                if (live != null) item(key = "readback-${selected.cameraId}") { ReadbackCard(requestedReportedLines(live), discrepancyLines(live.hardwareTruth, stringResource(R.string.caps_route_mismatch)), live.hardwareTruth.warnings) }
                 item(key = "raw-header-${selected.cameraId}") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         SettingsHeading(stringResource(R.string.caps_section_raw, selected.entries.size), stringResource(R.string.caps_section_raw_summary))

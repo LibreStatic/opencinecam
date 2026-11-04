@@ -168,6 +168,9 @@ class WebDavTransferRuntime internal constructor(
         }
     }
 
+    /** True while a capture holds a reservation, from its start request until its take retires (the CinemaDNG export checks it). */
+    val captureActive: Boolean get() = synchronized(gate) { captures > 0 }
+
     /** Admit destructive local IO only when no transfer owns a source. Never cancels a worker,
      * initializes the outbox or waits on capture; callers retry after the visible operation ends. */
     fun reserveIdleMediaMutation(): AutoCloseable = synchronized(gate) {

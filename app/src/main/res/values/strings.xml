@@ -139,6 +139,8 @@
     <string name="mode_selector_summary">Choose a tactile dial or an adaptive button grid.</string>
     <string name="translucent_chrome">Translucent interface</string>
     <string name="translucent_chrome_summary">Let the viewfinder use the whole screen and float the controls over it.</string>
+    <string name="scroll_long_text">Scroll long text</string>
+    <string name="scroll_long_text_summary">Text that does not fit scrolls slowly instead of being cut off with an ellipsis.</string>
     <string name="viewfinder_scale">Viewfinder</string>
     <string name="viewfinder_scale_fit">Fit</string>
     <string name="viewfinder_scale_fill">Fill</string>
@@ -369,6 +371,7 @@
     <string name="image_mode_video">EIS · electronic</string>
     <string name="image_mode_preview">EIS · preview-matched</string>
     <string name="image_stabilization_help">OIS and EIS are selected separately; simultaneous support is not inferred. EIS can crop or change the field of view. Actual operation depends on resolution, FPS and output surfaces; check reported results, not only advertised modes.</string>
+    <string name="scroll_long_text_help">Single-line text that does not fit its space, such as the capture status line, scrolls slowly so you can read all of it, as on professional cameras. Only text that does not fit moves; text that fits stays still. It waits about 1.5 seconds before scrolling and between passes. With system animations turned off it never moves. Turn it off to cut long text with an ellipsis (…) instead.</string>
     <string name="image_noise">Image noise reduction</string>
     <string name="image_edge">Image edge enhancement</string>
     <string name="image_mode_fast">Fast</string>
@@ -967,6 +970,7 @@
     <string name="caps_profile_quirk_off">%1$s (switched off)</string>
     <string name="caps_quirk_high_speed_physical">High-speed capture opens the physical camera that owns the mode</string>
     <string name="caps_quirk_moto_keys">Motorola slow-motion keys on high-speed requests</string>
+    <string name="caps_quirk_qti_raw_fps">RAW above the declared frame-rate limit (Qualcomm)</string>
     <string name="caps_section_main10">Latest Main10 file check</string>
     <string name="caps_main10_none">No HLG or LOG take has been checked yet.</string>
     <string name="caps_main10_summary">%1$s take, checked %2$s</string>

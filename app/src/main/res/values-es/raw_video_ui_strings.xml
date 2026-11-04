@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">Configuración de video RAW</string>
+    <string name="raw_video_automatic">Automática</string>
+    <string name="raw_video_automatic_detail">La tasa calificada más alta</string>
+    <string name="raw_video_group_full">SENSOR COMPLETO</string>
+    <string name="raw_video_group_crop">RECORTE CENTRAL</string>
+    <string name="raw_video_crop_note">Un recorte graba solo el centro del sensor: la misma lectura, un campo de visión más estrecho.</string>
+    <string name="raw_video_config_frozen">La configuración se cambia entre tomas.</string>
+    <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_and_time">%1$s · quedan %2$s</string>
+    <string name="raw_video_label_crop">%1$s · recorte</string>
+    <string name="raw_video_label_compressed">Comprimido</string>
+    <string name="raw_video_settings_active">En uso: %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">Todavía no hay ninguna configuración calificada en esta cámara.</string>
+    <string name="raw_video_requalify">Volver a calificar</string>
+    <string name="raw_video_requalify_note">Lleva varios minutos y la cámara no está disponible mientras tanto.</string>
+    <string name="raw_video_ring">BÚFER %1$d%%</string>
+    <string name="raw_video_frames">%1$d fot.</string>
+    <string name="raw_video_ring_description">Búfer RAW al %1$d%%, %2$d fotogramas escritos</string>
+    <string name="raw_video_config_help">El video RAW graba cada fotograma sin comprimir en Documents/OpenCineCam/RAW. Solo se ofrecen los tamaños y las cadencias que este teléfono ha calificado en su almacenamiento: cada uno superó una prueba larga de almacenamiento y una toma real sin perder ningún fotograma. Automática elige la tasa calificada más alta. Un recorte lee el sensor completo pero graba solo su centro, así que la imagen es más estrecha. El tiempo indicado es lo que dura el espacio libre a esa tasa.</string>
+    <string name="gallery_raw_video">Video RAW</string>
+    <string name="media_integrity_raw">Una toma OpenCine RAW. El reproductor muestra una vista previa revelada; para la calidad completa, cópiala o compártela a un ordenador y conviértela con el conversor DNG de escritorio.</string>
+    <string name="raw_video_audio_incomplete">El sonido tiene cortes</string>
+    <string name="raw_video_risky_notice">Tasa riesgosa: puede haber microcortes, latencia o un archivo dañado</string>
+    <string name="raw_video_risky_label">%1$s, tasa riesgosa</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · alcanza %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Alcanza %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">El signo de advertencia marca una tasa riesgosa: el almacenamiento es demasiado lento para ella, así que una toma puede tener microcortes, latencia o terminar dañada. Automática nunca la elige.</string>
+    <string name="raw_video_burst_minutes">%1$d min</string>
+    <string name="raw_video_burst_seconds">%1$d s</string>
+    <string name="raw_video_risky_notice_burst">Tasa riesgosa: puede perder fotogramas tras aprox. %1$s (con el teléfono en reposo)</string>
+</resources>

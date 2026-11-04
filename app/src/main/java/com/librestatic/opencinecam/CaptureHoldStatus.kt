@@ -51,7 +51,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
@@ -213,10 +212,10 @@ private fun CaptureHoldStrip(hold: CaptureHold, title: String, onUnlock: () -> U
         ) {
             HoldIndicator(busy, 18.dp)
             Column(Modifier.weight(1f)) {
-                Text(title, color = colors.onSurface, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(hint, color = colors.onSurfaceVariant, fontSize = 12.sp, lineHeight = 15.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FitText(title, color = colors.onSurface, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1)
+                FitText(hint, color = colors.onSurfaceVariant, fontSize = 12.sp, lineHeight = 15.sp,
+                    maxLines = 1)
             }
             if (!busy) FilledTonalButton(
                 onClick = onUnlock,
@@ -269,10 +268,10 @@ private fun CaptureHoldPill(hold: CaptureHold, title: String, onUnlock: () -> Un
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             HoldIndicator(busy, 11.dp)
-            Text(caption.uppercase(), color = colors.onSurfaceVariant, fontSize = 11.sp, lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(caption.uppercase(), color = colors.onSurfaceVariant, fontSize = 11.sp, lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp, maxLines = 1)
         }
-        Text(title, color = accent, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FitText(title, color = accent, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1)
     }
 }

@@ -173,8 +173,8 @@ private fun FocusQuick(
     ) {
         Text(stringResource(R.string.focus_advanced), color = colors.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.weight(1f))
-        Text("${formatPullSeconds(settings.focusPullDurationMs)} · $easing", color = colors.onSurfaceVariant, fontSize = 12.sp,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        FitText("${formatPullSeconds(settings.focusPullDurationMs)} · $easing", color = colors.onSurfaceVariant, fontSize = 12.sp,
+            maxLines = 1, modifier = Modifier.weight(1f, fill = false))
         CineGlyph(CineIcon.CHEVRON, colors.onSurfaceVariant, Modifier.size(16.dp))
     }
 }

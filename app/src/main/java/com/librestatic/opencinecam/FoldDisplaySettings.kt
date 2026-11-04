@@ -170,7 +170,7 @@ private fun FoldSessionStrip(display: FoldDisplayState, mode: SubjectDisplayMode
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
-        Text(state, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        FitText(state, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, maxLines = 2,
             modifier = Modifier.weight(1f).testTag("fold-status"))
         when {
             active -> TextButton(onClick = onClose, modifier = Modifier.testTag("fold-close")) {

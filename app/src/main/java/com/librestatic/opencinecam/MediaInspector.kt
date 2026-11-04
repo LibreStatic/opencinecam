@@ -59,7 +59,8 @@ internal fun integrityExplanation(status: LocalMediaRelationStatus): Int = when 
 @Composable
 internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, actions: GalleryTakeActions,
-    onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier,
+    progress: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     val window = LocalAdaptiveWindow.current
     Column(modifier.fillMaxWidth().testTag("gallery-details-${take.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -70,9 +71,12 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             CloseButton("gallery-info-close", if (window.hardwareKeyboard) withShortcut(close, ShortcutAction.DISMISS) else close, onClose)
         }
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))) {
-            val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
+            val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails, loadable = take.kind.hasSystemThumbnail())
             GalleryThumbnailTile(take, poster, settings.autoThumbnails, facts, Modifier.matchParentSize(), tag = "gallery-poster")
-            if (take.kind != LocalMediaKind.PHOTO && (poster.bitmap != null || settings.autoThumbnails)) {
+            val playAction = actions.play
+            // A RAW take's placeholder glyph sits where the overlay would; it plays from the Play action below instead.
+            if (playAction != null && take.kind != LocalMediaKind.PHOTO && take.kind.hasSystemThumbnail() &&
+                (poster.bitmap != null || settings.autoThumbnails)) {
                 val play = stringResource(R.string.media_action_play)
                 Box(
                     Modifier
@@ -80,7 +84,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                         .size(56.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.82f))
-                        .clickable(onClickLabel = play, role = Role.Button, onClick = actions.play)
+                        .clickable(onClickLabel = play, role = Role.Button, onClick = playAction)
                         .semantics { contentDescription = play }
                         .testTag("gallery-inspector-poster-play"),
                     contentAlignment = Alignment.Center,
@@ -88,19 +92,18 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("gallery-title-${take.id}"),
-                color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2,
-                overflow = TextOverflow.Ellipsis)
+            FitText(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("gallery-title-${take.id}"),
+                color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
             // Without a slate the title already is the capture time.
             if (takeTitle(take.slate) != TakeTitle.CaptureTime) {
                 Text(remember(take.primary.modifiedSeconds) { takeTimeText(context, take.primary.modifiedSeconds) },
                     Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
-            Text(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-file-name-${take.id}"), color = SettingsMuted,
-                fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            FitText(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-file-name-${take.id}"), color = SettingsMuted,
+                fontSize = 11.sp, maxLines = 2)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DetailChip(stringResource(galleryKindLabel(take.kind.galleryKind())))
+            DetailChip(stringResource(take.kind.kindLabel()))
             formatTakeDuration(facts?.durationMs)?.let { DetailChip(it) }
             resolutionBadge(facts?.width, facts?.height)?.let { DetailChip(it) }
             badges.codec?.let { DetailChip(codecBadgeText(it), tag = "gallery-details-codec-${take.id}") }
@@ -111,13 +114,15 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             badges.proxy.label()?.let { DetailChip(stringResource(it), color = badges.proxy.tint, tag = "gallery-details-proxy-${take.id}") }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, actions.play)
+            actions.play?.let { InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, it) }
             actions.share?.let { InspectorAction("gallery-inspector-share", CineIcon.SHARE, R.string.media_action_share, action = it) }
+            actions.export?.let { InspectorAction("gallery-inspector-export", CineIcon.FILES, R.string.cinemadng_export_action, action = it) }
             actions.rename?.let { InspectorAction("gallery-inspector-rename", CineIcon.RENAME, R.string.media_action_rename, action = it) }
             actions.proxy?.let { InspectorAction("gallery-inspector-proxy", CineIcon.PROXY, R.string.media_action_proxy, action = it) }
             actions.delete?.let { InspectorAction("gallery-inspector-delete", CineIcon.DELETE, R.string.media_action_delete,
                 MaterialTheme.colorScheme.error, it) }
         }
+        progress?.invoke()
         DetailSection(R.string.media_section_integrity) {
             val attention = takeNeedsAttention(take.relationStatus)
             val tint = if (attention) GalleryWarning else LocalCineColors.current.ok
@@ -127,7 +132,8 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                     color = tint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                if (badges.incompleteReasons.isEmpty()) stringResource(integrityExplanation(take.relationStatus))
+                if (take.kind == LocalMediaKind.RAW_VIDEO) stringResource(R.string.media_integrity_raw)
+                else if (badges.incompleteReasons.isEmpty()) stringResource(integrityExplanation(take.relationStatus))
                 else stringResource(R.string.take_saved_incomplete, badges.incompleteReasons.joinToString(", ")),
                 Modifier.fillMaxWidth().testTag("gallery-integrity-${take.id}"), color = SettingsMuted,
                 fontSize = 12.sp, lineHeight = 16.sp)
@@ -228,8 +234,8 @@ private fun GalleryFiles(take: LocalMediaTake, technical: Boolean, onOpen: (Loca
             val tint = if (expanded) SettingsAccent else MaterialTheme.colorScheme.onSurface
             CineGlyph(CineIcon.FILES, tint, Modifier.size(20.dp))
             Text(stringResource(R.string.media_section_files), color = tint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            Text(summary, Modifier.weight(1f).testTag("gallery-files-${take.id}-label"), color = SettingsMuted, fontSize = 12.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            FitText(summary, Modifier.weight(1f).testTag("gallery-files-${take.id}-label"), color = SettingsMuted, fontSize = 12.sp,
+                maxLines = 2)
             CineGlyph(if (expanded) CineIcon.COLLAPSE else CineIcon.EXPAND, tint, Modifier.size(16.dp))
         }
         if (expanded) {

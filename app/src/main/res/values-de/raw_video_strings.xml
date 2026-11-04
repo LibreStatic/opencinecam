@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_video_not_qualified">RAW-Video ist auf dieser Kamera noch nicht qualifiziert. Führe zuerst die RAW-Video-Qualifizierung aus.</string>
+    <string name="raw_video_unsupported">Diese Kamera hat keinen RAW10-Ausgang und kann daher kein RAW-Video aufnehmen.</string>
+    <string name="raw_video_failed">Diese Kamera hat den RAW-Videostream abgelehnt. RAW-Video ist auf ihr bis zum Neustart der App nicht verfügbar.</string>
+    <string name="raw_video_unavailable">Die Kamera hat den RAW-Videostream abgelehnt. Zu %1$s gewechselt.</string>
+    <string name="raw_video_memory">Nicht genug freier Arbeitsspeicher für den RAW-Bildpuffer. Schließe andere Apps und versuche es erneut.</string>
+    <string name="raw_video_codec_unavailable">Der RAW-Encoder konnte nicht starten. Wähle eine unkomprimierte RAW-Konfiguration.</string>
+    <string name="raw_video_storage">Nicht genug freier Speicher für eine RAW-Aufnahme: %1$s für 10 Sekunden nötig, %2$s frei.</string>
+    <string name="raw_video_storage_unknown">Der freie Speicher konnte nicht gelesen werden, daher wurde die RAW-Aufnahme nicht gestartet.</string>
+    <string name="raw_video_start_failed">Die RAW-Aufnahme konnte nicht starten.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
+    <string name="raw_video_saved">RAW-Aufnahme gespeichert: %1$d Bilder, %2$s s</string>
+    <string name="raw_video_not_finalised">Die RAW-Aufnahme wurde nicht abgeschlossen; sie wird beim nächsten Start wiederhergestellt.</string>
+    <string name="raw_video_empty">Die RAW-Aufnahme hat kein Bild aufgezeichnet.</string>
+    <string name="raw_video_end_ring_full">der Speicher kam mit dem RAW-Stream nicht mit</string>
+    <string name="raw_video_end_writer">die RAW-Datei konnte nicht geschrieben werden</string>
+    <string name="raw_video_end_stream">die Kamera lieferte keine RAW-Bilder mehr</string>
+    <string name="raw_video_end_frame">ein RAW-Bild ging verloren</string>
+    <string name="raw_video_end_stalled">der RAW-Schreiber reagierte nicht mehr</string>
+    <string name="raw_video_end_other">die RAW-Aufnahme ist fehlgeschlagen</string>
+</resources>

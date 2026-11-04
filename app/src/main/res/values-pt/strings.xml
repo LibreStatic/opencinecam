@@ -137,6 +137,8 @@
     <string name="mode_selector_summary">Escolha um seletor giratório tátil ou uma grade de botões adaptável.</string>
     <string name="translucent_chrome">Interface translúcida</string>
     <string name="translucent_chrome_summary">Deixa o visor ocupar a tela inteira e os controles flutuarem sobre ele.</string>
+    <string name="scroll_long_text">Rolar textos longos</string>
+    <string name="scroll_long_text_summary">O texto que não cabe rola devagar em vez de ser cortado com reticências.</string>
     <string name="viewfinder_scale">Visor</string>
     <string name="viewfinder_scale_fit">Ajustar</string>
     <string name="viewfinder_scale_fill">Preencher</string>
@@ -364,6 +366,7 @@
     <string name="image_mode_video">EIS · eletrônica</string>
     <string name="image_mode_preview">EIS · igual à visualização</string>
     <string name="image_stabilization_help">OIS e EIS são selecionados separadamente; o suporte simultâneo não é presumido. A EIS pode cortar ou alterar o campo de visão. O funcionamento real depende da resolução, do FPS e das superfícies de saída; verifique os resultados informados, não só os modos anunciados.</string>
+    <string name="scroll_long_text_help">O texto de uma linha que não cabe no seu espaço, como a linha de status da captura, rola devagar para que você possa lê-lo inteiro, como nas câmeras profissionais. Só o texto que não cabe se move; o que cabe fica parado. Ele espera cerca de 1,5 segundo antes de rolar e entre uma passagem e outra. Com as animações do sistema desativadas, ele nunca se move. Desative a opção para cortar textos longos com reticências (…).</string>
     <string name="image_noise">Redução de ruído da imagem</string>
     <string name="image_edge">Realce de bordas da imagem</string>
     <string name="image_mode_fast">Rápido</string>
@@ -961,6 +964,7 @@
     <string name="caps_profile_quirk_off">%1$s (desativada)</string>
     <string name="caps_quirk_high_speed_physical">A captura em alta velocidade abre a câmera física que possui o modo</string>
     <string name="caps_quirk_moto_keys">Chaves de câmera lenta da Motorola nas solicitações de alta velocidade</string>
+    <string name="caps_quirk_qti_raw_fps">RAW acima do limite declarado de fps (Qualcomm)</string>
     <string name="caps_section_main10">Última verificação de ficheiro Main10</string>
     <string name="caps_main10_none">Ainda não foi verificada nenhuma gravação HLG ou LOG.</string>
     <string name="caps_main10_summary">Gravação %1$s, verificada %2$s</string>

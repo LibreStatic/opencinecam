@@ -20,4 +20,6 @@
     <string name="picture_help_summary">Eigene Regler dieser Kamera</string>
     <string name="picture_blocked_neutral_summary">Ohne Wirkung bei LOG, HLG, RAW und Highspeed</string>
     <string name="picture_blocked_edge_off_summary">Schärfe braucht aktive Kantenverstärkung</string>
+    <string name="raw_video_config_help_summary">Nur qualifizierte Konfigurationen werden angeboten</string>
+    <string name="scroll_long_text_help_summary">Langer Text läuft durch statt gekürzt</string>
 </resources>

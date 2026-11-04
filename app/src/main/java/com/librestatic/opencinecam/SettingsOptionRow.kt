@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /** The left side of a settings row: the title and, under it, a one-line muted summary. */
 @Composable
@@ -37,13 +38,19 @@ internal fun <T> SettingsOptionRow(
     enabled: Boolean = true,
     /** Greys one choice without disabling the row; an unavailable choice cannot be selected. */
     choiceEnabled: (T) -> Boolean = { true },
+    /** A warning for one choice: its pill shows the warning glyph in amber and speaks this text instead of the label. */
+    choiceWarning: @Composable (T) -> String? = { null },
 ) {
     SettingsRow(modifier,
         label = { SettingsRowLabel(title, summary, enabled) },
         control = {
             SettingsPillRow(Modifier.selectableGroup()) {
                 choices.forEach { choice ->
-                    SettingsPill(label(choice), tag(choice), selected = choice == selected, enabled = enabled && choiceEnabled(choice)) { onSelect(choice) }
+                    val warning = choiceWarning(choice)
+                    SettingsPill(label(choice), tag(choice), selected = choice == selected, enabled = enabled && choiceEnabled(choice),
+                        icon = if (warning != null) CineIcon.WARNING else null,
+                        iconTint = if (warning != null && choice != selected) LocalCineColors.current.pending else null,
+                        description = warning) { onSelect(choice) }
                 }
             }
         })

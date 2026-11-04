@@ -44,12 +44,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.CineGlyph
 import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.FitText
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsAccent
 import com.librestatic.opencinecam.SettingsBorder
@@ -64,7 +64,7 @@ private val Disabled: Color @Composable get() = MaterialTheme.colorScheme.onSurf
 @Composable
 internal fun MetadataChip(text: String, modifier: Modifier = Modifier, emphasized: Boolean = false) {
     val shape = RoundedCornerShape(6.dp)
-    Text(
+    FitText(
         text,
         modifier
             .clip(shape)
@@ -74,7 +74,6 @@ internal fun MetadataChip(text: String, modifier: Modifier = Modifier, emphasize
         color = if (emphasized) SettingsAccent else SettingsMuted,
         style = MaterialTheme.typography.labelSmall,
         maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
     )
 }
 

@@ -136,18 +136,18 @@ import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
 
 // Theme roles under the names the wizard uses; the Cine palette gives the approved look.
-private val OnbSurface: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer
-private val OnbSurfaceHigh: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
-private val OnbText: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
-private val OnbAmber: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
-private val OnbMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+internal val OnbSurface: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainer
+internal val OnbSurfaceHigh: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceContainerHighest
+internal val OnbText: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+internal val OnbAmber: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+internal val OnbMuted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val OnbDot: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outlineVariant
 
 /** MainActivity's splash fade: a one-frame delay plus 200 ms. */
 private const val SplashHandoverMillis = 240L
 
 /** The single-column wizard's text width on tablets: longer lines get hard to follow. */
-private val PageMaxWidth = 560.dp
+internal val PageMaxWidth = 560.dp
 
 /** Bump when the tour gains content worth showing again to people who already finished it. */
 internal const val ONBOARDING_VERSION = 1
@@ -223,7 +223,7 @@ internal fun onboardingCardColumns(paneWidthDp: Float): Int =
     if (windowWidthClass(paneWidthDp) == WindowWidthClass.COMPACT) 1 else 2
 
 /** The two-pane layout never stretches wider than this on a desktop or a large tablet. */
-private val TwoPaneMaxWidth = 1120.dp
+internal val TwoPaneMaxWidth = 1120.dp
 
 @Composable
 internal fun OnboardingScreen(
@@ -232,6 +232,10 @@ internal fun OnboardingScreen(
     onFinished: () -> Unit,
     hinge: FoldHinge? = null,
     replay: Boolean = false,
+    rawQualificationInfo: () -> RawVideoQualificationInfo? = { null },
+    rawQualificationStep: (@Composable (onLeave: () -> Unit) -> Unit)? = null,
+    initialRawStage: OnboardingRawStage? = null,
+    initialRawInfo: RawVideoQualificationInfo? = null,
 ) {
     val context = LocalContext.current
     val reducedMotion = LocalReducedMotion.current
@@ -298,9 +302,20 @@ internal fun OnboardingScreen(
             if (reducedMotion) pagerState.scrollToPage(page.ordinal) else pagerState.animateScrollToPage(page.ordinal, animationSpec = pageSpec)
         }
     }
+    // OCC-PLAN-071: the last question, asked only where the back camera's RAW video awaits qualification.
+    var rawStage by rememberSaveable { mutableStateOf(initialRawStage) }
+    var rawInfo by remember { mutableStateOf(initialRawInfo) }
     fun leave() {
         if (finishing) return
         val target = onboardingExitTarget(cameraGranted)
+        if (target == null && rawQualificationStep != null) {
+            val info = runCatching { rawQualificationInfo() }.getOrNull()
+            if (onboardingRawStageAfterPages(cameraGranted, info?.gate) != null) {
+                rawInfo = info
+                rawStage = OnboardingRawStage.QUESTION
+                return
+            }
+        }
         when {
             target != null -> goTo(target)
             // The done page has already scattered the shapes: nothing is left to wait for.
@@ -341,6 +356,24 @@ internal fun OnboardingScreen(
             HingeSafeSettingsPane(hinge, tag = "onboarding-pane") {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     AboutScreen(onBack = { showLicenses = false }, backLabel = stringResource(R.string.onb_licenses_back))
+                }
+            }
+        }
+        return
+    }
+    rawStage?.let { stage ->
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("onboarding")) {
+            // Still shapes: the qualification below can run for minutes with the camera at full load.
+            RawQualificationBackdrop()
+            HingeSafeSettingsPane(hinge, tag = "onboarding-pane") {
+                when (stage) {
+                    OnboardingRawStage.QUESTION -> {
+                        // Back returns to the last page; the question is asked again on leaving it.
+                        BackHandler { rawStage = null }
+                        OnboardingRawQuestion(rawInfo, onNow = { rawStage = onboardingRawStageAfterAnswer(now = true) }, onLater = onFinished)
+                    }
+                    OnboardingRawStage.STEP -> rawQualificationStep?.invoke(onFinished)
+                        ?: OnboardingRawQuestion(rawInfo, onNow = {}, onLater = onFinished)
                 }
             }
         }
@@ -542,7 +575,7 @@ private val FadeEdge = 28.dp
  * cue shows until the operator scrolls, so a card under the fold is never a secret.
  */
 @Composable
-private fun FadingScroll(
+internal fun FadingScroll(
     modifier: Modifier,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     content: @Composable ColumnScope.() -> Unit,
@@ -635,7 +668,7 @@ private fun pageLabel(page: OnboardingPage): Int? = when (page) {
 }
 
 @Composable
-private fun PrimaryButton(text: String, arrow: Boolean = true, testTag: String? = null, onClick: () -> Unit) {
+internal fun PrimaryButton(text: String, arrow: Boolean = true, testTag: String? = null, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
@@ -689,7 +722,7 @@ private fun <T> CardGrid(items: List<T>, columns: Int, card: @Composable (T, Mod
 }
 
 @Composable
-private fun InfoCard(
+internal fun InfoCard(
     @DrawableRes icon: Int,
     title: String,
     body: String,

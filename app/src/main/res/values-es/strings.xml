@@ -137,6 +137,8 @@
     <string name="mode_selector_summary">Elegí una perilla táctil o una grilla de botones adaptativa.</string>
     <string name="translucent_chrome">Interfaz semitransparente</string>
     <string name="translucent_chrome_summary">Dejá que el visor ocupe toda la pantalla con los controles flotando encima.</string>
+    <string name="scroll_long_text">Desplazar textos largos</string>
+    <string name="scroll_long_text_summary">El texto que no cabe se desplaza despacio en vez de cortarse con puntos suspensivos.</string>
     <string name="viewfinder_scale">Visor</string>
     <string name="viewfinder_scale_fit">Ajustar</string>
     <string name="viewfinder_scale_fill">Rellenar</string>
@@ -364,6 +366,7 @@
     <string name="image_mode_video">EIS · electrónica</string>
     <string name="image_mode_preview">EIS · igual a la vista previa</string>
     <string name="image_stabilization_help">OIS y EIS se seleccionan por separado; no se infiere soporte simultáneo. EIS puede recortar o cambiar el campo de visión. Su funcionamiento depende de resolución, FPS y superficies de salida; revisá el resultado reportado, no sólo los modos anunciados.</string>
+    <string name="scroll_long_text_help">El texto de una sola línea que no cabe en su espacio, como la línea de estado de captura, se desplaza despacio para que puedas leerlo entero, como en las cámaras profesionales. Solo se mueve el texto que no cabe; el que cabe queda quieto. Espera unos 1,5 segundos antes de desplazarse y entre pasadas. Si desactivas las animaciones del sistema, nunca se mueve. Desactívalo para cortar el texto largo con puntos suspensivos (…).</string>
     <string name="image_noise">Reducción de ruido de imagen</string>
     <string name="image_edge">Nitidez de imagen</string>
     <string name="image_mode_fast">Rápido</string>
@@ -961,6 +964,7 @@
     <string name="caps_profile_quirk_off">%1$s (desactivada)</string>
     <string name="caps_quirk_high_speed_physical">La captura de alta velocidad abre la cámara física que posee el modo</string>
     <string name="caps_quirk_moto_keys">Claves de cámara lenta de Motorola en las solicitudes de alta velocidad</string>
+    <string name="caps_quirk_qti_raw_fps">RAW por encima del límite declarado de fps (Qualcomm)</string>
     <string name="caps_section_main10">Última comprobación de archivo Main10</string>
     <string name="caps_main10_none">Aún no se ha comprobado ninguna toma HLG o LOG.</string>
     <string name="caps_main10_summary">Toma %1$s, comprobada %2$s</string>

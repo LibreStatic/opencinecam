@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,8 +82,8 @@ internal fun PanelHeader(title: String, onClose: () -> Unit) {
         if (LocalAdaptiveWindow.current.hardwareKeyboard) withShortcut(it, ShortcutAction.DISMISS) else it
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        FitText(title, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, modifier = Modifier.weight(1f))
         Box(
             Modifier
                 .size(48.dp)
@@ -140,6 +139,8 @@ internal fun ChoiceTile(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     detail: String? = null,
+    /** Marks the tile with a warning glyph; the text is its content description (the label and the risk). */
+    warning: String? = null,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -160,24 +161,30 @@ internal fun ChoiceTile(
                 },
             )
             .clickable(enabled = enabled, onClick = hapticClick(HapticEvent.Select, onClick))
+            .then(if (warning != null) Modifier.semantics { contentDescription = warning } else Modifier)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                label,
-                color = textColor,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (warning != null) {
+                    CineGlyph(CineIcon.WARNING, if (selected) textColor else com.librestatic.opencinecam.ui.theme.LocalCineColors.current.pending,
+                        Modifier.size(14.dp))
+                }
+                FitText(
+                    label,
+                    color = textColor,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                )
+            }
             // A second, quieter line under the name: the pixels under "4K".
             detail?.let {
-                Text(it, color = textColor.copy(alpha = textColor.alpha * 0.8f), fontSize = 12.sp, lineHeight = 14.sp,
-                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FitText(it, color = textColor.copy(alpha = textColor.alpha * 0.8f), fontSize = 12.sp, lineHeight = 14.sp,
+                    textAlign = TextAlign.Center, maxLines = 1)
             }
         }
     }

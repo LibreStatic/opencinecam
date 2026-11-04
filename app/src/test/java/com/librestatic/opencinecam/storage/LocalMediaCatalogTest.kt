@@ -16,8 +16,8 @@ class LocalMediaCatalogTest {
     private val recording = MediaNamespace(id, true)
     private fun row(id: Long, kind: LocalMediaKind = LocalMediaKind.PHOTO,
         namespace: MediaNamespace = still, date: Long = 100, name: String = "image.jpg"): CatalogRow {
-        val segment = when (kind) { LocalMediaKind.PHOTO -> "images"; LocalMediaKind.VIDEO -> "video"; LocalMediaKind.AUDIO -> "audio" }
-        val mime = when (kind) { LocalMediaKind.PHOTO -> "image/jpeg"; LocalMediaKind.VIDEO -> "video/mp4"; LocalMediaKind.AUDIO -> "audio/wav" }
+        val segment = when (kind) { LocalMediaKind.PHOTO -> "images"; LocalMediaKind.VIDEO -> "video"; LocalMediaKind.AUDIO -> "audio"; LocalMediaKind.RAW_VIDEO -> "file" }
+        val mime = when (kind) { LocalMediaKind.PHOTO -> "image/jpeg"; LocalMediaKind.VIDEO -> "video/mp4"; LocalMediaKind.AUDIO -> "audio/wav"; LocalMediaKind.RAW_VIDEO -> "application/octet-stream" }
         return CatalogRow(LocalMediaArtifact("content://media/external_primary/$segment/media/$id", name, mime, 12, date), id, kind, namespace)
     }
     private fun download(n: Int, name: String, mime: String) =

@@ -89,7 +89,7 @@ class PresetUiTest {
         val p = CameraPreset(name = "Unsupported", settings = CameraSettings(videoWidth = 3840))
         compose.setContent { MaterialTheme { PresetReviewDialog(p, state, CameraSettings(), {}, {}) } }
         compose.onNodeWithText(context.getString(R.string.presets_pending)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(context.getString(R.string.presets_incompatible, p.compatibilityIssues(state).joinToString(", "))).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.presets_incompatible, p.compatibilityIssues(state).joinToString(", ") { code -> presetIssueText(code)?.let(context::getString) ?: code })).performScrollTo().assertIsDisplayed()
     }
     @Test fun disabledChoiceTileDoesNotDispatchOrExposeEnabledSemantics() {
         var clicked = 0

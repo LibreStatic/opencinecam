@@ -70,3 +70,22 @@ Record the shipped backend as the Kotlin OpenGL ES 3.0 path above. The handle, `
 - The app ships no native libraries of its own; no ABI split or NDK toolchain is needed for release builds.
 - Device evidence for the GPU path comes from the Kotlin pipeline (GLES numeric checks, Main10 takes), not from `native-pipeline` host runs, which certify nothing about a device.
 - Synchronisation relies on `SurfaceTexture.updateTexImage` and `eglSwapBuffers` fences plus the sensor timestamp; explicit `glFenceSync` is used only by the cover preview output.
+
+## Amendment (2026-11-02): RAW video codecs
+
+- Status: Accepted
+- Date: 2026-11-02
+
+### Context
+
+RAW video (PLAN-071) writes 234–936 MB/s of RAW10. On ART the Java CRC32C is not intrinsified and tops out around 245 MB/s, and lossless Bayer compression in Kotlin costs about 340 ms per frame. Both need NEON, which the Kotlin GL path cannot provide.
+
+### Decision
+
+`:media` builds `libocc_rawcodec.so` (`media/src/main/cpp`) from the `native-pipeline/` CRC32C and RAW10 codec sources, for `arm64-v8a` and `x86_64`, behind a small JNI surface (`NativeCrc32c`, `NativeRawCodec`). It is the first JNI consumer. Handles stay explicit: Kotlin owns every direct buffer, and native code never retains a pointer past a call. A missing or unloadable library leaves the Java CRC32C and disables LJ92 configurations; it never changes the file format.
+
+### Consequences
+
+- The amendment of 2026-10-28 no longer holds that the app ships no native libraries: release builds need the NDK and CMake, and the APK carries `libocc_rawcodec.so` per ABI.
+- The GPU path is unchanged and still crosses no JNI.
+- Codec correctness is covered by the host ctest in `native-pipeline/` and by the device runs of `RawThroughputDeviceTest`, which record encode time, ratio and CPU per LJ92 configuration.

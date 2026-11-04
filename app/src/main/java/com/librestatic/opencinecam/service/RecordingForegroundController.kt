@@ -30,9 +30,10 @@ data class RecordingPermissionState(
     val notificationsGranted: Boolean,
 )
 
-fun validateRecordingPermissions(state: RecordingPermissionState, audioEnabled: Boolean, correlationId: String = "recording-fgs"): StableFailure? = when {
-    !state.cameraGranted -> StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, "Camera permission is required to record.")
-    audioEnabled && !state.microphoneGranted -> StableFailure("recording-fgs", FailureCode.AUDIO_INITIALIZATION_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, "Microphone permission is required for audio recording.")
+/** [text] resolves a string resource, so the reason reaches the operator in their language. */
+fun validateRecordingPermissions(state: RecordingPermissionState, audioEnabled: Boolean, correlationId: String = "recording-fgs", text: (Int) -> String): StableFailure? = when {
+    !state.cameraGranted -> StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, text(R.string.recording_camera_permission_required))
+    audioEnabled && !state.microphoneGranted -> StableFailure("recording-fgs", FailureCode.AUDIO_INITIALIZATION_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, text(R.string.recording_microphone_permission_required))
     else -> null
 }
 
@@ -51,7 +52,7 @@ class RecordingForegroundController(
             microphoneGranted = ContextCompat.checkSelfPermission(service, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
             notificationsGranted = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(service, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
         )
-        validateRecordingPermissions(permission, audioEnabled, correlationId)?.let { return ForegroundRecordingStart.Rejected(it) }
+        validateRecordingPermissions(permission, audioEnabled, correlationId, service::getString)?.let { return ForegroundRecordingStart.Rejected(it) }
         return try {
             createChannel()
             val notification = notification()
@@ -59,9 +60,9 @@ class RecordingForegroundController(
             ServiceCompat.startForeground(service, NOTIFICATION_ID, notification, types)
             ForegroundRecordingStart.Started(permission.notificationsGranted)
         } catch (_: SecurityException) {
-            ForegroundRecordingStart.Rejected(StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, "Foreground recording permission was denied."))
+            ForegroundRecordingStart.Rejected(StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.USER_ACTION, correlationId, service.getString(R.string.recording_foreground_denied)))
         } catch (_: RuntimeException) {
-            ForegroundRecordingStart.Rejected(StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.RETRYABLE, correlationId, "Foreground recording could not be started."))
+            ForegroundRecordingStart.Rejected(StableFailure("recording-fgs", FailureCode.CAPTURE_OPEN_FAILED, FailureSeverity.ERROR, Recoverability.RETRYABLE, correlationId, service.getString(R.string.recording_foreground_failed)))
         }
     }
 

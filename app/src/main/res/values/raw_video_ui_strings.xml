@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">RAW video configuration</string>
+    <string name="raw_video_automatic">Automatic</string>
+    <string name="raw_video_automatic_detail">Highest qualified rate</string>
+    <string name="raw_video_group_full">FULL SENSOR</string>
+    <string name="raw_video_group_crop">CENTRE CROP</string>
+    <string name="raw_video_crop_note">A crop writes only the centre of the sensor: the same readout, a narrower field of view.</string>
+    <string name="raw_video_config_frozen">The configuration changes between takes.</string>
+    <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_and_time">%1$s · %2$s left</string>
+    <string name="raw_video_label_crop">%1$s · crop</string>
+    <string name="raw_video_label_compressed">Compressed</string>
+    <string name="raw_video_settings_active">In use: %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">No configuration is qualified on this camera yet.</string>
+    <string name="raw_video_requalify">Qualify again</string>
+    <string name="raw_video_requalify_note">It takes several minutes, and the camera is unavailable meanwhile.</string>
+    <string name="raw_video_ring">RING %1$d%%</string>
+    <string name="raw_video_frames">%1$d fr</string>
+    <string name="raw_video_ring_description">RAW buffer %1$d%% full, %2$d frames written</string>
+    <string name="raw_video_config_help">RAW video writes every frame uncompressed to Documents/OpenCineCam/RAW. Only the sizes and frame rates this phone has qualified on its storage are offered: each one passed a long storage test and a live take without losing a frame. Automatic picks the highest qualified rate. A crop keeps the full sensor readout but writes only its centre, so the picture is narrower. The time shown is how long the free storage lasts at that rate.</string>
+    <string name="gallery_raw_video">RAW video</string>
+    <string name="media_integrity_raw">An OpenCine RAW take. The player shows a developed preview; for full quality, copy or share it to a computer and convert it with the desktop DNG converter.</string>
+    <string name="raw_video_audio_incomplete">Sound has gaps</string>
+    <string name="raw_video_risky_notice">Risky rate: possible micro-stutters, latency or a corrupted file</string>
+    <string name="raw_video_risky_label">%1$s, risky rate</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · reaches %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Reaches %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">The warning sign marks a risky rate: the storage is too slow for it, so a take may stutter, lag or end up corrupted. Automatic never picks one.</string>
+    <string name="raw_video_burst_minutes">%1$d min</string>
+    <string name="raw_video_burst_seconds">%1$d s</string>
+    <string name="raw_video_risky_notice_burst">Risky rate: frames may drop after about %1$s (with a rested phone)</string>
+</resources>

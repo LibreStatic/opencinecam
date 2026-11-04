@@ -45,6 +45,7 @@ internal fun DeviceProfileState.label(): Int = when (this) {
 internal fun QuirkEffect.label(): Int = when (this) {
     QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA -> R.string.caps_quirk_high_speed_physical
     QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS -> R.string.caps_quirk_moto_keys
+    QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE -> R.string.caps_quirk_qti_raw_fps
 }
 
 /**

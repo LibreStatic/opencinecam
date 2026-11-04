@@ -23,7 +23,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Opt-in WebDAV auto-upload of new takes only: WorkManager runs it as a visible dataSync service. -->
+    <!-- Opt-in WebDAV auto-upload of new takes (WorkManager) and the operator-started network drive: visible dataSync services. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
@@ -59,6 +59,11 @@
             android:name=".service.CaptureService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone" />
+        <!-- The operator-started, read-only network drive (PLAN-071 §8 route 3): a visible dataSync service. -->
+        <service
+            android:name=".share.NetworkShareService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:exported="false"

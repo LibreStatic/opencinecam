@@ -6,6 +6,7 @@ package com.librestatic.opencinecam.core.model
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.OutputStream
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -20,6 +21,26 @@ interface BenchmarkSink : AutoCloseable {
     fun write(bytes: ByteArray)
     fun flush()
     val bytesWritten: Long
+
+    /**
+     * True when [write] with a `ByteBuffer` is the sink's native path (e.g. a `FileChannel`); the
+     * runner then writes from one reused direct buffer instead of a heap array.
+     */
+    val supportsByteBuffer: Boolean
+        get() = false
+
+    /** Writes every remaining byte of [buffer]. By default it copies them and calls the array [write]. */
+    fun write(buffer: ByteBuffer) {
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+        write(bytes)
+    }
+
+    /**
+     * Makes what has been written durable, so the measurement reflects the flash rather than the
+     * page cache. By default it only [flush]es.
+     */
+    fun sync() = flush()
 }
 
 fun interface BenchmarkCancellation {
@@ -56,6 +77,8 @@ data class StorageBenchmarkRequest(
     val windowDurationMillis: Long = 1_000,
     val requiredBytesPerSecond: Long,
     val chunkSizeBytes: Int = 64 * 1024,
+    /** The runner calls [BenchmarkSink.sync] each time this many bytes have been written; 0 never syncs. */
+    val syncIntervalBytes: Long = DEFAULT_SYNC_INTERVAL_BYTES,
 ) {
     init {
         require(benchmarkId.isNotBlank()) { "benchmark ID must not be blank" }
@@ -63,6 +86,12 @@ data class StorageBenchmarkRequest(
         require(windowDurationMillis > 0) { "window duration must be positive" }
         require(requiredBytesPerSecond >= 0) { "required throughput must not be negative" }
         require(chunkSizeBytes > 0) { "chunk size must be positive" }
+        require(syncIntervalBytes >= 0) { "sync interval must not be negative" }
+    }
+
+    companion object {
+        /** 256 MiB: measured on the S24, a force this often gives realistic flash rates. */
+        const val DEFAULT_SYNC_INTERVAL_BYTES = 256L * 1024 * 1024
     }
 }
 
@@ -163,7 +192,7 @@ class StorageBenchmarkRunner(
         var failure: StableFailure? = null
         try {
             sink = destination.openSink()
-            val chunk = ByteArray(request.chunkSizeBytes)
+            val writer = chunkWriter(sink, request)
             repeat(request.windowCount) { index ->
                 if (cancellation.isCancelled()) {
                     outcome = StorageBenchmarkOutcome.CANCELLED
@@ -188,7 +217,7 @@ class StorageBenchmarkRunner(
                         )
                         return@repeat
                     }
-                    sink.write(chunk)
+                    writer()
                     val remaining = deadline - clock.nanoTime()
                     clock.sleepNanos(minOf(remaining, 1_000_000))
                 }
@@ -255,6 +284,32 @@ class StorageBenchmarkRunner(
             }
         }
         return result
+    }
+
+    /**
+     * One chunk per call: from a reused direct buffer when the sink takes one (no heap copy), from a
+     * heap array otherwise, with a durable [BenchmarkSink.sync] every [StorageBenchmarkRequest.syncIntervalBytes].
+     */
+    private fun chunkWriter(sink: BenchmarkSink, request: StorageBenchmarkRequest): () -> Unit {
+        val chunkBytes = request.chunkSizeBytes
+        val direct = if (sink.supportsByteBuffer) ByteBuffer.allocateDirect(chunkBytes) else null
+        val heap = if (direct == null) ByteArray(chunkBytes) else null
+        var sinceSync = 0L
+        return {
+            if (direct != null) {
+                direct.clear()
+                sink.write(direct)
+            } else {
+                sink.write(heap!!)
+            }
+            if (request.syncIntervalBytes > 0) {
+                sinceSync += chunkBytes
+                if (sinceSync >= request.syncIntervalBytes) {
+                    sink.sync()
+                    sinceSync = 0
+                }
+            }
+        }
     }
 
     private fun failure(

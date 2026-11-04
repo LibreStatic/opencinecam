@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
@@ -84,8 +83,8 @@ internal fun SubjectReviewOperatorBar(modifier: Modifier = Modifier, help: Boole
     }
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SettingsSurface).heightIn(min = 48.dp)
         .padding(horizontal = 12.dp).testTag("subject-review-operator-bar"), verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.subject_review_on_cover, pick.name), Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        FitText(stringResource(R.string.subject_review_on_cover, pick.name), Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, maxLines = 2)
         TextButton(onClick = { review.clear() }, modifier = Modifier.heightIn(min = 48.dp).testTag("subject-review-stop")) {
             Text(stringResource(R.string.subject_review_stop))
         }

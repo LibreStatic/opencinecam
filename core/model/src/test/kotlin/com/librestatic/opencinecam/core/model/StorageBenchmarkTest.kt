@@ -4,10 +4,13 @@
 package com.librestatic.opencinecam.core.model
 
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,6 +131,128 @@ class StorageBenchmarkTest {
                 StorageBenchmarkOutcome.FAILED,
             ).map { it.schemaOutcome() },
         )
+    }
+
+    @Test
+    fun byteBufferSinkGetsOneReusedDirectBufferAndPeriodicSyncs() {
+        val sink = BufferSink()
+        val result = StorageBenchmarkRunner(FakeClock()).run(
+            StorageBenchmarkRequest("bench-buffer", requiredBytesPerSecond = 1, chunkSizeBytes = 64, syncIntervalBytes = 256),
+            listOf(SinkDestination("buffer", sink)),
+        ).results.single()
+
+        assertEquals(StorageBenchmarkOutcome.QUALIFIED, result.outcome)
+        assertEquals(0, sink.arrayWrites)
+        assertTrue(sink.bufferWrites > 0)
+        assertTrue(sink.allDirect)
+        assertEquals(1, sink.distinctBuffers.size)
+        assertEquals(sink.bufferWrites * 64L, result.bytesWritten)
+        // One sync per four 64-byte chunks.
+        assertEquals(sink.bufferWrites / 4, sink.syncs)
+        assertEquals(result.bytesWritten, result.windows.sumOf { it.bytesWritten })
+    }
+
+    @Test
+    fun arraySinkKeepsTheHeapPathAndSyncsOnTheSameCadence() {
+        val sink = ArraySink()
+        StorageBenchmarkRunner(FakeClock()).run(
+            StorageBenchmarkRequest("bench-array", requiredBytesPerSecond = 1, chunkSizeBytes = 100, syncIntervalBytes = 250),
+            listOf(SinkDestination("array", sink)),
+        )
+
+        assertTrue(sink.writes > 0)
+        // 100-byte chunks against a 250-byte interval: a sync after every third chunk.
+        assertEquals(sink.writes / 3, sink.syncs)
+    }
+
+    @Test
+    fun zeroSyncIntervalNeverSyncs() {
+        val sink = BufferSink()
+        StorageBenchmarkRunner(FakeClock()).run(
+            StorageBenchmarkRequest("bench-nosync", requiredBytesPerSecond = 1, chunkSizeBytes = 64, syncIntervalBytes = 0),
+            listOf(SinkDestination("nosync", sink)),
+        )
+
+        assertTrue(sink.bufferWrites > 0)
+        assertEquals(0, sink.syncs)
+    }
+
+    @Test
+    fun defaultBufferWriteFallsBackToTheArrayPath() {
+        val sink = ArraySink()
+        assertFalse(sink.supportsByteBuffer)
+        val buffer = ByteBuffer.allocateDirect(8).apply { put(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)); flip(); position(2) }
+        sink.write(buffer)
+        assertEquals(6L, sink.bytesWritten)
+        assertArrayEquals(byteArrayOf(3, 4, 5, 6, 7, 8), sink.last)
+        assertFalse(buffer.hasRemaining())
+        sink.sync()
+        assertEquals(1, sink.flushes)
+    }
+
+    @Test
+    fun defaultSyncIntervalIs256MiB() {
+        assertEquals(256L * 1024 * 1024, StorageBenchmarkRequest("bench-default", requiredBytesPerSecond = 1).syncIntervalBytes)
+    }
+
+    private class SinkDestination(override val id: String, private val sink: BenchmarkSink) : BenchmarkDestination {
+        override fun openSink(): BenchmarkSink = sink
+        override fun cleanup() = Unit
+    }
+
+    private class BufferSink : BenchmarkSink {
+        var arrayWrites = 0
+        var bufferWrites = 0
+        var syncs = 0
+        var allDirect = true
+        val distinctBuffers = mutableSetOf<Int>()
+        private var count = 0L
+        override val supportsByteBuffer = true
+        override fun write(bytes: ByteArray) {
+            arrayWrites++
+            count += bytes.size
+        }
+
+        override fun write(buffer: ByteBuffer) {
+            bufferWrites++
+            allDirect = allDirect && buffer.isDirect
+            distinctBuffers += System.identityHashCode(buffer)
+            count += buffer.remaining()
+            buffer.position(buffer.limit())
+        }
+
+        override fun sync() {
+            syncs++
+        }
+
+        override fun flush() = Unit
+        override val bytesWritten: Long get() = count
+        override fun close() = Unit
+    }
+
+    private class ArraySink : BenchmarkSink {
+        var writes = 0
+        var syncs = 0
+        var flushes = 0
+        var last: ByteArray? = null
+        private var count = 0L
+        override fun write(bytes: ByteArray) {
+            writes++
+            last = bytes.copyOf()
+            count += bytes.size
+        }
+
+        override fun sync() {
+            syncs++
+            super.sync()
+        }
+
+        override fun flush() {
+            flushes++
+        }
+
+        override val bytesWritten: Long get() = count
+        override fun close() = Unit
     }
 
     private class FakeClock : BenchmarkClock {
