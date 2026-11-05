@@ -365,7 +365,6 @@ internal fun audioMeterModeLabel(mode: AudioMeterMode): Int = when (mode) {
     AudioMeterMode.PPM -> R.string.audio_meter_ppm
 }
 
-
 @Composable
 internal fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, chip: Boolean = false) {
     var noticeVisible by remember { mutableStateOf(true) }

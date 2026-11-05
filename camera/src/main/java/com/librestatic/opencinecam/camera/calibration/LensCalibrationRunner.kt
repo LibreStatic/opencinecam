@@ -48,7 +48,7 @@ data class RunLens(
     val flags: Set<CalibrationFlag> = emptySet(),
 )
 
-/** Lenses are in nominal-ratio order. */
+// Lenses are in nominal-ratio order.
 /** One alternating cycle of [targetId] against the reference: the averaged frames and what was fitted to them. */
 class CalibrationCycle(
     val targetId: String,

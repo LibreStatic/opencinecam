@@ -74,4 +74,3 @@ class WhiteBalanceSelectionTest {
         assertEquals(preset, preset.adaptTo(null))
     }
 }
-

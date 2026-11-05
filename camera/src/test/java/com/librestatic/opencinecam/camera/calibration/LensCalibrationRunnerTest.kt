@@ -217,5 +217,4 @@ class LensCalibrationRunnerTest {
         val outcome = runner(rig).run()
         assertEquals(RunFailure.INTERNAL, (outcome as RunOutcome.Failure).failure)
     }
-
 }

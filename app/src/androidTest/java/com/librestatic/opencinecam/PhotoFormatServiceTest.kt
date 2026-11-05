@@ -116,7 +116,7 @@ class PhotoFormatServiceTest {
         val storageWriter=AtomicReference<java.util.concurrent.ThreadPoolExecutor?>()
         var expectedAspect=aspect
         val collections=listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,MediaStore.Downloads.EXTERNAL_CONTENT_URI)
-        fun rows(collection:Uri):Set<Uri> = requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
+        fun rows(collection:Uri): Set<Uri> = requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?",arrayOf(context.packageName),null)).use { c -> buildSet { while(c.moveToNext()) add(ContentUris.withAppendedId(collection,c.getLong(0))) } }
         fun rows()=collections.flatMap(::rows).toSet()
         val initial=rows()
@@ -443,7 +443,7 @@ class PhotoFormatServiceTest {
     private fun reviewPublishedPhoto(context:Context,publication:StillPublication,show:(MediaReviewSelection?)->Unit) {
         val media=LocalMediaRepository(context)
         val name=publication.images.first().displayName
-        fun lookup():LocalMediaTake {
+        fun lookup(): LocalMediaTake {
             var cursor:LocalMediaCursor?=null
             var selected:LocalMediaTake?=null
             var pages=0
@@ -534,5 +534,4 @@ class PhotoFormatServiceTest {
             compose.waitUntil(30_000) {(readers()-beforeReaders).isEmpty()}
         }
     }
-
 }

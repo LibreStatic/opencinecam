@@ -190,5 +190,4 @@ class ExposureBracketTest {
             assertNull(admission.get())
         }
     }
-
 }

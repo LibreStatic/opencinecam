@@ -60,4 +60,3 @@ internal fun ProxySettingsControls(settings: ProxySettings, onSettings: (ProxySe
         Text(stringResource(R.string.proxy_settings_audio), Modifier.fillMaxWidth().testTag("proxy-settings-audio"))
     }
 }
-

@@ -37,5 +37,4 @@ class MediaPlaybackGeometryTest {
         assertEquals(126, playing.videoWidth); assertEquals(64, playing.videoHeight)
         assertSame(playing, playing.withPlayerGeometry(0, 0))
     }
-
 }

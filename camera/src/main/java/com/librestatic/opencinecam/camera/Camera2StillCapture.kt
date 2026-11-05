@@ -43,8 +43,7 @@ internal fun Camera2PreviewEngine.stillPhysicalId(owner: PhotoRequest): String? 
 }
 
 /** The lens correction plan for one compressed still, or null (with the reason logged). */
-internal fun Camera2PreviewEngine.photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int):
-    com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
+internal fun Camera2PreviewEngine.photoLensPlan(owner: PhotoRequest, kind: StillImageKind, width: Int, height: Int): com.librestatic.opencinecam.camera.calibration.PhotoLensPlan? {
     if (owner.descriptor.lensLock != null || owner.lensCropFactor != null) return null
     val (set, alignment) = photoLensCalibration ?: return null
     val physicalId = stillPhysicalId(owner)

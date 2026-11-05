@@ -74,7 +74,7 @@ internal class GeotagTestProvider(private val context:Context) : AutoCloseable {
             time=System.currentTimeMillis()-ageMillis;elapsedRealtimeNanos=SystemClock.elapsedRealtimeNanos()-ageMillis*1_000_000
         })
     }
-    fun waitFor(predicate:(CaptureLocationSnapshot?)->Boolean):CaptureLocationSnapshot? {
+    fun waitFor(predicate:(CaptureLocationSnapshot?)->Boolean): CaptureLocationSnapshot? {
         val end=SystemClock.elapsedRealtime()+15_000
         while(SystemClock.elapsedRealtime()<end) {val value=runtime.snapshot();if(predicate(value)) return value;Thread.sleep(20)}
         error("Location snapshot condition timed out: ${runtime.snapshot()?.status}")

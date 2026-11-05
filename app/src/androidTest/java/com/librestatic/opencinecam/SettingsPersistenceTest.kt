@@ -29,7 +29,7 @@ class SettingsPersistenceTest {
     private val target=InstrumentationRegistry.getInstrumentation().targetContext
     private val context = object : ContextWrapper(target) {
         override fun getApplicationContext(): Context = this
-        override fun getSharedPreferences(name:String,mode:Int):android.content.SharedPreferences {
+        override fun getSharedPreferences(name:String,mode:Int): android.content.SharedPreferences {
             check(name=="camera-settings")
             return super.getSharedPreferences(preferencesName,mode)
         }

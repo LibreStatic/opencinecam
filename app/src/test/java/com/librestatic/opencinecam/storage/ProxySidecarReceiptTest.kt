@@ -62,5 +62,4 @@ class ProxySidecarReceiptTest {
         rejects(JsonObject(valid + ("normalization" to JsonPrimitive("implicit"))))
         rejects(JsonObject(valid + ("exportPcm16Sha256" to JsonPrimitive("bad"))))
     }
-
 }

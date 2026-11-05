@@ -15,22 +15,22 @@ class ProjectMp4TimingTest {
     private fun word(n: Int)=ByteBuffer.allocate(4).putInt(n).array()
     private fun box(type: String,bytes: ByteArray)=word(bytes.size+8)+type.toByteArray(Charsets.US_ASCII)+bytes
     private fun header(type: String,wide: Boolean=false): ByteArray {
-        val data=ByteArray(96); if(wide)data[0]=1
+        val data=ByteArray(96); if(wide) data[0]=1
         val b=ByteBuffer.wrap(data)
-        if(type=="tkhd") { if(wide)b.putLong(28,200) else b.putInt(20,200) }
-        else { b.putInt(if(wide)20 else 12,if(type=="mvhd")1000 else 90000);if(wide)b.putLong(24,200) else b.putInt(16,200) }
+        if(type=="tkhd") { if(wide) b.putLong(28,200) else b.putInt(20,200) }
+        else { b.putInt(if(wide) 20 else 12,if(type=="mvhd") 1000 else 90000);if(wide) b.putLong(24,200) else b.putInt(16,200) }
         return box(type,data)
     }
     private fun file(wide: Boolean=false, extraTrack: Boolean=false, badCtts: Boolean=false, edit: Boolean=false): Memory {
         val hdlr=ByteArray(24);"vide".toByteArray().copyInto(hdlr,8)
         val stts=box("stts",word(0)+word(2)+word(1)+word(1501)+word(2)+word(1502))
         val stsz=box("stsz",word(0)+word(0)+word(3)+word(2)+word(2)+word(2))
-        val ctts=if(badCtts)box("ctts",word(0)+word(1)+word(3)+word(1)) else byteArrayOf()
+        val ctts=if(badCtts) box("ctts",word(0)+word(1)+word(3)+word(1)) else byteArrayOf()
         val stco=box("stco",word(0)+word(1)+word(8))
         val mdia=box("mdia",header("mdhd",wide)+box("hdlr",hdlr)+box("minf",box("stbl",stts+stsz+stco+ctts)))
-        val edts=if(edit)box("edts",box("elst",word(0)+word(1)+word(200)+word(0)+word(65536))) else byteArrayOf()
+        val edts=if(edit) box("edts",box("elst",word(0)+word(1)+word(200)+word(0)+word(65536))) else byteArrayOf()
         val track=box("trak",header("tkhd",wide)+mdia+edts)
-        return Memory(box("mdat",byteArrayOf(1,2,3,4,5,6))+box("moov",header("mvhd",wide)+track+(if(extraTrack)track else byteArrayOf())))
+        return Memory(box("mdat",byteArrayOf(1,2,3,4,5,6))+box("moov",header("mvhd",wide)+track+(if(extraTrack) track else byteArrayOf())))
     }
     private fun offset(file: Memory,type: String): Int {
         val key=type.toByteArray()
@@ -83,8 +83,8 @@ class ProjectMp4TimingTest {
                 override fun read(offset:Long,length:Int)=memory.read(offset,length)
                 override fun write(offset:Long,bytes:ByteArray) {
                     writes++
-                    if(writes==1)memory.write(offset,bytes)
-                    else if(throwOnWrite)throw java.io.IOException("Injected partial write")
+                    if(writes==1) memory.write(offset,bytes)
+                    else if(throwOnWrite) throw java.io.IOException("Injected partial write")
                 }
             }
             assertThrows(Exception::class.java) { finalizeProjectMp4Timing(faulty,CaptureFrameRate(60000,1001),3) }

@@ -43,7 +43,6 @@ internal class CaptureLocations private constructor(private val context: android
     private val mutableStatus = MutableStateFlow(CaptureLocationStatus.INACTIVE)
     val status: StateFlow<CaptureLocationStatus> = mutableStatus
 
-
     fun setForeground(owner: Any, resumed: Boolean) {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (resumed) owners.add(owner) else owners.remove(owner)

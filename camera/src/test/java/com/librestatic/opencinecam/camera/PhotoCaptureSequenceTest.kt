@@ -145,5 +145,4 @@ class PhotoCaptureSequenceTest {
                 PhotoFlashCapabilities(true, setOf(0, 1, 2, 3)), requireNotNull(photoExposureMode(priority, 1))) is PhotoFlashResolution.Rejected)
         }
     }
-
 }

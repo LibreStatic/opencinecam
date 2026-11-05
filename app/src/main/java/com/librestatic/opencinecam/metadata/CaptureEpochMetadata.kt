@@ -36,7 +36,6 @@ internal fun captureEpochJson(report: CaptureEpochReport): JSONObject = JSONObje
         } })
     } ?: JSONObject.NULL)
 
-
 private fun aacCalibrationJson(report: com.librestatic.opencinecam.camera.AacCodecCalibration): JSONObject = JSONObject()
     .put("policy", "NATIVE_TWO_BOUNDARY_PCM_CALIBRATION_V1")
     .put("encoder", report.config.codecName).put("decoder", report.decoderName)

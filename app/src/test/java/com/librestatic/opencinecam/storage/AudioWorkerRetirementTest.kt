@@ -121,5 +121,4 @@ class AudioWorkerRetirementTest {
         assertEquals(listOf(second), actual.suppressed.toList())
         releaseAudioResources(emptyList())
     }
-
 }

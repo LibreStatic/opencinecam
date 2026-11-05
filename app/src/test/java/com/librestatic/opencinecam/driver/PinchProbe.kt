@@ -34,4 +34,3 @@ fun PinchProbe() {
         Text("ratio=%.2f pinches=$pinches".format(ratio), color = Color.White, modifier = Modifier.testTag("pinch-readout"))
     }
 }
-

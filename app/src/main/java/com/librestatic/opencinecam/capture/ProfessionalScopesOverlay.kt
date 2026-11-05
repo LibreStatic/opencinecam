@@ -382,8 +382,9 @@ private fun scopeTabTag(tab: ScopeTab): String = when (tab) {
     }
 }
 
-/** The false-colour bands as a 0–100 % ramp and a legend with each band's range. */
 /**
+ * The false-colour bands as a 0–100 % ramp and a legend with each band's range.
+ *
  * False colour: how much of the frame sits in each exposure zone right now ([frameBands], null
  * while there is no current analysis), above the zone thresholds the overlay paints with.
  */

@@ -46,4 +46,3 @@ internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSett
         SettingsHelp(stringResource(R.string.media_share_lut_help_summary), stringResource(R.string.media_share_lut_help), tag = "media-share-lut-help")
     }
 }
-

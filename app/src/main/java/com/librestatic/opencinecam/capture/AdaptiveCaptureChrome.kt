@@ -1164,7 +1164,6 @@ internal fun AdaptiveCaptureChrome(
                     deckHeight - (if (scopeTray) scopeTrayHeight else 0.dp) - 8.dp,
             ).coerceAtLeast(160.dp),
         )
-
     }
     CaptureModeSheet(visible = modeSheet, onDismiss = { modeSheet = false }) { modesContent { modeSheet = false } }
     }

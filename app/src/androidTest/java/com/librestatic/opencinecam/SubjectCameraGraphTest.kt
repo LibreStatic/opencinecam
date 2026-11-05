@@ -217,7 +217,6 @@ class SubjectCameraGraphTest {
                 assertFalse(wbResult.ready)
                 assertEquals("white-balance-lock-unavailable", wbResult.failure)
             }
-
         } finally {
             engine.close()
             exterior.close()

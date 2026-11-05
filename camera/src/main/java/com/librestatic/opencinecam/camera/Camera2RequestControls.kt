@@ -470,6 +470,7 @@ internal fun Camera2PreviewEngine.engineEnumKey(key: String): CaptureRequest.Key
     else -> throw IllegalArgumentException("No Camera2 request key for $key")
 }
 
+/** Constrained high-speed sessions accept only a restricted request-control subset. */
 internal fun Camera2PreviewEngine.applyHighSpeedControls(builder: CaptureRequest.Builder) {
     // Keep TEMPLATE_RECORD defaults intact. Some Qualcomm HALs advertise these keys but
     // reject an HFR request when AF/AWB/AE mode is redundantly overridden.

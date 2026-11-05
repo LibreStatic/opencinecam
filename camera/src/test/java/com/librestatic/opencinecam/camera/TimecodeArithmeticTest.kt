@@ -40,7 +40,7 @@ class TimecodeArithmeticTest {
             for(value in listOf(-1L,Long.MIN_VALUE,Long.MAX_VALUE,rate.framesPerDay,rate.framesPerDay+1)) {
                 assertEquals(Math.floorMod(value,rate.framesPerDay),SmpteTimecode.fromTotalFrames(value,rate).toTotalFrames(rate))
             }
-            assertEquals("00:00:00"+(if(rate.dropFrame)";00" else ":00"),SmpteTimecode.fromTotalFrames(rate.framesPerDay,rate).format())
+            assertEquals("00:00:00"+(if(rate.dropFrame) ";00" else ":00"),SmpteTimecode.fromTotalFrames(rate.framesPerDay,rate).format())
         }
     }
     @Test fun exactElapsedFramesDoNotAccumulateTruncatedMicroseconds() {

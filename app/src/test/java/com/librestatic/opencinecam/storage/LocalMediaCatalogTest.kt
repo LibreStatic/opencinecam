@@ -246,7 +246,6 @@ class LocalMediaCatalogTest {
             catalogTake(still, images, listOf(document(stillJson(images))))?.relationStatus)
     }
 
-
     @Test fun aSidecarMarkedIncompleteSurfacesAsIncompleteWithItsReasons() {
         val video = row(9, LocalMediaKind.VIDEO, recording)
         val slate = ProductionSlateSettings(project = "Feature")

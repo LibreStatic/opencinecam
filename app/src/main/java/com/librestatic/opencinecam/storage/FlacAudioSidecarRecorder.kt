@@ -567,7 +567,6 @@ class FlacAudioSidecarRecorder private constructor(
         return metadataUri
     }
 
-
     companion object {
         private const val CODEC_TIMEOUT_US = 10_000L
         private const val STOP_TIMEOUT_MS = 5_000L

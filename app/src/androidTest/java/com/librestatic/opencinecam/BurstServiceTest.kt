@@ -54,7 +54,7 @@ class BurstServiceTest {
         val release=CountDownLatch(1);val firstFrame=CountDownLatch(1)
         val delivered=AtomicReference<CapturedBurst?>()
         val collections=listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,MediaStore.Downloads.EXTERNAL_CONTENT_URI)
-        fun rows():Set<Uri> = collections.flatMap {collection -> requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
+        fun rows(): Set<Uri> = collections.flatMap {collection -> requireNotNull(context.contentResolver.query(collection,arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?",arrayOf(context.packageName),null)).use { c -> buildList {while(c.moveToNext()) add(ContentUris.withAppendedId(collection,c.getLong(0)))}}}.toSet()
         val initial=rows()
         val connection=object:ServiceConnection {

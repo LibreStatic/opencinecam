@@ -35,14 +35,14 @@ class LosslessSharedPauseTest {
     private fun exercise(flac: Boolean, stopPaused: Boolean, floating: Boolean, comparable: Boolean = true) {
         val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName,Manifest.permission.RECORD_AUDIO)
-        val rate=if(stopPaused)44100 else 48000;val channels=if(stopPaused)2 else 1
-        val depth=if(floating)AudioBitDepth.PCM_FLOAT else AudioBitDepth.PCM_16
+        val rate=if(stopPaused) 44100 else 48000;val channels=if(stopPaused) 2 else 1
+        val depth=if(floating) AudioBitDepth.PCM_FLOAT else AudioBitDepth.PCM_16
         val stem="LOSSLESS_${if(flac) "FLAC" else "WAV"}_${if(stopPaused) "STOP_PAUSED" else if(comparable) "REPEATED" else "UNKNOWN"}"
         val video=File(context.cacheDir,"$stem.mp4");val videoName="${stem}_${System.nanoTime()}.mp4"
         val clock=CaptureEpochClock(comparable,rate);val levels=AtomicInteger()
         val settings=CameraSettings(audioSampleRateHz=rate,audioChannels=channels,audioBitDepth=depth,
             audioSource=AudioSourceSelection.MIC,automaticGainControlEnabled=false,noiseSuppressorEnabled=false,acousticEchoCancelerEnabled=false)
-        val audio:AudioSidecarRecorder=if(flac)FlacAudioSidecarRecorder.create(context,videoName,settings,clock){levels.incrementAndGet()}
+        val audio:AudioSidecarRecorder=if(flac) FlacAudioSidecarRecorder.create(context,videoName,settings,clock){levels.incrementAndGet()}
             else WavAudioSidecarRecorder.create(context,videoName,settings,clock){levels.incrementAndGet()}
         val statuses=CopyOnWriteArrayList<TimelapsePauseStatus>();val stopped=CountDownLatch(1)
         val saved=AtomicBoolean();val evidence=AtomicReference<OpenCineLogRecordingEvidence?>()
@@ -57,7 +57,7 @@ class LosslessSharedPauseTest {
             fun frames(ms:Long){val end=SystemClock.elapsedRealtime()+ms;while(SystemClock.elapsedRealtime()<end){
                 val ns=SystemClock.elapsedRealtimeNanos();sourcePts+=ns;fixture.sourceFrame(ns);SystemClock.sleep(34)
             }}
-            if(comparable){
+            if(comparable) {
                 val deadline=SystemClock.elapsedRealtime()+3000
                 while(statuses.isEmpty()&&SystemClock.elapsedRealtime()<deadline)frames(70)
                 assertTrue("Missing shared pause: ${fixture.failures}",statuses.isNotEmpty())
@@ -68,19 +68,19 @@ class LosslessSharedPauseTest {
                 frames(400)
                 repeat(2){pause(true);val analysis=fixture.analysis.get();val meter=levels.get();frames(600)
                     assertTrue(fixture.analysis.get()>analysis);assertTrue(levels.get()>meter);pause(false);frames(400)}
-                if(stopPaused){pause(true);frames(350)}
-            }else{frames(1200);assertTrue(statuses.isEmpty());assertFalse(fixture.pipeline.setTimelapsePaused(true) {})}
+                if(stopPaused) {pause(true);frames(350)}
+            } else{frames(1200);assertTrue(statuses.isEmpty());assertFalse(fixture.pipeline.setTimelapsePaused(true) {})}
             assertTrue(fixture.pipeline.stopRecording());assertTrue(stopped.await(10,TimeUnit.SECONDS))
             assertTrue(fixture.failures.toString(),saved.get())
             val result=requireNotNull(audio.finish(true));val timing=requireNotNull(result.captureTiming)
             val report=clock.report(evidence.get()!!.avTiming!!.videoEncoderFirstPtsUs,null,null)
                 .copy(submittedPcmFrames=result.frames,audioStorage="SEPARATE_${result.container}")
             assertEquals(result.frames,timing.writtenFrames);assertEquals(timing.capturedFrames,report.capturedPcmFrames)
-            if(comparable){val cut=requireNotNull(report.sharedPause)
-                assertEquals(if(stopPaused)3 else 2,cut.windows.size);assertNotNull(cut.stopFrame)
+            if(comparable) {val cut=requireNotNull(report.sharedPause)
+                assertEquals(if(stopPaused) 3 else 2,cut.windows.size);assertNotNull(cut.stopFrame)
                 assertEquals(result.frames,cut.retainedPcmFrames);assertTrue(timing.capturedFrames-result.frames>rate)
                 assertTrue(statuses.last().finished);assertEquals(stopPaused,statuses.last().paused)
-            }else{assertNull(report.sharedPause);assertEquals(timing.capturedFrames,result.frames)}
+            } else{assertNull(report.sharedPause);assertEquals(timing.capturedFrames,result.frames)}
             val resolver=context.contentResolver
             val metadataName=videoName.removeSuffix(".mp4")+".audio.json"
             val metadataUri=requireNotNull(resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,arrayOf("_id"),
@@ -88,7 +88,7 @@ class LosslessSharedPauseTest {
                 assertEquals(1,it.count);assertTrue(it.moveToFirst());ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI,it.getLong(0))}
             val json=JSONObject(requireNotNull(resolver.openInputStream(metadataUri)).bufferedReader().use{it.readText()})
             assertEquals(result.frames,json.getJSONObject("sharedTiming").getLong("submittedPcmFrames"))
-            requireNotNull(resolver.openInputStream(result.uri)).use{input->File(context.cacheDir,stem+if(flac)".flac" else ".wav").outputStream().use{input.copyTo(it)}}
+            requireNotNull(resolver.openInputStream(result.uri)).use{input->File(context.cacheDir,stem+if(flac) ".flac" else ".wav").outputStream().use{input.copyTo(it)}}
             json.put("videoTiming",captureEpochJson(report)).put("sourceVideoPtsNs",JSONArray(sourcePts))
                 .put("previewFrames",fixture.analysis.get()).put("meterUpdates",levels.get()).put("stopPaused",stopPaused)
             File(context.cacheDir,"$stem.json").writeText(json.toString(2))

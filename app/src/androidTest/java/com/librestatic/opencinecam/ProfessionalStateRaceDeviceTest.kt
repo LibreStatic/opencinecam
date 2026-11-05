@@ -133,5 +133,4 @@ class ProfessionalStateRaceDeviceTest {
             executor?.let { if(it.isShutdown) assertTrue(it.awaitTermination(15,TimeUnit.SECONDS)) }
         }
     }
-
 }

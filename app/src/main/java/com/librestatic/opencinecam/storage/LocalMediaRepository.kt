@@ -85,7 +85,6 @@ class LocalMediaRepository(context: Context) {
         }
     }
 
-
     /** Targeted re-observation for sharing. It never searches the library or repairs capture state. */
     internal fun freshSnapshot(selected: LocalMediaTake): MediaShareSnapshot {
         checkShareRunning()
@@ -116,7 +115,6 @@ class LocalMediaRepository(context: Context) {
         checkShareRunning()
         return MediaShareSnapshot(fresh, documents)
     }
-
 
     /** Deletion requires a complete provider enumeration, including pending rows. A gallery page
      * may display a bounded incomplete take, but that is never authority to delete a truncated set. */

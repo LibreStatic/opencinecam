@@ -168,8 +168,8 @@ class LocalMediaCatalogDeviceTest {
         f.insert(photos,"DCIM/OpenCineCam/","${f.token}.jpg","image/jpeg",f.jpeg)
         val dir = File(context.cacheDir,"gallery-journal-${UUID.randomUUID()}").apply { mkdirs() }
         val isolated = object:ContextWrapper(context) {
-            override fun getApplicationContext():Context = this
-            override fun getNoBackupFilesDir():File = dir
+            override fun getApplicationContext(): Context = this
+            override fun getNoBackupFilesDir(): File = dir
         }
         val file = File(dir,"still-recovery.sqlite")
         try {
@@ -198,7 +198,7 @@ class LocalMediaCatalogDeviceTest {
             try { java.io.ByteArrayOutputStream().use { out -> bitmap.eraseColor(android.graphics.Color.GREEN);check(bitmap.compress(Bitmap.CompressFormat.JPEG,90,out));out.toByteArray() } }
             finally { bitmap.recycle() }
         }
-        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false):Uri {
+        fun insert(collection:Uri,path:String,name:String,mime:String,data:ByteArray,pending:Boolean=false): Uri {
             val uri = requireNotNull(resolver.insert(collection,ContentValues().apply {
                 put(MediaStore.MediaColumns.RELATIVE_PATH,path);put(MediaStore.MediaColumns.DISPLAY_NAME,name)
                 put(MediaStore.MediaColumns.MIME_TYPE,mime);put(MediaStore.MediaColumns.IS_PENDING,1)
@@ -207,7 +207,7 @@ class LocalMediaCatalogDeviceTest {
             if (!pending) assertEquals(1,resolver.update(uri,ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING,0) },null,null))
             return uri
         }
-        fun all(settings:GallerySettings=GallerySettings(),query:String="",limit:Int=60):List<LocalMediaTake> {
+        fun all(settings:GallerySettings=GallerySettings(),query:String="",limit:Int=60): List<LocalMediaTake> {
             val result=mutableListOf<LocalMediaTake>();var cursor:LocalMediaCursor?=null;var count=0
             do {
                 check(++count<500) { "Nonterminating cursor" }

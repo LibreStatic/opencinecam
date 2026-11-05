@@ -64,5 +64,4 @@ class ProxyVideoPresentationTest {
             assertArrayEquals(before, bytes)
         }
     }
-
 }

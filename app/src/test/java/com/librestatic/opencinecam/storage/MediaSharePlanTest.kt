@@ -201,5 +201,4 @@ class MediaSharePlanTest {
         rejected { requirePortableShareNames(listOf("Café.mp4", "Cafe\u0301.mp4")) }
         requirePortableShareNames(listOf("Original video.mp4", "original audio.wav", "relationships.json"))
     }
-
 }

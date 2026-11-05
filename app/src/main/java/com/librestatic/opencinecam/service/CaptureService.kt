@@ -1475,7 +1475,7 @@ class CaptureService : Service() {
                 effectiveFps = null,
                 messageTransient = snappedFps || selectedFps != current.targetFps,
                 message = fpsUnavailableNotice(snappedFps || selectedFps != current.targetFps, current.selectedMode, current.targetFps, selectedFps)
-                    ?: "$sourceLabel ${width}×$height · $selectedFps fps${if (selectedHighSpeed) " · HIGH SPEED" else ""}",
+                    ?: "$sourceLabel $width×$height · $selectedFps fps${if (selectedHighSpeed) " · HIGH SPEED" else ""}",
             )
             if (current.selectedMode.usesLogGraph) {
                 attachedPreviewSurface?.takeIf { it.isValid }?.let { surface ->
@@ -1823,7 +1823,6 @@ class CaptureService : Service() {
             applySettings(repository.states.value)
         }
 
-        /** [audioForThisTake] overrides the persisted audio switch for one recording only. */
         /** UI actions retain their originating take and display role, not the next live take. */
         fun setRecordingPausedForRole(paused: Boolean, takeId: Long, ticket: CaptureActionTicket): Boolean {
             if (!ticket.isCurrent(selfRecordingRole, cameraState.value.captureActionGeneration) ||
@@ -1917,6 +1916,7 @@ class CaptureService : Service() {
             return true
         }
 
+        /** [audioForThisTake] overrides the persisted audio switch for one recording only. */
         fun capturePrimary(audioForThisTake: Boolean? = null): Boolean {
             if (captureCountdown.active != null) { cancelCountdown(); return true }
             return capturePrimaryNow(audioForThisTake)

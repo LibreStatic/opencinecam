@@ -174,7 +174,7 @@ class RecordingRecoveryDeviceTest {
             ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, "provider-renamed.mp4") }, null, null))
         val similar = f.direct(id, "DCIM", "keep.mp4", "video/mp4", pending = 0,
             path = "DCIM/OpenCineCam/OCC_TAKE_${id}_other/")
-        val transfer = f.direct(id, "Download", "OCC_${id}.timing.json", "application/json", pending = 0,
+        val transfer = f.direct(id, "Download", "OCC_$id.timing.json", "application/json", pending = 0,
             path = "Download/OpenCineCam/")
         val before = listOf(similar, transfer).associateWith(f::digest)
         assertEquals(setOf(video, audio, metadata), f.journal.allRows(id))

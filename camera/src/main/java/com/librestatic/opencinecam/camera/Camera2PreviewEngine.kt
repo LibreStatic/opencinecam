@@ -2694,7 +2694,6 @@ class Camera2PreviewEngine(
         }
     }
 
-    /** Constrained high-speed sessions accept only a restricted request-control subset. */
     /**
      * Applies the composer's base block for [mode] where the engine used to hand-set the same
      * keys; the stateful appliers that follow on the builder are unchanged.
