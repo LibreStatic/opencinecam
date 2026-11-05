@@ -3,6 +3,10 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.fold.FoldPane
+import com.librestatic.opencinecam.fold.foldPanes
+import com.librestatic.opencinecam.settings.hingeSettingsPaneBounds
 
 class HingeSettingsBoundaryTest {
     @Test fun narrowTopDoesNotMakeSettingsCrossTabletopHinge() {

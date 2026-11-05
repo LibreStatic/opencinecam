@@ -22,10 +22,10 @@ import android.net.Uri
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import com.librestatic.opencinecam.camera.createDisabledManualAgc
-import com.librestatic.opencinecam.recordingGainJson
+import com.librestatic.opencinecam.metadata.recordingGainJson
 import com.librestatic.opencinecam.camera.SoftAgc
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.camera.AudioLevelMeter
@@ -34,7 +34,7 @@ import com.librestatic.opencinecam.camera.AudioEffectsSnapshot
 import com.librestatic.opencinecam.camera.AudioEffectState
 import com.librestatic.opencinecam.camera.AudioEffectObservationReader
 import com.librestatic.opencinecam.camera.requireExclusiveAgcObservation
-import com.librestatic.opencinecam.audioEffectsJson
+import com.librestatic.opencinecam.metadata.audioEffectsJson
 import com.librestatic.opencinecam.camera.PcmMeterEncoding
 import java.io.FileOutputStream
 import com.librestatic.opencinecam.media.audio.AudioCapturePath
@@ -443,7 +443,7 @@ class WavAudioSidecarRecorder private constructor(
     private fun writeMetadata(result: AudioSidecarRecordingResult): Uri {
         val json = JSONObject()
             .put("schema", "opencinecam-audio-sidecar-v1")
-            .put("productionSlate", JSONObject(com.librestatic.opencinecam.productionSlateJson(settings.productionSlate).toString()))
+            .put("productionSlate", JSONObject(com.librestatic.opencinecam.metadata.productionSlateJson(settings.productionSlate).toString()))
             .put("audioUri", result.uri.toString())
             .put("file", result.displayName)
             .put("container", "WAV")
@@ -456,7 +456,7 @@ class WavAudioSidecarRecorder private constructor(
             .put("startedAtElapsedRealtimeNs", result.startedAtElapsedNs)
             .put("stoppedAtElapsedRealtimeNs", result.stoppedAtElapsedNs)
             .put("captureTiming", result.captureTiming?.let(::pcmSourceTimingJson) ?: JSONObject.NULL)
-            .put("sharedTiming", captureClock?.report(null, null, null)?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_WAV")?.let { com.librestatic.opencinecam.captureEpochJson(it) } ?: JSONObject.NULL)
+            .put("sharedTiming", captureClock?.report(null, null, null)?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_WAV")?.let { com.librestatic.opencinecam.metadata.captureEpochJson(it) } ?: JSONObject.NULL)
             .put("source", result.source)
             .put("preferredInputDeviceId", result.preferredInputDeviceId ?: JSONObject.NULL)
             .put("routedInputDeviceId", result.routedInputDeviceId ?: JSONObject.NULL)

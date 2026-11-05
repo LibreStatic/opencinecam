@@ -31,6 +31,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import kotlin.math.roundToInt
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 
 /** Synthetic window geometry verifies layout only, not physical fold/display behavior. */
 class HingeSettingsBoundaryTest {

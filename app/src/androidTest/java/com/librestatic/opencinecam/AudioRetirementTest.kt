@@ -11,6 +11,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
 
 @Suppress("DEPRECATION")
 class AudioRetirementTest {

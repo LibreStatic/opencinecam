@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.captureEpochJson
 
 /** Actual GLES textures/fences/window buffers; synthetic pixels, not a physical-foldable verdict. */
 class SubjectPreviewGpuTest {

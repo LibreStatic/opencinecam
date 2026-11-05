@@ -21,6 +21,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.FoldSlider
+import com.librestatic.opencinecam.ui.CineSlider
 
 /**
  * Drags that start on the thumb at either end of the range must move the slider.

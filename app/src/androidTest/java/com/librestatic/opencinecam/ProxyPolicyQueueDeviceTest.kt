@@ -19,6 +19,12 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaProxyDialog
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxyPolicy
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
 
 /** Actual platform battery observation and real queue/repository/codec, not injected admission. */
 class ProxyPolicyQueueDeviceTest {

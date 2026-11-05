@@ -17,6 +17,12 @@ import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.rotationDegrees
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectPreviewGuide
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectSelfMonitorOverlay
 
 /** OCC-PLAN-068 U1/U2 subject overlays: output-only, derived from service status. */
 class SubjectOverlayUiTest {

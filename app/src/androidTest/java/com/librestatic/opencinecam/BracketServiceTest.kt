@@ -24,6 +24,10 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Native request/result/exposure evidence; not a physical illumination or HDR qualification. */
 class BracketServiceTest {

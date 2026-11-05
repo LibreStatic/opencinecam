@@ -15,6 +15,11 @@ import java.util.UUID
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Real owned MediaStore rows and conditional deletes. Synthetic recording bytes qualify only
  * member ownership/deletion, not encoding or editor interoperability. Never deletes foreign rows. */

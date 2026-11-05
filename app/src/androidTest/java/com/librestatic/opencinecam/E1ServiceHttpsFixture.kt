@@ -32,6 +32,8 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import org.json.JSONObject
 import org.junit.Assert.*
+import com.librestatic.opencinecam.capture.Panel
+import com.librestatic.opencinecam.settings.WebDavTransferSettingsSection
 
 /** Test-only CA on real Android Network connections; production creates every persisted artifact. */
 internal class E1ServiceHttpsFixture(private val context: Context, private val lanOptIn: Boolean = false) {

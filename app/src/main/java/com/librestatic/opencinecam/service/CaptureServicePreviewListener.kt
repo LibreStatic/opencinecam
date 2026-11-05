@@ -10,32 +10,32 @@ import com.librestatic.opencinecam.camera.CapturedStill
 import com.librestatic.opencinecam.camera.StillImageKind
 import com.librestatic.opencinecam.camera.TimelapseProgress
 
-import com.librestatic.opencinecam.recordingTimecodeJson
-import com.librestatic.opencinecam.captureEpochJson
+import com.librestatic.opencinecam.metadata.recordingTimecodeJson
+import com.librestatic.opencinecam.metadata.captureEpochJson
 
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 
 import android.os.Looper
-import com.librestatic.opencinecam.timelapseProjectRate
-import com.librestatic.opencinecam.projectLabel
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.CameraUiPhase
-import com.librestatic.opencinecam.HardwareTruthHudState
-import com.librestatic.opencinecam.hardwareTruthTake
-import com.librestatic.opencinecam.TakeVideoEncoder
-import com.librestatic.opencinecam.withHardwareTruth
-import com.librestatic.opencinecam.RouteTruth
-import com.librestatic.opencinecam.routeTruthOf
-import com.librestatic.opencinecam.readbackSamples
+import com.librestatic.opencinecam.capture.HardwareTruthHudState
+import com.librestatic.opencinecam.metadata.hardwareTruthTake
+import com.librestatic.opencinecam.metadata.TakeVideoEncoder
+import com.librestatic.opencinecam.metadata.withHardwareTruth
+import com.librestatic.opencinecam.capture.RouteTruth
+import com.librestatic.opencinecam.capture.routeTruthOf
+import com.librestatic.opencinecam.capture.readbackSamples
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.usesLogGraph
-import com.librestatic.opencinecam.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewListener
 import com.librestatic.opencinecam.camera.Camera2PreviewMetadata
 import com.librestatic.opencinecam.camera.RecordingWhiteBalanceStatus
 import com.librestatic.opencinecam.camera.Camera2Analysis
-import com.librestatic.opencinecam.recordingGainJson
+import com.librestatic.opencinecam.metadata.recordingGainJson
 import com.librestatic.opencinecam.camera.LockState
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
@@ -43,7 +43,7 @@ import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.media.audio.AvClockDiagnostics
 import com.librestatic.opencinecam.media.video.softwareVideoEncoderDisclosure
-import com.librestatic.opencinecam.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
 import com.librestatic.opencinecam.storage.IncompleteTake
 import com.librestatic.opencinecam.storage.ClipSidecarProvider
 import com.librestatic.opencinecam.storage.clipSidecarProvider
@@ -53,10 +53,10 @@ import com.librestatic.opencinecam.storage.AudioSidecarRecorder
 import java.util.concurrent.RejectedExecutionException
 import com.librestatic.opencinecam.camera.monitorLutIdentity
 import com.librestatic.opencinecam.camera.BakedLutEvidence
-import com.librestatic.opencinecam.recordingLutJson
+import com.librestatic.opencinecam.metadata.recordingLutJson
 import com.librestatic.opencinecam.camera.OperatorLutStatus
 import com.librestatic.opencinecam.camera.OperatorLutState
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 
@@ -695,8 +695,8 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                     } else withGain
                     val withMarker = subjectSyncMarker?.let { marker ->
                         (withTimecode?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-timing.v1"))
-                            .put(com.librestatic.opencinecam.SUBJECT_SYNC_MARKER_KEY,
-                                JSONObject(com.librestatic.opencinecam.subjectSyncMarkerJson(marker).toString())).toString(2)
+                            .put(com.librestatic.opencinecam.subject.SUBJECT_SYNC_MARKER_KEY,
+                                JSONObject(com.librestatic.opencinecam.subject.subjectSyncMarkerJson(marker).toString())).toString(2)
                     } ?: withTimecode
                     val withLens = graphEvidence?.lensCorrection?.let { lens ->
                         (withMarker?.let(::JSONObject) ?: JSONObject().put("schema", "opencinecam.recording-color.v1"))
@@ -813,7 +813,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                 if (uri != null && !finalization.incomplete) {
                     val checkKind = if (hlgEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.HLG
                         else if (logEvidence != null) com.librestatic.opencinecam.camera.Main10TakeKind.LOG else null
-                    if (checkKind != null) com.librestatic.opencinecam.Main10FileCheckScheduler.schedule(this@newPreviewListener, uri.toString(), checkKind, output?.displayName)
+                    if (checkKind != null) com.librestatic.opencinecam.diagnostics.Main10FileCheckScheduler.schedule(this@newPreviewListener, uri.toString(), checkKind, output?.displayName)
                 }
                 // A SAVED observer must see the registration outcome in the same state emission.
                 cameraState.update { current -> current.copy(
@@ -965,17 +965,17 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
             clearLensLockRoute()
             return
         }
-        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL)
+        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.capture.LensLockRoute.DIRECT_PHYSICAL)
     }
 
     override fun onLensLockCrop(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>) {
         android.util.Log.i("CaptureService", "Lens lock on $physicalId served by the GPU crop over $uiZoomRange")
         // The lock is served, so this is not a fallback: the logical calibration stays off.
         lensLockFallback = false
-        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.LensLockRoute.GPU_CROP)
+        serveLensLock(physicalId, uiZoomRange, com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP)
         // Photo previews straight to the window by default; the crop needs the GPU viewfinder.
         mainHandler.post {
-            if (cameraState.value.lensLock.route != com.librestatic.opencinecam.LensLockRoute.GPU_CROP ||
+            if (cameraState.value.lensLock.route != com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP ||
                 cameraState.value.structuralSettingsFrozen || previewEngine.usesGpuViewfinder() || !desiredGpuViewfinder()) return@post
             attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
         }
@@ -1000,7 +1000,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
     }
 
     /** Publishes a served lock: the locked lens' own range on the logical scale; the anchors are the lock options. */
-    private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.LensLockRoute) {
+    private fun serveLensLock(physicalId: String, uiZoomRange: ClosedFloatingPointRange<Float>, route: com.librestatic.opencinecam.capture.LensLockRoute) {
         refreshLensLockState()
         cameraState.update { state ->
             val anchors = state.lensLock.options.map { ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }

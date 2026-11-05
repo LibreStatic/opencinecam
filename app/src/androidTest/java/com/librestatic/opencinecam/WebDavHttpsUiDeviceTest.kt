@@ -44,6 +44,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.WebDavTransferSettingsSection
 
 /** Real default Android Network + HTTPS peer; trust customization is confined to these connections. */
 class WebDavHttpsUiDeviceTest {

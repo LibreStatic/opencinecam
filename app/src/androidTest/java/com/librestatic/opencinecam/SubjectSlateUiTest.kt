@@ -25,6 +25,15 @@ import java.util.Locale
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSlateField
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.subject.SLATE_TIMECODE_IDLE
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectSlateSettings
 
 /** OCC-PLAN-068 U6 slate and sync flash. Written and compiled in W1; run in the W2 emulator regression. */
 class SubjectSlateUiTest {

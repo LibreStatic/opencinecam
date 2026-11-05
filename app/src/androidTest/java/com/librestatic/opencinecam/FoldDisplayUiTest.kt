@@ -10,6 +10,12 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.FoldDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsScreen
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 
 class FoldDisplayUiTest {
     @get:Rule val compose = createComposeRule()

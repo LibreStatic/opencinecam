@@ -3,6 +3,10 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.playbackFitScale
+import com.librestatic.opencinecam.gallery.withPlayerGeometry
 
 class MediaPlaybackGeometryTest {
     @Test fun portraitLandscapeAndResizeKeepFitAspectWithoutCropping() {

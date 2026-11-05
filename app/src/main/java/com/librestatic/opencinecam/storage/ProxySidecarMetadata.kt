@@ -2,7 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.camera.*
-import com.librestatic.opencinecam.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import kotlinx.serialization.json.*
 
 internal data class ProxySidecarSelection(val audio: LocalMediaArtifact,

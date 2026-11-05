@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.storage.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Real audio capture and owned provider rows; these are not VIDEO encoder qualification tests. */
 class AudioTakeOwnershipTest {

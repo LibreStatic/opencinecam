@@ -30,6 +30,9 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.WebDavQueueSettingsSection
 
 /** Isolated settings/UI evidence; no network requests or physical TalkBack qualification. */
 class WebDavQueueSettingsUiTest {

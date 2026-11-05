@@ -65,6 +65,34 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.service.CaptureService
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.librestatic.opencinecam.calibration.LensCalibrationContent
+import com.librestatic.opencinecam.calibration.LensCalibrationUiState
+import com.librestatic.opencinecam.capture.Amber
+import com.librestatic.opencinecam.capture.CaptureSurface
+import com.librestatic.opencinecam.capture.Graphite
+import com.librestatic.opencinecam.capture.LocalOperatorActions
+import com.librestatic.opencinecam.capture.Muted
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.capture.rememberOperatorActions
+import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.diagnostics.StorageBenchmarkScreen
+import com.librestatic.opencinecam.diagnostics.benchmarkRequiredBytesPerSecond
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.gallery.MediaCatalogScreen
+import com.librestatic.opencinecam.onboarding.OnboardingScreen
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.onboarding.SplashHandoff
+import com.librestatic.opencinecam.settings.AboutScreen
+import com.librestatic.opencinecam.settings.LocalAudioListeningActions
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsScreen
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.ui.LocalAppHaptics
+import com.librestatic.opencinecam.ui.predictiveBackPreview
+import com.librestatic.opencinecam.ui.rememberAppHaptics
+import com.librestatic.opencinecam.ui.rememberPermissionAccess
+import com.librestatic.opencinecam.ui.rememberPredictiveBack
 
 @Composable
 fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), onReady: () -> Unit = {}) {

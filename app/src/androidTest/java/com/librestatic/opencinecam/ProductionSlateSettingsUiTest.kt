@@ -18,6 +18,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettingsControls
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 
 /** This verifies next-capture intent, not publication or automatic take completion. */
 class ProductionSlateSettingsUiTest {

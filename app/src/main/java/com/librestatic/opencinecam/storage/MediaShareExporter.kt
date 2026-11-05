@@ -7,8 +7,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
-import com.librestatic.opencinecam.LutLibrary
-import com.librestatic.opencinecam.MediaSharingSettings
+import com.librestatic.opencinecam.settings.LutLibrary
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import java.io.File
 import java.nio.file.Files
 import java.security.MessageDigest

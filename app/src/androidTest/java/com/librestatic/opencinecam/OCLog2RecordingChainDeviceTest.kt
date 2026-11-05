@@ -47,6 +47,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
 
 /**
  * End-to-end numeric proof of the production OCLog2 recording chain:

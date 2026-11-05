@@ -5,6 +5,7 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.ui.AdaptiveWindow
 
 class AppNavigationTest {
     private val phonePortrait = AdaptiveWindow(411f, 914f)

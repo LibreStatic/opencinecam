@@ -5,6 +5,7 @@ import com.librestatic.opencinecam.camera.*
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.TimecodeContinuationFile
 
 class TimecodeContinuityFileTest {
     private fun fixture(block: (File) -> Unit) {

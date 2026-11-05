@@ -4,6 +4,7 @@ import android.os.SystemClock
 import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.recordingTimecodeJson
 
 /** Runs the actual platform BigInteger/clock implementation, not only JVM unit-test substitutes. */
 class TimecodeDeviceTest {

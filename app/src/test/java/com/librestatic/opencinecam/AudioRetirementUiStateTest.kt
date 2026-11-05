@@ -4,6 +4,8 @@ package com.librestatic.opencinecam
 import com.librestatic.opencinecam.camera.RecordingWhiteBalanceStatus
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class AudioRetirementUiStateTest {
     @Test fun audioRetirementAloneIsCancelableAndStructuralIntentRemainsFrozen() {

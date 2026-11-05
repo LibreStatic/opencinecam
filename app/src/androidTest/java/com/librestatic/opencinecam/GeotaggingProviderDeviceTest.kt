@@ -11,6 +11,11 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.locationPermission
 
 /**
  * Provider cases that need PRECISE location. They live in their own class because a runtime grant cannot

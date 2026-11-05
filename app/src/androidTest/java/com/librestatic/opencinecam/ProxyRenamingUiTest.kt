@@ -25,6 +25,11 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaProxyDialog
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real derivative rename through the production dialog; no chooser delivery or deletion claim. */
 class ProxyRenamingUiTest {

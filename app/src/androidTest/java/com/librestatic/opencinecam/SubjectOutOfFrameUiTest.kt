@@ -21,6 +21,10 @@ import com.librestatic.opencinecam.camera.SubjectFramingStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectStateForwarder
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectOutOfFrameSettings
 
 /** OCC-PLAN-068 U7: the warning is output-only, delayed by the preference and readable at 200 % font. */
 class SubjectOutOfFrameUiTest {

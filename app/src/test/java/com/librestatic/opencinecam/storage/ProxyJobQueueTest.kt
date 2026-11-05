@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -129,7 +129,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
             override suspend fun create(job: ProxyJob): MediaProxyResult { count.incrementAndGet(); return result(job) }
-        }, { if (blocked) com.librestatic.opencinecam.ProxyWaitReason.STORAGE else null })
+        }, { if (blocked) com.librestatic.opencinecam.gallery.ProxyWaitReason.STORAGE else null })
         try {
             val id = queue.enqueue(take(), ProxySettings())
             withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -155,7 +155,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
             override suspend fun create(job: ProxyJob): MediaProxyResult = error("Waiting job encoded")
-        }, { com.librestatic.opencinecam.ProxyWaitReason.BATTERY })
+        }, { com.librestatic.opencinecam.gallery.ProxyWaitReason.BATTERY })
         try {
             val id = queue.enqueue(take(), ProxySettings())
             withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -186,7 +186,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? { cleaned.incrementAndGet(); return null }
             override suspend fun create(job: ProxyJob): MediaProxyResult = error("Low storage encoded")
-        }, { assertEquals(1, cleaned.get()); com.librestatic.opencinecam.ProxyWaitReason.STORAGE })
+        }, { assertEquals(1, cleaned.get()); com.librestatic.opencinecam.gallery.ProxyWaitReason.STORAGE })
         try {
             queue.start(); withTimeout(10_000) { queue.states.first { id in it.waiting } }
             assertEquals(ProxyJobStatus.QUEUED, store.read().single().status)
@@ -222,7 +222,7 @@ class ProxyJobQueueTest {
             override suspend fun deleteProxy(take: LocalMediaTake, expected: MediaProxyResult, committed: suspend (String, String) -> Unit) {
                 deletes.incrementAndGet(); committed(expected.proxyId, take.id)
             }
-        }, { if (blocked.get()) com.librestatic.opencinecam.ProxyWaitReason.STORAGE else null })
+        }, { if (blocked.get()) com.librestatic.opencinecam.gallery.ProxyWaitReason.STORAGE else null })
         try {
             val id = queue.enqueue(take(), ProxySettings())
             withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -411,7 +411,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
             override suspend fun create(job: ProxyJob): MediaProxyResult { encoded.complete(job); return result(job) }
-        }, { if (blocked.get()) com.librestatic.opencinecam.ProxyWaitReason.STORAGE else null })
+        }, { if (blocked.get()) com.librestatic.opencinecam.gallery.ProxyWaitReason.STORAGE else null })
         try {
             val id = queue.enqueue(take(), ProxySettings(1920, 8))
             val waiting = withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -502,7 +502,7 @@ class ProxyJobQueueTest {
                 val invalid = listOf(
                     selected.copy(id = take(2).id), selected.copy(kind = LocalMediaKind.AUDIO),
                     selected.copy(relationStatus = LocalMediaRelationStatus.DECLARED),
-                    selected.copy(slate = com.librestatic.opencinecam.ProductionSlateSettings()),
+                    selected.copy(slate = com.librestatic.opencinecam.settings.ProductionSlateSettings()),
                     selected.copy(primary = alien, originals = listOf(alien)),
                     selected.copy(originals = listOf(selected.primary, alien)),
                     selected.copy(metadata = listOf(alien)),
@@ -588,7 +588,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
             override suspend fun create(job: ProxyJob): MediaProxyResult { creates.incrementAndGet(); return result(job) }
-        }, { com.librestatic.opencinecam.ProxyWaitReason.BATTERY })
+        }, { com.librestatic.opencinecam.gallery.ProxyWaitReason.BATTERY })
         try {
             val id = queue.enqueue(take(), ProxySettings(1920, 5))
             val waiting = withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -769,13 +769,13 @@ class ProxyJobQueueTest {
 
     @Test fun mediaOwnershipBusyWaitsQueuedAndResumesWhenReleased() = runBlocking<Unit> {
         val store = ProxyJobStore(temporary.newFolder())
-        val busy = java.util.concurrent.atomic.AtomicReference<com.librestatic.opencinecam.ProxyWaitReason?>(
-            com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE)
+        val busy = java.util.concurrent.atomic.AtomicReference<com.librestatic.opencinecam.gallery.ProxyWaitReason?>(
+            com.librestatic.opencinecam.gallery.ProxyWaitReason.CAPTURE_ACTIVE)
         val reconciles = AtomicInteger(); val creates = AtomicInteger()
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? {
                 reconciles.incrementAndGet()
-                busy.get()?.takeIf { it == com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE }?.let {
+                busy.get()?.takeIf { it == com.librestatic.opencinecam.gallery.ProxyWaitReason.CAPTURE_ACTIVE }?.let {
                     throw ProxyMediaBusyException(it, "Local media changes require idle capture and transfer ownership", IllegalStateException())
                 }
                 return null
@@ -788,13 +788,13 @@ class ProxyJobQueueTest {
         try {
             val id = queue.enqueue(take(), ProxySettings())
             val waiting = withTimeout(10_000) { queue.states.first { id in it.waiting } }
-            assertEquals(com.librestatic.opencinecam.ProxyWaitReason.CAPTURE_ACTIVE, waiting.waiting[id])
+            assertEquals(com.librestatic.opencinecam.gallery.ProxyWaitReason.CAPTURE_ACTIVE, waiting.waiting[id])
             assertEquals(ProxyJobStatus.QUEUED, store.read().single().status)
             assertEquals(0, store.read().single().attempts); assertNull(store.read().single().error)
             assertNull(waiting.error)
             // Another proxy action now holds the media lock instead of REC: still a wait, never FAILED.
-            busy.set(com.librestatic.opencinecam.ProxyWaitReason.MEDIA_BUSY); queue.mediaReleased()
-            withTimeout(10_000) { queue.states.first { it.waiting[id] == com.librestatic.opencinecam.ProxyWaitReason.MEDIA_BUSY } }
+            busy.set(com.librestatic.opencinecam.gallery.ProxyWaitReason.MEDIA_BUSY); queue.mediaReleased()
+            withTimeout(10_000) { queue.states.first { it.waiting[id] == com.librestatic.opencinecam.gallery.ProxyWaitReason.MEDIA_BUSY } }
             assertEquals(ProxyJobStatus.QUEUED, store.read().single().status)
             busy.set(null); queue.conditionsChanged()
             val done = terminal(queue, id)
@@ -808,7 +808,7 @@ class ProxyJobQueueTest {
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? = null
             override suspend fun create(job: ProxyJob): MediaProxyResult = error("Battery wait encoded")
-        }, { admissions.incrementAndGet(); com.librestatic.opencinecam.ProxyWaitReason.BATTERY })
+        }, { admissions.incrementAndGet(); com.librestatic.opencinecam.gallery.ProxyWaitReason.BATTERY })
         try {
             val id = queue.enqueue(take(), ProxySettings())
             withTimeout(10_000) { queue.states.first { id in it.waiting } }
@@ -816,7 +816,7 @@ class ProxyJobQueueTest {
             // Queue work is serialized on the gate; a later enqueue runs after the released wake-ups.
             assertEquals(id, queue.enqueue(take(), ProxySettings()))
             assertEquals(1, admissions.get())
-            assertEquals(com.librestatic.opencinecam.ProxyWaitReason.BATTERY, queue.states.value.waiting[id])
+            assertEquals(com.librestatic.opencinecam.gallery.ProxyWaitReason.BATTERY, queue.states.value.waiting[id])
         } finally { queue.shutdown() }
     }
 
@@ -826,7 +826,7 @@ class ProxyJobQueueTest {
         val blocked = java.util.concurrent.atomic.AtomicBoolean(true); val cleaned = AtomicInteger()
         val queue = ProxyJobQueue(store, object : ProxyJobEngine {
             override suspend fun reconcile(job: ProxyJob): MediaProxyResult? {
-                if (blocked.get()) throw ProxyMediaBusyException(com.librestatic.opencinecam.ProxyWaitReason.TRANSFER_ACTIVE, "busy")
+                if (blocked.get()) throw ProxyMediaBusyException(com.librestatic.opencinecam.gallery.ProxyWaitReason.TRANSFER_ACTIVE, "busy")
                 cleaned.incrementAndGet(); return null
             }
             override suspend fun create(job: ProxyJob): MediaProxyResult = error("Cancelled request must not encode")

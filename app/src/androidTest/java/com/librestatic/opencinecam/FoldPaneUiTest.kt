@@ -14,6 +14,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureSurface
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.fold.FoldPosture
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 
 class FoldPaneUiTest {
     @get:Rule val compose = createComposeRule()

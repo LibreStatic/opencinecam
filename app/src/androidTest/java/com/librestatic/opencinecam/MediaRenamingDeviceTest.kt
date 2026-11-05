@@ -15,6 +15,9 @@ import java.util.UUID
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Actual MediaStore rename and JSON readback. Recording fixture bytes qualify relationships,
  * not a codec. IO seams inject named failures without bypassing the real ownership predicates. */

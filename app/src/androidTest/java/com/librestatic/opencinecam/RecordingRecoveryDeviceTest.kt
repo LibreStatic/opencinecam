@@ -16,6 +16,8 @@ import java.security.MessageDigest
 import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
 
 /** Native SQLite/MediaStore ownership protocol, not codec or playable-media qualification.
  * Every database and namespace belongs to this fixture; no global recovery database is edited. */

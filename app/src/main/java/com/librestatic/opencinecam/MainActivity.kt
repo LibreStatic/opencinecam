@@ -39,6 +39,18 @@ import com.librestatic.opencinecam.ui.theme.AppThemeStore
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import com.librestatic.opencinecam.ui.theme.SyncWindowBackground
 import com.librestatic.opencinecam.ui.theme.rememberAppTheme
+import com.librestatic.opencinecam.capture.LocalShortcutDispatcher
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorKeyLatch
+import com.librestatic.opencinecam.capture.ShortcutDispatcher
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.capture.shortcutActionFor
+import com.librestatic.opencinecam.fold.FoldDisplayCoordinator
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.onboarding.SplashHandoff
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.ui.ProvideAdaptiveWindow
 
 class MainActivity : ComponentActivity() {
     private val operatorKeys = OperatorKeyLatch()

@@ -17,6 +17,9 @@ import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Actual repository → service → Camera2 path; no encoder or physical-media qualification claim. */
 class PresetServiceTest {

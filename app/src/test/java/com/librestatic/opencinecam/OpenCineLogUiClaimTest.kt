@@ -9,6 +9,7 @@ import com.librestatic.opencinecam.camera.OpenCineLogQualificationStage
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.capture.ocLogQualificationLabel
 
 class OpenCineLogUiClaimTest {
     @Test

@@ -16,6 +16,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSessionCues
+import com.librestatic.opencinecam.subject.InterviewOperatorControl
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectInterviewSettings
 
 class SubjectInterviewUiTest {
     @get:Rule val compose = createComposeRule()

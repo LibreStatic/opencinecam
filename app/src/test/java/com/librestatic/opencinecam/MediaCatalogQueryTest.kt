@@ -5,6 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.galleryQueryInput
+import com.librestatic.opencinecam.gallery.validGalleryQuery
 
 class MediaCatalogQueryTest {
     @Test fun queriesOver128CharactersOrWithControlsAreInvalid() {

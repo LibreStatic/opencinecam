@@ -18,6 +18,11 @@ import java.security.MessageDigest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 /** Composited-screen SDR geometry acceptance, not an HDR-display or continuous exact-PTS claim. */
 class MediaPlaybackSurfaceUiTest {

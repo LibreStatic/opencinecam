@@ -32,36 +32,36 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.librestatic.opencinecam.AdaptiveCaptureChrome
-import com.librestatic.opencinecam.AdaptiveWindow
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CaptureFrameReserve
-import com.librestatic.opencinecam.CaptureInitialPane
-import com.librestatic.opencinecam.CaptureLayoutFamily
+import com.librestatic.opencinecam.capture.CaptureFrameReserve
+import com.librestatic.opencinecam.capture.CaptureInitialPane
+import com.librestatic.opencinecam.capture.CaptureLayoutFamily
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.CaptureScopeVisibility
-import com.librestatic.opencinecam.CompositionGridMode
-import com.librestatic.opencinecam.HistogramMode
-import com.librestatic.opencinecam.HorizonRollMath
-import com.librestatic.opencinecam.LocalAdaptiveWindow
-import com.librestatic.opencinecam.LocalOperatorActions
-import com.librestatic.opencinecam.MonitoringOverlay
-import com.librestatic.opencinecam.CAPTURE_RAIL_WIDTH_DP
-import com.librestatic.opencinecam.INSPECTOR_WIDTH_DP
-import com.librestatic.opencinecam.SIDE_COLUMN_WIDTH_DP
-import com.librestatic.opencinecam.SLIM_TOP_BAR_HEIGHT_DP
-import com.librestatic.opencinecam.STACKED_TOP_BAR_HEIGHT_DP
+import com.librestatic.opencinecam.capture.CaptureScopeVisibility
+import com.librestatic.opencinecam.capture.CompositionGridMode
+import com.librestatic.opencinecam.settings.HistogramMode
+import com.librestatic.opencinecam.capture.HorizonRollMath
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
+import com.librestatic.opencinecam.capture.LocalOperatorActions
+import com.librestatic.opencinecam.capture.MonitoringOverlay
+import com.librestatic.opencinecam.capture.CAPTURE_RAIL_WIDTH_DP
+import com.librestatic.opencinecam.capture.INSPECTOR_WIDTH_DP
+import com.librestatic.opencinecam.capture.SIDE_COLUMN_WIDTH_DP
+import com.librestatic.opencinecam.capture.SLIM_TOP_BAR_HEIGHT_DP
+import com.librestatic.opencinecam.capture.STACKED_TOP_BAR_HEIGHT_DP
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.analyzeMonitoringRgb
 import com.librestatic.opencinecam.camera.detectFocusEdges
 import com.librestatic.opencinecam.camera.monitoringDisplayPoint
-import com.librestatic.opencinecam.fittedPreviewViewport
-import com.librestatic.opencinecam.previewDisplayRatio
-import com.librestatic.opencinecam.reservedPreviewViewport
-import com.librestatic.opencinecam.captureLayoutFamily
+import com.librestatic.opencinecam.capture.fittedPreviewViewport
+import com.librestatic.opencinecam.capture.previewDisplayRatio
+import com.librestatic.opencinecam.capture.reservedPreviewViewport
+import com.librestatic.opencinecam.capture.captureLayoutFamily
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import java.io.File
 
@@ -297,7 +297,7 @@ private fun storeAudio(): com.librestatic.opencinecam.media.audio.ProfessionalAu
 /** The settings hub with the microphone permission granted and a lossless-capable microphone, so the audio page shows its controls. */
 @Composable
 fun StoreSettings() = DriverTheme {
-    com.librestatic.opencinecam.SettingsScreen(
+    com.librestatic.opencinecam.settings.SettingsScreen(
         CameraUiState(phase = com.librestatic.opencinecam.CameraUiPhase.PREVIEWING, audioCapabilities = storeAudio()),
         CameraSettings(audioOutputFormat = com.librestatic.opencinecam.media.audio.AudioOutputFormat.WAV_PCM, audioSampleRateHz = 48_000,
             audioBitDepth = com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_24, audioChannels = 2),

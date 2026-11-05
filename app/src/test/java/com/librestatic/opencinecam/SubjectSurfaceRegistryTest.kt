@@ -3,6 +3,15 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.capture.rotationDegrees
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
+import com.librestatic.opencinecam.subject.SubjectPreviewBlock
+import com.librestatic.opencinecam.subject.SubjectSurfaceRegistry
+import com.librestatic.opencinecam.subject.subjectPreviewBlock
+import com.librestatic.opencinecam.subject.subjectPreviewFrameRate
 
 class SubjectSurfaceRegistryTest {
     @Test fun lateSurfaceDestructionAndStatusDoNotAffectNewLease() {

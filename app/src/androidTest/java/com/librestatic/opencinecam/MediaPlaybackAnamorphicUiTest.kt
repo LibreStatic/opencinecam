@@ -21,6 +21,11 @@ import java.security.MessageDigest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 /** Cropped96x62 AVC/SAR2:1 must display192:62 (or62:192 after90deg), in CPU stills,
  * native exact stills and continuous video. Composited SDR screenshots do not prove HDR. */

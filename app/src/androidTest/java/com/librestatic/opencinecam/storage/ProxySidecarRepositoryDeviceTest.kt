@@ -13,6 +13,10 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Real MediaStore/source/proxy publication. Capture anchors are synthetic, not physical qualification. */
 class ProxySidecarRepositoryDeviceTest {

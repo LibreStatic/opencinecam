@@ -19,6 +19,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.MediaPlaybackSession
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 class MediaPlaybackExactSurfaceDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

@@ -48,14 +48,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsAccent
-import com.librestatic.opencinecam.SettingsBorder
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsSurface
-import com.librestatic.opencinecam.SettingsSurfaceRaised
+import com.librestatic.opencinecam.settings.SettingsAccent
+import com.librestatic.opencinecam.settings.SettingsBorder
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsSurface
+import com.librestatic.opencinecam.settings.SettingsSurfaceRaised
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 private val Disabled: Color @Composable get() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)

@@ -8,8 +8,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
 import android.provider.MediaStore
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.camera.CapturedAccumulation
 import com.librestatic.opencinecam.camera.CapturedBurst
 import com.librestatic.opencinecam.camera.CapturedBracket

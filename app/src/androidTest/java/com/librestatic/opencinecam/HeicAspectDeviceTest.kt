@@ -13,6 +13,7 @@ import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CancellationException
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
 
 /** Real HEIC fixtures are generated from known RGB pixels. The rotated container has identical
  * coded mdat bytes, so these checks detect ignored or double-applied container rotation. */

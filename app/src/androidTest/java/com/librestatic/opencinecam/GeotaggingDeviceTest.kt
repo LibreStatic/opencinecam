@@ -13,6 +13,12 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.locationPermission
 
 /** Synthetic coordinates delivered by Android's real test provider. No physical GPS claim. */
 internal class GeotagTestProvider(private val context:Context) : AutoCloseable {

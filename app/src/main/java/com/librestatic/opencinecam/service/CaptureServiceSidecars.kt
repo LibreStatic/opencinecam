@@ -3,9 +3,9 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.recordingTimecodeJson
+import com.librestatic.opencinecam.metadata.recordingTimecodeJson
 import com.librestatic.opencinecam.camera.RecordingTimecodeReport
-import com.librestatic.opencinecam.captureEpochJson
+import com.librestatic.opencinecam.metadata.captureEpochJson
 
 import com.librestatic.opencinecam.camera.CaptureFrameRate
 
@@ -56,7 +56,7 @@ internal fun CaptureService.hlgSidecarJson(evidence: OpenCineLogRecordingEvidenc
         .put("targetFps", evidence.targetFps)
         .put("maxVideoPtsGapUs", evidence.maxVideoPtsGapUs ?: JSONObject.NULL)
         .put("videoPtsGapsOverThreshold", evidence.videoPtsGapsOverThreshold))
-    .apply { avTiming?.let { put("avTiming", com.librestatic.opencinecam.captureEpochJson(it)) } }
+    .apply { avTiming?.let { put("avTiming", com.librestatic.opencinecam.metadata.captureEpochJson(it)) } }
     .toString(2)
 
 /** The lens correction a take was encoded with; present only when one was active. */

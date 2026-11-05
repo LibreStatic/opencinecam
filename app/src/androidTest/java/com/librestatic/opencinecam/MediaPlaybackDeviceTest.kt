@@ -13,6 +13,10 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.MediaPlaybackSession
+import com.librestatic.opencinecam.gallery.PlaybackObservation
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 class MediaPlaybackDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

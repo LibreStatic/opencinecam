@@ -11,6 +11,9 @@ import com.librestatic.opencinecam.storage.LocalMediaTake
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real AudioRecord → publication → catalog → activity review, not a synthesized PCM file.
  * The separate OperatorServiceTest keeps exact video acceptance, including its color failure. */

@@ -10,6 +10,8 @@ import com.librestatic.opencinecam.storage.StillImageSaver
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 class ProductionSlateLegacyDeviceTest {
     @Test fun legacyJpegKeepsActualBytesAndPublishesOnlyRealRelationshipFields() {

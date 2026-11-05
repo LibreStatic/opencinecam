@@ -11,6 +11,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectFrameBadge
 
 class SubjectPreviewUiTest {
     @get:Rule val compose = createComposeRule()

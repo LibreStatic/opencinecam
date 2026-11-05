@@ -10,6 +10,10 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 
 class ProxyJobStoreTest {
     @get:Rule val temporary = TemporaryFolder()

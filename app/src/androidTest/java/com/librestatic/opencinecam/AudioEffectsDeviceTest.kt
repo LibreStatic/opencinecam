@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Public effect/session observations; absence is not proof of disabled hidden HAL processing. */
 class AudioEffectsDeviceTest {

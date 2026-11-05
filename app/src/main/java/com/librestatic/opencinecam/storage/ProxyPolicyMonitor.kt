@@ -10,6 +10,10 @@ import androidx.core.net.toUri
 import com.librestatic.opencinecam.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
+import com.librestatic.opencinecam.gallery.ProxyConditions
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
+import com.librestatic.opencinecam.gallery.proxyWaitReason
 
 /** Admission is re-observed off the UI thread. Existing work finishes its owned operation;
  * changed policy controls the next attempt, never abandons a publication in progress. */

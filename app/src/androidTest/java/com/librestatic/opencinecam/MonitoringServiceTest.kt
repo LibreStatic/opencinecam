@@ -30,6 +30,12 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real Camera2 YUV preview through the production settings repository and binder. This fixture
  * does not encode media or qualify physical color accuracy, HDR, LOG or a guaranteed update rate.

@@ -5,6 +5,8 @@ import com.librestatic.opencinecam.playback.*
 import java.util.Locale
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.capture.ShortcutAction
+import com.librestatic.opencinecam.ui.AdaptiveWindow
 
 class PlaybackLayoutTest {
     @Test fun eachWindowGetsTheMonitorLayoutItsSizeAllows() {

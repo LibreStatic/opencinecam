@@ -6,6 +6,8 @@ package com.librestatic.opencinecam
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.librestatic.opencinecam.onboarding.OnboardingPage
+import com.librestatic.opencinecam.onboarding.onboardingExitTarget
 
 class OnboardingStoreTest {
     @Test

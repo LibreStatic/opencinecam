@@ -14,6 +14,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CaptureLocations
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.locationPermission
 
 /** Real ActivityResult and PermissionController UI, not a simulated Content callback.
  * Runner preconditions: API 33+; COARSE/FINE revoked with user-set/user-fixed

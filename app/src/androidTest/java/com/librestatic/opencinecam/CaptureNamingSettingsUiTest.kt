@@ -16,6 +16,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CAPTURE_NAMING_EXAMPLE_UUID
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.CaptureNamingSettingsControls
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 class CaptureNamingSettingsUiTest {
     @get:Rule val compose = createComposeRule()

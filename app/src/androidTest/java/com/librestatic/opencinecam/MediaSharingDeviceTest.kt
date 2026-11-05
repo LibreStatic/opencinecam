@@ -22,6 +22,14 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.LutLibrary
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Real provider rows/FileProvider/SQLite and an independent recipient UID, not a mocked intent. */
 class MediaSharingDeviceTest {

@@ -22,6 +22,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.captureEpochJson
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class LosslessSharedPauseTest {
     @Test fun wavRepeatedPauseCutsTheSameSourceWindowsAsVideo() = exercise(false,false,false)

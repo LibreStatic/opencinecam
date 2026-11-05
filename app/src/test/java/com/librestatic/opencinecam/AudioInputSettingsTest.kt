@@ -14,6 +14,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.audioInputUnavailable
+import com.librestatic.opencinecam.settings.builtInMicPositionLabel
+import com.librestatic.opencinecam.settings.decodeAudioInputKey
+import com.librestatic.opencinecam.settings.encodeAudioInputKey
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.uniqueAudioInputLabels
 
 class AudioInputSettingsTest {
     private val builtIn = SelectableAudioInput(7, "", 15, listOf(48_000), listOf(1, 2), emptyList(), "bottom")

@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.tint
 
 /** Real Camera2 graph switch on the connected device; no claim of physical double-screen qualification. */
 class SubjectCameraGraphTest {

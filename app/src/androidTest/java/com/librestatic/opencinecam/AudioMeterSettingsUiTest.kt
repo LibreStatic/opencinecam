@@ -21,6 +21,14 @@ import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.AudioMeterHud
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioMeterMode
+import com.librestatic.opencinecam.settings.AudioMeterSettings
+import com.librestatic.opencinecam.settings.AudioMeterSettingsControls
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Presentation fixtures are not physical calibration or a substitute for DSP acceptance tests. */
 class AudioMeterSettingsUiTest {

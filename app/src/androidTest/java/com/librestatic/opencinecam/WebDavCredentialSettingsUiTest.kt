@@ -24,6 +24,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.WebDavQueueSettingsSection
 
 /** Real isolated Keystore + AtomicFile behind the settings composition. */
 class WebDavCredentialSettingsUiTest {

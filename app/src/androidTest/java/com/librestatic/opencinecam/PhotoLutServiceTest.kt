@@ -37,6 +37,12 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Camera2 stills and MediaStore stay native while PixelCopy observes the real GPU operator output.
  * DNG platform decoding is not a claim about physical RAW quality or a calibrated color response.

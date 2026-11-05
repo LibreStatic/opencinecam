@@ -8,6 +8,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.PresetPreferences
 
 class CameraRootStateTest {
     private fun store(completed: Boolean) = OnboardingStore(PresetPreferences()).apply { if (completed) markCompleted() }

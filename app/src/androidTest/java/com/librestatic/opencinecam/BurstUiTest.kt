@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.BurstCaptureProgress
 
 class BurstUiTest {
     @get:Rule val compose=createComposeRule()

@@ -9,8 +9,8 @@ import android.provider.MediaStore
 import android.util.AtomicFile
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 import java.io.File
 import java.security.MessageDigest

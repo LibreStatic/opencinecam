@@ -11,6 +11,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureButton
+import com.librestatic.opencinecam.capture.LocalOperatorActions
+import com.librestatic.opencinecam.capture.OperatorActions
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Presentation only: service tests own proof of microphone retirement and late-start exclusion. */
 class AudioRetirementUiTest {

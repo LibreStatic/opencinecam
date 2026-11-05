@@ -23,6 +23,9 @@ import com.librestatic.opencinecam.transfers.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.WebDavTransferSettingsSection
 
 /** Pure presentation: no runtime, MediaStore, credentials, settings writes or network. */
 class WebDavTransferSettingsUiTest {

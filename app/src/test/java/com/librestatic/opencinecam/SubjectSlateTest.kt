@@ -19,6 +19,33 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import kotlin.math.abs
+import com.librestatic.opencinecam.fold.SubjectSlateField
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.subject.SLATE_EMPTY_VALUE
+import com.librestatic.opencinecam.subject.SLATE_TIMECODE_IDLE
+import com.librestatic.opencinecam.subject.SUBJECT_SYNC_BEEP_MS
+import com.librestatic.opencinecam.subject.SUBJECT_SYNC_BEEP_SAMPLE_RATE
+import com.librestatic.opencinecam.subject.SUBJECT_SYNC_MARKER_KEY
+import com.librestatic.opencinecam.subject.SUBJECT_SYNC_MAX_START_ELAPSED_MS
+import com.librestatic.opencinecam.subject.SubjectSlateLine
+import com.librestatic.opencinecam.subject.SubjectSyncArming
+import com.librestatic.opencinecam.subject.SubjectSyncDecision
+import com.librestatic.opencinecam.subject.SubjectSyncMarkerOutcome
+import com.librestatic.opencinecam.subject.SubjectSyncMarkerPolicy
+import com.librestatic.opencinecam.subject.SubjectSyncMarkerRecord
+import com.librestatic.opencinecam.subject.SubjectSyncMarkerReport
+import com.librestatic.opencinecam.subject.SubjectSyncMarkerSlot
+import com.librestatic.opencinecam.subject.boundedSyncFailure
+import com.librestatic.opencinecam.subject.parseSmpteLabel
+import com.librestatic.opencinecam.subject.parseSubjectSyncMarkerJson
+import com.librestatic.opencinecam.subject.slateTimecodeLabel
+import com.librestatic.opencinecam.subject.slateTimecodeRate
+import com.librestatic.opencinecam.subject.subjectSlateLines
+import com.librestatic.opencinecam.subject.subjectSlateRows
+import com.librestatic.opencinecam.subject.subjectSyncBeepPcm
+import com.librestatic.opencinecam.subject.subjectSyncMarkerFromSidecar
+import com.librestatic.opencinecam.subject.subjectSyncMarkerJson
 
 class SubjectSlateTest {
     private val slate = ProductionSlateSettings(project = "Lumen", camera = "B", scene = " 12A ", reel = "", takeNumber = 7)

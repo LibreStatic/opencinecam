@@ -10,6 +10,8 @@ import org.junit.Assert.assertEquals
  import org.junit.Assert.assertFalse
  import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.normalizedFor
 
 class ProfessionalAudioSettingsTest {
     private val capabilities = ProfessionalAudioCapabilities(

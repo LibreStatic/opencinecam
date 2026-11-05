@@ -4,6 +4,9 @@ package com.librestatic.opencinecam
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.librestatic.opencinecam.ui.HapticEvent
+import com.librestatic.opencinecam.ui.sliderHapticFor
+import com.librestatic.opencinecam.ui.zoomHapticFor
 
 class CineSliderHapticTest {
     private val range = 0f..10f

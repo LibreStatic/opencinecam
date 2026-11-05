@@ -22,6 +22,8 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import com.librestatic.opencinecam.metadata.audioEffectsJson
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class AudioEffectsSidecarDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

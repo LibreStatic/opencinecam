@@ -27,6 +27,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
+import com.librestatic.opencinecam.settings.captureFileStem
 
 /** Actual GLES clips, AudioRecord PCM and MediaStore rows, with no fixture-file dependency. */
 class PreparedCaptureBundleDeviceTest {

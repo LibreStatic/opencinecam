@@ -16,6 +16,9 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.BracketCaptureProgress
+import com.librestatic.opencinecam.settings.BracketSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class BracketUiTest {
     @get:Rule val compose=createComposeRule()

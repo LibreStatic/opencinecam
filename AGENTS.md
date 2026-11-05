@@ -147,7 +147,7 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Pass fake state (`CameraUiState(...)`, `CameraSettings(...)`, a fake `MediaCatalogSource`) and no-op callbacks. Leave `binder = null`.
 - When a screen builds its own repository or service, render the stateless content composable it delegates to, as `Gallery` does with `MediaCatalogContent`. If no such seam exists, extract one in production code; that is the only production refactor this tooling justifies.
 - Fakes stay in the test source set; never add them to `main`.
-- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.CameraScreenKt.LandscapeChromePreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
+- `start <Fqn>` (or `reset <Fqn>`) also accepts any fully qualified zero-argument top-level composable, private `@Preview`s included, e.g. `com.librestatic.opencinecam.capture.AdaptiveCaptureChromeKt.CaptureSlotsPreview`. Previews that do not apply `OpenCineCamTheme` themselves render with plain Material light defaults, so for real review add a `DriverScreens.kt` entry instead.
 
 ### Known limits
 
@@ -159,6 +159,13 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Endless frame loops (`while (true) withFrameNanos`) never let the test clock go idle, and requests fail after 60 s. Render those screens with `LocalReducedMotion provides true`, as `Onboarding` does.
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
 - Fonts, shadows and blur come from Robolectric's native graphics. They are close to a device but not pixel-identical, so do final visual sign-off on a device.
+
+## Code layout
+
+- `:app` groups code by feature under `com.librestatic.opencinecam`. Keep the root package to the activity, the root screen (`CameraScreen.kt`), its navigation state (`CameraRootState.kt`) and `CameraUiState`. New code goes into the feature package it belongs to: `capture`, `settings`, `gallery`, `subject`, `fold`, `calibration`, `onboarding`, `diagnostics`, `metadata` or `ui` (shared widgets), next to `service`, `storage`, `transfers` and `playback`. Tests mirror the package of what they test.
+- Put UI logic that decides something (navigation, mode switches, settings rules) in a plain state holder or a pure function beside the composable, and test it there; `CameraRootNavigation` and `planModeSwitch` are the examples.
+- `Camera2PreviewEngine` and `CaptureService` keep their state, lifecycle and public API in their own file; their internal steps live in extension files grouped by responsibility (`Camera2*.kt` in `:camera`, `CaptureService*.kt` in `service`). Add a step to the file that matches it rather than to the class.
+- After moving or splitting code that runs at startup or in the capture chrome, the baseline profile names classes that no longer exist; regenerate it (see below).
 
 ## Baseline profile and startup benchmarks
 

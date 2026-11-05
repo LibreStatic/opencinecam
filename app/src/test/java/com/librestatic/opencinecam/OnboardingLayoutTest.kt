@@ -5,6 +5,10 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.onboarding.OnboardingLayout
+import com.librestatic.opencinecam.onboarding.onboardingCardColumns
+import com.librestatic.opencinecam.onboarding.onboardingLayout
+import com.librestatic.opencinecam.ui.AdaptiveWindow
 
 class OnboardingLayoutTest {
     private fun layout(width: Float, height: Float) = onboardingLayout(AdaptiveWindow(width, height))

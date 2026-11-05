@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+package com.librestatic.opencinecam.gallery
+
+import com.librestatic.opencinecam.storage.PreciseLogView
+
+/** Presentation preferences only: no autoplay, saved playback position or capture-audio control. */
+data class PlaybackSettings(
+    val muted: Boolean = false,
+    val loop: Boolean = false,
+    val showFramePosition: Boolean = true,
+    /** OCLog2 clips review as the flat monitor unless the operator asks for the Rec.709 view assist. */
+    val logView: PreciseLogView = PreciseLogView.FLAT_LOG,
+    /**
+     * Paused frames go straight to the display Surface instead of the verified CPU colour preview.
+     * A per-device choice: presets never carry it, and it starts off.
+     */
+    val nativeSurfaceFrames: Boolean = false,
+)

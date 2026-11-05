@@ -19,6 +19,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.gallery.MediaDeleteDialogContent
+import com.librestatic.opencinecam.gallery.MediaDeleteSource
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** No real media is deleted here. These tests exercise explicit consent, confirmed-work retirement,
  * honest results and requery. Separate MediaStore tests verify actual deletion and ownership. */

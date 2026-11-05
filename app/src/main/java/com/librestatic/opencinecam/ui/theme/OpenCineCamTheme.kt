@@ -44,7 +44,7 @@ import androidx.compose.ui.platform.LocalView
 /** Built-in looks. CINE is the approved graphite/amber palette; YOU follows the wallpaper and the system light/dark mode. */
 enum class AppTheme { CINE, YOU }
 
-/** The chosen look, kept apart from [com.librestatic.opencinecam.CameraSettings] so presets never change it. */
+/** The chosen look, kept apart from [com.librestatic.opencinecam.settings.CameraSettings] so presets never change it. */
 class AppThemeStore(private val prefs: SharedPreferences) {
     constructor(context: Context) : this(context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
 

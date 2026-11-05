@@ -17,6 +17,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 
 /** Real AudioTrack route/write/retirement checks, not evidence of acoustic audibility or latency. */
 class AudioListeningControllerDeviceTest {

@@ -13,6 +13,8 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.ProfessionalScopesPanel
+import com.librestatic.opencinecam.capture.color
 class MonitoringOverlayUiTest {
     @get:Rule val compose = createComposeRule()
     @Test fun tabsSwitchScopesStaleGraphsDisappearAndTheHostOwnsEnlargement() {

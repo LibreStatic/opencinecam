@@ -22,6 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 
 class OnboardingUiTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext

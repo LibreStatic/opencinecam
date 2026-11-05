@@ -5,6 +5,11 @@ import com.librestatic.opencinecam.*
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 class MediaSharePlanTest {
     private val id = "2b2a7bb1-5061-4379-86c1-cd7cbca97e42"

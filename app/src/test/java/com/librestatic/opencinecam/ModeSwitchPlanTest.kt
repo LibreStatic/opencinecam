@@ -12,6 +12,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.librestatic.opencinecam.capture.ModeSwitchPlan
+import com.librestatic.opencinecam.capture.planModeSwitch
+import com.librestatic.opencinecam.settings.CameraSettings
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])

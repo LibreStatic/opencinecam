@@ -3,6 +3,7 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.playbackTimecode
 
 class PlaybackTimecodeTest {
     @Test fun framesUseTheNominalRate() {

@@ -42,7 +42,7 @@ This audit is static: local sources and documentation were reviewed, and no new 
 
 - [Overall status and validation conditions](../README.md).
 - [Requirements](requirements.md), [architecture](architecture.md), and [plans index](plans/README.md).
-- [Settings and persistence](../app/src/main/java/com/librestatic/opencinecam/CameraSettings.kt).
+- [Settings and persistence](../app/src/main/java/com/librestatic/opencinecam/settings/CameraSettings.kt).
 - [Main interface](../app/src/main/java/com/librestatic/opencinecam/CameraScreen.kt) and [UI state](../app/src/main/java/com/librestatic/opencinecam/CameraUiState.kt).
 - [Capture ownership and commands](../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt).
 - [Camera2 engine](../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2PreviewEngine.kt).

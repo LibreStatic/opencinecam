@@ -12,6 +12,13 @@ import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real activity → media tab → MediaStore catalog → live shared settings, without a mock source. */
 class GalleryNavigationDeviceTest {

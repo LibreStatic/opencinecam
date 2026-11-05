@@ -20,6 +20,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureTooltip
 
 /**
  * A greyed capture slot explains itself in a tooltip whose popup takes no focus. On the capture

@@ -10,10 +10,10 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
-import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.ProxySettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch

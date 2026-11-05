@@ -28,6 +28,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.metadata.recordingLutJson
 
 /** Real SDR GLES and real AVC decode. Synthetic chart, not a hardware OCLog qualification. */
 class OperatorLutGpuTest {

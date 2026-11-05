@@ -13,6 +13,14 @@ import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSessionCues
+import com.librestatic.opencinecam.subject.LocalSubjectReviewFeed
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectReviewFeed
+import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
+import com.librestatic.opencinecam.subject.SubjectReviewPick
 
 /** OCC-PLAN-068 U4 subject-side review: nothing without the operator's cue, no controls, and a take start releases it. */
 class SubjectReviewUiTest {

@@ -34,6 +34,21 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioMeterMode
+import com.librestatic.opencinecam.settings.AudioMeterSettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real AudioRecord/Camera2 service. A latch retains one actual PCM callback, not a fake mic. */
 class PreviewAudioRetirementDeviceTest {

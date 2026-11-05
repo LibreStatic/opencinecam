@@ -4,6 +4,14 @@ package com.librestatic.opencinecam
 import com.librestatic.opencinecam.storage.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.MediaShareBlocker
+import com.librestatic.opencinecam.gallery.MediaShareContent
+import com.librestatic.opencinecam.gallery.MediaShareMetadata
+import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.gallery.canPrepareMediaShare
+import com.librestatic.opencinecam.gallery.mediaShareBlocker
+import com.librestatic.opencinecam.gallery.mediaShareFix
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 class MediaShareBlockerTest {
     private val original = LocalMediaArtifact("content://media/external_primary/video/media/1", "OCC_1.mp4", "video/mp4", 10, 1)

@@ -3,6 +3,8 @@ package com.librestatic.opencinecam
 
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.PlaybackPhase
+import com.librestatic.opencinecam.gallery.playbackToggleAction
 
 class MediaPlaybackToggleTest {
     @Test fun shownPauseDoesNotTurnIntoPlayWhenLoopStartsSeekingBeforeDispatch() {

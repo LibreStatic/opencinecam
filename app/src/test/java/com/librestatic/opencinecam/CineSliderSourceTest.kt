@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.ui.CineSlider
 
 /** Every slider must go through [CineSlider], which keeps thumb drags out of the back-gesture insets. */
 class CineSliderSourceTest {

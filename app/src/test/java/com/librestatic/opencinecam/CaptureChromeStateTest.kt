@@ -6,6 +6,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.librestatic.opencinecam.capture.RecordButtonState
+import com.librestatic.opencinecam.capture.operatorErrorText
+import com.librestatic.opencinecam.capture.recordButtonState
 
 class CaptureChromeStateTest {
     private fun video(phase: CameraUiPhase, finalizing: Boolean = false) =

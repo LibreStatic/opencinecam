@@ -38,6 +38,15 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 
 /** Real service reservation, Camera2/GLES encoding, MediaStore and platform decode. Three-frame
  * time lapse permits the existing software-codec route; this is not physical LOG qualification. */

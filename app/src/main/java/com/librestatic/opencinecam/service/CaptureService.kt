@@ -12,28 +12,28 @@ import com.librestatic.opencinecam.camera.StillImageKind
 import com.librestatic.opencinecam.camera.TimelapseCapture
 import com.librestatic.opencinecam.camera.TimelapseProgress
 
-import com.librestatic.opencinecam.fpsLockActive
-import com.librestatic.opencinecam.lowLightFpsActive
-import com.librestatic.opencinecam.recordingTimecodeJson
+import com.librestatic.opencinecam.settings.fpsLockActive
+import com.librestatic.opencinecam.settings.lowLightFpsActive
+import com.librestatic.opencinecam.metadata.recordingTimecodeJson
 import com.librestatic.opencinecam.camera.RecordingTimecodeReport
-import com.librestatic.opencinecam.captureEpochJson
-import com.librestatic.opencinecam.OperatorAction
-import com.librestatic.opencinecam.forOperatorStartup
-import com.librestatic.opencinecam.startupCaptureMode
-import com.librestatic.opencinecam.operatorActionAvailable
+import com.librestatic.opencinecam.metadata.captureEpochJson
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.forOperatorStartup
+import com.librestatic.opencinecam.capture.startupCaptureMode
+import com.librestatic.opencinecam.capture.operatorActionAvailable
 
 import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ExposureCapabilities
 import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.camera.ShutterUnit
 import com.librestatic.opencinecam.camera.resolve
-import com.librestatic.opencinecam.CaptureActionTicket
-import com.librestatic.opencinecam.CaptureCountdown
+import com.librestatic.opencinecam.capture.CaptureActionTicket
+import com.librestatic.opencinecam.capture.CaptureCountdown
 
-import com.librestatic.opencinecam.SubjectPreviewPort
-import com.librestatic.opencinecam.SubjectSurfaceRegistry
-import com.librestatic.opencinecam.subjectPreviewBlock
-import com.librestatic.opencinecam.wantsCameraPreview
+import com.librestatic.opencinecam.subject.SubjectPreviewPort
+import com.librestatic.opencinecam.subject.SubjectSurfaceRegistry
+import com.librestatic.opencinecam.subject.subjectPreviewBlock
+import com.librestatic.opencinecam.fold.wantsCameraPreview
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 
@@ -50,27 +50,27 @@ import android.os.Environment
 import android.os.StatFs
 import android.util.Size
 import android.view.Surface
-import com.librestatic.opencinecam.timelapseProjectRate
-import com.librestatic.opencinecam.videoProjectRate
-import com.librestatic.opencinecam.projectLabel
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.videoProjectRate
+import com.librestatic.opencinecam.settings.projectLabel
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.HardwareTruthHudState
-import com.librestatic.opencinecam.hardwareTruthTake
-import com.librestatic.opencinecam.TakeVideoEncoder
-import com.librestatic.opencinecam.withHardwareTruth
-import com.librestatic.opencinecam.RouteTruth
-import com.librestatic.opencinecam.routeTruthOf
-import com.librestatic.opencinecam.readbackSamples
+import com.librestatic.opencinecam.capture.HardwareTruthHudState
+import com.librestatic.opencinecam.metadata.hardwareTruthTake
+import com.librestatic.opencinecam.metadata.TakeVideoEncoder
+import com.librestatic.opencinecam.metadata.withHardwareTruth
+import com.librestatic.opencinecam.capture.RouteTruth
+import com.librestatic.opencinecam.capture.routeTruthOf
+import com.librestatic.opencinecam.capture.readbackSamples
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.DeviceQuirksProvider
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
 import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
-import com.librestatic.opencinecam.TimeLapseLimitMode
-import com.librestatic.opencinecam.normalizedFor
-import com.librestatic.opencinecam.toSpec
-import com.librestatic.opencinecam.VideoGeometryPolicy
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.capture.toSpec
+import com.librestatic.opencinecam.capture.VideoGeometryPolicy
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine
@@ -81,7 +81,7 @@ import com.librestatic.opencinecam.camera.RecordingWhiteBalanceStatus
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.camera.adaptTo
 import com.librestatic.opencinecam.camera.Camera2Analysis
-import com.librestatic.opencinecam.recordingGainJson
+import com.librestatic.opencinecam.metadata.recordingGainJson
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import com.librestatic.opencinecam.camera.Camera2EmbeddedAudioConfig
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
@@ -112,9 +112,9 @@ import com.librestatic.opencinecam.media.video.softwareVideoEncoderDisclosure
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.afterSavedProductionSlate
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.afterSavedProductionSlate
 import com.librestatic.opencinecam.storage.StillImageSaver
 import com.librestatic.opencinecam.storage.MotionLogRecorder
 import com.librestatic.opencinecam.storage.MotionLogTarget
@@ -141,11 +141,11 @@ import com.librestatic.opencinecam.media.audio.AudioInputLossAction
 import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import com.librestatic.opencinecam.media.audio.audioInputKind
-import com.librestatic.opencinecam.audioInputTypeLabel
-import com.librestatic.opencinecam.audioInputUnavailable
-import com.librestatic.opencinecam.resolveAudioInputSelection
+import com.librestatic.opencinecam.settings.audioInputTypeLabel
+import com.librestatic.opencinecam.settings.audioInputUnavailable
+import com.librestatic.opencinecam.settings.resolveAudioInputSelection
 import com.librestatic.opencinecam.camera.PcmListeningSink
-import com.librestatic.opencinecam.AudioListeningStatus
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
@@ -153,17 +153,17 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
-import com.librestatic.opencinecam.CameraPreset
-import com.librestatic.opencinecam.CameraPresetCodec
-import com.librestatic.opencinecam.withLivePreferencesFrom
-import com.librestatic.opencinecam.LutLibraries
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
+import com.librestatic.opencinecam.settings.LutLibraries
 import com.librestatic.opencinecam.camera.monitorLutIdentity
 import com.librestatic.opencinecam.camera.MonitorLut
 import com.librestatic.opencinecam.camera.BakedLutEvidence
-import com.librestatic.opencinecam.recordingLutJson
+import com.librestatic.opencinecam.metadata.recordingLutJson
 import com.librestatic.opencinecam.camera.OperatorLutStatus
 import com.librestatic.opencinecam.camera.OperatorLutState
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -197,7 +197,7 @@ class CaptureService : Service() {
     private val state = MutableStateFlow<CaptureState>(CaptureState.Stopped)
     internal val stateCommands = CaptureStateCommands(OWNER_ID)
     internal val cameraState = MutableStateFlow(CameraUiState())
-    internal val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.LensCalibrationUiState())
+    internal val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.calibration.LensCalibrationUiState())
     internal val localBinder = LocalBinder()
     internal val foreground = RecordingForegroundController(this)
     internal val previewEngine by lazy { CaptureStartup.adoptEngine(this) }
@@ -262,7 +262,7 @@ class CaptureService : Service() {
     internal val audioLevelEpoch = java.util.concurrent.atomic.AtomicLong()
     @Volatile internal var recordingStartedAtMs = 0L
     /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
-    internal val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
+    internal val subjectSyncMarkers = com.librestatic.opencinecam.subject.SubjectSyncMarkerSlot()
     internal var timelapseAutoStopRunnable: Runnable? = null
     internal var attachedPreviewSurface: Surface? = null
     internal var attachedPreviewRotationDegrees: Int = 0
@@ -273,7 +273,7 @@ class CaptureService : Service() {
     internal var pendingStatusMessage: String? = null
     internal val perCameraZoom = mutableMapOf<String, Float>()
     internal val timecodeTracker by lazy { TimecodeTracker(
-        continuationStore = com.librestatic.opencinecam.TimecodeContinuationFile(java.io.File(filesDir, "timecode-continuation.json"))) }
+        continuationStore = com.librestatic.opencinecam.metadata.TimecodeContinuationFile(java.io.File(filesDir, "timecode-continuation.json"))) }
     internal var settings = CameraSettings()
     private var operatorStartupPending = true
     private var foldClosureTracker: FoldClosureTracker? = null
@@ -355,7 +355,7 @@ class CaptureService : Service() {
     @Volatile internal var currentOperatorLut: MonitorLut? = null
     @Volatile private var currentSubjectLut: MonitorLut? = null
     @Volatile private var currentRecordingLut: MonitorLut? = null
-    @Volatile private var recordingLutLibrary: com.librestatic.opencinecam.LutLibrary? = null
+    @Volatile private var recordingLutLibrary: com.librestatic.opencinecam.settings.LutLibrary? = null
     internal data class RecordingLutIntent(val owner: CaptureTransferReservation, val lut: MonitorLut?, val captureNames: CaptureNameSnapshot) {
         val productionSlate get() = captureNames.slate
     }
@@ -696,7 +696,7 @@ class CaptureService : Service() {
 
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
-        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
+        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.calibration.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
 
         /**
          * Locks the selected logical camera to [physicalId] (one of `CameraUiState.lensLock.options`),
@@ -733,7 +733,7 @@ class CaptureService : Service() {
                 calibrationStartDeadlineMs = 0L
                 mainHandler.removeCallbacks(calibrationStartRetry)
                 lensCalibrationState.update {
-                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                    it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
                 }
             }
             val run = calibrationRun ?: return
@@ -751,10 +751,10 @@ class CaptureService : Service() {
             val current = cameraState.value
             val cameraId = current.selectedCameraId
             val lenses = calibrationLensesOf(current.descriptor)
-            fun refuse(reason: com.librestatic.opencinecam.LensCalibrationFailure) {
+            fun refuse(reason: com.librestatic.opencinecam.calibration.LensCalibrationFailure) {
                 calibrationPending = null
                 lensCalibrationState.update {
-                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, logicalCameraId = cameraId,
+                    it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED, logicalCameraId = cameraId,
                         referencePhysicalId = null, lenses = emptyList(), failure = reason)
                 }
             }
@@ -764,7 +764,7 @@ class CaptureService : Service() {
                     return
                 }
                 calibrationStartDeadlineMs = 0L
-                refuse(com.librestatic.opencinecam.LensCalibrationFailure.NO_MULTI_CAMERA)
+                refuse(com.librestatic.opencinecam.calibration.LensCalibrationFailure.NO_MULTI_CAMERA)
                 return
             }
             val idle = current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) && !current.structuralSettingsFrozen &&
@@ -773,15 +773,15 @@ class CaptureService : Service() {
             if (!idle || attachedPreviewSurface?.isValid != true) {
                 val waiting = current.phase !in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING) && !current.structuralSettingsFrozen
                 if (waiting && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
-                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
-                        it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
+                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
+                        it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
                             referencePhysicalId = null, lenses = emptyList(), failure = null)
                     }
                     mainHandler.postDelayed(calibrationStartRetry, 250L)
                     return
                 }
                 calibrationStartDeadlineMs = 0L
-                refuse(com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE)
+                refuse(com.librestatic.opencinecam.calibration.LensCalibrationFailure.UNSUPPORTED_MODE)
                 return
             }
             calibrationStartDeadlineMs = 0L
@@ -793,12 +793,12 @@ class CaptureService : Service() {
             calibrationPending = null
             lensCalibrationState.update {
                 it.copy(
-                    phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING,
+                    phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING,
                     logicalCameraId = cameraId,
                     referencePhysicalId = null,
                     lenses = lenses.sortedBy { lens -> lens.nominalRatio }.map { lens ->
-                        com.librestatic.opencinecam.LensCalibrationLensRow(lens.physicalId, lens.nominalRatio,
-                            com.librestatic.opencinecam.LensCalibrationLensStatus.PENDING)
+                        com.librestatic.opencinecam.calibration.LensCalibrationLensRow(lens.physicalId, lens.nominalRatio,
+                            com.librestatic.opencinecam.calibration.LensCalibrationLensStatus.PENDING)
                     },
                     failure = null,
                     illuminantMismatch = false,
@@ -829,17 +829,17 @@ class CaptureService : Service() {
         /** Saves the run's result for this build and camera, and applies it when the correction is on. */
         fun saveLensCalibration() {
             val set = calibrationPending ?: return
-            if (calibrationRun != null || lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.RESULT) return
+            if (calibrationRun != null || lensCalibrationState.value.phase != com.librestatic.opencinecam.calibration.LensCalibrationPhase.RESULT) return
             calibrationPending = null
             try {
                 storageExecutor.execute {
-                    val saved = runCatching { com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService).save(set) }.isSuccess
+                    val saved = runCatching { com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this@CaptureService).save(set) }.isSuccess
                     mainHandler.post {
                         if (serviceDestroyed) return@post
                         lensCalibrationCache = null
                         lensCalibrationState.update {
-                            if (saved) it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
-                            else it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, failure = com.librestatic.opencinecam.LensCalibrationFailure.INTERNAL)
+                            if (saved) it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                            else it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED, failure = com.librestatic.opencinecam.calibration.LensCalibrationFailure.INTERNAL)
                         }
                         refreshSavedCalibration(cameraState.value.descriptor)
                         refreshLensCorrection()
@@ -854,7 +854,7 @@ class CaptureService : Service() {
             if (calibrationRun != null) return
             calibrationPending = null
             lensCalibrationState.update {
-                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
             }
         }
 
@@ -865,7 +865,7 @@ class CaptureService : Service() {
             try {
                 storageExecutor.execute {
                     runCatching {
-                        com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService)
+                        com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this@CaptureService)
                             .delete(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
                     }
                     mainHandler.post {
@@ -881,7 +881,7 @@ class CaptureService : Service() {
         val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
 
         /** OCC-PLAN-068 U6 evidence for the active take's sidecar. Not a capture command: it never starts, stops or delays a take. */
-        fun recordSubjectSyncMarker(report: com.librestatic.opencinecam.SubjectSyncMarkerReport): Boolean =
+        fun recordSubjectSyncMarker(report: com.librestatic.opencinecam.subject.SubjectSyncMarkerReport): Boolean =
             !serviceDestroyed && subjectSyncMarkers.offer(report, android.os.SystemClock.elapsedRealtimeNanos())
 
         /** Returns false when the bounded actor queue is full or the service is shutting down. */
@@ -949,7 +949,7 @@ class CaptureService : Service() {
                         CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                         CaptureMode.LOG to if (preferred.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                         CaptureMode.HLG to if (preferred.supportsOpenCineLog && preferred.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.capture.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
                     message = null,
@@ -1178,7 +1178,7 @@ class CaptureService : Service() {
                     CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     CaptureMode.LOG to if (descriptor.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                     CaptureMode.HLG to if (descriptor.supportsOpenCineLog && descriptor.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.capture.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
                 ),
             )
             refreshLensLockState(cameraId)
@@ -2100,7 +2100,7 @@ class CaptureService : Service() {
                     previewEngine.captureStill(selectedStillPhotoFormat(), settings.photoFlash, settings.photoQuality, aspect = settings.photoAspect,
                         zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
                         if (!accepted) {
-                            if (com.librestatic.opencinecam.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
+                            if (com.librestatic.opencinecam.capture.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
                             else finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")
                         }
                     }
@@ -2523,8 +2523,8 @@ class CaptureService : Service() {
             run.thread?.interrupt()
             calibrationRun = null
             lensCalibrationState.update {
-                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED,
-                    failure = com.librestatic.opencinecam.LensCalibrationFailure.CAMERA_LOST)
+                it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED,
+                    failure = com.librestatic.opencinecam.calibration.LensCalibrationFailure.CAMERA_LOST)
             }
             cameraState.update { it.copy(lensCalibrationRunning = false) }
         }

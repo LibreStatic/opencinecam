@@ -25,6 +25,11 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.ProxyCatalogDialog
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real catalog rename/deletion after source deletion; external open/chooser delivery is not exercised. */
 class ProxyCatalogActionsUiTest {

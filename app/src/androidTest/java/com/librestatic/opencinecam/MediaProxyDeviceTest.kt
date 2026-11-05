@@ -20,6 +20,9 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaCatalogScreen
+import com.librestatic.opencinecam.gallery.ProxySettings
 
 class MediaProxyDeviceTest {
     @get:Rule val compose = createComposeRule()

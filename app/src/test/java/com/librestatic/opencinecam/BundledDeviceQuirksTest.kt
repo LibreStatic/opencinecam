@@ -18,6 +18,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.BUNDLED_PROFILE_DIRECTORY
+import com.librestatic.opencinecam.diagnostics.BundledDeviceQuirks
 
 class BundledDeviceQuirksTest {
     /** Gradle runs app host tests with the module directory as the working directory. */

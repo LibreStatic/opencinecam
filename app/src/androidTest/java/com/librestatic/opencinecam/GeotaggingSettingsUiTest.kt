@@ -16,6 +16,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.GeotaggingSettingsContent
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsScreen
 
 /** Permission/provider inputs are explicit; these tests never request or grant Android permissions. */
 class GeotaggingSettingsUiTest {

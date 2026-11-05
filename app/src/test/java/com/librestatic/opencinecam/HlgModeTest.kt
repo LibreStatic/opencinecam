@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.settings.offersHdr10Video
 
 class HlgModeTest {
     private val hlg30 = profile(30, OpenCineLogSourcePath.HLG10_BT2020)

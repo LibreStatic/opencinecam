@@ -13,6 +13,11 @@ import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 class MediaPlaybackHdrUiTest {
     @get:Rule val compose = createComposeRule()

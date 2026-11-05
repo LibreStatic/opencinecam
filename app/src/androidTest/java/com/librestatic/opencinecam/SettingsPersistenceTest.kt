@@ -8,6 +8,19 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.After
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.shutter
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.gallery.tint
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.HapticLevel
+import com.librestatic.opencinecam.settings.HapticPreferences
+import com.librestatic.opencinecam.settings.MAX_CHROME_OPACITY
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsRepository
+import com.librestatic.opencinecam.settings.ViewfinderScale
 
 class SettingsPersistenceTest {
     // The runner executes with the target UID. Use isolated target-owned files, never the

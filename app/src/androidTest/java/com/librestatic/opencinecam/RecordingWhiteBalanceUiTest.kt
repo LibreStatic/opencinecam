@@ -15,6 +15,10 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureButton
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.RecordingWhiteBalanceSettings
+import com.librestatic.opencinecam.settings.SettingsCatalog
 
 class RecordingWhiteBalanceUiTest {
     @get:Rule val compose = createComposeRule()

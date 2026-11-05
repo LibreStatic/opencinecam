@@ -6,10 +6,10 @@ package com.librestatic.opencinecam.service
 import android.content.pm.PackageManager
 import android.Manifest
 import android.os.Looper
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.settings.normalizedFor
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.storage.AudioRetirementGate
@@ -18,9 +18,9 @@ import com.librestatic.opencinecam.media.audio.AudioInputLossAction
 import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import com.librestatic.opencinecam.media.audio.audioInputKind
-import com.librestatic.opencinecam.audioInputTypeLabel
-import com.librestatic.opencinecam.audioInputUnavailable
-import com.librestatic.opencinecam.resolveAudioInputSelection
+import com.librestatic.opencinecam.settings.audioInputTypeLabel
+import com.librestatic.opencinecam.settings.audioInputUnavailable
+import com.librestatic.opencinecam.settings.resolveAudioInputSelection
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import java.util.concurrent.CompletableFuture
 import kotlinx.coroutines.cancel

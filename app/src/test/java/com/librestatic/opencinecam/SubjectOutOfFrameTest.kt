@@ -10,6 +10,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.subject.faceDetectGraphFor
+import com.librestatic.opencinecam.subject.operatorExitArrow
+import com.librestatic.opencinecam.subject.outOfFrameCapable
+import com.librestatic.opencinecam.subject.subjectReturnArrow
 
 class SubjectOutOfFrameTest {
     private fun state(mode: CaptureMode, faceModes: Set<Int>, framing: SubjectFramingStatus = SubjectFramingStatus()): CameraUiState {

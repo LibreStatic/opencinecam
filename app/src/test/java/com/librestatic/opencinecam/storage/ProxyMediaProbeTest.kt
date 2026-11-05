@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettings
 import org.junit.Assert.*
 import org.junit.Test
 

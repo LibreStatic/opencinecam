@@ -19,6 +19,11 @@ import java.security.MessageDigest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
 
 /** Exact Surface output is checked against each independently colored source frame, not merely
  * a label or any running video frame. Screen captures prove SDR composition, not HDR capability. */

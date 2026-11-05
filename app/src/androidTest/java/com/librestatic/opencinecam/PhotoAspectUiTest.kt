@@ -14,6 +14,8 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.PhotoAspectSettings
 
 class PhotoAspectUiTest {
     @get:Rule val compose = createComposeRule()

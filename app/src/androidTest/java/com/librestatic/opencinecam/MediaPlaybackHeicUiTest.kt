@@ -22,6 +22,12 @@ import kotlin.math.roundToInt
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
+import com.librestatic.opencinecam.gallery.MediaReviewSelection
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.gallery.label
 
 /** Existing E8 libheif oracle: identical mdat, base320x240 and irot03 clockwise90=>240x320.
  * These tests inspect the real dialog's composed Image, not a second decoder used as an oracle. */

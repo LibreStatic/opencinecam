@@ -4,6 +4,31 @@ package com.librestatic.opencinecam
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.fold.DisplayCapability
+import com.librestatic.opencinecam.fold.DisplayOperation
+import com.librestatic.opencinecam.fold.DisplaySessionPhase
+import com.librestatic.opencinecam.fold.FoldCloseDetector
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.FoldHinge
+import com.librestatic.opencinecam.fold.FoldPane
+import com.librestatic.opencinecam.fold.FoldSessionStateMachine
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectPreviewGuide
+import com.librestatic.opencinecam.fold.SubjectSessionCues
+import com.librestatic.opencinecam.fold.SubjectSlateField
+import com.librestatic.opencinecam.fold.foldPanes
+import com.librestatic.opencinecam.fold.splitsPreview
+import com.librestatic.opencinecam.fold.transferBrightnessRequest
+import com.librestatic.opencinecam.fold.wantsCameraPreview
+import com.librestatic.opencinecam.gallery.tint
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
+import com.librestatic.opencinecam.subject.parseInterviewQuestions
 
 class FoldDisplayTest {
     @Test fun unavailableAndUnknownCapabilitiesNeverStartASession() {

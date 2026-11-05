@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.rules.ExternalResource
 import org.junit.Test
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 
 class MainActivityTest {
     /** The first-run wizard has its own test (OnboardingUiTest); this one covers returning users. */

@@ -33,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class AudioRecordingGainDeviceTest {
     @Test fun wav16StereoManualGainPublishesItsPcmReceiptAndMetadata() = record(AudioBitDepth.PCM_16, 2, false)

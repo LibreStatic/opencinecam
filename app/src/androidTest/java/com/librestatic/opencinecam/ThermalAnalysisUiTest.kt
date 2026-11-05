@@ -30,6 +30,17 @@ import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.AnalysisSuspensionNotice
+import com.librestatic.opencinecam.capture.OperatorAction
+import com.librestatic.opencinecam.capture.OperatorActions
+import com.librestatic.opencinecam.capture.OperatorButtonRow
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.capture.ProfessionalScopesPanel
+import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.capture.ThermalHudChip
+import com.librestatic.opencinecam.capture.operatorActionAvailable
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /**
  * Thermal scope suspension as the operator sees it. The first test renders the production

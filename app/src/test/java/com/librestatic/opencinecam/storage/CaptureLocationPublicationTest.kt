@@ -6,6 +6,15 @@ import com.librestatic.opencinecam.camera.*
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.CaptureLocationFix
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.CaptureLocationStatus
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.LocationPermissionPrecision
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.captureLocationJson
 
 class CaptureLocationPublicationTest {
     private val id = "2b2a7bb1-5061-4379-86c1-cd7cbca97e42"

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.ProxySettings
-import com.librestatic.opencinecam.ProxyWaitReason
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxyWaitReason
 import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow

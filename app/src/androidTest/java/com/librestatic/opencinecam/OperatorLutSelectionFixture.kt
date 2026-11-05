@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.LutSignalDomain
 import com.librestatic.opencinecam.camera.LutTransformKind
+import com.librestatic.opencinecam.settings.LutLibraries
 
 /** Only its own entry/selection are changed; existing library bytes are never reset. */
 internal fun <T> withOperatorLutFixture(block: (String) -> T): T {

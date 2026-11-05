@@ -20,6 +20,11 @@ import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioListeningStatus
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Owned AudioRecord feeds both file and real AudioTrack. Exact offered PCM retained for independent decode. */
 class AudioListeningPcmDeviceTest {

@@ -20,6 +20,8 @@ import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.AudioRecordingGainSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Intent and receipt rendering only; these tests do not manufacture native audio acceptance. */
 class AudioRecordingGainSettingsUiTest {

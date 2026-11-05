@@ -12,7 +12,7 @@ import androidx.core.net.toUri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Size
-import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettings
 import java.io.File
 
 /** Compatibility surface for the capture button; only selected recent items load thumbnails. */

@@ -6,6 +6,7 @@ import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ShutterUnit
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.librestatic.opencinecam.settings.flickerSafeValue
 
 class FlickerSafeValueTest {
     @Test

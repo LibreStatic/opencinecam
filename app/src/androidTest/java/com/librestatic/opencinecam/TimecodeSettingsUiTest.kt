@@ -14,6 +14,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.TimecodeSettings
 
 class TimecodeSettingsUiTest {
     @get:Rule val compose = createComposeRule()

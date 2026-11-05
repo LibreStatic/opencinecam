@@ -5,6 +5,20 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.fold.DisplayOperation
+import com.librestatic.opencinecam.fold.DisplaySessionPhase
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTIONS
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.subject.InterviewEchoFilter
+import com.librestatic.opencinecam.subject.clampInterviewIndex
+import com.librestatic.opencinecam.subject.fitInterviewFontSp
+import com.librestatic.opencinecam.subject.interviewCharactersLeft
+import com.librestatic.opencinecam.subject.interviewControlVisible
+import com.librestatic.opencinecam.subject.limitInterviewDraft
+import com.librestatic.opencinecam.subject.parseInterviewQuestions
+import com.librestatic.opencinecam.subject.stepInterviewIndex
 
 class SubjectInterviewTest {
     @Test fun blankLinesAndSurroundingWhitespaceAreDropped() {

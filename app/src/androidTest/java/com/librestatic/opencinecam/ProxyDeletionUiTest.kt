@@ -24,6 +24,11 @@ import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaProxyDialog
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Real derivative pair and production dialog. No chooser delivery or process-death claim. */
 class ProxyDeletionUiTest {

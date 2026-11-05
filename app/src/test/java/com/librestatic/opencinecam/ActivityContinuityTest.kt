@@ -6,6 +6,7 @@ package com.librestatic.opencinecam
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.ProbeLayoutMode
 
 class ActivityContinuityTest {
     @Test

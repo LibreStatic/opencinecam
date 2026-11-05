@@ -13,11 +13,11 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import com.librestatic.opencinecam.AudioListeningDevice
-import com.librestatic.opencinecam.AudioListeningOutput
-import com.librestatic.opencinecam.AudioListeningPhase
-import com.librestatic.opencinecam.AudioListeningSettings
-import com.librestatic.opencinecam.AudioListeningStatus
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 import com.librestatic.opencinecam.camera.PcmMeterEncoding
 import com.librestatic.opencinecam.storage.releaseAudioResources
 import java.nio.ByteBuffer

@@ -20,6 +20,11 @@ import com.librestatic.opencinecam.camera.MonitorColor
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.MonitoringSettings
 
 /** Exercises settings intent, not sensor calibration or the sampling pipeline. */
 class MonitoringSettingsUiTest {

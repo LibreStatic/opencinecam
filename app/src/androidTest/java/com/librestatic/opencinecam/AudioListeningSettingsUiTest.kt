@@ -19,6 +19,15 @@ import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioListeningSettingsControls
+import com.librestatic.opencinecam.settings.AudioListeningStatus
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Presentation intent only. Accepted frames and runtime phases are supplied observations here. */
 class AudioListeningSettingsUiTest {

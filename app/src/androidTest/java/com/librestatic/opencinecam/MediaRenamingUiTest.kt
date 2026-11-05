@@ -20,6 +20,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.gallery.MediaRenameDialogContent
+import com.librestatic.opencinecam.gallery.MediaRenameSource
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Uses the real pure preview and injected write boundary. Actual MediaStore bytes, compensation
  * and pending-transfer holds are verified independently; these tests never rename real files. */

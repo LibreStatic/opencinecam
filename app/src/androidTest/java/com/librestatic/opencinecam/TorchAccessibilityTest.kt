@@ -30,6 +30,11 @@ import com.librestatic.opencinecam.camera.TorchCapabilities
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.OperatorPreferences
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.TorchSettings
 
 /** Software accessibility evidence; this does not qualify physical TalkBack or luminance. */
 class TorchAccessibilityTest {

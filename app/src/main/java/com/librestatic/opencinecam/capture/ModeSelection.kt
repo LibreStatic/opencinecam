@@ -1,0 +1,123 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+package com.librestatic.opencinecam.capture
+
+import androidx.compose.runtime.compositionLocalOf
+import com.librestatic.opencinecam.camera.CaptureFrameRate
+import com.librestatic.opencinecam.CameraUiState
+import com.librestatic.opencinecam.CaptureMode
+import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.settings.CameraSettings
+
+/**
+ * Slow motion is the video pipeline recording off-speed: a high-speed capture rate conformed to the
+ * project rate, without audio. The dial shows it as its own mode, but it drives the same tested
+ * VIDEO path the off-speed setting already uses, so there is one recorder, not two.
+ */
+internal fun displayedCaptureMode(selected: CaptureMode, videoOffSpeed: Boolean): CaptureMode =
+    if (selected == CaptureMode.VIDEO && videoOffSpeed) CaptureMode.SLOW_MOTION else selected
+
+/**
+ * Modes worth putting on the dial: those the camera can run now or may after probing. Modes this
+ * device cannot run, or that the app has not integrated, belong in diagnostics, not in the path of
+ * an operator looking for a mode. The displayed mode always stays, so the dial never loses its place.
+ */
+internal fun visibleCaptureModes(gates: Map<CaptureMode, ModeGateState>, displayed: CaptureMode): List<CaptureMode> =
+    CaptureMode.entries.filter { mode ->
+        mode == displayed || gates[mode] !in setOf(ModeGateState.UNSUPPORTED, ModeGateState.FAILED)
+    }
+
+/** Rates above this need a high-speed session on every Camera2 device probed so far. */
+internal const val SLOW_MOTION_MIN_FPS = 100
+
+internal fun supportsSlowMotion(profiles: List<VideoProfileSpec>): Boolean = profiles.any { it.fps >= SLOW_MOTION_MIN_FPS }
+
+/**
+ * The high-speed profile slow motion opens with: the fastest rate at the current resolution, or
+ * the fastest the camera offers at all (largest frame first) when that resolution has none.
+ * Choosing size and rate together lets the camera open once, straight into the high-speed session.
+ */
+internal fun slowMotionProfile(profiles: List<VideoProfileSpec>, width: Int, height: Int): VideoProfileSpec? {
+    val fast = profiles.filter { it.fps >= SLOW_MOTION_MIN_FPS }
+    val candidates = fast.filter { it.width == width && it.height == height }.takeIf { it.isNotEmpty() } ?: fast
+    return candidates.maxWithOrNull(compareBy<VideoProfileSpec> { it.fps }.thenBy { it.width.toLong() * it.height })
+}
+
+/**
+ * Whether [fps] plays back slower than [projectRate]: slow motion conforms any faster capture rate to
+ * the project rate, so 60 fps in a 30 fps project is 2x slow motion, not only the high-speed rates.
+ */
+internal fun slowsDown(fps: Int, projectRate: CaptureFrameRate): Boolean =
+    fps.toLong() * projectRate.denominator > projectRate.numerator
+
+/** The sizes slow motion can record at: those with a rate faster than [projectRate]. */
+internal fun slowMotionSizes(profiles: List<VideoProfileSpec>, projectRate: CaptureFrameRate): Set<Pair<Int, Int>> =
+    profiles.filter { slowsDown(it.fps, projectRate) }.mapTo(mutableSetOf()) { it.width to it.height }
+
+/**
+ * The rate slow motion keeps when the RES slot moves it to [width]x[height]: the current rate when
+ * that size offers it, otherwise the fastest there. Never one at or below [projectRate], so a size
+ * change cannot drop the take to real time.
+ */
+internal fun slowMotionRateAt(
+    profiles: List<VideoProfileSpec>,
+    width: Int,
+    height: Int,
+    currentFps: Int,
+    projectRate: CaptureFrameRate,
+): Int? {
+    val atSize = profiles.filter { it.width == width && it.height == height && slowsDown(it.fps, projectRate) }
+    return atSize.firstOrNull { it.fps == currentFps }?.fps ?: atSize.maxOfOrNull { it.fps }
+}
+
+/**
+ * What choosing [mode] on the dial does: the settings to store and apply (null when unchanged), the
+ * pipeline mode to select (null when it stays), otherwise the rate to select (null when it stays),
+ * and the real-time rate Video returns to after slow motion.
+ */
+internal data class ModeSwitchPlan(
+    val settings: CameraSettings?,
+    val pipelineMode: CaptureMode?,
+    val targetFps: Int?,
+    val normalVideoFps: Int,
+)
+
+/**
+ * Plans a switch to [mode]. Slow motion is VIDEO recording off-speed and Video is the same path at
+ * normal speed, so size and rate are settled before the mode changes: a switch from another mode
+ * then opens the camera once, directly in the high-speed session, instead of reopening it per step.
+ * [normalVideoFps] is the real-time rate Video had before slow motion raised it.
+ */
+internal fun planModeSwitch(mode: CaptureMode, state: CameraUiState, settings: CameraSettings, normalVideoFps: Int): ModeSwitchPlan {
+    val slow = mode == CaptureMode.SLOW_MOTION
+    val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
+    val normalFps = if (slow && !settings.videoOffSpeed && state.targetFps < SLOW_MOTION_MIN_FPS) state.targetFps else normalVideoFps
+    val profile = if (slow) state.descriptor?.let { descriptor ->
+        slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
+    } else null
+    val offSpeed = when (mode) {
+        CaptureMode.SLOW_MOTION -> true
+        CaptureMode.VIDEO -> false
+        else -> settings.videoOffSpeed
+    }
+    val updated = settings.copy(videoOffSpeed = offSpeed).let { base ->
+        profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) }
+            ?: if (leavingSlowMotion) base.copy(videoFps = normalFps) else base
+    }
+    val pipelineMode = if (slow) CaptureMode.VIDEO else mode
+    return ModeSwitchPlan(
+        settings = updated.takeIf { it != settings },
+        pipelineMode = pipelineMode.takeIf { it != state.selectedMode },
+        targetFps = when {
+            pipelineMode != state.selectedMode -> null
+            profile != null -> profile.fps
+            leavingSlowMotion -> normalFps
+            else -> null
+        },
+        normalVideoFps = normalFps,
+    )
+}
+
+/** The mode shown as selected and the action that selects one, provided by the capture chrome. */
+internal class ModeSelection(val displayed: CaptureMode, val select: (CaptureMode) -> Unit)
+
+internal val LocalModeSelection = compositionLocalOf<ModeSelection?> { null }

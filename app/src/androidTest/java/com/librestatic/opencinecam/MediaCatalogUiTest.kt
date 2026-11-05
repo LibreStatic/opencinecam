@@ -21,6 +21,19 @@ import kotlinx.coroutines.withContext
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.GallerySettingsControls
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.gallery.galleryTechnicalText
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.gallery.takeNeedsAttention
+import com.librestatic.opencinecam.gallery.takeTitleText
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 
 /** Injected pages test UI concurrency and actions. Real MediaStore relations have separate device tests. */
 class MediaCatalogUiTest {

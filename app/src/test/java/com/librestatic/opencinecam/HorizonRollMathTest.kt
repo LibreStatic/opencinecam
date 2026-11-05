@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.cos
 import kotlin.math.sin
+import com.librestatic.opencinecam.capture.HorizonRollMath
 
 class HorizonRollMathTest {
     private val g = 9.81f

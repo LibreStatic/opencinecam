@@ -1,0 +1,150 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+package com.librestatic.opencinecam.settings
+
+import java.text.Normalizer
+import java.util.Locale
+import com.librestatic.opencinecam.R
+import com.librestatic.opencinecam.capture.color
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.diagnostics.shutter
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.gallery.tint
+
+enum class SettingsCategory(val title: Int, val summary: Int) {
+    CAPTURE(R.string.settings_category_capture, R.string.settings_summary_capture),
+    RECORDING(R.string.settings_category_recording, R.string.settings_summary_recording),
+    MONITORING(R.string.settings_category_monitoring, R.string.settings_summary_monitoring),
+    AUDIO(R.string.settings_category_audio, R.string.settings_summary_audio),
+    MEDIA(R.string.settings_category_media, R.string.settings_summary_media),
+    CONTROLS(R.string.settings_category_controls, R.string.settings_summary_controls),
+    DISPLAYS(R.string.fold_settings_title, R.string.settings_summary_displays),
+    TRANSFERS(R.string.webdav_queue_title, R.string.settings_summary_transfers),
+    DIAGNOSTICS(R.string.settings_category_diagnostics, R.string.settings_summary_diagnostics),
+}
+
+data class SettingEntry(val id: String, val category: SettingsCategory, val title: Int, val keywords: String)
+
+object SettingsCatalog {
+    val entries = listOf(
+        SettingEntry("proxy", SettingsCategory.MEDIA, R.string.proxy_settings_title, "proxy proxies copia copy derivados derivatives edición editing offline resolución resolution bitrate Mbps tamaño size escala scaling original audio manual batería battery carga charging espacio space reserva reserve"),
+        SettingEntry("geotagging", SettingsCategory.MEDIA, R.string.geotagging_title, "geolocation geotagging GPS location ubicación localización coordenadas coordinates permiso permission aproximada approximate precisa precise privacidad privacy metadatos metadata"),
+        SettingEntry("playback", SettingsCategory.MEDIA, R.string.playback_settings_title, "reproduccion playback visor viewer archivos files media silenciar mute sonido bucle loop posicion frame fotograma"),
+        SettingEntry("capture-naming", SettingsCategory.MEDIA, R.string.capture_naming_title, "archivos files proyecto project nombres naming filename plantilla template prefijo prefix claqueta slate toma take UTC fecha date hora time UUID"),
+        SettingEntry("media-sharing", SettingsCategory.MEDIA, R.string.media_sharing_title, "compartir share exportar export originales originals metadatos metadata claqueta slate technical tecnico LUT cube privacidad privacy"),
+        SettingEntry("media-gallery", SettingsCategory.MEDIA, R.string.gallery_settings_title, "galeria gallery biblioteca catalogo catalog media archivos files buscar search filtro filter foto photo video audio claqueta slate toma take buena good fecha date orden sort"),
+        SettingEntry("production-slate", SettingsCategory.MEDIA, R.string.production_slate_title, "claqueta slate proyecto project cámara camera escena scene rollo reel lente lens toma take interior exterior dia day noche night buena good incremento increment metadatos metadata"),
+        SettingEntry("lut-library", SettingsCategory.MONITORING, R.string.lut_library_title, "LUT cube biblioteca library importar exportar operador color look técnica technical hash dominio domain"),
+        SettingEntry("monitoring-scopes", SettingsCategory.MONITORING, R.string.monitoring_title, "waveform vectorscopio vectorscope falso color false code zebra peaking opacidad opacity umbral threshold area segura safe guia aspect frecuencia Hz"),
+        SettingEntry("webdav-queue", SettingsCategory.TRANSFERS, R.string.webdav_queue_title, "webdav transferencia transfer upload subida cola queue wifi celular cellular destino endpoint servidor server"),
+        SettingEntry("project-timing", SettingsCategory.RECORDING, R.string.project_timing_title, "pausa pause reanudar resume sincronizacion synchronization off speed velocidad proyecto project rational racional captura capture fps silencio silent audio"),
+        SettingEntry("timelapse", SettingsCategory.RECORDING, R.string.timelapse_settings_title, "pausa pause reanudar resume timelapse time lapse intervalo interval fotogramas frames project proyecto FPS cadence cadencia duracion duration limite limit"),
+        SettingEntry("operator-controls", SettingsCategory.CONTROLS, R.string.operator_title, "botones buttons programables programmable volumen volume teclas keys inicio startup restaurar restore bloqueo lock toma recording ergonomia"),
+        SettingEntry("presets", SettingsCategory.CONTROLS, R.string.presets_title, "preset preajuste guardar save actualizar update importar import exportar export C1 C2 configuracion configuration"),
+        SettingEntry("image-processing", SettingsCategory.CAPTURE, R.string.image_processing_title, "estabilizacion stabilization OIS EIS optica optical electronica electronic ISP nitidez sharpness edge ruido imagen noise reduction procesamiento imagen processing"),
+        SettingEntry("professional-exposure", SettingsCategory.CAPTURE, R.string.pro_exposure_title, "ISO shutter obturacion exposicion exposure angle angulo prioridad priority antibanding antiparpadeo 50 60 Hz metering medicion medición spot puntual centre-weighted center weighted ponderada Messung mesure misurazione medição Kelvin temperatura temperature tint tinte balance blancos white balance lock recording bloqueo toma"),
+        SettingEntry("fold-displays", SettingsCategory.DISPLAYS, R.string.fold_settings_title, "plegable foldable pantalla exterior outer rear screen teleprompter brillo brightness autograbacion self recording temporizador timer countdown cuenta regresiva minimal espejo mirror vista previa preview color assist asistencia dividir pantalla dividida split screen camara camera mitad half bisagra hinge mesa libro modo mode revision review toma take reproducir play"),
+        SettingEntry("subject-self-monitor", SettingsCategory.DISPLAYS, R.string.subject_self_monitor_title, "pantalla exterior outer screen sujeto subject automonitor self monitor vista previa preview espejo mirror bandas bands area grabada recorded aspecto aspect tercios thirds zona segura safe area guia guide audio nivel level medidor meter"),
+        SettingEntry("subject-tally", SettingsCategory.DISPLAYS, R.string.subject_tally_title, "pantalla exterior outer screen sujeto subject tally rojo red REC grabando recording borde border cuenta regresiva countdown temporizador timer gigante giant"),
+        SettingEntry("subject-fill-light", SettingsCategory.DISPLAYS, R.string.fold_mode_fill_light, "pantalla exterior outer screen luz de relleno fill light Kelvin temperatura temperature color tinte tint tiempo timeout apagar termico thermal"),
+        SettingEntry("subject-interview", SettingsCategory.DISPLAYS, R.string.fold_mode_interview, "pantalla exterior outer screen entrevista interview preguntas questions cola queue lista list siguiente next"),
+        SettingEntry("subject-slate", SettingsCategory.DISPLAYS, R.string.fold_mode_slate, "pantalla exterior outer screen claqueta slate digital proyecto project escena scene toma take camara camera rollo reel timecode codigo de tiempo sincronizacion sync flash destello pitido beep"),
+        SettingEntry("subject-out-of-frame", SettingsCategory.DISPLAYS, R.string.subject_out_of_frame_title, "pantalla exterior outer screen fuera de cuadro out of frame encuadre framing cara face rostro deteccion detection aviso warning demora delay"),
+        SettingEntry("appearance", SettingsCategory.CONTROLS, R.string.appearance_title, "apariencia appearance tema theme colores colors cine material you dinamico dynamic claro light oscuro dark amoled negro black fondo wallpaper"),
+        SettingEntry("layout", SettingsCategory.CONTROLS, R.string.mode_selector_style, "dial buttons botones selector interfaz"),
+        SettingEntry("haptics", SettingsCategory.CONTROLS, R.string.haptics_title, "haptica haptico vibracion vibrar haptic haptics vibration feedback tacto touch respuesta tactil silenciar mute toma take"),
+        SettingEntry("translucent-chrome", SettingsCategory.CONTROLS, R.string.translucent_chrome, "interfaz translucida translucent transparente transparent semitransparente pantalla completa full screen visor viewfinder ajustar fit rellenar fill recortar crop opacidad opacity inmersivo immersive"),
+        SettingEntry("audio", SettingsCategory.AUDIO, R.string.audio_recording, "mic microphone microfono permiso permission"),
+        SettingEntry("audio-permission", SettingsCategory.AUDIO, R.string.grant_microphone, "mic microphone microfono permiso permission"),
+        SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
+        SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
+        SettingEntry("recording-policy", SettingsCategory.RECORDING, R.string.recording_policy_title, "strict estricto adaptive adaptativo politica policy detener stop degradar degrade aviso warning termico thermal almacenamiento storage espacio space deriva drift cadencia cadence toma take"),
+        SettingEntry("bitrate", SettingsCategory.RECORDING, R.string.video_bitrate, "video calidad quality Mbps"),
+        SettingEntry("video-codec", SettingsCategory.RECORDING, R.string.video_codec, "video codec codificador H.264 AVC HEVC H.265 formato format tamaño size archivo file"),
+        SettingEntry("low-light-fps", SettingsCategory.RECORDING, R.string.low_light_fps_title, "low light fps frame rate auto automatic automatica poca luz cuadros fotogramas cadencia cadence variable VFR 60 30 dinamica dynamic IQ nocturno brillo brighter profesional professional"),
+        SettingEntry("fps-lock", SettingsCategory.RECORDING, R.string.fps_lock_title, "fps lock cadence cadencia bloqueo fijar mantener frame rate cuadros fotogramas 60 30 24 shutter obturador velocidad poca luz low light dark oscuro noche night LOG HLG video profesional professional"),
+        SettingEntry("geometry", SettingsCategory.RECORDING, R.string.recording_geometry, "geometria orientacion rotation raster"),
+        SettingEntry("anamorphic", SettingsCategory.RECORDING, R.string.anamorphic, "desqueeze lente squeeze"),
+        SettingEntry("accumulation", SettingsCategory.RECORDING, R.string.accumulation_title, "light water stars bulb acumulacion accumulation exposicion larga pintura luz agua estrellas duracion intervalo memoria cancelar"),
+        SettingEntry("bracket", SettingsCategory.RECORDING, R.string.bracket_settings_title, "bracket horquillado cantidad count paso step ev exposiciones exposure separado hdr cancelacion progreso"),
+        SettingEntry("photo-aspect", SettingsCategory.RECORDING, R.string.photo_aspect_title, "aspecto aspect ratio recorte crop personalizado custom proporcion ancho alto width height JPEG RAW"),
+        SettingEntry("photo-format", SettingsCategory.RECORDING, R.string.photo_format_title, "foto photo fotografia formato format raw dng jpeg heic calidad quality pareja pair"),
+        SettingEntry("zero-shutter-lag", SettingsCategory.RECORDING, R.string.zsl_title, "zsl zero shutter lag latencia latency retardo disparador obturador shutter foto photo rapido fast"),
+        SettingEntry("night-photo", SettingsCategory.RECORDING, R.string.night_photo_title, "noche night nocturno auto automatica siempre always low light poca luz oscuridad dark foto photo fotografia extension extensión HDR fusion multiples frames"),
+        SettingEntry("photo-flash", SettingsCategory.RECORDING, R.string.photo_flash_title, "flash fotografia foto photo automatico automatic forced forzado pulso pulse intensidad strength precaptura"),
+        SettingEntry("torch", SettingsCategory.CAPTURE, R.string.flash_torch, "flash torch antorcha linterna luz light intensidad intensity strength LOG"),
+        SettingEntry("zebra", SettingsCategory.MONITORING, R.string.monitor_zebra, "zebra cebra exposicion exposure"),
+        SettingEntry("peaking", SettingsCategory.MONITORING, R.string.monitor_peaking, "peaking focus enfoque"),
+        SettingEntry("histogram", SettingsCategory.MONITORING, R.string.histogram_default, "histogram histograma RGB luma"),
+        SettingEntry("grid", SettingsCategory.MONITORING, R.string.composition_grid, "grid grilla composicion guia"),
+        SettingEntry("grid-mode", SettingsCategory.MONITORING, R.string.composition_grid_mode, "grid thirds tercios aurea diagonal golden"),
+        SettingEntry("horizon", SettingsCategory.MONITORING, R.string.horizon_level, "horizonte nivel level horizon"),
+        SettingEntry("metering", SettingsCategory.CAPTURE, R.string.tap_exposure_metering, "tap touch toque exposicion exposure metering medicion"),
+        SettingEntry("assist", SettingsCategory.MONITORING, R.string.log_view_assist, "LUT LOG Rec709 asistencia assist color"),
+        SettingEntry("log-grey-reference", SettingsCategory.RECORDING, R.string.log_grey_reference, "LOG OCLog2 gris medio middle grey gray 18% HLG SDR exposicion exposure referencia reference ganancia gain"),
+        SettingEntry("hdr-format", SettingsCategory.RECORDING, R.string.hdr_format, "HDR HLG HDR10 PQ ST 2084 BT.2020 transferencia transfer formato format video Main10"),
+        SettingEntry("focus-lock", SettingsCategory.CAPTURE, R.string.af_lock_behavior, "focus enfoque AF bloqueo lock"),
+        SettingEntry("zoom-lens", SettingsCategory.CAPTURE, R.string.zoom_lens_switch_mode, "zoom lente lens cambio switch automatico automatic manual preajuste preset tele gran angular wide pellizco pinch"),
+        SettingEntry("smooth-lens-switch", SettingsCategory.CAPTURE, R.string.smooth_lens_switch, "zoom lente lens cambio switch salto jump suavizar smooth fundido blend transicion transition encuadre framing tele gran angular wide ultrawide pellizco pinch"),
+        SettingEntry("lens-calibration", SettingsCategory.CAPTURE, R.string.lens_cal_title, "lens lente objetivo calibration calibracion calibrar zoom colour color match igualar sensor multi camera wide ultrawide tele telephoto framing encuadre alineacion alignment correction correccion switch cambio"),
+        SettingEntry("lens-lock", SettingsCategory.CAPTURE, R.string.lens_lock_title, "lens lock bloqueo lente objetivo zoom digital zoom digital switch lens cambio cambiar ultra wide ultrawide gran angular tele telephoto fijar pin"),
+        SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),
+        SettingEntry("gyroflow-log", SettingsCategory.RECORDING, R.string.gyroflow_log_title, "gyroflow gyro gyroscope giroscopio acelerometro accelerometer gcsv movimiento motion estabilizacion stabilization sensor IMU video LOG HLG privacidad privacy"),
+        SettingEntry("camera-capabilities", SettingsCategory.DIAGNOSTICS, R.string.caps_title, "capacidades capabilities parametros parameters caracteristicas characteristics camera2 camara camera sensor lente lens soporte support compatibilidad compatibility hardware nivel level ISO RAW HLG HDR fps alta velocidad high speed formatos formats informe report"),
+        SettingEntry("storage-benchmark", SettingsCategory.DIAGNOSTICS, R.string.bench_title, "almacenamiento storage velocidad speed escritura write benchmark prueba test tarjeta card sd disco disk bitrate"),
+        SettingEntry("hardware", SettingsCategory.DIAGNOSTICS, R.string.hardware_truth, "hardware capacidades capabilities camara camera LOG RAW"),
+        SettingEntry("modes", SettingsCategory.DIAGNOSTICS, R.string.settings_mode_availability, "modo mode supported disponible experimental"),
+        SettingEntry("about", SettingsCategory.DIAGNOSTICS, R.string.about_title, "about acerca licencia license version ayuda help"),
+    )
+
+    fun search(query: String, category: SettingsCategory?, label: (Int) -> String): Set<String> {
+        val words = normalize(query).split(Regex("\\s+")).filter(String::isNotEmpty)
+        return entries.filter { entry ->
+            (category == null || entry.category == category) && words.all { word ->
+                word in normalize("${label(entry.title)} ${label(entry.category.title)} ${entry.keywords}")
+            }
+        }.mapTo(linkedSetOf()) { it.id }
+    }
+
+    private fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
+}
+
+/** Only these preferences change a running recording; structural settings, including manual
+ * audio gain and requested AGC, remain pending until the next take. */
+fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings = copy(
+    geotaggingEnabled = next.geotaggingEnabled,
+    gyroflowLogEnabled = next.gyroflowLogEnabled,
+    audioListening = next.audioListening,
+    audioMeter = next.audioMeter,
+    gallery = next.gallery,
+    mediaSharing = next.mediaSharing,
+    captureNaming = next.captureNaming,
+    playback = next.playback,
+    proxy = next.proxy,
+    audioListeningOutputDeviceId = next.audioListeningOutputDeviceId,
+    monitoring = next.monitoring,
+    operation = next.operation,
+    haptics = next.haptics,
+    fpsLock = next.fpsLock,
+    // Only the render crop changes, never the session, so it follows the switch mid-take.
+    smoothLensSwitch = next.smoothLensSwitch,
+    // lensLock and the lensCorrection* switches are deliberately absent: they are structural and stay
+    // as the take started (the camera session and the render graph are built from them).
+    exposure = if (next.operation.lockDuringTake) exposure else next.exposure,
+    whiteBalance = if (next.operation.lockDuringTake || recordingWhiteBalance == com.librestatic.opencinecam.camera.RecordingWhiteBalancePolicy.LOCK_ON_RECORD) whiteBalance else next.whiteBalance,
+    subjectDisplay = next.subjectDisplay.copy(continueRecordingOnFold = subjectDisplay.continueRecordingOnFold),
+    flashEnabled = if (next.operation.lockDuringTake) flashEnabled else next.flashEnabled,
+    torchStrengthLevel = if (next.operation.lockDuringTake) torchStrengthLevel else next.torchStrengthLevel,
+    zebraEnabled = next.zebraEnabled,
+    peakingEnabled = next.peakingEnabled,
+    histogramEnabled = next.histogramEnabled,
+    histogramMode = next.histogramMode,
+    compositionGridEnabled = next.compositionGridEnabled,
+    compositionGridMode = next.compositionGridMode,
+    horizonLevelEnabled = next.horizonLevelEnabled,
+    logViewAssistEnabled = next.logViewAssistEnabled,
+    modeSelectorStyle = next.modeSelectorStyle,
+    translucentChrome = next.translucentChrome,
+    viewfinderScale = next.viewfinderScale,
+    chromeOpacity = next.chromeOpacity,
+)

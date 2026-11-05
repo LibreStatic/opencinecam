@@ -15,6 +15,9 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.settings.AccumulationCaptureProgress
+import com.librestatic.opencinecam.settings.AccumulationSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 class AccumulationUiTest {
     @get:Rule val compose=createComposeRule()

@@ -18,9 +18,9 @@ import com.librestatic.opencinecam.service.CaptureService.ServiceCalibrationRig
 // These are extensions so the service's state stays in one object; they keep the threading rules of its members.
 
 /** The lenses [cameraId] can be locked to, widest first (the engine caches the characteristics read). */
-internal fun CaptureService.lensLockOptions(cameraId: String?): List<com.librestatic.opencinecam.LensLockOption> =
+internal fun CaptureService.lensLockOptions(cameraId: String?): List<com.librestatic.opencinecam.capture.LensLockOption> =
     cameraId?.let { id ->
-        previewEngine.lensLockCandidates(id).map { com.librestatic.opencinecam.LensLockOption(it.physicalId, it.anchorRatio, it.focalMm) }
+        previewEngine.lensLockCandidates(id).map { com.librestatic.opencinecam.capture.LensLockOption(it.physicalId, it.anchorRatio, it.focalMm) }
     }.orEmpty()
 
 /**
@@ -96,7 +96,7 @@ internal fun CaptureService.loadLensCalibration(cameraId: String?): com.libresta
     if (lensLockedSession(cameraId)) return null
     lensCalibrationCache?.takeIf { it.first == cameraId }?.let { return it.second }
     val set = runCatching {
-        com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
+        com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this)
             .load(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
     }.getOrNull()
     lensCalibrationCache = cameraId to set
@@ -138,10 +138,10 @@ internal fun CaptureService.logCalibrationCycle(c: com.librestatic.opencinecam.c
 }
 
 internal fun CaptureService.calibrationRows(progress: com.librestatic.opencinecam.camera.calibration.RunProgress) = progress.lenses.map {
-    com.librestatic.opencinecam.LensCalibrationLensRow(
+    com.librestatic.opencinecam.calibration.LensCalibrationLensRow(
         physicalId = it.physicalId,
         nominalRatio = it.nominalRatio,
-        status = com.librestatic.opencinecam.LensCalibrationLensStatus.valueOf(it.status.name),
+        status = com.librestatic.opencinecam.calibration.LensCalibrationLensStatus.valueOf(it.status.name),
         progress = it.progress,
         colorDeltaEBefore = it.colorDeltaEBefore,
         colorDeltaEAfter = it.colorDeltaEAfter,
@@ -157,11 +157,11 @@ internal fun CaptureService.savedCalibrationRows(
     anchors: List<ZoomAnchor>,
 ) = set.lenses.map { lens ->
     val reference = lens.physicalId == set.referencePhysicalId
-    com.librestatic.opencinecam.LensCalibrationLensRow(
+    com.librestatic.opencinecam.calibration.LensCalibrationLensRow(
         physicalId = lens.physicalId,
         nominalRatio = anchors.firstOrNull { it.physicalCameraId == lens.physicalId }?.ratio ?: 0f,
-        status = if (reference) com.librestatic.opencinecam.LensCalibrationLensStatus.REFERENCE
-            else com.librestatic.opencinecam.LensCalibrationLensStatus.DONE,
+        status = if (reference) com.librestatic.opencinecam.calibration.LensCalibrationLensStatus.REFERENCE
+            else com.librestatic.opencinecam.calibration.LensCalibrationLensStatus.DONE,
         progress = 1f,
         colorDeltaEAfter = lens.quality.colorResidualDeltaE.takeIf { !reference },
         alignPxAfter = lens.quality.alignResidualPx.takeIf { !reference },
@@ -179,7 +179,7 @@ internal fun CaptureService.refreshSavedCalibration(descriptor: Camera2CameraDes
     val cameraId = descriptor?.cameraId
     val set = cameraId?.let {
         runCatching {
-            com.librestatic.opencinecam.LensCalibrationStore.forContext(this)
+            com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this)
                 .load(Build.FINGERPRINT, it, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
         }.getOrNull()
     }
@@ -263,7 +263,7 @@ internal fun CaptureService.runCalibration(
                 onProgress = { progress ->
                     if (calibrationRun === run && !run.cancelled) lensCalibrationState.update {
                         it.copy(
-                            phase = com.librestatic.opencinecam.LensCalibrationPhase.valueOf(progress.phase.name),
+                            phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.valueOf(progress.phase.name),
                             referencePhysicalId = progress.referencePhysicalId,
                             lenses = calibrationRows(progress),
                         )
@@ -311,13 +311,13 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
     failure?.let { android.util.Log.i("LensCalibration", "run failed: ${it.failure}") }
     when {
         run.cancelled -> lensCalibrationState.update {
-            it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+            it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
         }
         success != null && !run.lost -> {
             calibrationPending = success.set
             lensCalibrationState.update {
                 it.copy(
-                    phase = com.librestatic.opencinecam.LensCalibrationPhase.RESULT,
+                    phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.RESULT,
                     logicalCameraId = restore.cameraId,
                     referencePhysicalId = success.set.referencePhysicalId,
                     lenses = calibrationRows(success.progress),
@@ -327,14 +327,14 @@ internal fun CaptureService.finishCalibration(run: CalibrationRun, outcome: com.
         }
         else -> {
             val reason = when {
-                run.lost -> com.librestatic.opencinecam.LensCalibrationFailure.CAMERA_LOST
-                run.unsupported || outcome == null -> com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE
-                failure != null -> com.librestatic.opencinecam.LensCalibrationFailure.valueOf(failure.failure.name)
-                else -> com.librestatic.opencinecam.LensCalibrationFailure.INTERNAL
+                run.lost -> com.librestatic.opencinecam.calibration.LensCalibrationFailure.CAMERA_LOST
+                run.unsupported || outcome == null -> com.librestatic.opencinecam.calibration.LensCalibrationFailure.UNSUPPORTED_MODE
+                failure != null -> com.librestatic.opencinecam.calibration.LensCalibrationFailure.valueOf(failure.failure.name)
+                else -> com.librestatic.opencinecam.calibration.LensCalibrationFailure.INTERNAL
             }
             lensCalibrationState.update {
                 it.copy(
-                    phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED,
+                    phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED,
                     logicalCameraId = restore.cameraId,
                     lenses = failure?.let { f -> calibrationRows(f.progress) } ?: it.lenses,
                     failure = reason,

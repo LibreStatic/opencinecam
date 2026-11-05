@@ -46,8 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
-import com.librestatic.opencinecam.CineGlyph
-import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.ui.CineGlyph
+import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import kotlinx.coroutines.delay

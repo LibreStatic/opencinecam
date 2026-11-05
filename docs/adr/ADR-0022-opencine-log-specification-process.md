@@ -60,7 +60,7 @@ Revisit only when official platform contracts, measured device evidence, release
 
 ### Context
 
-The original decision keeps Log unavailable until the specification, references, vectors and tolerances pass. OCC-PLAN-061 later put an OCLog2 runtime behind the launcher, and `docs/color/opencine-log-v2.md` and `docs/architecture.md` describe it as experimental and not qualified. The mode UI labels an available LOG gate "Experimental" unless the camera has an OpenCineLog profile backed by accepted evidence (`showsExperimentalGate` in `app/src/main/java/com/librestatic/opencinecam/CameraScreen.kt`).
+The original decision keeps Log unavailable until the specification, references, vectors and tolerances pass. OCC-PLAN-061 later put an OCLog2 runtime behind the launcher, and `docs/color/opencine-log-v2.md` and `docs/architecture.md` describe it as experimental and not qualified. The mode UI labels an available LOG gate "Experimental" unless the camera has an OpenCineLog profile backed by accepted evidence (`showsExperimentalGate` in `app/src/main/java/com/librestatic/opencinecam/capture/CaptureModeLabels.kt`).
 
 ### Decision
 

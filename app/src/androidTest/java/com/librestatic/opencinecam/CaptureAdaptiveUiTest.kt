@@ -41,6 +41,17 @@ import org.junit.Test
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.capture.CompositionGridMode
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.glyph
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.AboutScreen
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.HistogramMode
+import com.librestatic.opencinecam.settings.ModeSelectorStyle
+import com.librestatic.opencinecam.settings.SettingsScreen
+import com.librestatic.opencinecam.settings.loadThirdPartyComponents
 
 class CaptureAdaptiveUiTest {
     private var chromeDensity = 1f

@@ -16,6 +16,19 @@ import com.librestatic.opencinecam.camera.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.ChoiceTile
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.PresetPersistence
+import com.librestatic.opencinecam.settings.PresetQuickAccess
+import com.librestatic.opencinecam.settings.PresetRepository
+import com.librestatic.opencinecam.settings.PresetReviewDialog
+import com.librestatic.opencinecam.settings.PresetSettings
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.compatibilityIssues
+import com.librestatic.opencinecam.settings.readPresetDocument
 
 class PresetUiTest {
     @get:Rule val compose = createComposeRule()

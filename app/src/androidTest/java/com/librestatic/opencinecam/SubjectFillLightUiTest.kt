@@ -12,6 +12,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.gallery.tint
+import com.librestatic.opencinecam.subject.FillLightNotice
+import com.librestatic.opencinecam.subject.FillLightOutput
+import com.librestatic.opencinecam.subject.FillLightPreset
+import com.librestatic.opencinecam.subject.LocalSubjectFillLightOutput
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectFillLightSettings
 
 /** OCC-PLAN-068 U3. Written in W1; run by the W2 integration on the isolated test emulator. */
 class SubjectFillLightUiTest {

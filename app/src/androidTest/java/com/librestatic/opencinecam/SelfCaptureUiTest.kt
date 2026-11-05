@@ -9,6 +9,11 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.CaptureButton
+import com.librestatic.opencinecam.capture.SelfCaptureChrome
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 
 class SelfCaptureUiTest {
     @get:Rule val compose = createComposeRule()

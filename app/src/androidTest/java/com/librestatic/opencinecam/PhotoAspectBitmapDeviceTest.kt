@@ -15,6 +15,8 @@ import java.nio.ByteOrder
 import java.util.concurrent.CancellationException
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.label
 
 /** Actual platform JPEG encode/decode. EXIF is inserted in memory, not through a production
  * orientation helper. Expected corner tables are independent of its matrix/pixel transforms. */

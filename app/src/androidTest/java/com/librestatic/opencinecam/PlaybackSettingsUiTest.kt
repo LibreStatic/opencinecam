@@ -15,6 +15,12 @@ import androidx.compose.ui.unit.dp
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.PlaybackSettings
+import com.librestatic.opencinecam.gallery.PlaybackSettingsControls
+import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 class PlaybackSettingsUiTest {
     @get:Rule val compose = createComposeRule()

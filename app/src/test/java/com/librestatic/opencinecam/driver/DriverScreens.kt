@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.settings.normalizedFor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,29 +36,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import com.librestatic.opencinecam.DisplayCapability
-import com.librestatic.opencinecam.FoldDisplaySettings
-import com.librestatic.opencinecam.FoldDisplayState
-import com.librestatic.opencinecam.FoldPosture
-import com.librestatic.opencinecam.LocalFoldDisplayStateWithoutCoordinator
-import com.librestatic.opencinecam.SelfCaptureChrome
-import com.librestatic.opencinecam.SubjectDisplayMode
-import com.librestatic.opencinecam.SubjectDisplayScreen
-import com.librestatic.opencinecam.SubjectDisplaySettings
-import com.librestatic.opencinecam.SubjectSessionCues
+import com.librestatic.opencinecam.fold.DisplayCapability
+import com.librestatic.opencinecam.fold.FoldDisplaySettings
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.FoldPosture
+import com.librestatic.opencinecam.fold.LocalFoldDisplayStateWithoutCoordinator
+import com.librestatic.opencinecam.capture.SelfCaptureChrome
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSessionCues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
-import com.librestatic.opencinecam.AboutScreen
-import com.librestatic.opencinecam.CameraCapabilitiesScreen
-import com.librestatic.opencinecam.StorageBenchmarkContent
-import com.librestatic.opencinecam.LensCalibrationContent
-import com.librestatic.opencinecam.LensCalibrationFailure
-import com.librestatic.opencinecam.LensCalibrationLensRow
-import com.librestatic.opencinecam.LensCalibrationLensStatus
-import com.librestatic.opencinecam.LensCalibrationPhase
-import com.librestatic.opencinecam.LensCalibrationUiState
+import com.librestatic.opencinecam.settings.AboutScreen
+import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.diagnostics.StorageBenchmarkContent
+import com.librestatic.opencinecam.calibration.LensCalibrationContent
+import com.librestatic.opencinecam.calibration.LensCalibrationFailure
+import com.librestatic.opencinecam.calibration.LensCalibrationLensRow
+import com.librestatic.opencinecam.calibration.LensCalibrationLensStatus
+import com.librestatic.opencinecam.calibration.LensCalibrationPhase
+import com.librestatic.opencinecam.calibration.LensCalibrationUiState
 import com.librestatic.opencinecam.core.model.CalibrationFlag
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
@@ -67,42 +67,42 @@ import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.core.model.StorageBenchmarkOutcome
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import com.librestatic.opencinecam.AdaptiveCaptureChrome
-import com.librestatic.opencinecam.AdaptiveWindow
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
+import com.librestatic.opencinecam.ui.AdaptiveWindow
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
-import com.librestatic.opencinecam.OperatorPreferences
+import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CaptureInitialPane
+import com.librestatic.opencinecam.capture.CaptureInitialPane
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.CaptureScopeVisibility
-import com.librestatic.opencinecam.CodecBadge
-import com.librestatic.opencinecam.CompositionGridMode
-import com.librestatic.opencinecam.GalleryFacts
-import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.HistogramMode
-import com.librestatic.opencinecam.HorizonRollMath
-import com.librestatic.opencinecam.LocalAdaptiveWindow
-import com.librestatic.opencinecam.LocalOperatorActions
-import com.librestatic.opencinecam.MediaCatalogContent
-import com.librestatic.opencinecam.MediaCatalogSource
-import com.librestatic.opencinecam.MonitoringOverlay
-import com.librestatic.opencinecam.OnboardingScreen
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.capture.CaptureScopeVisibility
+import com.librestatic.opencinecam.gallery.CodecBadge
+import com.librestatic.opencinecam.capture.CompositionGridMode
+import com.librestatic.opencinecam.gallery.GalleryFacts
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.settings.HistogramMode
+import com.librestatic.opencinecam.capture.HorizonRollMath
+import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
+import com.librestatic.opencinecam.capture.LocalOperatorActions
+import com.librestatic.opencinecam.gallery.MediaCatalogContent
+import com.librestatic.opencinecam.gallery.MediaCatalogSource
+import com.librestatic.opencinecam.capture.MonitoringOverlay
+import com.librestatic.opencinecam.onboarding.OnboardingScreen
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsScreen
-import com.librestatic.opencinecam.SplashHandoff
-import com.librestatic.opencinecam.TakeProxyState
+import com.librestatic.opencinecam.settings.SettingsScreen
+import com.librestatic.opencinecam.onboarding.SplashHandoff
+import com.librestatic.opencinecam.gallery.TakeProxyState
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.camera.detectFocusEdges
 import com.librestatic.opencinecam.camera.monitoringDisplayPoint
 import com.librestatic.opencinecam.camera.outputFrameInStream
-import com.librestatic.opencinecam.drawFocusPeaking
-import com.librestatic.opencinecam.focusPeakingPlacement
-import com.librestatic.opencinecam.previewDisplayRatio
+import com.librestatic.opencinecam.capture.drawFocusPeaking
+import com.librestatic.opencinecam.capture.focusPeakingPlacement
+import com.librestatic.opencinecam.capture.previewDisplayRatio
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaCursor
 import com.librestatic.opencinecam.storage.LocalMediaEncoding
@@ -174,17 +174,17 @@ fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
 
 /** The Razr Fold's three lenses as lock options: ultra-wide "3", wide "2" and tele "5" (anchors 0.55, 1 and 3). */
 private val DriverLensLockOptions = listOf(
-    com.librestatic.opencinecam.LensLockOption("3", 0.55f, 2.2f),
-    com.librestatic.opencinecam.LensLockOption("2", 1.0f, 6.9f),
-    com.librestatic.opencinecam.LensLockOption("5", 3.0f, 20.6f),
+    com.librestatic.opencinecam.capture.LensLockOption("3", 0.55f, 2.2f),
+    com.librestatic.opencinecam.capture.LensLockOption("2", 1.0f, 6.9f),
+    com.librestatic.opencinecam.capture.LensLockOption("5", 3.0f, 20.6f),
 )
 
 private fun driverLensLockState(
     lockedId: String?,
-    route: com.librestatic.opencinecam.LensLockRoute? = null,
+    route: com.librestatic.opencinecam.capture.LensLockRoute? = null,
     switched: Boolean = false,
 ): CameraUiState {
-    val lock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedId, route, switched)
+    val lock = com.librestatic.opencinecam.capture.LensLockUiState(DriverLensLockOptions, lockedId, route, switched)
     val base = driverCaptureState(CaptureMode.VIDEO)
     val anchors = DriverLensLockOptions.map { com.librestatic.opencinecam.camera.ZoomAnchor(it.anchorRatio, it.focalLengthMm, it.physicalId) }
     // Locked to the tele: its 1-8x digital range times its 3x anchor; unlocked: the logical 0.55-24x scale at 1x.
@@ -196,7 +196,7 @@ private fun driverLensLockState(
 
 /** Video locked to the tele ("5", served directly): the anchor bar is the lock bar and LENS LOCK is on. */
 @Composable
-fun CaptureLensLocked() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.DIRECT_PHYSICAL))
+fun CaptureLensLocked() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.capture.LensLockRoute.DIRECT_PHYSICAL))
 
 /** Video with the lens lock offered but off: the LENS LOCK key beside the lock keys, the normal anchors. */
 @Composable
@@ -204,7 +204,7 @@ fun CaptureLensLockAvailable() = CaptureChrome(driverLensLockState(null))
 
 /** Locked to the tele on the fallback route: the "Lens lock: digital crop" notice under the zoom. */
 @Composable
-fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.LensLockRoute.GPU_CROP))
+fun CaptureLensLockCrop() = CaptureChrome(driverLensLockState("5", com.librestatic.opencinecam.capture.LensLockRoute.GPU_CROP))
 
 /** RAW photo on a camera that rejected the full graph: RAW and the analysis stream dropped, the notice under the zoom. */
 @Composable
@@ -335,7 +335,7 @@ fun Settings() = DriverTheme {
     var settings by remember { mutableStateOf(CameraSettings()) }
     var lockedLens by remember { mutableStateOf<String?>(null) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING,
-        lensLock = com.librestatic.opencinecam.LensLockUiState(DriverLensLockOptions, lockedLens)), settings, audioPermissionGranted = false,
+        lensLock = com.librestatic.opencinecam.capture.LensLockUiState(DriverLensLockOptions, lockedLens)), settings, audioPermissionGranted = false,
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it }, onSetLensLock = { lockedLens = it })
 }
 
@@ -391,7 +391,7 @@ fun CapabilitiesMain10() = DriverTheme {
 fun CapabilitiesDeviceProfile() = DriverTheme {
     val documents = java.io.File("src/main/profiles/device-profiles").listFiles { file -> file.extension == "json" }
         .orEmpty().sortedBy { it.name }.associate { it.name to it.readText() }
-    val quirks = com.librestatic.opencinecam.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
+    val quirks = com.librestatic.opencinecam.diagnostics.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
     CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
         loadMain10Check = { null }, loadDeviceProfile = { _, cameraId -> quirks.resolve(cameraId) })
 }

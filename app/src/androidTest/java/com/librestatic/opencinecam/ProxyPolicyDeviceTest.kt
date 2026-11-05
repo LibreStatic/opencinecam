@@ -17,6 +17,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.diagnostics.label
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxyPolicy
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.gallery.ProxySettingsControls
+import com.librestatic.opencinecam.gallery.label
 
 /** Real local preferences and controls; no proxy engine or device-condition acceptance claim. */
 class ProxyPolicyDeviceTest {

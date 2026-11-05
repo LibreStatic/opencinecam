@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Force a concurrent preview-state update between the real method read and write. */
 @OptIn(kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi::class)

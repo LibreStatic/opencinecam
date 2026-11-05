@@ -24,6 +24,11 @@ import kotlinx.coroutines.flow.first
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.gallery.MediaCatalogScreen
+import com.librestatic.opencinecam.gallery.ProxyPolicies
+import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 
 /** Actual orphaned derivative discovery. Share affordance only: no external chooser is launched. */
 class ProxyCatalogUiTest {

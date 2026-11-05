@@ -20,6 +20,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.gallery.GalleryMediaKind
+import com.librestatic.opencinecam.gallery.GallerySettings
+import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 
 /** Actual MediaStore rows, sidecar bytes and read-only recovery receipts; never a fake gallery. */
 class LocalMediaCatalogDeviceTest {

@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** Actual standalone files and published metadata, not synthesized PCM anchors or video alignment. */
 class SidecarCaptureTimingTest {

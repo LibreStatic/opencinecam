@@ -17,6 +17,24 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import com.librestatic.opencinecam.capture.PortraitCaptureTransport
+import com.librestatic.opencinecam.capture.RecordingPauseButton
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.ProjectTimingSettings
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.SettingsRepository
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.TimelapseSettings
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.videoProjectRate
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 
 class TimelapseUiTest {
     @get:Rule val compose = createComposeRule()

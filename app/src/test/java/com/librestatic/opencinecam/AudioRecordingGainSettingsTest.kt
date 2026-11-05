@@ -5,6 +5,17 @@ import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.SettingsPersistence
+import com.librestatic.opencinecam.settings.SettingsRepository
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
+import com.librestatic.opencinecam.settings.PRESET_V20_KEYS
 
 class AudioRecordingGainSettingsTest {
     private val keys = setOf("audio-recording-gain-enabled", "audio-recording-gain-db")

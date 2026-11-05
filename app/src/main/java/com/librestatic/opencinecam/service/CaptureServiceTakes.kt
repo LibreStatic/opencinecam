@@ -5,16 +5,16 @@ package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.camera.resolve
 
-import com.librestatic.opencinecam.projectLabel
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.DeviceQuirksProvider
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.RecordingGeometry
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.afterSavedProductionSlate
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.afterSavedProductionSlate
 import com.librestatic.opencinecam.storage.MotionLogRecorder
 import com.librestatic.opencinecam.storage.MotionLogTarget
 import com.librestatic.opencinecam.storage.VideoOutput
@@ -32,7 +32,7 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.RejectedExecutionException
 import com.librestatic.opencinecam.camera.monitorLutIdentity
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import com.librestatic.opencinecam.service.CaptureService.DetachedTake
 
@@ -323,5 +323,5 @@ internal fun CaptureService.incrementSavedSlate(saved: ProductionSlateSettings) 
 internal fun CaptureService.admittedCaptureNames(): CaptureNameSnapshot {
     val intent = SettingsRepositories.get(this).states.value
     return CaptureNameSnapshot(intent.captureNaming, intent.productionSlate, System.currentTimeMillis(),
-        com.librestatic.opencinecam.CaptureLocations.get(this).snapshot())
+        com.librestatic.opencinecam.settings.CaptureLocations.get(this).snapshot())
 }
