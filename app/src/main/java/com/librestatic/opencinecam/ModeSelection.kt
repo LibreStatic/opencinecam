@@ -65,6 +65,54 @@ internal fun slowMotionRateAt(
     return atSize.firstOrNull { it.fps == currentFps }?.fps ?: atSize.maxOfOrNull { it.fps }
 }
 
+/**
+ * What choosing [mode] on the dial does: the settings to store and apply (null when unchanged), the
+ * pipeline mode to select (null when it stays), otherwise the rate to select (null when it stays),
+ * and the real-time rate Video returns to after slow motion.
+ */
+internal data class ModeSwitchPlan(
+    val settings: CameraSettings?,
+    val pipelineMode: CaptureMode?,
+    val targetFps: Int?,
+    val normalVideoFps: Int,
+)
+
+/**
+ * Plans a switch to [mode]. Slow motion is VIDEO recording off-speed and Video is the same path at
+ * normal speed, so size and rate are settled before the mode changes: a switch from another mode
+ * then opens the camera once, directly in the high-speed session, instead of reopening it per step.
+ * [normalVideoFps] is the real-time rate Video had before slow motion raised it.
+ */
+internal fun planModeSwitch(mode: CaptureMode, state: CameraUiState, settings: CameraSettings, normalVideoFps: Int): ModeSwitchPlan {
+    val slow = mode == CaptureMode.SLOW_MOTION
+    val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
+    val normalFps = if (slow && !settings.videoOffSpeed && state.targetFps < SLOW_MOTION_MIN_FPS) state.targetFps else normalVideoFps
+    val profile = if (slow) state.descriptor?.let { descriptor ->
+        slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
+    } else null
+    val offSpeed = when (mode) {
+        CaptureMode.SLOW_MOTION -> true
+        CaptureMode.VIDEO -> false
+        else -> settings.videoOffSpeed
+    }
+    val updated = settings.copy(videoOffSpeed = offSpeed).let { base ->
+        profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) }
+            ?: if (leavingSlowMotion) base.copy(videoFps = normalFps) else base
+    }
+    val pipelineMode = if (slow) CaptureMode.VIDEO else mode
+    return ModeSwitchPlan(
+        settings = updated.takeIf { it != settings },
+        pipelineMode = pipelineMode.takeIf { it != state.selectedMode },
+        targetFps = when {
+            pipelineMode != state.selectedMode -> null
+            profile != null -> profile.fps
+            leavingSlowMotion -> normalFps
+            else -> null
+        },
+        normalVideoFps = normalFps,
+    )
+}
+
 /** The mode shown as selected and the action that selects one, provided by the capture chrome. */
 internal class ModeSelection(val displayed: CaptureMode, val select: (CaptureMode) -> Unit)
 

@@ -82,9 +82,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         binder?.refreshAudioCapabilities()
     }
     val onboardingStore = remember(context) { OnboardingStore(context) }
-    var onboardingDone by remember { mutableStateOf(onboardingStore.isCompleted()) }
-    // The tour was started again from About rather than on a first run.
-    var tourReplay by rememberSaveable { mutableStateOf(false) }
+    val navigation = rememberCameraRootNavigation(onboardingStore)
+    val onboardingDone = navigation.onboardingDone
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
     val liveState = stateFlow.collectAsStateWithLifecycle()
@@ -115,17 +114,13 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         }
     }
     LaunchedEffect(foldDisplays, settings.subjectDisplay.brightness) { foldDisplays?.applyBrightness() }
-    var section by rememberSaveable { mutableStateOf(AppSection.CAPTURE) }
-    var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+    val section = navigation.section
+    val settingsPage = navigation.settingsPage
     val settingsStateHolder = rememberSaveableStateHolder()
 
-    val sectionBack = rememberPredictiveBack(enabled = section != AppSection.CAPTURE && settingsPage == SettingsPage.MAIN) {
-        section = AppSection.CAPTURE
-    }
+    val sectionBack = rememberPredictiveBack(enabled = navigation.sectionBackEnabled) { navigation.backToCapture() }
 
-    val pageBack = rememberPredictiveBack(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
-        settingsPage = SettingsPage.MAIN
-    }
+    val pageBack = rememberPredictiveBack(enabled = navigation.pageBackEnabled) { navigation.backToSettingsHome() }
 
     LaunchedEffect(state.audioCapabilities) {
         state.audioCapabilities?.let { capabilities ->
@@ -136,24 +131,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         }
     }
     LaunchedEffect(state.selectedMode, state.targetVideoWidth, state.targetVideoHeight, state.targetFps) {
-        if (state.phase == CameraUiPhase.RECORDING) return@LaunchedEffect
-        val updated = when (state.selectedMode) {
-            CaptureMode.LOG, CaptureMode.HLG -> settings.copy(
-                logWidth = state.targetVideoWidth,
-                logHeight = state.targetVideoHeight,
-                logFps = state.targetFps,
-            )
-            CaptureMode.TIME_LAPSE -> settings.copy(
-                timelapseWidth = state.targetVideoWidth,
-                timelapseHeight = state.targetVideoHeight,
-            )
-            in CameraUiState.videoProfileModes -> settings.copy(
-                videoWidth = state.targetVideoWidth,
-                videoHeight = state.targetVideoHeight,
-                videoFps = state.targetFps,
-            )
-            else -> settings
-        }
+        val updated = settings.followingCameraSelection(state)
         if (updated != settings) {
             settingsRepository.set(updated)
         }
@@ -184,21 +162,17 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                 onSettingsChanged = { updated ->
                     settingsRepository.set(updated)
                 },
-                onOpenMedia = { binder?.cancelSelfTimer(); section = AppSection.MEDIA },
+                onOpenMedia = { binder?.cancelSelfTimer(); navigation.openMedia() },
                 onOpenSettings = {
                     binder?.cancelSelfTimer()
-                    settingsPage = SettingsPage.MAIN
-                    section = AppSection.SETTINGS
+                    navigation.openSettings()
                 },
             )
             }
         } else {
             // The capture surface binds the camera, so it is not composed under the gesture: the shrinking shell reveals the background.
             Box(Modifier.fillMaxSize().predictiveBackPreview(sectionBack).background(MaterialTheme.colorScheme.background)) {
-            AppShell(section, foldState.hinge, onSelect = {
-                settingsPage = SettingsPage.MAIN
-                section = it
-            }) {
+            AppShell(section, foldState.hinge, onSelect = navigation::select) {
                 when (section) {
                     AppSection.MEDIA -> MediaCatalogScreen(settings.gallery,
                         onSettings = { gallery -> settingsRepository.update { it.copy(gallery = gallery) } },
@@ -211,15 +185,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                     AppSection.SETTINGS -> if (settingsPage == SettingsPage.ABOUT) {
                         Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
                         AboutScreen(
-                            onBack = { settingsPage = SettingsPage.MAIN },
-                            onReplayTour = {
-                                onboardingStore.reset()
-                                settingsPage = SettingsPage.MAIN
-                                // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
-                                section = AppSection.CAPTURE
-                                tourReplay = true
-                                onboardingDone = false
-                            },
+                            onBack = navigation::backToSettingsHome,
+                            onReplayTour = navigation::replayTour,
                         )
                         }
                     } else if (settingsPage == SettingsPage.CAPABILITIES) {
@@ -227,7 +194,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                         CameraCapabilitiesScreen(
                             cameras = state.cameras,
                             activeCameraId = state.selectedCameraId,
-                            onBack = { settingsPage = SettingsPage.MAIN },
+                            onBack = navigation::backToSettingsHome,
                             liveState = state,
                         )
                         }
@@ -236,7 +203,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                         StorageBenchmarkScreen(
                             requiredBytesPerSecond = benchmarkRequiredBytesPerSecond(state.selectedMode, settings, state.targetFps,
                                 state.activeVideoProfile?.constrainedHighSpeed == true),
-                            onBack = { settingsPage = SettingsPage.MAIN },
+                            onBack = navigation::backToSettingsHome,
                         )
                         }
                     } else if (settingsPage == SettingsPage.LENS_CALIBRATION) {
@@ -245,12 +212,11 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             state = lensCalibration,
                             settings = settings,
                             onSettingsChange = settingsRepository::set,
-                            onBack = { settingsPage = SettingsPage.MAIN },
+                            onBack = navigation::backToSettingsHome,
                             onStart = {
                                 // The run happens on the viewfinder: start it, then show the capture screen.
                                 binder?.startLensCalibration()
-                                settingsPage = SettingsPage.MAIN
-                                section = AppSection.CAPTURE
+                                navigation.showCaptureForCalibration()
                             },
                             onDelete = { binder?.deleteLensCalibration() },
                         )
@@ -263,12 +229,12 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             audioPermissionGranted = audioPermissionGranted,
                             audioPermissionBlocked = audioAccess.blocked,
                             onRequestAudioPermission = audioAccess.request,
-                            onOpenAbout = { settingsPage = SettingsPage.ABOUT },
+                            onOpenAbout = { navigation.openSettingsPage(SettingsPage.ABOUT) },
                             onSettingsChange = settingsRepository::set,
                             onApplyPreset = binder?.let { owner -> { preset -> owner.applyPreset(preset) } },
-                            onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
-                            onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
-                            onOpenLensCalibration = { settingsPage = SettingsPage.LENS_CALIBRATION },
+                            onOpenCapabilities = { navigation.openSettingsPage(SettingsPage.CAPABILITIES) },
+                            onOpenStorageBenchmark = { navigation.openSettingsPage(SettingsPage.STORAGE_BENCHMARK) },
+                            onOpenLensCalibration = { navigation.openSettingsPage(SettingsPage.LENS_CALIBRATION) },
                             onSetLensLock = binder?.let { owner -> { id -> owner.setLensLock(id) } },
                         )
                         }
@@ -334,13 +300,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                 audioPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
                 binder?.refreshAudioCapabilities()
             },
-            onFinished = {
-                onboardingStore.markCompleted()
-                onboardingDone = true
-                tourReplay = false
-            },
+            onFinished = navigation::finishTour,
             hinge = foldState.hinge,
-            replay = tourReplay,
+            replay = navigation.tourReplay,
         )
     }
     }
