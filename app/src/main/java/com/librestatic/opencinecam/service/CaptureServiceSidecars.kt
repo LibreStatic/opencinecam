@@ -16,7 +16,6 @@ import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 import com.librestatic.opencinecam.camera.Hdr10Video
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
-import com.librestatic.opencinecam.camera.OpenCineLogGpuPipeline
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
 import org.json.JSONObject
 

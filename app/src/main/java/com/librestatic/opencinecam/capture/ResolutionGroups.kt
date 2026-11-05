@@ -6,8 +6,6 @@ package com.librestatic.opencinecam.capture
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import com.librestatic.opencinecam.diagnostics.label
-import com.librestatic.opencinecam.gallery.label
 
 /** The aspect families the RES panel groups sizes into, in panel order. */
 internal enum class ResolutionAspect(val label: String?) {

@@ -4,9 +4,6 @@ package com.librestatic.opencinecam.settings
 import kotlinx.serialization.json.*
 import java.util.UUID
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.capture.color
-import com.librestatic.opencinecam.diagnostics.shutter
-import com.librestatic.opencinecam.gallery.tint
 
 /** Lens identity and calibrated focus marks are never assumed portable. */
 data class CameraPreset(

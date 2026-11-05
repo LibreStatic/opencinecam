@@ -75,7 +75,6 @@ import com.librestatic.opencinecam.capture.gateColor
 import com.librestatic.opencinecam.capture.gateLabel
 import com.librestatic.opencinecam.capture.modeLabel
 import com.librestatic.opencinecam.capture.showsExperimentalGate
-import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.fold.FoldDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.gallery.GallerySettingsControls

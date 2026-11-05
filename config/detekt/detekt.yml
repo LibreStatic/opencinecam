@@ -18,6 +18,9 @@ exceptions:
     active: false
 
 style:
+  # ktlint no longer checks imports; detekt does.
+  UnusedImports:
+    active: true
   # Camera, colour and codec code is full of physical constants used once at their call site.
   MagicNumber:
     active: false

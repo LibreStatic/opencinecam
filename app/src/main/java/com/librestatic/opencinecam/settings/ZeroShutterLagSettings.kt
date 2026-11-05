@@ -17,7 +17,6 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.capture.color
 import com.librestatic.opencinecam.diagnostics.label
-import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.gallery.label
 
 @Composable

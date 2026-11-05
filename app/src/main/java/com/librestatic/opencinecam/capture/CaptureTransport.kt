@@ -5,7 +5,6 @@
 
 package com.librestatic.opencinecam.capture
 
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.runtime.snapshotFlow
@@ -91,7 +90,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.animation.core.snap
 import androidx.compose.ui.unit.Dp
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState

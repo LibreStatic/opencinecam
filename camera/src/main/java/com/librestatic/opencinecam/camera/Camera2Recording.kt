@@ -5,13 +5,11 @@ package com.librestatic.opencinecam.camera
 
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
-import android.media.MediaRecorder
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.librestatic.opencinecam.media.video.VideoCodecPreference
 import android.util.Size
-import android.view.Surface
 import java.util.concurrent.CompletableFuture
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine.RecorderRequest
 import com.librestatic.opencinecam.camera.Camera2PreviewEngine.Companion.RECORDER_LEVEL_INTERVAL_MS

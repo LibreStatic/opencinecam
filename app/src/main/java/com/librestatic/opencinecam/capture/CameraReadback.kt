@@ -19,7 +19,6 @@ import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import kotlin.math.abs
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.diagnostics.focusDistance
 import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.gallery.tint
 import com.librestatic.opencinecam.settings.displayLabel

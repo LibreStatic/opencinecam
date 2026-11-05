@@ -23,7 +23,6 @@ import com.librestatic.opencinecam.settings.audioInputUnavailable
 import com.librestatic.opencinecam.settings.resolveAudioInputSelection
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import java.util.concurrent.CompletableFuture
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.update
 import com.librestatic.opencinecam.service.CaptureService.TakeAudioInput
 import com.librestatic.opencinecam.service.CaptureService.Companion.LOST_INPUT_STOP_ATTEMPTS

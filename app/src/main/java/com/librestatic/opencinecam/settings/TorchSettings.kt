@@ -15,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -30,8 +29,6 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.capture.color
-import com.librestatic.opencinecam.diagnostics.label
-import com.librestatic.opencinecam.gallery.label
 import com.librestatic.opencinecam.ui.CineSlider
 
 @OptIn(ExperimentalMaterial3Api::class)

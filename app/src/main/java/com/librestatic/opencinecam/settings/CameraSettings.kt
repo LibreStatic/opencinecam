@@ -6,9 +6,6 @@ package com.librestatic.opencinecam.settings
 import android.content.Context
 import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.camera.MonitoringOptions
-import com.librestatic.opencinecam.camera.MonitorColor
-import com.librestatic.opencinecam.camera.FalseColorPalette
-import com.librestatic.opencinecam.camera.MonitorAspectGuide
 import com.librestatic.opencinecam.camera.ImageProcessingSelection
 import com.librestatic.opencinecam.camera.StabilizationMode
 import com.librestatic.opencinecam.camera.IspMode
@@ -47,8 +44,6 @@ import com.librestatic.opencinecam.capture.CompositionGridMode
 import com.librestatic.opencinecam.capture.OperatorAction
 import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.StartupMode
-import com.librestatic.opencinecam.capture.color
-import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTIONS
 import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH
 import com.librestatic.opencinecam.fold.SubjectDisplayMode

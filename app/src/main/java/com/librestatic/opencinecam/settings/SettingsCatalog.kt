@@ -4,11 +4,8 @@ package com.librestatic.opencinecam.settings
 import java.text.Normalizer
 import java.util.Locale
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.capture.color
 import com.librestatic.opencinecam.diagnostics.label
-import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.gallery.label
-import com.librestatic.opencinecam.gallery.tint
 
 enum class SettingsCategory(val title: Int, val summary: Int) {
     CAPTURE(R.string.settings_category_capture, R.string.settings_summary_capture),

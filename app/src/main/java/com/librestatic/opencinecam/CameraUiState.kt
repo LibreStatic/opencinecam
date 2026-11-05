@@ -11,9 +11,6 @@ import com.librestatic.opencinecam.camera.WhiteBalanceSelection
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
-import com.librestatic.opencinecam.camera.FocusPullEasing
-import com.librestatic.opencinecam.camera.SmpteTimecode
-import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
 import com.librestatic.opencinecam.capture.HardwareTruthHudState
 import com.librestatic.opencinecam.capture.LensLockUiState

@@ -36,7 +36,6 @@ import com.librestatic.opencinecam.camera.AudioEffectState
 import com.librestatic.opencinecam.camera.AudioEffectObservationReader
 import com.librestatic.opencinecam.camera.requireExclusiveAgcObservation
 import com.librestatic.opencinecam.metadata.audioEffectsJson
-import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import com.librestatic.opencinecam.camera.createDisabledManualAgc
 import com.librestatic.opencinecam.metadata.recordingGainJson
 import com.librestatic.opencinecam.camera.SoftAgc

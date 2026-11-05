@@ -5,7 +5,6 @@
 
 package com.librestatic.opencinecam.capture
 
-import kotlinx.coroutines.flow.first
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.style.TextAlign
@@ -67,7 +66,6 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.gallery.glyph
 import com.librestatic.opencinecam.liveCameraState
 import com.librestatic.opencinecam.settings.AudioMeterMode
 import com.librestatic.opencinecam.settings.AudioMeterPeakHold

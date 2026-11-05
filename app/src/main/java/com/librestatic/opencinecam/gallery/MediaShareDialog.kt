@@ -22,7 +22,6 @@ import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.capture.color
-import com.librestatic.opencinecam.diagnostics.label
 import com.librestatic.opencinecam.settings.SettingsAccent
 import com.librestatic.opencinecam.settings.SettingsMuted
 import com.librestatic.opencinecam.ui.CineGlyph

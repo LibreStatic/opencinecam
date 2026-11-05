@@ -14,7 +14,6 @@ import kotlin.math.roundToInt
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.capture.exposureAvailability
 import com.librestatic.opencinecam.gallery.label
-import com.librestatic.opencinecam.gallery.tint
 
 /** How far a camera feeds one OpenCineCam feature. */
 enum class AppFeatureStatus { ACTIVE, PARTIAL, UNAVAILABLE }

@@ -14,8 +14,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextAlign
-import android.content.Context
-import android.view.SurfaceView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn

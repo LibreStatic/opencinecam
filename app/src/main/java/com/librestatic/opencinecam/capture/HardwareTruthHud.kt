@@ -3,9 +3,6 @@
 
 package com.librestatic.opencinecam.capture
 
-import com.librestatic.opencinecam.diagnostics.label
-import com.librestatic.opencinecam.gallery.label
-
 enum class ControlAvailability { SUPPORTED, UNSUPPORTED, UNKNOWN }
 
 data class ManualControlAvailability(

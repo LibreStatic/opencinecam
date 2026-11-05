@@ -10,7 +10,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.style.TextAlign
-import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

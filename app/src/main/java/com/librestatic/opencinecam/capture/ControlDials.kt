@@ -49,7 +49,6 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.diagnostics.shutter
 import com.librestatic.opencinecam.gallery.tint
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.settings.TimelapseSettings
