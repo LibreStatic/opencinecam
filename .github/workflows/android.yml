@@ -34,7 +34,7 @@ jobs:
         run: python3 tools/validate_plan_system.py
 
   quality:
-    name: JDK 17 lint, tests, and ARM64 debug build
+    name: JDK 17 lint, static analysis, tests with coverage, and ARM64 debug build
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -49,12 +49,29 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: Run deterministic formatting checks
         run: ./tools/check_format.sh
-      - name: Run lint, unit tests, and ARM64 debug build
+      - name: Run ktlint and detekt
         shell: bash
         run: |
           set -o pipefail
           mkdir -p build
-          ./gradlew --no-daemon --dependency-verification=strict --console=plain lint test assembleDebug --stacktrace 2>&1 | tee build/ci-gradle.log
+          ./gradlew --no-daemon --dependency-verification=strict --console=plain staticAnalysis --stacktrace 2>&1 | tee build/ci-static-analysis.log
+      - name: Run lint, unit tests with coverage, and ARM64 debug build
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          ./gradlew --no-daemon --dependency-verification=strict --console=plain lint test koverXmlReportUnit koverHtmlReportUnit assembleDebug --stacktrace 2>&1 | tee build/ci-gradle.log
+      - name: Summarize coverage
+        if: success()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          root = ET.parse("build/reports/kover/reportUnit.xml").getroot()
+          print("### Unit test coverage (debug, JVM tests)\n\n| Counter | Covered |\n|---|---|")
+          for c in root.findall("counter"):
+              missed, covered = int(c.get("missed")), int(c.get("covered"))
+              print(f"| {c.get('type').title()} | {100 * covered / (missed + covered):.1f}% ({covered}/{missed + covered}) |")
+          PY
       - name: Upload quality reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -62,6 +79,10 @@ jobs:
           name: android-quality-reports
           path: |
             build/ci-gradle.log
+            build/ci-static-analysis.log
+            build/reports/ktlint/
+            build/reports/detekt/
+            build/reports/kover/
             app/build/reports/
             app/build/test-results/
             camera/build/reports/

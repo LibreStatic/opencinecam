@@ -167,6 +167,14 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - `Camera2PreviewEngine` and `CaptureService` keep their state, lifecycle and public API in their own file; their internal steps live in extension files grouped by responsibility (`Camera2*.kt` in `:camera`, `CaptureService*.kt` in `service`). Add a step to the file that matches it rather than to the class.
 - After moving or splitting code that runs at startup or in the capture chrome, the baseline profile names classes that no longer exist; regenerate it (see below).
 
+## Static analysis and coverage
+
+- `./gradlew staticAnalysis` runs ktlint and detekt, as CI does. Both run their command-line jars from the root project (`build.gradle.kts`), so they need no plugin support from AGP.
+- ktlint reads `.editorconfig`. It enforces hygiene (unused imports, blank lines, spacing around types and `then`, string templates, naming of non-composable functions) and leaves layout alone: the wrapping and spacing rules are disabled because the project's dense layout would otherwise be rewritten everywhere. `./gradlew ktlintFormat` fixes what it reports. Do not re-enable a layout rule without reformatting in its own commit.
+- detekt reads `config/detekt/detekt.yml` on top of its defaults and watches size, complexity and likely bugs. `config/detekt/baseline.xml` lists the findings that predate it; new code must not add findings. When you remove one, run `./gradlew detektBaseline` and commit the smaller baseline; never regenerate it to absorb new findings.
+- `./gradlew koverHtmlReportUnit` writes the merged coverage of the debug unit tests of `:app`, `:camera`, `:media` and `:core:model` to `build/reports/kover/htmlUnit/index.html` (CI keeps the XML and prints a summary). Instrumented tests are not counted.
+- New Gradle dependencies, including these tools, need checksums in `gradle/verification-metadata.xml`: run the build once with `--write-verification-metadata sha256` and review the added entries.
+
 ## Baseline profile and startup benchmarks
 
 - Why: Compose is unbundled, so a fresh install runs interpreted until ART compiles it; the baseline profile (`app/src/main/generated/baselineProfiles/`, merged into `:app`) precompiles startup, the capture chrome, the mode sheet and the gallery. Debug is interpreted and has Live Literals, so never judge performance on a debug build. Android Studio and `adb install` skip profiles, so measure with the benchmark tasks below or `adb shell cmd package compile -m speed-profile -f <pkg>`.
