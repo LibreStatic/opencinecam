@@ -91,7 +91,75 @@ data class OcrawFrameIndex(
     val errors: List<String>,
     /** Every `AUDIO_PCM16` chunk in file order, payloads unread and unchecked. */
     val audio: List<OcrawAudioChunk> = emptyList(),
-)
+) {
+    /** For each frame without a `FRAME_METADATA` record, the colour values it inherits; built on first use. */
+    private val inheritedColour: Map<Long, Map<String, String>> by lazy { inheritColour(frames, frameMetadata) }
+
+    /**
+     * The per-frame metadata to develop the frame with sequence [sequence]: its own
+     * `FRAME_METADATA` record when it has one. A frame without one (takes recorded
+     * before the engine kept the last capture result lose it on the final frame)
+     * inherits only the colour-defining values — `neutral`, the black level
+     * (`dynamicBlackLevel`, else `blackLevel`) and `whiteLevel` — each from the nearest
+     * earlier frame whose record carries it, else the nearest later one. Exposure, ISO
+     * and the rest stay absent. Empty when no frame carries any of them.
+     */
+    fun effectiveFrameMetadata(sequence: Long): Map<String, String> =
+        frameMetadata[sequence] ?: inheritedColour[sequence].orEmpty()
+
+    companion object {
+        /** The inherited key groups: a group is taken whole from one record. */
+        internal val INHERITED_COLOUR_GROUPS: List<List<String>> = listOf(
+            listOf("neutral"),
+            listOf("dynamicBlackLevel", "blackLevel"),
+            listOf("whiteLevel"),
+        )
+
+        private fun inheritColour(
+            frames: List<OcrawStreamFrame>,
+            frameMetadata: Map<Long, Map<String, String>>,
+        ): Map<Long, Map<String, String>> {
+            val count = frames.size
+            val records = Array(count) { frameMetadata[frames[it].sequence] }
+            if (records.none { it == null } || records.all { it == null }) return emptyMap()
+            // Per group, the nearest frame whose record has a non-empty value in it: earlier first, else later.
+            val sources = INHERITED_COLOUR_GROUPS.map { group ->
+                val has = BooleanArray(count) { i -> records[i]?.let { r -> group.any { !r[it].isNullOrEmpty() } } == true }
+                val source = IntArray(count) { -1 }
+                var last = -1
+                for (i in 0 until count) {
+                    if (has[i]) last = i
+                    source[i] = last
+                }
+                var next = -1
+                for (i in count - 1 downTo 0) {
+                    if (has[i]) next = i
+                    if (source[i] < 0) source[i] = next
+                }
+                source
+            }
+            val inherited = HashMap<Long, Map<String, String>>()
+            // Consecutive frames without a record usually share their sources, so share the map too.
+            var previousKey: List<Int>? = null
+            var previous: Map<String, String> = emptyMap()
+            for (i in 0 until count) {
+                if (records[i] != null) continue
+                val key = sources.map { it[i] }
+                if (key != previousKey) {
+                    val values = LinkedHashMap<String, String>()
+                    INHERITED_COLOUR_GROUPS.forEachIndexed { g, group ->
+                        val record = key[g].takeIf { it >= 0 }?.let { records[it] } ?: return@forEachIndexed
+                        group.forEach { name -> record[name]?.takeIf { it.isNotEmpty() }?.let { values[name] = it } }
+                    }
+                    previous = values
+                    previousKey = key
+                }
+                if (previous.isNotEmpty()) inherited[frames[i].sequence] = previous
+            }
+            return inherited
+        }
+    }
+}
 
 enum class OcrawRecoveryAction {
     /** The file was already cleanly closed. */

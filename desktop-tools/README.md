@@ -93,7 +93,9 @@ Android's integer values), `BlackLevel` (2x2) and `WhiteLevel`,
 `model` for `Model` and `UniqueCameraModel`. Each frame's `FRAME_METADATA`
 adds `AsShotNeutral` (`neutral`), `ExposureTime` (`exposureNs`) and
 `ISOSpeedRatings` (`iso`), and a `blackLevel` or `dynamicBlackLevel` there
-overrides the static black level for that frame. Without `colorMatrix1` the
+overrides the static black level for that frame. A frame without its own
+`FRAME_METADATA` inherits the nearest frame's `neutral` and levels (the earlier one
+first), never its exposure or ISO. Without `colorMatrix1` the
 tool writes an identity matrix for D65 and says so, so the files still open
 but their colours are not calibrated. Monochrome sensors are not supported.
 

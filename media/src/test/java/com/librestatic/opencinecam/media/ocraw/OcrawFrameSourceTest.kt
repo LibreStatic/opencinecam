@@ -126,7 +126,8 @@ class OcrawFrameSourceTest {
                 val first = source.read(0, slot) as OcrawFrameRead.Frame
                 assertEquals("100", first.metadata["iso"])
                 val third = source.read(2, slot) as OcrawFrameRead.Frame
-                assertEquals(emptyMap<String, String>(), third.metadata)
+                // No record of its own: only the colour values, inherited from the nearest earlier frame with them.
+                assertEquals(mapOf("neutral" to "1/2 1/1 3/4"), third.metadata)
                 assertEquals("1/2 1/1 3/4", third.neutral)
                 assertEquals(mapOf("iso" to "200"), (source.read(1, slot) as OcrawFrameRead.Frame).metadata)
             }
