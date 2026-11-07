@@ -222,6 +222,12 @@ data class CameraUiState(
     val rawVideoSelectedKey: String? = null,
     /** The [rawVideoOptions] key Automatic resolves to, whatever the operator chose; null when none is qualified. */
     val rawVideoAutoKey: String? = null,
+    /**
+     * The camera's block-pack ([RawVideoConfigOption.isBlockPack]) options can record near-lossless:
+     * it has a bundled RAW noise profile and the native codec loaded. [CameraSettings.rawVideoNearLossless]
+     * applies only then; otherwise block-pack records lossless.
+     */
+    val rawVideoNearLosslessAvailable: Boolean = false,
     /** Ring occupancy (0..100) of the running RAW take; null outside one. A take stops at 90 (ADR-0019). */
     val rawVideoRingPercent: Int? = null,
     /** Frames the running RAW take has written to its file; null outside one. */

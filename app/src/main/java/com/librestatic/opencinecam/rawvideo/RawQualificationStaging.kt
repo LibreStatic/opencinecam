@@ -158,6 +158,14 @@ object RawQualificationStaging {
     /** The phone reached [THERMAL_STATUS_SEVERE] during the run or check: that configuration fails, nothing is extrapolated from it. */
     const val REASON_THERMAL_LIMIT = "thermal-limit"
 
+    /**
+     * Informational, never a reason a verdict fails or is risky for: a compressed configuration whose
+     * own long run the heat alone failed ([compressedHeatOnly]) was judged by the extrapolation
+     * instead. It goes in the verdict row's `infoCodes` and the record's evidence (`heatFallback`), not
+     * in any `reasonCodes`.
+     */
+    const val REASON_COMPRESSED_HEAT_FALLBACK = "compressed-heat-fallback"
+
     /** No passing long run of at least this rate exists, so nothing vouches for the storage. */
     const val REASON_STORAGE_NOT_COVERED = "storage-not-covered"
 
@@ -356,7 +364,9 @@ object RawQualificationStaging {
 
     /**
      * The verdict of an uncompressed [config]. [longRuns] holds the long runs that ran (PASS or FAIL);
-     * a configuration with its own takes that run's verdict (a storage-only failure is risky).
+     * a configuration with its own takes that run's verdict (a storage-only failure is risky), even
+     * when a camera check of it ran too: the run already weighed that check
+     * ([storageLoadResult]) where its shortfall could be the storage's.
      * Otherwise its [cameraCheck] judges the camera: a failure fails it; a pass makes it ready only
      * when a passing long run covers its rate ([coveringRun]). A skipped or missing check leaves it
      * UNKNOWN, and so does no cover, with the reason its own long run was skipped for ([longRunSkip],
@@ -381,9 +391,22 @@ object RawQualificationStaging {
         }
     }
 
-    /** What says whether the camera delivers [config]: its own long run when one ran, else its camera check. */
+    /**
+     * What says whether the camera delivers [config]: its camera check when one judged it (the checks
+     * run first, on a cool phone), else its own long run when one ran, else the skipped check.
+     */
     fun cameraEvidence(config: RawVideoConfig, longRuns: Map<RawVideoConfig, RawStageResult>, cameraChecks: Map<RawVideoConfig, RawStageResult>): RawStageResult? =
-        longRuns[config]?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN } ?: cameraChecks[config]
+        cameraChecks[config]?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN }
+            ?: longRuns[config]?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN }
+            ?: cameraChecks[config]
+
+    /**
+     * Whether the long run of [config] is skipped because its camera check already proved the camera
+     * cannot deliver it ([RawStageResult.cameraDelivered] false): a long run would only repeat the
+     * failure, hotter. A skipped, missing or passing check keeps the run.
+     */
+    fun skipLongRun(cameraCheck: RawStageResult?): Boolean =
+        cameraCheck != null && cameraCheck.status == RawBenchmarkStatus.FAIL && !cameraCheck.cameraDelivered
 
     /** The configuration the encode benchmark runs on: the heaviest uncompressed one whose camera delivered, or null. */
     fun benchRun(runs: List<RawQualificationRun>, cameraOk: (RawVideoConfig) -> Boolean): RawQualificationRun? =
@@ -467,11 +490,38 @@ object RawQualificationStaging {
 
     /**
      * The verdict of a compressed configuration that ran its own long run ([own], a PASS or FAIL):
-     * that run's, by [RawQualificationMethods.COMPRESSED_LONG_RUN]; null for a skipped run (the caller
-     * falls back to [compressedVerdict]).
+     * that run's, by [RawQualificationMethods.COMPRESSED_LONG_RUN]; null for a skipped run and for one
+     * the heat alone failed ([compressedHeatOnly]): the caller falls back to [compressedVerdict].
      */
     fun compressedLongRunVerdict(own: RawStageResult?): RawStagedVerdict? =
-        own?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN }?.let { RawStagedVerdict(it.status, it.reasonCodes, RawQualificationMethods.COMPRESSED_LONG_RUN) }
+        own?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN && !compressedHeatOnly(it) }
+            ?.let { RawStagedVerdict(it.status, it.reasonCodes, RawQualificationMethods.COMPRESSED_LONG_RUN) }
+
+    /**
+     * A compressed long run failed by the heat alone: FAIL with [REASON_THERMAL_LIMIT] and no other
+     * reason but informational ones ([RawQualificationRisk.INFORMATIONAL_REASONS]); no frame loss, ring
+     * overflow, writer, scan or frame-rate code. Such a run proves nothing about the compressed
+     * configuration: it runs last, on the hottest phone, so its verdict comes from its twin's camera
+     * and its codec's benchmark ([compressedVerdict]), marked [REASON_COMPRESSED_HEAT_FALLBACK]. An
+     * uncompressed long run never falls back: there the heat failure stands.
+     */
+    fun compressedHeatOnly(result: RawStageResult?): Boolean =
+        result != null && result.status == RawBenchmarkStatus.FAIL && REASON_THERMAL_LIMIT in result.reasonCodes &&
+            result.reasonCodes.all { it == REASON_THERMAL_LIMIT || it in RawQualificationRisk.INFORMATIONAL_REASONS }
+
+    /**
+     * The verdict of a compressed configuration whose uncompressed twin is [twin] (camera evidence
+     * [twinCamera]): its own long run's ([own], [compressedLongRunVerdict]) when that judged it, else the
+     * extrapolation from [bench] and [longRuns] ([compressedVerdict]): no run, a skipped one, or one the
+     * heat alone failed.
+     */
+    fun compressedFinalVerdict(
+        own: RawStageResult?,
+        twin: RawVideoConfig,
+        twinCamera: RawStageResult?,
+        bench: RawEncodeBenchFigures?,
+        longRuns: Map<RawVideoConfig, RawStageResult>,
+    ): RawStagedVerdict = compressedLongRunVerdict(own) ?: compressedVerdict(twin, twinCamera, bench, longRuns)
 
     /**
      * What a compressed long run's shortfall under a ring overflow is weighed against

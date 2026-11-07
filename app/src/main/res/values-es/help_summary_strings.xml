@@ -22,4 +22,5 @@
     <string name="picture_blocked_edge_off_summary">Requiere Nitidez de imagen activada</string>
     <string name="raw_video_config_help_summary">Solo se ofrecen configuraciones calificadas</string>
     <string name="scroll_long_text_help_summary">El texto largo se desplaza, no se corta</string>
+    <string name="raw_compression_help_summary">Casi sin pérdida ahorra más espacio, dentro del ruido</string>
 </resources>

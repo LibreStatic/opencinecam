@@ -72,6 +72,8 @@ data class RawVideoArmState(
     val slotCount: Int,
     /** True when frames are encoded on the writer thread ([RawVideoConfig.isCompressed]: block-pack or LJ92). */
     val compressed: Boolean = false,
+    /** True when a block-pack configuration records near-lossless (quantised block-pack, [NearLosslessFrameEncoder]). */
+    val nearLossless: Boolean = false,
 ) {
     val ringBytes: Long get() = slotBytes.toLong() * slotCount
 }
@@ -147,6 +149,8 @@ data class RawTakeResult(
     val writerStats: OcrawStreamStats?,
     /** The configured encoding, [RawVideoConfig.encoding]. */
     val encoding: String = RawVideoConfig.ENCODING_RAW10,
+    /** True when the block-pack take was recorded near-lossless ([RawVideoArmState.nearLossless]). */
+    val nearLossless: Boolean = false,
     /** Frames written encoded; the rest of a compressed take's frames were stored as RAW10. */
     val framesEncoded: Long = 0,
     /** Frames of a compressed take stored uncompressed because their encoding did not fit the slot. */
@@ -206,6 +210,12 @@ data class RawTakeResult(
  * RAW10 (encoding 0). Without the native library a compressed configuration is refused at [arm] with
  * [RawTakeReasons.CODEC_UNAVAILABLE].
  *
+ * **Near-lossless.** A block-pack configuration armed with a [RawNoiseProfile] records quantised
+ * block-pack instead ([nearLosslessEncoderFactory], [NearLosslessFrameEncoder]); the configuration and
+ * its qualification stay block-pack. The writer passes each frame's ISO from its capture result, or the
+ * most recent one known when the result has not arrived yet, so the encoder rebuilds its tables only on
+ * an ISO change and on the writer thread; frames before the first known ISO are lossless block-pack.
+ *
  * **Audio (PLAN-071 §7.1).** A take given a [RawAudioSource] starts it right after the writer thread;
  * the source captures on its own thread and offers ~100 ms PCM16 chunks, stamped on the sensor clock,
  * to a small bounded queue beside the ring ([audioQueueChunks]). The writer writes the static
@@ -226,6 +236,8 @@ class RawVideoRecorder(
     private val clock: () -> Long = System::nanoTime,
     /** The encoder of a compressed configuration's [RawVideoConfig.encoding]; null when the codec is unavailable. */
     private val encoderFactory: (String) -> RawFrameEncoder? = { RawFrameEncoders.native(it) },
+    /** The near-lossless encoder of a block-pack configuration armed with a noise profile; null when the codec is unavailable. */
+    private val nearLosslessEncoderFactory: (RawNoiseProfile) -> RawFrameEncoder? = { RawFrameEncoders.nativeNearLossless(it) },
     private val audioQueueChunks: Int = AUDIO_QUEUE_CHUNKS,
 ) : RawVideoFrameConsumer {
     init {
@@ -248,6 +260,8 @@ class RawVideoRecorder(
     /** One capture result reduced to its metadata values; [arrivedAtFrame] is writer-thread state. */
     private class FrameResult(val timestampNs: Long, val frameNumber: Long, val values: Map<String, String>) {
         var arrivedAtFrame = 0L
+        /** The frame's sensitivity (`iso`), when the result carries one. */
+        val iso: Int? get() = values[ISO_KEY]?.toIntOrNull()?.takeIf { it > 0 }
     }
 
     private class Take(
@@ -320,9 +334,10 @@ class RawVideoRecorder(
     /**
      * Allocates the ring for [config]: as many frame slots as fit in [ringBytes] (at least
      * [RawRingBudget.MIN_SLOTS]). If memory runs out part way, the slots already allocated are kept
-     * when there are enough of them. Re-arming frees the previous ring first.
+     * when there are enough of them. Re-arming frees the previous ring first. A block-pack [config]
+     * with a [noiseProfile] records near-lossless; the profile is ignored for any other encoding.
      */
-    fun arm(config: RawVideoConfig, ringBytes: Long): RawVideoArmState = synchronized(control) {
+    fun arm(config: RawVideoConfig, ringBytes: Long, noiseProfile: RawNoiseProfile? = null): RawVideoArmState = synchronized(control) {
         check(take == null) { "cannot arm during a take" }
         disarmLocked()
         require(config.encoding == RawVideoConfig.ENCODING_RAW10 || config.encoding in RawVideoConfig.COMPRESSED_ENCODINGS) {
@@ -334,8 +349,10 @@ class RawVideoRecorder(
         val slotBytes = frameBytes.toInt()
         val wanted = (ringBytes / slotBytes).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         require(wanted >= RawRingBudget.MIN_SLOTS) { "a ring of $ringBytes bytes holds fewer than ${RawRingBudget.MIN_SLOTS} frames" }
+        val nearLossless = noiseProfile?.takeIf { config.encoding == RawVideoConfig.ENCODING_BLOCK_PACK }
         val encoder = if (config.isCompressed) {
-            encoderFactory(config.encoding) ?: throw RawVideoArmException(RawTakeReasons.CODEC_UNAVAILABLE)
+            (if (nearLossless != null) nearLosslessEncoderFactory(nearLossless) else encoderFactory(config.encoding))
+                ?: throw RawVideoArmException(RawTakeReasons.CODEC_UNAVAILABLE)
         } else null
         val memory: RawSlotMemory
         val compressor: RawFrameCompressor?
@@ -362,7 +379,8 @@ class RawVideoRecorder(
         } catch (problem: OutOfMemoryError) {
             keepPartial(buffers, memory, encoder, problem)
         }
-        val state = RawVideoArmState(config, crop, slotBytes, buffers.size, compressed = compressor != null)
+        val state = RawVideoArmState(config, crop, slotBytes, buffers.size, compressed = compressor != null,
+            nearLossless = compressor != null && nearLossless != null)
         armed = Armed(state, buffers, memory, compressor, encoder)
         state
     }
@@ -502,6 +520,7 @@ class RawVideoRecorder(
             outputError = outputError,
             writerStats = current.writerStats,
             encoding = current.armed.config.encoding,
+            nearLossless = current.armed.nearLossless,
             framesEncoded = current.compressor?.framesEncoded ?: 0,
             framesStoredUncompressed = current.compressor?.framesStoredUncompressed ?: 0,
             compressionRatio = current.compressor?.compressionRatio,
@@ -618,10 +637,13 @@ class RawVideoRecorder(
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Long>?): Boolean = size > resultWindowFrames
         }
         var metadataWritten = false
+        // The most recent ISO a capture result reported, for frames whose own result is still to come.
+        var latestIso: Int? = null
 
         fun writable() = writer != null && current.writerError == null
 
         fun handle(result: FrameResult) {
+            result.iso?.let { latestIso = it }
             val sequence = awaiting.remove(result.timestampNs)
             if (sequence != null) {
                 if (writable()) guarded(current) {
@@ -685,7 +707,8 @@ class RawVideoRecorder(
                     }
                     val result = pending.remove(timestamp)
                     // Compressed takes encode here, off the producer; the slot is released only after the write.
-                    val (frameHeader, data) = current.compressor?.compress(header, slot.buffer) ?: (header to slot.buffer)
+                    val (frameHeader, data) = current.compressor?.compress(header, slot.buffer, result?.iso ?: latestIso)
+                        ?: (header to slot.buffer)
                     val sequence = writer!!.writeRawFrame(frameHeader, data, ticksOf(timestamp))
                     if (current.firstTimestampNs < 0) current.firstTimestampNs = timestamp
                     current.lastTimestampNs = timestamp
@@ -768,6 +791,7 @@ class RawVideoRecorder(
             ),
         )
         values[RawFrameEncoders.KEY_ENCODING] = config.encoding
+        // A near-lossless encoder's keys replace the encoding with `bpq`.
         current.compressor?.let { values.putAll(it.metadata) }
         values.putAll(current.audioMetadata)
         return values
@@ -791,6 +815,8 @@ class RawVideoRecorder(
         const val HIGH_WATER_FRACTION = 0.9
         /** FRAME_METADATA key of the Camera2 capture frame number (`TotalCaptureResult.getFrameNumber`). */
         const val FRAME_NUMBER_KEY = "frameNumber"
+        /** The `FRAME_METADATA` key of the sensitivity ([RawVideoMetadata.frameValues]). */
+        const val ISO_KEY = "iso"
         const val RESULT_WINDOW_FRAMES = 32
         const val WRITER_JOIN_TIMEOUT_MS = 30_000L
         const val FINAL_RESULT_WAIT_MS = 100L

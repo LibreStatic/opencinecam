@@ -277,3 +277,25 @@ and 2 apply unchanged.
   on the frame instead of returning codes as samples. As with the other
   encodings, a frame that does not fit is stored as encoding 0, and each
   frame header's encoding is authoritative.
+
+## Near-lossless takes: static metadata (added 2026-11-04)
+
+This section extends the static metadata keys above.
+
+- `encoding` may also be `bp` (a block-pack take: frames of encoding 2) or
+  `bpq` (a near-lossless take: a block-pack configuration recorded with
+  encoding 3). A `bpq` take's frames are encoding 3, or encoding 2 until the
+  writer knows the sensitivity of the frames (the capture results trail the
+  frames), or encoding 0 when a frame does not fit. As before, the value is
+  informative and each frame header's encoding is authoritative.
+- `blockPackStrips`: `bp` and `bpq` takes, the strip count the writer
+  requests, integer.
+- `quantK`: `bpq` takes only, the step `k` in noise sigmas the tables were
+  built with, decimal (informative; each frame's preamble carries `kMilli`).
+- `quantNoiseProfile`: `bpq` takes only, the noise profile the tables came
+  from as `device/cameraId` (informative).
+
+A writer builds each frame's table from the most recent ISO it knows, which
+is the frame's own when its capture result has arrived; the preamble's
+`isoUsed` names that ISO and may differ from the frame's `iso` in
+`FRAME_METADATA`.

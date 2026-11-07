@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Bateria em %1$d%% ou mais</string>
     <string name="raw_qualification_check_battery_fix">Carregue primeiro até pelo menos %1$d%% (agora %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_warn">%1$d%%. A qualificação pode esgotá-la: conecte o carregador se puder.</string>
     <string name="raw_qualification_check_cool">Temperatura normal</string>
     <string name="raw_qualification_check_cool_fix">Deixe o telefone esfriar primeiro.</string>
     <string name="raw_qualification_blocked">A qualificação não pode ser feita agora. Você pode fazê-la mais tarde escolhendo Vídeo RAW no seletor de modos.</string>
@@ -33,6 +34,7 @@
     <string name="raw_qualification_running_title">Qualificando o vídeo RAW</string>
     <string name="raw_qualification_step_preparing">Preparando</string>
     <string name="raw_qualification_step_storage">Teste de armazenamento</string>
+    <string name="raw_qualification_step_resting">Pausa antes do teste de armazenamento</string>
     <string name="raw_qualification_step_camera">Verificação da câmera</string>
     <string name="raw_qualification_step_compression">Medindo a compressão</string>
     <string name="raw_qualification_step_cooling">Resfriando</string>
@@ -83,6 +85,7 @@
     <string name="raw_qualification_status_ready">Pronta</string>
     <string name="raw_qualification_status_testing">Testando</string>
     <string name="raw_qualification_status_pending">Pendente</string>
+    <string name="raw_qualification_status_measured">Medida</string>
     <string name="raw_qualification_status_skipped">Sem espaço</string>
     <string name="raw_qualification_status_failed">Falhou</string>
     <string name="raw_qualification_status_not_qualified">Não qualificada</string>
@@ -100,6 +103,7 @@
     <!-- The rate the camera achieved beside a qualified or risky configuration (PLAN-071); the second form below its target. -->
     <string name="raw_qualification_item_fps">%1$.1f fps</string>
     <string name="raw_qualification_item_reaches">Atinge %1$.1f fps</string>
+    <string name="raw_qualification_item_live_fps">%1$.1f / %2$d fps</string>
     <string name="raw_qualification_risky_body">Você pode escolhê-las, mas o armazenamento é lento demais para a taxa delas: uma tomada pode ter microtravamentos, atraso ou ficar corrompida.</string>
     <string name="raw_qualification_done_risky_only">Só taxas arriscadas</string>
     <string name="raw_qualification_done_risky_only_body">Nenhuma configuração foi qualificada com segurança. Você ainda pode escolher uma taxa arriscada no vídeo RAW, por sua conta e risco.</string>

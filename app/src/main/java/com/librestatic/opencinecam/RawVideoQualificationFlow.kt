@@ -43,11 +43,20 @@ internal fun modeChoiceAction(mode: CaptureMode, gate: ModeGateState?): ModeChoi
 /** Whether a selector offers [mode] as a live choice (selectable, or one question away from it). */
 internal fun isModeChoosable(mode: CaptureMode, gate: ModeGateState?): Boolean = modeChoiceAction(mode, gate) != ModeChoiceAction.REJECT
 
-/** Battery at least this to start: a qualification runs the camera and storage hard for minutes. */
-internal const val RAW_QUALIFICATION_MIN_BATTERY_PERCENT = 50
+/**
+ * Battery at least this to start: below it most phones cut the maximum current they deliver, which
+ * would skew a qualification that runs the camera and storage hard for minutes.
+ */
+internal const val RAW_QUALIFICATION_MIN_BATTERY_PERCENT = 5
+
+/**
+ * Below this (and at or above [RAW_QUALIFICATION_MIN_BATTERY_PERCENT]) the step warns that the
+ * qualification may drain the battery, without blocking the start.
+ */
+internal const val RAW_QUALIFICATION_WARN_BATTERY_PERCENT = 50
 
 /** A running qualification stops below this. */
-internal const val RAW_QUALIFICATION_ABORT_BATTERY_PERCENT = 20
+internal const val RAW_QUALIFICATION_ABORT_BATTERY_PERCENT = 5
 
 /** [PowerManager.THERMAL_STATUS_LIGHT]: none or light is cool enough to start. */
 internal const val RAW_QUALIFICATION_MAX_THERMAL_STATUS = 1
@@ -58,11 +67,21 @@ internal enum class RawQualificationBlocker { BATTERY_LOW, TOO_WARM }
 /** The battery and the temperature the qualification step checks; a null battery level is unknown (no battery). */
 internal data class RawQualificationConditions(val batteryPercent: Int?, val thermalStatus: Int) {
     val blockers: List<RawQualificationBlocker> get() = rawQualificationReadiness(batteryPercent, thermalStatus)
+
+    /**
+     * A known battery level that may start but is under [RAW_QUALIFICATION_WARN_BATTERY_PERCENT]:
+     * a warning, never a blocker.
+     */
+    val batteryWarning: Boolean
+        get() = batteryPercent != null &&
+            batteryPercent >= RAW_QUALIFICATION_MIN_BATTERY_PERCENT &&
+            batteryPercent < RAW_QUALIFICATION_WARN_BATTERY_PERCENT
 }
 
 /**
  * The reasons the qualification cannot start: the battery below [RAW_QUALIFICATION_MIN_BATTERY_PERCENT]
- * (an unknown level does not block) or a thermal status above [RAW_QUALIFICATION_MAX_THERMAL_STATUS].
+ * (an unknown level does not block; a low level above it is only [RawQualificationConditions.batteryWarning])
+ * or a thermal status above [RAW_QUALIFICATION_MAX_THERMAL_STATUS].
  * A connected charger does not block: heat is judged by the thermal status, before and during the
  * runs. Empty when it may start.
  */
@@ -172,15 +191,20 @@ data class RawVideoQualificationUi(
 /**
  * Where one configuration of a qualification stands. RISKY failed only because the storage is too
  * slow for its rate ([RawQualificationRisk]): it can still be chosen by hand, with a warning.
+ * MEASURED ran (a camera check, or a session that ended) and waits for its verdict, which the
+ * qualifier writes at the end.
  */
-enum class RawQualificationItemStatus { PENDING, TESTING, PASSED, RISKY, FAILED, CAMERA_LIMIT, NOT_QUALIFIED, SKIPPED_SPACE, SKIPPED_HEAT }
+enum class RawQualificationItemStatus { PENDING, TESTING, MEASURED, PASSED, RISKY, FAILED, CAMERA_LIMIT, NOT_QUALIFIED, SKIPPED_SPACE, SKIPPED_HEAT }
 
 /**
  * One configuration of a qualification: [label] reads like a [RawVideoConfigOption] label (compressed
  * variants end in [RAW_LABEL_COMPRESSED_SUFFIX]); [neededBytes] is the free space its run needs, the figure a skip for
  * space is decided on; [burstSeconds], on a RISKY one, how long a take lasts before the storage's
  * write cache fills and frames may drop (null when unknown); [achievedFps], on a PASSED or RISKY one,
- * the rate the camera delivered, to a tenth (null when unknown).
+ * the rate the camera delivered, to a tenth (null when unknown); [liveFps], on a TESTING one, the
+ * rate its camera session delivers now ([RawQualificationProgress.liveFps]), null when not known yet.
+ * [benchmarking] marks an already judged item whose configuration an encode benchmark streams now,
+ * at [benchLiveFps]; its status stays as it is.
  */
 data class RawQualificationItem(
     val spec: String,
@@ -189,12 +213,25 @@ data class RawQualificationItem(
     val status: RawQualificationItemStatus,
     val burstSeconds: Long? = null,
     val achievedFps: Double? = null,
+    val liveFps: Double? = null,
+    val benchmarking: Boolean = false,
+    val benchLiveFps: Double? = null,
 ) {
     /** The rate of the spec this item tests, or null when the spec names none. */
     val targetFps: Int? get() = rawQualificationSpecFps(spec)
 
     /** It qualified at a reduced rate: under [RawQualificationFrameRate.FPS_TOLERANCE] of its target (PLAN-071). */
     val reducedRate: Boolean get() = targetFps?.let { RawQualificationFrameRate.isReducedRate(achievedFps, it) } == true
+
+    /** The rate its camera delivers now: an encode benchmark's on a [benchmarking] item, else [liveFps]. */
+    val currentFps: Double? get() = if (benchmarking) benchLiveFps else liveFps
+
+    /** Its [currentFps] is under [RawQualificationFrameRate.FPS_TOLERANCE] of its target. */
+    val liveFpsShort: Boolean get() {
+        val live = currentFps ?: return false
+        val target = targetFps ?: return false
+        return RawQualificationFrameRate.fpsNotReached(live, target)
+    }
 }
 
 /** The configurations a qualification would run with [space] free: PENDING, or SKIPPED_SPACE when they do not fit. */
@@ -236,7 +273,8 @@ internal fun rawQualificationRunStatus(
 
 /**
  * [items] with [spec] set to [status], or with a new item for it (a compressed follow-up) at the end.
- * [burstSeconds] is kept only on a RISKY item, [achievedFps] only on a PASSED or RISKY one.
+ * [burstSeconds] is kept only on a RISKY item, [achievedFps] only on a PASSED, RISKY or MEASURED one,
+ * [liveFps] only on a TESTING one.
  */
 internal fun rawQualificationItemsWith(
     items: List<RawQualificationItem>,
@@ -246,20 +284,81 @@ internal fun rawQualificationItemsWith(
     neededBytes: Long,
     burstSeconds: Long? = null,
     achievedFps: Double? = null,
+    liveFps: Double? = null,
 ): List<RawQualificationItem> {
     val burst = burstSeconds.takeIf { status == RawQualificationItemStatus.RISKY }
-    val rate = achievedFps.takeIf { status == RawQualificationItemStatus.PASSED || status == RawQualificationItemStatus.RISKY }
+    val rate = achievedFps.takeIf {
+        status == RawQualificationItemStatus.PASSED || status == RawQualificationItemStatus.RISKY || status == RawQualificationItemStatus.MEASURED
+    }
+    val live = liveFps.takeIf { status == RawQualificationItemStatus.TESTING }
     val index = items.indexOfFirst { it.spec == spec }
-    if (index < 0) return items + RawQualificationItem(spec, label, neededBytes, status, burst, rate)
-    return items.toMutableList().also { it[index] = it[index].copy(status = status, burstSeconds = burst, achievedFps = rate) }
+    if (index < 0) return items + RawQualificationItem(spec, label, neededBytes, status, burst, rate, live)
+    return items.toMutableList().also { it[index] = it[index].copy(status = status, burstSeconds = burst, achievedFps = rate, liveFps = live) }
 }
 
 /**
  * [items] once [progress] arrives: the configuration a long run or a camera check names becomes
- * TESTING unless it already has a result, and nothing else changes. Other phases (the encode
- * benchmark names the configuration it encodes, already judged) return [items].
+ * TESTING unless it already has a verdict, and takes the report's [RawQualificationProgress.liveFps].
+ * A TESTING item whose session the report shows ended (another configuration, a cool-down, a
+ * benchmark, saving) becomes MEASURED: camera checks get their verdicts only at the end.
+ * The encode benchmark names the configuration it streams, already judged: that item becomes
+ * [RawQualificationItem.benchmarking] at the report's rate, keeping its status. Any other report
+ * ends a benchmark's marking; nothing else changes.
  */
 internal fun rawQualificationItemsOnProgress(
+    items: List<RawQualificationItem>,
+    progress: RawQualificationProgress,
+    label: String?,
+    neededBytes: Long,
+): List<RawQualificationItem> {
+    val benchSpec = progress.spec.takeIf { progress.phase == RawQualificationPhase.ENCODE_BENCH }
+    val marked = rawQualificationItemsBenchmarking(rawQualificationItemsSessionEnded(items, progress), benchSpec, progress.liveFps)
+    if (benchSpec != null) return marked
+    return rawQualificationItemsOnRunProgress(marked, progress, label, neededBytes)
+}
+
+/** [items] with only [spec]'s item (none when null) marked as benchmarked at [fps]; unchanged items keep the list. */
+private fun rawQualificationItemsBenchmarking(items: List<RawQualificationItem>, spec: String?, fps: Double?): List<RawQualificationItem> {
+    fun wanted(item: RawQualificationItem) =
+        if (item.spec == spec) item.copy(benchmarking = true, benchLiveFps = fps) else item.copy(benchmarking = false, benchLiveFps = null)
+    return if (items.all { wanted(it) == it }) items else items.map(::wanted)
+}
+
+/** The phases a TESTING item's own session reports while it lasts (a heat wait comes before its stream). */
+private val RAW_QUALIFICATION_SESSION_PHASES = setOf(
+    RawQualificationPhase.RUN, RawQualificationPhase.CAMERA_CHECK, RawQualificationPhase.THERMAL_WAIT,
+)
+
+/** [items] with every TESTING item [progress] is not about any more MEASURED; unchanged items keep the list. */
+private fun rawQualificationItemsSessionEnded(items: List<RawQualificationItem>, progress: RawQualificationProgress): List<RawQualificationItem> {
+    fun ended(item: RawQualificationItem) = item.status == RawQualificationItemStatus.TESTING &&
+        !(item.spec == progress.spec && progress.phase in RAW_QUALIFICATION_SESSION_PHASES)
+    if (items.none(::ended)) return items
+    return items.map { if (ended(it)) it.copy(status = RawQualificationItemStatus.MEASURED, liveFps = null) else it }
+}
+
+/**
+ * [items] once a camera check's result row for [spec] arrives: its item becomes MEASURED with the
+ * [achievedFps] the check saw (null when unknown), unless it already has a verdict. An unknown spec joins.
+ */
+internal fun rawQualificationItemsCameraChecked(
+    items: List<RawQualificationItem>,
+    spec: String,
+    label: String,
+    neededBytes: Long,
+    achievedFps: Double?,
+): List<RawQualificationItem> {
+    val current = items.firstOrNull { it.spec == spec }
+    if (current != null && current.status !in RAW_QUALIFICATION_UNJUDGED) return items
+    return rawQualificationItemsWith(items, spec, RawQualificationItemStatus.MEASURED, label, current?.neededBytes ?: neededBytes, achievedFps = achievedFps)
+}
+
+/** The statuses that carry no verdict yet. */
+private val RAW_QUALIFICATION_UNJUDGED = setOf(
+    RawQualificationItemStatus.PENDING, RawQualificationItemStatus.TESTING, RawQualificationItemStatus.MEASURED,
+)
+
+private fun rawQualificationItemsOnRunProgress(
     items: List<RawQualificationItem>,
     progress: RawQualificationProgress,
     label: String?,
@@ -268,13 +367,58 @@ internal fun rawQualificationItemsOnProgress(
     val spec = progress.spec ?: return items
     if (progress.phase != RawQualificationPhase.RUN && progress.phase != RawQualificationPhase.CAMERA_CHECK) return items
     val current = items.firstOrNull { it.spec == spec }
-    if (current != null && current.status != RawQualificationItemStatus.PENDING) return items
-    return rawQualificationItemsWith(items, spec, RawQualificationItemStatus.TESTING, label ?: spec, neededBytes)
+    if (current != null && current.status == RawQualificationItemStatus.TESTING) {
+        return if (current.liveFps == progress.liveFps) items
+        else items.map { if (it.spec == spec) it.copy(liveFps = progress.liveFps) else it }
+    }
+    // A measured item measured again (a retry) tests anew; one with a verdict keeps it.
+    if (current != null && current.status != RawQualificationItemStatus.PENDING && current.status != RawQualificationItemStatus.MEASURED) return items
+    return rawQualificationItemsWith(items, spec, RawQualificationItemStatus.TESTING, label ?: spec, neededBytes, liveFps = progress.liveFps)
 }
 
-/** The items of a run that ended: one still TESTING (a cancel cut it short) goes back to PENDING. */
+/** The items of a run that ended: one still TESTING or MEASURED (no verdict: a cancel cut it short) goes back to PENDING. */
 internal fun rawQualificationItemsFinished(items: List<RawQualificationItem>): List<RawQualificationItem> =
-    items.map { if (it.status == RawQualificationItemStatus.TESTING) it.copy(status = RawQualificationItemStatus.PENDING) else it }
+    items.map {
+        if (it.status == RawQualificationItemStatus.TESTING || it.status == RawQualificationItemStatus.MEASURED)
+            it.copy(status = RawQualificationItemStatus.PENDING, liveFps = null, achievedFps = null, benchmarking = false, benchLiveFps = null)
+        else if (it.benchmarking) it.copy(benchmarking = false, benchLiveFps = null)
+        else it
+    }
+
+/** The size and rate a [RawVideoConfigOption.label] starts with ("4080×3060 · 30 fps"). */
+private val RAW_LABEL_SIZE_RATE = Regex("""^(\d+)×(\d+) · (\d+) fps""")
+
+/**
+ * Heaviest stream first, by label: the pixel rate (width × height × fps, which the RAW10 stream
+ * follows), then the higher frame rate, then the uncompressed configuration before its compressed
+ * twin, so a twin comes right after it. A label without a size and rate goes last. Equal keys keep
+ * their order (the sorts using it are stable).
+ */
+internal val rawQualificationHeaviestFirst: Comparator<String> = run {
+    fun parts(label: String) = RAW_LABEL_SIZE_RATE.find(label)?.groupValues
+    compareByDescending<String> { label -> parts(label)?.let { it[1].toLong() * it[2].toLong() * it[3].toLong() } ?: -1L }
+        .thenByDescending { label -> parts(label)?.get(3)?.toInt() ?: -1 }
+        .thenBy { label -> if (parts(label) == null) "" else rawConfigLabelParts(label).first }
+        .thenBy { label -> parts(label) != null && rawConfigLabelParts(label).second != null }
+}
+
+/** A row the qualification is working on: a session testing it, or the encode benchmark streaming it. */
+internal val RawQualificationItem.inProgress: Boolean
+    get() = status == RawQualificationItemStatus.TESTING || benchmarking
+
+/** [items] heaviest first ([rawQualificationHeaviestFirst]), as each section of the result lists them. */
+internal fun rawQualificationItemsHeaviestFirst(items: List<RawQualificationItem>): List<RawQualificationItem> =
+    items.sortedWith(compareBy(rawQualificationHeaviestFirst) { it.label })
+
+/**
+ * [items] in the order a running qualification lists them: the row in progress
+ * ([RawQualificationItem.inProgress]) first, then every other heaviest first, each compressed twin
+ * right after its uncompressed twin.
+ */
+internal fun rawQualificationItemsRunningOrder(items: List<RawQualificationItem>): List<RawQualificationItem> {
+    val (current, others) = items.partition { it.inProgress }
+    return current + rawQualificationItemsHeaviestFirst(others)
+}
 
 /** The frame rate of a qualification spec ("full@60+bp" is 60), or null when it has none. */
 internal fun rawQualificationSpecFps(spec: String): Int? =
@@ -315,7 +459,7 @@ internal fun rawConfigLabelNoBreak(label: String, compressedWord: String = RAW_L
 }
 
 /** The line a running qualification shows for its current step. */
-internal enum class RawQualificationStepText { PREPARING, STORAGE, CONFIG, CAMERA, COMPRESSION, COOLING, WAITING_TO_COOL, SAVING }
+internal enum class RawQualificationStepText { PREPARING, STORAGE, RESTING, CONFIG, CAMERA, COMPRESSION, COOLING, WAITING_TO_COOL, SAVING }
 
 internal fun rawQualificationStepText(phase: RawQualificationPhase): RawQualificationStepText = when (phase) {
     RawQualificationPhase.SWEEP -> RawQualificationStepText.STORAGE
@@ -324,6 +468,7 @@ internal fun rawQualificationStepText(phase: RawQualificationPhase): RawQualific
     RawQualificationPhase.CAMERA_CHECK -> RawQualificationStepText.CAMERA
     RawQualificationPhase.ENCODE_BENCH -> RawQualificationStepText.COMPRESSION
     RawQualificationPhase.COOLING -> RawQualificationStepText.COOLING
+    RawQualificationPhase.STORAGE_REST -> RawQualificationStepText.RESTING
     RawQualificationPhase.THERMAL_WAIT -> RawQualificationStepText.WAITING_TO_COOL
     RawQualificationPhase.SAVING, RawQualificationPhase.DONE -> RawQualificationStepText.SAVING
 }

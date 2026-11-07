@@ -26,7 +26,7 @@ data class PresetDifference(val key: String, val before: Any?, val after: Any)
 
 /** Flat typed settings schema; never deserialize app/device identifiers or arbitrary file paths. */
 object CameraPresetCodec {
-    const val VERSION = 25
+    const val VERSION = 26
     const val MAX_BYTES = 65_536
     // Explicit V2 registry: adding an application preference never exports it accidentally.
     // A schema revision and privacy review are required before extending this registry.
@@ -138,6 +138,7 @@ object CameraPresetCodec {
     private val portableV23 = portableV22 + setOf("haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take")
     private val portableV24 = portableV23 + setOf("raw-video-config")
     private val portableV25 = portableV24 + setOf("scroll-long-text")
+    private val portableV26 = portableV25 + setOf("raw-video-near-lossless")
     /**
      * The exact key set a payload of [version] must carry. Every published version stays frozen
      * here, so a payload written by an older build keeps decoding without its keys being guessed.
@@ -154,11 +155,12 @@ object CameraPresetCodec {
         version == 22 -> portableV22
         version == 23 -> portableV23
         version == 24 -> portableV24
-        else -> portableV25
+        version == 25 -> portableV25
+        else -> portableV26
     }
     private fun snapshot(settings: CameraSettings): Map<String, Any> {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(settings)
-        return memory.all.filterKeys { it in portableV25 }.mapValues { requireNotNull(it.value) }.toSortedMap()
+        return memory.all.filterKeys { it in portableV26 }.mapValues { requireNotNull(it.value) }.toSortedMap()
     }
     private val defaults by lazy { snapshot(CameraSettings()) }
     val portableKeys: Set<String> get() = defaults.keys

@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Battery at %1$d%% or more</string>
     <string name="raw_qualification_check_battery_fix">Charge it to at least %1$d%% first (now %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_warn">%1$d%%. The qualification may use all of it: plug in the charger if you can.</string>
     <string name="raw_qualification_check_cool">Normal temperature</string>
     <string name="raw_qualification_check_cool_fix">Let the phone cool down first.</string>
     <string name="raw_qualification_blocked">The qualification cannot run now. You can do it later by choosing RAW video in the mode selector.</string>
@@ -33,6 +34,7 @@
     <string name="raw_qualification_running_title">Qualifying RAW video</string>
     <string name="raw_qualification_step_preparing">Preparing</string>
     <string name="raw_qualification_step_storage">Storage test</string>
+    <string name="raw_qualification_step_resting">Resting before the storage test</string>
     <string name="raw_qualification_step_camera">Camera check</string>
     <string name="raw_qualification_step_compression">Measuring compression</string>
     <string name="raw_qualification_step_cooling">Cooling down</string>
@@ -81,6 +83,8 @@
     <string name="raw_qualification_status_ready">Ready</string>
     <string name="raw_qualification_status_testing">Testing</string>
     <string name="raw_qualification_status_pending">Pending</string>
+    <!-- A configuration whose test ran; its verdict comes at the end of the run. -->
+    <string name="raw_qualification_status_measured">Measured</string>
     <string name="raw_qualification_status_skipped">No space</string>
     <string name="raw_qualification_status_failed">Failed</string>
     <string name="raw_qualification_status_not_qualified">Not qualified</string>
@@ -98,6 +102,8 @@
     <!-- The rate the camera achieved beside a qualified or risky configuration (PLAN-071); the second form below its target. -->
     <string name="raw_qualification_item_fps">%1$.1f fps</string>
     <string name="raw_qualification_item_reaches">Reaches %1$.1f fps</string>
+    <!-- The rate the camera delivers now against its target, under the configuration being tested. -->
+    <string name="raw_qualification_item_live_fps">%1$.1f / %2$d fps</string>
     <string name="raw_qualification_risky_body">You can choose these, but the storage is too slow for their rate: a take may stutter, lag or end up corrupted.</string>
     <string name="raw_qualification_done_risky_only">Only risky rates</string>
     <string name="raw_qualification_done_risky_only_body">No configuration qualified safely. You can still choose a risky rate in RAW video, at your own risk.</string>

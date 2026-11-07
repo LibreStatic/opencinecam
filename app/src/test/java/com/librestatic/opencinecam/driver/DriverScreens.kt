@@ -309,11 +309,30 @@ private val DriverRawVideoOptions: List<com.librestatic.opencinecam.RawVideoConf
     listOf(30, 60).forEach { add(option(1920, 1080, it, crop = true)) }
 }
 
-/** RAW video qualified on this camera, running full sensor at 30 fps (picked, not Automatic). */
-private fun driverRawVideoState(phase: CameraUiPhase = CameraUiPhase.PREVIEWING): CameraUiState =
+/**
+ * [DriverRawVideoOptions] with block-pack twins of 4080×3060 · 30 fps and 3840×2160 · 30 fps, each right
+ * after its uncompressed configuration (the gate's order); they read "· Near-lossless" while near-lossless is on.
+ */
+private val DriverRawVideoOptionsCompressed: List<com.librestatic.opencinecam.RawVideoConfigOption> = DriverRawVideoOptions.flatMap { option ->
+    val twin = when (option.key) {
+        "full@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 4080, 3060, 30, "bp")
+        "3840x2160@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 3840, 2160, 30, "bp")
+        else -> null
+    }
+    listOfNotNull(option, twin?.let { com.librestatic.opencinecam.RawVideoConfigOption.of(it) })
+}
+
+/**
+ * RAW video qualified on this camera, running full sensor at 30 fps (picked, not Automatic). With
+ * [compressed] the block-pack twins are offered too and the camera has a noise profile, so they can
+ * record near-lossless.
+ */
+private fun driverRawVideoState(phase: CameraUiPhase = CameraUiPhase.PREVIEWING, compressed: Boolean = false): CameraUiState =
     driverCaptureState(CaptureMode.RAW_VIDEO, phase).let {
         it.copy(modeGates = it.modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.AVAILABLE),
-            rawVideoOptions = DriverRawVideoOptions, rawVideoSelectedKey = "full@30", rawVideoAutoKey = "full@30",
+            rawVideoOptions = if (compressed) DriverRawVideoOptionsCompressed else DriverRawVideoOptions,
+            rawVideoNearLosslessAvailable = compressed,
+            rawVideoSelectedKey = "full@30", rawVideoAutoKey = "full@30",
             targetFps = 30, targetVideoWidth = 4080, targetVideoHeight = 3060, recordingWidth = 4080, recordingHeight = 3060)
     }
 
@@ -338,9 +357,12 @@ fun CaptureRawVideoStatus(): Unit {
     CaptureChrome(driverRawVideoState().copy(timecodeDisplay = "01:02:03:04"), DriverRawVideoSettings)
 }
 
-/** The RAW configuration chooser open (what RES or FPS opens in RAW video): Automatic, full sensor, crops. */
+/**
+ * The RAW configuration chooser open (what RES or FPS opens in RAW video): Automatic, full sensor, crops,
+ * with the block-pack twins of 4080×3060 and 3840×2160 at 30 fps labelled "· Near-lossless".
+ */
 @Composable
-fun CaptureRawVideoConfig() = CaptureChrome(driverRawVideoState(), DriverRawVideoSettings, CaptureInitialPane.RESOLUTION)
+fun CaptureRawVideoConfig() = CaptureChrome(driverRawVideoState(compressed = true), DriverRawVideoSettings, CaptureInitialPane.RESOLUTION)
 
 /**
  * RAW video with 4080×3060 at 60 fps qualified as risky and chosen by hand: the chooser open, its
@@ -408,7 +430,7 @@ private fun driverRawPlannedConfigs(freeBytes: Long): List<RawQualificationPlann
     RawQualificationPlannedConfig(spec, run.config, needed, fits = needed <= freeBytes)
 }
 
-/** A qualification estimate: about 14 min, [freeBytes] free, the configurations that do not fit skipped for space. */
+/** A qualification estimate: about 12 min, [freeBytes] free, the configurations that do not fit skipped for space. */
 private fun driverRawQualificationInfo(
     freeBytes: Long = 26_000_000_000L,
     minimumFreeBytes: Long = 3L shl 30,
@@ -419,8 +441,8 @@ private fun driverRawQualificationInfo(
         cameraId = "0",
         gate = ModeGateState.CANDIDATE,
         space = RawQualificationSpaceEstimate(
-            estimate = RawQualificationEstimate(durationMs = 6 * 60_000L + 40_000L, freeBytesNeeded = 22_100_000_000L,
-                sweepFreeBytesNeeded = 3L shl 30, runCount = 16),
+            estimate = RawQualificationEstimate(durationMs = 12 * 60_000L + 10_000L, freeBytesNeeded = 22_100_000_000L,
+                sweepFreeBytesNeeded = 3L shl 30, runCount = 15),
             freeBytes = freeBytes,
             skippedRuns = configs.count { !it.fits },
             minimumFreeBytes = minimumFreeBytes,
@@ -474,7 +496,7 @@ private fun RawQualificationDriver(
                 info = info,
                 conditions = conditions,
                 state = shown,
-                onStart = { shown = RawVideoQualificationUi(phase = RawQualificationPhase.SWEEP, runCount = 16, remainingMs = 17 * 60_000L) },
+                onStart = { shown = RawVideoQualificationUi(phase = RawQualificationPhase.RING, remainingMs = 12 * 60_000L) },
                 onCancel = { shown = RawVideoQualificationUi(outcome = RawQualificationOutcomeKind.CANCELLED, reason = it) },
                 onLeave = { shown = null },
             )
@@ -492,9 +514,13 @@ fun RawQualificationReady() = RawQualificationDriver(DriverRawReady, null)
 @Composable
 fun RawQualificationReadyAllFit() = RawQualificationDriver(DriverRawReady, null, driverRawQualificationInfo(freeBytes = 128_000_000_000L))
 
-/** Battery at 35 % and moderately warm: each check says what to do and Start is disabled. */
+/** Battery at 3 % and moderately warm: each check says what to do and Start is disabled. */
 @Composable
-fun RawQualificationBlocked() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 35, thermalStatus = 2), null)
+fun RawQualificationBlocked() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 3, thermalStatus = 2), null)
+
+/** Battery at 35 % and cool: the battery row warns that the run may drain it, and Start stays enabled. */
+@Composable
+fun RawQualificationBatteryLow() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 35, thermalStatus = 0), null)
 
 /** The plan's items with [statuses] set by spec; the rest pending, or skipped when they do not fit. */
 private fun driverRawItems(vararg statuses: Pair<String, RawQualificationItemStatus>): List<RawQualificationItem> =
@@ -502,29 +528,81 @@ private fun driverRawItems(vararg statuses: Pair<String, RawQualificationItemSta
         statuses.firstOrNull { it.first == item.spec }?.let { item.copy(status = it.second) } ?: item
     }
 
-/** A run at step 2 of 16: 15 fps ready, 24 fps being tested, two configurations skipped for space. */
+/** The camera's rate each fitting configuration's check measured, as the driver's screens show it. */
+private val DriverRawChecked = linkedMapOf(
+    "full@30" to 29.9, "full@24" to 24.0, "3840x2160@30" to 30.0, "full@15" to 15.0, "1920x1080@60" to 59.8, "1920x1080@30" to 30.0,
+)
+
+/** The plan's items with the camera checks of [checked] done (MEASURED, with their rates), then [more] statuses. */
+private fun driverRawCheckedItems(checked: Collection<String>, vararg more: Pair<String, RawQualificationItemStatus>): List<RawQualificationItem> =
+    driverRawItems(*(checked.map { it to RawQualificationItemStatus.MEASURED } + more).toTypedArray())
+        .map { item -> DriverRawChecked[item.spec]?.takeIf { item.spec in checked }?.let { item.copy(achievedFps = it) } ?: item }
+
+/**
+ * Camera check 4 of 15, heaviest first while the phone is cool: the two 60 fps configurations that do
+ * not fit stay "No space", 4080×3060 · 30 fps is measured, 24 fps is being checked at 23.4 fps live.
+ */
 @Composable
 fun RawQualificationRunning() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
-    phase = RawQualificationPhase.RUN, fraction = 0.12f, runIndex = 2, runCount = 16, specLabel = "4080×3060 · 24 fps", remainingMs = 6 * 60_000L,
-    items = driverRawItems("full@15" to RawQualificationItemStatus.PASSED, "full@24" to RawQualificationItemStatus.TESTING),
+    phase = RawQualificationPhase.CAMERA_CHECK, fraction = 0.09f, runIndex = 4, runCount = 15, specLabel = "4080×3060 · 24 fps",
+    remainingMs = 11 * 60_000L,
+    items = driverRawCheckedItems(listOf("full@30"), "full@24" to RawQualificationItemStatus.TESTING)
+        .map { if (it.spec == "full@24") it.copy(liveFps = 23.4) else it },
 ))
 
-/** Before the first configuration: the storage sweep at 5 %, every configuration pending or skipped. */
+/** Camera check 7 of 15 on 1920×1080 · 60 fps, the camera delivering 49.8 fps (under the tolerance: amber). */
+@Composable
+fun RawQualificationRunningSlow() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawCheckedItems(listOf("full@30", "full@24", "3840x2160@30", "full@15"),
+        "1920x1080@60" to RawQualificationItemStatus.TESTING)
+        .map { if (it.spec == "1920x1080@60") it.copy(liveFps = 49.8) else it }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.CAMERA_CHECK, fraction = 0.15f, runIndex = 7, runCount = 15,
+        specLabel = items.first { it.spec == "1920x1080@60" }.label, remainingMs = 10 * 60_000L, items = items,
+    )
+})
+
+/**
+ * The compression benchmark, step 9 of 15, after every camera check: it streams 4080×3060 · 30 fps,
+ * the heaviest the camera delivered, at 29.7 fps; that row leads, highlighted and still Measured.
+ */
+@Composable
+fun RawQualificationRunningBench() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawCheckedItems(DriverRawChecked.keys)
+        .map { if (it.spec == "full@30") it.copy(benchmarking = true, benchLiveFps = 29.7) else it }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.ENCODE_BENCH, fraction = 0.22f, runIndex = 9, runCount = 15,
+        specLabel = items.first { it.spec == "full@30" }.label, remainingMs = 9 * 60_000L, items = items,
+    )
+})
+
+/** The storage rest after the camera work: the ring keeps 9 / 15, every fitting configuration Measured. */
+@Composable
+fun RawQualificationRunningRest() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.STORAGE_REST, fraction = 0.31f, runIndex = 9, runCount = 15, remainingMs = 8 * 60_000L,
+    items = driverRawCheckedItems(DriverRawChecked.keys),
+))
+
+/** The storage sweep after the rest, at 45 % overall: the ring keeps 9 / 15, every fitting configuration Measured. */
 @Composable
 fun RawQualificationRunningSweep() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
-    phase = RawQualificationPhase.SWEEP, fraction = 0.05f, runCount = 16, remainingMs = 7 * 60_000L, items = driverRawItems(),
+    phase = RawQualificationPhase.SWEEP, fraction = 0.45f, runIndex = 9, runCount = 15, remainingMs = 6 * 60_000L,
+    items = driverRawCheckedItems(DriverRawChecked.keys),
 ))
 
-/** Late in the run, on a compressed (block-pack) follow-up: the longest header label, which may break only before "· Compressed". */
+/**
+ * Late in the run, step 11 of 13: the descent stopped at 4080×3060 · 30 fps (Ready), and its compressed (block-pack)
+ * twin runs its own long run, the longest header label, which may break only before "· Compressed".
+ */
 @Composable
 fun RawQualificationRunningCompressed() = RawQualificationDriver(DriverRawReady, run {
-    val passed = DriverRawPlanNeeds.filter { it.second <= 26_000_000_000L }.map { it.first to RawQualificationItemStatus.PASSED }
     val compressed = requireNotNull(RawQualificationSpecs.parse("full@30+bp", "0", 4080, 3060))
     val label = RawVideoConfigOption.of(compressed.config).label
     RawVideoQualificationUi(
-        phase = RawQualificationPhase.RUN, fraction = 0.72f, runIndex = 9, runCount = 14, specLabel = label, remainingMs = 2 * 60_000L,
-        items = driverRawItems(*passed.toTypedArray()) +
-            RawQualificationItem("full@30+bp", label, 22_100_000_000L, RawQualificationItemStatus.TESTING),
+        phase = RawQualificationPhase.RUN, fraction = 0.8f, runIndex = 11, runCount = 13, specLabel = label, remainingMs = 2 * 60_000L,
+        items = driverRawCheckedItems(DriverRawChecked.keys - "full@30", "full@30" to RawQualificationItemStatus.PASSED)
+            .map { if (it.spec == "full@30") it.copy(achievedFps = 29.9) else it } +
+            RawQualificationItem("full@30+bp", label, 22_100_000_000L, RawQualificationItemStatus.TESTING, liveFps = 29.8),
     )
 })
 
@@ -640,11 +718,15 @@ fun RawQualificationNone() = RawQualificationDriver(DriverRawReady, RawVideoQual
     phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.NO_CONFIG,
 ))
 
-/** Settings with RAW video qualified: Capture holds the configuration row (`settings-raw-video`) and "Qualify again" (`settings-raw-video-requalify`). */
+/**
+ * Settings with RAW video qualified: Capture holds the configuration row (`settings-raw-video`), with
+ * block-pack twins, the RAW compression row (`settings-raw-compression`: `raw-compression-lossless`,
+ * `raw-compression-near-lossless`) and "Qualify again" (`settings-raw-video-requalify`).
+ */
 @Composable
 fun SettingsRawVideo() = DriverTheme {
     var settings by remember { mutableStateOf(DriverRawVideoSettings) }
-    SettingsScreen(driverRawVideoState(), settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+    SettingsScreen(driverRawVideoState(compressed = true), settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
         onSettingsChange = { settings = it }, onSelectRawVideoConfig = { key -> settings = settings.copy(rawVideoConfig = key) },
         onRequalifyRawVideo = {})
 }
@@ -1461,7 +1543,9 @@ private fun NetworkDriveStoppedScreen(showOriginals: Boolean) = DriverTheme {
     com.librestatic.opencinecam.share.NetworkDriveContent(
         state = com.librestatic.opencinecam.share.NetworkShareState.Stopped(),
         takeActive = false,
+        showOriginals = originals,
         onEnabledChange = {},
+        onShowOriginalsChange = { originals = it },
         onCopy = { _, _, _ -> },
         onBack = {},
     )
@@ -1484,7 +1568,9 @@ private fun NetworkDriveRunningScreen(revealed: Boolean) = DriverTheme {
             password = "k7pq2m9xwe4hjtna",
         ),
         takeActive = false,
+        showOriginals = false,
         onEnabledChange = {},
+        onShowOriginalsChange = {},
         onCopy = { _, _, _ -> },
         onBack = {},
         initialPasswordRevealed = revealed,
@@ -1529,7 +1615,3 @@ fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
             Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
     }
 }
-        showOriginals = originals,
-        onShowOriginalsChange = { originals = it },
-        showOriginals = false,
-        onShowOriginalsChange = {},

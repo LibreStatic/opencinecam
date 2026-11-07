@@ -290,7 +290,7 @@ class RawQualificationStagingTest {
 
     @Test fun theBenchCameraHoldsOnTheCameraCheckCriteria() {
         assertTrue(RawQualificationStaging.benchCameraHeld(59.8, 60, 1_794, 1_794))
-        assertFalse(RawQualificationStaging.benchCameraHeld(55.9, 60, 1_677, 1_677))
+        assertFalse(RawQualificationStaging.benchCameraHeld(51.0, 60, 1_530, 1_530))
         assertFalse(RawQualificationStaging.benchCameraHeld(60.0, 60, 1_790, 1_794))
         assertFalse(RawQualificationStaging.benchCameraHeld(0.0, 60, 0, 0))
     }
@@ -348,6 +348,49 @@ class RawQualificationStagingTest {
         assertEquals(storageFail, RawQualificationStaging.cameraEvidence(config("full@60"), longRuns, checks))
         assertEquals(cameraFail, RawQualificationStaging.cameraEvidence(config("full@30"), longRuns, checks))
         assertNull(RawQualificationStaging.cameraEvidence(config("full@24"), longRuns, checks))
+    }
+
+    @Test fun theCoolCameraCheckIsTheCameraEvidenceEvenWhenALongRunRanToo() {
+        // The checks run first, on a cool phone; the long run after the sweep may run hot.
+        val hot = RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT))
+        val longRuns = mapOf(config("full@60") to hot, config("full@30") to storageFail)
+        val checks = mapOf(config("full@60") to RawStageResult.PASS, config("full@30") to RawStageResult.skipped("ring-unavailable"))
+        assertEquals(RawStageResult.PASS, RawQualificationStaging.cameraEvidence(config("full@60"), longRuns, checks))
+        // A skipped check judged nothing: the long run speaks for the camera.
+        assertEquals(storageFail, RawQualificationStaging.cameraEvidence(config("full@30"), longRuns, checks))
+        // With neither, the skipped check says why.
+        val skipped = RawStageResult.skipped("thermal-skip")
+        assertEquals(skipped, RawQualificationStaging.cameraEvidence(config("full@24"), longRuns, mapOf(config("full@24") to skipped)))
+    }
+
+    @Test fun aLongRunIsSkippedOnlyWhenItsCameraCheckProvedTheCameraCannotDeliver() {
+        assertTrue(RawQualificationStaging.skipLongRun(cameraFail))
+        assertTrue(RawQualificationStaging.skipLongRun(RawStageResult.fail(listOf(RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT))))
+        // A pass, a reduced rate, a skipped or missing check, or a heat failure the camera delivered through keep the run.
+        assertFalse(RawQualificationStaging.skipLongRun(RawStageResult.PASS))
+        assertFalse(RawQualificationStaging.skipLongRun(RawStageResult.pass(listOf(RawQualificationStaging.REASON_FPS_REDUCED))))
+        assertFalse(RawQualificationStaging.skipLongRun(RawStageResult.skipped("thermal-skip")))
+        assertFalse(RawQualificationStaging.skipLongRun(null))
+        assertFalse(RawQualificationStaging.skipLongRun(RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT))))
+    }
+
+    @Test fun aConfigurationWithBothALongRunAndACameraCheckTakesItsLongRunsVerdict() {
+        val full60 = config("full@60")
+        // Its own long run judged the storage: risky, even though the check passed.
+        val longRuns = mapOf(full60 to storageFail, config("full@30") to RawStageResult.PASS)
+        val risky = RawQualificationStaging.uncompressedVerdict(full60, longRuns, RawStageResult.PASS)
+        assertEquals(storageFail.status, risky.status)
+        assertEquals(storageFail.reasonCodes, risky.reasonCodes)
+        assertEquals(RawQualificationMethods.LONG_RUN, risky.method)
+        // A passing long run passes with any check.
+        val passed = RawQualificationStaging.uncompressedVerdict(config("full@30"), longRuns, cameraFail)
+        assertEquals(RawBenchmarkStatus.PASS, passed.status)
+        assertEquals(RawQualificationMethods.LONG_RUN, passed.method)
+        // A configuration whose long run was skipped for its failed check takes the check's failure.
+        val skippedForCamera = RawQualificationStaging.uncompressedVerdict(config("3840x2160@60"), longRuns, cameraFail)
+        assertEquals(RawBenchmarkStatus.FAIL, skippedForCamera.status)
+        assertEquals(cameraFail.reasonCodes, skippedForCamera.reasonCodes)
+        assertEquals(RawQualificationMethods.EXTRAPOLATED, skippedForCamera.method)
     }
 
     @Test fun anLj92ConfigurationIsUsableUnlessItsTwinFailedForTheCamera() {
@@ -719,6 +762,65 @@ class RawQualificationStagingTest {
         // A skipped run (no space, no codec) and no run fall back to the extrapolation.
         assertNull(RawQualificationStaging.compressedLongRunVerdict(RawStageResult.skipped("insufficient-space")))
         assertNull(RawQualificationStaging.compressedLongRunVerdict(null))
+    }
+
+    @Test fun aTwinLongRunTheHeatAloneFailedIsHeatOnly() {
+        val thermal = RawQualificationStaging.REASON_THERMAL_LIMIT
+        // The Razr's full@30+bp: its own run, the last and hottest, failed with thermal-limit alone.
+        assertTrue(RawQualificationStaging.compressedHeatOnly(RawStageResult.fail(listOf(thermal))))
+        assertTrue(RawQualificationStaging.compressedHeatOnly(RawStageResult.fail(listOf(thermal, RawQualificationStaging.REASON_FPS_REDUCED))))
+        assertTrue(RawQualificationStaging.compressedHeatOnly(
+            RawStageResult.fail(listOf(thermal, RawQualificationStaging.REASON_FPS_DROPPED_UNDER_STORAGE_LOAD))))
+        // Heat with frame loss, an overflow, a camera shortfall, the storage or the writer stays the run's failure.
+        for (other in listOf(RawThroughputBenchmark.REASON_RAW_FRAME_LOSS, RawThroughputBenchmark.REASON_RING_OVERFLOW,
+            RawQualificationStaging.REASON_FPS_NOT_REACHED, RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED, "writer-error")) {
+            val result = RawStageResult.fail(listOf(thermal, other))
+            assertFalse(other, RawQualificationStaging.compressedHeatOnly(result))
+            assertEquals(other, RawQualificationMethods.COMPRESSED_LONG_RUN, RawQualificationStaging.compressedLongRunVerdict(result)?.method)
+        }
+        // No heat, a pass, a skip (thermal-skip included: UNKNOWN already falls back) or no run is not heat-only.
+        assertFalse(RawQualificationStaging.compressedHeatOnly(RawStageResult.fail(listOf("writer-error"))))
+        assertFalse(RawQualificationStaging.compressedHeatOnly(RawStageResult.PASS))
+        assertFalse(RawQualificationStaging.compressedHeatOnly(RawStageResult.skipped("thermal-skip")))
+        assertFalse(RawQualificationStaging.compressedHeatOnly(null))
+        // A heat-only run gives no verdict of its own: the extrapolation judges it.
+        assertNull(RawQualificationStaging.compressedLongRunVerdict(RawStageResult.fail(listOf(thermal))))
+        // The fallback code is informational, never a failing or storage reason.
+        assertFalse(RawQualificationStaging.REASON_COMPRESSED_HEAT_FALLBACK in RawQualificationRisk.STORAGE_REASONS)
+    }
+
+    @Test fun theExtrapolationReplacesATwinLongRunTheHeatAloneFailed() {
+        val thermal = RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT))
+        val twin = config("full@30")
+        val longRuns = descend(emptyMap())
+        val fast = bench(1e10, 1.6, encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        // The twin's cool check delivered and the bench keeps up: the extrapolation passes it, covered by a long run.
+        val passed = RawQualificationStaging.compressedFinalVerdict(thermal, twin, RawStageResult.PASS, fast, longRuns)
+        assertEquals(RawBenchmarkStatus.PASS, passed.status)
+        assertEquals(RawQualificationMethods.COMPRESSED_EXTRAPOLATED, passed.method)
+        assertEquals(config("full@60"), passed.coveredBy)
+        assertTrue(passed.reasonCodes.isEmpty())
+        assertEquals(RawQualificationStaging.compressedVerdict(twin, RawStageResult.PASS, fast, longRuns), passed)
+        // No extra pass rule: a bench too slow for the twin still fails it.
+        val slow = bench(100e6, 1.6, encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val tooSlow = RawQualificationStaging.compressedFinalVerdict(thermal, twin, RawStageResult.PASS, slow, longRuns)
+        assertEquals(RawBenchmarkStatus.FAIL, tooSlow.status)
+        assertEquals(RawQualificationMethods.COMPRESSED_EXTRAPOLATED, tooSlow.method)
+        assertTrue(RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW in tooSlow.reasonCodes)
+        // Nor a missing bench, or no long run to cover it.
+        assertEquals(RawBenchmarkStatus.UNKNOWN, RawQualificationStaging.compressedFinalVerdict(thermal, twin, RawStageResult.PASS, null, longRuns).status)
+        val uncovered = RawQualificationStaging.compressedFinalVerdict(thermal, twin, RawStageResult.PASS, fast, emptyMap())
+        assertEquals(RawBenchmarkStatus.UNKNOWN, uncovered.status)
+        assertEquals(listOf(RawQualificationStaging.REASON_STORAGE_NOT_COVERED), uncovered.reasonCodes)
+        // Heat with frame loss keeps the run's own failure.
+        val lossy = RawStageResult.fail(listOf(RawQualificationStaging.REASON_THERMAL_LIMIT, RawThroughputBenchmark.REASON_RAW_FRAME_LOSS))
+        val own = RawQualificationStaging.compressedFinalVerdict(lossy, twin, RawStageResult.PASS, fast, longRuns)
+        assertEquals(RawBenchmarkStatus.FAIL, own.status)
+        assertEquals(RawQualificationMethods.COMPRESSED_LONG_RUN, own.method)
+        assertEquals(lossy.reasonCodes, own.reasonCodes)
+        // A run that judged it, passing or not, keeps its verdict.
+        assertEquals(RawQualificationMethods.COMPRESSED_LONG_RUN,
+            RawQualificationStaging.compressedFinalVerdict(RawStageResult.PASS, twin, RawStageResult.PASS, slow, longRuns).method)
     }
 
     @Test fun aRunOnlyTheHeatAndTheStorageFailedStillDeliveredTheCamera() {

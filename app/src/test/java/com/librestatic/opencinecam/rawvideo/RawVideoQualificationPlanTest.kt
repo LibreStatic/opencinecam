@@ -205,15 +205,16 @@ class RawVideoQualificationPlanTest {
 
     @Test fun defaultPlanEstimateOnAnS24LikeSensor() {
         val withCodec = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
-        // Sweep 152 s (60 burst windows, up to 90 s sustained, 2 s overhead) + ring 2 s + 8 long runs (6 at 46.5 s, 2 at 86.5 s) + one 34.5 s benchmark + 8 cool-downs of 3 s.
-        assertEquals(152_000L + 2_000L + 452_000L + 34_500L + 24_000L, withCodec.durationMs)
-        assertEquals(9, withCodec.runCount)
+        // Ring 2 s + 8 camera checks of 12.5 s + one 34.5 s benchmark + the 120 s storage rest + sweep 152 s (60 burst
+        // windows, up to 90 s sustained, 2 s overhead) + 8 long runs (6 at 46.5 s, 2 at 86.5 s) + 16 cool-downs of 3 s.
+        assertEquals(2_000L + 100_000L + 34_500L + 120_000L + 152_000L + 452_000L + 48_000L, withCodec.durationMs)
+        assertEquals(17, withCodec.runCount)
         // The disk need is the sweep and the largest long run; the encode benchmark writes nothing.
         assertEquals(936_360_000L * 85 + (1L shl 30), withCodec.freeBytesNeeded)
         assertEquals(RawVideoQualifier.SWEEP_WRAP_BYTES + 15_606_000L, withCodec.sweepFreeBytesNeeded)
         val withoutCodec = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = false)
-        assertEquals(152_000L + 2_000L + 452_000L + 21_000L, withoutCodec.durationMs)
-        assertEquals(8, withoutCodec.runCount)
+        assertEquals(2_000L + 100_000L + 120_000L + 152_000L + 452_000L + 45_000L, withoutCodec.durationMs)
+        assertEquals(16, withoutCodec.runCount)
         assertEquals(withCodec.freeBytesNeeded, withoutCodec.freeBytesNeeded)
     }
 
@@ -236,6 +237,36 @@ class RawVideoQualificationPlanTest {
         assertEquals(0L, bench.freeBytesNeeded)
     }
 
+    @Test fun theStorageRestFollowsTheCameraSessionsBeforeTheSweep() {
+        val timing = RawQualificationTiming()
+        assertEquals(120_000L, RawQualificationTiming.STORAGE_REST_MS)
+        val runs = runs(RawQualificationPlan.DEFAULT.specs).filter { !it.config.isCompressed }
+        val all = RawQualificationEstimates.of(runs, 1, timing)
+        val sweepAndLong = RawQualificationEstimates.of(runs, 0, timing, setOf(RawQualificationStage.SWEEP, RawQualificationStage.LONG))
+        // Without camera sessions before it, the sweep starts at once: no rest.
+        assertEquals(2_000L + 152_000L + runs.sumOf { timing.runMs(it.config) } + (runs.size - 1) * 3_000L, sweepAndLong.durationMs)
+        // With them, the rest and their sessions and cool-downs come on top.
+        assertEquals(sweepAndLong.durationMs + RawQualificationTiming.STORAGE_REST_MS + runs.size * (timing.cameraCheckMs() + 3_000L) +
+            timing.encodeBenchMs() + 3_000L, all.durationMs)
+        // Without a sweep (camera checks only), no rest either.
+        val checks = RawQualificationEstimates.of(runs, 0, timing, setOf(RawQualificationStage.CAMERA))
+        assertEquals(2_000L + runs.size * timing.cameraCheckMs() + (runs.size - 1) * 3_000L, checks.durationMs)
+    }
+
+    @Test fun theProgressMeterShrinksForStepsThatDoNotRunWithoutGoingBack() {
+        val meter = RawQualificationProgressMeter(10_000L)
+        meter.startStep(4_000L); meter.finishStep()
+        assertEquals(0.4, meter.fraction(), 1e-9)
+        meter.shrink(5_000L)
+        assertEquals(0.8, meter.fraction(), 1e-9)
+        // Never below the work done, and the fraction never goes back.
+        meter.shrink(100_000L)
+        assertEquals(4_000L, meter.totalMs)
+        assertEquals(1.0, meter.fraction(), 1e-9)
+        meter.extend(6_000L)
+        assertEquals(1.0, meter.fraction(), 1e-9)
+    }
+
     @Test fun freeSpaceEstimateKeepsEveryRunWhenThereIsRoom() {
         val full = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
         val roomy = RawQualificationEstimates.forFreeSpace(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true,
@@ -254,9 +285,11 @@ class RawVideoQualificationPlanTest {
         val skipped = runs.count { timing.neededBytes(it.config) > largest - 1 }
         assertTrue(skipped > 0)
         assertEquals(skipped, partial.skippedRuns)
-        // The benchmark needs no space, so only the skipped long runs leave the plan.
-        assertEquals(9 - skipped, partial.estimate.runCount)
-        assertTrue(partial.estimate.durationMs < 664_500L)
+        // The camera checks and the benchmark need no space, so only the skipped long runs leave the plan.
+        assertEquals(17 - skipped, partial.estimate.runCount)
+        val full = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
+        assertEquals(full.durationMs - runs.filter { timing.neededBytes(it.config) > largest - 1 }
+            .sumOf { timing.runMs(it.config) + RawQualificationTiming.COOL_DOWN_MS }, partial.estimate.durationMs)
         assertTrue(partial.enoughSpace)
     }
 
@@ -479,18 +512,18 @@ class RawVideoQualificationPlanTest {
     }
 
     @Test fun aShortfallWithTheQtiOverrideAppliedIsAPlainFailureNotACameraLimit() {
-        // The Razr at 1920x1080@60 with the vendor keys sent: 50-57 fps against a declared 30.
+        // The Razr at 1920x1080@60 with the vendor keys sent: 48-57 fps against a declared 30.
         val thirty = 33_333_333L
-        assertTrue(RawQualificationFrameRate.fpsNotReached(54.0, 60))
-        assertEquals(emptyList<String>(), RawQualificationFrameRate.cameraReasons(thirty, 60, 54.0, 1600, qtiFrameRateOverride = true))
+        assertTrue(RawQualificationFrameRate.fpsNotReached(51.0, 60))
+        assertEquals(emptyList<String>(), RawQualificationFrameRate.cameraReasons(thirty, 60, 51.0, 1600, qtiFrameRateOverride = true))
         assertEquals(emptyList<String>(), RawQualificationFrameRate.cameraReasons(thirty, 60, 30.0, 900, qtiFrameRateOverride = true))
         // No frames at all is still the camera's, override or not.
         assertEquals(listOf(RawQualificationFrameRate.REASON_CAMERA_NO_FRAMES),
             RawQualificationFrameRate.cameraReasons(thirty, 60, 0.0, 0, qtiFrameRateOverride = true))
         // Without the override the same shortfall stays the camera's limit.
-        assertEquals(listOf(RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT), RawQualificationFrameRate.cameraReasons(thirty, 60, 54.0, 1600))
+        assertEquals(listOf(RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT), RawQualificationFrameRate.cameraReasons(thirty, 60, 51.0, 1600))
         // Stored and shown as an ordinary failure: not CAMERA_LIMIT and not RISKY.
-        val extra = listOf("fps-not-reached") + RawQualificationFrameRate.cameraReasons(thirty, 60, 54.0, 1600, qtiFrameRateOverride = true)
+        val extra = listOf("fps-not-reached") + RawQualificationFrameRate.cameraReasons(thirty, 60, 51.0, 1600, qtiFrameRateOverride = true)
         val stored = record(config("1920x1080@60"), extra = extra).qualification
         assertEquals(RawBenchmarkStatus.FAIL, stored.status)
         assertEquals("fps-not-reached", stored.reasonCode)

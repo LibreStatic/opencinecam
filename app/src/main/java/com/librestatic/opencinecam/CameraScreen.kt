@@ -3619,7 +3619,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
             // data rate and the time the free space lasts at it (PLAN-071).
             add("RAW10")
             val facts = rawVideoStatusFacts(state)
-            facts?.let { val label = rawLocalizedLabel(it.label); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(stringResource(R.string.raw_video_rate, it.megabytesPerSecond)) }
+            facts?.let { val label = rawLocalizedLabel(it.label, it.isBlockPack && rawVideoNearLosslessActive(state, settings)); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(stringResource(R.string.raw_video_rate, it.megabytesPerSecond)) }
             add(stringResource(R.string.status_audio_off))
             facts?.timeLeftMs?.let { add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it))) }
         } else if (video) {
@@ -4608,7 +4608,10 @@ internal fun SettingsContent(
         }
         // OCC-PLAN-071: offered once the camera has RAW10 output, qualified (the chooser) or not yet (why, and Qualify).
         if ("raw-video" in visibleIds && state.modeGates[CaptureMode.RAW_VIDEO] in setOf(ModeGateState.AVAILABLE, ModeGateState.CANDIDATE)) {
-            settingsCard("raw-video") { RawVideoSettings(state, settings, onSelectRawVideoConfig, onRequalifyRawVideo) }
+            settingsCard("raw-video") {
+                RawVideoSettings(state, settings, onSelectRawVideoConfig, onRequalifyRawVideo,
+                    onNearLosslessChange = { onSettingsChange(settings.copy(rawVideoNearLossless = it)) })
+            }
         }
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)

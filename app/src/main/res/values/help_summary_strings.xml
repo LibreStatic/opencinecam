@@ -22,4 +22,5 @@
     <string name="picture_blocked_edge_off_summary">Sharpness needs edge enhancement on</string>
     <string name="raw_video_config_help_summary">Only qualified configurations are offered</string>
     <string name="scroll_long_text_help_summary">Long text scrolls instead of being cut</string>
+    <string name="raw_compression_help_summary">Near-lossless saves more space, within sensor noise</string>
 </resources>

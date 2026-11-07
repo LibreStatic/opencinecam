@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.rawvideo.RawQualificationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,13 +46,28 @@ class RawVideoQualificationFlowTest {
 
     // region readiness
 
-    @Test fun readyAtFiftyPercentUnpluggedAndLight() {
-        assertEquals(emptyList<RawQualificationBlocker>(), rawQualificationReadiness(50, thermalStatus = 1))
+    @Test fun readyAtFivePercentUnpluggedAndLight() {
+        assertEquals(emptyList<RawQualificationBlocker>(), rawQualificationReadiness(5, thermalStatus = 1))
+        assertEquals(emptyList<RawQualificationBlocker>(), rawQualificationReadiness(49, thermalStatus = 0))
         assertEquals(emptyList<RawQualificationBlocker>(), rawQualificationReadiness(100, thermalStatus = 0))
     }
 
-    @Test fun batteryBelowFiftyBlocks() {
-        assertEquals(listOf(RawQualificationBlocker.BATTERY_LOW), rawQualificationReadiness(49, thermalStatus = 0))
+    @Test fun batteryBelowFiveBlocks() {
+        assertEquals(listOf(RawQualificationBlocker.BATTERY_LOW), rawQualificationReadiness(4, thermalStatus = 0))
+        assertEquals(listOf(RawQualificationBlocker.BATTERY_LOW), rawQualificationReadiness(0, thermalStatus = 0))
+    }
+
+    @Test fun batteryWarnsFromFiveToFortyNine() {
+        assertTrue(RawQualificationConditions(batteryPercent = 5, thermalStatus = 0).batteryWarning)
+        assertTrue(RawQualificationConditions(batteryPercent = 49, thermalStatus = 0).batteryWarning)
+        assertFalse(RawQualificationConditions(batteryPercent = 50, thermalStatus = 0).batteryWarning)
+        assertFalse(RawQualificationConditions(batteryPercent = null, thermalStatus = 0).batteryWarning)
+        // Blocked, not warned.
+        assertFalse(RawQualificationConditions(batteryPercent = 4, thermalStatus = 0).batteryWarning)
+    }
+
+    @Test fun theBatteryWarningNeverBlocks() {
+        assertEquals(emptyList<RawQualificationBlocker>(), RawQualificationConditions(batteryPercent = 35, thermalStatus = 0).blockers)
     }
 
     @Test fun unknownBatteryDoesNotBlock() {
@@ -69,16 +85,17 @@ class RawVideoQualificationFlowTest {
     }
 
     @Test fun everyBlockerIsListed() {
-        val conditions = RawQualificationConditions(batteryPercent = 35, thermalStatus = 2)
+        val conditions = RawQualificationConditions(batteryPercent = 3, thermalStatus = 2)
         assertEquals(
             listOf(RawQualificationBlocker.BATTERY_LOW, RawQualificationBlocker.TOO_WARM),
             conditions.blockers,
         )
     }
 
-    @Test fun runStopsBelowTwentyPercentOnly() {
-        assertEquals(RawQualificationStopReasons.BATTERY, rawQualificationRunAbort(19))
-        assertNull(rawQualificationRunAbort(20))
+    @Test fun runStopsBelowFivePercentOnly() {
+        assertEquals(RawQualificationStopReasons.BATTERY, rawQualificationRunAbort(4))
+        assertNull(rawQualificationRunAbort(5))
+        assertNull(rawQualificationRunAbort(19))
         assertNull(rawQualificationRunAbort(80))
         assertNull(rawQualificationRunAbort(null))
     }
@@ -170,6 +187,7 @@ class RawVideoQualificationFlowTest {
         assertEquals(RawQualificationStepText.CAMERA, rawQualificationStepText(RawQualificationPhase.CAMERA_CHECK))
         assertEquals(RawQualificationStepText.COMPRESSION, rawQualificationStepText(RawQualificationPhase.ENCODE_BENCH))
         assertEquals(RawQualificationStepText.COOLING, rawQualificationStepText(RawQualificationPhase.COOLING))
+        assertEquals(RawQualificationStepText.RESTING, rawQualificationStepText(RawQualificationPhase.STORAGE_REST))
         assertEquals(RawQualificationStepText.WAITING_TO_COOL, rawQualificationStepText(RawQualificationPhase.THERMAL_WAIT))
         assertEquals(RawQualificationStepText.SAVING, rawQualificationStepText(RawQualificationPhase.SAVING))
         assertEquals(RawQualificationStepText.SAVING, rawQualificationStepText(RawQualificationPhase.DONE))
@@ -324,6 +342,15 @@ class RawVideoQualificationFlowTest {
         assertEquals(RawQualificationItemStatus.NOT_QUALIFIED, rawQualificationRunStatus(null, null))
     }
 
+    @Test fun aHeatFallbackVerdictReadsAsItsExtrapolatedStatus() {
+        // The verdict row of a compressed run the heat alone failed carries its info code outside reasonCodes.
+        assertEquals(RawQualificationItemStatus.PASSED, rawQualificationRunStatus("PASS", null, emptyList()))
+        assertEquals(RawQualificationItemStatus.FAILED, rawQualificationRunStatus("FAIL",
+            RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW, listOf(RawQualificationStaging.REASON_COMPRESSED_ENCODE_TOO_SLOW)))
+        assertEquals(RawQualificationItemStatus.NOT_QUALIFIED, rawQualificationRunStatus("UNKNOWN",
+            RawQualificationStaging.REASON_STORAGE_NOT_COVERED, listOf(RawQualificationStaging.REASON_STORAGE_NOT_COVERED)))
+    }
+
     @Test fun severeHeatDuringARunReadsAsTooHot() {
         assertEquals(RawQualificationItemStatus.SKIPPED_HEAT, rawQualificationRunStatus("FAIL", RawQualificationStaging.REASON_THERMAL_LIMIT))
         assertEquals(RawQualificationItemStatus.SKIPPED_HEAT,
@@ -431,13 +458,184 @@ class RawVideoQualificationFlowTest {
         // A camera check marks its configuration too; the LJ92 benchmark judges no single item.
         assertEquals(RawQualificationItemStatus.TESTING,
             rawQualificationItemsOnProgress(items, run("full@24", RawQualificationPhase.CAMERA_CHECK), "b", 15L)[1].status)
-        assertEquals(items, rawQualificationItemsOnProgress(items, run("full@24", RawQualificationPhase.ENCODE_BENCH), "b", 15L))
+        assertEquals(items.map { it.status },
+            rawQualificationItemsOnProgress(items, run("full@24", RawQualificationPhase.ENCODE_BENCH), "b", 15L).map { it.status })
         // Steps outside a run, or without a spec, change nothing.
         assertEquals(items, rawQualificationItemsOnProgress(items, run("full@24", RawQualificationPhase.COOLING), "b", 15L))
         assertEquals(items, rawQualificationItemsOnProgress(items, run(null), null, 0L))
         // An LJ92 follow-up joins as it starts.
         val followup = rawQualificationItemsOnProgress(items, run("full@15+lj92"), null, 4L)
         assertEquals(RawQualificationItem("full@15+lj92", "full@15+lj92", 4L, RawQualificationItemStatus.TESTING), followup.last())
+    }
+
+    @Test fun liveFpsReachesTheTestingItemAndIsClearedWhenItLeavesTesting() {
+        val live = { fps: Double? -> RawQualificationProgress(RawQualificationPhase.RUN, 0.5, 1, 2, "full@24", liveFps = fps) }
+        // Warm-up: TESTING with no rate yet.
+        val started = rawQualificationItemsOnProgress(items, live(null), "b", 15L)
+        assertEquals(RawQualificationItemStatus.TESTING, started[1].status)
+        assertNull(started[1].liveFps)
+        // The rate arrives and updates on the TESTING item only.
+        val measuring = rawQualificationItemsOnProgress(started, live(23.4), "b", 15L)
+        assertEquals(23.4, measuring[1].liveFps!!, 0.0)
+        assertNull(measuring[0].liveFps)
+        assertFalse(measuring[1].liveFpsShort)
+        val slower = rawQualificationItemsOnProgress(measuring, live(20.9), "b", 15L)
+        assertEquals(20.9, slower[1].liveFps!!, 0.0)
+        assertTrue(slower[1].liveFpsShort)
+        // An unchanged rate leaves the list as it is (no extra post).
+        assertSame(slower, rawQualificationItemsOnProgress(slower, live(20.9), "b", 15L))
+        // A camera check carries it too; the encode benchmark sets no TESTING rate.
+        val check = rawQualificationItemsOnProgress(items,
+            RawQualificationProgress(RawQualificationPhase.CAMERA_CHECK, 0.5, 1, 2, "full@24", liveFps = 24.0), "b", 15L)
+        assertEquals(24.0, check[1].liveFps!!, 0.0)
+        assertNull(rawQualificationItemsOnProgress(items,
+            RawQualificationProgress(RawQualificationPhase.ENCODE_BENCH, 0.5, 1, 2, "full@24", liveFps = 24.0), "b", 15L)[1].liveFps)
+        // Its result clears it, and a judged item never takes a new one.
+        val judged = rawQualificationItemsWith(slower, "full@24", RawQualificationItemStatus.PASSED, "b", 15L, achievedFps = 23.9)
+        assertNull(judged[1].liveFps)
+        assertEquals(judged, rawQualificationItemsOnProgress(judged, live(23.9), "b", 15L))
+        // A cancelled run returns it to PENDING without it.
+        val cut = rawQualificationItemsFinished(slower)
+        assertEquals(RawQualificationItemStatus.PENDING, cut[1].status)
+        assertNull(cut[1].liveFps)
+        // Only a TESTING item keeps a live rate when set directly.
+        assertNull(rawQualificationItemsWith(items, "full@24", RawQualificationItemStatus.FAILED, "b", 0L, liveFps = 20.0)[1].liveFps)
+        // No target rate, no shortfall.
+        assertFalse(RawQualificationItem("custom", "c", 1L, RawQualificationItemStatus.TESTING, liveFps = 1.0).liveFpsShort)
+    }
+
+    @Test fun anEncodeBenchmarkMarksTheJudgedItemItStreamsWithoutChangingItsStatus() {
+        val judged = rawQualificationItemsWith(items, "full@15", RawQualificationItemStatus.PASSED, "a", 10L, achievedFps = 15.0)
+        val bench = { fps: Double? -> RawQualificationProgress(RawQualificationPhase.ENCODE_BENCH, 0.6, 3, 4, "full@15", liveFps = fps) }
+        // Warm-up: marked, no rate yet.
+        val warming = rawQualificationItemsOnProgress(judged, bench(null), "a", 10L)
+        assertTrue(warming[0].benchmarking)
+        assertNull(warming[0].currentFps)
+        val streaming = rawQualificationItemsOnProgress(warming, bench(14.8), "a", 10L)
+        assertEquals(RawQualificationItemStatus.PASSED, streaming[0].status)
+        assertEquals(15.0, streaming[0].achievedFps!!, 0.0)
+        assertEquals(14.8, streaming[0].currentFps!!, 0.0)
+        assertFalse(streaming[0].liveFpsShort)
+        assertFalse(streaming[1].benchmarking)
+        assertSame(streaming, rawQualificationItemsOnProgress(streaming, bench(14.8), "a", 10L))
+        // The next step ends the marking, the achieved rate stays.
+        val cooling = rawQualificationItemsOnProgress(streaming, run(null, RawQualificationPhase.COOLING), null, 0L)
+        assertEquals(judged, cooling)
+        // So does a run starting, and the run's end.
+        val next = rawQualificationItemsOnProgress(streaming, run("full@24"), "b", 15L)
+        assertFalse(next[0].benchmarking)
+        assertNull(next[0].benchLiveFps)
+        assertEquals(RawQualificationItemStatus.TESTING, next[1].status)
+        assertEquals(judged, rawQualificationItemsFinished(streaming))
+        // A benchmark naming no item marks nothing.
+        assertEquals(judged, rawQualificationItemsOnProgress(judged,
+            RawQualificationProgress(RawQualificationPhase.ENCODE_BENCH, 0.6, 3, 4, "1920x1080@30", liveFps = 30.0), null, 0L))
+    }
+
+    @Test fun aTestingItemIsMeasuredOnceItsSessionEnds() {
+        val testing = rawQualificationItemsOnProgress(items, run("full@15", RawQualificationPhase.CAMERA_CHECK), "a", 10L)
+        assertEquals(RawQualificationItemStatus.TESTING, testing[0].status)
+        // Its own heat wait and further reports keep it TESTING.
+        assertSame(testing, rawQualificationItemsOnProgress(testing, run("full@15", RawQualificationPhase.THERMAL_WAIT), "a", 10L))
+        assertSame(testing, rawQualificationItemsOnProgress(testing, run("full@15", RawQualificationPhase.CAMERA_CHECK), "a", 10L))
+        // The next configuration starting: only one TESTING at a time.
+        val next = rawQualificationItemsOnProgress(testing, run("full@24", RawQualificationPhase.CAMERA_CHECK), "b", 15L)
+        assertEquals(listOf(RawQualificationItemStatus.MEASURED, RawQualificationItemStatus.TESTING), next.map { it.status })
+        // A cool-down, a benchmark or saving ends it as well; the live rate goes.
+        val live = rawQualificationItemsOnProgress(testing,
+            RawQualificationProgress(RawQualificationPhase.CAMERA_CHECK, 0.5, 1, 2, "full@15", liveFps = 14.9), "a", 10L)
+        for (phase in listOf(RawQualificationPhase.COOLING, RawQualificationPhase.ENCODE_BENCH, RawQualificationPhase.STORAGE_REST,
+            RawQualificationPhase.SWEEP, RawQualificationPhase.SAVING)) {
+            val ended = rawQualificationItemsOnProgress(live, run(if (phase == RawQualificationPhase.ENCODE_BENCH) "full@24" else null, phase), null, 0L)
+            assertEquals(phase.name, RawQualificationItemStatus.MEASURED, ended[0].status)
+            assertNull(ended[0].liveFps)
+        }
+        // A measured item stays so on later reports.
+        val measured = rawQualificationItemsOnProgress(live, run(null, RawQualificationPhase.COOLING), null, 0L)
+        assertSame(measured, rawQualificationItemsOnProgress(measured, run(null, RawQualificationPhase.COOLING), null, 0L))
+    }
+
+    private fun item(spec: String, label: String, status: RawQualificationItemStatus = RawQualificationItemStatus.PENDING) =
+        RawQualificationItem(spec, label, 1L, status)
+
+    private val orderItems = listOf(
+        item("full@15", "4080×3060 · 15 fps"),
+        item("full@30+bp", "4080×3060 · 30 fps · Compressed"),
+        item("1920x1080@60", "1920×1080 · 60 fps"),
+        item("full@30", "4080×3060 · 30 fps"),
+        item("3840x2160@30", "3840×2160 · 30 fps"),
+        item("full@60", "4080×3060 · 60 fps"),
+        item("1920x1080@30", "1920×1080 · 30 fps"),
+        item("3840x2160@60+bp", "3840×2160 · 60 fps · Compressed"),
+        item("3840x2160@60", "3840×2160 · 60 fps"),
+    )
+
+    @Test fun theResultListsEachSectionHeaviestFirstWithCompressedTwinsAfterTheirTwin() {
+        assertEquals(listOf("full@60", "3840x2160@60", "3840x2160@60+bp", "full@30", "full@30+bp", "3840x2160@30", "full@15",
+            "1920x1080@60", "1920x1080@30"), rawQualificationItemsHeaviestFirst(orderItems).map { it.spec })
+        // Labels sort the same way (the passed card lists labels).
+        assertEquals(listOf("4080×3060 · 30 fps", "4080×3060 · 30 fps · Compressed", "1920×1080 · 60 fps"),
+            listOf("1920×1080 · 60 fps", "4080×3060 · 30 fps · Compressed", "4080×3060 · 30 fps").sortedWith(rawQualificationHeaviestFirst))
+        // Equal rates: the higher frame rate first (2x pixels at half the rate).
+        assertEquals(listOf("1920×1080 · 60 fps", "3840×1080 · 30 fps"),
+            listOf("3840×1080 · 30 fps", "1920×1080 · 60 fps").sortedWith(rawQualificationHeaviestFirst))
+        // A label without a size goes last and keeps its place among such labels.
+        assertEquals(listOf("1920×1080 · 30 fps", "b", "a"), listOf("b", "1920×1080 · 30 fps", "a").sortedWith(rawQualificationHeaviestFirst))
+    }
+
+    @Test fun theRunningListLeadsWithTheRowInProgress() {
+        val testing = orderItems.map { if (it.spec == "full@15") it.copy(status = RawQualificationItemStatus.TESTING) else it }
+        val running = rawQualificationItemsRunningOrder(testing)
+        assertEquals("full@15", running.first().spec)
+        assertEquals(rawQualificationItemsHeaviestFirst(orderItems).filter { it.spec != "full@15" }.map { it.spec }, running.drop(1).map { it.spec })
+        // A benchmark streaming a measured row leads too, the compressed twin staying after its twin elsewhere.
+        val bench = orderItems.map {
+            when (it.spec) {
+                "full@30" -> it.copy(status = RawQualificationItemStatus.MEASURED, benchmarking = true)
+                else -> it
+            }
+        }
+        val benchOrder = rawQualificationItemsRunningOrder(bench).map { it.spec }
+        assertEquals("full@30", benchOrder.first())
+        assertEquals(listOf("full@60", "3840x2160@60", "3840x2160@60+bp", "full@30+bp"), benchOrder.subList(1, 5))
+        // Nothing in progress: plain heaviest first; the same list in, the same order out.
+        assertEquals(rawQualificationItemsHeaviestFirst(orderItems), rawQualificationItemsRunningOrder(orderItems))
+        assertEquals(rawQualificationItemsRunningOrder(orderItems), rawQualificationItemsRunningOrder(orderItems.reversed()))
+    }
+
+    @Test fun theStorageRestAndTheSweepAfterTheChecksKeepTheItemsAndTheStepCount() {
+        val checked = rawQualificationItemsCameraChecked(items, "full@15", "a", 10L, 15.0)
+        // The rest and the sweep name no configuration and carry the last session's step.
+        for (phase in listOf(RawQualificationPhase.STORAGE_REST, RawQualificationPhase.SWEEP)) {
+            val progress = RawQualificationProgress(phase, 0.3, runIndex = 9, runCount = 17)
+            assertSame(checked, rawQualificationItemsOnProgress(checked, progress, null, 0L))
+            val ui = rawQualificationUiOf(progress, 900_000L, null)
+            assertEquals(9, ui.runIndex)
+            assertEquals(17, ui.runCount)
+            assertNull(ui.specLabel)
+        }
+        // The long run after the sweep tests the measured item again.
+        val longRun = rawQualificationItemsOnProgress(checked, run("full@15"), "a", 10L)
+        assertEquals(RawQualificationItemStatus.TESTING, longRun[0].status)
+    }
+
+    @Test fun aCameraCheckResultMeasuresItsItemAndTheVerdictReplacesIt() {
+        val testing = rawQualificationItemsOnProgress(items, run("full@24", RawQualificationPhase.CAMERA_CHECK), "b", 15L)
+        val checked = rawQualificationItemsCameraChecked(testing, "full@24", "b", 15L, 23.9)
+        assertEquals(RawQualificationItemStatus.MEASURED, checked[1].status)
+        assertEquals(23.9, checked[1].achievedFps!!, 0.0)
+        assertNull(checked[1].liveFps)
+        // The verdict at the end replaces it.
+        val judged = rawQualificationItemsWith(checked, "full@24", RawQualificationItemStatus.PASSED, "b", 15L, achievedFps = 23.9)
+        assertEquals(RawQualificationItemStatus.PASSED, judged[1].status)
+        // A check row arriving after a verdict changes nothing.
+        assertEquals(judged, rawQualificationItemsCameraChecked(judged, "full@24", "b", 15L, 20.0))
+        // A cancel returns measured items to PENDING, without the rate.
+        val cut = rawQualificationItemsFinished(checked)
+        assertEquals(RawQualificationItemStatus.PENDING, cut[1].status)
+        assertNull(cut[1].achievedFps)
+        // An unknown check joins as measured.
+        assertEquals(RawQualificationItemStatus.MEASURED, rawQualificationItemsCameraChecked(items, "full@60", "c", 9L, null).last().status)
     }
 
     @Test fun finishedRunReturnsACutShortItemToPending() {

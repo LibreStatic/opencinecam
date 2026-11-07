@@ -29,13 +29,17 @@ import org.junit.runner.RunWith
  * [RawVideoQualifier]: this test only maps instrumentation arguments onto it and logs its output. It
  * never promotes RAW video (no store is written).
  *
- * The stages: a storage sweep; long disk runs of the uncompressed configurations, heaviest stream
- * first, stopping at the first pass; a RAM-only camera check of every configuration no long run
- * judged; and an encode benchmark per codec from the RAM ring (no disk), from the heaviest
- * configuration the camera delivers down, from which every compressed configuration is judged by
- * pixel rate: block-pack (`+bp`, the "Save space" codec the app records), and LJ92 (`+lj92`) only
- * when a `rawConfigs` spec names it.
- *
+ * The stages, in order: the ring; a RAM-only camera check of every uncompressed configuration,
+ * heaviest stream first, while the phone is still cool; an encode benchmark per codec from the RAM
+ * ring (no disk), from the heaviest configuration the camera checks say the camera delivers down,
+ * from which every compressed configuration is judged by pixel rate: block-pack (`+bp`, the "Save
+ * space" codec the app records), and LJ92 (`+lj92`) only when a `rawConfigs` spec names it; a 2 min
+ * storage rest; a storage sweep; long disk runs of the uncompressed configurations, heaviest stream
+ * first, stopping at the first pass and leaving out those whose camera check proved the camera
+ * cannot deliver them; then the compressed twins' own long runs. The camera is judged by the cool
+ * checks, the storage by the long runs. With several `rawCameras`, every camera's checks and
+ * benchmarks run first, then one rest and one sweep, then each camera's long runs.
+
  * Instrumentation arguments, all optional:
  * - `rawCameras`: comma-separated Camera2 ids (default: the first back camera with RAW10).
  * - `rawConfigs`: comma-separated `WxH@fps` (a centred crop) or `full@fps`, optionally `+bp` or
@@ -61,7 +65,8 @@ import org.junit.runner.RunWith
  *   never below `rawLiveSeconds`).
  * - `rawSweepSeconds`: storage sweep windows (default 60; below 60 the sweep fails rule v2 by design).
  * - `rawIgnoreRest`: `true` runs on after a sweep that found the write cache unrested (default `false`:
- *   the run stops after the sweep with `storage-not-rested`, a valid outcome, logged as a warning).
+ *   the run stops after the sweep, past the camera checks and benchmarks, with `storage-not-rested`, a
+ *   valid outcome, logged as a warning).
  * - `rawRestReference`: the rested burst median in bytes/s the sweep is compared with (default: the
  *   one the app stored for this build, if any).
  *

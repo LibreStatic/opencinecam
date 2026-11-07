@@ -32,4 +32,10 @@
     <string name="raw_video_burst_minutes">%1$d min</string>
     <string name="raw_video_burst_seconds">%1$d s</string>
     <string name="raw_video_risky_notice_burst">Tasa riesgosa: puede perder fotogramas tras aprox. %1$s (con el teléfono en reposo)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">Compresión RAW</string>
+    <string name="raw_compression_summary">Para configuraciones comprimidas</string>
+    <string name="raw_compression_lossless">Sin pérdida</string>
+    <string name="raw_video_label_near_lossless">Casi sin pérdida</string>
+    <string name="raw_compression_help">Se aplica a las configuraciones comprimidas. Sin pérdida conserva cada valor que entrega el sensor. Casi sin pérdida une valores que difieren menos que aproximadamente la mitad del ruido del sensor en el ISO del fotograma, así que la diferencia queda oculta en el ruido y los archivos ocupan todavía menos, sobre todo con poca luz. Ambos se abren en la galería, en la exportación CinemaDNG y en las herramientas de escritorio. El tiempo restante supone la misma relación prudente para los dos.</string>
 </resources>

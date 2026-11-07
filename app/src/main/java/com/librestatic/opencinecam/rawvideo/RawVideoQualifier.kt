@@ -107,28 +107,48 @@ class RawVideoQualificationOutcome(
  * the app itself. It never promotes RAW video by itself: [run] returns the records, and stores them
  * only when given a store. The decisions are [RawQualificationStaging]'s; this runs the stages:
  *
- * 1. A storage sweep: at least 60 one-second windows of unthrottled `RAW_FRAME`-shaped gather writes
+ * 1. One [RawVideoRing] sized per decision 4 (off-heap [SharedMemorySlots]), allocated once and reused.
+ * 2. A camera check of every uncompressed configuration, heaviest stream first, while the phone is still
+ *    cool: the real camera for [RawQualificationTiming.cameraCheckSeconds], its RAW10 rows copied into
+ *    the ring on the reader thread and released, no row. The checks judge the camera: its verdicts, its
+ *    achieved rates and the evidence of every configuration come from them, measured before any heavy
+ *    session warmed the phone.
+ * 3. An encode benchmark per codec of the compressed configurations (block-pack, and LJ92 when a
+ *    spec names it), once per [RawQualificationPlan.threadsFor] entry: the same session on the
+ *    heaviest configuration whose camera check says the camera delivers, each frame encoded on the
+ *    consumer thread with a fresh encoder ([RawFrameEncoders.native]) and discarded, no row. Every
+ *    compressed configuration is judged from its codec's benchmark by pixel rate, its twin's camera and
+ *    the storage at the compressed rate.
+ * 4. A storage rest of [RawQualificationTiming.STORAGE_REST_MS] when a camera session ran, so the
+ *    storage is measured rested.
+ * 5. A storage sweep: at least 60 one-second windows of unthrottled `RAW_FRAME`-shaped gather writes
  *    to a pending row in `Documents/OpenCineCam/RAW` ([RawVideoQualificationRows]), forced every 256 MiB,
  *    then a sustained phase that writes on until the SLC write cache's cliff and the windows after it
- *    are measured ([RawStorageCliff]); rule v2 reads only the first 60.
- * 2. One [RawVideoRing] sized per decision 4 (off-heap [SharedMemorySlots]), allocated once and reused.
- * 3. Long disk runs of the uncompressed configurations, heaviest stream first: the real camera, its
- *    RAW10 rows copied into the ring on the reader thread and drained by one [OcrawStreamWriter]
- *    thread to its own row, then scanned back with [OcrawStreamReader]. Each is judged by
- *    [RawThroughputBenchmark.qualifyWithBuffer] plus the run's own checks (frame rate, heat, writer,
- *    scan), and, for comparison, by the old [RawThroughputBenchmark.qualifyWithoutBuffer]. The first
- *    pass stops the descent: it covers every lighter configuration's storage. A run whose ring
- *    overflowed and whose only camera reason is `fps-not-reached` gets a camera check of its own
- *    right after it: when the camera holds the rate from the RAM ring, the drop was the storage's
+ *    are measured ([RawStorageCliff]); rule v2 reads only the first 60. A sweep judged unrested
+ *    (`storage-not-rested`) ends the run there, after the camera work: those rows stay in the report and
+ *    nothing is stored.
+ * 6. Long disk runs of the uncompressed configurations, heaviest stream first: the real camera, its
+ *    RAW10 rows copied into the ring and drained by one [OcrawStreamWriter] thread to its own row, then
+ *    scanned back with [OcrawStreamReader]. Each is judged by [RawThroughputBenchmark.qualifyWithBuffer]
+ *    plus the run's own checks (frame rate, heat, writer, scan), and, for comparison, by the old
+ *    [RawThroughputBenchmark.qualifyWithoutBuffer]. The first pass stops the descent: it covers every
+ *    lighter configuration's storage. A configuration whose camera check proved the camera cannot
+ *    deliver it ([RawQualificationStaging.skipLongRun]) gets no long run. A run whose ring overflowed
+ *    and whose only camera reason is `fps-not-reached` is weighed against its earlier camera check:
+ *    when the camera held the rate from the RAM ring, the drop was the storage's
  *    ([RawQualificationStaging.storageLoadCodes]) and the run is risky rather than failed.
- * 4. A camera check of every configuration no long run judged: the same session for
- *    [RawQualificationTiming.cameraCheckSeconds], frames copied into the ring and released, no row.
- * 5. An encode benchmark per codec of the compressed configurations (block-pack, and LJ92 when a
- *    spec names it), once per [RawQualificationPlan.threadsFor] entry: the same session on the
- *    heaviest configuration the camera delivers, each frame encoded on the consumer thread with a
- *    fresh encoder ([RawFrameEncoders.native]) and discarded, no row. Every compressed configuration
- *    is judged from its codec's benchmark by pixel rate, its twin's camera and the storage at the
- *    compressed rate.
+ * 7. A long run of the compressed twins whose twin's camera delivered and whose encoder keeps up
+ *    ([RawQualificationStaging.compressedLongRunOrder]). They run last, on the hottest phone, so one
+ *    that fails for heat alone ([RawQualificationStaging.compressedHeatOnly]) is judged by the
+ *    extrapolation instead ([RawQualificationStaging.compressedFinalVerdict]): its row stays in the
+ *    results marked `supersededByVerdict`, its record is dropped, and the extrapolated verdict's
+ *    record and row (with the info code `compressed-heat-fallback` and a `heatFallback` summary of
+ *    the run) replace them.
+ * 8. The verdicts: a configuration with a long run takes that run's; any other its camera check's,
+ *    ready when a passing long run covers its rate ([RawQualificationStaging.uncompressedVerdict]).
+ *
+ * With several cameras, steps 2 and 3 run for every camera, then one rest and one sweep, then steps 6
+ * to 8 for each camera.
  *
  * The graph of every run is the app's RAW_VIDEO session (`Camera2PreviewEngine.configureGpuPreviewSession`):
  * the RAW10 reader at the largest RAW10 size beside one viewfinder stream, a [SurfaceTexture] at the
@@ -140,9 +160,9 @@ class RawVideoQualificationOutcome(
  * within the limit plus the Qualcomm vendor keys at 1/fps.
  *
  * Between sessions it waits [RawQualificationTiming.COOL_DOWN_MS], but not between the sweep and the
- * first long run: only the ring allocation sits between them, so that run writes past the write cache
- * the sweep filled, as a long take would, and its verdict does not depend on how long the phone rested
- * before. A session waits up to [THERMAL_WAIT_MS]
+ * first long run: nothing sits between them, so that run writes past the write cache the sweep filled,
+ * as a long take would, and its verdict does not depend on how long the phone rested before. Nor does
+ * the sweep wait for the heat after the storage rest. A session waits up to [THERMAL_WAIT_MS]
  * for the thermal status to drop below SEVERE and is skipped (`thermal-skip`) if it does not; reaching
  * SEVERE during one fails it (`thermal-limit`). Encode benchmarks and every long run (uncompressed or
  * a compressed twin's), the heaviest sessions, first cool down: they wait up to [COOL_WAIT_MS] for the
@@ -210,6 +230,14 @@ class RawVideoQualifier(
 
     /** The hottest thermal status seen during the current session's sleeps. */
     @Volatile private var thermalPeak = 0
+
+    /** The live run whose frame rate progress reports carry ([liveFps]); null outside a camera session. */
+    @Volatile private var liveSession: LiveState? = null
+
+    // Qualification thread only: [liveFps]'s last value, recomputed every [RawQualificationLiveRate.INTERVAL_MS].
+    private var liveFpsOf: LiveState? = null
+    private var liveFpsValue: Double? = null
+    private var liveFpsAtMs = 0L
 
     /** The last writer or consumer thread; slot memory and the encoders are released only once it has ended. */
     private var lastWriter: Thread? = null
@@ -314,38 +342,8 @@ class RawVideoQualifier(
             .put("runCount", estimate.runCount))
         meter = RawQualificationProgressMeter(estimate.durationMs)
 
-        // 1. Storage sweep, with the largest frame any run will write.
+        // 1. The ring, allocated once, for the largest frame any session will carry.
         val largest = cameras.maxBy { it.size.width.toLong() * it.size.height }.size
-        val sweep = if (RawQualificationStage.SWEEP in stages) {
-            progress(RawQualificationPhase.SWEEP)
-            meter.startStep(timing.sweepMs)
-            val reference = restReferenceBytesPerSecond ?: store?.let { runCatching { it.restReference(destinationId) }.getOrNull() }
-            val sweepResult = storageSweep(largest, timing.sweepWindows, timing.sweepMaxExtraSeconds, reference)
-            meter.finishStep()
-            report.put("sweep", sweepResult.json)
-            emit(JSONObject(sweepResult.json.toString()).put("kind", "sweep"))
-            System.gc()
-            val rest = sweepResult.rest
-            if (rest != null && rest.rested && store != null) {
-                rest.medianBytesPerSecond?.takeIf { it > 0 }?.let { median ->
-                    runCatching { store.raiseRestReference(destinationId, median) }
-                        .onFailure { Log.w(TAG, "rest reference not stored", it) }
-                }
-            }
-            if (rest != null && !rest.rested && !ignoreStorageRest) {
-                // A cache still flushing makes every storage verdict wrong; the records in force stay untouched.
-                Log.i(TAG, "storage not rested (${rest.rule}): median ${rest.medianBytesPerSecond} B/s, p01 ${rest.p01BytesPerSecond} B/s")
-                report.put("results", results)
-                    .put("status", RawQualificationStatus.UNKNOWN.name)
-                    .put("reasonCode", REASON_STORAGE_NOT_RESTED)
-                    .put("safeMessage", "The storage is still flushing recent writes; let the phone rest and qualify again. Nothing was stored.")
-                return RawVideoQualificationOutcome(RawQualificationStatus.UNKNOWN, REASON_STORAGE_NOT_RESTED, report, emptyList())
-            }
-            sweepResult.sweep
-        } else null
-        checkCancelled()
-
-        // 2. The ring, allocated once.
         progress(RawQualificationPhase.RING)
         meter.startStep(RawQualificationTiming.RING_OVERHEAD_MS)
         val slotBytes = OcrawFrameHeader.raw10RowBytes(largest.width) * largest.height
@@ -355,12 +353,14 @@ class RawVideoQualifier(
         Log.i(TAG, "ring=${ringPlan.json}")
         checkCancelled()
 
-        // 3. Per camera: the long-run descent, the camera checks, the encode benchmarks, the verdicts.
         val steps = StepCounter(estimate.runCount)
         var anyException = false
         var ringPoisoned = false
         val benchJson = JSONArray()
-        var laterCameras = runsByCamera.values.toList()
+        /** The storage sweep, once it ran: the camera checks and the encode benchmarks come before it. */
+        var sweep: RawStorageSweep? = null
+        /** The next long run is the first after the sweep: no cool-down and no cool wait, so it writes past the cache the sweep filled. */
+        var firstAfterSweep = false
 
         /** The record of the latest session, when it stored one. */
         var lastRecord: RawVideoQualificationRecord? = null
@@ -378,8 +378,10 @@ class RawVideoQualifier(
             bench: EncodeSession? = null,
             expectedFps: Double? = null,
         ): JSONObject {
-            // No cool-down before the first: the long run must start while the sweep's cache exhaustion lasts.
-            if (steps.index > 0) coolDown(steps.index, steps.count)
+            val afterSweep = kind == SessionKind.LONG && firstAfterSweep
+            if (kind == SessionKind.LONG) firstAfterSweep = false
+            // No cool-down before the first session, nor between the sweep and the first long run.
+            if (steps.index > 0 && !afterSweep) coolDown(steps.index, steps.count)
             steps.index++
             meter.startStep(kind.plannedMs(run.config))
             progress(kind.phase, index = steps.index, count = steps.count, spec = run.spec)
@@ -389,7 +391,8 @@ class RawVideoQualifier(
                 ringPoisoned -> LiveOutcome(skipped(run, "ring-poisoned", kind), null)
                 (kind == SessionKind.ENCODE || run.config.isCompressed) && bench == null -> LiveOutcome(skipped(run, REASON_CODEC_UNAVAILABLE, kind), null)
                 else -> try {
-                    liveRun(manager, camera, run, ring, sweep, kind, bench, steps.index, steps.count, expectedFps)
+                    liveRun(manager, camera, run, ring, sweep, kind, bench, steps.index, steps.count, expectedFps,
+                        coolFirst = steps.index > 1 && !afterSweep)
                 } catch (cancel: QualificationCancelled) {
                     throw cancel
                 } catch (error: Throwable) {
@@ -415,138 +418,180 @@ class RawVideoQualifier(
             return result
         }
 
-        for ((camera, cameraRuns) in runsByCamera) {
-            laterCameras = laterCameras.drop(1)
-            val uncompressed = plan.uncompressedRuns(cameraRuns)
-            val specOf = uncompressed.associate { it.config to it.spec }
-            val longRuns = linkedMapOf<RawVideoConfig, RawStageResult>()
-            val longSkips = mutableMapOf<RawVideoConfig, RawStageResult>()
-            val cameraChecks = mutableMapOf<RawVideoConfig, RawStageResult>()
-            val evidence = mutableMapOf<RawVideoConfig, JSONObject>()
-            /** The rate each configuration's camera delivered, to a tenth: its RAM camera check when one ran, else its long run. */
-            val achieved = mutableMapOf<RawVideoConfig, Double>()
-            fun noteAchieved(config: RawVideoConfig, json: JSONObject) {
-                if (json.optString("status") == RawBenchmarkStatus.UNKNOWN.name) return
-                json.optDouble("achievedFps").takeIf { !it.isNaN() }?.let { achieved[config] = it }
-            }
-            /** What an encode benchmark of [config] asks the camera to hold: its reduced rate when it has one, else the target. */
-            fun expectedFps(config: RawVideoConfig): Double =
-                achieved[config]?.takeIf { RawQualificationFrameRate.isReducedRate(it, config.fps) } ?: config.fps.toDouble()
+        val passes = runsByCamera.map { (camera, cameraRuns) ->
+            CameraPass(camera, plan.uncompressedRuns(cameraRuns), plan.compressedRuns(cameraRuns, codecAvailable),
+                plan.benchEncodings(cameraRuns, codecAvailable))
+        }
+        val cameraJudged = RawQualificationStage.CAMERA in stages
 
-            // Long disk runs, heaviest first, until one passes.
+        // 2 and 3. Per camera, while the phone is cool: a camera check of every uncompressed configuration, heaviest
+        // first, from the ring alone; then each codec's benchmark, judged from those checks.
+        for (pass in passes) {
+            val camera = pass.camera
+            if (cameraJudged) {
+                for (run in RawQualificationStaging.longRunOrder(pass.uncompressed)) {
+                    val json = session(camera, run, SessionKind.CAMERA)
+                    pass.noteAchieved(run.config, json)
+                    pass.cameraChecks[run.config] = stageResult(json)
+                    pass.checkJsons[run.config] = json
+                    json.optJSONObject("evidence")?.let { pass.evidence[run.config] = it }
+                }
+            }
+
+            // Each codec's benchmark, once per thread count, from the heaviest configuration the camera delivers
+            // down, until one holds the camera under the encode load and keeps up with its own configuration.
+            for (encoding in pass.benchEncodings) {
+                val sessionsPer = plan.threadsFor(encoding).size
+                val sessionsMs = sessionsPer * (timing.encodeBenchMs() + RawQualificationTiming.COOL_DOWN_MS)
+                val benches = linkedMapOf<RawVideoConfig, RawEncodeBenchFigures?>()
+                val twinConfigs = pass.compressedRuns.filter { it.config.encoding == encoding }
+                    .map { it.config.copy(encoding = RawVideoConfig.ENCODING_RAW10) }.toSet()
+                val candidates = if (!cameraJudged) emptyList() else RawQualificationStaging.longRunOrder(pass.uncompressed)
+                    .filter { it.config in twinConfigs && RawQualificationStaging.cameraEvidence(it.config, pass.longRuns, pass.cameraChecks)?.cameraDelivered == true }
+                /** One benchmark configuration: a session per thread count; the verdict entry's figures go into [benches]. */
+                fun benchConfig(benchRun: RawQualificationRun) {
+                    val entries = mutableListOf<RawEncodeBenchFigures?>()
+                    for (threads in plan.threadsFor(encoding)) {
+                        val bench = encodeSession(encoding, threads, plan.encodeStrips, slotBytes)
+                        val json = session(camera, benchRun, SessionKind.ENCODE, bench, pass.expectedFps(benchRun.config))
+                        bench?.let { closeAfterConsumer(it.encoder) }
+                        benchJson.put(json)
+                        entries += benchFigures(json, benchRun.config, encoding, threads)
+                        json.optJSONObject("evidence")?.let { pass.benchEvidence[Triple(encoding, benchRun.config, threads)] = it }
+                    }
+                    benches[benchRun.config] = RawQualificationStaging.verdictBench(entries, RawFrameEncoders.defaultThreads(encoding))
+                }
+                if (!cameraJudged) {
+                    // No camera check ran (the stage is off): one benchmark on the heaviest.
+                    RawQualificationStaging.longRunOrder(pass.uncompressed).firstOrNull()?.let(::benchConfig)
+                    pass.judgesByEncoding[encoding] = benches.values.firstOrNull()?.let { only -> twinConfigs.associateWith { only } }.orEmpty()
+                } else {
+                    val candidateConfigs = candidates.map { it.config }
+                    var next = RawQualificationStaging.nextEncodeBenchConfig(candidateConfigs, benches)
+                    if (next == null) {
+                        steps.count -= sessionsPer
+                        meter.shrink(sessionsMs)
+                    }
+                    while (next != null) {
+                        if (benches.isNotEmpty()) {
+                            // The plan counted one benchmark configuration per codec; the descent adds another.
+                            steps.count += sessionsPer
+                            meter.extend(sessionsMs)
+                        }
+                        benchConfig(candidates.first { it.config == next })
+                        next = RawQualificationStaging.nextEncodeBenchConfig(candidateConfigs, benches)
+                    }
+                    pass.judgesByEncoding[encoding] = RawQualificationStaging.encodeJudges(candidateConfigs, benches)
+                }
+            }
+        }
+
+        // 4. The storage rest: after the camera work, the storage is measured rested.
+        val sweepStage = RawQualificationStage.SWEEP in stages
+        if (sweepStage && steps.index > 0) {
+            meter.startStep(RawQualificationTiming.STORAGE_REST_MS)
+            progress(RawQualificationPhase.STORAGE_REST, index = steps.index, count = steps.count)
+            sleepCancellable(RawQualificationTiming.STORAGE_REST_MS, 0L, RawQualificationPhase.STORAGE_REST, steps.index, steps.count, null)
+            meter.finishStep()
+        }
+
+        // 5. Storage sweep, with the largest frame any run will write; right after the rest, with no thermal wait.
+        if (sweepStage) {
+            progress(RawQualificationPhase.SWEEP, index = steps.index, count = steps.count)
+            meter.startStep(timing.sweepMs)
+            val reference = restReferenceBytesPerSecond ?: store?.let { runCatching { it.restReference(destinationId) }.getOrNull() }
+            val sweepResult = storageSweep(largest, timing.sweepWindows, timing.sweepMaxExtraSeconds, reference, steps.index, steps.count)
+            meter.finishStep()
+            report.put("sweep", sweepResult.json)
+            emit(JSONObject(sweepResult.json.toString()).put("kind", "sweep"))
+            System.gc()
+            val rest = sweepResult.rest
+            if (rest != null && rest.rested && store != null) {
+                rest.medianBytesPerSecond?.takeIf { it > 0 }?.let { median ->
+                    runCatching { store.raiseRestReference(destinationId, median) }
+                        .onFailure { Log.w(TAG, "rest reference not stored", it) }
+                }
+            }
+            if (rest != null && !rest.rested && !ignoreStorageRest) {
+                // A cache still flushing makes every storage verdict wrong; the records in force stay untouched.
+                // The camera checks and benchmarks already ran: their rows stay in the report, nothing is stored.
+                Log.i(TAG, "storage not rested (${rest.rule}): median ${rest.medianBytesPerSecond} B/s, p01 ${rest.p01BytesPerSecond} B/s")
+                report.put("results", results)
+                    .put("status", RawQualificationStatus.UNKNOWN.name)
+                    .put("reasonCode", REASON_STORAGE_NOT_RESTED)
+                    .put("safeMessage", "The storage is still flushing recent writes; let the phone rest and qualify again. Nothing was stored.")
+                return RawVideoQualificationOutcome(RawQualificationStatus.UNKNOWN, REASON_STORAGE_NOT_RESTED, report, emptyList())
+            }
+            sweep = sweepResult.sweep
+            firstAfterSweep = true
+            checkCancelled()
+        }
+
+        // 6 to 8. Per camera: the long-run descent, the compressed long runs, the verdicts.
+        for (pass in passes) {
+            val camera = pass.camera
+            val longRuns = pass.longRuns
+            val cameraChecks = pass.cameraChecks
+            val evidence = pass.evidence
+            val achieved = pass.achieved
+
+            // Long disk runs, heaviest first, until one passes; one whose camera check proved the camera cannot deliver
+            // it is left out (its check judges it).
             if (RawQualificationStage.LONG in stages) {
-                for (run in RawQualificationStaging.longRunOrder(uncompressed)) {
+                val order = RawQualificationStaging.longRunOrder(pass.uncompressed)
+                for ((position, run) in order.withIndex()) {
+                    val check = cameraChecks[run.config]
+                    if (RawQualificationStaging.skipLongRun(check)) {
+                        steps.count--
+                        meter.shrink(timing.runMs(run.config) + RawQualificationTiming.COOL_DOWN_MS)
+                        continue
+                    }
                     val json = session(camera, run, SessionKind.LONG)
-                    noteAchieved(run.config, json)
+                    // The cool camera check's rate wins over the long run's, which the heat and the storage may lower.
+                    if (run.config !in achieved) pass.noteAchieved(run.config, json)
                     val longRecord = lastRecord
                     var result = stageResult(json)
-                    if (RawQualificationStage.CAMERA in stages && result.status == RawBenchmarkStatus.FAIL &&
+                    val checkJson = pass.checkJsons[run.config]
+                    if (check != null && checkJson != null && result.status == RawBenchmarkStatus.FAIL &&
                         RawQualificationStaging.needsStorageLoadCheck(result.reasonCodes)) {
-                        // The ring overflowed and the rate fell: the camera's fault, or the storage's load?
-                        steps.count++
-                        meter.extend(timing.cameraCheckMs() + RawQualificationTiming.COOL_DOWN_MS)
-                        val checkJson = session(camera, run, SessionKind.CAMERA)
-                        noteAchieved(run.config, checkJson)
-                        val check = stageResult(checkJson)
-                        cameraChecks[run.config] = check
+                        // The ring overflowed and the rate fell: the camera's fault, or the storage's load? The camera check
+                        // that ran before, from the RAM ring alone, says whether the camera holds the rate.
                         result = storageLoadReclassify(json, result, check, checkJson, longRecord, records, sweep)
                         // Emitted again so the row the UI and the logs read carries the final verdict.
                         emit(json)
                     }
                     // The run's own row and record keep the sustained rule; the descent and the cover read what it held.
                     result = RawQualificationStaging.withoutSustainedRate(result)
-                    if (result.status == RawBenchmarkStatus.UNKNOWN) longSkips[run.config] = result else {
+                    if (result.status == RawBenchmarkStatus.UNKNOWN) pass.longSkips[run.config] = result else {
                         longRuns[run.config] = result
-                        json.optJSONObject("evidence")?.let { evidence[run.config] = it }
+                        if (run.config !in evidence) json.optJSONObject("evidence")?.let { evidence[run.config] = it }
                     }
-                    if (!RawQualificationStaging.continueDescent(result)) break
-                }
-            }
-
-            // Camera checks of the rest, from the ring alone; the benchmark sessions after them.
-            val checks = if (RawQualificationStage.CAMERA in stages) uncompressed.filter { it.config !in longRuns && it.config !in cameraChecks } else emptyList()
-            val compressedRuns = plan.compressedRuns(cameraRuns, codecAvailable)
-            val benchEncodings = plan.benchEncodings(cameraRuns, codecAvailable)
-            val benchSessions = plan.benchSessions(cameraRuns, codecAvailable)
-            steps.count = steps.index + checks.size + benchSessions + laterCameras.sumOf { plannedSteps(it, codecAvailable) }
-            meter.replan(checks.size * (timing.cameraCheckMs() + RawQualificationTiming.COOL_DOWN_MS) +
-                benchSessions * (timing.encodeBenchMs() + RawQualificationTiming.COOL_DOWN_MS) +
-                laterCameras.sumOf { plannedMs(it, codecAvailable) })
-            for (run in checks) {
-                val json = session(camera, run, SessionKind.CAMERA)
-                noteAchieved(run.config, json)
-                cameraChecks[run.config] = stageResult(json)
-                json.optJSONObject("evidence")?.let { evidence[run.config] = it }
-            }
-
-            // Each codec's benchmark, once per thread count, from the heaviest configuration the camera delivers
-            // down, until one holds the camera under the encode load and keeps up with its own configuration.
-            val cameraJudged = RawQualificationStage.LONG in stages || RawQualificationStage.CAMERA in stages
-            val benchEvidence = mutableMapOf<Triple<String, RawVideoConfig, Int>, JSONObject>()
-            val judgesByEncoding = mutableMapOf<String, Map<RawVideoConfig, RawEncodeBenchFigures?>>()
-            for ((position, encoding) in benchEncodings.withIndex()) {
-                val sessionsPer = plan.threadsFor(encoding).size
-                /** The sessions the plan counted for the codecs after this one. */
-                fun laterBenchMs() = benchEncodings.drop(position + 1).sumOf { plan.threadsFor(it).size } *
-                    (timing.encodeBenchMs() + RawQualificationTiming.COOL_DOWN_MS)
-                val benches = linkedMapOf<RawVideoConfig, RawEncodeBenchFigures?>()
-                val twinConfigs = compressedRuns.filter { it.config.encoding == encoding }
-                    .map { it.config.copy(encoding = RawVideoConfig.ENCODING_RAW10) }.toSet()
-                val candidates = if (!cameraJudged) emptyList() else RawQualificationStaging.longRunOrder(uncompressed)
-                    .filter { it.config in twinConfigs && RawQualificationStaging.cameraEvidence(it.config, longRuns, cameraChecks)?.cameraDelivered == true }
-                /** One benchmark configuration: a session per thread count; the verdict entry's figures go into [benches]. */
-                fun benchConfig(benchRun: RawQualificationRun) {
-                    val entries = mutableListOf<RawEncodeBenchFigures?>()
-                    for (threads in plan.threadsFor(encoding)) {
-                        val bench = encodeSession(encoding, threads, plan.encodeStrips, slotBytes)
-                        val json = session(camera, benchRun, SessionKind.ENCODE, bench, expectedFps(benchRun.config))
-                        bench?.let { closeAfterConsumer(it.encoder) }
-                        benchJson.put(json)
-                        entries += benchFigures(json, benchRun.config, encoding, threads)
-                        json.optJSONObject("evidence")?.let { benchEvidence[Triple(encoding, benchRun.config, threads)] = it }
+                    if (!RawQualificationStaging.continueDescent(result)) {
+                        val left = order.drop(position + 1).filterNot { RawQualificationStaging.skipLongRun(cameraChecks[it.config]) }
+                        steps.count -= left.size
+                        meter.shrink(left.sumOf { timing.runMs(it.config) + RawQualificationTiming.COOL_DOWN_MS })
+                        break
                     }
-                    benches[benchRun.config] = RawQualificationStaging.verdictBench(entries, RawFrameEncoders.defaultThreads(encoding))
-                }
-                if (!cameraJudged) {
-                    // The camera was not judged (the benchmark stage alone): one benchmark on the heaviest.
-                    RawQualificationStaging.longRunOrder(uncompressed).firstOrNull()?.let(::benchConfig)
-                    judgesByEncoding[encoding] = benches.values.firstOrNull()?.let { only -> twinConfigs.associateWith { only } }.orEmpty()
-                } else {
-                    val candidateConfigs = candidates.map { it.config }
-                    var next = RawQualificationStaging.nextEncodeBenchConfig(candidateConfigs, benches)
-                    if (next == null) {
-                        steps.count -= sessionsPer
-                        meter.replan(laterBenchMs() + laterCameras.sumOf { plannedMs(it, codecAvailable) })
-                    }
-                    while (next != null) {
-                        if (benches.isNotEmpty()) {
-                            // The plan counted one benchmark configuration per codec; the descent adds another.
-                            steps.count += sessionsPer
-                            meter.replan(sessionsPer * (timing.encodeBenchMs() + RawQualificationTiming.COOL_DOWN_MS) + laterBenchMs() +
-                                laterCameras.sumOf { plannedMs(it, codecAvailable) })
-                        }
-                        benchConfig(candidates.first { it.config == next })
-                        next = RawQualificationStaging.nextEncodeBenchConfig(candidateConfigs, benches)
-                    }
-                    judgesByEncoding[encoding] = RawQualificationStaging.encodeJudges(candidateConfigs, benches)
                 }
             }
 
             // Compressed twins whose twin's camera delivered and whose encoder keeps up: a long run of their own, on the
             // storage with the encoder working, judged like any long run. The rest are extrapolated from the benchmark.
             val compressedLong = mutableMapOf<RawVideoConfig, RawStageResult>()
-            if (RawQualificationStage.LONG in stages && cameraJudged) {
+            /** The compressed long runs the heat alone failed, summarized: their verdict is the extrapolation's. */
+            val heatFallbacks = mutableMapOf<RawVideoConfig, JSONObject>()
+            if (RawQualificationStage.LONG in stages) {
                 val order = RawQualificationStaging.compressedLongRunOrder(
-                    compressedRuns.map { it.config },
+                    pass.compressedRuns.map { it.config },
                     { twin -> RawQualificationStaging.cameraEvidence(twin, longRuns, cameraChecks) },
-                    { config -> judgesByEncoding[config.encoding]?.get(config.copy(encoding = RawVideoConfig.ENCODING_RAW10)) },
+                    { config -> pass.judgesByEncoding[config.encoding]?.get(config.copy(encoding = RawVideoConfig.ENCODING_RAW10)) },
                 )
                 if (order.isNotEmpty()) {
                     steps.count += order.size
                     meter.extend(order.sumOf { timing.runMs(it) + RawQualificationTiming.COOL_DOWN_MS })
                 }
                 for (config in order) {
-                    val run = compressedRuns.first { it.config == config }
+                    val run = pass.compressedRuns.first { it.config == config }
                     val twin = config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
                     val bench = encodeSession(config.encoding, RawFrameEncoders.defaultThreads(config.encoding), plan.encodeStrips, slotBytes)
                     val json = session(camera, run, SessionKind.LONG, bench)
@@ -564,6 +609,22 @@ class RawVideoQualifier(
                             json.optDouble("burstRatio", 1.0).takeIf { !it.isNaN() && it >= 1.0 } ?: 1.0)
                         emit(json)
                     }
+                    if (RawQualificationStaging.compressedHeatOnly(result)) {
+                        // It ran last, on the hottest phone: the heat alone proves nothing about the configuration, so its
+                        // twin's camera and its codec's benchmark judge it (the verdict loop). Its row stays in the results,
+                        // its record goes: the extrapolated verdict's replaces it.
+                        records.removeAll { it.config == config }
+                        rowsByConfig.remove(config)
+                        storageRates.remove(config)
+                        json.put("supersededByVerdict", true)
+                        heatFallbacks[config] = JSONObject()
+                            .put("reasonCode", RawQualificationStaging.REASON_COMPRESSED_HEAT_FALLBACK)
+                            .put("longRunStatus", json.optString("status"))
+                            .put("longRunReasonCodes", JSONArray(result.reasonCodes))
+                            .put("achievedFps", json.opt("achievedFps") ?: JSONObject.NULL)
+                            .put("thermalBefore", json.opt("thermalBefore") ?: JSONObject.NULL)
+                            .put("thermalPeak", json.opt("thermalPeak") ?: JSONObject.NULL)
+                    }
                     compressedLong[config] = result
                 }
             }
@@ -572,30 +633,39 @@ class RawVideoQualifier(
             // Verdicts, records and the rows the UI reads.
             val ring = ringPlan.ring ?: continue
             val measuredAt = System.currentTimeMillis()
-            for (run in uncompressed) {
+            for (run in pass.uncompressed) {
+                // A long run's record and row are already in, its camera check weighed where it mattered.
                 if (run.config in longRuns) continue
-                val verdict = RawQualificationStaging.uncompressedVerdict(run.config, longRuns, cameraChecks[run.config], longSkips[run.config])
-                val record = verdictRecord(run.config, ring, requireNotNull(sweep), verdict, 1.0, specOf, evidence[run.config], measuredAt, achieved[run.config])
+                val verdict = RawQualificationStaging.uncompressedVerdict(run.config, longRuns, cameraChecks[run.config], pass.longSkips[run.config])
+                val record = verdictRecord(run.config, ring, requireNotNull(sweep), verdict, 1.0, pass.specOf, evidence[run.config], measuredAt, achieved[run.config])
                 record?.let(records::add)
                 storageRates[run.config] = RawQualificationFrameRate.effectiveStreamBytesPerSecond(run.config, achieved[run.config]) to 1.0
-                verdictRow(run, verdict, specOf, timing.neededBytes(run.config), record).also { rowsByConfig[run.config] = it; results.put(it); emit(it) }
+                verdictRow(run, verdict, pass.specOf, timing.neededBytes(run.config), record).also { rowsByConfig[run.config] = it; results.put(it); emit(it) }
             }
-            for (run in compressedRuns) {
-                // Its own long run's record and row are already in; a skipped one falls back to the extrapolation.
+            for (run in pass.compressedRuns) {
+                // Its own long run's record and row are already in; a skipped one, or one the heat alone failed, falls
+                // back to the extrapolation.
                 if (RawQualificationStaging.compressedLongRunVerdict(compressedLong[run.config]) != null) continue
                 val twin = run.config.copy(encoding = RawVideoConfig.ENCODING_RAW10)
                 val camEvidence = RawQualificationStaging.cameraEvidence(twin, longRuns, cameraChecks)
-                val bench = judgesByEncoding[run.config.encoding]?.get(twin)
-                val verdict = RawQualificationStaging.compressedVerdict(twin, camEvidence, bench, longRuns)
+                val bench = pass.judgesByEncoding[run.config.encoding]?.get(twin)
+                val verdict = RawQualificationStaging.compressedFinalVerdict(compressedLong[run.config], twin, camEvidence, bench, longRuns)
+                val heatFallback = heatFallbacks[run.config]
                 val proof = JSONObject()
                     .put("camera", evidence[twin] ?: JSONObject.NULL)
-                    .put("bench", bench?.let { benchEvidence[Triple(it.encoding, it.config, it.threads)] } ?: JSONObject.NULL)
+                    .put("bench", bench?.let { pass.benchEvidence[Triple(it.encoding, it.config, it.threads)] } ?: JSONObject.NULL)
+                heatFallback?.let { proof.put("heatFallback", it) }
                 val ratio = bench?.conservativeRatio ?: 1.0
-                val record = verdictRecord(run.config, ring, requireNotNull(sweep), verdict, ratio, specOf, proof, measuredAt, achieved[twin])
+                val record = verdictRecord(run.config, ring, requireNotNull(sweep), verdict, ratio, pass.specOf, proof, measuredAt, achieved[twin])
                 record?.let(records::add)
                 storageRates[run.config] = RawStorageCliff.compressedBytesPerSecond(
                     RawQualificationFrameRate.effectiveStreamBytesPerSecond(run.config, achieved[twin]), ratio) to ratio
-                verdictRow(run, verdict, specOf, 0L, record).also { rowsByConfig[run.config] = it; results.put(it); emit(it) }
+                verdictRow(run, verdict, pass.specOf, 0L, record).also { row ->
+                    heatFallback?.let {
+                        row.put("infoCodes", JSONArray(listOf(RawQualificationStaging.REASON_COMPRESSED_HEAT_FALLBACK))).put("heatFallback", it)
+                    }
+                    rowsByConfig[run.config] = row; results.put(row); emit(row)
+                }
             }
         }
         applyLongRunSustained(sweep?.sustained, writeEvidence, records, storageRates, rowsByConfig, report)
@@ -613,8 +683,9 @@ class RawVideoQualifier(
             .put("cpuCores", Runtime.getRuntime().availableProcessors())
             .put("bench", benchJson))
 
+        // A compressed long run the heat alone failed is superseded by its extrapolated verdict row.
         val statuses = (0 until results.length()).map { results.getJSONObject(it) }
-            .filter { it.optString("kind") == "live" }.map { it.optString("status") }
+            .filter { it.optString("kind") == "live" && !it.optBoolean("supersededByVerdict") }.map { it.optString("status") }
         val passedCount = statuses.count { it == "PASS" }
         val status = RawQualificationRecords.overallStatus(statuses)
         var reasonCode = if (anyException) REASON_EXCEPTION else if (passedCount > 0) "raw-video-qualified-configs" else "raw-video-no-qualified-config"
@@ -662,13 +733,35 @@ class RawVideoQualifier(
         else -> timing.cameraCheckWarmupSeconds * 1_000L
     }
 
-    /** The upper-bound steps of a camera's plan (every long run, or every check, plus the benchmark sessions). */
-    private fun plannedSteps(cameraRuns: List<RawQualificationRun>, codecAvailable: Boolean): Int =
-        RawQualificationEstimates.of(plan.uncompressedRuns(cameraRuns), plan.benchSessions(cameraRuns, codecAvailable), timing, plan.effectiveStages).runCount
+    /** One camera's runs and what its sessions found, kept from its camera checks to its verdicts. */
+    private class CameraPass(
+        val camera: CameraInfo,
+        val uncompressed: List<RawQualificationRun>,
+        val compressedRuns: List<RawQualificationRun>,
+        val benchEncodings: List<String>,
+    ) {
+        val specOf: Map<RawVideoConfig, String> = uncompressed.associate { it.config to it.spec }
+        val longRuns = linkedMapOf<RawVideoConfig, RawStageResult>()
+        val longSkips = mutableMapOf<RawVideoConfig, RawStageResult>()
+        val cameraChecks = mutableMapOf<RawVideoConfig, RawStageResult>()
+        /** Each camera check's row, for a long run's storage-load reclassification. */
+        val checkJsons = mutableMapOf<RawVideoConfig, JSONObject>()
+        /** Each configuration's camera evidence: its camera check's, else its long run's. */
+        val evidence = mutableMapOf<RawVideoConfig, JSONObject>()
+        /** The rate each configuration's camera delivered, to a tenth: its RAM camera check when one ran, else its long run. */
+        val achieved = mutableMapOf<RawVideoConfig, Double>()
+        val benchEvidence = mutableMapOf<Triple<String, RawVideoConfig, Int>, JSONObject>()
+        val judgesByEncoding = mutableMapOf<String, Map<RawVideoConfig, RawEncodeBenchFigures?>>()
 
-    private fun plannedMs(cameraRuns: List<RawQualificationRun>, codecAvailable: Boolean): Long =
-        RawQualificationEstimates.of(plan.uncompressedRuns(cameraRuns), plan.benchSessions(cameraRuns, codecAvailable), timing, plan.effectiveStages)
-            .let { it.durationMs - RawQualificationTiming.RING_OVERHEAD_MS - (if (RawQualificationStage.SWEEP in plan.effectiveStages) timing.sweepMs else 0L) + RawQualificationTiming.COOL_DOWN_MS }
+        fun noteAchieved(config: RawVideoConfig, json: JSONObject) {
+            if (json.optString("status") == RawBenchmarkStatus.UNKNOWN.name) return
+            json.optDouble("achievedFps").takeIf { !it.isNaN() }?.let { achieved[config] = it }
+        }
+
+        /** What an encode benchmark of [config] asks the camera to hold: its reduced rate when it has one, else the target. */
+        fun expectedFps(config: RawVideoConfig): Double =
+            achieved[config]?.takeIf { RawQualificationFrameRate.isReducedRate(it, config.fps) } ?: config.fps.toDouble()
+    }
 
     /** A session row's verdict. */
     private fun stageResult(json: JSONObject): RawStageResult {
@@ -925,7 +1018,7 @@ class RawVideoQualifier(
      * write cache still flushing ends the sweep there ([RawStorageCliff.STOP_NOT_RESTED], no sustained
      * phase) unless [ignoreStorageRest]. The sweep's `rest` object carries the figures either way.
      */
-    private fun storageSweep(size: Size, windows: Int, maxExtraSeconds: Int, restReference: Long?): SweepResult {
+    private fun storageSweep(size: Size, windows: Int, maxExtraSeconds: Int, restReference: Long?, index: Int = 0, runCount: Int = 0): SweepResult {
         val header = OcrawFrameHeader.raw10(size.width, size.height, 0, 0, 0, 0)
         val frame = ByteBuffer.allocateDirect(header.dataLength).order(ByteOrder.LITTLE_ENDIAN)
         // Varied, incompressible bytes (a 64-bit LCG), so no layer can shortcut the write.
@@ -1016,7 +1109,7 @@ class RawVideoQualifier(
                         val nowMs = now / 1_000_000L
                         if (nowMs - lastProgress >= PROGRESS_INTERVAL_MS) {
                             lastProgress = nowMs
-                            progress(RawQualificationPhase.SWEEP, meter.fraction(nowMs - sweepStart))
+                            progress(RawQualificationPhase.SWEEP, meter.fraction(nowMs - sweepStart), index, runCount)
                         }
                     }
                     channel.force(false)
@@ -1167,14 +1260,15 @@ class RawVideoQualifier(
         index: Int,
         runCount: Int,
         expectedFps: Double? = null,
+        coolFirst: Boolean = index > 1,
     ): LiveOutcome {
         val config = run.config
         val liveSeconds = kind.measureSeconds(config)
         val warmupMs = kind.warmupMs()
         // Encode benchmarks and long runs start cool (a long run that reaches SEVERE fails with thermal-limit); camera
-        // checks only need to be below SEVERE. The first session, the long run right after the sweep, does not: it must
-        // write while the sweep's cache exhaustion lasts.
-        val heavy = (kind == SessionKind.ENCODE || kind == SessionKind.LONG) && index > 1
+        // checks only need to be below SEVERE. [coolFirst] is false for the first session and for the long run right
+        // after the sweep, which must write while the sweep's cache exhaustion lasts.
+        val heavy = (kind == SessionKind.ENCODE || kind == SessionKind.LONG) && coolFirst
         val thermalWait = if (heavy) {
             waitForThermalHeadroom(index, runCount, run.spec, PowerManager.THERMAL_STATUS_MODERATE, COOL_WAIT_MS)
         } else {
@@ -1223,6 +1317,7 @@ class RawVideoQualifier(
 
         val timestampCapacity = (liveSeconds + (warmupMs / 1_000L).toInt() + 5) * maxOf(config.fps, 30) * 2 + 256
         val state = LiveState(timestampCapacity)
+        liveSession = state
         val compressor = bench?.compressor
         compressor?.reset()
         val effectiveRingBytes = ring.slotCount.toLong() * config.bytesPerFrame
@@ -1444,6 +1539,7 @@ class RawVideoQualifier(
                 SessionKind.ENCODE -> benchResult(probe, state, ring, requireNotNull(bench), batteryBefore, batteryTemperatureC())
             }
         } finally {
+            liveSession = null
             val aborting = cancelled.get()
             state.producerStop = true
             if (aborting) runCatching { session?.stopRepeating() }
@@ -2058,10 +2154,11 @@ class RawVideoQualifier(
             .put("encodeMaxMs", round2(compressor.encodeMaxMs))
     }
 
-    /** The report name of an OCRAW frame encoding: the [RawVideoConfig] encoding names. */
+    /** The report name of an OCRAW frame encoding: the [RawVideoConfig] encoding names (`bpq` for near-lossless). */
     private fun codecName(encoding: Int): String = when (encoding) {
         OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK -> RawVideoConfig.ENCODING_BLOCK_PACK
         OcrawFrameHeader.ENCODING_LJ92 -> RawVideoConfig.ENCODING_LJ92
+        OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED -> RawFrameEncoders.ENCODING_NEAR_LOSSLESS
         else -> RawVideoConfig.ENCODING_RAW10
     }
 
@@ -2111,7 +2208,7 @@ class RawVideoQualifier(
      * Sleeps [ms] in short slices, reporting [phase] progress at [stepOffsetMs] into the session
      * (negative: none) and sampling the thermal status into [thermalPeak] every [THERMAL_SAMPLE_MS].
      */
-    private fun sleepCancellable(ms: Long, stepOffsetMs: Long, phase: RawQualificationPhase, index: Int, runCount: Int, spec: String) {
+    private fun sleepCancellable(ms: Long, stepOffsetMs: Long, phase: RawQualificationPhase, index: Int, runCount: Int, spec: String?) {
         val start = SystemClock.elapsedRealtime()
         var lastProgress = start
         var lastThermal = start
@@ -2173,8 +2270,35 @@ class RawVideoQualifier(
     }
 
     private fun progress(phase: RawQualificationPhase, fraction: Double = meter.fraction(), index: Int = 0, count: Int = 0, spec: String? = null) {
-        runCatching { listener.onProgress(RawQualificationProgress(phase, fraction, index, count, spec)) }
+        val fps = if (phase == RawQualificationPhase.SWEEP) null else liveFps()
+        runCatching { listener.onProgress(RawQualificationProgress(phase, fraction, index, count, spec, fps)) }
             .onFailure { Log.w(TAG, "progress listener failed", it) }
+    }
+
+    /**
+     * Qualification thread: the rate the current camera session delivers over the last two seconds of
+     * measured frames ([RawQualificationLiveRate.fps]), recomputed about once a second; null outside a
+     * session, in its warm-up and once it stops producing. The reader thread writes the timestamps;
+     * entries it has counted but not yet written read 0 and are left out.
+     */
+    private fun liveFps(): Double? {
+        val state = liveSession
+        if (state == null || !state.measuring || state.producerStop) {
+            liveFpsOf = null
+            liveFpsValue = null
+            return null
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (liveFpsOf === state && now - liveFpsAtMs < RawQualificationLiveRate.INTERVAL_MS) return liveFpsValue
+        val count = minOf(state.handled, state.imageTs.length())
+        val lastWallNs = state.readerWallEndNs
+        val sinceLastNs = if (lastWallNs >= 0) (SystemClock.elapsedRealtimeNanos() - lastWallNs).coerceAtLeast(0L) else 0L
+        val fps = RawQualificationLiveRate.fps(count, state.imageTs::get, sinceLastNs = sinceLastNs)
+            ?.let(RawQualificationFrameRate::roundFps)
+        liveFpsOf = state
+        liveFpsAtMs = now
+        liveFpsValue = fps
+        return fps
     }
 
     private fun emit(result: JSONObject) {

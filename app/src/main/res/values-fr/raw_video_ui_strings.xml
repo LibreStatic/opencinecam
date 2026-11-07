@@ -32,4 +32,10 @@
     <string name="raw_video_burst_minutes">%1$d min</string>
     <string name="raw_video_burst_seconds">%1$d s</string>
     <string name="raw_video_risky_notice_burst">Débit risqué : des images peuvent se perdre après environ %1$s (téléphone au repos)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">Compression RAW</string>
+    <string name="raw_compression_summary">Pour les configurations compressées</string>
+    <string name="raw_compression_lossless">Sans perte</string>
+    <string name="raw_video_label_near_lossless">Quasi sans perte</string>
+    <string name="raw_compression_help">S’applique aux configurations compressées. Sans perte conserve chaque valeur fournie par le capteur. Quasi sans perte regroupe les valeurs qui diffèrent de moins d’environ la moitié du bruit du capteur à l’ISO de l’image : l’écart reste caché dans le bruit et les fichiers sont encore plus petits, surtout en basse lumière. Les deux s’ouvrent dans la galerie, l’export CinemaDNG et les outils de bureau. Le temps restant suppose le même rapport prudent pour les deux.</string>
 </resources>

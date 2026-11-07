@@ -191,6 +191,29 @@ class RawVideoRecorderTest {
     }
 
     @Test
+    fun theLastFramesResultArrivingAfterItWasWrittenStillBecomesItsMetadata() {
+        // The engine forwards the last frame's result before it reports the take stopped, so the
+        // result reaches the recorder after the frame is on disk and before stop(); no backstop wait.
+        val recorder = recorder(finalWaitMs = 0)
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val output = FileOutput()
+        recorder.start(output, info())
+        recorder.onTakeStarted("0", RawVideoSessionConfig(WIDTH, HEIGHT, 30), emptyMap())
+        for (index in 0 until 3) assertTrue(recorder.onFrame(plane(index), STRIDE, WIDTH, HEIGHT, ts(index)))
+        for (index in 0 until 2) recorder.onResult(ts(index), index.toLong(), mapOf("iso" to "100"))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (recorder.liveStats().framesWritten < 3 && System.nanoTime() < deadline) Thread.sleep(5)
+        assertEquals(3, recorder.liveStats().framesWritten)
+        recorder.onResult(ts(2), 2, mapOf("iso" to "400"))
+
+        val result = recorder.stop()
+        assertEquals(3, result.frameMetadataWritten)
+        assertEquals(0, result.unmatchedResults)
+        val scan = scan(output.file)
+        assertEquals("400", scan.frameMetadata.getValue(scan.frames[2].sequence)["iso"])
+    }
+
+    @Test
     fun ringHighWaterEndsTheTakeWithoutDroppingAFrame() {
         val gate = CountDownLatch(1)
         val recorder = recorder()
@@ -499,6 +522,165 @@ class RawVideoRecorderTest {
         assertFalse(recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 6).compressed)
         // An unknown encoding is a programming error.
         assertThrows(IllegalArgumentException::class.java) { recorder.arm(CONFIG.copy(encoding = "deflate"), CONFIG.bytesPerFrame * 6) }
+    }
+
+    /** Stands in for the native quantised block-pack codec: the frame's first half XOR 0xa5, after tables are set. */
+    private class FakeQuantising : QuantisingFrameCodec {
+        val isos = mutableListOf<Int>()
+        var tables: com.librestatic.opencinecam.media.raw.RawQuantisation.Tables? = null
+        var calls = 0
+        var closed = false
+        override fun setQuantisation(tables: com.librestatic.opencinecam.media.raw.RawQuantisation.Tables, iso: Int) {
+            this.tables = tables
+            isos += iso
+        }
+        override fun encode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Int {
+            check(!closed)
+            checkNotNull(tables) { "setQuantisation first" }
+            calls++
+            val size = src.remaining() / 2
+            for (i in 0 until size) dst.put(dst.position() + i, (src.get(src.position() + i).toInt() xor 0xa5).toByte())
+            return size
+        }
+        override fun close() { closed = true }
+    }
+
+    private fun profile() = RawNoiseProfile("testdevice", "0", WIDTH, HEIGHT, 64,
+        listOf(RawNoisePoint(100, 0.4, 0.04), RawNoisePoint(1600, 0.0, 0.43)))
+
+    private fun awaitWritten(recorder: RawVideoRecorder, frames: Long) {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (recorder.liveStats().framesWritten < frames && System.nanoTime() < deadline) Thread.sleep(2)
+        assertEquals(frames, recorder.liveStats().framesWritten)
+    }
+
+    @Test
+    fun nearLosslessEncoderBuildsTablesOnlyOnAnIsoChangeAndIsLosslessUntilTheFirstIso() {
+        val lossless = FakeEncoder(encoding = OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK)
+        val quantised = FakeQuantising()
+        val encoder = NearLosslessFrameEncoder(lossless, quantised, profile())
+        val src = ByteBuffer.allocateDirect(ROW_BYTES * HEIGHT)
+        val dst = ByteBuffer.allocateDirect(ROW_BYTES * HEIGHT)
+        encoder.encode(src, WIDTH, HEIGHT, dst)
+        assertEquals(OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK, encoder.encoding)
+        assertNull(encoder.tablesIso)
+        encoder.setIso(400)
+        encoder.setIso(400)
+        encoder.encode(src, WIDTH, HEIGHT, dst)
+        assertEquals(OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED, encoder.encoding)
+        encoder.setIso(800)
+        encoder.setIso(800)
+        encoder.setIso(0) // not a sensitivity: ignored
+        encoder.encode(src, WIDTH, HEIGHT, dst)
+        assertEquals(listOf(400, 800), quantised.isos)
+        assertEquals(2, encoder.tableBuilds)
+        assertEquals(800, encoder.tablesIso)
+        assertEquals(1, lossless.calls)
+        assertEquals(2, quantised.calls)
+        // The tables are the profile's model at that ISO, over its black level.
+        val expected = com.librestatic.opencinecam.media.raw.RawQuantisation.build(profile().modelAt(800), 64)
+        assertArrayEquals(expected.forward, requireNotNull(quantised.tables).forward)
+        assertEquals(64, requireNotNull(quantised.tables).blackLevel)
+        assertEquals(RawFrameEncoders.ENCODING_NEAR_LOSSLESS, encoder.metadata[RawFrameEncoders.KEY_ENCODING])
+        assertEquals("0.5", encoder.metadata[RawFrameEncoders.KEY_QUANT_K])
+        assertEquals("testdevice/0", encoder.metadata[RawFrameEncoders.KEY_QUANT_NOISE_PROFILE])
+        assertEquals("8", encoder.metadata[RawFrameEncoders.KEY_BLOCK_PACK_STRIPS])
+        encoder.close()
+        assertTrue(lossless.closed)
+        assertTrue(quantised.closed)
+    }
+
+    @Test
+    fun aBlockPackTakeWithANoiseProfileRecordsNearLosslessFromTheFirstKnownIso() {
+        val quantised = FakeQuantising()
+        val lossless = FakeEncoder(encoding = OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK)
+        val profiles = mutableListOf<RawNoiseProfile>()
+        val asked = mutableListOf<String>()
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 10_000,
+            encoderFactory = { asked += it; FakeEncoder(encoding = OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK) },
+            nearLosslessEncoderFactory = { profiles += it; NearLosslessFrameEncoder(lossless, quantised, it) })
+        val armed = recorder.arm(BLOCK_PACK, ringBytes = BLOCK_PACK.bytesPerFrame * 8, noiseProfile = profile())
+        assertTrue(armed.compressed)
+        assertTrue(armed.nearLossless)
+        assertEquals(listOf(profile()), profiles)
+        assertEquals(emptyList<String>(), asked)
+        val output = FileOutput("bpq.ocraw")
+        recorder.start(output, info())
+        // Frame 0: no result yet, so lossless block-pack.
+        assertTrue(recorder.onFrame(plane(0), STRIDE, WIDTH, HEIGHT, ts(0)))
+        awaitWritten(recorder, 1)
+        // Frame 0's result (ISO 800) arrives after it was written: frame 1 uses it before its own result comes.
+        recorder.onResult(ts(0), 100, mapOf("iso" to "800"))
+        assertTrue(recorder.onFrame(plane(1), STRIDE, WIDTH, HEIGHT, ts(1)))
+        awaitWritten(recorder, 2)
+        recorder.onResult(ts(1), 101, mapOf("iso" to "800"))
+        // Frame 2's own result arrives first: its ISO wins.
+        recorder.onResult(ts(2), 102, mapOf("iso" to "1600"))
+        assertTrue(recorder.onFrame(plane(2), STRIDE, WIDTH, HEIGHT, ts(2)))
+        awaitWritten(recorder, 3)
+        // A result without an ISO keeps the last one.
+        recorder.onResult(ts(3), 103, emptyMap())
+        assertTrue(recorder.onFrame(plane(3), STRIDE, WIDTH, HEIGHT, ts(3)))
+        val result = recorder.stop()
+        assertNull(result.reason)
+        assertTrue(result.nearLossless)
+        assertEquals(RawVideoConfig.ENCODING_BLOCK_PACK, result.encoding)
+        assertEquals(4, result.framesEncoded)
+        assertEquals("tables are built only when the ISO changes", listOf(800, 1600), quantised.isos)
+
+        val scan = scan(output.file)
+        assertTrue(scan.errors.toString(), scan.cleanlyClosed)
+        assertEquals(RawFrameEncoders.ENCODING_NEAR_LOSSLESS, scan.metadata[RawFrameEncoders.KEY_ENCODING])
+        assertEquals("0.5", scan.metadata[RawFrameEncoders.KEY_QUANT_K])
+        assertEquals("testdevice/0", scan.metadata[RawFrameEncoders.KEY_QUANT_NOISE_PROFILE])
+        assertEquals("8", scan.metadata[RawFrameEncoders.KEY_BLOCK_PACK_STRIPS])
+        val encodings = scan.frames.map { requireNotNull(it.header).encoding }
+        assertEquals(listOf(OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK) + List(3) { OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED }, encodings)
+        scan.frames.forEachIndexed { index, frame ->
+            val header = requireNotNull(frame.header)
+            val expected = expectedCrop(index, armed.crop)
+            val key = if (index == 0) 0x5a else 0xa5
+            assertArrayEquals(ByteArray(expected.size / 2) { (expected[it].toInt() xor key).toByte() },
+                frameData(output.file, frame.fileOffset, header.dataLength).second)
+        }
+        recorder.disarm()
+        assertTrue(lossless.closed)
+        assertTrue(quantised.closed)
+    }
+
+    @Test
+    fun withoutAProfileOrForAnotherEncodingTheTakeStaysLossless() {
+        val asked = mutableListOf<String>()
+        var nearAsked = 0
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 10_000,
+            encoderFactory = { encoding ->
+                asked += encoding
+                FakeEncoder(encoding = if (encoding == RawVideoConfig.ENCODING_BLOCK_PACK) OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK else OcrawFrameHeader.ENCODING_LJ92)
+            },
+            nearLosslessEncoderFactory = { nearAsked++; null })
+        // Near-lossless off (no profile passed): lossless block-pack, encoding `bp`.
+        assertFalse(recorder.arm(BLOCK_PACK, ringBytes = BLOCK_PACK.bytesPerFrame * 6).nearLossless)
+        val output = FileOutput("bp.ocraw")
+        recorder.start(output, info())
+        recorder.onResult(ts(0), 1, mapOf("iso" to "800"))
+        assertTrue(recorder.onFrame(plane(0), STRIDE, WIDTH, HEIGHT, ts(0)))
+        val result = recorder.stop()
+        assertFalse(result.nearLossless)
+        val scan = scan(output.file)
+        assertEquals(RawVideoConfig.ENCODING_BLOCK_PACK, scan.metadata[RawFrameEncoders.KEY_ENCODING])
+        assertNull(scan.metadata[RawFrameEncoders.KEY_QUANT_K])
+        assertEquals(OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK, requireNotNull(scan.frames.single().header).encoding)
+        // A profile only applies to block-pack: LJ92 and RAW10 ignore it.
+        assertFalse(recorder.arm(LJ92, ringBytes = LJ92.bytesPerFrame * 6, noiseProfile = profile()).nearLossless)
+        assertFalse(recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 6, noiseProfile = profile()).nearLossless)
+        assertEquals(listOf(RawVideoConfig.ENCODING_BLOCK_PACK, RawVideoConfig.ENCODING_LJ92), asked)
+        assertEquals(0, nearAsked)
+        // Without the codec a near-lossless arm is refused like any compressed one.
+        assertEquals(RawTakeReasons.CODEC_UNAVAILABLE, assertThrows(RawVideoArmException::class.java) {
+            recorder.arm(BLOCK_PACK, ringBytes = BLOCK_PACK.bytesPerFrame * 6, noiseProfile = profile())
+        }.reason)
+        assertEquals(1, nearAsked)
+        assertNull(recorder.armState)
     }
 
     @Test
