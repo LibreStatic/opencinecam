@@ -3,7 +3,7 @@
 <resources>
     <string name="network_share_title">Netzlaufwerk</string>
     <string name="network_share_settings_summary">RAW-Takes als CinemaDNG-Ordner am Computer einbinden</string>
-    <string name="network_share_intro">Öffne die RAW-Takes von einem Computer im selben WLAN, Hotspot oder USB-Tethering. Jeder Take ist ein Ordner mit seinen CinemaDNG-Bildern, seiner WAV und der originalen .ocraw. Vom Computer aus lässt sich nichts ändern oder löschen.</string>
+    <string name="network_share_intro">Öffne die RAW-Takes von einem Computer im selben WLAN, Hotspot oder USB-Tethering. Jeder Take ist ein Ordner mit seinen CinemaDNG-Bildern und seiner WAV, dazu die originale .ocraw, wenn du sie anzeigen lässt. Vom Computer aus lässt sich nichts ändern oder löschen.</string>
     <string name="network_share_switch">Im Netzwerk freigeben</string>
     <string name="network_share_state_stopped">Aus</string>
     <string name="network_share_state_starting">Wird gestartet…</string>
@@ -26,8 +26,8 @@
     <string name="network_share_connect_windows">Windows: Explorer › Dieser PC › Netzlaufwerk verbinden, dann die Adresse als Ordner eingeben.</string>
     <string name="network_share_connect_macos">macOS: Finder › Gehe zu › Mit Server verbinden, dann die Adresse eingeben.</string>
     <string name="network_share_connect_linux">Linux: Dateien › Andere Orte › Mit Server verbinden, dann %1$s eingeben.</string>
-    <string name="network_share_windows_limit_help_summary">Windows kopiert standardmäßig Dateien bis 50 MB</string>
-    <string name="network_share_windows_limit_help">Der WebDAV-Client von Windows lehnt Dateien über 50 MB ab, solange sein Limit nicht erhöht ist. Die DNG-Bilder und die WAV sind kleiner, die originale .ocraw meist nicht. Um sie unter Windows zu kopieren, setze FileSizeLimitInBytes unter HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters auf 4294967295 und starte den Dienst WebClient neu, oder kopiere sie per USB.</string>
+    <string name="network_share_windows_limit_help_summary">Windows kopiert standardmäßig bis 50 MB, höchstens 4 GB</string>
+    <string name="network_share_windows_limit_help">Der WebDAV-Client von Windows lehnt Dateien über 50 MB ab, solange sein Limit nicht erhöht ist. Die DNG-Bilder sind kleiner, die WAV eines langen Takes womöglich nicht. Setzt du FileSizeLimitInBytes unter HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters auf 4294967295 und startest den Dienst WebClient neu, steigt das Limit auf 4 GB, das Maximum von Windows. Die originale .ocraw ist, wenn sie angezeigt wird, meist größer, deshalb kann der Explorer sie nicht kopieren: Kopiere sie per USB oder mit WinSCP oder rclone.</string>
     <string name="network_share_copy_advice">Kopiere den Ordner eines Takes vor dem Schneiden auf die Festplatte des Computers: Die Bilder entstehen erst beim Lesen, für die Wiedergabe übers Netzwerk ist das zu langsam.</string>
     <string name="network_share_auto_stop">Es beendet sich nach 15 Minuten ohne Kopiervorgang, wenn das Telefon das Netzwerk verlässt, in dem es gestartet wurde, und wenn die Aufnahme eines Takes beginnt. Für ein anderes Netzwerk schalte es aus und wieder ein.</string>
     <string name="network_share_security_help_summary">Nur lokale Netzwerke, jedes Mal ein neues Passwort</string>
@@ -37,4 +37,7 @@
     <string name="network_share_notification_stop">Beenden</string>
     <string name="network_share_show_password">Passwort anzeigen</string>
     <string name="network_share_hide_password">Passwort verbergen</string>
+    <string name="network_share_show_originals">Originale .ocraw-Dateien anzeigen</string>
+    <string name="network_share_show_originals_help_summary">DNG-Bilder und WAV sind alles, was ein Schnittprogramm braucht</string>
+    <string name="network_share_show_originals_help">Der Ordner eines Takes enthält seine DNG-Bilder und, wenn der Take Ton hat, seine WAV: alles, was ein Schnittprogramm braucht. Die originale .ocraw ist der ganze Take und so groß wie er, oft viele GB. Der Windows-Explorer kann keine Dateien über 4 GB kopieren, also kopiere das Original per USB oder mit einem WebDAV-Client wie WinSCP, Cyberduck oder rclone. Die Wahl gilt sofort, ob das Laufwerk läuft oder nicht.</string>
 </resources>

@@ -3,7 +3,7 @@
 <resources>
     <string name="network_share_title">Unidade de rede</string>
     <string name="network_share_settings_summary">Monte os takes RAW num computador como pastas CinemaDNG</string>
-    <string name="network_share_intro">Abra os takes RAW a partir de um computador na mesma Wi-Fi, ponto de acesso ou ancoragem USB. Cada take é uma pasta com os fotogramas CinemaDNG, o WAV e o .ocraw original. Nada pode ser alterado nem apagado a partir do computador.</string>
+    <string name="network_share_intro">Abra os takes RAW a partir de um computador na mesma Wi-Fi, ponto de acesso ou ancoragem USB. Cada take é uma pasta com os fotogramas CinemaDNG e o WAV, mais o .ocraw original se optar por mostrá-lo. Nada pode ser alterado nem apagado a partir do computador.</string>
     <string name="network_share_switch">Partilhar na rede</string>
     <string name="network_share_state_stopped">Desligada</string>
     <string name="network_share_state_starting">A iniciar…</string>
@@ -26,8 +26,8 @@
     <string name="network_share_connect_windows">Windows: Explorador de Ficheiros › Este PC › Mapear unidade de rede e introduza o endereço como pasta.</string>
     <string name="network_share_connect_macos">macOS: Finder › Ir › Ligar ao servidor e introduza o endereço.</string>
     <string name="network_share_connect_linux">Linux: Ficheiros › Outras localizações › Ligar ao servidor e introduza %1$s.</string>
-    <string name="network_share_windows_limit_help_summary">O Windows copia ficheiros até 50 MB por predefinição</string>
-    <string name="network_share_windows_limit_help">O cliente WebDAV do Windows recusa ficheiros maiores que 50 MB enquanto o limite não for aumentado. Os fotogramas DNG e o WAV são menores, mas o .ocraw original normalmente não. Para o copiar no Windows, defina FileSizeLimitInBytes em HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters como 4294967295 e reinicie o serviço WebClient, ou copie-o por USB.</string>
+    <string name="network_share_windows_limit_help_summary">O Windows copia até 50 MB por predefinição, 4 GB no máximo</string>
+    <string name="network_share_windows_limit_help">O cliente WebDAV do Windows recusa ficheiros maiores que 50 MB enquanto o limite não for aumentado. Os fotogramas DNG são menores; o WAV de um take longo pode não ser. Definir FileSizeLimitInBytes em HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters como 4294967295 e reiniciar o serviço WebClient sobe o limite para 4 GB, o máximo do Windows. O .ocraw original, quando é mostrado, costuma ser maior, por isso o Explorador de Ficheiros não o consegue copiar: copie-o por USB ou com o WinSCP ou o rclone.</string>
     <string name="network_share_copy_advice">Copie a pasta de um take para o disco do computador antes de editar: os fotogramas são gerados ao serem lidos, o que é demasiado lento para reproduzir a partir da rede.</string>
     <string name="network_share_auto_stop">Para sozinha após 15 minutos sem cópias, quando o telemóvel sai da rede em que iniciou e quando começa a gravação de um take. Para usar outra rede, desligue-a e volte a ligá-la.</string>
     <string name="network_share_security_help_summary">Só redes locais, uma palavra-passe nova de cada vez</string>
@@ -37,4 +37,7 @@
     <string name="network_share_notification_stop">Parar</string>
     <string name="network_share_show_password">Mostrar palavra-passe</string>
     <string name="network_share_hide_password">Ocultar palavra-passe</string>
+    <string name="network_share_show_originals">Mostrar os ficheiros .ocraw originais</string>
+    <string name="network_share_show_originals_help_summary">Os fotogramas DNG e o WAV são tudo o que um editor precisa</string>
+    <string name="network_share_show_originals_help">A pasta de cada take contém os fotogramas DNG e, se o take tiver som, o WAV: tudo o que um editor precisa. O .ocraw original é o take inteiro, tão grande como ele, muitas vezes vários GB. O Explorador de Ficheiros do Windows não copia ficheiros com mais de 4 GB, por isso copie o original por USB ou com um cliente WebDAV como o WinSCP, o Cyberduck ou o rclone. A escolha aplica-se de imediato, com a unidade ligada ou desligada.</string>
 </resources>

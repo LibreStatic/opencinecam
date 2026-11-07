@@ -72,8 +72,10 @@ class NetworkShareService : Service() {
         if (session != null) return
         val networks = AndroidShareNetworks(this)
         val credentials = ShareCredentials.generate()
+        // Read on every request, so the page's switch applies without restarting the drive.
+        val showOriginals = NetworkShare.showOriginals(this)
         val created = NetworkShareSession(
-            tree = ShareTree(MediaStoreShareTakes(this)),
+            tree = ShareTree(MediaStoreShareTakes(this), includeOriginal = { showOriginals.value }),
             credentials = credentials,
             addresses = networks::bindings,
             takeActive = { NetworkShare.takeActive.value },

@@ -3,7 +3,7 @@
 <resources>
     <string name="network_share_title">Lecteur réseau</string>
     <string name="network_share_settings_summary">Monter les prises RAW sur un ordinateur en dossiers CinemaDNG</string>
-    <string name="network_share_intro">Ouvrez les prises RAW depuis un ordinateur sur le même Wi-Fi, point d\'accès ou partage de connexion USB. Chaque prise est un dossier avec ses images CinemaDNG, son WAV et le .ocraw d\'origine. Rien ne peut être modifié ni supprimé depuis l\'ordinateur.</string>
+    <string name="network_share_intro">Ouvrez les prises RAW depuis un ordinateur sur le même Wi-Fi, point d\'accès ou partage de connexion USB. Chaque prise est un dossier avec ses images CinemaDNG et son WAV, plus le .ocraw d\'origine si vous choisissez de l\'afficher. Rien ne peut être modifié ni supprimé depuis l\'ordinateur.</string>
     <string name="network_share_switch">Partager sur le réseau</string>
     <string name="network_share_state_stopped">Désactivé</string>
     <string name="network_share_state_starting">Démarrage…</string>
@@ -26,8 +26,8 @@
     <string name="network_share_connect_windows">Windows : Explorateur de fichiers › Ce PC › Connecter un lecteur réseau, puis saisissez l\'adresse comme dossier.</string>
     <string name="network_share_connect_macos">macOS : Finder › Aller › Se connecter au serveur, puis saisissez l\'adresse.</string>
     <string name="network_share_connect_linux">Linux : Fichiers › Autres emplacements › Connexion à un serveur, puis saisissez %1$s.</string>
-    <string name="network_share_windows_limit_help_summary">Windows copie par défaut les fichiers jusqu\'à 50 Mo</string>
-    <string name="network_share_windows_limit_help">Le client WebDAV de Windows refuse les fichiers de plus de 50 Mo tant que sa limite n\'est pas relevée. Les images DNG et le WAV sont plus petits, mais le .ocraw d\'origine rarement. Pour le copier sous Windows, réglez FileSizeLimitInBytes sous HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters sur 4294967295 et redémarrez le service WebClient, ou copiez-le par USB.</string>
+    <string name="network_share_windows_limit_help_summary">Windows copie jusqu\'à 50 Mo par défaut, 4 Go au plus</string>
+    <string name="network_share_windows_limit_help">Le client WebDAV de Windows refuse les fichiers de plus de 50 Mo tant que sa limite n\'est pas relevée. Les images DNG sont plus petites ; le WAV d\'une longue prise peut ne pas l\'être. Régler FileSizeLimitInBytes sous HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters sur 4294967295 et redémarrer le service WebClient porte la limite à 4 Go, le maximum de Windows. Le .ocraw d\'origine, quand il est affiché, est généralement plus gros : l\'Explorateur de fichiers ne peut pas le copier. Copiez-le par USB ou avec WinSCP ou rclone.</string>
     <string name="network_share_copy_advice">Copiez le dossier d\'une prise sur le disque de l\'ordinateur avant le montage : les images sont générées à la lecture, trop lentement pour lire depuis le réseau.</string>
     <string name="network_share_auto_stop">Il s\'arrête seul après 15 minutes sans copie, quand le téléphone quitte le réseau sur lequel il a démarré et quand l\'enregistrement d\'une prise commence. Pour utiliser un autre réseau, désactivez-le puis réactivez-le.</string>
     <string name="network_share_security_help_summary">Réseaux locaux seulement, un nouveau mot de passe à chaque fois</string>
@@ -37,4 +37,7 @@
     <string name="network_share_notification_stop">Arrêter</string>
     <string name="network_share_show_password">Afficher le mot de passe</string>
     <string name="network_share_hide_password">Masquer le mot de passe</string>
+    <string name="network_share_show_originals">Afficher les fichiers .ocraw d\'origine</string>
+    <string name="network_share_show_originals_help_summary">Les images DNG et le WAV suffisent à un logiciel de montage</string>
+    <string name="network_share_show_originals_help">Le dossier de chaque prise contient ses images DNG et, si la prise a du son, son WAV : tout ce dont un logiciel de montage a besoin. Le .ocraw d\'origine est la prise entière, aussi lourd qu\'elle, souvent plusieurs Go. L\'Explorateur de fichiers de Windows ne peut pas copier de fichiers de plus de 4 Go : copiez l\'original par USB ou avec un client WebDAV comme WinSCP, Cyberduck ou rclone. Le choix s\'applique tout de suite, que le lecteur soit actif ou non.</string>
 </resources>

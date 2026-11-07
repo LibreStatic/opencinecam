@@ -1447,9 +1447,17 @@ private fun AudioInputSettings(initial: CameraSettings) = DriverTheme {
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it.normalizedFor(capabilities) })
 }
 
-/** The network drive page (PLAN-071 §8 route 3), stopped: the switch off and the instructions below. */
+/** The network drive page (PLAN-071 §8 route 3), stopped: the switch off, the originals hidden and the instructions below. */
 @Composable
-fun NetworkDrive() = DriverTheme {
+fun NetworkDrive() = NetworkDriveStoppedScreen(showOriginals = false)
+
+/** The same with the original `.ocraw` files shown (`network-drive-show-originals` on). */
+@Composable
+fun NetworkDriveOriginals() = NetworkDriveStoppedScreen(showOriginals = true)
+
+@Composable
+private fun NetworkDriveStoppedScreen(showOriginals: Boolean) = DriverTheme {
+    var originals by remember { mutableStateOf(showOriginals) }
     com.librestatic.opencinecam.share.NetworkDriveContent(
         state = com.librestatic.opencinecam.share.NetworkShareState.Stopped(),
         takeActive = false,
@@ -1521,3 +1529,7 @@ fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
             Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
     }
 }
+        showOriginals = originals,
+        onShowOriginalsChange = { originals = it },
+        showOriginals = false,
+        onShowOriginalsChange = {},
