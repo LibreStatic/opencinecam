@@ -41,6 +41,12 @@ data class RawVideoConfigOption(
      */
     val achievedFps: Double? = null,
 ) {
+    /**
+     * A block-pack (`+bp`) option: the one compression that records near-lossless where the camera
+     * allows it ([CameraUiState.rawVideoNearLosslessAvailable], [CameraSettings.rawVideoNearLossless]).
+     */
+    val isBlockPack: Boolean get() = key.endsWith(RawVideoConfigKeys.BLOCK_PACK_SUFFIX)
+
     /** The camera delivers this configuration under its target rate ([achievedFps]). */
     val isReducedRate: Boolean get() = achievedFps != null
 

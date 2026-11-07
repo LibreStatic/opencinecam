@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.Dp
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -65,6 +67,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -489,18 +492,25 @@ internal fun RawQualificationStep(
 
 /** One precondition row: a check or a warning, what it needs, and the reading or what to do. */
 @Composable
-private fun CheckRow(title: String, passed: Boolean, detail: String?, tag: String) {
+private fun CheckRow(title: String, passed: Boolean, detail: String?, tag: String, warning: Boolean = false) {
     val success = LocalCineColors.current.success
+    val warn = LocalCineColors.current.pending
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 4.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        if (passed) StepIcon(StepGlyph.CHECK_CIRCLE, success.onContainer, Modifier.size(26.dp), on = success.container)
+        if (passed && warning) StepIcon(StepGlyph.WARNING, warn, Modifier.size(26.dp))
+        else if (passed) StepIcon(StepGlyph.CHECK_CIRCLE, success.onContainer, Modifier.size(26.dp), on = success.container)
         else StepIcon(StepGlyph.ALERT_CIRCLE, MaterialTheme.colorScheme.error, Modifier.size(26.dp), on = MaterialTheme.colorScheme.onError)
         Column(Modifier.weight(1f)) {
             Text(title, color = OnbText, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            if (detail != null) Text(detail, color = if (passed) OnbMuted else MaterialTheme.colorScheme.error, fontSize = 13.sp, lineHeight = 18.sp)
+            val detailColor = when {
+                !passed -> MaterialTheme.colorScheme.error
+                warning -> warn
+                else -> OnbMuted
+            }
+            if (detail != null) Text(detail, color = detailColor, fontSize = 13.sp, lineHeight = 18.sp)
         }
     }
 }
@@ -516,10 +526,12 @@ private fun Checklist(conditions: RawQualificationConditions) {
             detail = when {
                 RawQualificationBlocker.BATTERY_LOW in blockers ->
                     stringResource(R.string.raw_qualification_check_battery_fix, RAW_QUALIFICATION_MIN_BATTERY_PERCENT, battery ?: 0)
+                conditions.batteryWarning && battery != null -> stringResource(R.string.raw_qualification_check_battery_warn, battery)
                 battery != null -> stringResource(R.string.raw_qualification_check_battery_ok, battery)
                 else -> null
             },
             tag = "raw-qualification-check-battery",
+            warning = conditions.batteryWarning,
         )
         CardDivider()
         CheckRow(
@@ -664,7 +676,8 @@ private fun ReadyStage(
  */
 @Composable
 private fun rawAchievedRate(item: RawQualificationItem): String? {
-    if (item.status != RawQualificationItemStatus.PASSED && item.status != RawQualificationItemStatus.RISKY) return null
+    if (item.status != RawQualificationItemStatus.PASSED && item.status != RawQualificationItemStatus.RISKY &&
+        item.status != RawQualificationItemStatus.MEASURED) return null
     val fps = item.achievedFps ?: return null
     return stringResource(if (item.reducedRate) R.string.raw_qualification_item_reaches else R.string.raw_qualification_item_fps, fps)
 }
@@ -675,12 +688,14 @@ private fun ItemRow(item: RawQualificationItem) {
     val colors = MaterialTheme.colorScheme
     val success = LocalCineColors.current.success
     val testing = item.status == RawQualificationItemStatus.TESTING
+    // An encode benchmark streaming a judged configuration highlights its row like a test, status kept.
+    val active = testing || item.benchmarking
     val risky = LocalCineColors.current.pending
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (testing) OnbAmber.copy(alpha = 0.16f) else Color.Transparent)
+            .background(if (active) OnbAmber.copy(alpha = 0.16f) else Color.Transparent)
             .heightIn(min = 48.dp)
             .padding(horizontal = 10.dp, vertical = 6.dp)
             .testTag("raw-qualification-item-${item.spec}"),
@@ -693,6 +708,7 @@ private fun ItemRow(item: RawQualificationItem) {
             RawQualificationItemStatus.RISKY -> StepIcon(StepGlyph.WARNING, risky, iconModifier)
             RawQualificationItemStatus.TESTING -> StepIcon(StepGlyph.TESTING, OnbAmber, iconModifier)
             RawQualificationItemStatus.PENDING -> StepIcon(StepGlyph.CLOCK, OnbMuted, iconModifier)
+            RawQualificationItemStatus.MEASURED -> StepIcon(StepGlyph.CHECK_CIRCLE, OnbMuted, iconModifier)
             RawQualificationItemStatus.FAILED -> StepIcon(StepGlyph.ALERT_CIRCLE, colors.error, iconModifier, on = colors.onError)
             RawQualificationItemStatus.NOT_QUALIFIED, RawQualificationItemStatus.SKIPPED_SPACE -> StepIcon(StepGlyph.BLOCK, OnbMuted, iconModifier)
             RawQualificationItemStatus.SKIPPED_HEAT -> StepIcon(StepGlyph.THERMOMETER, OnbMuted, iconModifier)
@@ -701,7 +717,22 @@ private fun ItemRow(item: RawQualificationItem) {
         Column(Modifier.weight(1f)) {
             // Never truncated: the label may only break before its compressed suffix.
             Text(rawConfigLabelNoBreak(item.label, rawCompressedWord()), color = OnbText, fontSize = 15.sp, lineHeight = 19.sp)
-            rawAchievedRate(item)?.let { Text(it, color = OnbMuted, fontSize = 13.sp, lineHeight = 17.sp) }
+            // The rate the camera delivers now, in the achieved rate's slot: a TESTING row has none, and a
+            // benchmarked row shows it again once its benchmark ends.
+            val live = item.currentFps.takeIf { active }
+            val target = item.targetFps
+            if (live == null || target == null) {
+                rawAchievedRate(item)?.let { Text(it, color = OnbMuted, fontSize = 13.sp, lineHeight = 17.sp) }
+            } else {
+                Text(
+                    stringResource(R.string.raw_qualification_item_live_fps, live, target),
+                    color = if (item.liveFpsShort) risky else success.onContainer,
+                    fontSize = 13.sp,
+                    lineHeight = 17.sp,
+                    style = TextStyle(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.testTag("raw-qualification-live-fps"),
+                )
+            }
         }
         when (item.status) {
             RawQualificationItemStatus.PASSED -> StatusPill(stringResource(R.string.raw_qualification_status_ready), success.container, success.onContainer)
@@ -709,6 +740,8 @@ private fun ItemRow(item: RawQualificationItem) {
                 StatusPill(stringResource(R.string.raw_qualification_status_risky), Color.Transparent, risky, outlined = true, border = risky)
             RawQualificationItemStatus.TESTING -> StatusPill(stringResource(R.string.raw_qualification_status_testing), OnbAmber, colors.onPrimary)
             RawQualificationItemStatus.PENDING -> StatusPill(stringResource(R.string.raw_qualification_status_pending), colors.surfaceContainerHighest, OnbText)
+            RawQualificationItemStatus.MEASURED ->
+                StatusPill(stringResource(R.string.raw_qualification_status_measured), Color.Transparent, OnbText, outlined = true, border = OnbMuted)
             RawQualificationItemStatus.SKIPPED_SPACE ->
                 StatusPill(stringResource(R.string.raw_qualification_status_skipped), Color.Transparent, OnbMuted, outlined = true)
             RawQualificationItemStatus.SKIPPED_HEAT ->
@@ -742,6 +775,7 @@ private fun RunningStage(state: RawVideoQualificationUi, onCancel: () -> Unit) {
     val stepText = when (rawQualificationStepText(state.phase)) {
         RawQualificationStepText.PREPARING -> stringResource(R.string.raw_qualification_step_preparing)
         RawQualificationStepText.STORAGE -> stringResource(R.string.raw_qualification_step_storage)
+        RawQualificationStepText.RESTING -> stringResource(R.string.raw_qualification_step_resting)
         RawQualificationStepText.CONFIG -> null
         RawQualificationStepText.CAMERA -> stringResource(R.string.raw_qualification_step_camera)
         RawQualificationStepText.COMPRESSION -> stringResource(R.string.raw_qualification_step_compression)
@@ -750,8 +784,9 @@ private fun RunningStage(state: RawVideoQualificationUi, onCancel: () -> Unit) {
         RawQualificationStepText.SAVING -> stringResource(R.string.raw_qualification_step_saving)
     }
     val headline = state.specLabel ?: stepText ?: stringResource(R.string.raw_qualification_step_preparing)
-    // The ring counts configurations once the runs start; before that (the storage sweep) it shows
-    // the overall percentage, as the labelled bar does. The bar always shows the overall progress.
+    // The ring counts the camera sessions once they start, and keeps the count through the storage
+    // rest and sweep; before the first (preparing) it shows the overall percentage, as the labelled
+    // bar does. The bar always shows the overall progress.
     val inRuns = state.runIndex > 0 && state.runCount > 0
     val percent = (state.fraction.coerceIn(0f, 1f) * 100).toInt()
     RawStageScaffold(
@@ -801,14 +836,20 @@ private fun RunningStage(state: RawVideoQualificationUi, onCancel: () -> Unit) {
         },
         body = {
             if (state.items.isNotEmpty()) {
+                // The row in progress leads, the rest heaviest first; when another row starts, the list
+                // scrolls back so it shows.
+                val ordered = remember(state.items) { rawQualificationItemsRunningOrder(state.items) }
+                val current = ordered.firstOrNull()?.takeIf { it.inProgress }?.spec
+                val currentInView = remember { BringIntoViewRequester() }
+                LaunchedEffect(current) { if (current != null) currentInView.bringIntoView() }
                 StageCard(Modifier.testTag("raw-qualification-items"), padding = 8.dp) {
-                    state.items.forEachIndexed { index, item ->
+                    ordered.forEachIndexed { index, item ->
                         if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 10.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        ItemRow(item)
+                        if (index == 0 && current != null) Box(Modifier.bringIntoViewRequester(currentInView)) { ItemRow(item) } else ItemRow(item)
                     }
                 }
             }
-            NoticeCard(stringResource(R.string.raw_qualification_running_notice, RAW_QUALIFICATION_MIN_BATTERY_PERCENT),
+            NoticeCard(stringResource(R.string.raw_qualification_running_notice, RAW_QUALIFICATION_ABORT_BATTERY_PERCENT),
                 Modifier.testTag("raw-qualification-notice"))
         },
         footer = {
@@ -852,12 +893,13 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
         return
     }
     val success = LocalCineColors.current.success
-    val leftOut = state.items.filter {
+    val leftOut = rawQualificationItemsHeaviestFirst(state.items).filter {
         it.status == RawQualificationItemStatus.SKIPPED_SPACE || it.status == RawQualificationItemStatus.FAILED ||
             it.status == RawQualificationItemStatus.NOT_QUALIFIED || it.status == RawQualificationItemStatus.SKIPPED_HEAT ||
             it.status == RawQualificationItemStatus.CAMERA_LIMIT
     }
-    val risky = state.items.filter { it.status == RawQualificationItemStatus.RISKY }
+    val risky = rawQualificationItemsHeaviestFirst(state.items).filter { it.status == RawQualificationItemStatus.RISKY }
+    val passedLabels = remember(state.passedLabels) { state.passedLabels.sortedWith(rawQualificationHeaviestFirst) }
     val riskyTint = LocalCineColors.current.pending
     val anySkippedForSpace = leftOut.any { it.status == RawQualificationItemStatus.SKIPPED_SPACE }
     val anySkippedForHeat = leftOut.any { it.status == RawQualificationItemStatus.SKIPPED_HEAT }
@@ -879,7 +921,7 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
         body = {
             if (state.outcome == RawQualificationOutcomeKind.PASSED && state.passedLabels.isNotEmpty()) {
                 StageCard(Modifier.testTag("raw-qualification-passed"), padding = 12.dp) {
-                    state.passedLabels.forEachIndexed { index, label ->
+                    passedLabels.forEachIndexed { index, label ->
                         if (index > 0) CardDivider()
                         val item = state.items.firstOrNull { it.label == label && it.status == RawQualificationItemStatus.PASSED }
                         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).then(item?.let { Modifier.testTag("raw-qualification-item-${it.spec}") } ?: Modifier),

@@ -32,4 +32,10 @@
     <string name="raw_video_burst_minutes">%1$d Min.</string>
     <string name="raw_video_burst_seconds">%1$d Sek.</string>
     <string name="raw_video_risky_notice_burst">Riskante Rate: nach etwa %1$s können Bilder verloren gehen (bei ausgeruhtem Telefon)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">RAW-Komprimierung</string>
+    <string name="raw_compression_summary">Für komprimierte Konfigurationen</string>
+    <string name="raw_compression_lossless">Verlustfrei</string>
+    <string name="raw_video_label_near_lossless">Nahezu verlustfrei</string>
+    <string name="raw_compression_help">Gilt für komprimierte Konfigurationen. Verlustfrei behält jeden Wert, den der Sensor liefert. Nahezu verlustfrei fasst Werte zusammen, die sich um weniger als etwa das halbe Sensorrauschen bei der ISO des Bildes unterscheiden. Der Unterschied bleibt im Rauschen verborgen, und die Dateien werden noch kleiner, vor allem bei wenig Licht. Beides öffnet sich in der Galerie, im CinemaDNG-Export und in den Desktop-Werkzeugen. Die Restzeit rechnet für beide mit demselben vorsichtigen Verhältnis.</string>
 </resources>

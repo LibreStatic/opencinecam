@@ -221,6 +221,7 @@ import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
 import com.librestatic.opencinecam.rawvideo.RawVideoQualificationOutcome
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
 import com.librestatic.opencinecam.RawQualificationItem
+import com.librestatic.opencinecam.rawQualificationItemsCameraChecked
 import com.librestatic.opencinecam.rawQualificationItemsFinished
 import com.librestatic.opencinecam.rawQualificationItemsOnProgress
 import com.librestatic.opencinecam.rawQualificationItemsWith
@@ -1480,8 +1481,8 @@ class CaptureService : Service() {
     private val rawRaw10Sizes = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Int, Int>>>()
     /** Cameras that refused the RAW_VIDEO graph in this service session (gate FAILED). */
     private val rawVideoFailedCameras = mutableSetOf<String>()
-    /** The configuration the ring was last asked to arm for; null while disarmed. */
-    private var rawArmTarget: RawVideoConfig? = null
+    /** The configuration (and near-lossless noise profile) the ring was last asked to arm for; null while disarmed. */
+    private var rawArmTarget: Pair<RawVideoConfig, com.librestatic.opencinecam.rawvideo.RawNoiseProfile?>? = null
     /** Set (on the control thread) when the ring for this configuration could not be planned or allocated. */
     @Volatile private var rawArmNoMemory: RawVideoConfig? = null
     /** Why arming [rawArmNoMemory] failed: no RAM for the ring, or no encoder for a compressed configuration. */
@@ -1598,6 +1599,16 @@ class CaptureService : Service() {
         }.toMap()
     }
 
+    /**
+     * The bundled RAW noise profile a block-pack [config] records near-lossless with: its camera's,
+     * measured at its sensor size, with the native codec loaded and, unless [ignoreSetting], near-lossless
+     * chosen ([CameraSettings.rawVideoNearLossless]). Null means lossless block-pack.
+     */
+    private fun rawNearLosslessProfile(config: RawVideoConfig, ignoreSetting: Boolean = false): com.librestatic.opencinecam.rawvideo.RawNoiseProfile? =
+        if ((!ignoreSetting && !settings.rawVideoNearLossless) || config.encoding != RawVideoConfig.ENCODING_BLOCK_PACK ||
+            !com.librestatic.opencinecam.media.raw.NativeRawCodec.available) null
+        else com.librestatic.opencinecam.rawvideo.RawNoiseProfiles.forCamera(this, config.cameraId, config.sensorWidth, config.sensorHeight)
+
     /** The risky ones among [usable] configurations of [cameraId]. */
     private fun rawRiskyConfigs(cameraId: String, usable: List<RawVideoConfig>): Set<RawVideoConfig> =
         if (usable.isEmpty()) emptySet() else rawVideoRiskyConfigs(usable, rawRiskyRecordedConfigs(cameraId))
@@ -1637,6 +1648,7 @@ class CaptureService : Service() {
             } else emptyList(),
             rawVideoSelectedKey = selected?.let(RawVideoConfigKeys::key),
             rawVideoAutoKey = selectRawVideoConfig(usable, "", manualOnly).takeIf { available }?.let(RawVideoConfigKeys::key),
+            rawVideoNearLosslessAvailable = available && usable.any { rawNearLosslessProfile(it, ignoreSetting = true) != null },
         )
         return if (next.selectedMode == CaptureMode.RAW_VIDEO && selected != null) {
             // The status line shows the RAW time left before a take too, so the free space is read here, not only by the REC ticker.
@@ -1664,8 +1676,11 @@ class CaptureService : Service() {
         if (serviceDestroyed || rawTake != null) return
         // A qualification allocates its own ring: the two never coexist.
         val wanted = currentRawVideoConfig().takeIf { attachedPreviewSurface != null && rawQualificationSession == null }
-        if (wanted == rawArmTarget) return
-        rawArmTarget = wanted
+        // A block-pack configuration records near-lossless when its camera has a noise profile and the setting is on.
+        val noiseProfile = wanted?.let { rawNearLosslessProfile(it) }
+        val target = wanted?.let { it to noiseProfile }
+        if (target == rawArmTarget) return
+        rawArmTarget = target
         rawControlExecute {
             if (rawRecorder.isRecording) return@rawControlExecute
             runCatching { rawRecorder.disarm() }
@@ -1679,12 +1694,13 @@ class CaptureService : Service() {
             val plan = runCatching { RawRingBudget.plan(this, wanted.bytesPerFrame.toInt()) }.getOrNull()
             try {
                 checkNotNull(plan) { "no RAM budget for a ring of ${RawRingBudget.MIN_SLOTS} frames" }
-                val armed = rawRecorder.arm(wanted, plan.ringBytes)
+                val armed = rawRecorder.arm(wanted, plan.ringBytes, noiseProfile)
                 rawArmNoMemory = null
                 // Re-evaluate the runtime risk against the ring actually armed.
                 rawArmedRing = armed
                 postRawVideoGate()
-                android.util.Log.i("CaptureService", "RAW ring armed: ${armed.slotCount} slots of ${armed.slotBytes} bytes (${plan.limitedBy})")
+                android.util.Log.i("CaptureService", "RAW ring armed: ${armed.slotCount} slots of ${armed.slotBytes} bytes (${plan.limitedBy})" +
+                    if (armed.nearLossless) ", near-lossless (${noiseProfile?.id})" else "")
             } catch (failure: Exception) {
                 rawArmFailure = if (failure is com.librestatic.opencinecam.rawvideo.RawVideoArmException) RawVideoServiceReasons.CODEC else RawVideoServiceReasons.MEMORY
                 rawArmNoMemory = wanted
@@ -1758,9 +1774,18 @@ class CaptureService : Service() {
 
     /** Qualification thread: one run's result row; its configuration takes its status at once. */
     private fun recordRawQualificationResult(session: RawQualificationSession, result: org.json.JSONObject) {
-        if (result.optString("kind") != "live") return
+        val kind = result.optString("kind")
+        if (kind != "live" && kind != RAW_QUALIFICATION_CAMERA_KIND) return
         val spec = result.optString("spec").takeIf { it.isNotEmpty() } ?: return
         val config = RawQualificationSpecs.parse(spec, session.cameraId, session.sensorWidth, session.sensorHeight)?.config
+        if (kind == RAW_QUALIFICATION_CAMERA_KIND) {
+            // A camera check's verdict comes at the end; until then its configuration reads as measured.
+            session.items = rawQualificationItemsCameraChecked(session.items, spec, config?.let { RawVideoConfigOption.of(it).label } ?: spec,
+                config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L, result.optDouble("achievedFps").takeIf { !it.isNaN() })
+            val last = session.lastPosted ?: return
+            postRawQualificationUi(session, last.copy(items = session.items), android.os.SystemClock.elapsedRealtime())
+            return
+        }
         val codes = result.optJSONArray("reasonCodes")?.let { array -> (0 until array.length()).map(array::optString) }
         val status = rawQualificationRunStatus(result.optString("status"), result.optString("reasonCode").ifEmpty { null },
             codes ?: listOfNotNull(result.optString("reasonCode").ifEmpty { null }))
@@ -2016,7 +2041,9 @@ class CaptureService : Service() {
         mainHandler.removeCallbacks(recordingTicker)
         cameraState.update { it.copy(
             phase = CameraUiPhase.RECORDING,
-            message = getString(R.string.raw_video_recording, rawConfigLabelLocalized(option.label, getString(R.string.raw_video_label_compressed)), kotlin.math.round(option.megabytesPerSecond).toLong()) +
+            message = getString(R.string.raw_video_recording, rawConfigLabelLocalized(option.label,
+                getString(if (rawArmedRing?.nearLossless == true) R.string.raw_video_label_near_lossless else R.string.raw_video_label_compressed)),
+                kotlin.math.round(option.megabytesPerSecond).toLong()) +
                 " · " + rawTakeAudioLabel(),
             recordingElapsedMs = 0L,
             recordingPauseStatus = null,
@@ -4360,6 +4387,8 @@ class CaptureService : Service() {
                 }
                 // OCC-PLAN-071: a new RAW configuration changes the RAW10 stream, so the session reopens
                 // when it resolves to another configuration; the ring is re-planned for its frame size.
+                // Lossless or near-lossless block-pack: the ring re-arms with the other encoder (same configuration).
+                if (previous.rawVideoNearLossless != settings.rawVideoNearLossless) syncRawVideoArm()
                 if (previous.rawVideoConfig != settings.rawVideoConfig) {
                     val before = cameraState.value.rawVideoSelectedKey
                     cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
@@ -5873,6 +5902,8 @@ class CaptureService : Service() {
     )
 
     companion object {
+        /** The `kind` of a camera check's result row ([com.librestatic.opencinecam.rawvideo.RawVideoQualifier]'s CAMERA stage). */
+        private const val RAW_QUALIFICATION_CAMERA_KIND = "camera"
         private const val LOST_INPUT_STOP_ATTEMPTS = 20
         private const val LOST_INPUT_STOP_RETRY_MS = 250L
         private const val OWNER_ID = "capture-service"

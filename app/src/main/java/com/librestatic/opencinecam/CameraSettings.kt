@@ -134,6 +134,12 @@ data class CameraSettings(
      * `1920x1080@60`); empty, unknown or no longer qualified means the highest qualified data rate.
      */
     val rawVideoConfig: String = "",
+    /**
+     * RAW compression quality of a block-pack (`+bp`) configuration: near-lossless (quantised to the
+     * sensor noise) when the camera has a noise profile, else lossless. The configuration key stays
+     * `+bp` either way; structural, so pending during a take.
+     */
+    val rawVideoNearLossless: Boolean = true,
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
     /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
     val zeroShutterLag: Boolean = true,
@@ -465,6 +471,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         lensLock = LensLockCodec.decode(preferences.getString(KEY_LENS_LOCK, null)),
         smoothLensSwitch = preferences.getBoolean(KEY_SMOOTH_LENS_SWITCH, false),
         rawVideoConfig = preferences.getString(KEY_RAW_VIDEO_CONFIG, null)?.takeIf(RawVideoConfigKeys::isValid).orEmpty(),
+        rawVideoNearLossless = preferences.getBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, true),
         torchStrengthLevel = preferences.getInt(KEY_TORCH_STRENGTH, 0).takeIf { it > 0 },
         zebraEnabled = preferences.getBoolean("zebra-enabled", false),
         peakingEnabled = preferences.getBoolean("peaking-enabled", false),
@@ -675,6 +682,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_LENS_LOCK, LensLockCodec.encode(settings.lensLock))
             .putBoolean(KEY_SMOOTH_LENS_SWITCH, settings.smoothLensSwitch)
             .putString(KEY_RAW_VIDEO_CONFIG, settings.rawVideoConfig.takeIf(RawVideoConfigKeys::isValid).orEmpty())
+            .putBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, settings.rawVideoNearLossless)
             .putString(KEY_PHOTO_FLASH, settings.photoFlash.mode.name)
             .putInt(KEY_PHOTO_FLASH_STRENGTH, settings.photoFlash.strength ?: 0)
             .putInt(KEY_TORCH_STRENGTH, settings.torchStrengthLevel ?: 0)
@@ -947,6 +955,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_LENS_LOCK = "lens-lock"
         const val KEY_SMOOTH_LENS_SWITCH = "smooth-lens-switch"
         const val KEY_RAW_VIDEO_CONFIG = "raw-video-config"
+        const val KEY_RAW_VIDEO_NEAR_LOSSLESS = "raw-video-near-lossless"
         const val KEY_PHOTO_FLASH = "photo-flash-mode"
         const val KEY_PHOTO_FLASH_STRENGTH = "photo-flash-strength"
         const val KEY_TORCH_STRENGTH = "torch-strength-level"

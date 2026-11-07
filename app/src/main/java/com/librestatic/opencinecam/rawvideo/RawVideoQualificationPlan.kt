@@ -283,6 +283,12 @@ data class RawQualificationTiming(
         /** The pause between two runs. */
         const val COOL_DOWN_MS = 3_000L
 
+        /**
+         * The pause between the last camera session (camera checks, encode benchmarks) and the storage
+         * sweep, so the storage is measured rested rather than right after the camera work.
+         */
+        const val STORAGE_REST_MS = 120_000L
+
         /** Kept free beyond a run's data. */
         const val SPACE_RESERVE_BYTES = 1L shl 30
 
@@ -303,8 +309,8 @@ data class RawQualificationTiming(
 /** How long a plan takes and the free space it needs. */
 data class RawQualificationEstimate(
     /**
-     * Upper bound: the sweep, the ring, every long run as if none passed (or, without the long
-     * stage, a camera check of each), the benchmark sessions and the cool-downs between steps.
+     * Upper bound: the ring, a camera check of each configuration, the benchmark sessions, the
+     * storage rest, the sweep, every long run as if none passed and the cool-downs between steps.
      */
     val durationMs: Long,
     /** The free space the sweep and the largest long run need; the encode benchmark and the camera checks write nothing. */
@@ -315,33 +321,43 @@ data class RawQualificationEstimate(
      * unbounded sweep stops that phase early (`free-space`) rather than eat into the reserve.
      */
     val sweepFreeBytesNeeded: Long,
-    /** Steps the ring counts: one per uncompressed configuration, plus the benchmark sessions. */
+    /**
+     * Steps the ring counts: a camera check per uncompressed configuration, the benchmark sessions
+     * and a long run per uncompressed configuration (the rest and the sweep are not steps).
+     */
     val runCount: Int,
 )
 
 object RawQualificationEstimates {
     /**
-     * The estimate of [runs] (uncompressed, the long-run and camera-check candidates) and
-     * [benchSessions] encode benchmark sessions under [plan]'s stages, with [timing]. The duration is
-     * an upper bound: every long run of the descent, as if none passed; the camera checks that would
-     * follow a pass are shorter than the long runs they replace, so they are not added.
+     * The estimate of [runs] (uncompressed, the camera-check and long-run candidates) and
+     * [benchSessions] encode benchmark sessions under [plan]'s stages, with [timing], in the order the
+     * qualifier runs them: the ring, a camera check of every run, the benchmark sessions, the storage
+     * rest ([RawQualificationTiming.STORAGE_REST_MS], only after camera sessions and before a sweep),
+     * the sweep, then the long runs. The duration is an upper bound: every long run of the descent, as
+     * if none passed. [longRuns] (default [runs]) are the long runs counted: [forFreeSpace] leaves out
+     * those the free space would skip.
      */
     fun of(
         runs: List<RawQualificationRun>,
         benchSessions: Int,
         timing: RawQualificationTiming,
         stages: Set<RawQualificationStage> = RawQualificationStage.ALL,
+        longRuns: List<RawQualificationRun> = runs,
     ): RawQualificationEstimate {
         val long = RawQualificationStage.LONG in stages
         val camera = RawQualificationStage.CAMERA in stages
         val sweep = long || RawQualificationStage.SWEEP in stages
-        val stepMs = runs.map { run -> if (long) timing.runMs(run.config) else if (camera) timing.cameraCheckMs() else 0L }.filter { it > 0 } +
+        val before = (if (camera) List(runs.size) { timing.cameraCheckMs() } else emptyList()) +
             List(benchSessions) { timing.encodeBenchMs() }
+        val after = if (long) longRuns.map { timing.runMs(it.config) } else emptyList()
+        val stepMs = before + after
         val stepsMs = stepMs.sum() + (stepMs.size - 1).coerceAtLeast(0) * RawQualificationTiming.COOL_DOWN_MS
+        val rest = if (sweep && before.isNotEmpty()) RawQualificationTiming.STORAGE_REST_MS else 0L
         val sweepBytes = if (sweep) RawVideoQualifier.SWEEP_WRAP_BYTES + (runs.maxOfOrNull { it.config.bytesPerFrame } ?: 0L) else 0L
-        val longBytes = if (long) runs.maxOfOrNull { timing.neededBytes(it.config) } ?: 0L else 0L
+        val longBytes = if (long) longRuns.maxOfOrNull { timing.neededBytes(it.config) } ?: 0L else 0L
         return RawQualificationEstimate(
-            durationMs = (if (sweep) timing.sweepMs else 0L) + RawQualificationTiming.RING_OVERHEAD_MS + stepsMs,
+            durationMs = RawQualificationTiming.RING_OVERHEAD_MS + rest + (if (sweep) timing.sweepMs else 0L) + stepsMs,
             freeBytesNeeded = maxOf(sweepBytes, longBytes),
             sweepFreeBytesNeeded = sweepBytes,
             runCount = stepMs.size,
@@ -364,8 +380,8 @@ object RawQualificationEstimates {
     /**
      * The estimate of [plan] given [freeBytes] free now: long runs that would be skipped for space
      * ([RawQualificationTiming.neededBytes] above [freeBytes]) are left out of the duration, as the
-     * qualifier skips them (a configuration skipped that way can still be covered by a heavier pass,
-     * but the camera check it then gets is not counted). Compressed twins need no space of their own.
+     * qualifier skips them; every configuration still gets its camera check. Compressed twins need no
+     * space of their own.
      */
     fun forFreeSpace(
         plan: RawQualificationPlan,
@@ -383,7 +399,7 @@ object RawQualificationEstimates {
         val sweepNeeded = of(runs, 0, timing).sweepFreeBytesNeeded
         val smallestRun = runs.minOfOrNull { timing.neededBytes(it.config) } ?: 0L
         return RawQualificationSpaceEstimate(
-            estimate = of(kept, if (kept.isEmpty()) 0 else bench, timing, plan.effectiveStages),
+            estimate = if (kept.isEmpty()) of(kept, 0, timing, plan.effectiveStages) else of(runs, bench, timing, plan.effectiveStages, kept),
             freeBytes = freeBytes,
             skippedRuns = runs.size - kept.size,
             minimumFreeBytes = maxOf(sweepNeeded, smallestRun),
@@ -421,13 +437,17 @@ data class RawQualificationSpaceEstimate(
 data class RawQualificationPlannedConfig(val spec: String, val config: RawVideoConfig, val neededBytes: Long, val fits: Boolean)
 
 /** The steps a qualification reports. */
-enum class RawQualificationPhase { SWEEP, RING, THERMAL_WAIT, RUN, CAMERA_CHECK, ENCODE_BENCH, COOLING, SAVING, DONE }
+enum class RawQualificationPhase { SWEEP, RING, THERMAL_WAIT, RUN, CAMERA_CHECK, ENCODE_BENCH, COOLING, STORAGE_REST, SAVING, DONE }
 
 /**
  * One progress report. [runIndex] is 1-based and [runCount] the steps planned so far (it shrinks once
  * the descent stops); both are 0 outside [RawQualificationPhase.RUN], [RawQualificationPhase.CAMERA_CHECK],
- * [RawQualificationPhase.ENCODE_BENCH], [RawQualificationPhase.THERMAL_WAIT] and [RawQualificationPhase.COOLING].
- * [fraction] is 0..1 and never goes back.
+ * [RawQualificationPhase.ENCODE_BENCH], [RawQualificationPhase.THERMAL_WAIT] and [RawQualificationPhase.COOLING],
+ * except that [RawQualificationPhase.STORAGE_REST] and a [RawQualificationPhase.SWEEP] after camera
+ * sessions carry the last session's, so the count does not drop back to a percentage.
+ * [fraction] is 0..1 and never goes back. [liveFps] is the rate the camera delivers in a running
+ * camera session, over the last [RawQualificationLiveRate.WINDOW_NS] ([RawQualificationLiveRate.fps]);
+ * null outside one (the sweep, cool-downs) and until two measured frames arrived.
  */
 data class RawQualificationProgress(
     val phase: RawQualificationPhase,
@@ -435,7 +455,52 @@ data class RawQualificationProgress(
     val runIndex: Int = 0,
     val runCount: Int = 0,
     val spec: String? = null,
+    val liveFps: Double? = null,
 )
+
+/**
+ * The live frame rate a qualification shows while a camera session runs. Display only: no verdict
+ * reads it (those use the whole measured window).
+ */
+object RawQualificationLiveRate {
+    /** The rolling window the rate covers. */
+    const val WINDOW_NS = 2_000_000_000L
+
+    /** How often the qualifier recomputes it. */
+    const val INTERVAL_MS = 1_000L
+
+    /**
+     * The rate of the frames whose timestamps [timestampNs] gives at indices 0 until [count] (ascending;
+     * entries not written yet read 0 or less and are ignored at the end), over the last [windowNs]:
+     * frame intervals in the window over its span. [sinceLastNs] is the time since the last frame
+     * arrived; beyond one average interval it counts as a gap, so a stalled camera reads lower and
+     * then 0. Null with fewer than two frames.
+     */
+    fun fps(count: Int, timestampNs: (Int) -> Long, windowNs: Long = WINDOW_NS, sinceLastNs: Long = 0L): Double? {
+        var n = count
+        while (n > 0 && timestampNs(n - 1) <= 0L) n--
+        if (n < 2) return null
+        val last = timestampNs(n - 1)
+        // The oldest frame in the window ending at the last frame, keeping at least one interval.
+        val first = minOf(firstInWindow(n, last, windowNs, timestampNs), n - 2)
+        val span = last - timestampNs(first)
+        if (span <= 0L) return null
+        val gap = sinceLastNs - span / (n - 1 - first)
+        if (gap <= 0L) return (n - 1 - first) * 1e9 / span
+        // A stall: the window ends [gap] after the last frame.
+        val end = last + gap
+        val stalledFirst = firstInWindow(n, end, windowNs, timestampNs)
+        if (stalledFirst >= n - 1) return 0.0
+        return (n - 1 - stalledFirst) * 1e9 / (end - timestampNs(stalledFirst))
+    }
+
+    /** The index of the oldest of the [n] frames no older than [windowNs] before [endNs] (n - 1 when only the last, or none). */
+    private fun firstInWindow(n: Int, endNs: Long, windowNs: Long, timestampNs: (Int) -> Long): Int {
+        var first = n - 1
+        while (first > 0 && endNs - timestampNs(first - 1) <= windowNs) first--
+        return first
+    }
+}
 
 /**
  * The overall 0..1 fraction from planned durations: completed steps count their planned time, the
@@ -455,6 +520,9 @@ class RawQualificationProgressMeter(totalMs: Long) {
 
     /** A step the plan did not count, of [ms], was added. */
     fun extend(ms: Long) { totalMs += ms.coerceAtLeast(0) }
+
+    /** A step the plan counted, of [ms], will not run; the total never drops below the work done. */
+    fun shrink(ms: Long) { totalMs = maxOf(doneMs + stepMs, totalMs - ms.coerceAtLeast(0)).coerceAtLeast(1) }
 
     /** The work left changed to [remainingMs] after the steps done so far. */
     fun replan(remainingMs: Long) { totalMs = (doneMs + stepMs + remainingMs.coerceAtLeast(0)).coerceAtLeast(1) }
@@ -487,7 +555,7 @@ enum class RawQualificationStatus {
  */
 object RawQualificationFrameRate {
     /** A run reaches its target when it delivers at least this fraction of it. */
-    const val FPS_TOLERANCE = 0.95
+    const val FPS_TOLERANCE = 0.875
 
     /** The rate was not reached and the camera declares it cannot deliver it. */
     const val REASON_CAMERA_FPS_LIMIT = "camera-fps-limit"

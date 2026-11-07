@@ -229,6 +229,17 @@ class CameraSettingsTest {
     }
 
     @Test
+    fun rawVideoNearLosslessDefaultsOnPersistsAndStaysPendingDuringATake() {
+        assertTrue(CameraSettings().rawVideoNearLossless)
+        val next = CameraSettings().copy(rawVideoNearLossless = false)
+        // Structural: a running take keeps the compression it started with.
+        assertTrue(CameraSettings().withLivePreferencesFrom(next).rawVideoNearLossless)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
+        assertFalse(CameraSettingsStore(memory).load().rawVideoNearLossless)
+        assertTrue(CameraSettingsStore(PresetPreferences()).load().rawVideoNearLossless)
+    }
+
+    @Test
     fun hapticsChangesApplyLiveAndPersist() {
         val next = CameraSettings().copy(haptics = HapticPreferences(HapticLevel.FULL, capture = false, controls = false, focusExposure = false, navigation = false, muteDuringTake = false))
         assertEquals(next.haptics, CameraSettings().withLivePreferencesFrom(next).haptics)

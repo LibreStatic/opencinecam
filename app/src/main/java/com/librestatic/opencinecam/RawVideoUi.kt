@@ -81,12 +81,30 @@ internal fun rawVideoActiveOption(state: CameraUiState): RawVideoConfigOption? =
 internal fun rawVideoActiveRisky(state: CameraUiState): Boolean =
     state.selectedMode == CaptureMode.RAW_VIDEO && rawVideoActiveOption(state)?.isRisky == true
 
+/**
+ * Block-pack configurations record near-lossless: the camera allows it
+ * ([CameraUiState.rawVideoNearLosslessAvailable]) and the operator has not chosen lossless.
+ */
+internal fun rawVideoNearLosslessActive(state: CameraUiState, settings: CameraSettings): Boolean =
+    state.rawVideoNearLosslessAvailable && settings.rawVideoNearLossless
+
+/** Settings offers the RAW compression choice: the camera allows near-lossless and has a block-pack option. */
+internal fun rawCompressionChoiceOffered(state: CameraUiState): Boolean =
+    state.rawVideoNearLosslessAvailable && state.rawVideoOptions.any { it.isBlockPack }
+
 /** The configuration can change only between takes, like every structural setting. */
 internal fun rawVideoConfigChangeAllowed(state: CameraUiState): Boolean =
     !state.structuralSettingsFrozen && state.phase != CameraUiPhase.CAPTURING
 
 /** What the capture status line says about a RAW video configuration; the line adds the crop marker from [isCrop]. */
-internal data class RawStatusFacts(val label: String, val isCrop: Boolean, val megabytesPerSecond: Long, val timeLeftMs: Long?)
+internal data class RawStatusFacts(
+    val label: String,
+    val isCrop: Boolean,
+    val megabytesPerSecond: Long,
+    val timeLeftMs: Long?,
+    /** The configuration is block-pack, so its label reads near-lossless when that is active. */
+    val isBlockPack: Boolean = false,
+)
 
 /**
  * The status line's RAW facts: the configuration in use, its uncompressed data rate in MB/s and the
@@ -97,7 +115,7 @@ internal fun rawVideoStatusFacts(state: CameraUiState): RawStatusFacts? {
     if (state.selectedMode != CaptureMode.RAW_VIDEO) return null
     val option = rawVideoActiveOption(state) ?: return null
     return RawStatusFacts(option.label, option.isCrop, rawRateMegabytes(option),
-        rawRecordTimeLeftMs(state.availableStorageBytes, option.capacityBytesPerSecond))
+        rawRecordTimeLeftMs(state.availableStorageBytes, option.capacityBytesPerSecond), option.isBlockPack)
 }
 
 /**
@@ -113,30 +131,45 @@ internal fun rawOptionDetail(option: RawVideoConfigOption, freeBytes: Long?): St
     return option.achievedFps?.let { stringResource(R.string.raw_video_reduced_detail, it, detail) } ?: detail
 }
 
-/** The localized word that ends a compressed configuration's label ("4080×3060 · 30 fps · Compressed"). */
+/**
+ * The localized word that ends a compressed configuration's label ("4080×3060 · 30 fps · Compressed"),
+ * or "Near-lossless" when a block-pack configuration records near-lossless.
+ */
 @Composable
-internal fun rawCompressedWord(): String = stringResource(R.string.raw_video_label_compressed)
+internal fun rawCompressedWord(nearLossless: Boolean = false): String =
+    stringResource(if (nearLossless) R.string.raw_video_label_near_lossless else R.string.raw_video_label_compressed)
 
 /** [label] as the UI shows it: a compressed configuration's suffix in the user's language. */
 @Composable
-internal fun rawLocalizedLabel(label: String): String = rawConfigLabelLocalized(label, rawCompressedWord())
+internal fun rawLocalizedLabel(label: String, nearLossless: Boolean = false): String =
+    rawConfigLabelLocalized(label, rawCompressedWord(nearLossless))
+
+/**
+ * The option's localized label; with [nearLossless] (block-pack records near-lossless,
+ * [rawVideoNearLosslessActive]) a block-pack option ends in "Near-lossless".
+ */
+@Composable
+internal fun rawOptionBaseLabel(option: RawVideoConfigOption, nearLossless: Boolean = false): String =
+    rawLocalizedLabel(option.label, nearLossless && option.isBlockPack)
 
 /** The option's label, with the crop marker for a centre crop ("1920×1080 · 60 fps · crop"). */
 @Composable
-internal fun rawOptionLabel(option: RawVideoConfigOption): String = rawLocalizedLabel(option.label).let { label ->
-    if (option.isCrop) stringResource(R.string.raw_video_label_crop, label) else label
-}
+internal fun rawOptionLabel(option: RawVideoConfigOption, nearLossless: Boolean = false): String =
+    rawOptionBaseLabel(option, nearLossless).let { label ->
+        if (option.isCrop) stringResource(R.string.raw_video_label_crop, label) else label
+    }
 
 /** [rawOptionLabel] with the rate a reduced-rate option reaches ("4080×3060 · 60 fps · reaches 51.9 fps"). */
 @Composable
-internal fun rawOptionChoiceLabel(option: RawVideoConfigOption): String = rawOptionLabel(option).let { label ->
-    option.achievedFps?.let { stringResource(R.string.raw_video_reduced_label, label, it) } ?: label
-}
+internal fun rawOptionChoiceLabel(option: RawVideoConfigOption, nearLossless: Boolean = false): String =
+    rawOptionLabel(option, nearLossless).let { label ->
+        option.achievedFps?.let { stringResource(R.string.raw_video_reduced_label, label, it) } ?: label
+    }
 
 /** The spoken warning of a risky [option] ("4000×3000 · 60 fps, risky rate"); null when it is not risky. */
 @Composable
-internal fun rawOptionWarning(option: RawVideoConfigOption): String? =
-    if (option.isRisky) stringResource(R.string.raw_video_risky_label, rawOptionLabel(option)) else null
+internal fun rawOptionWarning(option: RawVideoConfigOption, nearLossless: Boolean = false): String? =
+    if (option.isRisky) stringResource(R.string.raw_video_risky_label, rawOptionLabel(option, nearLossless)) else null
 
 /**
  * A risky configuration's burst estimate as the warnings say it: whole minutes from a minute on
@@ -182,13 +215,14 @@ internal fun RawVideoConfigDial(
     val chosen = rawVideoChosenKey(settings.rawVideoConfig, options)
     val enabled = rawVideoConfigChangeAllowed(state)
     val free = state.availableStorageBytes
+    val nearLossless = rawVideoNearLosslessActive(state, settings)
     PanelColumn(Modifier.testTag("raw-video-config-panel")) {
         PanelHeader(stringResource(R.string.raw_video_config_title), onClose)
         val auto = options.firstOrNull { it.key == state.rawVideoAutoKey }
         ChoiceGrid(listOf(""), minTileWidth = 150.dp, maxColumns = 1) { _, modifier ->
             // Automatic never resolves to a risky or reduced-rate configuration; with only such ones it resolves to none.
             ChoiceTile(stringResource(R.string.raw_video_automatic), chosen.isEmpty(), modifier.testTag("raw-video-config-auto"),
-                enabled = enabled, detail = auto?.let { rawOptionLabel(it) } ?: stringResource(R.string.raw_video_automatic_detail)) {
+                enabled = enabled, detail = auto?.let { rawOptionLabel(it, nearLossless) } ?: stringResource(R.string.raw_video_automatic_detail)) {
                 onSelect(""); onClose()
             }
         }
@@ -197,8 +231,8 @@ internal fun RawVideoConfigDial(
             if (group.isEmpty()) return@forEach
             PanelSectionLabel(stringResource(title))
             ChoiceGrid(group, minTileWidth = 150.dp, maxColumns = 3) { option, modifier ->
-                ChoiceTile(rawLocalizedLabel(option.label), option.key == chosen, modifier.testTag("raw-video-config-${option.key}"), enabled = enabled,
-                    detail = rawOptionDetail(option, free), warning = rawOptionWarning(option)) {
+                ChoiceTile(rawOptionBaseLabel(option, nearLossless), option.key == chosen, modifier.testTag("raw-video-config-${option.key}"), enabled = enabled,
+                    detail = rawOptionDetail(option, free), warning = rawOptionWarning(option, nearLossless)) {
                     onSelect(option.key); onClose()
                 }
             }
@@ -217,31 +251,39 @@ internal fun RawVideoConfigDial(
  * qualified by choosing RAW video in the mode selector, a camera judged before again here ([onRequalify]).
  */
 @Composable
-internal fun RawVideoSettings(state: CameraUiState, settings: CameraSettings, onSelect: ((String) -> Unit)?, onRequalify: (() -> Unit)? = null) {
+internal fun RawVideoSettings(
+    state: CameraUiState,
+    settings: CameraSettings,
+    onSelect: ((String) -> Unit)?,
+    onRequalify: (() -> Unit)? = null,
+    onNearLosslessChange: ((Boolean) -> Unit)? = null,
+) {
     val gate = state.modeGates[CaptureMode.RAW_VIDEO]
     val title = stringResource(R.string.raw_video_config_title)
     Column(Modifier.fillMaxWidth().testTag("settings-raw-video"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (gate == ModeGateState.AVAILABLE && state.rawVideoOptions.isNotEmpty()) {
             val options = state.rawVideoOptions
             val active = rawVideoActiveOption(state)
+            val nearLossless = rawVideoNearLosslessActive(state, settings)
             val summary = active?.let { option ->
-                stringResource(R.string.raw_video_settings_active, rawOptionLabel(option), rawOptionDetail(option, state.availableStorageBytes))
+                stringResource(R.string.raw_video_settings_active, rawOptionLabel(option, nearLossless), rawOptionDetail(option, state.availableStorageBytes))
             }
             SettingsOptionRow(
                 title = title,
                 summary = summary,
                 choices = listOf("") + options.map { it.key },
                 selected = rawVideoChosenKey(settings.rawVideoConfig, options),
-                label = { key -> options.firstOrNull { it.key == key }?.let { rawOptionChoiceLabel(it) } ?: stringResource(R.string.raw_video_automatic) },
+                label = { key -> options.firstOrNull { it.key == key }?.let { rawOptionChoiceLabel(it, nearLossless) } ?: stringResource(R.string.raw_video_automatic) },
                 tag = { key -> "raw-video-option-${key.ifEmpty { "auto" }}" },
                 onSelect = { key -> onSelect?.invoke(key) },
                 enabled = onSelect != null && rawVideoConfigChangeAllowed(state),
-                choiceWarning = { key -> options.firstOrNull { it.key == key }?.let { rawOptionWarning(it) } },
+                choiceWarning = { key -> options.firstOrNull { it.key == key }?.let { rawOptionWarning(it, nearLossless) } },
             )
             if (options.any { it.isRisky }) {
                 Text(stringResource(R.string.raw_video_config_risk_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
                     modifier = Modifier.testTag("settings-raw-video-risk-hint"))
             }
+            if (rawCompressionChoiceOffered(state)) RawCompressionSetting(state, settings, onNearLosslessChange)
         } else {
             val reason = when (gate) {
                 ModeGateState.UNSUPPORTED -> R.string.raw_video_unsupported
@@ -263,6 +305,28 @@ internal fun RawVideoSettings(state: CameraUiState, settings: CameraSettings, on
                 modifier = Modifier.testTag("settings-raw-video-requalify-note"))
         }
         SettingsHelp(stringResource(R.string.raw_video_config_help_summary), stringResource(R.string.raw_video_config_help), tag = "raw-video-help")
+    }
+}
+
+/**
+ * Settings > Capture > RAW video: lossless or near-lossless for the block-pack configurations, offered
+ * only where near-lossless is available ([rawCompressionChoiceOffered]). Structural, like the
+ * configuration: it changes between takes.
+ */
+@Composable
+private fun RawCompressionSetting(state: CameraUiState, settings: CameraSettings, onChange: ((Boolean) -> Unit)?) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("settings-raw-compression")) {
+        SettingsOptionRow(
+            title = stringResource(R.string.raw_compression_title),
+            summary = stringResource(R.string.raw_compression_summary),
+            choices = listOf(false, true),
+            selected = settings.rawVideoNearLossless,
+            label = { near -> stringResource(if (near) R.string.raw_video_label_near_lossless else R.string.raw_compression_lossless) },
+            tag = { near -> if (near) "raw-compression-near-lossless" else "raw-compression-lossless" },
+            onSelect = { near -> onChange?.invoke(near) },
+            enabled = onChange != null && rawVideoConfigChangeAllowed(state),
+        )
+        SettingsHelp(stringResource(R.string.raw_compression_help_summary), stringResource(R.string.raw_compression_help), tag = "raw-compression-help")
     }
 }
 

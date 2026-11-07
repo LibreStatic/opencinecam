@@ -188,4 +188,26 @@ class RawVideoUiTest {
         assertEquals(96_000_000_000L * 1_000L / lj92.capacityBytesPerSecond, facts.timeLeftMs)
         assertTrue(facts.timeLeftMs!! > rawRecordTimeLeftMs(96_000_000_000L, full30.bytesPerSecond)!!)
     }
+
+    @Test fun nearLosslessAppliesOnlyToBlockPackWhereTheCameraAllowsIt() {
+        val bp = RawVideoConfigOption.of(com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 4080, 3060, 30, "bp"))
+        val lj92 = RawVideoConfigOption.of(com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 4080, 3060, 30, "lj92"))
+        assertTrue(bp.isBlockPack)
+        assertFalse(lj92.isBlockPack)
+        assertFalse(full30.isBlockPack)
+        val state = CameraUiState(selectedMode = CaptureMode.RAW_VIDEO, rawVideoOptions = listOf(full30, bp), rawVideoSelectedKey = bp.key,
+            rawVideoNearLosslessAvailable = true)
+        assertTrue(rawVideoNearLosslessActive(state, CameraSettings()))
+        assertFalse(rawVideoNearLosslessActive(state, CameraSettings(rawVideoNearLossless = false)))
+        assertFalse(rawVideoNearLosslessActive(state.copy(rawVideoNearLosslessAvailable = false), CameraSettings()))
+        // The choice is offered only with a block-pack option on a camera that allows near-lossless.
+        assertTrue(rawCompressionChoiceOffered(state))
+        assertFalse(rawCompressionChoiceOffered(state.copy(rawVideoNearLosslessAvailable = false)))
+        assertFalse(rawCompressionChoiceOffered(state.copy(rawVideoOptions = listOf(full30, lj92))))
+        // The status line knows the configuration is block-pack, so its label can read near-lossless.
+        assertTrue(rawVideoStatusFacts(state)!!.isBlockPack)
+        assertFalse(rawVideoStatusFacts(state.copy(rawVideoSelectedKey = "full@30"))!!.isBlockPack)
+        // Capacity stays conservative either way.
+        assertEquals(lj92.capacityBytesPerSecond, bp.capacityBytesPerSecond)
+    }
 }

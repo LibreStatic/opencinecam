@@ -32,4 +32,10 @@
     <string name="raw_video_burst_minutes">%1$d min</string>
     <string name="raw_video_burst_seconds">%1$d s</string>
     <string name="raw_video_risky_notice_burst">Risky rate: frames may drop after about %1$s (with a rested phone)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">RAW compression</string>
+    <string name="raw_compression_summary">For compressed configurations</string>
+    <string name="raw_compression_lossless">Lossless</string>
+    <string name="raw_video_label_near_lossless">Near-lossless</string>
+    <string name="raw_compression_help">Applies to compressed configurations. Lossless keeps every value the sensor delivered. Near-lossless merges values that differ by less than about half the sensor noise at the frame’s ISO, so the difference stays hidden in the noise and files shrink further, most in low light. Both open in the gallery, the CinemaDNG export and the desktop tools. The time left assumes the same conservative ratio for both.</string>
 </resources>
