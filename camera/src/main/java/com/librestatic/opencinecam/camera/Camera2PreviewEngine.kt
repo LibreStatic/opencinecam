@@ -2058,7 +2058,7 @@ class Camera2PreviewEngine(
             if (take == null) { image.close(); continue }
             val timestampNs = image.timestamp
             val outcome = try {
-                take.state.onFrame { take.consumer.onRawFrame(image) }
+                take.state.onFrame(timestampNs) { take.consumer.onRawFrame(image) }
             } finally {
                 image.close()
             }
@@ -2066,18 +2066,37 @@ class Camera2PreviewEngine(
                 is RawVideoTakeState.FrameOutcome.Delivered -> if (outcome.first) {
                     runCatching { take.stream.listener.onRawVideoFirstFrame(timestampNs) }
                 }
-                is RawVideoTakeState.FrameOutcome.Ended -> finishRawTake(take, outcome.ending)
+                is RawVideoTakeState.FrameOutcome.Ended -> settleRawTake(take, outcome.ending)
                 RawVideoTakeState.FrameOutcome.Discarded -> Unit
             }
         }
     }
 
-    /** RAW thread: ends [take] with [reason] unless it already ended. */
+    /**
+     * RAW thread: ends [take] with [reason] unless its ending is already decided; a stream failure or
+     * a consumer fault also cuts a pending result drain short (see [RawVideoTakeState]).
+     */
     private fun endRawTake(take: RawTake, reason: String?, streamFailure: Boolean) {
         val ending = take.state.end(reason, streamFailure) ?: return
-        finishRawTake(take, ending)
+        settleRawTake(take, ending)
     }
 
+    /**
+     * RAW thread: [take]'s ending was just decided. It finishes now, or, while it drains the results
+     * of its delivered frames, when [forwardRawResult] sees the last one or the drain times out.
+     * [take] stays in [rawTake] meanwhile, so no other take starts and no frame is taken.
+     */
+    private fun settleRawTake(take: RawTake, ending: RawTakeEnding) {
+        if (take.state.settled) {
+            finishRawTake(take, ending)
+            return
+        }
+        Log.i(TAG, "RAW take ending: reason=${ending.reason ?: "stop"} frames=${take.state.framesDelivered}; draining results")
+        // A no-op once the drain is over: drainTimedOut then returns null.
+        rawVideoHandler.postDelayed({ take.state.drainTimedOut()?.let { finishRawTake(take, it) } }, RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS)
+    }
+
+    /** RAW thread: [take] is over; called exactly once, when its state settled. The consumer hears nothing after. */
     private fun finishRawTake(take: RawTake, ending: RawTakeEnding) {
         rawTake.compareAndSet(take, null)
         Log.i(TAG, "RAW take ended: reason=${ending.reason ?: "stop"} frames=${take.state.framesDelivered}")
@@ -2088,16 +2107,32 @@ class Camera2PreviewEngine(
         runCatching { take.stream.listener.onRawVideoStopped(ending.reason) }
     }
 
-    /** cameraExecutor: hands a repeating-request result to the active take on the RAW thread. */
+    /**
+     * cameraExecutor: hands a repeating-request result to the take on the RAW thread, while it is
+     * active and, once it ended, while it drains the results of the frames it delivered; the result
+     * of its last frame (or a later one) finishes it.
+     */
     private fun forwardRawResult(result: TotalCaptureResult) {
         val take = rawTake.get() ?: return
         rawVideoHandler.post {
-            if (take.state.phase != RawVideoTakeState.Phase.ACTIVE || rawTake.get() !== take) return@post
-            try {
-                take.consumer.onRawResult(result)
-            } catch (failure: Exception) {
-                Log.w(TAG, "RAW consumer failed in onRawResult", failure)
-                endRawTake(take, RawVideoReasons.CONSUMER_FAILED, streamFailure = false)
+            if (rawTake.get() !== take) return@post
+            val sensorTimestampNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
+            when (val outcome = take.state.onResult(sensorTimestampNs)) {
+                RawVideoTakeState.ResultOutcome.Discarded -> Unit
+                is RawVideoTakeState.ResultOutcome.Finished -> finishRawTake(take, outcome.ending)
+                is RawVideoTakeState.ResultOutcome.Forward -> {
+                    val failed = try {
+                        take.consumer.onRawResult(result)
+                        false
+                    } catch (failure: Exception) {
+                        Log.w(TAG, "RAW consumer failed in onRawResult", failure)
+                        true
+                    }
+                    when {
+                        outcome.finish != null -> finishRawTake(take, outcome.finish)
+                        failed -> endRawTake(take, RawVideoReasons.CONSUMER_FAILED, streamFailure = false)
+                    }
+                }
             }
         }
     }
@@ -2116,7 +2151,9 @@ class Camera2PreviewEngine(
      * a take is already active or a video take records. On true the take is accepted: [consumer]
      * hears onRawTakeStarted and then every frame and result on the `occ-raw-video` thread, and the
      * take ends exactly once with [Camera2PreviewListener.onRawVideoStopped]; a stream failure is
-     * also told to [consumer] through onRawStreamFailed, before that.
+     * also told to [consumer] through onRawStreamFailed, before that. A take that ended while the
+     * camera keeps running (stop, full ring) first drains the results of its delivered frames, up to
+     * [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS]; until it stopped, this returns false.
      */
     fun startRawVideo(consumer: RawVideoFrameConsumer): Boolean {
         if (disposed.get() || recording) return false
@@ -2149,8 +2186,12 @@ class Camera2PreviewEngine(
 
     /**
      * Ends the active RAW take, if any; frames already queued before the stop still reach the
-     * consumer. Completion is [Camera2PreviewListener.onRawVideoStopped] with a null reason, after
-     * which the consumer gets no further call. The RAW stream keeps running for the next take.
+     * consumer, later ones do not. The capture results of the delivered frames still follow: the
+     * take completes once the last frame's result went through (or a later result shows it was
+     * lost, or [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS] passed), so its last frame keeps its metadata.
+     * Completion is [Camera2PreviewListener.onRawVideoStopped] with the take's reason (null for
+     * this stop), after which the consumer gets no further call. The RAW stream keeps running for
+     * the next take.
      */
     fun stopRawVideo() {
         val take = rawTake.get() ?: return
