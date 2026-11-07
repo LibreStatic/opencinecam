@@ -123,21 +123,44 @@ fun rawVideoGraphDecision(
 data class RawTakeEnding(val reason: String?, val notifyStreamFailure: Boolean)
 
 /**
+ * How long a take that ended while the camera keeps running waits for the capture results of the
+ * frames it already delivered ([RawVideoTakeState.Phase.DRAINING]). A result trails its image by a
+ * few milliseconds, so this only bounds a result that never comes.
+ */
+const val RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS = 500L
+
+/**
  * One RAW take's lifecycle, confined to the engine's RAW reader thread. A take is accepted
- * ([PENDING]), becomes [ACTIVE] once the consumer heard onRawTakeStarted, and ends exactly once
- * whichever path gets there first: the operator's stop, a full ring, a consumer fault, or the
- * stream failing. Frames outside [ACTIVE] are not the take's: the caller closes them unseen.
+ * ([PENDING]), becomes [ACTIVE] once the consumer heard onRawTakeStarted, and its ending is decided
+ * exactly once whichever path gets there first: the operator's stop, a full ring, a consumer fault,
+ * or the stream failing. Frames outside [ACTIVE] are not the take's: the caller closes them unseen.
+ *
+ * The capture result of a frame trails its image, so a take ended by the operator's stop or a full
+ * ring, while the camera keeps running, first [DRAINING]: no frame is taken any more, but results up
+ * to the last delivered frame's sensor timestamp still reach the consumer. The drain is over (the
+ * take [ENDED]) once that frame's result went through, a later result shows it was lost, or the
+ * caller's timeout ([RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS]) expires. A stream failure or a consumer
+ * fault ends at once, also cutting a drain short; no useful result follows them.
  */
 class RawVideoTakeState {
-    enum class Phase { PENDING, ACTIVE, ENDED }
+    enum class Phase { PENDING, ACTIVE, DRAINING, ENDED }
 
     sealed interface FrameOutcome {
         /** No active take: close the image. */
         data object Discarded : FrameOutcome
         /** The consumer took the frame; [first] for the take's first one. */
         data class Delivered(val first: Boolean) : FrameOutcome
-        /** The consumer refused or failed on the frame and the take ended with [ending]. */
+        /** The consumer refused or failed on the frame and the take's ending is [ending] (see [settled]). */
         data class Ended(val ending: RawTakeEnding) : FrameOutcome
+    }
+
+    sealed interface ResultOutcome {
+        /** Not the take's (before it began, after it ended, or past the drain): drop it. */
+        data object Discarded : ResultOutcome
+        /** Hand the result to the consumer; a non-null [finish] means the drain is over once it has. */
+        data class Forward(val finish: RawTakeEnding?) : ResultOutcome
+        /** The drain is over without this result, which is later than the last delivered frame. */
+        data class Finished(val ending: RawTakeEnding) : ResultOutcome
     }
 
     var phase = Phase.PENDING
@@ -146,6 +169,15 @@ class RawVideoTakeState {
         private set
     var ending: RawTakeEnding? = null
         private set
+    /** Sensor timestamp of the last frame handed to the consumer (kept or refused); null before any. */
+    var lastFrameTimestampNs: Long? = null
+        private set
+    /** Latest SENSOR_TIMESTAMP among the results forwarded so far; null before any. */
+    var lastResultTimestampNs: Long? = null
+        private set
+
+    /** True once the ending is decided and no drain is pending: the caller finishes the take. */
+    val settled: Boolean get() = phase == Phase.ENDED
 
     /** PENDING to ACTIVE; false when the take already ended (or began). */
     fun begin(): Boolean {
@@ -154,23 +186,71 @@ class RawVideoTakeState {
         return true
     }
 
-    /** Offers one frame; [deliver] runs only while ACTIVE and returns the consumer's answer. */
-    fun onFrame(deliver: () -> Boolean): FrameOutcome {
+    /**
+     * Offers one frame, sensor timestamp [timestampNs]; [deliver] runs only while ACTIVE and returns
+     * the consumer's answer.
+     */
+    fun onFrame(timestampNs: Long, deliver: () -> Boolean): FrameOutcome {
         if (phase != Phase.ACTIVE) return FrameOutcome.Discarded
         val accepted = try {
             deliver()
         } catch (_: Exception) {
             return FrameOutcome.Ended(requireNotNull(end(RawVideoReasons.CONSUMER_FAILED, streamFailure = false)))
         }
+        // A refused frame may still be in the consumer's ring (it ends the take at its high water), so its result counts.
+        lastFrameTimestampNs = timestampNs
         if (!accepted) return FrameOutcome.Ended(requireNotNull(end(RawVideoReasons.RING_FULL, streamFailure = false)))
         framesDelivered++
         return FrameOutcome.Delivered(first = framesDelivered == 1L)
     }
 
-    /** Ends the take; returns how, or null when it had already ended (every later path is a no-op). */
+    /** Offers one capture result whose SENSOR_TIMESTAMP is [sensorTimestampNs] (null when it has none). */
+    fun onResult(sensorTimestampNs: Long?): ResultOutcome = when (phase) {
+        Phase.PENDING, Phase.ENDED -> ResultOutcome.Discarded
+        Phase.ACTIVE -> {
+            if (sensorTimestampNs != null) lastResultTimestampNs = maxOf(lastResultTimestampNs ?: sensorTimestampNs, sensorTimestampNs)
+            ResultOutcome.Forward(finish = null)
+        }
+        Phase.DRAINING -> {
+            val last = requireNotNull(lastFrameTimestampNs)
+            when {
+                sensorTimestampNs == null -> ResultOutcome.Discarded
+                sensorTimestampNs < last -> ResultOutcome.Forward(finish = null)
+                sensorTimestampNs == last -> ResultOutcome.Forward(finish = settle())
+                else -> ResultOutcome.Finished(settle())
+            }
+        }
+    }
+
+    /** The caller's drain timeout expired: the ending when this ends the drain, null when it was already over. */
+    fun drainTimedOut(): RawTakeEnding? = if (phase == Phase.DRAINING) settle() else null
+
+    /**
+     * Decides the take's ending; returns it, or null when it was already decided (every later path is
+     * a no-op). The take is [settled] at once unless it is [Phase.DRAINING] for the last frame's
+     * result. During a drain a stream failure or a consumer fault ends it now and returns the ending
+     * first decided; another stop is a no-op.
+     */
     fun end(reason: String?, streamFailure: Boolean): RawTakeEnding? {
-        if (phase == Phase.ENDED) return null
-        phase = Phase.ENDED
+        val drains = drains(reason, streamFailure)
+        when (phase) {
+            Phase.ENDED -> return null
+            Phase.DRAINING -> return if (drains) null else settle()
+            Phase.PENDING, Phase.ACTIVE -> Unit
+        }
+        val awaiting = phase == Phase.ACTIVE && drains && lastFrameTimestampNs.let { last ->
+            last != null && (lastResultTimestampNs ?: Long.MIN_VALUE) < last
+        }
+        phase = if (awaiting) Phase.DRAINING else Phase.ENDED
         return RawTakeEnding(reason, streamFailure && reason != null).also { ending = it }
     }
+
+    private fun settle(): RawTakeEnding {
+        phase = Phase.ENDED
+        return requireNotNull(ending)
+    }
+
+    /** The camera keeps running and the consumer stays sound, so the last frames' results still come. */
+    private fun drains(reason: String?, streamFailure: Boolean): Boolean =
+        !(streamFailure && reason != null) && reason != RawVideoReasons.CONSUMER_FAILED
 }

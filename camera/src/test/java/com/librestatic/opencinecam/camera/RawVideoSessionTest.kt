@@ -103,33 +103,37 @@ class RawVideoSessionTest {
     @Test fun framesBeforeTheTakeBeginsAreDiscarded() {
         val take = RawVideoTakeState()
         var calls = 0
-        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame { calls++; true })
+        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame(1L) { calls++; true })
         assertEquals(0, calls)
     }
 
     @Test fun deliveredFramesMarkOnlyTheFirst() {
         val take = RawVideoTakeState()
         assertTrue(take.begin())
-        assertEquals(RawVideoTakeState.FrameOutcome.Delivered(first = true), take.onFrame { true })
-        assertEquals(RawVideoTakeState.FrameOutcome.Delivered(first = false), take.onFrame { true })
+        assertEquals(RawVideoTakeState.FrameOutcome.Delivered(first = true), take.onFrame(1L) { true })
+        assertEquals(RawVideoTakeState.FrameOutcome.Delivered(first = false), take.onFrame(2L) { true })
         assertEquals(2L, take.framesDelivered)
     }
 
     @Test fun aRefusedFrameEndsTheTakeAsRingFullWithoutAStreamFailure() {
         val take = RawVideoTakeState()
         take.begin()
-        val outcome = take.onFrame { false }
+        val outcome = take.onFrame(1L) { false }
         assertEquals(RawVideoTakeState.FrameOutcome.Ended(RawTakeEnding(RawVideoReasons.RING_FULL, false)), outcome)
-        assertEquals(RawVideoTakeState.Phase.ENDED, take.phase)
+        // The refused frame may sit in the ring, so its result is awaited.
+        assertEquals(RawVideoTakeState.Phase.DRAINING, take.phase)
         // Every later frame is closed unseen, and no other path ends it again.
-        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame { error("not delivered") })
+        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame(2L) { error("not delivered") })
+        assertNull(take.end(null, streamFailure = false))
+        assertEquals(RawVideoTakeState.ResultOutcome.Forward(RawTakeEnding(RawVideoReasons.RING_FULL, false)), take.onResult(1L))
+        assertTrue(take.settled)
         assertNull(take.end(RawVideoReasons.SESSION_CLOSED, streamFailure = true))
     }
 
     @Test fun aThrowingConsumerEndsTheTake() {
         val take = RawVideoTakeState()
         take.begin()
-        val outcome = take.onFrame { throw IllegalStateException("copy failed") }
+        val outcome = take.onFrame(1L) { throw IllegalStateException("copy failed") }
         assertEquals(RawVideoTakeState.FrameOutcome.Ended(RawTakeEnding(RawVideoReasons.CONSUMER_FAILED, false)), outcome)
         assertEquals(0L, take.framesDelivered)
     }
@@ -153,6 +157,98 @@ class RawVideoSessionTest {
         val take = RawVideoTakeState()
         assertEquals(RawTakeEnding(RawVideoReasons.SESSION_CLOSED, true), take.end(RawVideoReasons.SESSION_CLOSED, streamFailure = true))
         assertFalse(take.begin())
-        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame { true })
+        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame(1L) { true })
+    }
+
+
+    private fun takeWithFrames(vararg timestamps: Long) = RawVideoTakeState().apply {
+        begin()
+        timestamps.forEach { onFrame(it) { true } }
+    }
+
+    @Test fun theStopDrainsTheResultsOfDeliveredFramesUpToTheLast() {
+        val take = takeWithFrames(100L, 200L, 300L)
+        assertEquals(300L, take.lastFrameTimestampNs)
+        assertEquals(RawVideoTakeState.ResultOutcome.Forward(null), take.onResult(100L))
+        assertEquals(RawTakeEnding(null, false), take.end(null, streamFailure = false))
+        assertEquals(RawVideoTakeState.Phase.DRAINING, take.phase)
+        assertFalse(take.settled)
+        // No frame is taken any more, but the trailing results still go to the consumer.
+        assertEquals(RawVideoTakeState.FrameOutcome.Discarded, take.onFrame(400L) { error("not delivered") })
+        assertEquals(RawVideoTakeState.ResultOutcome.Forward(null), take.onResult(200L))
+        assertEquals(RawVideoTakeState.ResultOutcome.Discarded, take.onResult(null))
+        // The last frame's result is forwarded and ends the drain.
+        assertEquals(RawVideoTakeState.ResultOutcome.Forward(RawTakeEnding(null, false)), take.onResult(300L))
+        assertTrue(take.settled)
+        assertEquals(RawVideoTakeState.ResultOutcome.Discarded, take.onResult(400L))
+        assertNull(take.drainTimedOut())
+        assertNull(take.end(null, streamFailure = false))
+    }
+
+    @Test fun aLaterResultEndsTheDrainWhenTheLastOneWasLost() {
+        val take = takeWithFrames(100L, 200L)
+        take.end(null, streamFailure = false)
+        assertEquals(RawVideoTakeState.ResultOutcome.Finished(RawTakeEnding(null, false)), take.onResult(233L))
+        assertTrue(take.settled)
+        assertEquals(RawVideoTakeState.ResultOutcome.Discarded, take.onResult(200L))
+    }
+
+    @Test fun theTimeoutEndsADrainExactlyOnce() {
+        val take = takeWithFrames(100L)
+        take.end(null, streamFailure = false)
+        assertEquals(RawTakeEnding(null, false), take.drainTimedOut())
+        assertTrue(take.settled)
+        assertNull(take.drainTimedOut())
+        assertEquals(RawVideoTakeState.ResultOutcome.Discarded, take.onResult(100L))
+    }
+
+    @Test fun aTakeWithoutFramesEndsAtOnce() {
+        val take = RawVideoTakeState()
+        take.begin()
+        assertEquals(RawVideoTakeState.ResultOutcome.Forward(null), take.onResult(50L))
+        assertEquals(RawTakeEnding(null, false), take.end(null, streamFailure = false))
+        assertTrue(take.settled)
+        assertNull(take.drainTimedOut())
+    }
+
+    @Test fun aStopAfterTheLastResultAlreadyCameEndsAtOnce() {
+        val take = takeWithFrames(100L, 200L)
+        take.onResult(200L)
+        take.end(null, streamFailure = false)
+        assertTrue(take.settled)
+    }
+
+    @Test fun aStreamFailureEndsAtOnceWithoutDraining() {
+        val take = takeWithFrames(100L)
+        assertEquals(RawTakeEnding(RawVideoReasons.CAMERA_ERROR, true), take.end(RawVideoReasons.CAMERA_ERROR, streamFailure = true))
+        assertTrue(take.settled)
+        assertEquals(RawVideoTakeState.ResultOutcome.Discarded, take.onResult(100L))
+    }
+
+    @Test fun aConsumerFaultEndsAtOnceWithoutDraining() {
+        val take = takeWithFrames(100L)
+        assertEquals(RawVideoTakeState.FrameOutcome.Ended(RawTakeEnding(RawVideoReasons.CONSUMER_FAILED, false)),
+            take.onFrame(200L) { throw IllegalStateException("copy failed") })
+        assertTrue(take.settled)
+        assertEquals(100L, take.lastFrameTimestampNs)
+    }
+
+    @Test fun aStreamFailureCutsADrainShortWithTheFirstEnding() {
+        val take = takeWithFrames(100L)
+        take.end(null, streamFailure = false)
+        // A second stop while draining changes nothing.
+        assertNull(take.end(null, streamFailure = false))
+        assertFalse(take.settled)
+        assertEquals(RawTakeEnding(null, false), take.end(RawVideoReasons.SESSION_CLOSED, streamFailure = true))
+        assertTrue(take.settled)
+        assertNull(take.drainTimedOut())
+        assertNull(take.end(RawVideoReasons.CAMERA_DISCONNECTED, streamFailure = true))
+    }
+
+    @Test fun aConsumerFaultCutsADrainShort() {
+        val take = takeWithFrames(100L, 200L)
+        take.end(null, streamFailure = false)
+        assertEquals(RawTakeEnding(null, false), take.end(RawVideoReasons.CONSUMER_FAILED, streamFailure = false))
+        assertTrue(take.settled)
     }
 }
