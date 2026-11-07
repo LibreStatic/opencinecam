@@ -31,9 +31,13 @@ class WebDavServerEndToEndTest {
     private val dng0 = "/$take/${take}_000000.dng"
     private val servers = mutableListOf<WebDavServer>()
 
-    private fun server(limits: ShareServerLimits = ShareServerLimits(), takes: () -> List<ShareTake> = { listOf(ShareFixture.take()) }): WebDavServer {
+    private fun server(
+        limits: ShareServerLimits = ShareServerLimits(),
+        takes: () -> List<ShareTake> = { listOf(ShareFixture.take()) },
+        includeOriginal: () -> Boolean = { true },
+    ): WebDavServer {
         val clock = ShareClock.MONOTONIC
-        val server = WebDavServer(ShareTree(takes, clock), DigestAuthenticator(ShareCredentials("occ", password), clock), clock, limits)
+        val server = WebDavServer(ShareTree(takes, clock, includeOriginal = includeOriginal), DigestAuthenticator(ShareCredentials("occ", password), clock), clock, limits)
         val port = NetworkShareSessionTest.freePort()
         server.bind(listOf(loopback), port..port)
         servers += server
@@ -135,6 +139,37 @@ class WebDavServerEndToEndTest {
             val one = c.send("PROPFIND", dng0, mapOf("Depth" to "1"))
             assertEquals(listOf(dng0), responses(one.text).map { it.first })
             assertEquals(207, c.send("PROPFIND", "/$take", mapOf("Depth" to "0")).status)
+        }
+    }
+
+    @Test
+    fun theOriginalIsServedOnlyWhileShown() {
+        var show = false
+        val server = server(includeOriginal = { show })
+        val original = "/$take/$take.ocraw"
+        client(server).use { c ->
+            val hidden = responses(c.request("PROPFIND", "/$take/", mapOf("Depth" to "1")).text).map { it.first }
+            assertTrue(hidden.toString(), hidden.none { it.endsWith(".ocraw") })
+            assertTrue(hidden.toString(), "/$take/$take.wav" in hidden && dng0 in hidden)
+            assertEquals(404, c.send("GET", original).status)
+            assertEquals(404, c.send("HEAD", original).status)
+            assertEquals(404, c.send("GET", original, mapOf("Range" to "bytes=0-9")).status)
+            assertEquals(404, c.send("PROPFIND", original, mapOf("Depth" to "0")).status)
+            assertEquals(200, c.send("GET", dng0).status)
+
+            // Turned on while the server runs: the next requests see it.
+            show = true
+            val shown = responses(c.send("PROPFIND", "/$take/", mapOf("Depth" to "1")).text)
+            assertEquals(ShareFixture.ocraw.length(), shown.single { it.first == original }.second)
+            val get = c.send("GET", original)
+            assertEquals(200, get.status)
+            assertArrayEquals(ShareFixture.ocraw.readBytes(), get.body)
+            val part = c.send("GET", original, mapOf("Range" to "bytes=0-9"))
+            assertEquals(206, part.status)
+            assertArrayEquals(ShareFixture.ocraw.readBytes().copyOfRange(0, 10), part.body)
+
+            show = false
+            assertEquals(404, c.send("GET", original).status)
         }
     }
 

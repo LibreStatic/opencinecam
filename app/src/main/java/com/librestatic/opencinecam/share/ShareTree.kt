@@ -50,7 +50,7 @@ internal sealed interface ShareNode {
 /** `/` (empty [name]) or `/<take>/`. */
 internal class ShareCollection(override val name: String, override val modifiedMs: Long, val take: ShareTake?) : ShareNode
 
-/** A file of a take folder: a DNG frame, the WAV or the original `.ocraw`. */
+/** A file of a take folder: a DNG frame, the WAV or (when shown) the original `.ocraw`. */
 internal class ShareFile(
     override val name: String,
     override val modifiedMs: Long,
@@ -78,7 +78,12 @@ internal fun interface ShareContent {
  * - `/<take>/` holds `<take>_000000.dng …` (convertible frames only, generated on the fly by
  *   [CinemaDngWriter]; RAW10 becomes uncompressed and LJ92 passes through), `<take>.wav`
  *   when the take has sound ([OcrawWavWriter], a corrupt chunk as silence so the size holds),
- *   and the original `<take>.ocraw`.
+ *   and the original `<take>.ocraw` only while [includeOriginal] says so.
+ *
+ * [includeOriginal] is read on every listing and lookup, so the operator's choice applies to the
+ * next request without a restart; the cached index always holds the original and only the view
+ * filters it. Hidden, the original is a plain miss (404), GET and HEAD included. It is hidden
+ * by default because it is as large as the take and Windows Explorer cannot copy past 4 GB.
  *
  * Names resolve by exact lookup in maps built from the catalog (NFC-normalised); a request
  * never builds a filesystem path. The take list is cached for [listTtlMs]; per-take indexes
@@ -91,11 +96,15 @@ internal class ShareTree(
     private val listTtlMs: Long = 3_000,
     private val indexCacheSize: Int = 4,
     private val failureTtlMs: Long = FAILURE_TTL_MS,
+    private val includeOriginal: () -> Boolean = { false },
 ) {
     private class Listing(val atMs: Long, val byName: Map<String, ShareTake>, val ordered: List<ShareTake>)
 
-    /** A take's indexed contents; [files] in listing order, by NFC name in [byName]. */
-    private class TakeContents(val files: List<ShareFile>, val byName: Map<String, ShareFile>)
+    /**
+     * A take's indexed contents; [files] (DNG frames and WAV) in listing order, by NFC name in
+     * [byName]; the [original] apart, so the view can leave it out.
+     */
+    private class TakeContents(val files: List<ShareFile>, val byName: Map<String, ShareFile>, val original: ShareFile, val originalName: String)
 
     private val lock = Any()
     private var listing: Listing? = null
@@ -115,7 +124,10 @@ internal class ShareTree(
     fun takeFolders(): List<ShareCollection> = listing().ordered.map { ShareCollection(it.stem, it.modifiedMs, it) }
 
     /** The files of [take]'s folder; indexes the take on first use. */
-    fun files(take: ShareTake): List<ShareFile> = contentsOf(take).files
+    fun files(take: ShareTake): List<ShareFile> {
+        val contents = contentsOf(take)
+        return if (includeOriginal()) contents.files + contents.original else contents.files
+    }
 
     /** The node at [path], or null when the tree has no such name. */
     fun resolve(path: SharePath): ShareNode? {
@@ -126,7 +138,12 @@ internal class ShareTree(
         if (segments.size > 2) return null
         // Probes for desktop.ini, .DS_Store, ._* and the like miss here without indexing anything.
         if (!looksLikeTakeFile(take.stem, segments[1])) return null
-        return contentsOf(take).byName[segments[1]]
+        val showOriginal = includeOriginal()
+        // A hidden original misses without indexing the take.
+        if (!showOriginal && segments[1].endsWith(OCRAW_EXTENSION, ignoreCase = true)) return null
+        val contents = contentsOf(take)
+        if (segments[1] == contents.originalName) return if (showOriginal) contents.original else null
+        return contents.byName[segments[1]]
     }
 
     private fun looksLikeTakeFile(stem: String, name: String): Boolean {
@@ -214,9 +231,9 @@ internal class ShareTree(
                     WavContent(take, index))
             }
         }
-        files += ShareFile(take.fileName, take.modifiedMs, take.size, OCRAW_TYPE, etag(tag, take, -2, take.size), OriginalContent(take))
+        val original = ShareFile(take.fileName, take.modifiedMs, take.size, OCRAW_TYPE, etag(tag, take, -2, take.size), OriginalContent(take))
         val byName = files.associateBy { Normalizer.normalize(it.name, Normalizer.Form.NFC) }
-        return TakeContents(files, byName)
+        return TakeContents(files, byName, original, Normalizer.normalize(take.fileName, Normalizer.Form.NFC))
     }
 
     private fun etag(tag: String, take: ShareTake, part: Long, size: Long) =

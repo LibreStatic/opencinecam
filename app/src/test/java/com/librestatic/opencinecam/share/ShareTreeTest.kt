@@ -19,7 +19,8 @@ class ShareTreeTest {
     private val clock = ManualClock()
     private var calls = 0
     private var takes = listOf(ShareFixture.take())
-    private val tree = ShareTree({ calls++; takes }, clock)
+    private var showOriginal = true
+    private val tree = ShareTree({ calls++; takes }, clock, includeOriginal = { showOriginal })
 
     @Before
     fun fixturePresent() {
@@ -58,6 +59,46 @@ class ShareTreeTest {
         assertEquals(listOf("A001_C001.wav", "A001_C001.ocraw"), names.takeLast(2))
         assertEquals(ShareFixture.ocraw.length(), tree.files(take).last().size)
         assertEquals(ShareTree.DNG_TYPE, tree.files(take).first().contentType)
+    }
+
+    @Test
+    fun theOriginalIsHiddenByDefault() {
+        val plain = ShareTree({ takes }, clock)
+        val take = plain.takeFolders().single().take!!
+        val names = plain.files(take).map { it.name }
+        assertTrue(names.toString(), names.none { it.endsWith(".ocraw") })
+        assertEquals("A001_C001.wav", names.last())
+        assertNull(plain.resolve(path(ShareFixture.TAKE, "A001_C001.ocraw")))
+        assertNotNull(plain.resolve(path(ShareFixture.TAKE, "A001_C001.wav")))
+        assertNotNull(plain.resolve(path(ShareFixture.TAKE, "A001_C001_000000.dng")))
+    }
+
+    @Test
+    fun aHiddenOriginalMissesWithoutIndexingTheTake() {
+        showOriginal = false
+        val before = ShareFixture.opened.get()
+        assertNull(tree.resolve(path(ShareFixture.TAKE, "A001_C001.ocraw")))
+        assertEquals(before, ShareFixture.opened.get())
+    }
+
+    @Test
+    fun theOriginalFollowsTheSwitchOnEveryCallWithoutIndexingAgain() {
+        val take = tree.takeFolders().single().take!!
+        val withOriginal = tree.files(take).map { it.name }
+        val opened = ShareFixture.opened.get()
+
+        showOriginal = false
+        val without = tree.files(take).map { it.name }
+        assertEquals(withOriginal.dropLast(1), without)
+        assertNull(tree.resolve(path(ShareFixture.TAKE, "A001_C001.ocraw")))
+
+        showOriginal = true
+        assertEquals(withOriginal, tree.files(take).map { it.name })
+        val original = tree.resolve(path(ShareFixture.TAKE, "A001_C001.ocraw")) as ShareFile
+        assertEquals(ShareFixture.ocraw.length(), original.size)
+        // The cached index serves both views: flipping the switch never reopens the take.
+        assertEquals(opened, ShareFixture.opened.get())
+        assertArrayEquals(ShareFixture.ocraw.readBytes(), bytes(original))
     }
 
     @Test

@@ -31,6 +31,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,10 +60,13 @@ internal fun NetworkDriveScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val state by NetworkShare.state.collectAsState()
     val takeActive by NetworkShare.takeActive.collectAsState()
+    val showOriginals by remember(context) { NetworkShare.showOriginals(context) }.collectAsState()
     NetworkDriveContent(
         state = state,
         takeActive = takeActive,
+        showOriginals = showOriginals,
         onEnabledChange = { on -> if (on) NetworkShare.start(context) else NetworkShare.stop(context) },
+        onShowOriginalsChange = { NetworkShare.setShowOriginals(context, it) },
         onCopy = { label, text, sensitive -> copyToClipboard(context, label, text, sensitive) },
         onBack = onBack,
     )
@@ -70,8 +74,10 @@ internal fun NetworkDriveScreen(onBack: () -> Unit) {
 
 /**
  * The Network drive page (OCC-PLAN-071 §8, route 3): the switch and its state, each address
- * with the user and password to copy, how to connect from each desktop, and the notes that
- * matter (copy before editing, the automatic stop, Windows' 50 MB limit). Stateless apart from
+ * with the user and password to copy, how to connect from each desktop, whether the take
+ * folders show the original `.ocraw` (off by default: Windows Explorer cannot copy past 4 GB),
+ * and the notes that matter (Windows' 50 MB default and 4 GB ceiling, copy before editing, the
+ * automatic stop). Stateless apart from
  * the password's reveal toggle (hidden by default, [initialPasswordRevealed] for previews), so
  * Compose Driver renders it with fake state. While the share runs, the window is FLAG_SECURE:
  * no screenshots, no recents thumbnail, nothing on a cast or recorded screen.
@@ -80,7 +86,9 @@ internal fun NetworkDriveScreen(onBack: () -> Unit) {
 internal fun NetworkDriveContent(
     state: NetworkShareState,
     takeActive: Boolean,
+    showOriginals: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onShowOriginalsChange: (Boolean) -> Unit,
     onCopy: (label: String, text: String, sensitive: Boolean) -> Unit,
     onBack: () -> Unit,
     initialPasswordRevealed: Boolean = false,
@@ -133,6 +141,15 @@ internal fun NetworkDriveContent(
                     Text(stringResource(R.string.network_share_connect_macos), color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, modifier = Modifier.testTag("network-drive-macos"))
                     Text(stringResource(R.string.network_share_connect_linux, example?.replaceFirst("http://", "dav://") ?: "dav://…:8642/"),
                         color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, modifier = Modifier.testTag("network-drive-linux"))
+                }
+            }
+            item(key = "originals") {
+                // Applies to a running drive on its next request, so it stays enabled either way.
+                SettingsCard {
+                    SettingsSwitchRow(stringResource(R.string.network_share_show_originals), showOriginals, onShowOriginalsChange,
+                        "network-drive-show-originals")
+                    SettingsHelp(stringResource(R.string.network_share_show_originals_help_summary), stringResource(R.string.network_share_show_originals_help),
+                        tag = "network-drive-show-originals-help")
                 }
             }
             item(key = "notes") {

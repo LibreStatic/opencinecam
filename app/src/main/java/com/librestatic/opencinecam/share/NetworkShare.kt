@@ -13,11 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * The process-wide face of the network drive: its [state] for the screen, the take activity
  * the capture service reports ([reportTakeActive]) so the drive never runs while recording,
- * and [start]/[stop], which go through [NetworkShareService].
+ * [start]/[stop], which go through [NetworkShareService], and the operator's choice to
+ * [showOriginals] in the take folders.
  */
 object NetworkShare {
     private val mutableState = MutableStateFlow<NetworkShareState>(NetworkShareState.Stopped())
     private val mutableTakeActive = MutableStateFlow(false)
+    private val mutableShowOriginals = MutableStateFlow(false)
+    @Volatile private var showOriginalsLoaded = false
 
     val state: StateFlow<NetworkShareState> = mutableState.asStateFlow()
 
@@ -28,6 +31,36 @@ object NetworkShare {
     fun reportTakeActive(active: Boolean) {
         mutableTakeActive.value = active
     }
+
+    /**
+     * Whether each take folder also lists the original `.ocraw`. Off by default: the DNG frames
+     * and the WAV are what an editor needs, and the original, as large as the take, is beyond
+     * the 4 GB Windows Explorer can copy. Persisted; read live by the running share.
+     */
+    fun showOriginals(context: Context): StateFlow<Boolean> {
+        loadShowOriginals(context)
+        return mutableShowOriginals.asStateFlow()
+    }
+
+    fun setShowOriginals(context: Context, show: Boolean) {
+        loadShowOriginals(context)
+        preferences(context).edit().putBoolean(KEY_SHOW_ORIGINALS, show).apply()
+        mutableShowOriginals.value = show
+    }
+
+    private fun loadShowOriginals(context: Context) {
+        if (showOriginalsLoaded) return
+        synchronized(this) {
+            if (showOriginalsLoaded) return
+            mutableShowOriginals.value = preferences(context).getBoolean(KEY_SHOW_ORIGINALS, false)
+            showOriginalsLoaded = true
+        }
+    }
+
+    private fun preferences(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private const val PREFS = "network-share"
+    private const val KEY_SHOW_ORIGINALS = "show-originals"
 
     internal fun publish(next: NetworkShareState) {
         mutableState.value = next

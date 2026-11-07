@@ -227,6 +227,7 @@ RAW takes record sound when the operator has audio on, and the player plays it.
    - **Security:**
      - It is off by default.
      - It binds only to private interfaces: Wi-Fi LAN and the USB tethering or hotspot address, never cellular.
+     *Original hidden by default (2026-11-05).* The original `.ocraw` is listed only when *Show original .ocraw files* is on in the Network drive page (a share-owned preference, off by default, read on every request). Windows' WebDAV client cannot copy a file over 4 GB (its `FileSizeLimitInBytes` is a DWORD; error 0x800700DF), a RAW take's original is far larger (14 GB for 32 s), and the DNG frames and the WAV are all an editor needs. Hidden, it is a 404; the page points to USB or WinSCP, Cyberduck or rclone.
      - Every request needs a random per-session password over HTTP Digest (MD5, qop=auth: Windows' WebDAV client refuses Basic over plain HTTP), user `occ`, shown with the URL on screen; repeated failures lock the client IP out for 30 s.
      - It is read-only: PROPFIND, GET, HEAD and OPTIONS. Anything else gets 405, and the paths are confined to the virtual tree.
      - It stops when the operator closes it, after 15 idle minutes, or when the phone leaves the network.
