@@ -494,6 +494,67 @@ class OcrawToDngTest(unittest.TestCase):
         self.assertNotIn(33434, exif)
         self.assertNotIn(34855, exif)
 
+    def convert_partial(self, metas: list[dict[str, str] | None]) -> list[tuple[dict, dict]]:
+        """A take with one frame per entry, a None entry having no FRAME_METADATA record; returns each DNG's IFDs."""
+        writer = TakeWriter()
+        writer.append(ocraw.METADATA, cbor_text_map(STATIC))
+        for index, meta in enumerate(metas):
+            sequence = writer.append(ocraw.RAW_FRAME, frame_payload(frame_pixels(index, WIDTH * HEIGHT), WIDTH,
+                                                                    HEIGHT, 1000 + index))
+            if meta is not None:
+                writer.append(ocraw.FRAME_METADATA, cbor_text_map({"sequence": str(sequence), **meta}))
+        writer.append(ocraw.END, b"")
+        code, _ = run_cli([str(self.write(bytes(writer.data))), "-o", str(self.tmp / "out")])
+        self.assertEqual(0, code)
+        return [read_dng(self.tmp / "out" / f"take_{index:06d}.dng")[:2] for index in range(len(metas))]
+
+    def test_last_frame_without_metadata_inherits_the_previous_colour(self):
+        first = {"exposureNs": "10000000", "iso": "400", "neutral": "1/2 1/1 3/4",
+                 "dynamicBlackLevel": "64.5 64 64 64", "whiteLevel": "1000"}
+        second = {"exposureNs": "20000000", "iso": "800", "neutral": "1/3 1/1 2/3",
+                  "dynamicBlackLevel": "63 63 65 65", "whiteLevel": "1010"}
+        dngs = self.convert_partial([first, second, None])
+        ifd0, exif = dngs[2]
+        self.assertEqual(dngs[1][0][50728], ifd0[50728])
+        self.assertEqual(ratios("1/3 1/1 2/3"), ifd0[50728])
+        self.assertEqual(dngs[1][0][50714], ifd0[50714])
+        self.assertEqual([1010], ifd0[50717])
+        self.assertNotIn(33434, exif)
+        self.assertNotIn(34855, exif)
+
+    def test_first_frame_without_metadata_inherits_the_next_colour(self):
+        later = {"exposureNs": "10000000", "iso": "400", "neutral": "1/2 1/1 3/4", "blackLevel": "60 62 63 66"}
+        dngs = self.convert_partial([None, later, {"neutral": "1/3 1/1 2/3"}])
+        ifd0, exif = dngs[0]
+        self.assertEqual(ratios("1/2 1/1 3/4"), ifd0[50728])
+        self.assertEqual(dngs[1][0][50714], ifd0[50714])
+        self.assertEqual([1023], ifd0[50717])
+        self.assertNotIn(33434, exif)
+        self.assertNotIn(34855, exif)
+
+    def test_take_without_any_frame_metadata_is_unchanged(self):
+        dngs = self.convert_partial([None, None])
+        for ifd0, exif in dngs:
+            self.assertNotIn(50728, ifd0)
+            self.assertEqual([1023], ifd0[50717])
+            self.assertNotIn(33434, exif)
+
+    def test_inherit_colour_takes_each_group_from_its_nearest_record(self):
+        meta = {
+            10: {"neutral": "1/2 1/1 3/4", "iso": "100"},
+            11: {"dynamicBlackLevel": "64 64 64 64", "whiteLevel": "1000", "neutral": ""},
+            14: {"neutral": "1/3 1/1 2/3", "blackLevel": "60 60 60 60"},
+        }
+        inherited = to_dng.inherit_colour([9, 10, 11, 12, 13, 14], meta)
+        self.assertEqual({9, 12, 13}, set(inherited))
+        self.assertEqual({"neutral": "1/2 1/1 3/4", "dynamicBlackLevel": "64 64 64 64", "whiteLevel": "1000"},
+                         inherited[9])
+        self.assertEqual({"neutral": "1/2 1/1 3/4", "dynamicBlackLevel": "64 64 64 64", "whiteLevel": "1000"},
+                         inherited[12])
+        self.assertEqual(inherited[12], inherited[13])
+        self.assertEqual({}, to_dng.inherit_colour([1, 2], {}))
+        self.assertEqual({}, to_dng.inherit_colour([1], {1: {"neutral": "1/1 1/1 1/1"}}))
+
 
 class EncodedFramesTest(unittest.TestCase):
     """Encodings 1 (LJ92) and 2 (block-pack), with fixtures from the reference C++ codec."""

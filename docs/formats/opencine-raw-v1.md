@@ -163,6 +163,12 @@ Other keys, all optional:
 | `dynamicBlackLevel` | `SENSOR_DYNAMIC_BLACK_LEVEL`, 4 decimals in CFA order, space-separated; overrides the static `blackLevel` for this frame |
 | `whiteLevel` | `SENSOR_DYNAMIC_WHITE_LEVEL`, integer; overrides the static `whiteLevel` for this frame |
 
+A frame with no `FRAME_METADATA` (older takes lost the last frame's) inherits only its
+colour values from the nearest earlier frame that has them, else the nearest later one:
+`neutral`, the black level (`dynamicBlackLevel` or `blackLevel`) and `whiteLevel`, each taken
+whole from one record. Exposure, ISO and the other keys stay absent. Readers that develop or
+convert frames (the app's review and CinemaDNG export, `ocraw_to_dng.py`) apply this rule.
+
 ## Static metadata keys
 
 The first `METADATA` chunk, written before any frame, carries what a DNG

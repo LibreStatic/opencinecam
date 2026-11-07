@@ -37,7 +37,8 @@ sealed interface OcrawFrameRead {
      * The slot holds the frame as tight RAW10 rows of [rowBytes] (`width * 5 / 4`),
      * position 0 and limit `rowBytes * header.height`. [header] is the stored one,
      * so for a compressed frame its `dataLength` is the encoded size. [metadata] is
-     * the frame's own `FRAME_METADATA` (empty when it has none); [neutral] is its
+     * [OcrawFrameIndex.effectiveFrameMetadata]: the frame's own `FRAME_METADATA`, or for
+     * a frame without one the neutral and levels it inherits; [neutral] is its
      * `neutral` or, failing that, the nearest earlier frame's, else the nearest
      * later one's, else null.
      */
@@ -169,7 +170,7 @@ class OcrawFrameSource(
             frameIndex = frameIndex,
             header = header,
             rowBytes = rowBytes,
-            metadata = metadataOf(frameIndex),
+            metadata = index.effectiveFrameMetadata(index.frames[frameIndex].sequence),
             neutral = if (source < 0) null else metadataOf(source)[NEUTRAL_KEY],
         )
     }

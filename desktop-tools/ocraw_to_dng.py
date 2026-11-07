@@ -716,6 +716,49 @@ def write_dng(path: Path, width: int, height: int, image: bytes | Encoded, colou
 # Selection and conversion.
 # ---------------------------------------------------------------------------
 
+# Colour values a frame without a FRAME_METADATA record inherits, as OcrawFrameIndex.effectiveFrameMetadata;
+# each group is taken whole from one record.
+INHERITED_COLOUR_GROUPS: tuple[tuple[str, ...], ...] = (("neutral",), ("dynamicBlackLevel", "blackLevel"), ("whiteLevel",))
+
+
+def inherit_colour(sequences: list[int], frame_meta: dict[int, dict[str, str]]) -> dict[int, dict[str, str]]:
+    """For each frame (by chunk sequence, in file order) without a FRAME_METADATA record, the colour values it
+    inherits: each group from the nearest earlier frame whose record carries it, else the nearest later one.
+    Takes recorded before the engine kept the last capture result lack the final frame's record; exposure, ISO
+    and the rest are never inherited."""
+    records = [frame_meta.get(sequence) for sequence in sequences]
+    if all(record is not None for record in records) or all(record is None for record in records):
+        return {}
+    count = len(records)
+    sources: list[list[int]] = []
+    for group in INHERITED_COLOUR_GROUPS:
+        has = [record is not None and any(record.get(name) for name in group) for record in records]
+        source = [-1] * count
+        last = -1
+        for i in range(count):
+            if has[i]:
+                last = i
+            source[i] = last
+        following = -1
+        for i in range(count - 1, -1, -1):
+            if has[i]:
+                following = i
+            if source[i] < 0:
+                source[i] = following
+        sources.append(source)
+    inherited: dict[int, dict[str, str]] = {}
+    for i, record in enumerate(records):
+        if record is not None:
+            continue
+        values: dict[str, str] = {}
+        for group, source in zip(INHERITED_COLOUR_GROUPS, sources):
+            if source[i] >= 0:
+                values.update({name: records[source[i]][name] for name in group if records[source[i]].get(name)})
+        if values:
+            inherited[sequences[i]] = values
+    return inherited
+
+
 def parse_frames(spec: str | None) -> Callable[[int], bool]:
     if not spec:
         return lambda index: True
@@ -779,6 +822,7 @@ def convert(path: Path, job: Conversion, frames: str | None = None, every: int =
                         origin_ns=frame_origin_ns(raw_chunks))
         if cine.fps is None:
             job.warn("metadata has no usable fps; wrote no FrameRate or TimeCodes")
+        inherited = inherit_colour([chunk.sequence for chunk in raw_chunks], frame_meta)
         picked = [index for index in range(len(raw_chunks)) if selected(index)][::every]
         for index in picked:
             chunk = raw_chunks[index]
@@ -805,7 +849,8 @@ def convert(path: Path, job: Conversion, frames: str | None = None, every: int =
                 continue
             width, height = int(header["width"]), int(header["height"])
             target = job.output / frame_file_name(job.prefix, index)
-            write_dng(target, width, height, image, colour, frame_meta.get(chunk.sequence, {}), job, cine,
+            meta = frame_meta[chunk.sequence] if chunk.sequence in frame_meta else inherited.get(chunk.sequence, {})
+            write_dng(target, width, height, image, colour, meta, job, cine,
                       int(header["sensorTimestampNs"]))
             job.written.append(target)
             key = f"{width}x{height}"

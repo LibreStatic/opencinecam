@@ -68,7 +68,8 @@ class CinemaDngLayout internal constructor(
  * Every DNG carries the CinemaDNG tags: FrameRate from `fps`, TimeCodes from the
  * frame's sensor timestamp relative to the take's first readable frame, and
  * ReelName and CameraLabel set to [takeName]. Static colour comes from
- * [OcrawFrameIndex.metadata], per-frame values from [OcrawFrameIndex.frameMetadata].
+ * [OcrawFrameIndex.metadata], per-frame values from [OcrawFrameIndex.effectiveFrameMetadata] (a frame
+ * without its own record inherits a neighbour's neutral and levels).
  *
  * [write] reads a frame's payload with its CRC32C check; a range that is not the
  * whole file reads only what it needs and skips the check. A frame whose header is
@@ -420,7 +421,7 @@ class CinemaDngWriter(
         tiled: Boolean,
         parts: LongArray,
     ): ByteArray {
-        val meta = index.frameMetadata[stored.sequence].orEmpty()
+        val meta = index.effectiveFrameMetadata(stored.sequence)
         var black = colour.black
         val dynamicBlack = meta["dynamicBlackLevel"]?.takeIf { it.isNotEmpty() } ?: meta["blackLevel"]
         if (!dynamicBlack.isNullOrEmpty()) {
