@@ -64,6 +64,48 @@ class OcrawFrameSourceTest {
     }
 
     @Test
+    fun aLeadingIndexStopsAfterItsFramesAndKeepsTheirMetadata() {
+        val file = temp.newFile("leading.ocraw")
+        val frames = (0 until 6).map(::frame)
+        val sequences = FileChannel.open(file.toPath(), StandardOpenOption.WRITE).use { channel ->
+            val writer = OcrawStreamWriter(channel, OcrawHeader(uuid), nanos)
+            writer.writeMetadata(staticMetadata)
+            val sequences = ArrayList<Long>()
+            frames.forEachIndexed { i, (header, data) ->
+                sequences += writer.writeRawFrame(header, ByteBuffer.wrap(data), i * frameInterval)
+                // Frame 0's result arrives late, after frame 2; frame 3's after the last frame.
+                if (i == 2) writer.writeFrameMetadata(sequences[0], mapOf("neutral" to "1/2 1/1 3/4"))
+            }
+            writer.writeFrameMetadata(sequences[3], mapOf("iso" to "800"))
+            writer.finish()
+            sequences
+        }
+        FileChannel.open(file.toPath()).use { channel ->
+            val reader = OcrawStreamReader(channel)
+            val full = reader.indexFrames()
+            val leading = reader.indexFrames(maxFrames = 2)
+            assertEquals(full.frames.take(2), leading.frames)
+            assertEquals(staticMetadata, leading.metadata)
+            // Metadata written after the third frame is not reached.
+            assertEquals(emptyMap<Long, Map<String, String>>(), leading.frameMetadata)
+            assertEquals(full.frames[2].fileOffset, leading.validEnd)
+            assertFalse(leading.tornTail)
+            assertFalse(leading.hasEnd)
+            assertEquals(nanos, leading.timeBase)
+            // A window wide enough for the late record keeps it; one wider than the take is the whole index.
+            assertEquals(mapOf("neutral" to "1/2 1/1 3/4"), reader.indexFrames(maxFrames = 3).frameMetadata[sequences[0]])
+            assertEquals(full, reader.indexFrames(maxFrames = 100))
+            assertThrows(IllegalArgumentException::class.java) { reader.indexFrames(maxFrames = 0) }
+            OcrawFrameSource(channel, leading, slotCount = 1).use { source ->
+                val slot = source.acquire()!!
+                val first = source.read(0, slot) as OcrawFrameRead.Frame
+                assertArrayEquals(frames[0].second, ByteArray(slot.buffer.remaining()).also(slot.buffer::get))
+                assertEquals(frames[0].first, first.header)
+            }
+        }
+    }
+
+    @Test
     fun aTornTailIndexesItsCompleteFrames() {
         val file = temp.newFile("full.ocraw")
         writeTake(file, (0 until 5).map(::frame))

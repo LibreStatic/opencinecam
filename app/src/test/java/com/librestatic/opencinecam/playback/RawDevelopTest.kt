@@ -266,6 +266,25 @@ class RawDevelopTest {
         assertArrayEquals(floatArrayOf(RawDevelop.tone(0.5f), 0f, RawDevelop.tone(0.35f)), out, 1e-6f)
     }
 
+    @Test fun aSteppedHalfDevelopKeepsTheMiddleQuadOfEachBlock() {
+        // 16×4: 8×2 quads, each its own grey.
+        val codes = IntArray(16 * 4) { (it % 16 / 2 + it / 32 * 8) * 60 }
+        val buffer = packRaw10(16, 4, codes)
+        val params = identityParams(cfa = RawCfa.MONO)
+        val full = RawDevelop.developHalf(buffer, header(16, 4), params)
+        assertArrayEquals(full, RawDevelop.developHalf(buffer, header(16, 4), params, step = 1), 0f)
+        assertArrayEquals(intArrayOf(8, 2), RawDevelop.halfSize(16, 4))
+        // Step 4: 2×1, from quads (2, 2) and (6, 2), clamped to the last row (1).
+        assertArrayEquals(intArrayOf(2, 1), RawDevelop.halfSize(16, 4, 4))
+        val stepped = RawDevelop.developHalf(buffer, header(16, 4), params, step = 4)
+        assertEquals(2 * 3, stepped.size)
+        assertArrayEquals(full.copyOfRange((8 + 2) * 3, (8 + 3) * 3), stepped.copyOfRange(0, 3), 0f)
+        assertArrayEquals(full.copyOfRange((8 + 6) * 3, (8 + 7) * 3), stepped.copyOfRange(3, 6), 0f)
+        // Never empty for a frame of at least one quad, empty below.
+        assertArrayEquals(intArrayOf(1, 1), RawDevelop.halfSize(16, 4, 100))
+        assertArrayEquals(intArrayOf(0, 0), RawDevelop.halfSize(1, 4))
+    }
+
     @Test fun monoHalfDevelopIsTheQuadMean() {
         val buffer = packRaw10(4, 2, intArrayOf(100, 200, 0, 0, 300, 400, 0, 0))
         val out = RawDevelop.developHalf(buffer, header(4, 2), identityParams(cfa = RawCfa.MONO))

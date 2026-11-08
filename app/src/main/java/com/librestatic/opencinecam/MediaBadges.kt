@@ -105,6 +105,26 @@ internal fun rememberProbedCodec(take: LocalMediaTake, source: MediaCatalogSourc
     return codec
 }
 
+/** The cache key of a take's details: a file rewritten in place (same id, new size or time) is read again. */
+internal fun takeDetailsKey(take: LocalMediaTake): String = "${take.id}|${take.primary.sizeBytes}|${take.primary.modifiedSeconds}"
+
+/**
+ * The details of the take open in the inspector, read once per [takeDetailsKey] while the gallery lives
+ * ([cache] keeps failures too, as null): [TakeDetailsLoad.Loading] until the read finishes.
+ */
+@Composable
+internal fun rememberTakeDetails(take: LocalMediaTake, source: MediaCatalogSource, cache: MutableMap<String, TakeTechnicalDetails?>): TakeDetailsLoad {
+    val key = takeDetailsKey(take)
+    var load by remember(key) { mutableStateOf(if (key in cache) TakeDetailsLoad.Loaded(cache[key]) else TakeDetailsLoad.Loading) }
+    LaunchedEffect(source, key) {
+        if (key in cache) { load = TakeDetailsLoad.Loaded(cache[key]); return@LaunchedEffect }
+        val read = try { source.details(take) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+        currentCoroutineContext().ensureActive()
+        cache[key] = read; load = TakeDetailsLoad.Loaded(read)
+    }
+    return load
+}
+
 internal fun photoCodecBadge(mime: String, name: String): CodecBadge? {
     val format = when (mime.lowercase(Locale.ROOT)) {
         "image/x-adobe-dng" -> "DNG"

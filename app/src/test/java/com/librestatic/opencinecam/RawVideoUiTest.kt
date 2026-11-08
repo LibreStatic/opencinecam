@@ -129,11 +129,12 @@ class RawVideoUiTest {
         assertEquals(R.string.media_action_play, LocalMediaKind.RAW_VIDEO.primaryActionLabel())
     }
 
-    @Test fun rawTakesKeepThePlaceholderAndCannotBeRenamedOrDeleted() {
-        assertFalse(LocalMediaKind.RAW_VIDEO.hasSystemThumbnail())
+    @Test fun rawTakesKeepThePlaceholderWithoutAPictureAndCannotBeRenamedOrDeleted() {
+        // A RAW take's picture loads like any other; only its failure is a quiet placeholder.
+        assertTrue(LocalMediaKind.RAW_VIDEO.thumbnailFailureShowsPlaceholder())
         assertFalse(LocalMediaKind.RAW_VIDEO.renamesAndDeletes())
         LocalMediaKind.entries.filter { it != LocalMediaKind.RAW_VIDEO }.forEach {
-            assertTrue("$it", it.hasSystemThumbnail())
+            assertFalse("$it", it.thumbnailFailureShowsPlaceholder())
             assertTrue("$it", it.renamesAndDeletes())
         }
     }

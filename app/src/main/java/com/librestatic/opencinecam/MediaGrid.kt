@@ -84,8 +84,11 @@ internal fun LocalMediaKind.kindLabel(): Int =
 @Suppress("UnusedReceiverParameter")
 internal fun LocalMediaKind.opensInApp(): Boolean = true
 
-/** A RAW take has no system thumbnail: it gets a neutral placeholder, never a load request. */
-internal fun LocalMediaKind.hasSystemThumbnail(): Boolean = this != LocalMediaKind.RAW_VIDEO
+/**
+ * A RAW take's picture is developed from its first frame, which a take still recording or a damaged
+ * one may not have: then its tile keeps a neutral placeholder rather than saying the picture failed.
+ */
+internal fun LocalMediaKind.thumbnailFailureShowsPlaceholder(): Boolean = this == LocalMediaKind.RAW_VIDEO
 
 /** Rename and delete re-observe a take through the media collections, which a RAW take is not in. */
 internal fun LocalMediaKind.renamesAndDeletes(): Boolean = this != LocalMediaKind.RAW_VIDEO
@@ -141,11 +144,10 @@ internal class GalleryThumbnailState(initial: Bitmap?) {
  */
 @Composable
 internal fun rememberGalleryThumbnail(artifact: LocalMediaArtifact, source: MediaCatalogSource, automatic: Boolean,
-    cache: GalleryThumbnailCache, loadable: Boolean = true): GalleryThumbnailState {
+    cache: GalleryThumbnailCache): GalleryThumbnailState {
     val state = remember(artifact.uri) { GalleryThumbnailState(cache[artifact.uri]) }
     LaunchedEffect(source, artifact.uri, state.request, automatic) {
-        // A RAW take has no picture MediaStore can decode; its tile keeps the placeholder.
-        if (!loadable || state.request == 0 && !automatic) return@LaunchedEffect
+        if (state.request == 0 && !automatic) return@LaunchedEffect
         if (state.bitmap != null) return@LaunchedEffect
         state.loading = true; state.unavailable = false
         try {
@@ -217,7 +219,7 @@ internal fun GalleryTakeCard(take: LocalMediaTake, settings: GallerySettings, so
             .semantics { this.selected = selected }
             .testTag("gallery-take-${take.id}"),
     ) {
-        val thumbnail = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails, loadable = take.kind.hasSystemThumbnail())
+        val thumbnail = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
         GalleryThumbnailTile(take, thumbnail, settings.autoThumbnails, facts, Modifier.fillMaxWidth().aspectRatio(16f / 10f), badges = badges)
         Row(Modifier.fillMaxWidth().padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -366,8 +368,8 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
     val id = take.id
     val bitmap = state.bitmap
     val requestLabel = stringResource(R.string.gallery_thumbnail)
-    // A RAW take never has a thumbnail: a neutral placeholder, not a button that loads one.
-    val placeholder = !take.kind.hasSystemThumbnail()
+    // A RAW take whose first frame gave no picture: a neutral placeholder, not an error or a button that retries.
+    val placeholder = state.unavailable && take.kind.thumbnailFailureShowsPlaceholder()
     val context = LocalContext.current
     Box(
         modifier
