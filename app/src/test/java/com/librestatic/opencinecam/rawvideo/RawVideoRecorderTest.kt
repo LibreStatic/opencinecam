@@ -214,6 +214,32 @@ class RawVideoRecorderTest {
     }
 
     @Test
+    fun resultsThatStallAtTheTakeStartAndArriveInABurstStillBecomeTheirFramesMetadata() {
+        // Seen on the Razr: the first results arrive, then none for about 45 frames, then all at once.
+        val recorder = recorder(finalWaitMs = 0)
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val output = FileOutput()
+        recorder.start(output, info())
+        recorder.onTakeStarted("0", RawVideoSessionConfig(WIDTH, HEIGHT, 30), emptyMap())
+        val frames = 60
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+        for (index in 0 until frames) {
+            assertTrue(recorder.onFrame(plane(index), STRIDE, WIDTH, HEIGHT, ts(index)))
+            if (index < 4) recorder.onResult(ts(index), index.toLong(), mapOf("iso" to "100"))
+            // Keep the ring from filling: the burst must come after the frames are on disk.
+            while (recorder.liveStats().framesWritten < index + 1 && System.nanoTime() < deadline) Thread.sleep(2)
+        }
+        assertEquals(frames.toLong(), recorder.liveStats().framesWritten.toLong())
+        for (index in 4 until frames) recorder.onResult(ts(index), index.toLong(), mapOf("iso" to "200"))
+
+        val result = recorder.stop()
+        assertEquals(frames.toLong(), result.frameMetadataWritten.toLong())
+        assertEquals(0, result.unmatchedResults)
+        val scan = scan(output.file)
+        assertEquals("200", scan.frameMetadata.getValue(scan.frames[4].sequence)["iso"])
+    }
+
+    @Test
     fun ringHighWaterEndsTheTakeWithoutDroppingAFrame() {
         val gate = CountDownLatch(1)
         val recorder = recorder()

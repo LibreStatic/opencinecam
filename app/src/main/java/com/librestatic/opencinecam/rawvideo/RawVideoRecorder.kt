@@ -189,7 +189,8 @@ data class RawTakeResult(
  *   finished. [liveStats] may be called from any thread.
  * - Results: [onRawResult] may come from any thread. It only queues the extracted values in a bounded
  *   inbox; the writer matches them to frames by sensor timestamp. Results that arrive before their
- *   frame wait in a small map; those that never meet a frame are dropped after [resultWindowFrames].
+ *   frame wait in a map, and frames written before their result wait for it; either side gives up
+ *   after [resultWindowFrames] frames.
  *
  * **No dropped frames (ADR-0019).** When the ring reaches [highWaterFraction] after a frame is
  * stored, [onRawFrame] returns false and the engine ends the take; the file is finalised and the
@@ -817,7 +818,13 @@ class RawVideoRecorder(
         const val FRAME_NUMBER_KEY = "frameNumber"
         /** The `FRAME_METADATA` key of the sensitivity ([RawVideoMetadata.frameValues]). */
         const val ISO_KEY = "iso"
-        const val RESULT_WINDOW_FRAMES = 32
+        /**
+         * How many frames a capture result may trail its frame (or lead it) and still become its
+         * metadata. The Razr has stalled its results for about 0.75 s at a take's start and then
+         * delivered them in a burst, up to 45 frames late at 60 fps; 256 frames (over 4 s at 60 fps)
+         * cost a few hundred bytes of timestamps and leave room for that.
+         */
+        const val RESULT_WINDOW_FRAMES = 256
         const val WRITER_JOIN_TIMEOUT_MS = 30_000L
         const val FINAL_RESULT_WAIT_MS = 100L
         private const val RESULT_INBOX = 256
