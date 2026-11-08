@@ -187,6 +187,8 @@ converter needs. Later `METADATA` chunks may add keys; a later value wins.
 | `crop` | `left top width height` of every frame, integers |
 | `fps` | rational |
 | `cameraId` | Camera2 id |
+| `focalLength` | first `LENS_INFO_AVAILABLE_FOCAL_LENGTHS` value, decimal mm; absent when the camera does not advertise it |
+| `aperture` | first `LENS_INFO_AVAILABLE_APERTURES` value, decimal f-number; absent when the camera does not advertise it |
 | `model` | `Build.MODEL` |
 | `appVersion` | app version name |
 | `encoding` | configured frame encoding: `raw10` or `lj92`; informative, each frame header's encoding is authoritative |

@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Section titles of a take's details in the gallery inspector. -->
+    <string name="media_detail_group_file">File</string>
+    <string name="media_detail_group_video">Video</string>
+    <string name="media_detail_group_image">Image</string>
+    <string name="media_detail_group_colour">Colour</string>
+    <string name="media_detail_group_audio">Audio</string>
+    <string name="media_detail_group_camera">Camera and exposure</string>
+    <string name="media_detail_group_raw">RAW</string>
+    <string name="media_detail_group_recording">Recording</string>
+    <!-- Shown in the inspector while a take's files and sidecars are read. -->
+    <string name="media_detail_loading">Reading file details…</string>
+    <!-- Action that copies a value (a file path) to the clipboard. -->
+    <string name="media_detail_copy">Copy</string>
+    <!-- Row labels of a take's details. The values are numbers, codec names and camera terms, never translated. -->
+    <string name="media_detail_path">Path</string>
+    <string name="media_detail_name">Name</string>
+    <string name="media_detail_type">Type</string>
+    <string name="media_detail_size">Size</string>
+    <string name="media_detail_modified">Modified</string>
+    <!-- When the take was recorded, from its clip sidecar. -->
+    <string name="media_detail_created">Recorded</string>
+    <string name="media_detail_resolution">Resolution</string>
+    <string name="media_detail_frame_rate">Frame rate</string>
+    <string name="media_detail_codec">Codec</string>
+    <string name="media_detail_codec_profile">Codec profile</string>
+    <string name="media_detail_codec_requested">Requested codec</string>
+    <string name="media_detail_duration">Duration</string>
+    <string name="media_detail_frames">Frames</string>
+    <string name="media_detail_bitrate">Bitrate</string>
+    <string name="media_detail_bitrate_target">Target bitrate</string>
+    <string name="media_detail_rotation">Rotation</string>
+    <string name="media_detail_orientation">Orientation</string>
+    <string name="media_detail_encoder">Encoder</string>
+    <string name="media_detail_encoder_type">Encoding</string>
+    <string name="media_detail_hardware_encoder">Hardware</string>
+    <string name="media_detail_software_encoder">Software</string>
+    <string name="media_detail_bit_depth">Bit depth</string>
+    <!-- Sample depth, e.g. "10-bit". -->
+    <string name="media_detail_bits">%1$d-bit</string>
+    <string name="media_detail_bits_float">%1$d-bit float</string>
+    <string name="media_detail_colour">Colour</string>
+    <string name="media_detail_transfer">Transfer</string>
+    <string name="media_detail_gamut">Gamut</string>
+    <string name="media_detail_range">Range</string>
+    <string name="media_detail_range_full">Full</string>
+    <string name="media_detail_range_limited">Limited</string>
+    <string name="media_detail_source_range">Source dynamic range</string>
+    <string name="media_detail_colour_space">Colour space</string>
+    <string name="media_detail_uncalibrated">Uncalibrated</string>
+    <string name="media_detail_lut">LUT</string>
+    <string name="media_detail_sample_rate">Sample rate</string>
+    <string name="media_detail_channels">Channels</string>
+    <!-- More than two audio channels, e.g. "6 channels". -->
+    <string name="media_detail_channel_count">%1$d channels</string>
+    <string name="media_detail_mono">Mono</string>
+    <string name="media_detail_stereo">Stereo</string>
+    <string name="media_detail_audio_recorded">Sound</string>
+    <string name="media_detail_audio_storage">Audio storage</string>
+    <string name="media_detail_audio_requested">Requested format</string>
+    <string name="media_detail_audio_source">Input</string>
+    <string name="media_detail_audio_dropped">Dropped samples</string>
+    <string name="media_detail_camera_id">Camera</string>
+    <string name="media_detail_device">Device</string>
+    <string name="media_detail_lens">Lens</string>
+    <string name="media_detail_focal_length">Focal length</string>
+    <string name="media_detail_aperture">Aperture</string>
+    <string name="media_detail_iso">ISO</string>
+    <string name="media_detail_shutter">Shutter</string>
+    <string name="media_detail_exposure_mode">Exposure mode</string>
+    <string name="media_detail_exposure_bias">Exposure compensation</string>
+    <string name="media_detail_white_balance">White balance</string>
+    <string name="media_detail_reported_cct">Reported colour temperature</string>
+    <string name="media_detail_tint">Tint</string>
+    <string name="media_detail_focus_mode">Focus mode</string>
+    <string name="media_detail_focus_distance">Focus distance</string>
+    <string name="media_detail_zoom">Zoom</string>
+    <string name="media_detail_ois">Optical stabilisation</string>
+    <string name="media_detail_eis">Video stabilisation</string>
+    <string name="media_detail_noise_reduction">Noise reduction</string>
+    <!-- Camera2 edge enhancement. -->
+    <string name="media_detail_edge">Sharpening</string>
+    <string name="media_detail_tone_map">Tone mapping</string>
+    <string name="media_detail_flash">Flash</string>
+    <string name="media_detail_flash_fired">Fired</string>
+    <string name="media_detail_flash_not_fired">Did not fire</string>
+    <string name="media_detail_taken">Taken</string>
+    <string name="media_detail_auto">Auto</string>
+    <string name="media_detail_manual">Manual</string>
+    <string name="media_detail_raw_encoding">Encoding</string>
+    <string name="media_detail_cfa">Colour filter</string>
+    <string name="media_detail_black_level">Black level</string>
+    <string name="media_detail_white_level">White level</string>
+    <string name="media_detail_compression">Compression</string>
+    <string name="media_detail_data_rate">Data rate</string>
+    <string name="media_detail_missing_frames">Missing frames</string>
+    <string name="media_detail_closed_cleanly">Closed cleanly</string>
+    <string name="media_detail_app_version">App version</string>
+    <string name="media_detail_fingerprint">Build fingerprint</string>
+    <string name="media_detail_software">Software</string>
+    <string name="media_detail_take_status">Take status</string>
+    <string name="media_detail_take_complete">Complete</string>
+    <string name="media_detail_take_incomplete">Incomplete</string>
+    <string name="media_detail_capture_mode">Capture mode</string>
+    <string name="media_detail_recording_policy">Recording policy</string>
+    <string name="media_detail_requested_size">Requested size</string>
+    <string name="media_detail_project_rate">Project rate</string>
+    <string name="media_detail_timecode">Timecode</string>
+    <string name="media_detail_route">Camera route</string>
+    <string name="media_detail_recorder">Recorder</string>
+    <string name="media_detail_device_profile">Device profile</string>
+    <string name="media_detail_quirks">Device quirks</string>
+    <!-- A value and what the operator asked for, e.g. "29.97 fps (requested 30 fps)". Both are pre-formatted. -->
+    <string name="media_detail_requested">%1$s (requested %2$s)</string>
+    <string name="media_detail_yes">Yes</string>
+    <string name="media_detail_no">No</string>
+    <string name="media_detail_on">On</string>
+    <string name="media_detail_off">Off</string>
+    <string name="media_detail_wb_kelvin">Kelvin</string>
+    <string name="media_detail_colour_sdr">SDR (BT.709)</string>
+    <string name="media_detail_colour_hlg">HLG (HDR)</string>
+    <string name="media_detail_colour_oclog">OCLog2 (LOG)</string>
+    <string name="media_detail_audio_embedded_aac">In the video (AAC)</string>
+    <string name="media_detail_audio_separate_wav">Separate file (WAV)</string>
+    <string name="media_detail_audio_separate_flac">Separate file (FLAC)</string>
+    <string name="media_detail_eis_preview">Preview stabilisation</string>
+</resources>

@@ -216,7 +216,7 @@ private fun statusColor(state: NetworkShareState) = when (state) {
     NetworkShareState.Starting -> SettingsMuted
 }
 
-private fun copyToClipboard(context: Context, label: String, text: String, sensitive: Boolean) {
+internal fun copyToClipboard(context: Context, label: String, text: String, sensitive: Boolean = false) {
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     val clip = ClipData.newPlainText(label, text)
     // The password stays out of the clipboard preview and keyboard suggestions.

@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.share.copyToClipboard
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaRelationStatus
@@ -60,7 +63,7 @@ internal fun integrityExplanation(status: LocalMediaRelationStatus): Int = when 
 internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, actions: GalleryTakeActions,
     onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier,
-    progress: (@Composable () -> Unit)? = null) {
+    progress: (@Composable () -> Unit)? = null, technical: TakeDetailsLoad? = null) {
     val context = LocalContext.current
     val window = LocalAdaptiveWindow.current
     Column(modifier.fillMaxWidth().testTag("gallery-details-${take.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -71,12 +74,13 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             CloseButton("gallery-info-close", if (window.hardwareKeyboard) withShortcut(close, ShortcutAction.DISMISS) else close, onClose)
         }
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))) {
-            val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails, loadable = take.kind.hasSystemThumbnail())
+            val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
             GalleryThumbnailTile(take, poster, settings.autoThumbnails, facts, Modifier.matchParentSize(), tag = "gallery-poster")
             val playAction = actions.play
-            // A RAW take's placeholder glyph sits where the overlay would; it plays from the Play action below instead.
-            if (playAction != null && take.kind != LocalMediaKind.PHOTO && take.kind.hasSystemThumbnail() &&
-                (poster.bitmap != null || settings.autoThumbnails)) {
+            // A RAW take's placeholder glyph sits where the overlay would, so it gets the overlay only over its picture;
+            // without one it plays from the Play action below.
+            if (playAction != null && take.kind != LocalMediaKind.PHOTO &&
+                (poster.bitmap != null || settings.autoThumbnails && !take.kind.thumbnailFailureShowsPlaceholder())) {
                 val play = stringResource(R.string.media_action_play)
                 Box(
                     Modifier
@@ -138,6 +142,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                 Modifier.fillMaxWidth().testTag("gallery-integrity-${take.id}"), color = SettingsMuted,
                 fontSize = 12.sp, lineHeight = 16.sp)
         }
+        TechnicalSections(take, technical)
         if (settings.showSlate) DetailSection(R.string.media_section_slate) { GallerySlate(take) }
         if (settings.showTechnical) DetailSection(R.string.media_section_properties) { GalleryTechnical(take.primary, "primary-${take.id}") }
         GalleryFiles(take, settings.showTechnical, onOpen)
@@ -177,14 +182,57 @@ private fun InspectorAction(tag: String, icon: CineIcon, label: Int, tint: Color
 }
 
 @Composable
-private fun DetailSection(title: Int, content: @Composable ColumnScope.() -> Unit) {
+private fun DetailSection(title: Int, content: @Composable ColumnScope.() -> Unit) = DetailSection(stringResource(title), null, content)
+
+@Composable
+private fun DetailSection(title: String, tag: String?, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(SettingsSurfaceRaised).border(1.dp, SettingsBorder, shape).padding(12.dp),
+        Modifier.fillMaxWidth().clip(shape).background(SettingsSurfaceRaised).border(1.dp, SettingsBorder, shape).padding(12.dp)
+            .then(tag?.let { Modifier.testTag(it) } ?: Modifier),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(stringResource(title), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         content()
+    }
+}
+
+/** The grouped label and value details read from the take's files, shown whatever the technical setting says. */
+@Composable
+private fun TechnicalSections(take: LocalMediaTake, technical: TakeDetailsLoad?) {
+    when (technical) {
+        null -> Unit
+        TakeDetailsLoad.Loading -> Text(stringResource(R.string.media_detail_loading), Modifier.fillMaxWidth().testTag("gallery-detail-loading"),
+            color = SettingsMuted, fontSize = 12.sp)
+        is TakeDetailsLoad.Loaded -> technical.details?.let { details ->
+            DetailGroupKind.entries.forEach { kind ->
+                val group = details.group(kind)?.takeIf { it.rows.isNotEmpty() } ?: return@forEach
+                val name = kind.name.lowercase()
+                DetailSection(stringResource(kind.title(take.kind)), "gallery-detail-$name") {
+                    SelectionContainer { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { group.rows.forEach { TechnicalRow(it, name) } } }
+                }
+            }
+        }
+    }
+}
+
+/** One label and its value; the value wraps rather than truncates, and a copyable one gets a copy key. */
+@Composable
+private fun TechnicalRow(row: DetailRow, kind: String) {
+    val context = LocalContext.current
+    val label = stringResource(row.label)
+    Row(Modifier.fillMaxWidth().testTag("gallery-detail-$kind-${row.key}"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, Modifier.weight(0.42f), color = SettingsMuted, fontSize = 12.sp, lineHeight = 16.sp)
+        // The copy key sits inside the value column, so every row's values start at the same edge.
+        Row(Modifier.weight(0.58f), verticalAlignment = Alignment.CenterVertically) {
+            Text(row.value, Modifier.weight(1f).testTag("gallery-detail-$kind-${row.key}-value"), color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp, lineHeight = 16.sp)
+            if (row.copyable) DisableSelection {
+                CineIconButton("gallery-detail-${row.key}-copy", CineIcon.FILES, stringResource(R.string.media_detail_copy), tint = SettingsMuted) {
+                    copyToClipboard(context, label, row.value)
+                }
+            }
+        }
     }
 }
 

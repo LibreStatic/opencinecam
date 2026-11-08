@@ -163,11 +163,14 @@ internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = build
     }
 }
 
-private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
-private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
-private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
-private val TONEMAP_MODES = mapOf(0 to "CONTRAST_CURVE", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "GAMMA_VALUE", 4 to "PRESET_CURVE")
-private val AWB_MODES = mapOf(1 to "AUTO", 2 to "INCANDESCENT", 3 to "FLUORESCENT", 4 to "WARM_FLUORESCENT", 5 to "DAYLIGHT",
+// Camera2 mode names by value; the clip sidecar's camera block ([com.librestatic.opencinecam.service.ClipCameraTracker]) shares them.
+internal val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
+internal val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
+internal val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
+internal val EDGE_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "ZERO_SHUTTER_LAG")
+internal val TONEMAP_MODES = mapOf(0 to "CONTRAST_CURVE", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "GAMMA_VALUE", 4 to "PRESET_CURVE")
+internal val AF_MODES = mapOf(0 to "OFF", 1 to "AUTO", 2 to "MACRO", 3 to "CONTINUOUS_VIDEO", 4 to "CONTINUOUS_PICTURE", 5 to "EDOF")
+internal val AWB_MODES = mapOf(1 to "AUTO", 2 to "INCANDESCENT", 3 to "FLUORESCENT", 4 to "WARM_FLUORESCENT", 5 to "DAYLIGHT",
     6 to "CLOUDY_DAYLIGHT", 7 to "TWILIGHT", 8 to "SHADE")
 
 /**

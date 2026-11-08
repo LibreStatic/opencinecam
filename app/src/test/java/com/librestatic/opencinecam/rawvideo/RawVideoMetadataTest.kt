@@ -38,8 +38,12 @@ class RawVideoMetadataTest {
             illuminant1 = 21,
             illuminant2 = 17,
             activeArray = Rect(8, 8, 4088, 3068),
+            focalLengthMm = 6.3f,
+            aperture = 1.7f,
         )
         assertEquals("GRBG", values["cfa"])
+        assertEquals("6.3", values["focalLength"])
+        assertEquals("1.7", values["aperture"])
         assertEquals("64 65 66 67", values["blackLevel"])
         assertEquals("1023", values["whiteLevel"])
         assertEquals("-7/1024 -5/1024 -3/1024 -1/1024 1/1024 3/1024 5/1024 7/1024 -9/1024", values["colorMatrix1"])
@@ -48,6 +52,13 @@ class RawVideoMetadataTest {
         assertEquals("21", values["calibrationIlluminant1"])
         assertEquals("17", values["calibrationIlluminant2"])
         assertEquals("8 8 4088 3068", values["activeArray"])
+    }
+
+    @Test
+    fun lensKeysAreLeftOutWhenTheCameraDoesNotAdvertiseThem() {
+        val values = RawVideoMetadata.staticValues(null, null, null, null, null, null, null, null, null, null, aperture = 0f)
+        assertNull(values["focalLength"])
+        assertNull(values["aperture"])
     }
 
     @Test

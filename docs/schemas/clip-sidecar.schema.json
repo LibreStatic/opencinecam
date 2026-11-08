@@ -47,6 +47,131 @@
         }
       }
     },
+    "sampledRange": {
+      "description": "A value sampled through the take: the first and last readings and the extremes in between.",
+      "type": "object",
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
+      }
+    },
+    "cameraSettings": {
+      "type": "object",
+      "properties": {
+        "cameraId": {
+          "type": "string"
+        },
+        "focalLengthMm": {
+          "type": "number"
+        },
+        "focalLength35mm": {
+          "description": "35 mm equivalent, inferred from the sensor size.",
+          "type": "number"
+        },
+        "aperture": {
+          "description": "f-number.",
+          "type": "number"
+        },
+        "exposureMode": {
+          "description": "ExposureMode names: AUTO, MANUAL, ISO_PRIORITY or SHUTTER_PRIORITY.",
+          "type": "object",
+          "properties": {
+            "requested": {
+              "type": "string"
+            },
+            "reported": {
+              "type": "string"
+            }
+          }
+        },
+        "iso": {
+          "$ref": "#/$defs/sampledRange"
+        },
+        "exposureTimeNs": {
+          "$ref": "#/$defs/sampledRange"
+        },
+        "whiteBalance": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "description": "AUTO, KELVIN or the CONTROL_AWB_MODE preset name.",
+              "type": "string"
+            },
+            "kelvin": {
+              "description": "The requested temperature of a KELVIN take.",
+              "type": "integer"
+            },
+            "reportedCctStart": {
+              "type": "integer"
+            },
+            "reportedCctEnd": {
+              "type": "integer"
+            },
+            "tint": {
+              "description": "The requested tint of a KELVIN take, otherwise the reported one.",
+              "type": "integer"
+            }
+          }
+        },
+        "focus": {
+          "type": "object",
+          "properties": {
+            "afMode": {
+              "description": "The CONTROL_AF_MODE name, or its value when the name is unknown.",
+              "type": "string"
+            },
+            "distanceDiopters": {
+              "type": "number"
+            }
+          }
+        },
+        "zoom": {
+          "$ref": "#/$defs/sampledRange"
+        },
+        "stabilization": {
+          "type": "object",
+          "properties": {
+            "ois": {
+              "description": "LENS_OPTICAL_STABILIZATION_MODE name.",
+              "type": "string"
+            },
+            "eis": {
+              "description": "CONTROL_VIDEO_STABILIZATION_MODE name.",
+              "type": "string"
+            }
+          }
+        },
+        "processing": {
+          "description": "NOISE_REDUCTION_MODE, EDGE_MODE and TONEMAP_MODE names.",
+          "type": "object",
+          "properties": {
+            "noiseReduction": {
+              "type": "string"
+            },
+            "edge": {
+              "type": "string"
+            },
+            "toneMap": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "knownValue": {
       "type": "object",
       "required": [
@@ -95,7 +220,22 @@
       "type": "object"
     },
     "resolvedGraph": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "camera": {
+          "description": "The camera settings sampled from the capture results while the take recorded. Optional; older sidecars omit it. Every key of the value is optional and left out when the camera did not report it.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/knownValue"
+            }
+          ],
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/cameraSettings"
+            }
+          }
+        }
+      }
     },
     "events": {
       "type": "array",

@@ -14,7 +14,7 @@ JSON Schema 2020-12 files here are canonical external contracts. Runtime models 
 
 - `schemaVersion`, `recordingId`, `createdAt`.
 - `intent`: what the operator asked for when the take started (recording policy, capture mode, requested size and fps, project rate, codec and bitrate preference, audio, LUT, timecode).
-- `resolvedGraph`: what actually ran, read when the take stopped (route, recorder, video encoder and encoded size, color kind/transfer/gamut/profile, audio storage, device profile and applied quirks). A field the service did not know is written as unknown, never guessed.
+- `resolvedGraph`: what actually ran, read when the take stopped (route, recorder, video encoder and encoded size, color kind/transfer/gamut/profile, audio storage, device profile and applied quirks, and `camera`: the camera settings sampled while the take recorded, such as lens, exposure mode, ISO and shutter ranges, white balance, focus, zoom, stabilization and processing modes). A field the service did not know is written as unknown, never guessed.
 - `events`: take start, pause/resume windows, warnings and take stop, each with `timeUs`, `code` and `severity`.
 - `validation`: the `Recorded` and `FileVerified` evidence steps (`pass`, `fail` or `notRun`).
 - `media`: display name, duration, encoded frames, and the take's other sidecars and audio files.

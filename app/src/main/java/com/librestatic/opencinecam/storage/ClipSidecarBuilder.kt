@@ -44,6 +44,41 @@ internal data class ClipDeviceProfile(
     val buildCheck: String,
 )
 
+/** A value sampled through the take: its first and last reading and the extremes in between. */
+internal data class ClipSampledRange<T : Comparable<T>>(val start: T, val end: T, val min: T, val max: T)
+
+/**
+ * The camera settings a take ran with, folded from the capture state while it recorded. Every field is
+ * nullable: a value the camera never reported is left out of the sidecar, never written as zero.
+ */
+internal data class ClipCameraSettings(
+    val cameraId: String? = null,
+    val focalLengthMm: Float? = null,
+    val focalLength35mm: Float? = null,
+    /** The f-number. */
+    val aperture: Float? = null,
+    /** [com.librestatic.opencinecam.camera.ExposureMode] names. */
+    val requestedExposureMode: String? = null,
+    val reportedExposureMode: String? = null,
+    val iso: ClipSampledRange<Int>? = null,
+    val exposureTimeNs: ClipSampledRange<Long>? = null,
+    /** `AUTO`, `KELVIN` or the CONTROL_AWB_MODE preset name. */
+    val whiteBalanceMode: String? = null,
+    val whiteBalanceKelvin: Int? = null,
+    val reportedCctStartK: Int? = null,
+    val reportedCctEndK: Int? = null,
+    val whiteBalanceTint: Int? = null,
+    /** The CONTROL_AF_MODE name, or its value when the name is unknown. */
+    val afMode: String? = null,
+    val focusDistanceDiopters: Float? = null,
+    val zoom: ClipSampledRange<Float>? = null,
+    val opticalStabilization: String? = null,
+    val videoStabilization: String? = null,
+    val noiseReduction: String? = null,
+    val edge: String? = null,
+    val toneMap: String? = null,
+)
+
 /** What actually ran, read when the take stopped. A null field is written as an unknown value, never guessed. */
 internal data class ClipGraph(
     val cameraId: String? = null,
@@ -71,6 +106,8 @@ internal data class ClipGraph(
     val audioSampleRateHz: Int? = null,
     val audioBitDepth: Int? = null,
     val deviceProfile: ClipDeviceProfile? = null,
+    /** The camera settings sampled while the take recorded; null when none were sampled. */
+    val camera: ClipCameraSettings? = null,
 )
 
 /** A pause window, in microseconds from the take start. */
@@ -158,6 +195,52 @@ private fun intentJson(intent: ClipIntent?): JsonObject = if (intent == null) un
     putOrUnknown(this, "timecodeEnabled", intent.timecodeEnabled)
 }
 
+private fun <T> rangeJson(range: ClipSampledRange<T>, extremes: Boolean = true): JsonObject where T : Number, T : Comparable<T> =
+    buildJsonObject {
+        put("start", range.start); put("end", range.end)
+        if (extremes) { put("min", range.min); put("max", range.max) }
+    }
+
+/** Puts [key] with the object [block] builds, or nothing when the object is empty. */
+private fun kotlinx.serialization.json.JsonObjectBuilder.putNonEmpty(key: String, block: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
+    val value = buildJsonObject(block)
+    if (value.isNotEmpty()) put(key, value)
+}
+
+private fun cameraJson(camera: ClipCameraSettings): JsonObject = buildJsonObject {
+    camera.cameraId?.let { put("cameraId", it) }
+    camera.focalLengthMm?.let { put("focalLengthMm", it) }
+    camera.focalLength35mm?.let { put("focalLength35mm", it) }
+    camera.aperture?.let { put("aperture", it) }
+    putNonEmpty("exposureMode") {
+        camera.requestedExposureMode?.let { put("requested", it) }
+        camera.reportedExposureMode?.let { put("reported", it) }
+    }
+    camera.iso?.let { put("iso", rangeJson(it)) }
+    camera.exposureTimeNs?.let { put("exposureTimeNs", rangeJson(it)) }
+    putNonEmpty("whiteBalance") {
+        camera.whiteBalanceMode?.let { put("mode", it) }
+        camera.whiteBalanceKelvin?.let { put("kelvin", it) }
+        camera.reportedCctStartK?.let { put("reportedCctStart", it) }
+        camera.reportedCctEndK?.let { put("reportedCctEnd", it) }
+        camera.whiteBalanceTint?.let { put("tint", it) }
+    }
+    putNonEmpty("focus") {
+        camera.afMode?.let { put("afMode", it) }
+        camera.focusDistanceDiopters?.let { put("distanceDiopters", it) }
+    }
+    camera.zoom?.let { put("zoom", rangeJson(it, extremes = false)) }
+    putNonEmpty("stabilization") {
+        camera.opticalStabilization?.let { put("ois", it) }
+        camera.videoStabilization?.let { put("eis", it) }
+    }
+    putNonEmpty("processing") {
+        camera.noiseReduction?.let { put("noiseReduction", it) }
+        camera.edge?.let { put("edge", it) }
+        camera.toneMap?.let { put("toneMap", it) }
+    }
+}
+
 private fun graphJson(graph: ClipGraph): JsonObject = buildJsonObject {
     putOrUnknown(this, "cameraId", graph.cameraId)
     put("route", if (graph.routeTruth == null) unknown() else known(buildJsonObject {
@@ -197,6 +280,7 @@ private fun graphJson(graph: ClipGraph): JsonObject = buildJsonObject {
             put("buildCheck", profile.buildCheck)
         })
     } ?: unknown())
+    put("camera", graph.camera?.takeIf { it != ClipCameraSettings() }?.let { known(cameraJson(it)) } ?: unknown())
 }
 
 private fun event(timeUs: Long, code: String, severity: String, extra: (kotlinx.serialization.json.JsonObjectBuilder.() -> Unit)? = null) =
