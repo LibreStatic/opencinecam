@@ -2,6 +2,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <resources>
     <string name="media_badge_depth">%1$s %2$d bit</string>
+    <string name="media_badge_raw_lossless">Senza perdita</string>
+    <string name="media_badge_raw_near_lossless">Perdita minima</string>
     <string name="media_badge_depth_float">%1$s %2$d bit in virgola mobile</string>
     <string name="media_badge_proxy_ready">Proxy pronto</string>
     <string name="media_badge_proxy_queued">Proxy in coda</string>

@@ -113,6 +113,7 @@ import com.librestatic.opencinecam.CaptureScopeVisibility
 import com.librestatic.opencinecam.CodecBadge
 import com.librestatic.opencinecam.CompositionGridMode
 import com.librestatic.opencinecam.GalleryFacts
+import com.librestatic.opencinecam.rawCodecBadge
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
@@ -975,7 +976,7 @@ fun GalleryInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection 
 fun GalleryInspectorProbed() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "7")
 
 /** The media catalog with no takes yet. */
-/** The sample takes with two RAW video takes (`.ocraw`): RAW10 badge, placeholder tile, size in place of the length. */
+/** The sample takes with two RAW video takes (`.ocraw`): RAW10 and near-lossless badges, placeholder tile, size in place of the length. */
 @Composable
 fun GalleryRaw() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes))
 
@@ -1214,10 +1215,15 @@ private fun take(id: Int, name: String, mime: String, kind: LocalMediaKind, size
     return LocalMediaTake(id.toString(), primary, listOf(primary), listOf(sidecar), kind, slate, status)
 }
 
-/** RAW takes as the repository lists them: one `.ocraw` in Documents/OpenCineCam/RAW, no sidecar, no facts. */
+/**
+ * RAW takes as the repository lists them: one `.ocraw` in Documents/OpenCineCam/RAW, no sidecar. Their
+ * only facts are the codec the file's first chunk declares: uncompressed RAW10, and near-lossless.
+ */
 internal val SampleRawTakes = listOf(
-    SampleTake(rawVideoTake(artifact(21, "OCC_TAKE_A001_S13_T01.ocraw", "application/octet-stream", 19_660_000_000L, 1_790_001_800L))),
-    SampleTake(rawVideoTake(artifact(22, "OCC_TAKE_A001_S13_T02.ocraw", "application/octet-stream", 4_120_000_000L, 1_790_000_900L))),
+    SampleTake(rawVideoTake(artifact(21, "OCC_TAKE_A001_S13_T01.ocraw", "application/octet-stream", 19_660_000_000L, 1_790_001_800L)),
+        facts = GalleryFacts(codec = rawCodecBadge("raw10"))),
+    SampleTake(rawVideoTake(artifact(22, "OCC_TAKE_A001_S13_T02.ocraw", "application/octet-stream", 4_120_000_000L, 1_790_000_900L)),
+        facts = GalleryFacts(codec = rawCodecBadge("bpq"))),
 )
 
 internal val SampleTakes = listOf(

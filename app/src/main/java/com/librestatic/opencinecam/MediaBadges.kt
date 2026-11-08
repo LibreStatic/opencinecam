@@ -26,8 +26,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
-/** A codec name and, when the take declares it, the sample depth ("HEVC" 10, "WAV" 32 float). */
-internal data class CodecBadge(val name: String, val bits: Int? = null, val float: Boolean = false)
+/**
+ * A codec name and, when the take declares it, the sample depth ("HEVC" 10, "WAV" 32 float). A
+ * compressed RAW take's badge is words, [label], shown in place of [name].
+ */
+internal data class CodecBadge(val name: String, val bits: Int? = null, val float: Boolean = false, @StringRes val label: Int? = null)
 
 /** What a card and the inspector say about a take beyond its MediaStore facts. */
 internal data class TakeBadges(val codec: CodecBadge? = null, val proxy: TakeProxyState = TakeProxyState.NONE,
@@ -45,8 +48,21 @@ internal fun codecBadge(kind: LocalMediaKind, mime: String, name: String, encodi
     LocalMediaKind.VIDEO -> videoCodecBadge(encoding?.videoMime, encoding?.videoProfile)
     LocalMediaKind.PHOTO -> photoCodecBadge(mime, name)
     LocalMediaKind.AUDIO -> audioCodecBadge(mime, name, encoding?.audioContainer, encoding?.audioSamples)
-    // Every OpenCine RAW v1 take so far is packed RAW10 (PLAN-071); a compressed encoding would get its own badge.
-    LocalMediaKind.RAW_VIDEO -> CodecBadge("RAW10")
+    // The encoding is in the file, not in a sidecar: until [GalleryFacts.codec] has read it, only "RAW".
+    LocalMediaKind.RAW_VIDEO -> CodecBadge("RAW")
+}
+
+/**
+ * A RAW take's badge from the `encoding` of its first `METADATA` chunk (PLAN-071): RAW10 when the
+ * key is absent, as in takes recorded before compression, and plain "RAW" for a value this build
+ * does not know.
+ */
+internal fun rawCodecBadge(encoding: String?): CodecBadge = when (encoding) {
+    null, "raw10" -> CodecBadge("RAW10")
+    "lj92" -> CodecBadge("LJ92")
+    "bp" -> CodecBadge("RAW", label = R.string.media_badge_raw_lossless)
+    "bpq" -> CodecBadge("RAW", label = R.string.media_badge_raw_near_lossless)
+    else -> CodecBadge("RAW")
 }
 
 /** The OCLog sidecar names the profile as "Main10" for HEVC or "AVC_<CodecProfileLevel>" for H.264. */
@@ -127,6 +143,7 @@ internal fun audioCodecBadge(mime: String, name: String, container: String?, sam
 @Composable
 @ReadOnlyComposable
 internal fun codecBadgeText(badge: CodecBadge): String = when {
+    badge.label != null -> stringResource(badge.label)
     badge.bits == null -> badge.name
     badge.float -> stringResource(R.string.media_badge_depth_float, badge.name, badge.bits)
     else -> stringResource(R.string.media_badge_depth, badge.name, badge.bits)

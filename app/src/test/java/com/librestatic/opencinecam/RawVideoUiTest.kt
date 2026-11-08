@@ -159,10 +159,20 @@ class RawVideoUiTest {
         assertEquals(listOf(raw), listOf(raw).filter { it.kind.opensInApp() })
     }
 
-    @Test fun rawTakesCarryTheRaw10Badge() {
+    @Test fun rawTakesSayOnlyRawUntilTheirFileIsRead() {
         val take = rawVideoTake(LocalMediaArtifact("content://media/external_primary/file/9", "OCC_TAKE_1.ocraw",
             "application/octet-stream", 4_000_000_000L, 1L))
-        assertEquals(CodecBadge("RAW10"), codecBadge(take, null))
+        assertEquals(CodecBadge("RAW"), codecBadge(take, null))
+    }
+
+    @Test fun rawBadgeFollowsTheEncodingTheFileDeclares() {
+        // Takes recorded before compression declare no encoding: they are all RAW10.
+        assertEquals(CodecBadge("RAW10"), rawCodecBadge(null))
+        assertEquals(CodecBadge("RAW10"), rawCodecBadge("raw10"))
+        assertEquals(CodecBadge("LJ92"), rawCodecBadge("lj92"))
+        assertEquals(CodecBadge("RAW", label = R.string.media_badge_raw_lossless), rawCodecBadge("bp"))
+        assertEquals(CodecBadge("RAW", label = R.string.media_badge_raw_near_lossless), rawCodecBadge("bpq"))
+        assertEquals(CodecBadge("RAW"), rawCodecBadge("zstd"))
     }
 
     @Test fun statusLineReadsTheConfigurationRateAndCapacityNotTheEncoderBitrate() {
