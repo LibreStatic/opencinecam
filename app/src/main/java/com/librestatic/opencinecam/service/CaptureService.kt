@@ -581,6 +581,8 @@ class CaptureService : Service() {
     private val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
     private var timelapseAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
+    /** The viewfinder surface was lost or replaced during a RAW take, which cannot reconfigure the session: reattach when it ends. */
+    private var rawTakePreviewStale = false
     private var attachedPreviewRotationDegrees: Int = 0
     private var cameraSwitchGeneration = 0L
     private var recoveryGeneration = 0L
@@ -2160,6 +2162,14 @@ class CaptureService : Service() {
         syncRawVideoArm()
         leaveFailedRawVideo()
         mainHandler.post { if (!serviceDestroyed) localBinder.applySettings(SettingsRepositories.get(this).states.value) }
+        if (rawTakePreviewStale) {
+            // A screen lock mid-take destroyed the SurfaceView; the session kept rendering to it and
+            // nothing could swap it. The camera is free again, so reopen the viewfinder on the live surface.
+            rawTakePreviewStale = false
+            mainHandler.post {
+                if (!serviceDestroyed) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+            }
+        }
     }
 
     /** Main: the take never started; back to previewing with the reason. */
@@ -3667,7 +3677,9 @@ class CaptureService : Service() {
             if (rawQualificationSession != null) return true
             syncRawVideoArm()
             if (cameraState.value.structuralSettingsFrozen) {
-                return previewEngine.attachPreviewWhileRecording(surface, displayRotationDegrees)
+                val attached = previewEngine.attachPreviewWhileRecording(surface, displayRotationDegrees)
+                if (!attached && rawTake != null) rawTakePreviewStale = true
+                return attached
             }
             // A layout/rotation callback can reattach an already present GPU output after
             // onPreviewStarted. Replace only its EGL window, not the configured camera graph:
@@ -3724,7 +3736,7 @@ class CaptureService : Service() {
                 cameraState.update { it.copy(stillCapturePending = stillOwner.get() != null) }
             }
             if (cameraState.value.structuralSettingsFrozen && !photoPreparing) {
-                previewEngine.detachPreviewWhileRecording()
+                if (!previewEngine.detachPreviewWhileRecording() && rawTake != null) rawTakePreviewStale = true
                 return
             }
             // A live subject lease keeps the GPU graph (photo modes included) for the cover window.
