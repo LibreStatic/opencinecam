@@ -140,6 +140,8 @@ class CinemaDngWriter(
 
     private val colour = StaticColour.from(index.metadata)
     private val fps: DngFraction? = parseFps(index.metadata["fps"])
+    /** TIFF Orientation from the take's `orientation`; 1 (as stored) for takes without one. */
+    private val tiffOrientation: Int = OcrawOrientation.tiffOrientation(index.orientationDegrees)
     private val originNs: Long? = index.frames.firstNotNullOfOrNull { it.header }?.sensorTimestampNs
     private val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
     private var payload: ByteBuffer? = null
@@ -440,7 +442,7 @@ class CinemaDngWriter(
                 TiffEntry.shorts(262, 32803),
                 TiffEntry.ascii(271, colour.make),
                 TiffEntry.ascii(272, colour.model),
-                TiffEntry.shorts(274, 1),
+                TiffEntry.shorts(274, tiffOrientation),
                 TiffEntry.shorts(277, 1),
                 TiffEntry.shorts(284, 1),
                 TiffEntry.ascii(305, SOFTWARE),

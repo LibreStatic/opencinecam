@@ -75,6 +75,8 @@ internal interface RawFrameSink {
     fun detach()
     /** The review's zoom (see [PlaybackController.setZoom]); any thread, applied to the next and the last frame. */
     fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {}
+    /** The take's `orientation` (clockwise degrees, see [OcrawFrameIndex.orientationDegrees]); set once before the first frame. */
+    fun setOrientation(degrees: Int) {}
     fun render(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, quality: RawDevelopQuality,
         onDone: (renderNanos: Long, drawn: Boolean) -> Unit)
     fun release()
@@ -353,11 +355,15 @@ internal class RawPlaybackSession(
         colour = RawStaticColour.from(index.metadata)
         audioPlan = rawAudioPlan(index, timesUs)
         val size = index.frames.firstNotNullOfOrNull { it.header }
+        // The stage and the chips take the upright size; the sink turns each frame to match.
+        val orientation = index.orientationDegrees
+        val shown = size?.let { RawDevelop.displaySize(it.width, it.height, orientation) }
         val made = createSink()
+        made.setOrientation(orientation)
         // Under the lock, so a zoom set meanwhile reaches the sink either here or through setZoom, never lost.
         synchronized(zoomLock) { sink = made; made.setZoom(zoom[0], zoom[1], zoom[2]) }
         publish(state.copy(phase = PlaybackPhase.LOADING, timeline = line, durationUs = timesUs.last() + intervalNs / 1000,
-            videoWidth = size?.width ?: 0, videoHeight = size?.height ?: 0, rawCodec = rawCodecLabel(index),
+            videoWidth = shown?.get(0) ?: 0, videoHeight = shown?.get(1) ?: 0, rawCodec = rawCodecLabel(index),
             rawAudioSampleRate = audioPlan?.format?.sampleRate))
         attachIfReady()
         stillTarget = 0
@@ -868,6 +874,7 @@ private class RendererSink(private val renderer: RawPlaybackRenderer) : RawFrame
     override fun attach(surface: Surface, width: Int, height: Int) = renderer.attach(surface, width, height)
     override fun detach() = renderer.detach()
     override fun setZoom(scale: Float, offsetX: Float, offsetY: Float) = renderer.setZoom(scale, offsetX, offsetY)
+    override fun setOrientation(degrees: Int) = renderer.setOrientation(degrees)
     override fun render(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, quality: RawDevelopQuality,
         onDone: (renderNanos: Long, drawn: Boolean) -> Unit) = renderer.render(buffer, header, params, quality, onDone)
     override fun release() = renderer.release()

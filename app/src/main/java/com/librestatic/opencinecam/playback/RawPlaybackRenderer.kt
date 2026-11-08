@@ -58,6 +58,8 @@ internal class RawPlaybackRenderer : Closeable {
     /** The developed frame's aspect, kept so a resized or re-attached window redraws without a new upload. */
     private var frameWidth = 0
     private var frameHeight = 0
+    /** The take's `orientation`: the blit turns the developed frame clockwise by it. */
+    private var orientationDegrees = 0
     private var zoomScale = 1f
     private var zoomX = 0f
     private var zoomY = 0f
@@ -101,6 +103,19 @@ internal class RawPlaybackRenderer : Closeable {
             zoomScale = scale; zoomX = offsetX; zoomY = offsetY
             try { makeCurrent(); present() }
             catch (failure: Exception) { android.util.Log.w(TAG, "RAW review zoom was not drawn.", failure) }
+        }
+    }
+
+    /**
+     * Shows every frame turned clockwise by [degrees] (0, 90, 180 or 270, the take's `orientation`),
+     * letterboxed at the turned aspect. Redraws the last developed frame.
+     */
+    fun setOrientation(degrees: Int) {
+        handler.post {
+            if (closed) return@post
+            orientationDegrees = degrees
+            try { makeCurrent(); present() }
+            catch (failure: Exception) { android.util.Log.w(TAG, "RAW review orientation was not drawn.", failure) }
         }
     }
 
@@ -260,11 +275,14 @@ internal class RawPlaybackRenderer : Closeable {
         GLES30.glClearColor(0f, 0f, 0f, 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         if (imageTexture != 0 && frameWidth > 0) {
-            val box = RawDevelop.letterbox(frameWidth, frameHeight, bufferWidth, bufferHeight)
+            val shown = RawDevelop.displaySize(frameWidth, frameHeight, orientationDegrees)
+            val box = RawDevelop.letterbox(shown[0], shown[1], bufferWidth, bufferHeight)
             GLES30.glUseProgram(blitProgram)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, imageTexture)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(blitProgram, "uImage"), 0)
+            GLES30.glUniformMatrix2fv(GLES30.glGetUniformLocation(blitProgram, "uOrientation"), 1, false,
+                RawDevelop.orientationMatrix(orientationDegrees), 0)
             GLES30.glUniform4fv(GLES30.glGetUniformLocation(blitProgram, "uZoom"), 1,
                 zoomedQuad(box, bufferWidth, bufferHeight, zoomScale, zoomX, zoomY), 0)
             drawQuad()
@@ -378,26 +396,32 @@ internal class RawPlaybackRenderer : Closeable {
             }
         """.trimIndent()
 
-        /** The develop passes' quad with the letterbox and zoom of [zoomedQuad]; texture coordinates stay on the plain quad. */
+        /**
+         * The develop passes' quad with the letterbox and zoom of [zoomedQuad]; texture coordinates stay on
+         * the plain quad. The image texture holds the top row in row 0, so the shown point is taken y down
+         * (flipping it upright), then turned back to the stored frame by [RawDevelop.orientationMatrix].
+         */
         private val BLIT_VERTEX_SHADER = """
             #version 300 es
             uniform vec4 uZoom;
+            uniform mat2 uOrientation;
             layout(location = 0) in vec2 aPosition;
             out vec2 vTexCoord;
             void main() {
                 gl_Position = vec4(aPosition * uZoom.xy + uZoom.zw, 0.0, 1.0);
-                vTexCoord = (aPosition + 1.0) * 0.5;
+                vec2 shown = vec2(aPosition.x + 1.0, 1.0 - aPosition.y) * 0.5;
+                vTexCoord = uOrientation * (shown - 0.5) + 0.5;
             }
         """.trimIndent()
 
-        /** The image texture holds the top row in row 0, so the window flips it upright. */
+        /** Samples the developed image at the stored point [BLIT_VERTEX_SHADER] chose. */
         private val BLIT_FRAGMENT_SHADER = """
             #version 300 es
             precision mediump float;
             uniform sampler2D uImage;
             in vec2 vTexCoord;
             out vec4 outColor;
-            void main() { outColor = vec4(texture(uImage, vec2(vTexCoord.x, 1.0 - vTexCoord.y)).rgb, 1.0); }
+            void main() { outColor = vec4(texture(uImage, vTexCoord).rgb, 1.0); }
         """.trimIndent()
 
         /**

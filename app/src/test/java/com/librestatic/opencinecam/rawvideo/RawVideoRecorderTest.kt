@@ -127,7 +127,12 @@ class RawVideoRecorderTest {
         assertEquals(8, armed.slotCount)
         val output = FileOutput()
         recorder.start(output, info())
-        recorder.onTakeStarted("2", RawVideoSessionConfig(WIDTH, HEIGHT, 30), mapOf("cfa" to "RGGB", "blackLevel" to "64 64 64 64"))
+        recorder.onTakeStarted(
+            "2",
+            RawVideoSessionConfig(WIDTH, HEIGHT, 30),
+            mapOf("cfa" to "RGGB", "blackLevel" to "64 64 64 64"),
+            orientationDegrees = 90,
+        )
 
         // Frame 0's result arrives before its frame; frames 1-3 get theirs afterwards; frame 4 never does.
         recorder.onResult(ts(0), 1000, mapOf("iso" to "100"))
@@ -168,6 +173,7 @@ class RawVideoRecorderTest {
         assertEquals("RGGB", metadata["cfa"])
         assertEquals("64 64 64 64", metadata["blackLevel"])
         assertEquals("fp", metadata["fingerprint"])
+        assertEquals("90", metadata[RawVideoMetadata.KEY_ORIENTATION])
 
         scan.frames.forEachIndexed { index, frame ->
             val header = requireNotNull(frame.header)
@@ -321,6 +327,18 @@ class RawVideoRecorderTest {
         // Without onRawTakeStarted the metadata still has the configuration's keys.
         assertEquals("0", scan.metadata["cameraId"])
         assertEquals("16 4 32 8", scan.metadata["crop"])
+        // No take start, no orientation: readers take an absent key as 0.
+        assertNull(scan.metadata[RawVideoMetadata.KEY_ORIENTATION])
+    }
+
+    @Test
+    fun orientationValuesAreQuarterTurns() {
+        assertEquals("0", RawVideoMetadata.orientationValue(0))
+        assertEquals("90", RawVideoMetadata.orientationValue(90))
+        assertEquals("180", RawVideoMetadata.orientationValue(180))
+        assertEquals("270", RawVideoMetadata.orientationValue(270))
+        assertEquals("0", RawVideoMetadata.orientationValue(360))
+        assertEquals("270", RawVideoMetadata.orientationValue(-90))
     }
 
     @Test

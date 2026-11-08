@@ -44,6 +44,12 @@ data class RawVideoCrop(val left: Int, val top: Int, val width: Int, val height:
  * space, decimals with `.` and no exponent.
  */
 object RawVideoMetadata {
+    /** Clockwise degrees (0, 90, 180, 270) that rotate the sensor-oriented frames upright. */
+    const val KEY_ORIENTATION = "orientation"
+
+    /** The `orientation` value of [degrees], normalised to a quarter turn in [0, 360). */
+    fun orientationValue(degrees: Int): String = ((Math.floorMod(degrees, 360) + 45) / 90 % 4 * 90).toString()
+
     /** Keys a take writes from its configuration, whatever the camera reports. */
     fun baseValues(
         cameraId: String,

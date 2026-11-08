@@ -313,6 +313,37 @@ class RawDevelopTest {
         assertArrayEquals(intArrayOf(0, 0, 0, 0), RawDevelop.letterbox(4080, 3060, 0, 1080))
     }
 
+    @Test fun displaySizeSwapsForAQuarterTurn() {
+        assertArrayEquals(intArrayOf(4080, 3060), RawDevelop.displaySize(4080, 3060, 0))
+        assertArrayEquals(intArrayOf(3060, 4080), RawDevelop.displaySize(4080, 3060, 90))
+        assertArrayEquals(intArrayOf(4080, 3060), RawDevelop.displaySize(4080, 3060, 180))
+        assertArrayEquals(intArrayOf(3060, 4080), RawDevelop.displaySize(4080, 3060, 270))
+        // A portrait take on a portrait window fills its height, centred.
+        val shown = RawDevelop.displaySize(4080, 3060, 90)
+        assertArrayEquals(intArrayOf(135, 0, 810, 1080), RawDevelop.letterbox(shown[0], shown[1], 1080, 1080))
+    }
+
+    @Test fun orientedSampleTurnsTheStoredFrameClockwise() {
+        fun sample(x: Float, y: Float, degrees: Int) = RawDevelop.orientedSample(x, y, degrees).toList()
+        // Shown corners (y down) and the stored corner each one comes from.
+        val corners = listOf(0f to 0f, 1f to 0f, 1f to 1f, 0f to 1f)
+        val expected = mapOf(
+            0 to corners,
+            // A clockwise quarter turn brings the stored bottom-left to the top-left.
+            90 to listOf(0f to 1f, 0f to 0f, 1f to 0f, 1f to 1f),
+            180 to listOf(1f to 1f, 0f to 1f, 0f to 0f, 1f to 0f),
+            270 to listOf(1f to 0f, 1f to 1f, 0f to 1f, 0f to 0f),
+        )
+        for ((degrees, stored) in expected) {
+            corners.zip(stored).forEach { (shown, from) ->
+                assertEquals("$degrees° $shown", listOf(from.first, from.second), sample(shown.first, shown.second, degrees))
+            }
+            assertEquals(listOf(0.5f, 0.5f), sample(0.5f, 0.5f, degrees))
+        }
+        // Unknown values draw the frame as stored.
+        assertEquals(listOf(0.25f, 0.75f), sample(0.25f, 0.75f, 45))
+    }
+
     @Test fun mipLevelsReachOnePixel() {
         assertEquals(1, RawDevelop.mipLevels(1, 1))
         assertEquals(11, RawDevelop.mipLevels(2040, 1530))

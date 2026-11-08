@@ -115,9 +115,11 @@ private class FakeSink(private val loop: ManualLoop, private val events: Mutable
     val attached = ArrayList<Pair<Surface, Int>>()
     var detaches = 0
     var released = false
+    val orientations = ArrayList<Int>()
 
     override fun attach(surface: Surface, width: Int, height: Int) { attached += surface to width }
     override fun detach() { detaches++ }
+    override fun setOrientation(degrees: Int) { orientations += degrees }
     override fun render(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, quality: RawDevelopQuality,
         onDone: (Long, Boolean) -> Unit) {
         renders += Render(header.frameNumber.toInt(), quality)
@@ -236,6 +238,21 @@ class RawPlaybackSessionTest {
         assertNotNull(last.renderedAtNs)
         assertTrue(last.canPlay)
         assertEquals(1080, sink.attached.single().second)
+    }
+
+    @Test fun aTurnedTakeShowsItsUprightSizeAndTurnsTheSinkBeforeTheFirstFrame() {
+        val sink = FakeSink(loop, events)
+        session(FakeProvider(loop, takeIndex(10, mapOf("fps" to "30/1", "orientation" to "90")), events), sink)
+        assertEquals(listOf(90), sink.orientations)
+        assertEquals(2, last.videoWidth); assertEquals(4, last.videoHeight)
+        assertEquals(listOf(FakeSink.Render(0, RawDevelopQuality.FULL)), sink.renders)
+    }
+
+    @Test fun aTakeWithoutOrientationIsShownAsStored() {
+        val sink = FakeSink(loop, events)
+        session(FakeProvider(loop, takeIndex(10, mapOf("fps" to "30/1", "orientation" to "sideways")), events), sink)
+        assertEquals(listOf(0), sink.orientations)
+        assertEquals(4, last.videoWidth); assertEquals(2, last.videoHeight)
     }
 
     @Test fun anEmptyTakeIsAnError() {

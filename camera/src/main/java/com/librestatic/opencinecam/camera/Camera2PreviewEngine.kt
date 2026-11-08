@@ -508,6 +508,8 @@ class Camera2PreviewEngine(
         val surface: Surface,
         val cameraId: String,
         val characteristics: CameraCharacteristics,
+        /** The stream's camera; its sensor orientation gives the take's orientation at take start. */
+        val descriptor: Camera2CameraDescriptor,
         val listener: Camera2PreviewListener,
         /** The RAW10 minimum frame duration declared at the stream's size; null when the camera declares none. */
         val declaredMinFrameDurationNs: Long?,
@@ -2005,7 +2007,7 @@ class Camera2PreviewEngine(
         }.getOrNull()?.takeIf { it > 0 }
         val qtiOverride = deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE)
         val stream = RawVideoStream(
-            config, reader, reader.surface, descriptor.cameraId, characteristics, owner, declaredMinFrameDurationNs, qtiOverride,
+            config, reader, reader.surface, descriptor.cameraId, characteristics, descriptor, owner, declaredMinFrameDurationNs, qtiOverride,
         )
         reader.setOnImageAvailableListener({ drainRawVideoReader(stream) }, rawVideoHandler)
         rawVideoStream = stream
@@ -2169,7 +2171,9 @@ class Camera2PreviewEngine(
             }
             if (!take.state.begin()) return@Runnable
             try {
-                consumer.onRawTakeStarted(stream.cameraId, stream.characteristics, stream.config)
+                // The same clockwise rotation ordinary video gives MediaRecorder as its orientation hint.
+                val orientation = jpegOrientation(stream.descriptor)
+                consumer.onRawTakeStarted(stream.cameraId, stream.characteristics, stream.config, orientation)
             } catch (failure: Exception) {
                 Log.w(TAG, "RAW consumer failed in onRawTakeStarted", failure)
                 endRawTake(take, RawVideoReasons.CONSUMER_FAILED, streamFailure = false)

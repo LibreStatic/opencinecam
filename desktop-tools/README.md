@@ -109,6 +109,12 @@ the integer nominal rate; above 30 fps the frames field counts pairs), and
 stem, whatever `--prefix` says). Without a usable `fps` the tool warns and
 writes neither `FrameRate` nor `TimeCodes`.
 
+Frames stay in sensor orientation; the take's static `orientation` (the
+clockwise turn, in degrees, that shows them upright) becomes the TIFF
+`Orientation` tag (274): 0 is 1, 90 is 6, 180 is 3 and 270 is 8. Takes
+without the key, or with any other value, get 1 as before, so a viewer that
+honours the tag shows a portrait take upright.
+
 On the device, `CinemaDngWriter` and `OcrawWavWriter` in `:media` write the
 same bytes, with exact sizes up front and byte ranges for the network share;
 `tools/regen-cinemadng-golden.sh` regenerates the golden fixtures that check it.
