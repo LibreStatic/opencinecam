@@ -6,6 +6,7 @@ import com.librestatic.opencinecam.ROUTE_KEY
 import com.librestatic.opencinecam.camera.OpenCineLogRecordingEvidence
 import com.librestatic.opencinecam.camera.SharedCapturePauseReport
 import com.librestatic.opencinecam.core.model.QuirkResolution
+import com.librestatic.opencinecam.storage.ClipCameraSettings
 import com.librestatic.opencinecam.storage.ClipDeviceProfile
 import com.librestatic.opencinecam.storage.ClipGraph
 import com.librestatic.opencinecam.storage.ClipIntent
@@ -48,6 +49,8 @@ internal data class ClipFactsInput(
     val encodedFrames: Long?,
     val success: Boolean,
     val nativeRetired: Boolean,
+    /** The camera settings [ClipCameraTracker] sampled while the take recorded; null when it did not run. */
+    val camera: ClipCameraSettings? = null,
 )
 
 internal fun clipDeviceProfileOf(resolution: QuirkResolution): ClipDeviceProfile = ClipDeviceProfile(
@@ -95,6 +98,7 @@ internal fun assembleClipFacts(input: ClipFactsInput): ClipTakeFacts {
         audioSampleRateHz = input.separateAudio?.sampleRateHz,
         audioBitDepth = input.separateAudio?.bitDepthBits,
         deviceProfile = input.deviceProfile,
+        camera = input.camera,
     )
     val pauses = input.sharedPause?.let { report ->
         report.windows.map { window ->

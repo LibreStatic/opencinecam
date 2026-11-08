@@ -419,11 +419,13 @@ class CaptureService : Service() {
         val intent = takeClipIntent
         val codecMime = takeClipCodecMime
         val mediaRecorder = takeClipMediaRecorder
+        val state = cameraState.value
+        val camera = takeCameraTracker?.also { it.sample(state) }?.result()
         takeClipMediaRecorder = null
         takeClipStartedAt = null
         takeClipIntent = null
         takeClipCodecMime = null
-        val state = cameraState.value
+        takeCameraTracker = null
         val facts = assembleClipFacts(ClipFactsInput(
             startedAt = started, intent = intent, cameraId = state.selectedCameraId, hardware = state.hardwareTruth,
             recordingWidth = state.recordingWidth, recordingHeight = state.recordingHeight, targetFps = state.targetFps,
@@ -433,7 +435,7 @@ class CaptureService : Service() {
             deviceProfile = clipDeviceProfile(state.selectedCameraId),
             noticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') },
             hardwareWarnings = emptyList(), stopReason = reasons.firstOrNull(), durationMs = activeRecordingElapsedMs(),
-            encodedFrames = encodedFrames, success = false, nativeRetired = false,
+            encodedFrames = encodedFrames, success = false, nativeRetired = false, camera = camera,
         ))
         return clipSidecarProvider { facts }
     }
@@ -644,6 +646,8 @@ class CaptureService : Service() {
     @Volatile private var takeClipStartedAt: java.time.Instant? = null
     @Volatile private var takeClipCodecMime: String? = null
     @Volatile private var takeClipMediaRecorder: Boolean? = null
+    /** Samples the running take's camera settings from [cameraState] for the clip sidecar; null outside a take. */
+    @Volatile private var takeCameraTracker: ClipCameraTracker? = null
     /** Stable code of a Strict encoder refusal reported by the engine, consumed by the failed-start branch. */
     @Volatile private var pendingStartRefusal: String? = null
     /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
@@ -816,6 +820,8 @@ class CaptureService : Service() {
         settingsScope.launch { repository.states.collect { localBinder.applySettings(it) } }
         // The network drive (PLAN-071 §8) never runs while a take prepares, records or finalises.
         settingsScope.launch { cameraState.collect { com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(it.reviewBlockedByTake()) } }
+        // The clip sidecar's camera block follows the reported exposure, white balance and zoom while a take records.
+        settingsScope.launch { cameraState.collect { takeCameraTracker?.sample(it) } }
         settingsScope.launch {
             val library = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LutLibraries.get(this@CaptureService) }
             recordingLutLibrary = library
@@ -2709,6 +2715,7 @@ class CaptureService : Service() {
             takeClipIntent = runCatching { clipIntentSnapshot() }.getOrNull()
             takeClipCodecMime = previewEngine.activeVideoCodec()?.mime
             takeClipMediaRecorder = previewEngine.recordsThroughMediaRecorder()
+            takeCameraTracker = ClipCameraTracker().also { it.sample(cameraState.value) }
             subjectSyncMarkers.begin(android.os.SystemClock.elapsedRealtimeNanos())
             audioSidecarRecorder?.let { sidecar ->
                 try {
@@ -2826,11 +2833,13 @@ class CaptureService : Service() {
             val clipIntent = takeClipIntent?.copy(timecodeEnabled = timecodeReport?.config?.enabled == true)
             val clipCodecMime = takeClipCodecMime
             val clipMediaRecorder = takeClipMediaRecorder
+            val clipState = cameraState.value
+            val clipCamera = takeCameraTracker?.also { it.sample(clipState) }?.result()
             takeClipMediaRecorder = null
             takeClipStartedAt = null
             takeClipIntent = null
             takeClipCodecMime = null
-            val clipState = cameraState.value
+            takeCameraTracker = null
             val clipDeviceProfile = clipDeviceProfile(clipState.selectedCameraId)
             val clipNoticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') }
             val clipStopReason = stopReason?.let { takeStopReason(it).name.lowercase().replace('_', '-') }
@@ -2927,7 +2936,7 @@ class CaptureService : Service() {
                                 deviceProfile = clipDeviceProfile, noticeCodes = clipNoticeCodes,
                                 hardwareWarnings = hardwareTruth?.warnings.orEmpty(), stopReason = clipStopReason,
                                 durationMs = durationMs, encodedFrames = encodedFrames,
-                                success = success, nativeRetired = nativeRetired,
+                                success = success, nativeRetired = nativeRetired, camera = clipCamera,
                             ))
                         }
                     }

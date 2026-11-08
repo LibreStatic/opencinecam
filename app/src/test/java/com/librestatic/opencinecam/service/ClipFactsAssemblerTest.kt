@@ -39,6 +39,12 @@ class ClipFactsAssemblerTest {
         durationMs = 4_000, encodedFrames = 100, success = true, nativeRetired = true,
     )
 
+    @Test fun theSampledCameraSettingsReachTheGraph() {
+        val camera = com.librestatic.opencinecam.storage.ClipCameraSettings(cameraId = "0", afMode = "CONTINUOUS_VIDEO")
+        assertEquals(camera, assembleClipFacts(input().copy(camera = camera)).graph.camera)
+        assertNull(assembleClipFacts(input()).graph.camera)
+    }
+
     @Test fun theRecorderIsWhatTheEngineReportedAtTheStartNeverInferred() {
         assertEquals("MediaCodec", assembleClipFacts(input(mediaRecorder = false)).graph.recorder)
         assertNull(assembleClipFacts(input(mediaRecorder = null)).graph.recorder)

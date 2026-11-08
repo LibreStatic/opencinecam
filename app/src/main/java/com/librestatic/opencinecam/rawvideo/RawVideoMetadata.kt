@@ -81,6 +81,8 @@ object RawVideoMetadata {
         illuminant1 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1),
         illuminant2 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt(),
         activeArray = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE),
+        focalLengthMm = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull(),
+        aperture = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull(),
     )
 
     fun staticValues(
@@ -94,6 +96,10 @@ object RawVideoMetadata {
         illuminant1: Int?,
         illuminant2: Int?,
         activeArray: Rect?,
+        /** The lens' first advertised focal length, in mm. */
+        focalLengthMm: Float? = null,
+        /** The lens' first advertised f-number. */
+        aperture: Float? = null,
     ): Map<String, String> {
         val values = linkedMapOf<String, String>()
         cfa(cfaArrangement)?.let { values["cfa"] = it }
@@ -109,6 +115,8 @@ object RawVideoMetadata {
         illuminant1?.let { values["calibrationIlluminant1"] = it.toString() }
         illuminant2?.let { values["calibrationIlluminant2"] = it.toString() }
         activeArray?.let { values["activeArray"] = "${it.left} ${it.top} ${it.right} ${it.bottom}" }
+        focalLengthMm?.takeIf { it > 0f }?.let { values["focalLength"] = decimal(it) }
+        aperture?.takeIf { it > 0f }?.let { values["aperture"] = decimal(it) }
         return values
     }
 

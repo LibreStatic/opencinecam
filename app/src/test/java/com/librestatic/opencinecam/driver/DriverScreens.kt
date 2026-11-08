@@ -114,6 +114,11 @@ import com.librestatic.opencinecam.CodecBadge
 import com.librestatic.opencinecam.CompositionGridMode
 import com.librestatic.opencinecam.GalleryFacts
 import com.librestatic.opencinecam.rawCodecBadge
+import com.librestatic.opencinecam.TakeDetailInputs
+import com.librestatic.opencinecam.TakeTechnicalDetails
+import com.librestatic.opencinecam.buildTakeDetails
+import com.librestatic.opencinecam.detailText
+import org.robolectric.RuntimeEnvironment
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
@@ -975,10 +980,32 @@ fun GalleryInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection 
 @Composable
 fun GalleryInspectorProbed() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "7")
 
-/** The media catalog with no takes yet. */
-/** The sample takes with two RAW video takes (`.ocraw`): RAW10 and near-lossless badges, placeholder tile, size in place of the length. */
+/** The DNG photo's details: its EXIF in the Image and Camera and exposure sections, and the RAW section's colour filter. */
 @Composable
-fun GalleryRaw() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes))
+fun GalleryPhotoInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "3")
+
+/** The WAV recorder track's details: the File and Audio sections only. */
+@Composable
+fun GalleryAudioInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "6")
+
+/** Take 1's details while its files are still being read: the loading line in place of the sections. */
+@Composable
+fun GalleryInspectorLoading() = GalleryWith(PendingDetailsCatalog(FakeCatalog(SampleTakes)), initialSelection = "1")
+
+/** A catalog whose details never arrive. */
+private class PendingDetailsCatalog(source: MediaCatalogSource) : MediaCatalogSource by source {
+    override suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = awaitCancellation()
+}
+
+/** The media catalog with no takes yet. */
+/**
+ * The sample takes with two RAW video takes (`.ocraw`): RAW10 and near-lossless badges, size in place of the length;
+ * the first with its developed first frame (a fake gradient), the second whose frame gave no picture, so the placeholder.
+ */
+@Composable
+fun GalleryRaw() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes) { artifact ->
+    if (artifact == SampleRawTakes[1].take.primary) null else gradientThumbnail(artifact.name.hashCode())
+})
 
 /** A RAW take's details: Play and Share (no rename or delete), and the note that the player shows a developed preview. */
 @Composable
@@ -1184,11 +1211,14 @@ internal class FakeCatalog(private val takes: List<SampleTake>,
         flowOf(takes.filter { it.take.id in ids && it.proxy != TakeProxyState.NONE }.associate { it.take.id to it.proxy })
 
     override suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = takes.firstOrNull { it.take.primary == artifact }?.probed
+
+    override suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = takes.firstOrNull { it.take == take }?.details
+        ?.let { buildTakeDetails(it(take), detailText(RuntimeEnvironment.getApplication())) }
 }
 
-/** A take with what MediaStore, its sidecars, the proxy queue and a probe of its file would say about it. */
+/** A take with what MediaStore, its sidecars, the proxy queue, a probe of its file and the inspector's readers would say about it. */
 internal class SampleTake(val take: LocalMediaTake, val facts: GalleryFacts? = null, val encoding: LocalMediaEncoding? = null,
-    val proxy: TakeProxyState = TakeProxyState.NONE, val probed: CodecBadge? = null)
+    val proxy: TakeProxyState = TakeProxyState.NONE, val probed: CodecBadge? = null, val details: ((LocalMediaTake) -> TakeDetailInputs)? = null)
 
 /** A stand-in frame: a two-colour gradient seeded by the file name, so takes are told apart. */
 private fun gradientThumbnail(seed: Int): Bitmap {
@@ -1221,29 +1251,33 @@ private fun take(id: Int, name: String, mime: String, kind: LocalMediaKind, size
  */
 internal val SampleRawTakes = listOf(
     SampleTake(rawVideoTake(artifact(21, "OCC_TAKE_A001_S13_T01.ocraw", "application/octet-stream", 19_660_000_000L, 1_790_001_800L)),
-        facts = GalleryFacts(codec = rawCodecBadge("raw10"))),
+        facts = GalleryFacts(codec = rawCodecBadge("raw10")), details = { rawTakeInputs(it, compressed = false) }),
     SampleTake(rawVideoTake(artifact(22, "OCC_TAKE_A001_S13_T02.ocraw", "application/octet-stream", 4_120_000_000L, 1_790_000_900L)),
-        facts = GalleryFacts(codec = rawCodecBadge("bpq"))),
+        facts = GalleryFacts(codec = rawCodecBadge("bpq")), details = { rawTakeInputs(it, compressed = true) }),
 )
 
 internal val SampleTakes = listOf(
     SampleTake(take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 3, goodTake = true), log = true),
-        GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY),
+        GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY,
+        details = ::logTakeInputs),
     SampleTake(take(2, "OCC_TAKE_A001_S12_T02.mp4", "video/mp4", LocalMediaKind.VIDEO, 912_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 2), log = true),
         GalleryFacts(durationMs = 51_000L, width = 1920, height = 1080), LocalMediaEncoding("video/avc", "AVC_8"), TakeProxyState.MAKING),
-    SampleTake(take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null)),
+    SampleTake(take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null),
+        details = { photoTakeInputs(it, dng = true) }),
     SampleTake(take(4, "OCC_20260930_181410.jpg", "image/jpeg", LocalMediaKind.PHOTO, 6_200_000L, slate = null,
-        status = LocalMediaRelationStatus.LEGACY)),
+        status = LocalMediaRelationStatus.LEGACY), details = { photoTakeInputs(it, dng = false) }),
     SampleTake(take(5, "OCC_TAKE_A001_S11_T01_room-tone.m4a", "audio/mp4", LocalMediaKind.AUDIO, 3_100_000L,
-        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)), GalleryFacts(durationMs = 62_000L)),
+        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)), GalleryFacts(durationMs = 62_000L),
+        details = { audioTakeInputs(it, wav = false) }),
     SampleTake(take(6, "OCC_TAKE_A001_S11_T02_wild.wav", "audio/wav", LocalMediaKind.AUDIO, 21_800_000L,
         ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 2)), GalleryFacts(durationMs = 75_000L),
-        LocalMediaEncoding(audioContainer = "WAV", audioSamples = "PCM_24")),
+        LocalMediaEncoding(audioContainer = "WAV", audioSamples = "PCM_24"), details = { audioTakeInputs(it, wav = true) }),
     SampleTake(take(7, "OCC_TAKE_A001_S10_T04.mp4", "video/mp4", LocalMediaKind.VIDEO, 640_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "10", reel = "A001", takeNumber = 4)),
-        GalleryFacts(durationMs = 42_000L, width = 1920, height = 1080), probed = CodecBadge("H.264", 8)),
+        GalleryFacts(durationMs = 42_000L, width = 1920, height = 1080), probed = CodecBadge("H.264", 8),
+        details = ::probedTakeInputs),
 )
 
 // Focus peaking

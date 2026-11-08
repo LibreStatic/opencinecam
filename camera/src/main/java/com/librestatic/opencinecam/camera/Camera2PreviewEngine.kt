@@ -127,6 +127,8 @@ data class Camera2CameraDescriptor(
     val kelvinRange: IntRange? = null,
     /** SENSOR_INFO_PHYSICAL_SIZE in mm (width, height), when advertised. */
     val sensorSizeMm: Pair<Float, Float>? = null,
+    /** LENS_INFO_AVAILABLE_APERTURES as f-numbers; empty when not advertised. */
+    val aperturesFNumber: List<Float> = emptyList(),
     val tintSupported: Boolean = false,
     val availableAwbModes: Set<Int> = emptySet(),
     val exposureCapabilities: ExposureCapabilities = ExposureCapabilities(),
@@ -7181,6 +7183,7 @@ class Camera2PreviewEngine(
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
                 focalLengthsMm = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList().orEmpty(),
                 sensorSizeMm = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { it.width to it.height },
+                aperturesFNumber = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.toList().orEmpty(),
                 previewSize = previewSize,
                 jpegSize = map.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height },
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)
