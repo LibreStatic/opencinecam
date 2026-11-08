@@ -240,12 +240,20 @@ object RawDevelop {
         }
     }
 
-    /** The real-time develop: (width/2)×(height/2) pixels, interleaved sRGB R, G, B, top row first. */
-    fun developHalf(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams): FloatArray {
-        val outWidth = header.width / 2
-        val outHeight = header.height / 2
+    /**
+     * The real-time develop: (width/2)×(height/2) pixels, interleaved sRGB R, G, B, top row first.
+     * A [step] above 1 keeps one quad in the middle of every [step]×[step] block of quads, so a
+     * thumbnail develops only the pixels it shows: [halfSize] gives the size.
+     */
+    fun developHalf(buffer: ByteBuffer, header: OcrawFrameHeader, params: RawDevelopParams, step: Int = 1): FloatArray {
+        require(step > 0) { "step must be positive" }
+        val quadsWide = header.width / 2
+        val quadsHigh = header.height / 2
+        val (outWidth, outHeight) = halfSize(header.width, header.height, step)
         val out = FloatArray(outWidth * outHeight * 3)
-        for (qy in 0 until outHeight) for (qx in 0 until outWidth) {
+        for (oy in 0 until outHeight) for (ox in 0 until outWidth) {
+            val qx = min(ox * step + step / 2, quadsWide - 1)
+            val qy = min(oy * step + step / 2, quadsHigh - 1)
             val sum = FloatArray(3)
             val count = FloatArray(3)
             var total = 0f
@@ -258,9 +266,17 @@ object RawDevelop {
             }
             val camera = if (params.cfa == RawCfa.MONO) FloatArray(3) { total * 0.25f }
                 else FloatArray(3) { sum[it] / max(count[it], 1f) }
-            finish(camera, params).copyInto(out, (qy * outWidth + qx) * 3)
+            finish(camera, params).copyInto(out, (oy * outWidth + ox) * 3)
         }
         return out
+    }
+
+    /** The (width, height) [developHalf] returns for a [width]×[height] frame at [step]; empty for a frame under one quad. */
+    fun halfSize(width: Int, height: Int, step: Int = 1): IntArray {
+        val quadsWide = width / 2
+        val quadsHigh = height / 2
+        if (quadsWide <= 0 || quadsHigh <= 0) return intArrayOf(0, 0)
+        return intArrayOf(max(1, quadsWide / step), max(1, quadsHigh / step))
     }
 
     /**

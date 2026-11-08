@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import com.librestatic.opencinecam.playback.RawThumbnails
 import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
@@ -72,6 +73,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
@@ -85,6 +88,8 @@ internal interface MediaCatalogSource {
     fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = flowOf(emptyMap())
     /** The codec of a video whose sidecar declares none, read from the file itself; null when unknown. */
     suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = null
+    /** The inspector's grouped file, video, colour, audio, camera, RAW and recording facts; null when unknown. */
+    suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = null
 }
 
 @Composable
@@ -111,11 +116,15 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
         object : MediaCatalogSource {
             override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int) =
                 withContext(Dispatchers.IO) { repository.page(settings, query, cursor, limit) }
-            override suspend fun thumbnail(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryThumbnail(app, artifact) }
+            override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? =
+                if (!artifact.name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)) withContext(Dispatchers.IO) { galleryThumbnail(app, artifact) }
+                // One RAW frame in memory at a time; a tile scrolled away while it waits never reads its take.
+                else RawThumbnailGate.withLock { withContext(Dispatchers.IO) { rawGalleryThumbnail(app, artifact) } }
             override suspend fun facts(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) { galleryFacts(app, artifact) }
             override suspend fun probedCodec(artifact: LocalMediaArtifact) = withContext(Dispatchers.IO) {
                 probeClipMetadata(app, artifact.uri, log = null)?.let { probedCodecBadge(it.codec, it.bitDepth) }
             }
+            override suspend fun details(take: LocalMediaTake) = withContext(Dispatchers.IO) { readTakeDetails(app, take) }
             // The queue for work in flight, the receipts (listed once per page load) for proxies already made.
             override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = if (ids.isEmpty()) flowOf(emptyMap())
                 else combine(queue.states, flow { emit(committedProxyTakes(app, ids)) }.flowOn(Dispatchers.IO)) { state, committed ->
@@ -167,6 +176,17 @@ private fun galleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bi
     context.contentResolver.loadThumbnail(artifact.uri.toUri(), Size(512, 512), null)
 }.getOrNull()
 
+/** Serialises [rawGalleryThumbnail]: each holds a full-resolution frame buffer while it develops. */
+private val RawThumbnailGate = Mutex()
+
+/** A RAW take, which MediaStore cannot decode, gets its first frame developed by [RawThumbnails]; null on any failure. */
+private fun rawGalleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bitmap? = runCatching {
+    // The stream owns the descriptor, so closing the channel closes it once.
+    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.let { descriptor ->
+        android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).channel.use { channel -> RawThumbnails.render(channel) }
+    }?.let { Bitmap.createBitmap(it.argb, it.width, it.height, Bitmap.Config.ARGB_8888) }
+}.getOrNull()
+
 /**
  * One MediaStore row read by URI: no file is opened, decoded or probed for the badges, except a RAW
  * take, whose encoding only its file says (its first chunk, a few hundred bytes).
@@ -200,6 +220,13 @@ private fun rawGalleryFacts(context: Context, artifact: LocalMediaArtifact): Gal
         }
     }?.let { GalleryFacts(codec = rawCodecBadge(it["encoding"])) }
 }.getOrNull()
+
+/** [this] with its unknown values taken from [other]. */
+internal fun GalleryFacts?.mergedWith(other: GalleryFacts?): GalleryFacts? = when {
+    this == null -> other
+    other == null -> this
+    else -> GalleryFacts(durationMs ?: other.durationMs, width ?: other.width, height ?: other.height, hdr || other.hdr, codec ?: other.codec)
+}
 
 /** A RAW take's codec as its file says, once read, over the kind's placeholder. */
 private fun TakeBadges.withFacts(facts: GalleryFacts?): TakeBadges = facts?.codec?.let { copy(codec = it) } ?: this
@@ -285,6 +312,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
     val facts = remember(source) { mutableMapOf<String, GalleryFacts>() }
     val probedCodecs = remember(source) { mutableMapOf<String, CodecBadge?>() }
+    val takeDetails = remember(source) { mutableMapOf<String, TakeTechnicalDetails?>() }
     val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
         .collectAsState(emptyMap())
     fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE,
@@ -387,10 +415,12 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         val shown = badges(take).let {
             if (it.codec == null && take.kind == LocalMediaKind.VIDEO) it.copy(codec = rememberProbedCodec(take, source, probedCodecs)) else it
         }
-        val takeFacts = rememberGalleryFacts(take.primary, source, facts)
+        val technical = rememberTakeDetails(take, source, takeDetails)
+        // A RAW take's MediaStore row has no duration or size: the file's own facts fill the chips.
+        val takeFacts = rememberGalleryFacts(take.primary, source, facts).mergedWith(technical.facts)
         MediaTakeDetails(take, settings, source, thumbnails, takeFacts, shown.withFacts(takeFacts),
             if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier,
-            progress = exportProgress(take))
+            progress = exportProgress(take), technical = technical)
     }
 
     val coordinator = LocalFoldDisplayCoordinator.current

@@ -368,8 +368,15 @@ class OcrawStreamReader(
      * frames included. `AUDIO_PCM16` chunks are listed in [OcrawFrameIndex.audio]
      * with their payloads skipped. Other chunks are skipped unchecked. Stops at the first
      * torn or invalid chunk header, or a metadata chunk failing its CRC.
+     *
+     * With [maxFrames], the walk also stops at the `RAW_FRAME` after the first [maxFrames],
+     * so the cost of a leading look (a gallery thumbnail) does not grow with the take: the
+     * index then holds those frames, the metadata written before that point, and
+     * [OcrawFrameIndex.validEnd] at the chunk where it stopped, with neither
+     * [OcrawFrameIndex.tornTail] nor [OcrawFrameIndex.hasEnd] set.
      */
-    fun indexFrames(): OcrawFrameIndex {
+    fun indexFrames(maxFrames: Int = Int.MAX_VALUE): OcrawFrameIndex {
+        require(maxFrames > 0) { "maxFrames must be positive" }
         val fileSize = channel.size()
         val header = readFileHeader(fileSize)
         if (header == null) {
@@ -400,6 +407,7 @@ class OcrawStreamReader(
             if (firstTimeBase == null) firstTimeBase = chunk.timeBase
             when (chunk.wireId) {
                 OcrawChunkId.RAW_FRAME.wireId -> {
+                    if (frames.size == maxFrames) break
                     if (frameTimeBase == null) frameTimeBase = chunk.timeBase
                     var frameHeader: OcrawFrameHeader? = null
                     if (chunk.payloadLength >= OcrawFrameHeader.BYTES) {
