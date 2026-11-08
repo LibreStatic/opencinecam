@@ -3615,12 +3615,12 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
     val raw = state.selectedMode == CaptureMode.RAW_VIDEO
     val parts = buildList {
         if (raw) {
-            // RAW video is silent and uncompressed: never the encoder's bitrate, but the configuration's
-            // data rate and the time the free space lasts at it (PLAN-071).
+            // RAW video is uncompressed: never the encoder's bitrate, but the configuration's data rate
+            // and the time the free space lasts at it (PLAN-071). Its sound is PCM, on with the audio setting.
             add("RAW10")
             val facts = rawVideoStatusFacts(state)
             facts?.let { val label = rawLocalizedLabel(it.label, it.isBlockPack && rawVideoNearLosslessActive(state, settings)); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(stringResource(R.string.raw_video_rate, it.megabytesPerSecond)) }
-            add(stringResource(R.string.status_audio_off))
+            add(if (settings.audioEnabled) "PCM " + formatAudioRate(settings.audioSampleRateHz) else stringResource(R.string.status_audio_off))
             facts?.timeLeftMs?.let { add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it))) }
         } else if (video) {
             add(when (state.selectedMode) {
