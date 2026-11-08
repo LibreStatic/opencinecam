@@ -580,6 +580,21 @@ class CineTags:
     origin_ns: int | None
 
 
+TIFF_ORIENTATION = {0: 1, 90: 6, 180: 3, 270: 8}
+
+
+def orientation_degrees(metadata: dict[str, str]) -> int:
+    """The take's `orientation` (clockwise degrees to show the stored frames upright): 0, 90, 180
+    or 270, and 0 when the key is absent or invalid, as in takes recorded before it."""
+    value = (metadata.get("orientation") or "").strip()
+    return int(value) if value in ("90", "180", "270") else 0
+
+
+def tiff_orientation(degrees: int) -> int:
+    """The TIFF Orientation (tag 274) value for [degrees]: 1, 6, 3 or 8."""
+    return TIFF_ORIENTATION.get(degrees, 1)
+
+
 def frame_origin_ns(raw_chunks: list[ocraw.Chunk]) -> int | None:
     """The sensor timestamp of the first RAW frame whose header is readable: the take start."""
     for chunk in raw_chunks:
@@ -604,7 +619,7 @@ def cine_entries(cine: CineTags, timestamp_ns: int) -> list[tuple[int, int, obje
 
 def write_dng(path: Path, width: int, height: int, image: bytes | Encoded, colour: StaticColour,
               frame_meta: dict[str, str], job: Conversion, cine: CineTags | None = None,
-              timestamp_ns: int = 0) -> None:
+              timestamp_ns: int = 0, orientation: int = 1) -> None:
     if not isinstance(image, Encoded):
         image = uncompressed(width, height, image)
     rows_per_strip = image.rows_per_part
@@ -635,7 +650,7 @@ def write_dng(path: Path, width: int, height: int, image: bytes | Encoded, colou
             (262, SHORT, [32803]),
             (271, ASCII, colour.make),
             (272, ASCII, colour.model),
-            (274, SHORT, [1]),
+            (274, SHORT, [orientation]),
             (277, SHORT, [1]),
             (284, SHORT, [1]),
             (305, ASCII, SOFTWARE),
@@ -822,6 +837,7 @@ def convert(path: Path, job: Conversion, frames: str | None = None, every: int =
                         origin_ns=frame_origin_ns(raw_chunks))
         if cine.fps is None:
             job.warn("metadata has no usable fps; wrote no FrameRate or TimeCodes")
+        orientation = tiff_orientation(orientation_degrees(metadata))
         inherited = inherit_colour([chunk.sequence for chunk in raw_chunks], frame_meta)
         picked = [index for index in range(len(raw_chunks)) if selected(index)][::every]
         for index in picked:
@@ -851,7 +867,7 @@ def convert(path: Path, job: Conversion, frames: str | None = None, every: int =
             target = job.output / frame_file_name(job.prefix, index)
             meta = frame_meta[chunk.sequence] if chunk.sequence in frame_meta else inherited.get(chunk.sequence, {})
             write_dng(target, width, height, image, colour, meta, job, cine,
-                      int(header["sensorTimestampNs"]))
+                      int(header["sensorTimestampNs"]), orientation)
             job.written.append(target)
             key = f"{width}x{height}"
             job.dimensions[key] = job.dimensions.get(key, 0) + 1

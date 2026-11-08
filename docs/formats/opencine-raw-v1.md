@@ -299,3 +299,18 @@ A writer builds each frame's table from the most recent ISO it knows, which
 is the frame's own when its capture result has arrived; the preamble's
 `isoUsed` names that ISO and may differ from the frame's `iso` in
 `FRAME_METADATA`.
+
+## Orientation (added 2026-11-08)
+
+This section extends the static metadata keys above.
+
+- `orientation`: `0`, `90`, `180` or `270`, the clockwise rotation in
+  degrees that shows the stored frames upright (the convention of the MP4
+  orientation hint and EXIF). Frames stay in sensor orientation; a writer
+  records the turn instead of rotating samples. The app writes the value it
+  gives ordinary video as its orientation hint, taken at take start.
+- A reader treats an absent key, or any other value, as `0`, so takes
+  written before the key show as before. The app's review draws each frame
+  turned, at the swapped aspect for `90` and `270`; DNG converters map it to
+  the TIFF `Orientation` tag (274): `0` is 1, `90` is 6, `180` is 3 and
+  `270` is 8.

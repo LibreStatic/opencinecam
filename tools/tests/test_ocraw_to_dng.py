@@ -858,6 +858,25 @@ class CinemaDngTest(unittest.TestCase):
         # 2 x 41.67 ms at 29.97 fps is 2.498 frames.
         self.assertEqual([2, 0, 0, 0, 0, 0, 0, 0], ifd0[51043])
 
+    def test_orientation_key_sets_the_tiff_orientation(self):
+        cases = {None: 1, "0": 1, "90": 6, "180": 3, "270": 8, "45": 1, "junk": 1}
+        for value, expected in cases.items():
+            with self.subTest(orientation=value):
+                static = dict(STATIC) if value is None else dict(STATIC, orientation=value)
+                data, _, _ = build_take(frames=1, static=static)
+                out = self.tmp / f"out-{value}"
+                code, summary = run_cli([str(self.write(data)), "-o", str(out), "--pure"])
+                self.assertEqual(0, code, summary)
+                ifd0, _, _ = read_dng(out / "A001_C002_000000.dng")
+                self.assertEqual([expected], ifd0[274])
+
+    def test_orientation_parsing(self):
+        self.assertEqual(0, to_dng.orientation_degrees({}))
+        self.assertEqual(90, to_dng.orientation_degrees({"orientation": "90"}))
+        self.assertEqual(270, to_dng.orientation_degrees({"orientation": " 270 "}))
+        self.assertEqual(0, to_dng.orientation_degrees({"orientation": "-90"}))
+        self.assertEqual(0, to_dng.orientation_degrees({"orientation": ""}))
+
     def test_without_fps_the_rate_and_timecode_are_omitted(self):
         static = {key: value for key, value in STATIC.items() if key != "fps"}
         data, _, _ = build_take(frames=1, static=static)

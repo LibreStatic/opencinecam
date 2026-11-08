@@ -92,6 +92,9 @@ data class OcrawFrameIndex(
     /** Every `AUDIO_PCM16` chunk in file order, payloads unread and unchecked. */
     val audio: List<OcrawAudioChunk> = emptyList(),
 ) {
+    /** The take's `orientation` key, parsed with [OcrawOrientation.degrees]. */
+    val orientationDegrees: Int get() = OcrawOrientation.degrees(metadata)
+
     /** For each frame without a `FRAME_METADATA` record, the colour values it inherits; built on first use. */
     private val inheritedColour: Map<Long, Map<String, String>> by lazy { inheritColour(frames, frameMetadata) }
 
@@ -158,6 +161,33 @@ data class OcrawFrameIndex(
             }
             return inherited
         }
+    }
+}
+
+/**
+ * The static `orientation` key: the clockwise rotation, in degrees, that shows the frames
+ * (stored in sensor orientation) upright, as the MP4 orientation hint and EXIF do.
+ */
+object OcrawOrientation {
+    const val KEY = "orientation"
+
+    /** 0, 90, 180 or 270; 0 when [metadata] has no `orientation` or an invalid one, as older takes. */
+    fun degrees(metadata: Map<String, String>): Int = parse(metadata[KEY])
+
+    /** [value] as 0, 90, 180 or 270; 0 for null or anything else. */
+    fun parse(value: String?): Int = when (value?.trim()) {
+        "90" -> 90
+        "180" -> 180
+        "270" -> 270
+        else -> 0
+    }
+
+    /** The TIFF/EXIF `Orientation` (tag 274) value for [degrees]: 1, 6, 3 or 8. */
+    fun tiffOrientation(degrees: Int): Int = when (degrees) {
+        90 -> 6
+        180 -> 3
+        270 -> 8
+        else -> 1
     }
 }
 

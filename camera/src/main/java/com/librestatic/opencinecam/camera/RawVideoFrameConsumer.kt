@@ -26,9 +26,16 @@ data class RawVideoSessionConfig(
 interface RawVideoFrameConsumer {
     /**
      * Static camera data for the take's metadata chunk, delivered once before
-     * the first frame.
+     * the first frame. [orientationDegrees] (0, 90, 180 or 270) is the clockwise
+     * rotation that shows the sensor-oriented frames upright, the value ordinary
+     * video passes to MediaRecorder as its orientation hint.
      */
-    fun onRawTakeStarted(cameraId: String, characteristics: CameraCharacteristics, config: RawVideoSessionConfig)
+    fun onRawTakeStarted(
+        cameraId: String,
+        characteristics: CameraCharacteristics,
+        config: RawVideoSessionConfig,
+        orientationDegrees: Int,
+    )
 
     /**
      * One RAW10 image. Copy what is needed and return at once; the engine closes

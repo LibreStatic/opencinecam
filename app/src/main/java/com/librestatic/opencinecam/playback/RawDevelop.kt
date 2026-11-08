@@ -312,6 +312,36 @@ object RawDevelop {
         return intArrayOf((surfaceWidth - width) / 2, (surfaceHeight - height) / 2, width, height)
     }
 
+    /**
+     * The size a [width]×[height] frame shows at once turned by [orientationDegrees] (the take's
+     * `orientation`, clockwise): swapped for a quarter turn, as given otherwise.
+     */
+    fun displaySize(width: Int, height: Int, orientationDegrees: Int): IntArray =
+        if (orientationDegrees == 90 || orientationDegrees == 270) intArrayOf(height, width) else intArrayOf(width, height)
+
+    /**
+     * The 2×2 matrix, column-major as `glUniformMatrix2fv` takes it, that maps a point of the shown
+     * picture to the stored frame point to sample, both as fractions with y down and centred on 0.5:
+     * `stored = M * (shown - 0.5) + 0.5`. It undoes the clockwise [orientationDegrees] that shows the
+     * frame upright; anything but 90, 180 or 270 is the identity.
+     */
+    fun orientationMatrix(orientationDegrees: Int): FloatArray = when (orientationDegrees) {
+        // Shown (x, y) comes from stored (y, 1 - x).
+        90 -> floatArrayOf(0f, -1f, 1f, 0f)
+        180 -> floatArrayOf(-1f, 0f, 0f, -1f)
+        // Shown (x, y) comes from stored (1 - y, x).
+        270 -> floatArrayOf(0f, 1f, -1f, 0f)
+        else -> floatArrayOf(1f, 0f, 0f, 1f)
+    }
+
+    /** [orientationMatrix] applied to the shown point ([x], [y]), as the blit shader does: the stored point. */
+    fun orientedSample(x: Float, y: Float, orientationDegrees: Int): FloatArray {
+        val m = orientationMatrix(orientationDegrees)
+        val dx = x - 0.5f
+        val dy = y - 0.5f
+        return floatArrayOf(m[0] * dx + m[2] * dy + 0.5f, m[1] * dx + m[3] * dy + 0.5f)
+    }
+
     /** Mip levels for a [width]×[height] texture, down to 1×1. */
     internal fun mipLevels(width: Int, height: Int): Int {
         var levels = 1

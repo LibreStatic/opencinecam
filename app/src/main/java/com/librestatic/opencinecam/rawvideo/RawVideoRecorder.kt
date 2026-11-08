@@ -294,6 +294,8 @@ class RawVideoRecorder(
         @Volatile var startedCameraId: String? = null
         @Volatile var sessionConfig: RawVideoSessionConfig? = null
         @Volatile var staticValues: Map<String, String> = emptyMap()
+        /** The take's `orientation` (clockwise degrees to show it upright); null until the take started. */
+        @Volatile var orientationDegrees: Int? = null
 
         // Writer thread.
         @Volatile var framesWritten = 0L
@@ -553,8 +555,13 @@ class RawVideoRecorder(
 
     // region RawVideoFrameConsumer
 
-    override fun onRawTakeStarted(cameraId: String, characteristics: CameraCharacteristics, config: RawVideoSessionConfig) {
-        onTakeStarted(cameraId, config, RawVideoMetadata.staticValues(characteristics))
+    override fun onRawTakeStarted(
+        cameraId: String,
+        characteristics: CameraCharacteristics,
+        config: RawVideoSessionConfig,
+        orientationDegrees: Int,
+    ) {
+        onTakeStarted(cameraId, config, RawVideoMetadata.staticValues(characteristics), orientationDegrees)
     }
 
     override fun onRawFrame(image: Image): Boolean {
@@ -575,11 +582,17 @@ class RawVideoRecorder(
     // endregion
 
     /** [onRawTakeStarted] without `CameraCharacteristics`, for tests. */
-    internal fun onTakeStarted(cameraId: String, config: RawVideoSessionConfig, staticValues: Map<String, String>) {
+    internal fun onTakeStarted(
+        cameraId: String,
+        config: RawVideoSessionConfig,
+        staticValues: Map<String, String>,
+        orientationDegrees: Int = 0,
+    ) {
         val current = take ?: return
         current.startedCameraId = cameraId
         current.sessionConfig = config
         current.staticValues = staticValues
+        current.orientationDegrees = orientationDegrees
     }
 
     /** [onRawFrame] over the plane of a RAW10 image. */
@@ -791,6 +804,7 @@ class RawVideoRecorder(
                 appVersion = current.info.appVersion,
             ),
         )
+        current.orientationDegrees?.let { values[RawVideoMetadata.KEY_ORIENTATION] = RawVideoMetadata.orientationValue(it) }
         values[RawFrameEncoders.KEY_ENCODING] = config.encoding
         // A near-lossless encoder's keys replace the encoding with `bpq`.
         current.compressor?.let { values.putAll(it.metadata) }
