@@ -453,6 +453,32 @@ class OcrawStreamTest {
         }
     }
 
+    @Test
+    fun leadingMetadataReadsOnlyTheFirstChunk() {
+        val file = temp.newFile("leading.ocraw")
+        writeTake(file, List(3) { frame(it) })
+        // A small scratch is enough: no frame payload is read.
+        FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
+            assertEquals(staticMetadata, OcrawStreamReader(channel, scratchBytes = 0).leadingMetadata())
+        }
+        // A frame first (no METADATA before it) and a corrupt payload both read as unknown.
+        val bare = temp.newFile("bare.ocraw")
+        FileChannel.open(bare.toPath(), StandardOpenOption.WRITE).use { channel ->
+            val writer = OcrawStreamWriter(channel, OcrawHeader(uuid), nanos)
+            val (header, data) = frame(0)
+            writer.writeRawFrame(header, ByteBuffer.wrap(data), 0)
+            writer.finish()
+        }
+        FileChannel.open(bare.toPath(), StandardOpenOption.READ).use { assertNull(OcrawStreamReader(it).leadingMetadata()) }
+        RandomAccessFile(file, "rw").use { raf ->
+            val at = OcrawCodec.HEADER_BYTES.toLong() + OcrawCodec.CHUNK_HEADER_BYTES
+            raf.seek(at); val b = raf.read(); raf.seek(at); raf.write(b xor 0xff)
+        }
+        FileChannel.open(file.toPath(), StandardOpenOption.READ).use { assertNull(OcrawStreamReader(it).leadingMetadata()) }
+        val empty = temp.newFile("empty.ocraw")
+        FileChannel.open(empty.toPath(), StandardOpenOption.READ).use { assertNull(OcrawStreamReader(it).leadingMetadata()) }
+    }
+
     private fun frame(index: Int): Pair<OcrawFrameHeader, ByteArray> {
         val header = OcrawFrameHeader.raw10(width, height, 8, 4, 1_000_000_000L + index * frameInterval, 100L + index)
         return header to Random(index).nextBytes(header.dataLength)

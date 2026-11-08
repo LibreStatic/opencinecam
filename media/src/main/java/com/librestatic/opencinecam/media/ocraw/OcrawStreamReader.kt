@@ -231,6 +231,23 @@ class OcrawStreamReader(
         .order(ByteOrder.LITTLE_ENDIAN)
     private val crc = Crc32c.newAccumulator()
 
+    /**
+     * The take's first `METADATA` chunk, written before the first frame, read without a scan: two
+     * small reads at the start of the file. Null when the header or that chunk is unreadable, or
+     * the first chunk is something else.
+     */
+    fun leadingMetadata(): Map<String, String>? {
+        val fileSize = channel.size()
+        readFileHeader(fileSize) ?: return null
+        val offset = OcrawCodec.HEADER_BYTES.toLong()
+        val chunk = readChunkHeader(offset, fileSize) ?: return null
+        if (chunk.wireId != OcrawChunkId.METADATA.wireId) return null
+        val payload = ByteArray(chunk.payloadLength)
+        readFully(ByteBuffer.wrap(payload), offset + OcrawCodec.CHUNK_HEADER_BYTES)
+        if (Crc32c.compute(payload) != chunk.crc) return null
+        return decodeCbor(payload, chunk.sequence, ArrayList())
+    }
+
     /** Walks every chunk from the header, stopping at the first invalid one. */
     fun scan(collectFrames: Boolean = true): OcrawStreamScan {
         val fileSize = channel.size()

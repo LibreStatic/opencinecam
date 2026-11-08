@@ -167,8 +167,12 @@ private fun galleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bi
     context.contentResolver.loadThumbnail(artifact.uri.toUri(), Size(512, 512), null)
 }.getOrNull()
 
-/** One MediaStore row read by URI: no file is opened, decoded or probed for the badges. */
+/**
+ * One MediaStore row read by URI: no file is opened, decoded or probed for the badges, except a RAW
+ * take, whose encoding only its file says (its first chunk, a few hundred bytes).
+ */
 private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): GalleryFacts? {
+    if (artifact.name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)) return rawGalleryFacts(context, artifact)
     val video = artifact.mimeType.startsWith("video/")
     if (!video && !artifact.mimeType.startsWith("audio/")) return null
     val transfer = video && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
@@ -188,6 +192,17 @@ private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): Galler
         }
     }.getOrNull()
 }
+
+private fun rawGalleryFacts(context: Context, artifact: LocalMediaArtifact): GalleryFacts? = runCatching {
+    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
+        java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
+            com.librestatic.opencinecam.media.ocraw.OcrawStreamReader(channel, scratchBytes = 0).leadingMetadata()
+        }
+    }?.let { GalleryFacts(codec = rawCodecBadge(it["encoding"])) }
+}.getOrNull()
+
+/** A RAW take's codec as its file says, once read, over the kind's placeholder. */
+private fun TakeBadges.withFacts(facts: GalleryFacts?): TakeBadges = facts?.codec?.let { copy(codec = it) } ?: this
 
 private data class GalleryRequest(val kind: GalleryMediaKind, val newestFirst: Boolean, val goodTakesOnly: Boolean, val query: String, val refresh: Int, val externalRefresh: Int)
 private data class GalleryLoad(val request: GalleryRequest? = null, val takes: List<LocalMediaTake> = emptyList(),
@@ -372,7 +387,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         val shown = badges(take).let {
             if (it.codec == null && take.kind == LocalMediaKind.VIDEO) it.copy(codec = rememberProbedCodec(take, source, probedCodecs)) else it
         }
-        MediaTakeDetails(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), shown,
+        val takeFacts = rememberGalleryFacts(take.primary, source, facts)
+        MediaTakeDetails(take, settings, source, thumbnails, takeFacts, shown.withFacts(takeFacts),
             if (onDemand) actions(take, close) else actions(take), onOpen = { open(it) }, onClose = close, modifier,
             progress = exportProgress(take))
     }
@@ -398,7 +414,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             if (action == ShortcutAction.DISMISS) { selectedId = null; true } else false
         }
         val card: @Composable (LocalMediaTake, Modifier) -> Unit = { take, modifier ->
-            GalleryTakeCard(take, settings, source, thumbnails, rememberGalleryFacts(take.primary, source, facts), badges(take),
+            val takeFacts = rememberGalleryFacts(take.primary, source, facts)
+            GalleryTakeCard(take, settings, source, thumbnails, takeFacts, badges(take).withFacts(takeFacts),
                 selected = side && take.id == selectedId,
                 clickLabel = stringResource(if (side || !take.kind.opensInApp()) R.string.media_action_details else take.kind.primaryActionLabel()),
                 actions = actions(take), modifier = modifier, footer = exportProgress(take)) {

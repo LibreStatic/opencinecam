@@ -58,7 +58,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 
 /** What MediaStore knows about a file beyond its name: duration, frame size and HDR transfer. */
-internal data class GalleryFacts(val durationMs: Long? = null, val width: Int? = null, val height: Int? = null, val hdr: Boolean = false)
+/** [codec] is a RAW take's, read from its file; null for every other kind, whose badge needs no read. */
+internal data class GalleryFacts(val durationMs: Long? = null, val width: Int? = null, val height: Int? = null, val hdr: Boolean = false,
+    val codec: CodecBadge? = null)
 
 /** A LOG recording carries its OCLog sidecar among the take's metadata. */
 internal fun takeIsLog(take: LocalMediaTake): Boolean = take.metadata.any { it.name.endsWith(".oclog.json") }
