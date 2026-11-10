@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-line summaries shown beside each settings help icon; the full text opens on tap. -->
+<resources>
+    <string name="lut_subject_help_summary">LUT próprio para a pré-visualização do sujeito</string>
+    <string name="operator_startup_help_summary">Aplicado uma vez ao abrir a app</string>
+    <string name="proxy_policy_help_summary">As alterações aplicam-se na próxima tentativa</string>
+    <string name="subject_out_of_frame_unavailable_summary">Requer deteção de rostos, indisponível aqui</string>
+    <string name="subject_slate_sync_scope_summary">Dispara uma vez por take, ao gravar</string>
+    <string name="subject_review_help_summary">Mostre takes no ecrã exterior a partir da galeria</string>
+    <string name="media_share_lut_help_summary">Uma LUT em falta impede o envio se não for excluída</string>
+    <string name="playback_settings_help_summary">Afeta apenas o visualizador da galeria</string>
+    <string name="playback_settings_direct_output_help_summary">Pausa mais rápida; a cor segue o sistema</string>
+    <string name="pro_flicker_help_summary">Reduz a cintilação da iluminação da rede</string>
+    <string name="pro_low_light_boost_help_summary">Clareia cenas escuras; pode reduzir os FPS</string>
+    <string name="pro_metering_help_summary">Que parte do fotograma define a exposição</string>
+    <string name="pro_wb_record_help_summary">Se o balanço de brancos pode mudar no take</string>
+    <string name="photo_quality_help_summary">Só compressão JPEG/HEIC, não DNG</string>
+    <string name="image_stabilization_help_summary">EIS pode cortar; confirme o resultado</string>
+    <string name="image_picture_profile_help_summary">Curva de tons da câmara: Padrão, Plano ou Cine</string>
+    <string name="picture_help_summary">Controlos próprios desta câmara</string>
+    <string name="picture_blocked_neutral_summary">Sem efeito em LOG, HLG, RAW e alta velocidade</string>
+    <string name="picture_blocked_edge_off_summary">A nitidez requer o realce de contornos ativo</string>
+    <string name="raw_video_config_help_summary">Só são oferecidas configurações qualificadas</string>
+    <string name="scroll_long_text_help_summary">O texto longo desloca-se em vez de ser cortado</string>
+    <string name="raw_compression_help_summary">Quase sem perdas poupa espaço, dentro do ruído</string>
+</resources>

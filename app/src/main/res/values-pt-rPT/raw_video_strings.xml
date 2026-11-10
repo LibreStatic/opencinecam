@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_video_not_qualified">O vídeo RAW ainda não está qualificado nesta câmara. Execute primeiro a qualificação de vídeo RAW.</string>
+    <string name="raw_video_unsupported">Esta câmara não tem saída RAW10, portanto não pode gravar vídeo RAW.</string>
+    <string name="raw_video_failed">Esta câmara recusou o fluxo de vídeo RAW. O vídeo RAW fica indisponível nela até a app reiniciar.</string>
+    <string name="raw_video_unavailable">A câmara recusou o fluxo de vídeo RAW. Mudou para %1$s.</string>
+    <string name="raw_video_memory">Não há memória livre suficiente para o buffer de fotogramas RAW. Feche outras apps e tente novamente.</string>
+    <string name="raw_video_codec_unavailable">Não foi possível iniciar o codificador RAW. Escolha uma configuração RAW sem compressão.</string>
+    <string name="raw_video_storage">Armazenamento livre insuficiente para um take RAW: são necessários %1$s para 10 segundos, há %2$s livres.</string>
+    <string name="raw_video_storage_unknown">Não foi possível ler o espaço livre, por isso o take RAW não foi iniciado.</string>
+    <string name="raw_video_start_failed">Não foi possível iniciar o take RAW.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
+    <string name="raw_video_saved">Take RAW guardado: %1$d fotogramas, %2$s s</string>
+    <string name="raw_video_not_finalised">O take RAW não foi finalizado; será recuperado no próximo arranque.</string>
+    <string name="raw_video_empty">O take RAW não gravou nenhum fotograma.</string>
+    <string name="raw_video_end_ring_full">o armazenamento não acompanhou o fluxo RAW</string>
+    <string name="raw_video_end_writer">não foi possível gravar o ficheiro RAW</string>
+    <string name="raw_video_end_stream">a câmara deixou de fornecer fotogramas RAW</string>
+    <string name="raw_video_end_frame">perdeu-se um fotograma RAW</string>
+    <string name="raw_video_end_stalled">o gravador RAW deixou de responder</string>
+    <string name="raw_video_end_other">o take RAW falhou</string>
+</resources>

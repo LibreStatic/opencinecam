@@ -9,12 +9,12 @@ Report problems at github.com/LibreStatic/opencinecam/issues
 </en-US>
 <es-419>
 OpenCineCam 1.0:
-- Calibración de lentes: igualá el color y la exposición de cada lente en la vista previa y el video
-- Bloqueo de lente: mantené la toma en una lente mientras hacés zoom
+- Calibración de lentes: iguala el color y la exposición de cada lente en la vista previa y el video
+- Bloqueo de lente: mantén la toma en una lente mientras haces zoom
 - Suavizar el cambio de lente (opcional) disimula el salto de encuadre entre lentes
 - FPS LOCK mantiene la exposición estable al cambiar de lente
 - El zoom con dos dedos funciona aunque un dedo esté sobre un control
-Reportá problemas en github.com/LibreStatic/opencinecam/issues
+Reporta problemas en github.com/LibreStatic/opencinecam/issues
 </es-419>
 <es-ES>
 OpenCineCam 1.0:

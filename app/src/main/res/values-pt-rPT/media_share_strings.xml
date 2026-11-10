@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_sharing_title">Partilha e exportação</string>
+    <string name="media_share_action">Partilhar ou exportar take</string>
+    <string name="media_share_help">Escolha exatamente o que sai desta app. Os originais não são reescritos. Os metadados de produção são exportados separadamente; os metadados técnicos excluem a claquete de produção. Cada pacote inclui um manifesto de relações.</string>
+    <string name="media_share_content_both">Originais e metadados selecionados</string>
+    <string name="media_share_content_originals">Apenas originais (mais manifesto de relações)</string>
+    <string name="media_share_content_metadata">Apenas metadados selecionados (mais manifesto de relações)</string>
+    <string name="media_share_production">Metadados da claquete de produção</string>
+    <string name="media_share_technical">Metadados técnicos</string>
+    <string name="media_share_both">Metadados de produção e técnicos</string>
+    <string name="media_share_lut">Incluir os ficheiros LUT referenciados exatos com os metadados técnicos</string>
+    <string name="media_share_lut_help">Uma LUT referenciada em falta interrompe a preparação, a menos que exclua explicitamente os ficheiros LUT. Uma LUT de gravação já aplicada aos píxeis não deve ser aplicada novamente.</string>
+    <string name="media_share_temporary">Os ficheiros gerados expiram após 24 horas e podem ser removidos da cache antes disso. Mantenha uma cópia externa, se necessário. Abrir o seletor do Android não verifica a entrega.</string>
+    <string name="media_share_sources">Fontes disponíveis — Originais: %1$d; Metadados: %2$d</string>
+    <string name="media_share_confirm">Preparar e abrir o seletor do Android</string>
+    <string name="media_share_preparing">A preparar a exportação selecionada…</string>
+    <string name="media_share_cancel">Cancelar</string>
+    <string name="media_share_error">A exportação não foi entregue com êxito. Tente novamente, altere a seleção, ou feche e atualize o catálogo. Os originais foram mantidos.</string>
+    <string name="media_share_cleanup_error">A limpeza da exportação temporária falhou; os originais foram mantidos.</string>
+    <string name="media_share_launched">Seletor do Android aberto — a entrega não é verificada.</string>
+    <string name="media_share_prepared_files">Ficheiros preparados: %1$d</string>
+    <string name="media_share_chooser">Enviar os ficheiros de captura selecionados</string>
+</resources>
