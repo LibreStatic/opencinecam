@@ -1418,7 +1418,7 @@ fun SubjectStatus() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisp
 
 /** Exterior display, Status: REC 01:23 with an operator cue. */
 @Composable
-fun SubjectStatusRecording() = Subject(subjectRecording(), SubjectDisplaySettings(operatorCue = "Mirá a cámara"))
+fun SubjectStatusRecording() = Subject(subjectRecording(), SubjectDisplaySettings(operatorCue = "Mira a cámara"))
 
 /** Exterior display, teleprompter at rest with a cue. */
 @Composable
@@ -1447,7 +1447,7 @@ fun SubjectReview() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisp
 @Composable
 fun SubjectInterview() = Subject(driverCaptureState(CaptureMode.VIDEO),
     SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW,
-        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usas?", "¿Qué consejo darías?")),
     SubjectSessionCues(interviewIndex = 1))
 
 /** Exterior display, digital slate. */
@@ -1475,7 +1475,7 @@ fun SubjectFillLightSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
 @Composable
 fun SubjectInterviewSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
     SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW, splitPreviewModes = setOf(SubjectDisplayMode.INTERVIEW),
-        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usas?", "¿Qué consejo darías?")),
     SubjectSessionCues(interviewIndex = 1))
 
 /** Exterior display, split screen: the slate on top. */

@@ -14,5 +14,5 @@
     <string name="haptics_navigation">Menús y navegación</string>
     <string name="haptics_navigation_summary">Dial de modos, ranuras y ajustes</string>
     <string name="haptics_mute_during_take">Silenciar clics durante una toma</string>
-    <string name="haptics_mute_during_take_summary">Mientras grabás, solo vibran la detención y la pausa.</string>
+    <string name="haptics_mute_during_take_summary">Mientras grabas, solo vibran la detención y la pausa.</string>
 </resources>
