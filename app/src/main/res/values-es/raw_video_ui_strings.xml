@@ -21,7 +21,7 @@
     <string name="raw_video_ring_description">Búfer RAW al %1$d%%, %2$d fotogramas escritos</string>
     <string name="raw_video_config_help">El video RAW graba cada fotograma sin comprimir en Documents/OpenCineCam/RAW. Solo se ofrecen los tamaños y las cadencias que este teléfono ha calificado en su almacenamiento: cada uno superó una prueba larga de almacenamiento y una toma real sin perder ningún fotograma. Automática elige la tasa calificada más alta. Un recorte lee el sensor completo pero graba solo su centro, así que la imagen es más estrecha. El tiempo indicado es lo que dura el espacio libre a esa tasa.</string>
     <string name="gallery_raw_video">Video RAW</string>
-    <string name="media_integrity_raw">Una toma OpenCine RAW. El reproductor muestra una vista previa revelada; para la calidad completa, cópiala o compártela a un ordenador y conviértela con el conversor DNG de escritorio.</string>
+    <string name="media_integrity_raw">Una toma OpenCine RAW. El reproductor muestra una vista previa revelada; para la calidad completa, cópiala o compártela a una computadora y conviértela con el conversor DNG de escritorio.</string>
     <string name="raw_video_audio_incomplete">El sonido tiene cortes</string>
     <string name="raw_video_risky_notice">Tasa riesgosa: puede haber microcortes, latencia o un archivo dañado</string>
     <string name="raw_video_risky_label">%1$s, tasa riesgosa</string>

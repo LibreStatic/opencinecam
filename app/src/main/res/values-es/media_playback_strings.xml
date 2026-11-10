@@ -8,7 +8,7 @@
     <string name="media_playback_previous_take">Toma anterior</string>
     <string name="media_playback_next_take">Toma siguiente</string>
     <string name="media_playback_loading">Leyendo medios…</string>
-    <string name="media_playback_page_error">Falló la lectura de la siguiente página. Volvé a intentar Toma siguiente.</string>
+    <string name="media_playback_page_error">Falló la lectura de la siguiente página. Vuelve a intentar Toma siguiente.</string>
     <string name="media_playback_paused">En pausa</string>
     <string name="media_playback_playing">Reproduciendo · el tiempo del reproductor es aproximado</string>
     <string name="media_playback_ended">Fin del medio</string>

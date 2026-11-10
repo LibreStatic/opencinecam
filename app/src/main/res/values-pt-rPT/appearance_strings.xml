@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<resources>
+    <string name="appearance_title">Aspeto</string>
+    <string name="appearance_summary">O Cine mantém o aspeto escuro em grafite e âmbar. O Material You usa as cores da sua imagem de fundo e segue o modo claro ou escuro do sistema, com fundo preto puro no modo escuro.</string>
+    <string name="appearance_cine">Cine</string>
+    <string name="appearance_you">Material You</string>
+</resources>

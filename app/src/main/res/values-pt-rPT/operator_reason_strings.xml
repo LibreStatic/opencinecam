@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operator_reason_log_only">Disponível apenas no modo LOG.</string>
+    <string name="operator_reason_locked">Os controlos estão bloqueados. Desbloqueie-os para usar isto.</string>
+    <string name="operator_reason_not_ready">A aguardar a câmara.</string>
+    <string name="operator_reason_high_speed">Indisponível em cadências de fotogramas de alta velocidade.</string>
+    <string name="operator_reason_no_torch">Esta câmara não tem lanterna.</string>
+    <string name="operator_reason_no_torch_level">A lanterna desta câmara tem um único nível de brilho.</string>
+    <string name="operator_reason_no_autofocus">Esta câmara tem foco fixo.</string>
+    <string name="operator_reason_no_focus_mark">Defina primeiro a marca de foco %1$s no painel de foco.</string>
+    <string name="operator_reason_self_minimal">Desativado enquanto se grava a si próprio com controlos mínimos.</string>
+    <string name="operator_reason_no_exterior">Precisa do ecrã exterior de um dobrável.</string>
+    <string name="operator_reason_no_preset">Nenhum preset neste slot. Atribua um nas Definições.</string>
+</resources>

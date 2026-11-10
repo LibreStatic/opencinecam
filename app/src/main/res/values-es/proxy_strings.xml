@@ -16,7 +16,7 @@
     <string name="proxy_succeeded">Completado</string>
     <string name="proxy_failed">Falló — reintento disponible</string>
     <string name="proxy_cancelled">Cancelado</string>
-    <string name="proxy_policy_help">La política se aplica al próximo intento; el trabajo activo termina. Cambiá estos ajustes locales para liberar solicitudes en espera.</string>
+    <string name="proxy_policy_help">La política se aplica al próximo intento; el trabajo activo termina. Cambia estos ajustes locales para liberar solicitudes en espera.</string>
     <string name="proxy_policy_charging">Exigir carga</string>
     <string name="proxy_policy_battery">Batería mínima: %1$d%%</string>
     <string name="proxy_policy_space">Espacio reservado: %1$d MiB</string>

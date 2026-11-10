@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_self_monitor_title">Automonitor do sujeito</string>
+    <string name="subject_preview_bands">Marcar a área gravada</string>
+    <string name="subject_preview_guide">Guia de enquadramento</string>
+    <string name="subject_preview_guide_none">Nenhuma</string>
+    <string name="subject_preview_guide_thirds">Regra dos terços</string>
+    <string name="subject_preview_guide_safe">Área segura</string>
+    <string name="subject_preview_audio_meter">Medidor de nível de áudio pequeno</string>
+    <string name="subject_self_monitor_help">Estas guias aparecem só no ecrã exterior e nunca no ficheiro gravado. Espelhar a pré-visualização exterior não espelha o ficheiro.</string>
+    <string name="subject_tally_title">Tally e contagem decrescente</string>
+    <string name="subject_tally_border">Contorno tally vermelho durante a gravação</string>
+    <string name="subject_giant_countdown">Contagem decrescente em ecrã inteiro</string>
+    <string name="subject_tally_help">O tally fica vermelho só enquanto o serviço da câmara confirma a gravação e âmbar enquanto um take é preparado, está em pausa ou é guardado. Segue o brilho exterior pedido.</string>
+    <string name="subject_audio_meter_label">Nível do microfone</string>
+</resources>

@@ -3,7 +3,7 @@
     <string name="gallery_settings_title">Galería y catálogo</string>
     <string name="gallery_title">Catálogo de capturas locales</string>
     <string name="gallery_settings_help">Preferencias de visualización y filtros en vivo. No modifican los archivos grabados. El filtro de buenas tomas requiere una claqueta legible que marque la toma como buena.</string>
-    <string name="gallery_help">Las tomas se agrupan por día de rodaje, cada una con sus archivos juntos. En ⋮ de cada toma tenés los detalles, compartir, renombrar, proxies y eliminar.</string>
+    <string name="gallery_help">Las tomas se agrupan por día de rodaje, cada una con sus archivos juntos. En ⋮ de cada toma tienes los detalles, compartir, renombrar, proxies y eliminar.</string>
     <string name="gallery_all">Todo</string>
     <string name="gallery_photo">Fotos</string>
     <string name="gallery_video">Videos</string>
@@ -18,7 +18,7 @@
     <string name="gallery_refresh">Actualizar catálogo</string>
     <string name="gallery_loading">Leyendo catálogo…</string>
     <string name="gallery_empty">No hay capturas que coincidan con esta búsqueda y estos filtros.</string>
-    <string name="gallery_load_failed">No se pudo leer el catálogo. Los resultados existentes se conservan; reintentá para continuar.</string>
+    <string name="gallery_load_failed">No se pudo leer el catálogo. Los resultados existentes se conservan; reintenta para continuar.</string>
     <string name="gallery_retry">Reintentar lectura</string>
     <string name="gallery_more">Cargar siguientes resultados</string>
     <string name="gallery_no_more">Fin de los resultados</string>
