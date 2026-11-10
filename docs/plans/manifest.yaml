@@ -935,3 +935,17 @@ plans:
     risks: [RISK-001, RISK-002]
     conditional_gates: []
     intended_executor: Claude Code
+
+  - id: OCC-PLAN-073
+    title: "Volume-key gestures and −/+ pairs"
+    status: InProgress
+    revision: 1
+    milestone: H3
+    path: docs/plans/PLAN-073-volume-key-gestures.md
+    depends_on: [OCC-PLAN-065]
+    blocks: []
+    requirements: [OCC-PRO-006, OCC-UI-002]
+    adrs: [ADR-0030]
+    risks: [RISK-020]
+    conditional_gates: []
+    intended_executor: Claude Code

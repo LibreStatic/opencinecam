@@ -23,4 +23,5 @@
     <string name="raw_video_config_help_summary">Seules les configurations qualifiées sont proposées</string>
     <string name="scroll_long_text_help_summary">Le texte long défile au lieu d’être coupé</string>
     <string name="raw_compression_help_summary">Quasi sans perte gagne de la place, sous le bruit</string>
+    <string name="operator_volume_gestures_help_summary">Maintien et double appui retardent l\'appui simple</string>
 </resources>

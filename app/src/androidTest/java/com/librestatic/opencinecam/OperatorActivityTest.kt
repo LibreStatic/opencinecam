@@ -19,6 +19,7 @@ class OperatorActivityTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+        OnboardingStore(context).markCompleted()
         val repository = SettingsRepositories.get(context)
         val original = repository.states.value
         val activity = AtomicReference<MainActivity?>()
@@ -31,7 +32,7 @@ class OperatorActivityTest {
         }
         fun focused(): Boolean {
             val focused = AtomicBoolean(false)
-            instrumentation.runOnMainSync { focused.set(activity.get()?.hasWindowFocus() == true && activity.get()?.operatorAction != null) }
+            instrumentation.runOnMainSync { focused.set(activity.get()?.hasWindowFocus() == true && activity.get()?.operatorKeyHandler != null) }
             return focused.get()
         }
         fun event(key: Int, down: Boolean, repeat: Int = 0): Boolean {
@@ -68,6 +69,64 @@ class OperatorActivityTest {
             android.util.Log.i("OperatorInputProbe", "windowKeyDown=true firstDownZebra=true repeats=5 repeatToggles=0 dialogToggles=0 pausedToggles=0 resumedZebra=false")
         } finally {
             instrumentation.runOnMainSync { dialog.getAndSet(null)?.dismiss() }
+            scenario?.close()
+            instrumentation.runOnMainSync { repository.set(original) }
+        }
+    }
+
+    @Test fun volumeHoldFiresAtTheThresholdAndADoublePressReplacesThePress() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.CAMERA)
+        OnboardingStore(context).markCompleted()
+        val repository = SettingsRepositories.get(context)
+        val original = repository.states.value
+        val activity = AtomicReference<MainActivity?>()
+        var scenario: ActivityScenario<MainActivity>? = null
+        val doubleTap = android.view.ViewConfiguration.getDoubleTapTimeout().toLong()
+        fun waitFor(condition: () -> Boolean) {
+            val deadline = SystemClock.elapsedRealtime() + 15_000
+            while (!condition() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(30)
+            assertTrue("Activity condition timed out", condition())
+        }
+        fun focused(): Boolean {
+            val focused = AtomicBoolean(false)
+            instrumentation.runOnMainSync { focused.set(activity.get()?.hasWindowFocus() == true && activity.get()?.operatorKeyHandler != null) }
+            return focused.get()
+        }
+        fun event(down: Boolean): Boolean {
+            val consumed = AtomicBoolean(false)
+            instrumentation.runOnMainSync {
+                val key = KeyEvent.KEYCODE_VOLUME_UP
+                val event = KeyEvent(0, SystemClock.uptimeMillis(), if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP, key, 0)
+                val owner = requireNotNull(activity.get())
+                consumed.set(if (down) owner.onKeyDown(key, event) else owner.onKeyUp(key, event))
+            }
+            return consumed.get()
+        }
+        try {
+            instrumentation.runOnMainSync { repository.set(CameraSettings(audioEnabled = false, operation = OperatorPreferences(
+                volumeUp = OperatorAction.HISTOGRAM, volumeUpLong = OperatorAction.ZEBRA, volumeUpDouble = OperatorAction.PEAKING))) }
+            scenario = ActivityScenario.launch(MainActivity::class.java)
+            scenario.onActivity { activity.set(it) }
+            waitFor(::focused)
+            val start = repository.states.value
+            // Hold: the long action fires while the key is still down, and the release adds nothing.
+            assertTrue(event(true))
+            waitFor { repository.states.value.zebraEnabled != start.zebraEnabled }
+            assertTrue(event(false))
+            SystemClock.sleep(doubleTap + 300)
+            assertEquals(start.histogramEnabled, repository.states.value.histogramEnabled)
+            assertEquals(start.peakingEnabled, repository.states.value.peakingEnabled)
+            // Double press: the second down fires the double action; the single press never fires.
+            assertTrue(event(true)); assertTrue(event(false)); assertTrue(event(true)); assertTrue(event(false))
+            waitFor { repository.states.value.peakingEnabled != start.peakingEnabled }
+            SystemClock.sleep(doubleTap + 300)
+            assertEquals(start.histogramEnabled, repository.states.value.histogramEnabled)
+            // A single press fires once the double-press window has passed.
+            assertTrue(event(true)); assertTrue(event(false))
+            waitFor { repository.states.value.histogramEnabled != start.histogramEnabled }
+        } finally {
             scenario?.close()
             instrumentation.runOnMainSync { repository.set(original) }
         }

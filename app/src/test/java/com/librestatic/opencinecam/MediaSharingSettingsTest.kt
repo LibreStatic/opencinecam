@@ -21,7 +21,7 @@ class MediaSharingSettingsTest {
         }
     }
     @Test fun versionEighteenHas160KeysAndFifteenRetains152WithThreeDefaults() {
-        assertEquals(26, CameraPresetCodec.VERSION); assertEquals(176, CameraPresetCodec.portableKeys.size)
+        assertEquals(27, CameraPresetCodec.VERSION); assertEquals(183, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         val source = CameraSettings(gallery = GallerySettings(GalleryMediaKind.VIDEO, false, true))
         val root = document(source); val old = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("capture-naming-") && !it.startsWith("playback-") && it != "gallery-auto-thumbnails" } - keys

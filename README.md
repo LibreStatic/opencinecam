@@ -44,7 +44,7 @@ The [user guide](docs/user-guide.md) explains where each feature lives and how t
 - Full-screen viewfinder with translucent, compact chrome and side rails for short landscape windows; works in both orientations, on phones, tablets and foldables.
 - Focus peaking, zebra, false color, histogram, waveform and vectorscope (with quick toggles in the capture row), grid and horizon level.
 - Operator, subject and recording LUTs, LOG view assist, and an always-on thermal load indicator.
-- Assignable operator buttons and volume keys, persistent settings and portable presets.
+- Assignable operator buttons and volume keys with hold, double-press and both-keys gestures, or the volume keys as a −/+ pair for zoom, EV, ISO, shutter or focus; persistent settings and portable presets.
 - Hardware keyboard shortcuts: R record, F focus, Z zebra, P peaking, G grid, H scopes, L LOG view, Esc close; Space and arrow keys in playback.
 - Configurable haptic feedback by group (capture, controls, focus and exposure, navigation), with ticks muted during a take.
 - Predictive back previews, and a one-line summary beside each settings help button.

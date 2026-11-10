@@ -11,4 +11,8 @@
     <string name="operator_reason_self_minimal">Disattivato mentre ti riprendi con i controlli minimi.</string>
     <string name="operator_reason_no_exterior">Richiede il display esterno di un pieghevole.</string>
     <string name="operator_reason_no_preset">Nessun preset in questo slot. Assegnane uno nelle Impostazioni.</string>
+    <string name="operator_reason_no_zoom">Questa fotocamera non ha lo zoom.</string>
+    <string name="operator_reason_no_ev">Questa fotocamera non ha la compensazione dell\'esposizione.</string>
+    <string name="operator_reason_no_manual_exposure">Questa fotocamera imposta da sola ISO e otturatore.</string>
+    <string name="operator_reason_no_manual_focus">Questa fotocamera ha la messa a fuoco fissa.</string>
 </resources>
