@@ -1,7 +1,7 @@
 OpenCineCam es una cámara de cine manual de código abierto para Android. Te da el control del hardware Camera2 de tu teléfono, con las herramientas de monitoreo y los metadatos de archivo que esperan los cineastas. Sin cuenta, sin anuncios, sin analíticas.
 
 VERSIÓN 1.0
-Esta es la versión 1.0 de OpenCineCam. Algunos modos son experimentales y permanecen ocultos si tu teléfono no cumple los requisitos, y los resultados varían de un teléfono a otro. Tus comentarios son bienvenidos y definen lo que viene: abrí una incidencia en la página del proyecto en GitHub.
+Esta es la versión 1.0 de OpenCineCam. Algunos modos son experimentales y permanecen ocultos si tu teléfono no cumple los requisitos, y los resultados varían de un teléfono a otro. Tus comentarios son bienvenidos y definen lo que viene: abre una incidencia en la página del proyecto en GitHub.
 
 CONTROL MANUAL
 • ISO, tiempo u ángulo de obturación, balance de blancos en Kelvin con matiz, foco manual y zoom
@@ -9,7 +9,7 @@ CONTROL MANUAL
 • Bloqueo de exposición y de balance de blancos, linterna, sugerencias de obturación a 50/60 Hz contra el parpadeo
 • Opciones de estabilización, ruido y nitidez de bordes cuando el teléfono las ofrece
 • FPS LOCK (bloqueo de cadencia): mantiene la cadencia con poca luz fijando el obturador en 1/fps
-• Bloqueo de lente: quedate en una sola lente con zoom digital, en teléfonos con varias lentes
+• Bloqueo de lente: quédate en una sola lente con zoom digital, en teléfonos con varias lentes
 • Calibración de lentes: iguala color, exposición y encuadre entre lentes en la vista previa y el video
 
 MODOS DE CAPTURA
@@ -34,13 +34,13 @@ VIDEO Y AUDIO
 FLUJO DE PRODUCCIÓN
 • Timecode SMPTE guardado en un archivo JSON auxiliar
 • Claqueta de producción: proyecto, cámara, escena, rollo, lente y toma
-• Ajustes preestablecidos portátiles que podés guardar, importar y exportar
+• Ajustes preestablecidos portátiles que puedes guardar, importar y exportar
 • Geoetiquetado opcional, desactivado por defecto
 
 MEDIOS Y TRANSFERENCIA
 • Galería integrada con reproducción, renombrado, compartir y eliminar
-• Proxies de edición generados en el dispositivo cuando los pedís
-• Subida opcional de tomas a tu propio servidor WebDAV por HTTPS, iniciada por vos o automática para las tomas nuevas (desactivada por defecto, solo por Wi-Fi salvo que permitas datos móviles)
+• Proxies de edición generados en el dispositivo cuando los pides
+• Subida opcional de tomas a tu propio servidor WebDAV por HTTPS, iniciada por ti o automática para las tomas nuevas (desactivada por defecto, solo por Wi-Fi salvo que permitas datos móviles)
 
 PENSADA PARA PLEGABLES
 • Diseños que se adaptan a teléfonos, tablets y plegables, incluida la bisagra
@@ -52,6 +52,6 @@ Las capacidades dependen de lo que exponga la implementación de Camera2 de tu t
 
 PRIVACIDAD
 • Tu material se queda en tu dispositivo
-• La cámara y el micrófono se usan solo para capturar; la ubicación, solo si activás el geoetiquetado
+• La cámara y el micrófono se usan solo para capturar; la ubicación, solo si activas el geoetiquetado
 • El único uso de red es la subida WebDAV opcional que configures
 • Licencia Apache-2.0
