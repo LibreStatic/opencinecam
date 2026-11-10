@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volume-key gestures and pairs in Settings › Controls › Operator controls. -->
+    <string name="operator_volume_keys">Volume keys</string>
+    <string name="operator_volume_pair_none">Separate actions</string>
+    <string name="operator_volume_pair_zoom">Zoom</string>
+    <string name="operator_volume_pair_ev">EV</string>
+    <string name="operator_volume_pair_iso">ISO</string>
+    <string name="operator_volume_pair_shutter">Shutter</string>
+    <string name="operator_volume_pair_focus">Focus</string>
+    <string name="operator_volume_pair_none_summary">Each key runs its own actions</string>
+    <string name="operator_volume_pair_summary">Press for one step, hold to keep changing</string>
+    <string name="operator_volume_pair_invert">Invert direction</string>
+    <string name="operator_volume_up_long">Volume up: hold</string>
+    <string name="operator_volume_up_double">Volume up: double press</string>
+    <string name="operator_volume_down_long">Volume down: hold</string>
+    <string name="operator_volume_down_double">Volume down: double press</string>
+    <string name="operator_volume_both">Both keys</string>
+    <string name="operator_volume_gestures_help">A key with a hold or double-press action, or any key while Both keys is set, acts on a single press only when you release it, or once the double-press window has passed. Without them the press acts at once, which suits the shutter. As a pair, a press moves one step and holding the key keeps changing the value: up zooms in, raises EV and ISO, lengthens the shutter and focuses farther. Invert direction swaps the keys.</string>
+</resources>

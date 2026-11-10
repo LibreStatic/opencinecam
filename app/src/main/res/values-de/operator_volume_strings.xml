@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volume-key gestures and pairs in Settings › Controls › Operator controls. -->
+    <string name="operator_volume_keys">Lautstärketasten</string>
+    <string name="operator_volume_pair_none">Getrennte Aktionen</string>
+    <string name="operator_volume_pair_zoom">Zoom</string>
+    <string name="operator_volume_pair_ev">EV</string>
+    <string name="operator_volume_pair_iso">ISO</string>
+    <string name="operator_volume_pair_shutter">Verschluss</string>
+    <string name="operator_volume_pair_focus">Fokus</string>
+    <string name="operator_volume_pair_none_summary">Jede Taste hat eigene Aktionen</string>
+    <string name="operator_volume_pair_summary">Drücken für einen Schritt, halten zum Weiterändern</string>
+    <string name="operator_volume_pair_invert">Richtung umkehren</string>
+    <string name="operator_volume_up_long">Lauter: halten</string>
+    <string name="operator_volume_up_double">Lauter: doppelt drücken</string>
+    <string name="operator_volume_down_long">Leiser: halten</string>
+    <string name="operator_volume_down_double">Leiser: doppelt drücken</string>
+    <string name="operator_volume_both">Beide Tasten</string>
+    <string name="operator_volume_gestures_help">Eine Taste mit einer Aktion zum Halten oder Doppeltdrücken, oder jede Taste, solange Beide Tasten eine Aktion hat, wirkt beim einfachen Drücken erst beim Loslassen oder nach Ablauf des Doppeldruck-Fensters. Ohne sie wirkt der Druck sofort, wie es der Auslöser braucht. Als Paar macht ein Druck einen Schritt, und Halten ändert den Wert weiter: Lauter zoomt hinein, erhöht EV und ISO, verlängert die Belichtung und fokussiert weiter weg. Richtung umkehren tauscht die Tasten.</string>
+</resources>

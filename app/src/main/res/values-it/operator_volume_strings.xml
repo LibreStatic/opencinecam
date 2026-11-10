@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volume-key gestures and pairs in Settings › Controls › Operator controls. -->
+    <string name="operator_volume_keys">Tasti volume</string>
+    <string name="operator_volume_pair_none">Azioni separate</string>
+    <string name="operator_volume_pair_zoom">Zoom</string>
+    <string name="operator_volume_pair_ev">EV</string>
+    <string name="operator_volume_pair_iso">ISO</string>
+    <string name="operator_volume_pair_shutter">Otturatore</string>
+    <string name="operator_volume_pair_focus">Messa a fuoco</string>
+    <string name="operator_volume_pair_none_summary">Ogni tasto ha le sue azioni</string>
+    <string name="operator_volume_pair_summary">Premi per un passo, tieni premuto per continuare</string>
+    <string name="operator_volume_pair_invert">Inverti direzione</string>
+    <string name="operator_volume_up_long">Volume +: tieni premuto</string>
+    <string name="operator_volume_up_double">Volume +: doppia pressione</string>
+    <string name="operator_volume_down_long">Volume −: tieni premuto</string>
+    <string name="operator_volume_down_double">Volume −: doppia pressione</string>
+    <string name="operator_volume_both">Entrambi i tasti</string>
+    <string name="operator_volume_gestures_help">Un tasto con un\'azione a pressione prolungata o doppia, o qualsiasi tasto quando Entrambi i tasti ha un\'azione, agisce alla pressione singola solo al rilascio, o allo scadere della finestra della doppia pressione. Senza di esse la pressione agisce subito, come serve allo scatto. In coppia, una pressione fa un passo e tenere premuto il tasto continua a cambiare il valore: + avvicina lo zoom, alza EV e ISO, allunga l\'otturatore e mette a fuoco più lontano. Inverti direzione scambia i tasti.</string>
+</resources>

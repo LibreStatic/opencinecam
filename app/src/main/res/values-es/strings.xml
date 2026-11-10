@@ -427,7 +427,7 @@
     <string name="presets_rename">Renombrar</string>
     <string name="presets_rename_help">Sólo cambia el nombre; los ajustes guardados se conservan.</string>
     <string name="operator_title">Controles del operador</string>
-    <string name="operator_help">Tres botones comparten Ajustes. Las teclas de volumen actúan una vez por pulsación, sólo en captura con foco; diálogos y Ajustes conservan el volumen del sistema. Los presets siempre abren una revisión.</string>
+    <string name="operator_help">Tres botones comparten Ajustes. Las teclas de volumen actúan sólo en captura con foco; diálogos y Ajustes conservan el volumen del sistema. Los presets siempre abren una revisión.</string>
     <string name="operator_button">Botón %1$d</string>
     <string name="operator_volume_up">Subir volumen</string>
     <string name="operator_volume_down">Bajar volumen</string>

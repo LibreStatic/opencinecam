@@ -40,7 +40,7 @@ class AudioListeningSettingsTest {
     @Test fun portableV18Has160KeysAndPhysicalOutputIsLocalAcrossImport() {
         val original = CameraSettings(audioListening = AudioListeningSettings(true, 34, AudioListeningOutput.BLUETOOTH), audioListeningOutputDeviceId = 212)
         val root = document(original)
-        assertEquals(26, CameraPresetCodec.VERSION); assertEquals(176, CameraPresetCodec.portableKeys.size)
+        assertEquals(27, CameraPresetCodec.VERSION); assertEquals(183, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         assertFalse(root.getValue("settings").jsonObject.containsKey("audio-listening-output-device-id"))
         val decoded = CameraPresetCodec.decode(root.toString()).settings

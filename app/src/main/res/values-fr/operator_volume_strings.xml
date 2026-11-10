@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volume-key gestures and pairs in Settings › Controls › Operator controls. -->
+    <string name="operator_volume_keys">Touches de volume</string>
+    <string name="operator_volume_pair_none">Actions séparées</string>
+    <string name="operator_volume_pair_zoom">Zoom</string>
+    <string name="operator_volume_pair_ev">EV</string>
+    <string name="operator_volume_pair_iso">ISO</string>
+    <string name="operator_volume_pair_shutter">Obturateur</string>
+    <string name="operator_volume_pair_focus">Mise au point</string>
+    <string name="operator_volume_pair_none_summary">Chaque touche a ses propres actions</string>
+    <string name="operator_volume_pair_summary">Appuyez pour un cran, maintenez pour continuer</string>
+    <string name="operator_volume_pair_invert">Inverser le sens</string>
+    <string name="operator_volume_up_long">Volume + : maintien</string>
+    <string name="operator_volume_up_double">Volume + : double appui</string>
+    <string name="operator_volume_down_long">Volume − : maintien</string>
+    <string name="operator_volume_down_double">Volume − : double appui</string>
+    <string name="operator_volume_both">Les deux touches</string>
+    <string name="operator_volume_gestures_help">Une touche avec une action au maintien ou au double appui, ou toute touche quand Les deux touches a une action, n\'agit à l\'appui simple qu\'au relâchement ou une fois le délai du double appui écoulé. Sans elles, l\'appui agit tout de suite, ce qui convient au déclencheur. En paire, un appui avance d\'un cran et maintenir la touche continue de changer la valeur : + zoome, augmente l\'EV et l\'ISO, allonge l\'obturation et fait la mise au point plus loin. Inverser le sens échange les touches.</string>
+</resources>

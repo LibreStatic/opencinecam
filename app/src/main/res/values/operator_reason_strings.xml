@@ -12,4 +12,8 @@
     <string name="operator_reason_self_minimal">Off while you record yourself with minimal controls.</string>
     <string name="operator_reason_no_exterior">Needs the outer display of a foldable.</string>
     <string name="operator_reason_no_preset">No preset in this slot. Assign one in Settings.</string>
+    <string name="operator_reason_no_zoom">This camera can\'t zoom.</string>
+    <string name="operator_reason_no_ev">This camera has no exposure compensation.</string>
+    <string name="operator_reason_no_manual_exposure">This camera sets ISO and shutter itself.</string>
+    <string name="operator_reason_no_manual_focus">This camera has fixed focus.</string>
 </resources>

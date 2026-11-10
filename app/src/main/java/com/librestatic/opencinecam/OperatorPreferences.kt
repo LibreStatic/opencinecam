@@ -20,6 +20,8 @@ val OperatorQuickToggles: List<OperatorAction> = listOf(OperatorAction.WAVEFORM,
 private val ScopeActions = setOf(OperatorAction.PEAKING, OperatorAction.ZEBRA, OperatorAction.HISTOGRAM,
     OperatorAction.WAVEFORM, OperatorAction.VECTORSCOPE, OperatorAction.FALSE_COLOR)
 enum class StartupMode { PHOTO, VIDEO, LAST }
+/** What the volume keys adjust as a −/+ pair; [NONE] leaves each key to its own actions. */
+enum class VolumeKeyPair { NONE, ZOOM, EXPOSURE_COMPENSATION, ISO, SHUTTER, FOCUS }
 
 data class OperatorPreferences(
     val button1: OperatorAction = OperatorAction.TORCH,
@@ -31,9 +33,20 @@ data class OperatorPreferences(
     val restoreExposureWhiteBalance: Boolean = true,
     val restoreTorch: Boolean = false,
     val lockDuringTake: Boolean = false,
+    val volumeUpLong: OperatorAction = OperatorAction.NONE,
+    val volumeDownLong: OperatorAction = OperatorAction.NONE,
+    val volumeUpDouble: OperatorAction = OperatorAction.NONE,
+    val volumeDownDouble: OperatorAction = OperatorAction.NONE,
+    val volumeBoth: OperatorAction = OperatorAction.NONE,
+    /** Anything but [VolumeKeyPair.NONE] turns the keys into −/+ for that value and ignores the per-key actions. */
+    val volumePair: VolumeKeyPair = VolumeKeyPair.NONE,
+    /** Swaps the pair so volume down zooms in, raises EV, ISO, the shutter time and focuses farther. */
+    val volumePairInverted: Boolean = false,
 ) {
     val buttons: List<OperatorAction> get() = listOf(button1, button2, button3)
-    init { require(buttons.none { it == OperatorAction.SYSTEM_VOLUME }) }
+    /** Gestures only ever map to app actions; the system volume is a key's plain press alone. */
+    val volumeGestures: List<OperatorAction> get() = listOf(volumeUpLong, volumeDownLong, volumeUpDouble, volumeDownDouble, volumeBoth)
+    init { require((buttons + volumeGestures).none { it == OperatorAction.SYSTEM_VOLUME }) }
 }
 
 /** Applied once on service creation, never on window recreation or a fold transition. */
@@ -45,21 +58,6 @@ fun CameraSettings.forOperatorStartup(): CameraSettings = copy(
 fun OperatorPreferences.startupCaptureMode(last: CaptureMode?, available: Set<CaptureMode>): CaptureMode {
     val requested = when (startupMode) { StartupMode.PHOTO -> CaptureMode.PHOTO; StartupMode.VIDEO -> CaptureMode.VIDEO; StartupMode.LAST -> last ?: CaptureMode.PHOTO }
     return requested.takeIf { it in available } ?: CaptureMode.PHOTO
-}
-
-/** Main-thread input latch: one down activates; repeats/up never activate another action. */
-class OperatorKeyLatch {
-    private val held = mutableSetOf<Int>()
-    fun clear() { held.clear() }
-    fun dispatch(key: Int, down: Boolean, repeat: Int, cancelled: Boolean, eligible: Boolean,
-        action: OperatorAction, perform: (OperatorAction) -> Unit): Boolean {
-        if (!down) return held.remove(key)
-        if (key in held) return true
-        if (!eligible || cancelled || repeat != 0 || action == OperatorAction.SYSTEM_VOLUME) return false
-        held.add(key)
-        if (action != OperatorAction.NONE) perform(action)
-        return true
-    }
 }
 
 /**
@@ -119,6 +117,11 @@ enum class OperatorUnavailableReason {
     SELF_MINIMAL,
     NO_EXTERIOR,
     NO_PRESET,
+    /** The volume-key pairs: the camera has no zoom, no EV range, no manual ISO or shutter, or fixed focus. */
+    NO_ZOOM,
+    NO_EV,
+    NO_MANUAL_EXPOSURE,
+    NO_MANUAL_FOCUS,
 }
 
 fun operatorActionAvailable(action: OperatorAction, state: CameraUiState): Boolean =

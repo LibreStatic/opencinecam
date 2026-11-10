@@ -427,7 +427,7 @@
     <string name="presets_rename">Renomear</string>
     <string name="presets_rename_help">Apenas o nome muda; as configurações salvas permanecem intactas.</string>
     <string name="operator_title">Controles do operador</string>
-    <string name="operator_help">Três botões compartilham as Configurações. As teclas de volume agem uma vez por toque, somente na tela de captura em foco; caixas de diálogo e Configurações mantêm o volume do sistema. As ações de preset sempre abrem uma revisão.</string>
+    <string name="operator_help">Três botões compartilham as Configurações. As teclas de volume agem somente na tela de captura em foco; caixas de diálogo e Configurações mantêm o volume do sistema. As ações de preset sempre abrem uma revisão.</string>
     <string name="operator_button">Botão %1$d</string>
     <string name="operator_volume_up">Volume +</string>
     <string name="operator_volume_down">Volume −</string>

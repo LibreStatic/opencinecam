@@ -87,7 +87,9 @@ import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
+import com.librestatic.opencinecam.OperatorAction
 import com.librestatic.opencinecam.OperatorPreferences
+import com.librestatic.opencinecam.VolumeKeyPair
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.OnboardingRawStage
 import com.librestatic.opencinecam.RawQualificationConditions
@@ -853,6 +855,14 @@ fun SettingsRecording() = DriverTheme {
 @Composable
 fun SettingsRecordingPolicy() = DriverTheme {
     var settings by remember { mutableStateOf(CameraSettings(recordingPolicy = PolicyMode.ADAPTIVE)) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+}
+
+/** The settings hub with the volume keys as a zoom pair; Controls › Operator controls shows the pair rows. */
+@Composable
+fun SettingsVolumeKeys() = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(operation = OperatorPreferences(volumePair = VolumeKeyPair.ZOOM, volumeBoth = OperatorAction.CAPTURE))) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
 }

@@ -11,4 +11,8 @@
     <string name="operator_reason_self_minimal">Aus, während du dich mit minimalen Bedienelementen selbst aufnimmst.</string>
     <string name="operator_reason_no_exterior">Benötigt das Außendisplay eines Foldables.</string>
     <string name="operator_reason_no_preset">Kein Preset in diesem Platz. Weise in den Einstellungen eines zu.</string>
+    <string name="operator_reason_no_zoom">Diese Kamera kann nicht zoomen.</string>
+    <string name="operator_reason_no_ev">Diese Kamera hat keine Belichtungskorrektur.</string>
+    <string name="operator_reason_no_manual_exposure">Diese Kamera wählt ISO und Verschluss selbst.</string>
+    <string name="operator_reason_no_manual_focus">Diese Kamera hat Fixfokus.</string>
 </resources>

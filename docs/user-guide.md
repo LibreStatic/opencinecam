@@ -161,6 +161,10 @@ All monitoring tools are display only. They never change the recorded file.
 
 **Operator controls** (in **Controls**) let you assign actions to three on-screen buttons and to the volume keys.
 
+- **Volume keys › Separate actions**: each key has a **Press**, a **Hold** and a **Double press** action, and **Both keys** has one more. A hold acts as soon as you have held the key long enough. A key whose only action is its press acts the moment you press it. With a hold or double press set, the single press waits for the release or for the double-press window, so keep them off a key you use as the shutter. A key left on **System volume** with nothing else set still changes the volume.
+- **Volume keys › Zoom, EV, ISO, Shutter or Focus**: the keys work as a −/+ pair. A press moves one step (a third of a stop for zoom, ISO and shutter; one EV step; a small focus step), and holding a key keeps changing the value until you let go. Up zooms in, brightens and focuses farther; **Invert direction** swaps the keys. Zoom stops at each lens on a press. From auto, ISO and shutter start from the value the camera is using. **Both keys** still works in this mode.
+- A step that cannot act (no zoom, fixed focus, no manual exposure, controls locked, a high-speed session) says why once per press.
+
 ## Audio
 
 Audio settings are in **Settings › Audio**.

@@ -61,29 +61,24 @@ class OperatorPreferencesTest {
         }
         assertFalse(CameraUiState(phase = CameraUiPhase.PREVIEWING, effectiveSettings = settings).captureControlsLocked)
     }
-    @Test fun volumeTriggersOnceAndConsumesItsPairedUpDespiteMappingChanges() {
-        val latch = OperatorKeyLatch(); val actions = mutableListOf<OperatorAction>()
-        assertTrue(latch.dispatch(24, true, 0, false, true, OperatorAction.CAPTURE, actions::add))
-        repeat(10) { assertTrue(latch.dispatch(24, true, it + 1, false, true, OperatorAction.TORCH, actions::add)) }
-        assertTrue(latch.dispatch(24, false, 0, false, false, OperatorAction.SYSTEM_VOLUME, actions::add))
-        assertEquals(listOf(OperatorAction.CAPTURE), actions)
-        assertTrue(latch.dispatch(24, true, 0, false, true, OperatorAction.TORCH, actions::add)); assertEquals(2, actions.size)
-    }
-    @Test fun systemVolumeCancelledEventsInactiveWindowsAndOrphanRepeatsNeverActivate() {
-        val latch = OperatorKeyLatch(); var calls = 0
-        assertFalse(latch.dispatch(24, true, 0, false, true, OperatorAction.SYSTEM_VOLUME) { calls++ })
-        assertFalse(latch.dispatch(24, true, 0, false, false, OperatorAction.CAPTURE) { calls++ })
-        assertFalse(latch.dispatch(24, true, 1, false, true, OperatorAction.CAPTURE) { calls++ })
-        assertFalse(latch.dispatch(24, true, 0, true, true, OperatorAction.CAPTURE) { calls++ })
-        assertTrue(latch.dispatch(24, true, 0, false, true, OperatorAction.NONE) { calls++ })
-        latch.clear(); assertFalse(latch.dispatch(24, false, 0, false, true, OperatorAction.CAPTURE) { calls++ })
-        assertEquals(0, calls)
-    }
-    @Test fun volumeKeysHaveIndependentLatches() {
-        val latch = OperatorKeyLatch(); var calls = 0
-        for (key in listOf(24, 25)) assertTrue(latch.dispatch(key, true, 0, false, true, OperatorAction.ZEBRA) { calls++ })
-        assertEquals(2, calls); latch.clear()
-        assertFalse(latch.dispatch(24, true, 3, false, true, OperatorAction.ZEBRA) { calls++ }); assertEquals(2, calls)
+    @Test fun volumeGesturesSurvivePersistenceAndNeverMapToTheSystemVolume() {
+        val op = OperatorPreferences(volumeUp = OperatorAction.TORCH, volumeUpLong = OperatorAction.CAPTURE, volumeDownLong = OperatorAction.EXTERIOR,
+            volumeUpDouble = OperatorAction.ZEBRA, volumeDownDouble = OperatorAction.PRESET_C1, volumeBoth = OperatorAction.CONTROL_LOCK,
+            volumePair = VolumeKeyPair.SHUTTER, volumePairInverted = true)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings(operation = op))
+        assertEquals(op, CameraSettingsStore(memory).load().operation)
+        for (key in listOf("operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both"))
+            assertTrue(key, key in memory.all)
+        assertThrows(IllegalArgumentException::class.java) { op.copy(volumeUpLong = OperatorAction.SYSTEM_VOLUME) }
+        assertThrows(IllegalArgumentException::class.java) { op.copy(volumeDownDouble = OperatorAction.SYSTEM_VOLUME) }
+        assertThrows(IllegalArgumentException::class.java) { op.copy(volumeBoth = OperatorAction.SYSTEM_VOLUME) }
+        // A stored system-volume gesture or an unknown pair reads back as the default instead of failing.
+        val stored = PresetPreferences(mapOf("operator-volume-both" to "SYSTEM_VOLUME", "operator-volume-pair" to "WARP"))
+        val loaded = CameraSettingsStore(stored).load().operation
+        assertEquals(OperatorAction.NONE, loaded.volumeBoth); assertEquals(VolumeKeyPair.NONE, loaded.volumePair)
+        val defaults = OperatorPreferences()
+        assertEquals(VolumeKeyPair.NONE, defaults.volumePair); assertFalse(defaults.volumePairInverted)
+        assertTrue(defaults.volumeGestures.all { it == OperatorAction.NONE })
     }
     @Test fun operationsRoundTripAndMigrateExactVersionTwoSchema() {
         val preset = CameraPreset(name = "Controls", settings = CameraSettings(operation = OperatorPreferences(volumeUp = OperatorAction.CAPTURE, startupMode = StartupMode.LAST)))
