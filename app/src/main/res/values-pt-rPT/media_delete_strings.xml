@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_delete_action">Eliminar originais relacionados…</string>
+    <string name="media_delete_title">Eliminar este take permanentemente</string>
+    <string name="media_delete_help">Isto elimina os ficheiros originais listados e os metadados relacionados, não apenas uma pré-visualização ou um proxy. Esta ação não pode ser anulada. Reveja cada ficheiro antes de confirmar.</string>
+    <string name="media_delete_acknowledge">Compreendo que estes ficheiros originais e metadados serão eliminados permanentemente.</string>
+    <string name="media_delete_sources">Ficheiros selecionados — Originais: %1$d; Metadados: %2$d</string>
+    <string name="media_delete_original">Original: %1$s</string>
+    <string name="media_delete_metadata">Metadados: %1$s</string>
+    <string name="media_delete_confirm">Eliminar permanentemente os ficheiros listados</string>
+    <string name="media_delete_cancel">Cancelar</string>
+    <string name="media_delete_busy">A eliminação está em curso. O cancelamento já não está disponível; aguarde o resultado de cada ficheiro. Sair deste ecrã não interrompe uma operação já confirmada.</string>
+    <string name="media_delete_complete">Todos os ficheiros selecionados foram eliminados.</string>
+    <string name="media_delete_partial">A eliminação foi parcial. Reveja o resultado de cada ficheiro; não presuma que o take foi totalmente eliminado.</string>
+    <string name="media_delete_rejected">A eliminação foi rejeitada. Reveja o catálogo atual antes de fazer uma nova seleção.</string>
+    <string name="media_delete_unknown">O resultado da eliminação é desconhecido. Atualize o catálogo e inspecione os ficheiros restantes antes de qualquer outra ação.</string>
+    <string name="media_delete_absent">Ausência verificada</string>
+    <string name="media_delete_remaining">Não eliminado</string>
+    <string name="media_delete_member_unknown">Resultado desconhecido</string>
+    <string name="media_delete_refresh">Foi pedida uma atualização do catálogo. Um erro de carregamento ou de leitura não prova que um ficheiro está em falta.</string>
+    <string name="media_delete_not_attempted">Não tentado</string>
+</resources>

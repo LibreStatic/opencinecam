@@ -9,7 +9,7 @@
     <string name="operator_volume_pair_shutter">Obturador</string>
     <string name="operator_volume_pair_focus">Foco</string>
     <string name="operator_volume_pair_none_summary">Cada tecla hace sus propias acciones</string>
-    <string name="operator_volume_pair_summary">Pulsá para un paso, mantené para seguir cambiando</string>
+    <string name="operator_volume_pair_summary">Pulsa para un paso, mantén para seguir cambiando</string>
     <string name="operator_volume_pair_invert">Invertir dirección</string>
     <string name="operator_volume_up_long">Subir volumen: mantener</string>
     <string name="operator_volume_up_double">Subir volumen: doble pulsación</string>

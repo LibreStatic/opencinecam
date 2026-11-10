@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scope_reduce">Reduzir scopes</string>
+    <string name="scope_enlarge">Ampliar scopes</string>
+    <string name="scope_suspended">Em pausa</string>
+    <string name="scope_domain_isp">SDR est.</string>
+    <string name="scope_domain_sdr">SDR</string>
+    <string name="scope_domain_log">OC-Log2</string>
+    <string name="scope_domain_waiting">Sem sinal</string>
+    <string name="scope_black">Preto</string>
+    <string name="scope_shadow">Sombra</string>
+    <string name="scope_mid">Meio-tom</string>
+    <string name="scope_highlight">Realce</string>
+    <string name="scope_clip">Clipping</string>
+</resources>

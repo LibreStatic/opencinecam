@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="capture_slot_shutter">OBTUR.</string>
+    <string name="capture_slot_wb">BB</string>
+    <string name="capture_slot_focus">FOCO</string>
+    <string name="capture_slot_interval">INTERV.</string>
+    <string name="capture_slot_resolution_name">Resolução</string>
+    <string name="capture_slot_fps_name">Cadência de fotogramas</string>
+    <string name="capture_slot_shutter_name">Obturador</string>
+    <string name="capture_slot_iso_name">Sensibilidade ISO</string>
+    <string name="capture_slot_ev_name">Compensação de exposição</string>
+    <string name="capture_slot_wb_name">Balanço de brancos</string>
+    <string name="capture_slot_focus_name">Foco</string>
+    <string name="capture_slot_interval_name">Intervalo</string>
+    <string name="capture_slot_reason_not_ready">A aguardar a câmara.</string>
+    <string name="capture_slot_reason_single_resolution">Este modo tem uma única resolução.</string>
+    <string name="capture_slot_reason_high_speed">As cadências de fotogramas altas ajustam isto automaticamente.</string>
+    <string name="capture_slot_reason_no_manual">Esta câmara não oferece exposição manual.</string>
+    <string name="capture_slot_reason_no_ev">Esta câmara não oferece compensação de exposição.</string>
+    <string name="capture_mode_button">Modo: %1$s</string>
+    <string name="capture_scopes_short">Scopes</string>
+    <string name="capture_scopes_toggle">Mostrar scopes</string>
+    <string name="capture_hold_busy_photo">A guardar foto…</string>
+    <string name="capture_hold_busy_burst">A fazer sequência…</string>
+    <string name="capture_hold_busy_bracket">A fazer bracketing…</string>
+    <string name="capture_hold_busy_light_trail">A criar rasto de luz…</string>
+    <string name="capture_hold_busy_hint">Os controlos voltam ao terminar</string>
+    <string name="capture_hold_operator_title">Controlos bloqueados para o take</string>
+    <string name="capture_hold_operator_hint">Parar, monitorização e Definições continuam ativos</string>
+    <string name="capture_hold_short_saving">A guardar…</string>
+    <string name="capture_hold_short_burst">Sequência…</string>
+    <string name="capture_hold_short_bracket">Bracketing…</string>
+    <string name="capture_hold_short_light_trail">Rasto…</string>
+    <string name="capture_hold_caption_busy">Ocupada</string>
+    <string name="capture_hold_caption_locked">Bloqueado</string>
+    <string name="capture_unlock">Desbloquear</string>
+    <string name="capture_slot_reason_night">A foto noturna define isto automaticamente.</string>
+    <string name="capture_hold_busy_night">A processar foto noturna…</string>
+    <string name="capture_hold_busy_night_progress">A processar foto noturna… %1$d%%</string>
+    <string name="capture_hold_short_night">Noite…</string>
+</resources>

@@ -4,12 +4,12 @@ VERSÃO 1.0
 Esta é a versão 1.0 do OpenCineCam. Alguns modos são experimentais e ficam ocultos se o seu telemóvel não se qualificar, e os resultados variam de telemóvel para telemóvel. Os seus comentários são bem-vindos e definem o que vem a seguir: abra uma issue na página do projeto no GitHub.
 
 CONTROLO MANUAL
-• ISO, tempo ou ângulo de obturação, equilíbrio de brancos em Kelvin com matiz, foco manual e zoom
+• ISO, tempo ou ângulo de obturação, balanço de brancos em Kelvin com matiz, foco manual e zoom
 • Valores pedidos e reportados lado a lado, para ver o que a câmara realmente aplicou
-• Bloqueio de exposição e de equilíbrio de brancos, lanterna, sugestões de obturador a 50/60 Hz contra a cintilação
+• Bloqueio de exposição e de balanço de brancos, lanterna, sugestões de obturador a 50/60 Hz contra a cintilação
 • Opções de estabilização, ruído e nitidez de contornos quando o telemóvel as oferece
 • FPS LOCK (bloqueio de cadência): mantém a cadência de imagens com pouca luz, fixando o obturador em 1/fps
-• Bloqueio de lente: fica numa só lente com zoom digital, em telemóveis com várias lentes
+• Bloqueio de lente: fique numa só lente com zoom digital, em telemóveis com várias lentes
 • Calibração das lentes: iguala cor, exposição e enquadramento entre as lentes na pré-visualização e no vídeo
 
 MODOS DE CAPTURA
@@ -28,19 +28,19 @@ VÍDEO E ÁUDIO
 • Codificação de vídeo AVC ou HEVC por hardware
 • Áudio AAC dentro do MP4, ou ficheiros WAV ou FLAC sem perdas em separado
 • Medidores de áudio em direto, controlo de ganho e escuta com auscultadores
-• Pausa e retoma dentro de uma mesma tomada
+• Pausa e retoma dentro de um mesmo take
 • Microfone USB e outras entradas de áudio externas
 
 FLUXO DE PRODUÇÃO
 • Timecode SMPTE guardado num ficheiro JSON auxiliar
-• Claquete de produção: projeto, câmara, cena, rolo, lente e tomada
+• Claquete de produção: projeto, câmara, cena, rolo, lente e take
 • Predefinições portáteis que pode guardar, importar e exportar
 • Geomarcação opcional, desativada por predefinição
 
 MULTIMÉDIA E TRANSFERÊNCIA
 • Galeria integrada com reprodução, mudança de nome, partilha e eliminação
 • Proxies de edição gerados no dispositivo quando os pede
-• Envio opcional das tomadas para o seu próprio servidor WebDAV por HTTPS, iniciado por si ou automático para as novas tomadas (desativado por predefinição, só por Wi-Fi, exceto se permitir dados móveis)
+• Envio opcional dos takes para o seu próprio servidor WebDAV por HTTPS, iniciado por si ou automático para os novos takes (desativado por predefinição, só por Wi-Fi, exceto se permitir dados móveis)
 
 PENSADO PARA DOBRÁVEIS
 • Layouts que se adaptam a telemóveis, tablets e dobráveis, incluindo a dobradiça
