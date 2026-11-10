@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="production_slate_title">Claquete de produção</string>
+    <string name="production_slate_help">Metadados descritivos para a próxima captura. A claquete admitida fica congelada durante a gravação e a publicação; as edições durante um take ficam pendentes. A numeração automática só avança depois de uma captura guardada e apenas se a claquete não tiver mudado. O UUID, e não o número do take, identifica uma captura. Estes campos não alteram nomes de ficheiro, não detetam a lente nem recolhem coordenadas GPS.</string>
+    <string name="production_slate_pending">Alterações da claquete pendentes para a próxima captura; a captura atual mantém os seus metadados admitidos.</string>
+    <string name="production_slate_project">Projeto</string>
+    <string name="production_slate_camera">Nome da câmara</string>
+    <string name="production_slate_scene">Cena</string>
+    <string name="production_slate_reel">Rolo</string>
+    <string name="production_slate_lens">Nome da lente (manual)</string>
+    <string name="production_slate_take">Número do take (1–999999)</string>
+    <string name="production_slate_invalid_text">Use no máximo 128 unidades UTF-16, sem caracteres de controlo, quebras de linha nem Unicode inválido. Esta edição não foi guardada.</string>
+    <string name="production_slate_invalid_take">Introduza um número inteiro de 1 a 999999 sem zeros à esquerda. Esta edição não foi guardada.</string>
+    <string name="production_slate_location">Local da cena</string>
+    <string name="production_slate_time">Hora do dia da cena</string>
+    <string name="production_slate_unspecified">Não especificado</string>
+    <string name="production_slate_interior">Interior</string>
+    <string name="production_slate_exterior">Exterior</string>
+    <string name="production_slate_day">Dia</string>
+    <string name="production_slate_night">Noite</string>
+    <string name="production_slate_good">Marcar como bom take</string>
+    <string name="production_slate_increment">Avançar o número do take após uma captura guardada (nunca além de 999999)</string>
+    <string name="production_slate_increment_failed">Ficheiro guardado mantido; verifique o próximo número de take da claquete.</string>
+</resources>

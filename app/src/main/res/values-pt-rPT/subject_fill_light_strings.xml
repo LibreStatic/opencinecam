@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_fill_light_help">Transforma o ecrã exterior numa luz suave. O brilho é um pedido ao sistema, não luz medida. Bloqueie a exposição e o balanço de brancos antes do take para que a luz não os faça variar.</string>
+    <string name="subject_fill_light_kelvin">Temperatura de cor: %1$d K</string>
+    <string name="subject_fill_light_tint">Matiz: %1$d (− verde, + magenta)</string>
+    <string name="subject_fill_light_timeout">Atenuar após</string>
+    <string name="subject_fill_light_timeout_off">Nunca</string>
+    <string name="subject_fill_light_timeout_minutes">%1$d min</string>
+    <string name="subject_fill_light_enable">Usar o ecrã exterior como luz de preenchimento</string>
+    <string name="subject_fill_light_lock_suggestion">A luz de preenchimento está ligada. Bloqueie a exposição (AE) e o balanço de brancos (AWB) antes do take: se esta luz mudar, eles variam. A app nunca os bloqueia por si.</string>
+    <string name="subject_fill_light_lock_awb_suggestion">A luz de preenchimento está ligada e a exposição bloqueada. Bloqueie também o balanço de brancos (AWB) para que uma mudança desta luz não altere a cor. A app nunca o bloqueia por si.</string>
+    <string name="subject_fill_light_notice_timeout">O tempo da luz de preenchimento acabou e ela foi atenuada. O operador pode voltar a ligá-la.</string>
+    <string name="subject_fill_light_notice_warm">O telemóvel está quente: a luz foi atenuada para proteger a gravação.</string>
+    <string name="subject_fill_light_notice_hot">O telemóvel está demasiado quente: a luz foi bastante atenuada para proteger a gravação.</string>
+    <string name="subject_fill_light_restart">Voltar a ligar a luz</string>
+    <string name="subject_fill_light_swatch">Pré-visualização da cor da luz, %1$d K, matiz %2$d</string>
+    <string name="subject_fill_light_swatch_note">Cor aproximada; o ecrã exterior não está calibrado.</string>
+    <string name="subject_fill_light_thermal_help">Quando o telemóvel aquece (estado térmico moderado ou superior) a luz atenua-se sozinha e os dois ecrãs avisam. A captura nunca muda.</string>
+    <string name="subject_fill_light_presets">Cores predefinidas</string>
+    <string name="subject_fill_light_preset_label">%1$s · %2$d K</string>
+    <string name="subject_fill_light_preset_candle">Vela</string>
+    <string name="subject_fill_light_preset_tungsten">Tungsténio</string>
+    <string name="subject_fill_light_preset_fluorescent">Fluorescente</string>
+    <string name="subject_fill_light_preset_beauty">Beleza</string>
+    <string name="subject_fill_light_preset_daylight">Luz do dia</string>
+    <string name="subject_fill_light_preset_neutral">Neutra</string>
+</resources>

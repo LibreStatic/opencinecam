@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_listening_title">Saída de monitorização</string>
+    <string name="audio_listening_help">Apenas reprodução: não altera o ganho do microfone nem as amostras gravadas. Ativar, importar um preset ou reabrir a app não liga o áudio; toque em Ligar explicitamente. Os medidores de nível, por si só, não confirmam a reprodução.</string>
+    <string name="audio_listening_enable">Ativar preferência de monitorização</string>
+    <string name="audio_listening_volume">Volume de monitorização pedido: %1$d%%</string>
+    <string name="audio_listening_wired">Auscultadores com fios ou USB</string>
+    <string name="audio_listening_bluetooth">Saída Bluetooth</string>
+    <string name="audio_listening_speaker">Altifalante integrado (seleção explícita)</string>
+    <string name="audio_listening_speaker_warning">A reprodução pelo altifalante pode voltar ao microfone e ser gravada acusticamente. Baixe o volume de monitorização antes de ligar. Sem alternativa automática para o altifalante.</string>
+    <string name="audio_listening_latency">A latência de monitorização não é medida; o Bluetooth pode introduzir um atraso considerável. A seleção de saída é apenas um pedido até o runtime confirmar a rota.</string>
+    <string name="audio_listening_auto">Qualquer dispositivo disponível do tipo de saída selecionado</string>
+    <string name="audio_listening_requested_device">Saída pedida: %1$s</string>
+    <string name="audio_listening_effective_device">Saída reportada: %1$s · ID %2$d</string>
+    <string name="audio_listening_disabled">Monitorização desativada</string>
+    <string name="audio_listening_needs_connect">Ligação explícita necessária</string>
+    <string name="audio_listening_waiting_pcm">A aguardar PCM de origem</string>
+    <string name="audio_listening_no_output">Nenhuma saída correspondente disponível</string>
+    <string name="audio_listening_connecting">A ligar a saída de monitorização…</string>
+    <string name="audio_listening_active">Saída de monitorização ativa</string>
+    <string name="audio_listening_disconnected">Saída desligada; volte a ligar explicitamente</string>
+    <string name="audio_listening_failed">A saída de monitorização falhou</string>
+    <string name="audio_listening_retiring">A aguardar o fecho da saída de monitorização…</string>
+    <string name="audio_listening_counters">Tramas aceites: %1$d · pacotes rejeitados: %2$d</string>
+    <string name="audio_listening_connect">Ligar / voltar a ligar a monitorização</string>
+</resources>
