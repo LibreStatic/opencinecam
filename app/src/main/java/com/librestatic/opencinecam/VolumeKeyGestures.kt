@@ -56,6 +56,15 @@ class VolumeKeyGestures(
         chord = false
     }
 
+    /**
+     * Stops every timer and loop without acting, for when the keys stop being the camera's while one
+     * is down. The held keys stay consumed until their release, so their repeats never reach the system.
+     */
+    fun settle() {
+        held.values.forEach { it.stop(); it.done = true }
+        pending?.cancel?.invoke(); pending = null
+    }
+
     /** True when the event is consumed. [prefs] is null when the keys are not the camera's right now. */
     fun dispatch(key: Int, down: Boolean, repeat: Int, cancelled: Boolean, prefs: OperatorPreferences?, handler: VolumeKeyHandler?): Boolean {
         if (!down) return release(key, cancelled)
