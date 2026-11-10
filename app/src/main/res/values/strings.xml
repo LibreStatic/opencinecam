@@ -432,7 +432,7 @@
     <string name="presets_rename">Rename</string>
     <string name="presets_rename_help">Only the name changes; the saved settings remain intact.</string>
     <string name="operator_title">Operator controls</string>
-    <string name="operator_help">Three buttons share Settings. Volume keys act once per press, only in the focused capture screen; dialogs and Settings keep system volume. Preset actions always open a review.</string>
+    <string name="operator_help">Three buttons share Settings. Volume keys act only in the focused capture screen; dialogs and Settings keep system volume. Preset actions always open a review.</string>
     <string name="operator_button">Button %1$d</string>
     <string name="operator_volume_up">Volume up</string>
     <string name="operator_volume_down">Volume down</string>

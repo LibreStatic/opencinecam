@@ -7,7 +7,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.ContextWrapper
-import android.view.KeyEvent
+import android.media.AudioManager
 import android.widget.Toast
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
@@ -55,7 +55,8 @@ private tailrec fun Context.operatorActivity(): MainActivity? = when (this) {
 
 @Composable
 internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSettings, binder: CaptureService.LocalBinder?,
-    coordinator: FoldDisplayCoordinator?, fold: FoldDisplayState, enabled: Boolean): OperatorActions {
+    coordinator: FoldDisplayCoordinator?, fold: FoldDisplayState, enabled: Boolean,
+    onSettingsChanged: (CameraSettings) -> Unit = {}, haptics: AppHaptics = AppHaptics.Disabled): OperatorActions {
     val context = LocalContext.current
     val repository = remember(context) { PresetRepositories.get(context) }
     val library by repository.states.collectAsState()
@@ -93,16 +94,68 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
             else -> scopes.press(action, operatorActionToggleState(action, settings, state) == true) { binder?.performOperatorAction(action) }
         }
     }
+    // The keys read the service's state, not this frame's, so a held key never steps from a stale value.
+    fun live(): CameraUiState = binder?.cameraStates?.value ?: state
+    val pairReason: (VolumeKeyPair, CameraUiState) -> OperatorUnavailableReason? = { pair, current ->
+        when {
+            !enabled || binder == null -> OperatorUnavailableReason.NOT_READY
+            else -> volumePairUnavailableReason(pair, current)
+                ?: if (current.selfRecordingActive && settings.subjectDisplay.selfMinimalControls) OperatorUnavailableReason.SELF_MINIMAL else null
+        }
+    }
+    fun <T> PairStep<T>.feel(before: T, announce: Boolean) {
+        if (anchor) haptics.perform(HapticEvent.ZoomAnchor)
+        if (limit && (announce || value != before)) haptics.perform(HapticEvent.Limit)
+    }
+    val step: (VolumeKeyPair, Int, Boolean) -> Boolean = { pair, direction, announce ->
+        val current = live()
+        val why = pairReason(pair, current)
+        if (why != null) {
+            if (announce) Toast.makeText(context, operatorUnavailableText(context, OperatorAction.NONE, why), Toast.LENGTH_SHORT).show()
+            false
+        } else when (pair) {
+            VolumeKeyPair.ZOOM -> volumeZoomTap(current.zoomRatio, direction, current.zoomMinRatio, current.zoomMaxRatio, zoomSectorAnchors(current).map { it.ratio })
+                .also { binder?.setZoomRatio(it.value); it.feel(current.zoomRatio, announce) }
+            VolumeKeyPair.EXPOSURE_COMPENSATION -> volumeEvStep(current, direction)
+                ?.also { binder?.setExposureCompensation(it.value); it.feel(current.requestedAeCompensationIndex, announce) }
+            VolumeKeyPair.ISO -> volumeIsoStep(current, settings, direction)
+                ?.also { onSettingsChanged(settings.copy(exposure = it.value)); it.feel(settings.exposure, announce) }
+            VolumeKeyPair.SHUTTER -> volumeShutterStep(current, settings, direction)
+                ?.also { onSettingsChanged(settings.copy(exposure = it.value)); it.feel(settings.exposure, announce) }
+            VolumeKeyPair.FOCUS -> volumeFocusStep(current, direction)
+                ?.also { binder?.setManualFocus(it.value); it.feel(current.requestedFocusDiopters ?: -1f, announce) }
+            VolumeKeyPair.NONE -> null
+        } != null
+    }
+    val zoomHold: (Int, Float) -> Unit = { direction, deltaSeconds ->
+        val current = live()
+        if (pairReason(VolumeKeyPair.ZOOM, current) == null) {
+            volumeZoomHold(current.zoomRatio, direction, deltaSeconds, current.zoomMinRatio, current.zoomMaxRatio, zoomSectorAnchors(current).map { it.ratio })
+                .also { if (it.value != current.zoomRatio) binder?.setZoomRatio(it.value); it.feel(current.zoomRatio, announce = false) }
+        }
+    }
     val currentPerform by rememberUpdatedState(perform)
+    val currentStep by rememberUpdatedState(step)
+    val currentZoomHold by rememberUpdatedState(zoomHold)
+    val currentHaptics by rememberUpdatedState(haptics)
     val currentSettings by rememberUpdatedState(settings)
     val currentEnabled by rememberUpdatedState(enabled && review == null && !editing)
     val activity = context.operatorActivity()
     DisposableEffect(activity) {
         val owner = Any()
-        activity?.installOperatorKeys(owner) { key ->
-            if (!currentEnabled) null else if (key == KeyEvent.KEYCODE_VOLUME_UP) currentSettings.operation.volumeUp else currentSettings.operation.volumeDown
+        val audio = context.getSystemService(AudioManager::class.java)
+        val handler = object : VolumeKeyHandler {
+            override fun perform(action: OperatorAction) = currentPerform(action)
+            override fun step(pair: VolumeKeyPair, direction: Int, announce: Boolean) = currentStep(pair, direction, announce)
+            override fun zoomContinuous(direction: Int, deltaSeconds: Float) = currentZoomHold(direction, deltaSeconds)
+            override fun haptic(event: HapticEvent) = currentHaptics.perform(event)
+            // A press the gestures held back still moves the volume, with the system's own panel.
+            override fun adjustVolume(direction: Int) {
+                audio?.adjustSuggestedStreamVolume(if (direction > 0) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
+                    AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
+            }
         }
-        activity?.operatorAction = { currentPerform(it) }
+        activity?.installOperatorKeys(owner, { if (currentEnabled) currentSettings.operation else null }, handler)
         onDispose { activity?.removeOperatorKeys(owner) }
     }
     // Navigating away cancels review; a changed role/camera never applies the old dialog silently.
@@ -134,6 +187,10 @@ internal fun operatorUnavailableText(context: Context, action: OperatorAction, r
     OperatorUnavailableReason.SELF_MINIMAL -> context.getString(R.string.operator_reason_self_minimal)
     OperatorUnavailableReason.NO_EXTERIOR -> context.getString(R.string.operator_reason_no_exterior)
     OperatorUnavailableReason.NO_PRESET -> context.getString(R.string.operator_reason_no_preset)
+    OperatorUnavailableReason.NO_ZOOM -> context.getString(R.string.operator_reason_no_zoom)
+    OperatorUnavailableReason.NO_EV -> context.getString(R.string.operator_reason_no_ev)
+    OperatorUnavailableReason.NO_MANUAL_EXPOSURE -> context.getString(R.string.operator_reason_no_manual_exposure)
+    OperatorUnavailableReason.NO_MANUAL_FOCUS -> context.getString(R.string.operator_reason_no_manual_focus)
 }
 
 @Composable
@@ -384,8 +441,7 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
                 onChange(settings.copy(operation = when (index) { 0 -> operation.copy(button1 = selected); 1 -> operation.copy(button2 = selected); else -> operation.copy(button3 = selected) }))
             }
         }
-        OperatorChoice(stringResource(R.string.operator_volume_up), operation.volumeUp, OperatorAction.entries, "operator-volume-up") { onChange(settings.copy(operation = operation.copy(volumeUp = it))) }
-        OperatorChoice(stringResource(R.string.operator_volume_down), operation.volumeDown, OperatorAction.entries, "operator-volume-down") { onChange(settings.copy(operation = operation.copy(volumeDown = it))) }
+        VolumeKeySettings(operation) { onChange(settings.copy(operation = it)) }
         SettingsChips(stringResource(R.string.operator_startup), StartupMode.entries, operation.startupMode,
             label = { stringResource(when (it) { StartupMode.PHOTO -> R.string.operator_startup_photo; StartupMode.VIDEO -> R.string.operator_startup_video; StartupMode.LAST -> R.string.operator_startup_last }) },
             onSelect = { onChange(settings.copy(operation = operation.copy(startupMode = it))) }, tag = { "operator-startup-$it" })
@@ -396,6 +452,39 @@ internal fun OperatorSettings(state: CameraUiState, settings: CameraSettings, on
         Text(stringResource(if (state.captureControlsLocked) R.string.operator_locked else R.string.operator_lock_help), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         OutlinedButton({ onChange(settings.copy(operation = OperatorPreferences())) }, Modifier.heightIn(min = 48.dp).testTag("operator-reset")) { Text(stringResource(R.string.operator_reset)) }
     }
+}
+/**
+ * The volume keys: separate actions per key with hold and double press, or a −/+ pair. A press
+ * left on system volume still moves the volume when the key also has a hold or double press.
+ */
+@Composable
+private fun VolumeKeySettings(operation: OperatorPreferences, onChange: (OperatorPreferences) -> Unit) {
+    val pair = operation.volumePair
+    SettingsOptionRow(stringResource(R.string.operator_volume_keys),
+        stringResource(if (pair == VolumeKeyPair.NONE) R.string.operator_volume_pair_none_summary else R.string.operator_volume_pair_summary),
+        VolumeKeyPair.entries, pair, label = { stringResource(it.labelResource()) },
+        tag = { "operator-volume-pair-$it" }, onSelect = { onChange(operation.copy(volumePair = it)) })
+    val gestures = OperatorAction.entries.filter { it != OperatorAction.SYSTEM_VOLUME }
+    if (pair != VolumeKeyPair.NONE) {
+        OperatorToggle(R.string.operator_volume_pair_invert, "operator-volume-pair-inverted", operation.volumePairInverted) { onChange(operation.copy(volumePairInverted = it)) }
+    } else {
+        OperatorChoice(stringResource(R.string.operator_volume_up), operation.volumeUp, OperatorAction.entries, "operator-volume-up") { onChange(operation.copy(volumeUp = it)) }
+        OperatorChoice(stringResource(R.string.operator_volume_up_long), operation.volumeUpLong, gestures, "operator-volume-up-long") { onChange(operation.copy(volumeUpLong = it)) }
+        OperatorChoice(stringResource(R.string.operator_volume_up_double), operation.volumeUpDouble, gestures, "operator-volume-up-double") { onChange(operation.copy(volumeUpDouble = it)) }
+        OperatorChoice(stringResource(R.string.operator_volume_down), operation.volumeDown, OperatorAction.entries, "operator-volume-down") { onChange(operation.copy(volumeDown = it)) }
+        OperatorChoice(stringResource(R.string.operator_volume_down_long), operation.volumeDownLong, gestures, "operator-volume-down-long") { onChange(operation.copy(volumeDownLong = it)) }
+        OperatorChoice(stringResource(R.string.operator_volume_down_double), operation.volumeDownDouble, gestures, "operator-volume-down-double") { onChange(operation.copy(volumeDownDouble = it)) }
+    }
+    OperatorChoice(stringResource(R.string.operator_volume_both), operation.volumeBoth, gestures, "operator-volume-both") { onChange(operation.copy(volumeBoth = it)) }
+    SettingsHelp(stringResource(R.string.operator_volume_gestures_help_summary), stringResource(R.string.operator_volume_gestures_help), tag = "operator-volume-gestures-help")
+}
+private fun VolumeKeyPair.labelResource(): Int = when (this) {
+    VolumeKeyPair.NONE -> R.string.operator_volume_pair_none
+    VolumeKeyPair.ZOOM -> R.string.operator_volume_pair_zoom
+    VolumeKeyPair.EXPOSURE_COMPENSATION -> R.string.operator_volume_pair_ev
+    VolumeKeyPair.ISO -> R.string.operator_volume_pair_iso
+    VolumeKeyPair.SHUTTER -> R.string.operator_volume_pair_shutter
+    VolumeKeyPair.FOCUS -> R.string.operator_volume_pair_focus
 }
 @Composable
 private fun OperatorChoice(title: String, value: OperatorAction, options: List<OperatorAction>, tag: String, onChange: (OperatorAction) -> Unit) {

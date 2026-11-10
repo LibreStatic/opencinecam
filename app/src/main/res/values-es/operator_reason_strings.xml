@@ -11,4 +11,8 @@
     <string name="operator_reason_self_minimal">Desactivado mientras te grabás con controles mínimos.</string>
     <string name="operator_reason_no_exterior">Necesita la pantalla exterior de un plegable.</string>
     <string name="operator_reason_no_preset">No hay un preset en esta ranura. Asigná uno en Ajustes.</string>
+    <string name="operator_reason_no_zoom">Esta cámara no tiene zoom.</string>
+    <string name="operator_reason_no_ev">Esta cámara no tiene compensación de exposición.</string>
+    <string name="operator_reason_no_manual_exposure">Esta cámara elige el ISO y el obturador por sí sola.</string>
+    <string name="operator_reason_no_manual_focus">Esta cámara tiene foco fijo.</string>
 </resources>

@@ -52,7 +52,7 @@ class ProductionSlateSettingsTest {
         }
     }
     @Test fun versionFourteenHas160KeysAndVersionThirteenMigratesExactlyTenDefaults() {
-        assertEquals(26, CameraPresetCodec.VERSION); assertEquals(176, CameraPresetCodec.portableKeys.size)
+        assertEquals(27, CameraPresetCodec.VERSION); assertEquals(183, CameraPresetCodec.portableKeys.size)
         assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
         val source = CameraSettings(audioMeter = AudioMeterSettings(mode = AudioMeterMode.VU, showValues = true))
         val root = document(source); val historical = root.getValue("settings").jsonObject.filterKeys { it !in PRESET_V20_KEYS && !it.startsWith("gallery-") && !it.startsWith("media-share-") && !it.startsWith("capture-naming-") && !it.startsWith("playback-") } - keys

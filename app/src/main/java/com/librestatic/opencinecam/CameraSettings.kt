@@ -347,6 +347,13 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             restoreExposureWhiteBalance = preferences.getBoolean("operator-restore-exposure-wb", true),
             restoreTorch = preferences.getBoolean("operator-restore-torch", false),
             lockDuringTake = preferences.getBoolean("operator-lock-during-take", false),
+            volumeUpLong = volumeGesturePreference("operator-volume-up-long"),
+            volumeDownLong = volumeGesturePreference("operator-volume-down-long"),
+            volumeUpDouble = volumeGesturePreference("operator-volume-up-double"),
+            volumeDownDouble = volumeGesturePreference("operator-volume-down-double"),
+            volumeBoth = volumeGesturePreference("operator-volume-both"),
+            volumePair = enumPreference("operator-volume-pair", VolumeKeyPair.NONE),
+            volumePairInverted = preferences.getBoolean("operator-volume-pair-inverted", false),
         ),
         imageProcessing = ImageProcessingSelection(
             stabilization = preferences.getString("image-stabilization", "DEFAULT")?.let { runCatching { StabilizationMode.valueOf(it) }.getOrNull() },
@@ -543,6 +550,13 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("operator-restore-exposure-wb", settings.operation.restoreExposureWhiteBalance)
             .putBoolean("operator-restore-torch", settings.operation.restoreTorch)
             .putBoolean("operator-lock-during-take", settings.operation.lockDuringTake)
+            .putString("operator-volume-up-long", settings.operation.volumeUpLong.name)
+            .putString("operator-volume-down-long", settings.operation.volumeDownLong.name)
+            .putString("operator-volume-up-double", settings.operation.volumeUpDouble.name)
+            .putString("operator-volume-down-double", settings.operation.volumeDownDouble.name)
+            .putString("operator-volume-both", settings.operation.volumeBoth.name)
+            .putString("operator-volume-pair", settings.operation.volumePair.name)
+            .putBoolean("operator-volume-pair-inverted", settings.operation.volumePairInverted)
             .putString("subject-mode", settings.subjectDisplay.mode.name)
             .putBoolean("subject-preview-mirror", settings.subjectDisplay.previewMirror)
             .putBoolean("subject-preview-view-assist", settings.subjectDisplay.previewViewAssist)
@@ -875,6 +889,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
 
     private inline fun <reified T : Enum<T>> enumPreference(key: String, fallback: T): T =
         preferences.getString(key, null)?.let { saved -> enumValues<T>().firstOrNull { it.name == saved } } ?: fallback
+    /** A volume-key gesture never maps to the system volume; a stored one reads as no action. */
+    private fun volumeGesturePreference(key: String): OperatorAction =
+        enumPreference(key, OperatorAction.NONE).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.NONE
 
     /** One-time repair for releases that accidentally shipped without the approved carousel. */
     private fun migratedModeSelectorStyle(): ModeSelectorStyle {

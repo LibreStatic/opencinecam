@@ -427,7 +427,7 @@
     <string name="presets_rename">Rinomina</string>
     <string name="presets_rename_help">Cambia solo il nome; le impostazioni salvate restano intatte.</string>
     <string name="operator_title">Controlli dell\'operatore</string>
-    <string name="operator_help">Tre pulsanti condividono le Impostazioni. I tasti volume agiscono una volta per pressione, solo nella schermata di acquisizione attiva; finestre di dialogo e Impostazioni mantengono il volume di sistema. Le azioni preset aprono sempre una revisione.</string>
+    <string name="operator_help">Tre pulsanti condividono le Impostazioni. I tasti volume agiscono solo nella schermata di acquisizione attiva; finestre di dialogo e Impostazioni mantengono il volume di sistema. Le azioni preset aprono sempre una revisione.</string>
     <string name="operator_button">Pulsante %1$d</string>
     <string name="operator_volume_up">Volume +</string>
     <string name="operator_volume_down">Volume −</string>

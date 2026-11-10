@@ -360,8 +360,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         return
     }
 
-    val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
     val appHaptics = rememberAppHaptics(settings.haptics, state.phase == CameraUiPhase.RECORDING)
+    val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE,
+        onSettingsChanged = { settingsRepository.set(it) }, haptics = appHaptics)
     CompositionLocalProvider(LocalLiveCameraState provides liveState, LocalOperatorActions provides operatorActions,
         LocalAppHaptics provides appHaptics,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
@@ -3920,10 +3921,6 @@ private fun ManualControlDial(
     }
 }
 
-/** High-speed sessions leave exposure and white balance to the camera. */
-private fun CameraUiState.highSpeedSession(): Boolean =
-    activeVideoProfile?.constrainedHighSpeed == true || activeLogProfile?.constrainedHighSpeed == true
-
 /** The one large value a panel is about, centred over its controls. */
 @Composable
 private fun PanelReadout(text: String, color: Color, modifier: Modifier = Modifier) {
@@ -3969,16 +3966,9 @@ private fun ExposureDial(
                 Modifier.testTag("exposure-unavailable"))
             return@PanelColumn
         }
-        val isoMin = descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0
-        val isoMax = descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0
-        val timeMin = descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0
-        val timeMax = descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0
-        val mode = settings.exposure.mode
+        val (isoMin, isoMax, timeMin, timeMax) = exposureControlRanges(descriptor)
         // The camera picks this value itself in full auto and in the other value's priority mode.
-        val autoHere = mode == ExposureMode.AUTO || mode == (if (iso) ExposureMode.SHUTTER_PRIORITY else ExposureMode.ISO_PRIORITY)
-        val angle = !iso && settings.exposure.shutterUnit == ShutterUnit.ANGLE
-        val isoValue = if (autoHere) state.sensitivityIso ?: state.requestedIso else state.requestedIso ?: state.sensitivityIso
-        val timeValue = if (autoHere) state.exposureTimeNs ?: state.requestedExposureTimeNs else state.requestedExposureTimeNs ?: state.exposureTimeNs
+        val (autoHere, angle, isoValue, timeValue) = exposureControlValue(iso, state, settings)
         val value = when {
             iso -> isoValue?.let { "ISO $it" }
             angle && !autoHere -> String.format(java.util.Locale.ROOT, "%.1f°", settings.exposure.angleTenths / 10f)
@@ -4000,21 +3990,11 @@ private fun ExposureDial(
                 else -> logPosition((timeValue ?: 16_666_667L).toDouble(), timeMin, timeMax)
             },
             onValueChange = { position ->
-                if (iso) {
-                    onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
-                        mode = if (mode == ExposureMode.ISO_PRIORITY || !manual) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
-                        iso = logValue(position, isoMin, isoMax).toInt(),
-                        timeNs = if (mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
-                    )))
-                } else {
-                    val intent = settings.exposure.copy(
-                        mode = if (mode == ExposureMode.SHUTTER_PRIORITY || !manual) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
-                        iso = if (mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
-                    )
-                    onSettingsChanged(settings.copy(exposure = if (angle) {
-                        intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
-                    } else intent.copy(timeNs = logValue(position, timeMin, timeMax).toLong())))
-                }
+                onSettingsChanged(settings.copy(exposure = when {
+                    iso -> exposureWithIso(settings, state, manual, logValue(position, isoMin, isoMax).toInt())
+                    angle -> exposureWithShutter(settings, state, manual, angleTenths = (position * 3599 + 1).roundToInt())
+                    else -> exposureWithShutter(settings, state, manual, timeNs = logValue(position, timeMin, timeMax).toLong())
+                }))
             },
             modifier = Modifier.fillMaxWidth().height(48.dp).testTag(if (iso) "iso-slider" else "shutter-slider"),
         )
