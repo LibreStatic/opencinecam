@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_screen_title">Reprodução de clipe</string>
+    <string name="playback_screen_share">Partilhar clipe</string>
+    <string name="playback_screen_delete">Eliminar clipe</string>
+    <string name="playback_screen_take_position">%1$d de %2$d</string>
+    <string name="playback_screen_take_position_more">%1$d de %2$d+</string>
+    <string name="playback_screen_fullscreen">Ecrã inteiro</string>
+    <string name="playback_screen_fullscreen_exit">Sair do ecrã inteiro</string>
+    <string name="playback_screen_frame_counter">Fotograma %1$d/%2$d</string>
+    <string name="playback_screen_monitoring">LUT de monitorização</string>
+    <string name="playback_screen_histogram">Histograma de luminância</string>
+    <string name="playback_screen_settings">Definições de reprodução</string>
+    <string name="playback_screen_native_surface">Usar saída direta no ecrã</string>
+    <string name="playback_screen_cpu_frames">Usar fotogramas com cor verificada</string>
+    <string name="playback_screen_retry">Tentar novamente</string>
+    <string name="playback_screen_interpret_track">Interpretar faixa</string>
+    <string name="playback_screen_exact_error_title">Não foi possível ativar fotogramas exatos neste dispositivo.</string>
+    <string name="playback_screen_exact_error_message">A reprodução continua disponível.</string>
+    <string name="playback_screen_read_error_title">Não foi possível ler este ficheiro.</string>
+    <string name="playback_screen_read_error_message">O original não foi alterado. Tente ler de novo.</string>
+    <string name="playback_screen_color_error_title">A cor deste clipe não pode ser lida com exatidão.</string>
+    <string name="playback_screen_color_error_message">Pode interpretá-lo com as tags SDR da faixa; a precisão da cor não é verificada.</string>
+    <string name="playback_screen_stage_error_title">Visualização de monitorização OCLog2 indisponível</string>
+    <string name="playback_screen_stage_error_message">O clipe é apresentado sem a etapa de visualização LOG.</string>
+    <string name="playback_screen_info">Detalhes do clipe</string>
+</resources>

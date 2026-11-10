@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_settings_title">Preferências de reprodução</string>
+    <string name="playback_settings_help">Estas preferências aplicam-se ao visualizador local, não ao áudio de captura, ao ganho de gravação nem aos ficheiros multimédia. A reprodução exige uma ação explícita de Reproduzir. A posição de reprodução não é guardada nas preferências nem nos presets.</string>
+    <string name="playback_settings_muted">Silenciar o áudio da reprodução</string>
+    <string name="playback_settings_loop">Repetir ao chegar ao fim da reprodução</string>
+    <string name="playback_settings_frame_position">Mostrar a posição do fotograma no visualizador</string>
+    <string name="playback_settings_direct_output">Enviar fotogramas em pausa diretamente para o ecrã</string>
+    <string name="playback_settings_direct_output_help">Desativado por predefinição. O visualizador normalmente converte cada fotograma em pausa para verificar a cor. Ative se isso for lento neste dispositivo: as posições continuam exatas, mas a cor segue o sistema e o HDR aparece como o ecrã permitir. Aplica-se só a este dispositivo.</string>
+</resources>

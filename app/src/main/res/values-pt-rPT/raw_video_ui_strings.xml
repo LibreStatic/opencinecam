@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">Configuração de vídeo RAW</string>
+    <string name="raw_video_automatic">Automática</string>
+    <string name="raw_video_automatic_detail">A maior taxa qualificada</string>
+    <string name="raw_video_group_full">SENSOR INTEIRO</string>
+    <string name="raw_video_group_crop">RECORTE CENTRAL</string>
+    <string name="raw_video_crop_note">Um recorte grava só o centro do sensor: a mesma leitura, um campo de visão mais estreito.</string>
+    <string name="raw_video_config_frozen">A configuração muda entre takes.</string>
+    <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_and_time">%1$s · restam %2$s</string>
+    <string name="raw_video_label_crop">%1$s · recorte</string>
+    <string name="raw_video_label_compressed">Comprimido</string>
+    <string name="raw_video_settings_active">Em uso: %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">Ainda não há nenhuma configuração qualificada nesta câmara.</string>
+    <string name="raw_video_requalify">Qualificar de novo</string>
+    <string name="raw_video_requalify_note">Demora alguns minutos e a câmara fica indisponível entretanto.</string>
+    <string name="raw_video_ring">BUFFER %1$d%%</string>
+    <string name="raw_video_frames">%1$d fot.</string>
+    <string name="raw_video_ring_description">Buffer RAW %1$d%% cheio, %2$d fotogramas gravados</string>
+    <string name="raw_video_config_help">O vídeo RAW grava cada fotograma sem compressão em Documents/OpenCineCam/RAW. Só são oferecidos os tamanhos e as cadências de fotogramas que este telemóvel qualificou no seu armazenamento: cada um passou num teste longo de armazenamento e num take real sem perder fotogramas. Automática escolhe a maior taxa qualificada. Um recorte lê o sensor inteiro, mas grava só o centro, por isso a imagem fica mais estreita. O tempo mostrado é quanto dura o espaço livre a essa taxa.</string>
+    <string name="gallery_raw_video">Vídeo RAW</string>
+    <string name="media_integrity_raw">Um take OpenCine RAW. O leitor mostra uma pré-visualização revelada; para a qualidade completa, copie-o ou partilhe-o com um computador e converta-o com o conversor DNG para desktop.</string>
+    <string name="raw_video_audio_incomplete">O som tem falhas</string>
+    <string name="raw_video_risky_notice">Taxa arriscada: possíveis micropausas, atraso ou um ficheiro corrompido</string>
+    <string name="raw_video_risky_label">%1$s, taxa arriscada</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · atinge %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Atinge %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">O sinal de aviso marca uma taxa arriscada: o armazenamento é demasiado lento para ela, por isso um take pode ter micropausas, atraso ou ficar corrompido. Automático nunca a escolhe.</string>
+    <string name="raw_video_burst_minutes">%1$d min</string>
+    <string name="raw_video_burst_seconds">%1$d s</string>
+    <string name="raw_video_risky_notice_burst">Taxa arriscada: pode perder fotogramas após cerca de %1$s (com o telemóvel em repouso)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">Compressão RAW</string>
+    <string name="raw_compression_summary">Para configurações comprimidas</string>
+    <string name="raw_compression_lossless">Sem perdas</string>
+    <string name="raw_video_label_near_lossless">Quase sem perdas</string>
+    <string name="raw_compression_help">Aplica-se às configurações comprimidas. Sem perdas mantém cada valor que o sensor entrega. Quase sem perdas junta valores que diferem menos do que cerca de metade do ruído do sensor no ISO do fotograma: a diferença fica escondida no ruído e os ficheiros ficam ainda mais pequenos, sobretudo com pouca luz. Ambos abrem na galeria, na exportação CinemaDNG e nas ferramentas de desktop. O tempo restante pressupõe a mesma razão prudente para os dois.</string>
+</resources>

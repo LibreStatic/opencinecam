@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="settings_category_matches">
+        <item quantity="one">%d resultado</item>
+        <item quantity="many">%d resultados</item>
+        <item quantity="other">%d resultados</item>
+    </plurals>
+    <string name="settings_camera_reports">A câmara indica: %1$s</string>
+    <string name="readback_antibanding">antioscilação: %1$s</string>
+    <string name="readback_optical">estabilização ótica: %1$s</string>
+    <string name="readback_video">estabilização eletrónica: %1$s</string>
+    <string name="readback_noise">redução de ruído: %1$s</string>
+    <string name="readback_edge">realce de contornos: %1$s</string>
+    <string name="readback_saturation">saturação: %1$d</string>
+    <string name="readback_sharpness">nitidez: %1$d</string>
+    <string name="readback_on">Ligado</string>
+    <string name="readback_preview_only">Só pré-visualização</string>
+    <string name="pro_auto">Automático</string>
+    <string name="pro_auto_reported">Automático (câmara: %1$s)</string>
+    <string name="pro_exposure_auto_only">Esta câmara oferece apenas exposição automática.</string>
+    <string name="pro_wb_temperature">Temperatura de cor</string>
+    <string name="caps_section_readback">Pedido e indicado</string>
+    <string name="caps_section_readback_summary">O que o OpenCineCam pediu à câmara em uso, ao lado do que a câmara indicou no último fotograma.</string>
+    <string name="hardware_log_status">OCLog2: %1$s</string>
+    <string name="hardware_log_all_verified">todos os formatos verificados</string>
+    <string name="hardware_log_hdr">A partir de vídeo HDR de 10 bits: até %1$d×%2$d, até %3$d fps</string>
+    <string name="hardware_log_high_speed">Alta velocidade a partir de vídeo de 8 bits: até %1$d fps</string>
+    <string name="anamorphic_off">Desligado</string>
+    <string name="anamorphic_output_squeezed">Manter comprimida</string>
+    <string name="anamorphic_output_desqueezed">Descomprimir</string>
+    <string name="anamorphic_output_summary">Manter comprimida guarda a imagem da lente tal como está e indica aos leitores que a estiquem. Descomprimir estica-a no ficheiro.</string>
+    <string name="audio_pcm_rate">Fonte sem compressão: %1$d kbps</string>
+</resources>
