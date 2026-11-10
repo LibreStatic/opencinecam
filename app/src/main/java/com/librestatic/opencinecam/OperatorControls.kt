@@ -17,6 +17,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -495,12 +498,14 @@ private fun OperatorChoice(title: String, value: OperatorAction, options: List<O
     SettingsValueRow(title, stringResource(value.labelResource()), Modifier.testTag(tag)) { open = true }
     if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) },
         text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            options.forEach { action -> TextButton({ onChange(action); open = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("operator-choice-$action")) {
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(stringResource(action.labelResource()), fontSize = 16.sp)
+            // Not a TextButton: its pill shape clips the corners of a choice whose help runs to several lines.
+            options.forEach { action ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button) { onChange(action); open = false }
+                    .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp).testTag("operator-choice-$action"), verticalArrangement = Arrangement.Center) {
+                    Text(stringResource(action.labelResource()), color = MaterialTheme.colorScheme.primary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     Text(stringResource(action.helpResource()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 }
-            } }
+            }
         } }, confirmButton = { TextButton({ open = false }) { Text(stringResource(android.R.string.cancel)) } })
 }
 @Composable
