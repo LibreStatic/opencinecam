@@ -116,6 +116,17 @@ class VolumeKeyGesturesTest {
         assertEquals(listOf("perform:TORCH", "perform:PEAKING"), handler.events)
         clock.advance(1_000); assertEquals(2, handler.events.size)
     }
+    @Test fun overlappingPressesBothFireTheirPress() {
+        val prefs = OperatorPreferences(volumeUp = OperatorAction.TORCH, volumeUpDouble = OperatorAction.ZEBRA,
+            volumeDown = OperatorAction.SYSTEM_VOLUME, volumeDownDouble = OperatorAction.PEAKING)
+        assertTrue(press(up, prefs)); assertTrue(press(down, prefs))
+        assertTrue(release(down, prefs)); assertTrue(handler.events.isEmpty())
+        assertTrue(release(up, prefs))
+        assertEquals(listOf("volume:-1"), handler.events)
+        clock.advance(300)
+        assertEquals(listOf("volume:-1", "perform:TORCH"), handler.events)
+        assertEquals(0, clock.pending)
+    }
     @Test fun bothKeysFireTheChordAndSwallowBothUntilBothAreUp() {
         val prefs = OperatorPreferences(volumeUp = OperatorAction.TORCH, volumeDown = OperatorAction.PEAKING,
             volumeUpLong = OperatorAction.CAPTURE, volumeBoth = OperatorAction.CONTROL_LOCK)
