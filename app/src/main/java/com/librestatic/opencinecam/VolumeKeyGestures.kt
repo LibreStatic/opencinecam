@@ -112,6 +112,8 @@ class VolumeKeyGestures(
         val handler = state.handler ?: return true
         val fire = { firePress(key, state.press, handler) }
         if (state.double != OperatorAction.NONE) {
+            // Overlapping presses: the other key's press is still waiting, and replacing it would lose it.
+            pending?.let { pending = null; it.cancel(); it.fire() }
             lateinit var tap: PendingTap
             tap = PendingTap(key, state.double, fire, scheduler.schedule(doubleTapMs) { if (pending === tap) { pending = null; fire() } })
             pending = tap
