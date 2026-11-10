@@ -14,7 +14,7 @@
     <string name="media_action_delete">Eliminar</string>
     <string name="media_details_title">Detalles de la toma</string>
     <string name="media_details_close">Cerrar detalles</string>
-    <string name="media_details_empty">Elegí una toma para ver sus detalles.</string>
+    <string name="media_details_empty">Elige una toma para ver sus detalles.</string>
     <string name="media_section_integrity">Integridad</string>
     <string name="media_section_slate">Claqueta</string>
     <string name="media_section_properties">Propiedades del archivo</string>
@@ -30,8 +30,8 @@
     <string name="media_share_step_send">Enviar</string>
     <string name="media_share_ready">Listo para enviar.</string>
     <string name="media_share_blocked_originals">Esta toma no tiene archivos originales para enviar.</string>
-    <string name="media_share_blocked_group">Los metadatos solo se pueden enviar si están todos los archivos de esta toma. Enviá solo los originales o actualizá la galería.</string>
-    <string name="media_share_blocked_slate">Esta toma no tiene una claqueta legible, así que no se pueden enviar datos de producción. Enviá los datos técnicos en su lugar.</string>
+    <string name="media_share_blocked_group">Los metadatos solo se pueden enviar si están todos los archivos de esta toma. Envía solo los originales o actualiza la galería.</string>
+    <string name="media_share_blocked_slate">Esta toma no tiene una claqueta legible, así que no se pueden enviar datos de producción. Envía los datos técnicos en su lugar.</string>
     <string name="media_share_fix_originals">Enviar solo originales</string>
     <string name="media_share_fix_technical">Enviar datos técnicos</string>
     <string name="media_details_show">Detalles</string>

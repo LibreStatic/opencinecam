@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_effect_title">Observações do processamento de áudio</string>
+    <string name="audio_effect_ns">Supressão de ruído (NS)</string>
+    <string name="audio_effect_agc">Controlo automático de ganho (AGC)</string>
+    <string name="audio_effect_aec">Cancelamento de eco acústico (AEC)</string>
+    <string name="audio_effect_help">Apenas o produtor PCM atual reporta estas observações. A disponibilidade e os pedidos não provam a aplicação. Sem um recibo PCM, incluindo com MediaRecorder, o processamento não é observado; a paridade entre backends não é presumida.</string>
+    <string name="audio_effect_request_help">Pedido para a próxima configuração de áudio; o estado observado é mostrado em separado.</string>
+    <string name="audio_effect_manual">O ganho de gravação manual suspende o pedido de AGC para a próxima configuração. O recibo atual ainda pode descrever o take congelado.</string>
+    <string name="audio_effect_yes">Sim</string>
+    <string name="audio_effect_no">Não</string>
+    <string name="audio_effect_requested">Preferência atual: %1$s</string>
+    <string name="audio_effect_receipt_requested">Pedido pelo produtor atual: %1$s</string>
+    <string name="audio_effect_unobserved">Não observado — sem recibo PCM atual</string>
+    <string name="audio_effect_observed">Estado observado: %1$s</string>
+    <string name="audio_effect_unknown">Desconhecido</string>
+    <string name="audio_effect_unavailable">Indisponível</string>
+    <string name="audio_effect_enabled">Ativado</string>
+    <string name="audio_effect_disabled">Desativado</string>
+    <string name="audio_effect_failed">Falhou</string>
+    <string name="audio_effect_implementation">Implementação: %1$s</string>
+    <string name="audio_effect_none">Nenhuma</string>
+    <string name="audio_effect_platform">Plataforma Android</string>
+    <string name="audio_effect_software">Processamento por software</string>
+    <string name="audio_effect_control">Controlo da plataforma observado: %1$s</string>
+    <string name="audio_effect_control_unknown">Não observado / não aplicável</string>
+    <string name="audio_effect_pending">Preferência pendente para o próximo take; a observação atual não muda.</string>
+    <string name="audio_effect_configuration_failed">Uma tentativa de configurar o efeito falhou. O estado observado e qualquer alternativa por software são mostrados em separado.</string>
+</resources>

@@ -4,5 +4,5 @@
     <string name="subject_review_show">Mostrar al sujeto</string>
     <string name="subject_review_stop">Detener</string>
     <string name="subject_review_on_cover">En la pantalla externa: %1$s</string>
-    <string name="subject_review_help">Abrí una toma o foto en el visor de la galería y elegí Mostrar al sujeto. La pantalla externa la reproduce sin sonido y se detiene al empezar a grabar.</string>
+    <string name="subject_review_help">Abre una toma o foto en el visor de la galería y elige Mostrar al sujeto. La pantalla externa la reproduce sin sonido y se detiene al empezar a grabar.</string>
 </resources>

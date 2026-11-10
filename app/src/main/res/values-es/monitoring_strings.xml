@@ -37,12 +37,12 @@
     <string name="monitoring_color_white">Blanco</string>
     <string name="monitoring_zebra_low">Código de cebra de sombras (%)</string>
     <string name="monitoring_zebra_high">Código de cebra de altas luces (%)</string>
-    <string name="monitoring_zebra_order">Usá 0 ≤ sombras &lt; altas luces ≤ 100. Aplicá ambos umbrales juntos.</string>
+    <string name="monitoring_zebra_order">Usa 0 ≤ sombras &lt; altas luces ≤ 100. Aplica ambos umbrales juntos.</string>
     <string name="monitoring_false_black">Falso color: límite de negros (%)</string>
     <string name="monitoring_false_shadow">Falso color: límite de sombras (%)</string>
     <string name="monitoring_false_highlight">Falso color: límite de altas luces (%)</string>
     <string name="monitoring_false_clip">Falso color: límite de recorte de señal (%)</string>
-    <string name="monitoring_false_order">Usá 0 ≤ negros &lt; sombras &lt; altas luces &lt; recorte ≤ 100. Las ediciones inválidas no se guardan.</string>
+    <string name="monitoring_false_order">Usa 0 ≤ negros &lt; sombras &lt; altas luces &lt; recorte ≤ 100. Las ediciones inválidas no se guardan.</string>
     <string name="monitoring_group_instruments">Instrumentos</string>
     <string name="monitoring_group_zebra">Cebra</string>
     <string name="monitoring_group_peaking">Resaltado de foco</string>

@@ -6,7 +6,7 @@ OpenCineCam is a native, open-source cinema camera for Android. It keeps four th
 - **Package:** `com.librestatic.opencinecam`
 - **Requires:** Android 10 (API 29) or later, ARM64
 - **License:** [Apache-2.0](LICENSE)
-- **Languages:** English, Spanish, French, Portuguese, Italian and German
+- **Languages:** English, Spanish, French, Portuguese (Brazilian and European), Italian and German
 
 ## Complimentary licenses for education, research and public service
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_rename_action">Mudar o nome dos ficheiros relacionados…</string>
+    <string name="media_rename_title">Mudar o nome deste take local</string>
+    <string name="media_rename_help">Introduza um nome base e reveja cada nome de ficheiro resultante. Apenas os nomes de apresentação locais e os respetivos metadados relacionados são atualizados; os bytes do ficheiro original, os URIs e o namespace de captura são preservados. Editar este campo não grava nenhum ficheiro.</string>
+    <string name="media_rename_remote_warning">Mudança de nome apenas LOCAL: as cópias remotas não mudam de nome. As transferências pendentes da versão anterior exigem atenção e não continuarão automaticamente. O histórico remoto verificado é mantido.</string>
+    <string name="media_rename_stem">Novo nome base</string>
+    <string name="media_rename_invalid">Introduza um nome base válido para pré-visualizar cada nome de ficheiro. A mudança de nome não está disponível para um conjunto de ficheiros incompatível ou ambíguo.</string>
+    <string name="media_rename_old">Seleção atual: %1$s</string>
+    <string name="media_rename_new">Nome proposto: %1$s</string>
+    <string name="media_rename_current">Nome observado após a operação: %1$s</string>
+    <string name="media_rename_unknown_name">Nome atual desconhecido; atualize e inspecione o ficheiro.</string>
+    <string name="media_rename_confirm">Confirmar mudança de nome local</string>
+    <string name="media_rename_cancel">Cancelar</string>
+    <string name="media_rename_busy">A mudança de nome está em curso. O cancelamento já não está disponível; aguarde o resultado verificado. Sair deste ecrã não interrompe uma operação já confirmada.</string>
+    <string name="media_rename_complete">O nome do conjunto completo de ficheiros locais foi mudado. As cópias remotas não mudaram de nome.</string>
+    <string name="media_rename_compensated">A mudança de nome falhou; os nomes de ficheiro anteriores e os bytes dos metadados relacionados foram restaurados. Reveja o resultado antes de uma nova tentativa.</string>
+    <string name="media_rename_partial">A alteração local não foi concluída nem totalmente restaurada. Reveja cada nome observado antes de qualquer outra ação.</string>
+    <string name="media_rename_rejected">A mudança de nome foi rejeitada antes de uma atualização completa. Atualize o catálogo e reveja a seleção.</string>
+    <string name="media_rename_unknown">O resultado da mudança de nome é desconhecido. Não presuma que os nomes ou os metadados foram restaurados. Atualize o catálogo e inspecione cada ficheiro.</string>
+    <string name="media_rename_refresh">Foi pedida uma atualização do catálogo. Nenhum resultado é inferido de um erro de carregamento ou de leitura.</string>
+    <string name="media_rename_status_renamed">Nome mudado</string>
+    <string name="media_rename_status_unchanged">Sem alteração</string>
+    <string name="media_rename_status_restored">Restaurado</string>
+    <string name="media_rename_status_partial">Alteração parcial</string>
+    <string name="media_rename_status_not_attempted">Não tentado</string>
+    <string name="media_rename_status_unknown">Resultado desconhecido</string>
+</resources>

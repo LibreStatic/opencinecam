@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_slate_fields">Campos apresentados na claquete</string>
+    <string name="subject_slate_field_project">Projeto</string>
+    <string name="subject_slate_field_scene">Cena</string>
+    <string name="subject_slate_field_take">Take</string>
+    <string name="subject_slate_field_camera">Câmara</string>
+    <string name="subject_slate_field_reel">Rolo</string>
+    <string name="subject_slate_field_timecode">Timecode</string>
+    <string name="subject_slate_sync_flash">Flash branco de sincronização ao iniciar REC</string>
+    <string name="subject_slate_sync_beep">Bip de sincronização ao iniciar REC</string>
+    <string name="subject_slate_sync_help">O bip toca pelo altifalante deste telemóvel, por isso também fica gravado neste take. Vem desligado por predefinição porque altera o áudio gravado. A numeração dos takes não muda.</string>
+    <string name="subject_slate_sync_scope">O marcador dispara uma vez por take, quando este telemóvel confirma o REC, e só enquanto a claquete é apresentada no ecrã exterior. A hora é gravada nos metadados do take.</string>
+</resources>
