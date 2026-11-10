@@ -59,6 +59,8 @@ class MainActivity : ComponentActivity() {
     internal fun installOperatorKeys(owner: Any, preferences: () -> OperatorPreferences?, handler: VolumeKeyHandler) {
         operatorKeys.clear(); operatorKeyOwner = owner; operatorKeyPreferences = preferences; operatorKeyHandler = handler
     }
+    /** The capture screen stopped taking operator input (a dialog, an editor): a held key acts no more. */
+    internal fun settleOperatorKeys() = operatorKeys.settle()
     internal fun removeOperatorKeys(owner: Any) {
         if (operatorKeyOwner !== owner) return
         operatorKeys.clear(); operatorKeyOwner = null; operatorKeyPreferences = null; operatorKeyHandler = null

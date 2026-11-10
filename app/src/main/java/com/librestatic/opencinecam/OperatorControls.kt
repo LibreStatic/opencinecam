@@ -139,8 +139,11 @@ internal fun rememberOperatorActions(state: CameraUiState, settings: CameraSetti
     val currentZoomHold by rememberUpdatedState(zoomHold)
     val currentHaptics by rememberUpdatedState(haptics)
     val currentSettings by rememberUpdatedState(settings)
-    val currentEnabled by rememberUpdatedState(enabled && review == null && !editing)
+    val inputEnabled = enabled && review == null && !editing
+    val currentEnabled by rememberUpdatedState(inputEnabled)
     val activity = context.operatorActivity()
+    // A hold timer or a pair loop started before an editor or dialog opened must not act through it.
+    LaunchedEffect(inputEnabled, activity) { if (!inputEnabled) activity?.settleOperatorKeys() }
     DisposableEffect(activity) {
         val owner = Any()
         val audio = context.getSystemService(AudioManager::class.java)

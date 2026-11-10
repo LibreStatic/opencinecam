@@ -215,6 +215,22 @@ class VolumeKeyGesturesTest {
         assertEquals(count + 1, handler.events.size) // only the flushed TORCH from the other key
         assertEquals(0, clock.pending)
     }
+    @Test fun settleStopsHeldKeysWithoutActingAndKeepsThemConsumed() {
+        val pair = OperatorPreferences(volumePair = VolumeKeyPair.ZOOM)
+        assertTrue(press(up, pair)); clock.advance(500)
+        val zoomed = handler.events.size
+        engine.settle(); clock.advance(1_000)
+        assertEquals(zoomed, handler.events.size); assertEquals(0, clock.pending)
+        assertTrue(press(up, null, repeat = 1)); assertTrue(release(up, null))
+        handler.events.clear()
+        val prefs = OperatorPreferences(volumeUp = OperatorAction.TORCH, volumeUpLong = OperatorAction.CAPTURE,
+            volumeDown = OperatorAction.PEAKING, volumeDownDouble = OperatorAction.ZEBRA)
+        assertTrue(press(down, prefs)); assertTrue(release(down, prefs))
+        assertTrue(press(up, prefs)); handler.events.clear()
+        engine.settle(); clock.advance(1_000)
+        assertTrue(release(up, prefs)); clock.advance(1_000)
+        assertTrue(handler.events.isEmpty()); assertEquals(0, clock.pending)
+    }
     @Test fun ineligibleOrCancelledKeysAreNeverConsumed() {
         val prefs = OperatorPreferences(volumeUp = OperatorAction.CAPTURE, volumePair = VolumeKeyPair.ZOOM)
         assertFalse(press(up, null))
