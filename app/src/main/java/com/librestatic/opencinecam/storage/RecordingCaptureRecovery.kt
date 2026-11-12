@@ -559,6 +559,13 @@ internal class MediaStoreRecordingRows(private val context: Context) : Recording
 }
 
 /**
+ * The drive stopped answering right after a drive take's marker was deleted, so whether the take is committed is
+ * unknown. Its outputs and journal entry stay: recovery prunes the entry when the marker is gone and recovers the take
+ * when it is still there.
+ */
+internal class RecordingCommitUnconfirmed(cause: Throwable? = null) : IllegalStateException("Recording take marker removal could not be confirmed", cause)
+
+/**
  * PLAN-072: a take on a drive, in its own folder `<tree>/OpenCineCam/<stem>/` (the provider may make it `<stem> (1)`).
  * Outputs are created under their final names and never renamed, so their document URIs stay valid in sidecars and
  * prepared artifacts. The hidden [MARKER] in the folder is the take's IS_PENDING: it is created with the folder,
@@ -631,7 +638,20 @@ internal class SafRecordingRows(
         RecoveredRow(root, doc.uri, doc.name, mime, resolver.ownedRowBytes(doc.uri), doc.uri.toString())
     }
 
-    override fun commit(id: String) { folder?.let(::deleteMarker) }
+    /**
+     * The take's durable commit point. [SafDocuments.delete] calls a document on an unplugged drive gone too, so the
+     * folder must list without the marker and the drive still answer; when that cannot be read, the marker may or may
+     * not be gone ([RecordingCommitUnconfirmed]).
+     */
+    override fun commit(id: String) {
+        val take = folder ?: return
+        // A drive that throws instead of answering leaves the marker's fate as unknown as one that is gone.
+        val removed = try { docs.delete(markerOf(take)) } catch (failure: Exception) { throw RecordingCommitUnconfirmed(failure) }
+        check(removed) { "Recording take marker could not be removed" }
+        // A provider that gave no answer reads as a marker already gone: only the folder's own listing confirms it.
+        val confirmed = try { listsNoMarker() && reachable() } catch (failure: Exception) { throw RecordingCommitUnconfirmed(failure) }
+        if (!confirmed) throw RecordingCommitUnconfirmed()
+    }
 
     /** Deletes the outputs, then the marker, then the folder: an interruption leaves the take pending for recovery. */
     override fun discard(id: String) {
@@ -721,6 +741,8 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     private var aborted = false
     private var committed = false
     private var discarded = false
+    /** The drive's commit point ran but could not be confirmed ([RecordingCommitUnconfirmed]): recovery owns the take. */
+    private var commitUnknown = false
     private var nativeWriters = 0
     private var salvaging = false
     private var relinquished = false
@@ -822,6 +844,8 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
 
     internal fun published(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
         if (committed) return@synchronized
+        // A retry never reports as published a take whose commit is left to recovery.
+        if (commitUnknown) throw RecordingCommitUnconfirmed()
         check(!aborted && member.prepared && member.retired && nativeWriters == 0) { "Native recording output remains owned" }
         member.rows.forEach { store.verify(id, it, 0) }
         member.published = true
@@ -855,7 +879,8 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
 
     internal fun abort(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
         member.retired = true
-        if (committed || discarded) return@synchronized
+        // A commit whose marker may be gone leaves the take to recovery, which reads the drive: nothing is deleted here.
+        if (committed || discarded || commitUnknown) return@synchronized
         if (member.keepBytes) {
             android.util.Log.w("RecordingRecovery", "Take $id keeps ${member.kind} bytes for incomplete publication or recovery")
             return@synchronized
@@ -878,7 +903,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     private fun finishIfReady() {
-        if (committed || discarded || nativeWriters != 0 || members.values.any { !it.retired }) return
+        if (committed || discarded || commitUnknown || nativeWriters != 0 || members.values.any { !it.retired }) return
         if (aborted) {
             // No native owner remains; failed cleanup is eligible for the next recovery retry.
             liveRecordingGroups.remove(journal.key(id))
@@ -894,8 +919,22 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
             check(store.allRows(id) == rows.map { it.uri }.toSet()) { "Take membership changed before commit" }
             rows.forEach { store.verify(id, it, 0) }
             // A drive take's durable commit is its marker going; recovery prunes an entry whose folder lost it.
-            store.commit(id)
-            journal.commit(id)
+            try { store.commit(id) } catch (failure: RecordingCommitUnconfirmed) {
+                // The take may be committed: no later abort may discard it. The next recovery pass resolves the entry,
+                // pruning it when the folder lists no marker and recovering the take when the marker is still there.
+                commitUnknown = true
+                liveRecordingGroups.remove(journal.key(id))
+                throw failure
+            }
+            try { journal.commit(id) } catch (failure: Exception) {
+                // A drive take whose marker went is committed on the drive whatever the journal says: no later abort may
+                // discard it, and recovery prunes the entry.
+                if (store is SafRecordingRows) {
+                    commitUnknown = true
+                    liveRecordingGroups.remove(journal.key(id))
+                }
+                throw failure
+            }
             committed = true
             liveRecordingGroups.remove(journal.key(id))
         }
@@ -935,6 +974,8 @@ internal class RecordingRecoveryMember(internal val group: RecordingRecoveryGrou
 internal class SafRawTakeJournal internal constructor(private val journal: RecordingCaptureRecovery, val id: String,
     private val store: SafRecordingRows) {
     private var done = false
+    /** [commit] ran but could not confirm its marker went ([RecordingCommitUnconfirmed]): recovery owns the take. */
+    private var unconfirmed = false
 
     /** The take's `.ocraw` document, named exactly [name]. */
     fun create(name: String): Uri = synchronized(recordingRecoveryLock) {
@@ -945,15 +986,27 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
     /** The take is complete on the drive: its marker goes, then its journal entry. A failure leaves both for recovery. */
     fun commit() = synchronized(recordingRecoveryLock) {
         if (done) return@synchronized
-        store.commit(id)
-        journal.commit(id)
+        // A retry never reports as committed a take left to recovery.
+        if (unconfirmed) throw RecordingCommitUnconfirmed()
+        try { store.commit(id) } catch (failure: RecordingCommitUnconfirmed) {
+            // The take may be committed: a later discard must not delete it. The next recovery pass reads the drive.
+            unconfirmed = true
+            journal.release(id)
+            throw failure
+        }
+        try { journal.commit(id) } catch (failure: Exception) {
+            // The marker went, so the take is committed on the drive: a later discard must not delete it.
+            unconfirmed = true
+            journal.release(id)
+            throw failure
+        }
         done = true
         journal.release(id)
     }
 
     /** The take holds no frame: its file, marker and folder go, then the entry. A drive that does not answer keeps them. */
     fun discard() = synchronized(recordingRecoveryLock) {
-        if (done) return@synchronized
+        if (done || unconfirmed) return@synchronized
         journal.release(id)
         journal.discard(id, store)
         done = true

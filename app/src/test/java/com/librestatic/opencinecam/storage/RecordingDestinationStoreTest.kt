@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.core.content.edit
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -37,6 +38,36 @@ class RecordingDestinationStoreTest {
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         listOf(RECORDING_JOURNAL, STILL_JOURNAL).forEach { File(context.noBackupFilesDir, it).delete() }
+        context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).delete()
+    }
+
+    /** An artifact in [state] in the WebDAV outbox whose source is a take's video on [tree], as an upload of a drive take queues it. */
+    private fun outboxed(tree: Uri, state: String) {
+        val file = context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).also { it.parentFile!!.mkdirs() }
+        SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
+            db.setForeignKeyConstraintsEnabled(true)
+            db.execSQL("""CREATE TABLE bundles (
+                id TEXT PRIMARY KEY NOT NULL, endpoint_id TEXT NOT NULL,
+                endpoint_revision INTEGER NOT NULL CHECK(endpoint_revision>=0),
+                revision INTEGER NOT NULL CHECK(revision>=0), sealed INTEGER NOT NULL CHECK(sealed IN (0,1)))""")
+            db.execSQL("""CREATE TABLE artifacts (
+                id TEXT PRIMARY KEY NOT NULL, bundle_id TEXT NOT NULL REFERENCES bundles(id) ON DELETE CASCADE,
+                role TEXT NOT NULL, source_uri TEXT NOT NULL, source_name TEXT NOT NULL, remote_name TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL CHECK(size_bytes>0), revision INTEGER NOT NULL CHECK(revision>=0),
+                modified_seconds INTEGER CHECK(modified_seconds>=0), sha256 TEXT, state TEXT NOT NULL,
+                attempt_id TEXT UNIQUE, attempt_kind TEXT, process_token TEXT,
+                admission_process TEXT, admission_revision INTEGER CHECK(admission_revision>=0), admission_network TEXT,
+                admission_cellular INTEGER CHECK(admission_cellular IN (0,1)),
+                remote_may_exist INTEGER NOT NULL CHECK(remote_may_exist IN (0,1)), source_failure TEXT,
+                UNIQUE(bundle_id,role), UNIQUE(bundle_id,source_uri), UNIQUE(bundle_id,remote_name))""")
+            db.version = 1
+            val bundle = UUID.randomUUID().toString()
+            db.execSQL("INSERT INTO bundles(id, endpoint_id, endpoint_revision, revision, sealed) VALUES(?, 'nas', 0, 0, 1)", arrayOf(bundle))
+            val video = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree) + "/OpenCineCam/A001/A001.mp4")
+            db.execSQL("INSERT INTO artifacts(id, bundle_id, role, source_uri, source_name, remote_name, size_bytes, revision, state, " +
+                "remote_may_exist) VALUES(?, ?, 'VIDEO', ?, 'A001.mp4', 'A001.mp4', 64, 0, ?, 0)",
+                arrayOf(UUID.randomUUID().toString(), bundle, video.toString(), state))
+        }
     }
 
     /** An uncommitted ([committed] 0) drive entry on [tree] in recovery journal [name], as a take or still group interrupted there leaves it. */
@@ -202,6 +233,31 @@ class RecordingDestinationStoreTest {
         journalled(RECORDING_JOURNAL, OTHER, committed = 1)
         store().clear()
         assertFalse(held(OTHER))
+        assertTrue(held(DRIVE))
+    }
+
+    @Test
+    fun aDriveTakeStillToUploadKeepsItsTreeUntilItIsVerified() {
+        store().adopt(DRIVE)
+        // A committed take on the drive, queued for the WebDAV upload: the upload reads it through this grant.
+        outboxed(DRIVE, "QUEUED")
+        store().clear()
+        assertTrue(held(DRIVE))
+    }
+
+    @Test
+    fun aVerifiedUploadNoLongerKeepsItsTree() {
+        store().adopt(DRIVE)
+        outboxed(DRIVE, "VERIFIED")
+        store().clear()
+        assertFalse(held(DRIVE))
+    }
+
+    @Test
+    fun anOutboxThatCannotBeReadKeepsTheTree() {
+        store().adopt(DRIVE)
+        context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).also { it.parentFile!!.mkdirs() }.writeText("not a database")
+        store().clear()
         assertTrue(held(DRIVE))
     }
 

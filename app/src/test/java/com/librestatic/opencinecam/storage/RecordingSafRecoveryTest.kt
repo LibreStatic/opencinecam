@@ -286,6 +286,49 @@ class RecordingSafRecoveryTest {
         assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
     }
 
+    @Test fun aCommitWhoseMarkerRemovalIsUnconfirmedIsNeverDiscardedByALaterAbort() {
+        val group = journal().start(destination)
+        val video = group.member(RecordingMemberKind.VIDEO)
+        val mp4 = video.insert("A001.mp4", "video/mp4", metadata = false).also { write(it, ByteArray(32) { 1 }) }
+        video.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, mp4.toString(), "A001.mp4")))
+        video.publish(mp4, "publication failed")
+        // The marker goes, then the drive leaves before its folder can be listed: the commit may or may not have happened.
+        drive.afterDelete = { drive.afterDelete = null; drive.queriesBeforeUnplug = 1 }
+        assertThrows(RecordingCommitUnconfirmed::class.java) { video.published() }
+        // The recorder's compensation after the failed publication must not delete a take that may be committed.
+        video.abort()
+        assertEquals(setOf("A001.mp4"), takeDir().list()!!.toSet())
+        assertEquals(32L, File(takeDir(), "A001.mp4").length())
+        assertEquals(listOf(group.id), entries().map { it[0] })
+        assertEquals("0", entries().single()[1])
+
+        // The take left the live registry: the drive's return prunes the entry, the folder lists no marker.
+        drive.queriesBeforeUnplug = null
+        drive.mounted = true
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        assertTrue(entries().isEmpty())
+        assertEquals(setOf("A001.mp4"), takeDir().list()!!.toSet())
+    }
+
+    @Test fun aRawTakeWhoseCommitIsUnconfirmedIsNotDeletedByALaterDiscard() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        val name = output.displayName
+        val folder = takeDir(name.removeSuffix(".ocraw"))
+        writeOcraw(output.channel, frames = 2, finish = true)
+        drive.afterDelete = { drive.afterDelete = null; drive.queriesBeforeUnplug = 1 }
+        assertThrows(RecordingCommitUnconfirmed::class.java) { output.publish() }
+        output.discard()
+        drive.queriesBeforeUnplug = null
+        drive.mounted = true
+        assertEquals(setOf(name), folder.list()!!.toSet())
+        assertEquals(2, scan(File(folder, name)).frameCount)
+        assertEquals("0", entries().single()[1])
+
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        assertTrue(entries().isEmpty())
+        assertEquals(setOf(name), folder.list()!!.toSet())
+    }
+
     @Test fun takeWhoseMarkerIsGoneWasCommittedAndIsOnlyPruned() {
         val id = interrupted("A001.mp4" to ByteArray(10) { 1 }, "A001.timing.json" to "{}".toByteArray())
         assertTrue(File(takeDir(), SafRecordingRows.MARKER).delete())

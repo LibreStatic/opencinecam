@@ -988,7 +988,12 @@ class CaptureService : Service() {
         if (!accepted) {
             cameraState.update { it.copy(message = listOfNotNull(it.message, getString(R.string.recording_drive_continue_failed))
                 .joinToString(" · "), messageTransient = false) }
-            if (request.mode == CaptureMode.RAW_VIDEO) refreshRawGate()
+            if (request.mode == CaptureMode.RAW_VIDEO) {
+                // toggleRawTake made the continuation's phone destination the next take's: the gate must follow the
+                // configured one again, the drive's when it is back.
+                nextTakeDestination = resolveTakeDestination()
+                refreshRawGate()
+            }
             releaseContinuationForeground()
         }
     }

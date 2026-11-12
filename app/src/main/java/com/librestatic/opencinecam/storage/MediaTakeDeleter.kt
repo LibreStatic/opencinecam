@@ -51,14 +51,18 @@ internal fun executeDriveDelete(
         } catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
         val answers = { deletion.docs.describe(deletion.docs.root) != null }
         val observed = if (!answers()) null else confirmed.map { artifact ->
-            if (deletion.docs.describe(artifact.uri.toUri()) == null) MediaDeleteFileResult(artifact, MediaDeleteStatus.ABSENT_VERIFIED)
-            else MediaDeleteFileResult(artifact, MediaDeleteStatus.RETAINED, problem)
+            val uri = artifact.uri.toUri()
+            if (deletion.docs.describe(uri) != null) MediaDeleteFileResult(artifact, MediaDeleteStatus.RETAINED, problem)
+            // No answer for the file is not proof it went: a listing from the nearest folder that answers must agree.
+            else if (runCatching { deletion.docs.listsNo(uri) }.getOrDefault(false)) MediaDeleteFileResult(artifact, MediaDeleteStatus.ABSENT_VERIFIED)
+            else MediaDeleteFileResult(artifact, MediaDeleteStatus.UNKNOWN, problem ?: "The drive did not confirm the file is gone")
         }
         // A drive that left while the files were read back makes each look absent: it must still answer afterwards.
         results = if (observed != null && answers()) observed else {
             problem = problem ?: "The USB drive stopped answering"
             confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.UNKNOWN, problem) }
         }
+        if (problem == null) problem = results.firstOrNull { it.status == MediaDeleteStatus.UNKNOWN }?.detail
         if (problem == null && results.any { it.status != MediaDeleteStatus.ABSENT_VERIFIED }) problem = "Conditional deletion did not remove the selected identity"
         if (problem == null && deletion.docs.describe(deletion.folder) != null) problem = "The take folder remains on the drive"
         error = problem

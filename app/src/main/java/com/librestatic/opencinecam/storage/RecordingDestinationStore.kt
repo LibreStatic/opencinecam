@@ -8,12 +8,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.storage.StorageManager
 import android.util.Log
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import com.librestatic.opencinecam.export.CinemaDngExportRuntime
 import com.librestatic.opencinecam.export.safFolderLabel
+import com.librestatic.opencinecam.transfers.WebDavArtifactState
+import java.io.File
 
 /** The outcome of [RecordingDestinationStore.adopt]. */
 internal sealed interface RecordingFolderAdoption {
@@ -220,7 +224,7 @@ internal class RecordingDestinationStore(
 
     /**
      * Whether [tree]'s permission must stay held: the destination uses it ([usesTree]), an adoption is still probing it,
-     * or a journalled take waits on it.
+     * a journalled take waits on it, or a committed drive take waits in the WebDAV outbox to be uploaded through it.
      */
     fun needsTree(tree: Uri): Boolean = synchronized(ALIAS_LOCK) {
         usesTree(tree) || tree.toString() in pendingAdoptions || recoveryNeedsTree(tree)
@@ -267,7 +271,8 @@ internal class RecordingDestinationStore(
      * Releases [tree] unless it is the configured recording tree, one of its aliases or the CinemaDNG export's, or recovery
      * still needs it: an interrupted take or still group journalled on it, or on the same folder of the same drive under
      * its other volume name ([sameDrive]), is deferred until its drive returns and is resolved with this grant. Such a
-     * grant then stays held once the entry is resolved. A journal that cannot be read keeps the grant.
+     * grant then stays held once the entry is resolved. A drive take still to upload from the WebDAV outbox keeps it too
+     * ([outboxDriveTrees]). A journal or outbox that cannot be read keeps the grant.
      */
     private fun releaseUnlessShared(tree: Uri) {
         val export = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
@@ -283,19 +288,28 @@ internal class RecordingDestinationStore(
     }
 
     /**
-     * Whether an interrupted take or still group is journalled on [tree], or on the same folder of the same drive under its
-     * other volume name, so recovery still needs the grant. True too when the journals cannot be read.
+     * Whether an interrupted take or still group is journalled on [tree], or a drive take on it waits in the WebDAV outbox
+     * to be uploaded, on it or on the same folder of the same drive under its other volume name, so recovery or the upload
+     * still needs the grant. True too when the journals or the outbox cannot be read.
      */
     private fun recoveryNeedsTree(tree: Uri): Boolean {
-        // Lock-free reads (journalledDriveTrees), so this may run under ALIAS_LOCK without ordering against the journals' locks.
+        // Lock-free reads (journalledDriveTrees, outboxDriveTrees), so this may run under ALIAS_LOCK without ordering
+        // against the journals' or the outbox's locks.
         val journalled = try {
             RecordingCaptureRecovery.journalledTrees(context) + StillCaptureRecovery.journalledTrees(context)
         } catch (failure: Exception) {
             Log.w(LOG_TAG, "The recovery journals could not be read: the folder permission is kept", failure)
             return true
         }
-        return journalled.any { it == tree.toString() || sameFolderOnDrive(it.toUri(), tree) }.also {
-            if (it) Log.i(LOG_TAG, "The folder permission is kept for an interrupted take still to recover")
+        val uploading = try { outboxDriveTrees(context.getDatabasePath(WEBDAV_OUTBOX_DATABASE)) } catch (failure: Exception) {
+            Log.w(LOG_TAG, "The WebDAV outbox could not be read: the folder permission is kept", failure)
+            return true
+        }
+        val holds = { trees: Set<String> -> trees.any { it == tree.toString() || sameFolderOnDrive(it.toUri(), tree) } }
+        return when {
+            holds(journalled) -> true.also { Log.i(LOG_TAG, "The folder permission is kept for an interrupted take still to recover") }
+            holds(uploading) -> true.also { Log.i(LOG_TAG, "The folder permission is kept for a take still to upload") }
+            else -> false
         }
     }
 
@@ -335,6 +349,26 @@ internal class RecordingDestinationStore(
 
         /** Keyed by [driveIdentityOf]: a drive vold mounts under a suffixed name keeps its measurement. */
         fun speedKey(volume: String) = KEY_SPEED_PREFIX + driveIdentityOf(volume)
+    }
+}
+
+/** The WebDAV outbox's database, as [com.librestatic.opencinecam.transfers.WebDavSqliteOutbox] names it by default. */
+internal const val WEBDAV_OUTBOX_DATABASE = "webdav-outbox.db"
+
+/**
+ * The picked folders (trees) that the WebDAV outbox [file] still reads drive takes through: the source of every artifact
+ * not yet VERIFIED, named as [CinemaDngExportRuntime.sourceTree] names a drive take's folder. Phone sources (MediaStore)
+ * give none. Takes no lock and never creates the outbox, as [journalledDriveTrees]: none reads as empty, and an outbox
+ * that cannot be read fails, so the caller keeps every grant.
+ */
+internal fun outboxDriveTrees(file: File): Set<String> {
+    if (!file.isFile) return emptySet()
+    // Read-write only so SQLite can roll back a writer's hot journal; no collator table is created.
+    return SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+        { throw IllegalStateException("WebDAV outbox is corrupt") }).use { db ->
+        db.rawQuery("SELECT DISTINCT source_uri FROM artifacts WHERE state <> ?", arrayOf(WebDavArtifactState.VERIFIED.name)).use { c ->
+            buildSet { while (c.moveToNext()) CinemaDngExportRuntime.sourceTree(c.getString(0))?.let(::add) }
+        }
     }
 }
 

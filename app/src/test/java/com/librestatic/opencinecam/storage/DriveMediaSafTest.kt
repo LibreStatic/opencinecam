@@ -291,6 +291,21 @@ class DriveMediaSafTest {
         assertFalse(folder.exists())
     }
 
+    @Test fun aFileTheDriveNoLongerDescribesIsUnknownWhenNoListingConfirmsIt() {
+        val folder = recording("A001", 3_000_000)
+        val take = takes().single()
+        // The delete goes through, then the folders above the take give no answer: the root still does, but no listing
+        // can confirm the files are gone.
+        drive.afterDelete = { drive.unanswered = setOf("OpenCineCam") }
+        val (result, released) = delete(take)
+        drive.unanswered = emptySet()
+        assertEquals(listOf(MediaDeleteStatus.UNKNOWN, MediaDeleteStatus.UNKNOWN), result.files.map { it.status })
+        assertNotNull(result.error)
+        assertFalse(result.complete)
+        assertTrue(released)
+        assertFalse(folder.exists())
+    }
+
     @Test fun aChangedFolderIsNotDeleted() {
         val folder = recording("A001", 3_000_000)
         val take = takes().first()
