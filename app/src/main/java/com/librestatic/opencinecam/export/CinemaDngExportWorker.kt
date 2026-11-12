@@ -9,6 +9,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.text.format.Formatter
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -92,22 +93,42 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
 
     /**
      * An export is queued: its lease is stored before the work, so a folder left meanwhile keeps its grant even when the
-     * process dies before the worker runs. The set also holds the folder of work WorkManager kept from an earlier
-     * process, which a new request does not replace. [endLease] drops it. [tree] is null for Documents, which needs no grant.
+     * process dies before the worker runs. It holds the folder the export writes to ([CinemaDngExportRequest.treeUri],
+     * null for Documents, which needs no grant) and, for a take on the USB drive, the folder it is read through: the
+     * recording destination may change while the export waits. The set also keeps the folders of work WorkManager kept
+     * from an earlier process, which a new request does not replace. [endLease] drops it.
      */
-    private fun lease(context: Context, tree: String?) {
+    private fun lease(context: Context, request: CinemaDngExportRequest) {
         val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
         RecordingDestinationStore(context).withGrants {
             val held = preferences.getStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, null).orEmpty()
             // An empty set still marks an export as queued.
-            check(preferences.edit().putStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, held + listOfNotNull(tree)).commit()) { "The export folder lease was not stored" }
+            check(preferences.edit().putStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, held + listOfNotNull(request.treeUri, sourceTree(request.takeUri))).commit()) {
+                "The export folder lease was not stored"
+            }
         }
     }
 
-    /** No export is queued or running any more: the lease goes, and with it the grants of the folders left meanwhile. */
+    /** The picked folder a drive take's document is read through: its URI names that tree; null for a phone take. */
+    internal fun sourceTree(takeUri: String): String? = runCatching {
+        val uri = takeUri.toUri()
+        if (!DocumentsContract.isTreeUri(uri)) null
+        else DocumentsContract.buildTreeDocumentUri(uri.authority, DocumentsContract.getTreeDocumentId(uri)).toString()
+    }.getOrNull()
+
+    /**
+     * No export is queued or running any more: the lease goes, and with it the grants of the folders left meanwhile and
+     * of a leased folder nothing else uses (the take's folder on a drive the recording destination left).
+     */
     fun endLease(context: Context) {
         val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
-        RecordingDestinationStore(context).withGrants { preferences.edit().remove(CINEMADNG_EXPORT_ACTIVE_TREES_KEY).commit() }
+        val recording = RecordingDestinationStore(context)
+        recording.withGrants {
+            val leased = preferences.getStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, null).orEmpty()
+            preferences.edit().remove(CINEMADNG_EXPORT_ACTIVE_TREES_KEY).commit()
+            val current = preferences.getString(CINEMADNG_EXPORT_TREE_KEY, null)
+            leased.filter { it != current }.forEach { recording.releaseUnlessNeeded(it.toUri()) }
+        }
         releaseLeftFolders(context)
     }
 
@@ -117,7 +138,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         if (!store.begin(request.takeUri, request.takeName)) return false
         appContext = app
         try {
-            lease(app, request.treeUri)
+            lease(app, request)
             WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
         } catch (failure: Exception) {
             runCatching { endLease(app) }

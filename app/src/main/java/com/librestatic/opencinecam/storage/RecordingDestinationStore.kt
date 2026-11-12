@@ -268,7 +268,9 @@ internal class RecordingDestinationStore(
         val export = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
         // A folder the export left stays while an export may still write to it; the export releases it when it ends.
         val kept = setOfNotNull(preferences.getString(KEY_TREE, null), export.getString(CINEMADNG_EXPORT_TREE_KEY, null)) + aliases() +
-            export.getStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, null).orEmpty()
+            export.getStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, null).orEmpty() +
+            // An export queued or running reads its take, or writes, through these; it releases them when it ends.
+            export.getStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, null).orEmpty()
         // Another adoption of this tree is still probing: the grant is the one it took, and it decides.
         if (tree.toString() in kept || tree.toString() in pendingAdoptions || recoveryNeedsTree(tree)) return
         runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
