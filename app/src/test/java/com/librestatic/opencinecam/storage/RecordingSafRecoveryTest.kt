@@ -328,6 +328,11 @@ class RecordingSafRecoveryTest {
         assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
         assertEquals("0", entries().single { it[0] == id }[1])
 
+        // Nor when its parent gives no answer either: the nearest folder that answers still lists the way to it.
+        drive.unanswered = setOf(takeDir().name, takeDir().parentFile!!.name)
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+
         drive.unanswered = emptySet()
         assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
         assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
@@ -474,6 +479,10 @@ class RecordingSafRecoveryTest {
         val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
         // A take starts on the main thread: its pass does not scan the RAW file.
         journal().start(destination).relinquish()
+        assertEquals(setOf("A001.ocraw", SafRecordingRows.MARKER), takeDir().list()!!.toSet())
+        assertTrue(entries().any { it[0] == id })
+        // Nor does a RAW take's start on the drive.
+        journal().startRaw(destination).discard()
         assertEquals(setOf("A001.ocraw", SafRecordingRows.MARKER), takeDir().list()!!.toSet())
         assertTrue(entries().any { it[0] == id })
         assertEquals(RawVideoRecoveryReport(published = 1), journal().recover().rawTakes)

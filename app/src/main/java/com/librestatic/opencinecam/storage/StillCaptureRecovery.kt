@@ -436,13 +436,8 @@ internal class SafStillRows(
     /** True when the folder's listing answers and holds no marker; a listing the drive does not give throws. */
     fun listsNoMarker(): Boolean = folder?.let { group -> docs.children(group).none { it.name == SafRecordingRows.MARKER } } ?: false
 
-    /** True when [group]'s parent lists no such folder, or is gone itself; a listing the drive does not give throws. */
-    private fun listsNoFolder(group: Uri): Boolean {
-        val id = DocumentsContract.getDocumentId(group)
-        val parent = DocumentsContract.buildDocumentUriUsingTree(docs.tree, if ('/' in id) id.substringBeforeLast('/') else id.substringBefore(':') + ":")
-        if (docs.describe(parent) == null) return true
-        return docs.children(parent).none { DocumentsContract.getDocumentId(it.uri) == id }
-    }
+    /** True when a listing confirms [group] is not there ([SafDocuments.listsNo]); a listing the drive does not give throws. */
+    private fun listsNoFolder(group: Uri): Boolean = docs.listsNo(group)
 
     private fun files(group: Uri): List<SafDocument> = docs.children(group).filter { it.name != SafRecordingRows.MARKER }
         .also { check(it.size <= MAX_FILES) { "Still group folder exceeds its file bound" } }

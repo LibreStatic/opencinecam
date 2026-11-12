@@ -111,10 +111,11 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /**
      * PLAN-072 Delivery 3: a RAW video take on a drive. It is journalled like an encoded take on that drive (same columns,
      * schema 2), and its folder holds only `<stem>.ocraw`: recovery tells the two apart by that file ([recoverDriveTake]).
-     * Runs a recovery pass first, as [start] does, so an interrupted RAW take on the drive is resolved before the next one.
+     * Runs a recovery pass first, as [start] does: without reading drive takes, so an interrupted one (a RAW take is
+     * scanned in full) waits for its next mount or service start instead of holding this take's start.
      */
     internal fun startRaw(destination: RecordingDestination.UsbFolder): SafRawTakeJournal {
-        recover()
+        recover(driveTakes = false)
         return synchronized(recordingRecoveryLock) {
             val id = UUID.randomUUID().toString()
             val store = driveRows(id, destination)
@@ -663,13 +664,8 @@ internal class SafRecordingRows(
     /** True when the folder's listing answers and holds no marker; a listing the drive does not give throws. */
     internal fun listsNoMarker(): Boolean = folder?.let { take -> docs.children(take).none { it.name == MARKER } } ?: false
 
-    /** True when the folder's parent lists no such folder, or is gone itself; a listing the drive does not give throws. */
-    internal fun listsNoFolder(): Boolean {
-        val id = DocumentsContract.getDocumentId(folder ?: return false)
-        val parent = DocumentsContract.buildDocumentUriUsingTree(docs.tree, if ('/' in id) id.substringBeforeLast('/') else id.substringBefore(':') + ":")
-        if (docs.describe(parent) == null) return true
-        return docs.children(parent).none { DocumentsContract.getDocumentId(it.uri) == id }
-    }
+    /** True when a listing confirms the folder is not there ([SafDocuments.listsNo]); a listing the drive does not give throws. */
+    internal fun listsNoFolder(): Boolean = folder?.let(docs::listsNo) ?: false
 
     /** The picked folder answers: the drive is mounted and the grant holds. */
     internal fun reachable(): Boolean = docs.describe(docs.root) != null

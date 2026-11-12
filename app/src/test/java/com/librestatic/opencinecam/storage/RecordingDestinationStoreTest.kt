@@ -161,6 +161,16 @@ class RecordingDestinationStoreTest {
     }
 
     @Test
+    fun aFailedProbeAfterALaterChoiceIsSuperseded() {
+        store().adopt(DRIVE)
+        probeResult = DriveProbeResult.FILE_SIZE_LIMIT
+        duringProbe = { store().clear() }
+        assertEquals(RecordingFolderAdoption.Superseded, store().adopt(OTHER))
+        assertEquals(RecordingDestination.Phone, store().configured())
+        assertFalse(held(OTHER))
+    }
+
+    @Test
     fun adoptingAnotherTreeReleasesThePreviousOne() {
         store().adopt(DRIVE)
         assertTrue(store().adopt(OTHER) is RecordingFolderAdoption.Adopted)

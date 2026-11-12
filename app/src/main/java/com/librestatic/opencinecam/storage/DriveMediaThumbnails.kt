@@ -54,7 +54,8 @@ private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int
 }
 
 private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bitmap? =
-    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
+    // Held for the drive's volume monitor: an EXIF read or a decode can outlast the drive (ADR-0037).
+    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
         val exif = runCatching { ExifInterface(descriptor.fileDescriptor) }.getOrNull()
         // A DNG's full decode is a sensor-sized develop; its embedded preview is what a gallery wants.
         val preview = if (artifact.name.endsWith(".dng", ignoreCase = true)) exif?.thumbnailBitmap else null
@@ -68,7 +69,7 @@ private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bi
             while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
             android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
             BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, BitmapFactory.Options().apply { inSampleSize = sample })
-        } ?: exif?.thumbnailBitmap ?: return@use null
+        } ?: exif?.thumbnailBitmap ?: return@useOnDrive null
         val degrees = exif?.rotationDegrees ?: 0
         if (degrees == 0) decoded
         else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(degrees.toFloat()) }, true)

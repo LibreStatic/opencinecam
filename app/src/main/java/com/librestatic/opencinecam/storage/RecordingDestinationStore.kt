@@ -152,6 +152,11 @@ internal class RecordingDestinationStore(
         probe(tree).rejection()?.let { reason ->
             synchronized(ALIAS_LOCK) {
                 settle()
+                if (generation != choice) {
+                    // A later choice was made meanwhile: this folder's refusal is not its answer.
+                    if (!usesTree(tree)) releaseUnlessShared(tree)
+                    return RecordingFolderAdoption.Superseded
+                }
                 releaseUnlessShared(tree)
             }
             return RecordingFolderAdoption.Rejected(reason)

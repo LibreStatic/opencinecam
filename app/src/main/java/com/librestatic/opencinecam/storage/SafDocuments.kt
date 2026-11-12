@@ -109,6 +109,24 @@ internal class SafDocuments(val resolver: ContentResolver, val tree: Uri) {
         null
     }
 
+    /**
+     * True when a listing confirms [document] is not there: its parent answers and does not list it, or the nearest
+     * ancestor that answers does not list the folder it would be under. A document or folder that gives no answer is
+     * not proof; a listing the drive does not give throws.
+     */
+    fun listsNo(document: Uri): Boolean {
+        val rootId = DocumentsContract.getDocumentId(root)
+        var id = DocumentsContract.getDocumentId(document)
+        while (id != rootId && id.startsWith(rootId)) {
+            val parentId = if ('/' in id) id.substringBeforeLast('/') else id.substringBefore(':') + ":"
+            if (parentId == id) return false
+            val parent = DocumentsContract.buildDocumentUriUsingTree(tree, parentId)
+            if (describe(parent) != null) return children(parent).none { DocumentsContract.getDocumentId(it.uri) == id }
+            id = parentId
+        }
+        return false
+    }
+
     /** Deletes [uri]; true when it is gone afterwards, including when it was already gone. */
     fun delete(uri: Uri): Boolean {
         if (describe(uri) == null) return true
