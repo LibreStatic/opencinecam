@@ -408,7 +408,12 @@ internal class SafStillRows(
     /** Deletes the files, then the marker, then the folder: an interruption leaves the group pending for recovery. */
     fun discard() {
         val group = folder ?: return
-        if (!folderExists()) { check(reachable()) { "Still drive unavailable" }; return }
+        if (!folderExists()) {
+            // A provider that gave no answer reads as a missing folder too: only its parent's listing confirms it.
+            check(listsNoFolder(group)) { "Still group folder state is unconfirmed" }
+            check(reachable()) { "Still drive unavailable" }
+            return
+        }
         var failure: Throwable? = null
         for (doc in files(group)) {
             try { check(docs.delete(doc.uri)) { "Interrupted still file could not be deleted" } } catch (problem: Throwable) {
@@ -429,6 +434,14 @@ internal class SafStillRows(
 
     /** True when the folder's listing answers and holds no marker; a listing the drive does not give throws. */
     fun listsNoMarker(): Boolean = folder?.let { group -> docs.children(group).none { it.name == SafRecordingRows.MARKER } } ?: false
+
+    /** True when [group]'s parent lists no such folder, or is gone itself; a listing the drive does not give throws. */
+    private fun listsNoFolder(group: Uri): Boolean {
+        val id = DocumentsContract.getDocumentId(group)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(docs.tree, if ('/' in id) id.substringBeforeLast('/') else id.substringBefore(':') + ":")
+        if (docs.describe(parent) == null) return true
+        return docs.children(parent).none { DocumentsContract.getDocumentId(it.uri) == id }
+    }
 
     private fun files(group: Uri): List<SafDocument> = docs.children(group).filter { it.name != SafRecordingRows.MARKER }
         .also { check(it.size <= MAX_FILES) { "Still group folder exceeds its file bound" } }

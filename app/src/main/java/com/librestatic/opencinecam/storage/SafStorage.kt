@@ -10,6 +10,8 @@ import android.provider.DocumentsContract
 /** The CinemaDNG export's preferences and the key of the folder it remembers. */
 internal const val CINEMADNG_EXPORT_PREFS = "cinemadng_export"
 internal const val CINEMADNG_EXPORT_TREE_KEY = "tree"
+/** The folders the export left while an export that may still write to them is queued or running. */
+const val CINEMADNG_EXPORT_LEFT_TREES_KEY = "leftTrees"
 
 /** The free bytes of the root holding [tree], when its provider reports them. */
 internal fun safFreeBytes(resolver: ContentResolver, tree: Uri): Long? = runCatching {

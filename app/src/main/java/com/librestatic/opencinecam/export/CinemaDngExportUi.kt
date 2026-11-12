@@ -110,10 +110,14 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
             context.contentResolver.openFileDescriptor(take.primary.uri.toUri(), "r")?.use { descriptor ->
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel.use { channel ->
                     // Indexing walks every frame: a take on the USB drive has both descriptors close with the drive (ADR-0037).
-                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), CloseOnce(channel, descriptor))
+                    val closer = CloseOnce(channel, descriptor)
+                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), closer)
                     try {
                         CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
-                    } finally { driveHandle.unregister() }
+                    } finally {
+                        // Both close while still registered, so a drive that leaves meanwhile finds them.
+                        try { closer.close() } finally { driveHandle.unregister() }
+                    }
                 }
             }
         } catch (cancelled: CancellationException) {

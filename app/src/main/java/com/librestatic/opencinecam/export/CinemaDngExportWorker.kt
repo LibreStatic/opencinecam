@@ -24,6 +24,7 @@ import androidx.work.workDataOf
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_LEFT_TREES_KEY
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
 import com.librestatic.opencinecam.storage.CloseOnce
@@ -66,7 +67,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     fun leaveFolder(context: Context, tree: String) {
         val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
         RecordingDestinationStore(context).withGrants {
-            preferences.edit().putStringSet(KEY_LEFT_TREES, preferences.getStringSet(KEY_LEFT_TREES, null).orEmpty() + tree).apply()
+            preferences.edit().putStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, preferences.getStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, null).orEmpty() + tree).apply()
         }
         releaseLeftFolders(context)
     }
@@ -76,12 +77,13 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
         val recording = RecordingDestinationStore(context)
         recording.withGrants {
-            val left = preferences.getStringSet(KEY_LEFT_TREES, null).orEmpty()
+            val left = preferences.getStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, null).orEmpty()
             if (left.isEmpty() || workerRunning || store.states.value is CinemaDngExportState.Running) return@withGrants
             val current = preferences.getString(CINEMADNG_EXPORT_TREE_KEY, null)
             // The recording destination may use the same tree, or an interrupted take may wait on it; its permission then stays.
+            // Forgotten first: a folder still listed as left keeps its grant.
+            preferences.edit().remove(CINEMADNG_EXPORT_LEFT_TREES_KEY).apply()
             left.filter { it != current }.forEach { recording.releaseUnlessNeeded(it.toUri()) }
-            preferences.edit().remove(KEY_LEFT_TREES).apply()
         }
     }
 
@@ -116,7 +118,6 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     const val KEY_TAKE_NAME = "takeName"
     const val KEY_TREE_URI = "treeUri"
     const val KEY_COMPRESS = "compress"
-    private const val KEY_LEFT_TREES = "leftTrees"
 
     fun workRequest(request: CinemaDngExportRequest): OneTimeWorkRequest = OneTimeWorkRequestBuilder<CinemaDngExportWorker>()
         .setInputData(workDataOf(KEY_TAKE_URI to request.takeUri, KEY_TAKE_NAME to request.takeName,
