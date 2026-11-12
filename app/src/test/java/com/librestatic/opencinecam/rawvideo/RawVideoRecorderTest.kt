@@ -369,6 +369,24 @@ class RawVideoRecorderTest {
     }
 
     @Test
+    fun aStreamAtAnotherRateThanTheArmedConfigurationEndsTheTakeBeforeAnyFrame() {
+        val recorder = recorder(finalWaitMs = 0)
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val ended = CopyOnWriteArrayList<String>()
+        val output = FileOutput()
+        recorder.start(output, info()) { ended += it }
+        // The session still streams the configuration selected before: the same sensor size at 60 fps, armed for 30.
+        recorder.onTakeStarted("0", RawVideoSessionConfig(WIDTH, HEIGHT, 60), emptyMap())
+        assertEquals(listOf(RawTakeReasons.STREAM_MISMATCH), ended)
+        assertFalse(recorder.onFrame(plane(0), STRIDE, WIDTH, HEIGHT, ts(0)))
+        val result = recorder.stop()
+        assertEquals(RawTakeReasons.STREAM_MISMATCH, result.reason)
+        assertEquals(0, result.framesWritten)
+        assertNull(result.uri)
+        assertTrue(output.discarded)
+    }
+
+    @Test
     fun framesOutsideATakeAreRefusedAndTheRingIsReusedAcrossTakes() {
         val slots = HeapSlots()
         val recorder = recorder(slots)

@@ -30,6 +30,10 @@ data class StillRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroup
  * once it exists, journalled before the first file in it). [SafStillRows] keeps the drive's IS_PENDING as the
  * folder's in-progress marker; deleting it is the drive group's durable commit point. [mounted] says whether a
  * drive volume (UUID) is mounted; tests replace it.
+ *
+ * Phone groups and drive groups are bounded apart ([MAX_GROUPS], [MAX_DRIVE_GROUPS]), so groups deferred on drives that
+ * never return cannot refuse a phone still. A drive group that finds its bound full forgets the oldest deferred drive
+ * entry (the journal row only; what is on that drive stays).
  */
 internal class StillCaptureRecovery(context: Context,
     private val checkpoint: (String, String) -> Unit = { _, _ -> },
@@ -37,7 +41,7 @@ internal class StillCaptureRecovery(context: Context,
 ) {
     private val context = context.applicationContext
     private val resolver = this.context.contentResolver
-    private val databaseFile = File(this.context.noBackupFilesDir, "still-recovery.sqlite")
+    private val databaseFile = File(this.context.noBackupFilesDir, DATABASE)
     private val mounted: (String) -> Boolean = mounted ?: { volume -> RecordingCaptureRecovery.volumeMounted(this.context, volume) }
 
     fun recover(): StillRecoveryReport = synchronized(processLock) { open().use(::recoverLocked) }
@@ -54,10 +58,10 @@ internal class StillCaptureRecovery(context: Context,
     internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T = synchronized(processLock) {
         open().use { db ->
             recoverLocked(db)
-            check(count(db) < MAX_GROUPS) { "Interrupted still journal is full" }
             val id = UUID.randomUUID().toString()
             val drive = when (destination) {
                 RecordingDestination.Phone -> {
+                    check(count(db, phone = true) < MAX_GROUPS) { "Interrupted still journal is full" }
                     // Reserve an empty namespace before allocating even the first provider row.
                     for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
                         "Still capture namespace already exists"
@@ -68,6 +72,7 @@ internal class StillCaptureRecovery(context: Context,
                 // The group folder is created at the first file, so it is new: no namespace to check.
                 is RecordingDestination.UsbFolder -> {
                     require(destination.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
+                    if (count(db, phone = false) >= MAX_DRIVE_GROUPS) forgetOldestDeferred(db)
                     db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
                         arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
                     SafStillRows(context, destination.treeUri, null) { folder ->
@@ -141,13 +146,36 @@ internal class StillCaptureRecovery(context: Context,
                     version = 2
                 }
             }
-            check(count(db) <= MAX_GROUPS) { "Interrupted still journal exceeds capacity" }
+            check(count(db, phone = true) <= MAX_GROUPS && count(db, phone = false) <= MAX_DRIVE_GROUPS) {
+                "Interrupted still journal exceeds capacity"
+            }
             return db
         } catch (failure: Throwable) { db.close(); throw failure }
     }
 
-    private fun count(db: SQLiteDatabase): Int = db.rawQuery("SELECT COUNT(*) FROM captures", null).use {
-        check(it.moveToFirst()); it.getLong(0).also { count -> check(count in 0..MAX_GROUPS.toLong()) }.toInt()
+    /** The entries of phone groups (NULL `tree`) or of drive groups, committed or not. */
+    private fun count(db: SQLiteDatabase, phone: Boolean): Long =
+        db.rawQuery("SELECT COUNT(*) FROM captures WHERE tree IS ${if (phone) "NULL" else "NOT NULL"}", null).use {
+            check(it.moveToFirst()); it.getLong(0)
+        }
+
+    /**
+     * Makes room for a drive group: deletes the entry of the oldest uncommitted drive group that [recoverLocked] would
+     * defer (its drive absent or its grant gone). Only the entry goes; the group's folder stays on its drive, marker
+     * included. Fails when every drive entry could still be resolved. Under [processLock], which spans every writer, so
+     * no entry here belongs to a group being written.
+     */
+    private fun forgetOldestDeferred(db: SQLiteDatabase) {
+        val held = heldReadWriteTrees(resolver)
+        val oldest = db.rawQuery("SELECT id, tree, volume, folder FROM captures WHERE tree IS NOT NULL AND committed = 0 ORDER BY rowid", null).use { c ->
+            generateSequence { if (c.moveToNext()) listOf(c.getString(0), c.getString(1), c.getString(2), c.getString(3)) else null }.firstOrNull { (_, tree, volume, folder) ->
+                volume == null || resolveDriveLocation(Uri.parse(tree), volume, folder?.let(Uri::parse), held, mounted) == null
+            }
+        }
+        checkNotNull(oldest) { "Interrupted still journal is full" }
+        check(db.delete("captures", "id = ? AND committed = 0", arrayOf(oldest[0])) == 1)
+        android.util.Log.w("StillRecovery", "Recovery journal full: forgot interrupted still group ${oldest[0]} on drive ${oldest[2]}, " +
+            "deferred since its drive went; its files stay on the drive")
     }
 
     private fun committed(db: SQLiteDatabase, id: String): Boolean =
@@ -161,11 +189,11 @@ internal class StillCaptureRecovery(context: Context,
     private enum class DriveRecovery { DEFERRED, DISCARDED, COMMITTED }
 
     private fun recoverLocked(db: SQLiteDatabase): StillRecoveryReport {
-        val receipts = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?", arrayOf((MAX_GROUPS + 1).toString())).use { cursor ->
+        val receipts = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?", arrayOf((MAX_GROUPS + MAX_DRIVE_GROUPS + 1).toString())).use { cursor ->
             buildList { while (cursor.moveToNext()) add(Receipt(cursor.getString(0), cursor.getType(1), cursor.getLong(1),
                 cursor.getString(2), cursor.getString(3), cursor.getString(4))) }
         }
-        check(receipts.size <= MAX_GROUPS)
+        check(receipts.size <= MAX_GROUPS + MAX_DRIVE_GROUPS)
         var discarded = 0
         var unresolved = 0
         var deferred = 0
@@ -272,9 +300,16 @@ internal class StillCaptureRecovery(context: Context,
 
     companion object {
         private val processLock = Any()
-        private const val MAX_GROUPS = 128
+        private const val DATABASE = "still-recovery.sqlite"
+        /** Phone groups (NULL `tree`) journalled at once; a phone still beyond it is refused. */
+        internal const val MAX_GROUPS = 128
+        /** Drive groups journalled at once; a drive group beyond it forgets the oldest deferred one ([publish]). */
+        internal const val MAX_DRIVE_GROUPS = 128
         private const val MAX_ROWS = 11
         private fun requireId(id: String) { require(UUID.fromString(id).toString() == id) }
+        /** The trees of uncommitted drive groups in the journal, which recovery still needs the grants of ([journalledDriveTrees]). */
+        internal fun journalledTrees(context: Context): Set<String> =
+            journalledDriveTrees(File(context.applicationContext.noBackupFilesDir, DATABASE))
         fun relativePath(id: String, metadata: Boolean): String {
             requireId(id)
             return "${if (metadata) "Download" else "DCIM"}/OpenCineCam/OCC_$id/"

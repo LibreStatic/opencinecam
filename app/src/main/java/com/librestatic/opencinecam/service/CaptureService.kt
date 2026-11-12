@@ -379,11 +379,15 @@ class CaptureService : Service() {
         val publication: CaptureTransferPublication?,
         val audioStartFailure: String?,
         val geometry: RecordingGeometry?,
+        /** The take's link to the drive take it continues (PLAN-072 Delivery 4); null when it is not a continuation. */
+        val continuation: ClipContinuation?,
     )
 
     /** Engine callbacks and main detach the take-owned outputs exactly once; the caller finishes them. */
     private fun detachTake(): DetachedTake = synchronized(takeOwnershipLock) {
-        DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry).also {
+        // Read before clearTakeDestination() below forgets it.
+        DetachedTake(videoOutput, audioSidecarRecorder, activeTransferPublication, audioStartFailure, activeRecordingGeometry,
+            takeContinuation?.link).also {
             videoOutput = null
             audioSidecarRecorder = null
             activeTransferPublication = null
@@ -426,9 +430,9 @@ class CaptureService : Service() {
 
     /**
      * A clip sidecar for a take that was cut short and has nothing but what its outputs hold: no engine evidence,
-     * only the intent and the state read now. Null when no take start was recorded.
+     * only the intent and the state read now, and the [continuation] link the take had. Null when no take start was recorded.
      */
-    private fun interruptedClipSidecar(reasons: List<String>, encodedFrames: Long?): ClipSidecarProvider? {
+    private fun interruptedClipSidecar(reasons: List<String>, encodedFrames: Long?, continuation: ClipContinuation?): ClipSidecarProvider? {
         val started = takeClipStartedAt ?: return null
         val intent = takeClipIntent
         val codecMime = takeClipCodecMime
@@ -450,7 +454,7 @@ class CaptureService : Service() {
             noticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') },
             hardwareWarnings = emptyList(), stopReason = reasons.firstOrNull(), durationMs = activeRecordingElapsedMs(),
             encodedFrames = encodedFrames, success = false, nativeRetired = false, camera = camera,
-        ))
+        )).copy(continuation = continuation)
         return clipSidecarProvider { facts }
     }
 
@@ -521,7 +525,7 @@ class CaptureService : Service() {
         encodedFrames: Long?, expectedMessage: String?) {
         val output = take.video
         val audio = take.audio
-        val clipSidecar = interruptedClipSidecar(reasons, encodedFrames)
+        val clipSidecar = interruptedClipSidecar(reasons, encodedFrames, take.continuation)
         salvageAfterRetirement(output, audio, retirement, reasons, run = {
             finalizePreparedRecordingTake<
                 com.librestatic.opencinecam.storage.PreparedVideoOutput,
@@ -661,16 +665,31 @@ class CaptureService : Service() {
     private fun phoneVolumeFreeBytes(): Long? = runCatching { StatFs(Environment.getExternalStorageDirectory().absolutePath).availableBytes }.getOrNull()
 
     /**
-     * PLAN-072: free bytes where the running take writes, or where the next encoded take would when idle; a drive's
-     * figure comes from its provider (one IPC query, null when it gives none, so the policy reuses the last sample).
+     * PLAN-072: free bytes where the running take writes, or where the next encoded take would when idle; any thread,
+     * never blocking on a drive. A drive's figure is its last sample ([driveFreeSpace]: null before the first one or
+     * when the provider gave none, so the policy reuses the last good one), and the call starts a fresh one.
      */
     private fun recordingVolumeFreeBytes(): Long? =
-        destinationFreeBytes(freeSpaceDestination(takeDestination?.destination, nextTakeDestination.destination))
+        cachedDestinationFreeBytes(freeSpaceDestination(takeDestination?.destination, nextTakeDestination.destination))
 
+    private fun cachedDestinationFreeBytes(destination: RecordingDestination): Long? = when (destination) {
+        RecordingDestination.Phone -> phoneVolumeFreeBytes()
+        is RecordingDestination.UsbFolder -> driveFreeSpace.read(destination)
+    }
+
+    /** Free bytes on [destination] read now; a drive's blocks on its provider (one IPC) and becomes its cached sample. */
     private fun destinationFreeBytes(destination: RecordingDestination): Long? = when (destination) {
         RecordingDestination.Phone -> phoneVolumeFreeBytes()
-        is RecordingDestination.UsbFolder -> driveFreeBytes(contentResolver, destination.treeUri)
+        is RecordingDestination.UsbFolder -> driveFreeBytes(contentResolver, destination.treeUri).also { driveFreeSpace.store(destination, it) }
     }
+
+    /**
+     * PLAN-072: the drive's free space for the main thread (the REC ticker, the take start), sampled on its own thread so
+     * a provider call never runs on main, least of all while a failing drive's loss must be handled there. Not
+     * [storageExecutor], whose bounded queue refuses work when full.
+     */
+    private val driveFreeSpaceExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-drive-free") }
+    private val driveFreeSpace = DriveFreeSpaceCache(driveFreeSpaceExecutor) { driveFreeBytes(contentResolver, it.treeUri) }
 
     /** PLAN-072: removable volumes, for the destination and its disconnects; null when StorageManager is unavailable. */
     private var recordingVolumeMonitor: RecordingVolumeMonitor? = null
@@ -726,6 +745,35 @@ class CaptureService : Service() {
         return output
     }
 
+    /** The take-start message for a storage refusal (ADR-0013): free space unreadable, or under the reserve. */
+    private fun storageRefusalText(admission: StorageAdmission.Refuse): String =
+        if (admission.availableBytes == null) getString(R.string.storage_unknown_refused)
+        else getString(R.string.storage_reserve_insufficient, android.text.format.Formatter.formatFileSize(this, admission.requiredBytes),
+            android.text.format.Formatter.formatFileSize(this, admission.availableBytes))
+
+    /**
+     * Main, before an encoded take's foreground start and output: the take was admitted for the destination resolved
+     * then, before the awaited transfer and audio retirement and the white balance convergence. When the one resolved now
+     * differs (the drive left or arrived meanwhile), the take is admitted again against its free space; false, with the
+     * refusal shown, when it does not fit. A continuation was admitted for the phone, where it always goes.
+     */
+    private fun admitChangedTakeDestination(): Boolean {
+        val intent = recordingLutIntent.get()?.takeIf { it.owner === transferCapture.get() } ?: return true
+        if (intent.continuation != null) return true
+        val destination = resolveTakeDestination().destination
+        if (destination == intent.admittedDestination) return true
+        android.util.Log.w("RecordingDestination", "The take's destination changed since its admission; admitting it again")
+        when (val admission = admitRecordingStorage(settings.recordingPolicy, takeProjectedBytesPerMinute, destinationFreeBytes(destination))) {
+            StorageAdmission.Admit -> admissionWarning = null
+            StorageAdmission.AdmitUnread -> admissionWarning = getString(R.string.storage_unknown_warning)
+            is StorageAdmission.Refuse -> {
+                refuseTakeStart(admission.errorCode, storageRefusalText(admission))
+                return false
+            }
+        }
+        return true
+    }
+
     /** Main: the take starting now writes to [resolved] until it ends; the HUD describes it, and says when it is a [continuation]. */
     private fun holdTakeDestination(resolved: ResolvedRecordingDestination, continuation: ContinuationRequest? = null) {
         takeDestination = resolved
@@ -764,15 +812,24 @@ class CaptureService : Service() {
         if (serviceDestroyed || rawTake != null || rawQualificationSession != null) return
         val before = cameraState.value.rawVideoSelectedKey
         cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
-        val current = cameraState.value
-        if (current.selectedMode == CaptureMode.RAW_VIDEO) {
-            val fallback = rawVideoModeFallback(current.selectedMode, current.modeGates, rawModeFallback, hasConfig = current.rawVideoSelectedKey != null)
-            if (fallback != null && !current.structuralSettingsFrozen) { localBinder.selectMode(fallback, reopen = true); return }
-            if (current.rawVideoSelectedKey != before && !current.structuralSettingsFrozen) {
-                attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
-            }
-        }
+        if (followRawSelection(before)) return
         syncRawVideoArm()
+    }
+
+    /**
+     * Main: after a gate recompute, RAW_VIDEO leaves for its fallback mode when nothing is selected, or reopens the
+     * session when the selection changed from [before]; neither while structural settings are frozen. True when the mode
+     * changed (its reopen arms what it needs).
+     */
+    private fun followRawSelection(before: String?): Boolean {
+        val current = cameraState.value
+        if (current.selectedMode != CaptureMode.RAW_VIDEO) return false
+        val fallback = rawVideoModeFallback(current.selectedMode, current.modeGates, rawModeFallback, hasConfig = current.rawVideoSelectedKey != null)
+        if (fallback != null && !current.structuralSettingsFrozen) { localBinder.selectMode(fallback, reopen = true); return true }
+        if (current.rawVideoSelectedKey != before && !current.structuralSettingsFrozen) {
+            attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+        }
+        return false
     }
 
     /**
@@ -799,6 +856,8 @@ class CaptureService : Service() {
                 return@launch
             }
             if (serviceDestroyed) return@launch
+            // Only once the read was not cancelled: a refresh overtaken by a volume event must not seed its drive's sample.
+            (resolved.destination as? RecordingDestination.UsbFolder)?.let { driveFreeSpace.store(it, status.driveFreeBytes) }
             nextTakeDestination = resolved
             // While a take runs the HUD keeps describing that take; the next take's state is published when it ends.
             // With a drive configured (or just cleared), an idle free figure left by the last drive take would mislead: the
@@ -817,6 +876,8 @@ class CaptureService : Service() {
     /** Main: a removable volume left or mounted. A leaving drive ends the take on it (Stop and save); a mounted one is recovered. */
     private fun onRecordingVolumeEvent(event: RecordingVolumeEvent) {
         if (serviceDestroyed) return
+        // A drive that left, or mounted again, has no free-space sample until its next one.
+        driveFreeSpace.invalidate(event.volumeId)
         when (event) {
             is RecordingVolumeEvent.Leaving -> {
                 // ADR-0037: the monitor already closed the drive's descriptors on its own thread; this is a cheap backstop.
@@ -1093,9 +1154,12 @@ class CaptureService : Service() {
     @Volatile private var currentSubjectLut: MonitorLut? = null
     @Volatile private var currentRecordingLut: MonitorLut? = null
     @Volatile private var recordingLutLibrary: com.librestatic.opencinecam.LutLibrary? = null
-    /** [continuation]: set when this take is a continuation on the phone (PLAN-072 Delivery 4); its output reads it. */
+    /**
+     * [continuation]: set when this take is a continuation on the phone (PLAN-072 Delivery 4); its output reads it.
+     * [admittedDestination]: where the storage admission measured the take; the start admits again if it changed.
+     */
     private data class RecordingLutIntent(val owner: CaptureTransferReservation, val lut: MonitorLut?, val captureNames: CaptureNameSnapshot,
-        val continuation: ContinuationRequest? = null) {
+        val continuation: ContinuationRequest? = null, val admittedDestination: RecordingDestination = RecordingDestination.Phone) {
         val productionSlate get() = captureNames.slate
     }
     private val recordingLutIntent = java.util.concurrent.atomic.AtomicReference<RecordingLutIntent?>()
@@ -2368,7 +2432,20 @@ class CaptureService : Service() {
         // A gate computed before the drive take armed its continuation may hold another selection: the same recompute.
         val staleSelection = continuation != null && cameraState.value.rawVideoSelectedKey != continuation.rawConfigKey
         if ((destinationChanged && rawDestinationId(destination.destination) != rawGateDestinationId) || staleSelection) {
+            val selectedBefore = cameraState.value.rawVideoSelectedKey
             cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+            if (cameraState.value.rawVideoSelectedKey != selectedBefore) {
+                // The live session still streams the configuration selected before, at its size and rate: reopen it for the
+                // new one, as refreshRawGate does, and refuse this press; the next one records the new configuration. A
+                // continuation is refused too, and ends with its "could not continue" outcome (startDriveContinuation).
+                if (!followRawSelection(selectedBefore)) syncRawVideoArm()
+                android.util.Log.w("CaptureService", "RAW take refused: the selection changed from $selectedBefore to " +
+                    "${cameraState.value.rawVideoSelectedKey}; the session reopens")
+                val reason = if (cameraState.value.rawVideoSelectedKey == null) RawVideoServiceReasons.NOT_QUALIFIED
+                    else RawVideoServiceReasons.START_FAILED
+                cameraState.update { it.copy(message = rawRefusalText(reason, null, null), errorCode = reason, messageTransient = false) }
+                return false
+            }
             syncRawVideoArm()
         }
         val gated = cameraState.value
@@ -2668,7 +2745,7 @@ class CaptureService : Service() {
         retireAudioLevelConsumer(clearLevels = true)
         foreground.stop()
         submitCaptureState(stateCommands.takeEnded())
-        val text = rawRefusalText(reason, session.config, destinationFreeBytes(session.destination.destination))
+        val text = rawRefusalText(reason, session.config, cachedDestinationFreeBytes(session.destination.destination))
         if (cameraState.value.phase == CameraUiPhase.CAPTURING) refuseTakeStart(reason, text)
         else cameraState.update { it.copy(message = text, errorCode = reason) }
         clearTakeDestination()
@@ -5400,16 +5477,13 @@ class CaptureService : Service() {
             takeProjectedBytesPerMinute = projectedBytesPerMinute
             // PLAN-072: measured where the take will go (the drive, or the phone when it falls back; a continuation, the phone).
             val continuation = continuationStarting?.takeIf { it.mode == current.selectedMode }
-            val admissionFree = if (continuation != null) phoneVolumeFreeBytes() else destinationFreeBytes(resolveTakeDestination().destination)
+            val admittedDestination = if (continuation != null) RecordingDestination.Phone else resolveTakeDestination().destination
+            val admissionFree = if (continuation != null) phoneVolumeFreeBytes() else destinationFreeBytes(admittedDestination)
             when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, admissionFree)) {
                 StorageAdmission.Admit -> Unit
                 StorageAdmission.AdmitUnread -> admissionWarning = getString(R.string.storage_unknown_warning)
                 is StorageAdmission.Refuse -> {
-                    val needed = android.text.format.Formatter.formatFileSize(this@CaptureService, admission.requiredBytes)
-                    val message = if (admission.availableBytes == null) getString(R.string.storage_unknown_refused)
-                        else getString(R.string.storage_reserve_insufficient,
-                            needed, android.text.format.Formatter.formatFileSize(this@CaptureService, admission.availableBytes))
-                    cameraState.update { it.copy(message = message, errorCode = admission.errorCode) }
+                    cameraState.update { it.copy(message = storageRefusalText(admission), errorCode = admission.errorCode) }
                     return false
                 }
             }
@@ -5417,7 +5491,7 @@ class CaptureService : Service() {
             check(transferCapture.compareAndSet(null, reservation))
             // A continuation keeps the drive take's names and slate: the same take number, and no increment of its own.
             val captureNames = continuation?.captureNames ?: admittedCaptureNames()
-            recordingLutIntent.set(RecordingLutIntent(reservation, lut, captureNames, continuation))
+            recordingLutIntent.set(RecordingLutIntent(reservation, lut, captureNames, continuation, admittedDestination))
             settings = settings.copy(productionSlate = captureNames.slate, captureNaming = captureNames.settings)
             cameraState.update { it.copy(recordingLutStatus = waitingRecordingLutStatus(), recordingLutSelectionPending = false) }
             transferCaptureDispatched = false
@@ -5531,6 +5605,9 @@ class CaptureService : Service() {
                 }
                 return true
             }
+            // PLAN-072: a drive that left or arrived since the admission changes where the take goes; admit it there again.
+            if (current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) &&
+                !admitChangedTakeDestination()) return false
             return when (current.selectedMode) {
                 CaptureMode.PHOTO, CaptureMode.RAW_PHOTO -> {
                     val owner = StillOwner(admittedCaptureNames())
@@ -6035,6 +6112,7 @@ class CaptureService : Service() {
         // Accepted still publications finish on orderly service destruction. New jobs reject;
         // completion callbacks are fenced by serviceDestroyed and the exact still owner.
         storageExecutor.shutdown()
+        driveFreeSpaceExecutor.shutdown()
         actor.close()
         com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(false)
         super.onDestroy()

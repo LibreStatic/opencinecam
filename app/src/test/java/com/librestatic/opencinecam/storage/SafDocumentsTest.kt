@@ -43,6 +43,17 @@ class SafDocumentsTest {
         assertThrows(IllegalStateException::class.java) { docs.directory(docs.root, "file") }
     }
 
+    @Test fun directoryCreatedConcurrentlyResolvesToTheOtherCreatorsFolder() {
+        // Another creator makes the folder between the lookup and the create: the provider names ours `OpenCineCam (1)`.
+        drive.beforeCreate = { check(drive.file("Takes/OpenCineCam").mkdir()) }
+        val folder = docs.directory(docs.root, "OpenCineCam")
+        assertEquals("FFF1-7571:Takes/OpenCineCam", DocumentsContract.getDocumentId(folder))
+        assertEquals(listOf("OpenCineCam"), docs.children(docs.root).map { it.name })
+        drive.beforeCreate = { check(drive.file("Takes/notes").createNewFile()) }
+        assertThrows(IllegalStateException::class.java) { docs.directory(docs.root, "notes") }
+        assertFalse(drive.file("Takes/notes (1)").exists())
+    }
+
     @Test fun newDirectoryTakesASuffixWhenTheNameIsTaken() {
         assertEquals("take", docs.newDirectory(docs.root, "take").name)
         val second = docs.newDirectory(docs.root, "take")

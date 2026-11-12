@@ -70,7 +70,7 @@ The drive was a WD Elements Desktop (self-powered, exFAT) on the USB 3 bus, firs
 
 ### Delivery 1: video, audio and stills on the drive
 
-Status (2026-11-08): slices A to F are implemented on `feat/external-ssd-recording`, uncommitted, with 2353 host tests passing. The device cases in `docs/device-validation.md` are pending. ADR-0037 records the decisions.
+Status (2026-11-08): slices A to F are implemented on `feat/external-ssd-recording`, with 2353 host tests passing. The device cases in `docs/device-validation.md` are pending. ADR-0037 records the decisions.
 
 | Slice | Owner files | Depends on |
 |---|---|---|
@@ -90,7 +90,7 @@ Status (2026-11-08): slices A to F are implemented on `feat/external-ssd-recordi
 
 ### Delivery 3: RAW video on the drive
 
-Status (2026-11-09): implemented on `feat/external-ssd-recording`, uncommitted, with host tests passing; the device cases in `docs/device-validation.md` are pending. ADR-0037 decision 7 records it. A drive qualification is a full run (camera checks are not reused from the phone's); the journal stays at schema v2.
+Status (2026-11-09): implemented on `feat/external-ssd-recording`, with host tests passing; the device cases in `docs/device-validation.md` are pending. ADR-0037 decision 7 records it. A drive qualification is a full run (camera checks are not reused from the phone's); the journal stays at schema v2.
 
 - `SafRawVideoOutput` implements `RawVideoTakeOutput`, with recovery entries in the SAF journal.
 - Qualification is per drive, with `destinationId = "saf:<volumeId>"` replacing the hard-coded `DESTINATION_MEDIASTORE_DOCUMENTS`.
@@ -99,10 +99,10 @@ Status (2026-11-09): implemented on `feat/external-ssd-recording`, uncommitted, 
 
 ### Delivery 4: continue on the phone
 
-Status (2026-11-09): implemented on `feat/external-ssd-recording`, uncommitted, with host tests passing; the device cases in `docs/device-validation.md` are pending. ADR-0037 decision 6 records it. RAW uses the same restart as MP4 instead of switching the writer's channel: the drive part is stopped and kept, and a new `.ocraw` take `<stem>_cont1` starts on the phone with `continuation*` keys in its static metadata. The gap is about 1–2 s rather than 1 s. Time-lapse and high-speed takes stop and save.
+Status (2026-11-09): implemented on `feat/external-ssd-recording`, with host tests passing; the device cases in `docs/device-validation.md` are pending. ADR-0037 decision 6 records it. RAW uses the same restart as MP4 instead of switching the writer's channel: the drive part is stopped and kept, and a new `.ocraw` take `<stem>_cont1` starts on the phone with `continuation*` keys in its static metadata. The gap is about 1–2 s rather than 1 s. Time-lapse and high-speed takes stop and save.
 
 - **MP4:** the take closes on the drive and a continuation take, `<stem>_cont1`, starts on the phone, linked in the clip sidecar. The gap is about 1 s.
-- **RAW:** the writer switches its channel to a phone output. This is allowed only if the configuration is qualified for the phone.
+- **RAW:** the take stops on the drive and keeps what reached it, and a new `.ocraw` take, `<stem>_cont1`, starts on the phone with `continuation*` keys in its static metadata. The gap is about 1–2 s. This is allowed only if the configuration is qualified for the phone.
 
 ## 6. Acceptance
 

@@ -27,6 +27,63 @@ internal fun freeSpaceDestination(takeDestination: RecordingDestination?, nextDe
     takeDestination ?: nextDestination
 
 /**
+ * PLAN-072: the last free-space sample of one drive, so the main thread never asks the provider. [read] returns it and
+ * starts a [sample] on [executor], at most one at a time; [store] keeps a sample taken elsewhere. The sample belongs to
+ * one drive: asking for another, or [invalidate] (its volume left or mounted again), forgets it, so a value is never
+ * reported for another drive or for a re-plugged one before its own first sample. A sample that gives null is kept as
+ * null, as a direct read would give it. Thread-safe.
+ */
+internal class DriveFreeSpaceCache(
+    private val executor: java.util.concurrent.Executor,
+    private val sample: (RecordingDestination.UsbFolder) -> Long?,
+) {
+    private var drive: RecordingDestination.UsbFolder? = null
+    private var bytes: Long? = null
+    /** Bumped whenever the sample is forgotten or replaced, so an older sample still running is dropped. */
+    private var generation = 0L
+    private var sampling = false
+
+    /** The last sample of [drive], null when there is none yet; starts a new sample unless one is running. */
+    fun read(drive: RecordingDestination.UsbFolder): Long? {
+        val (value, started) = synchronized(this) {
+            if (drive != this.drive) forget(drive)
+            if (sampling) return bytes
+            sampling = true
+            bytes to generation
+        }
+        try {
+            executor.execute {
+                val sampled = runCatching { sample(drive) }.getOrNull()
+                synchronized(this) {
+                    sampling = false
+                    if (generation == started) bytes = sampled
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            synchronized(this) { sampling = false }
+        }
+        return value
+    }
+
+    /** A sample of [drive] read directly now (take admission, the destination refresh). */
+    @Synchronized fun store(drive: RecordingDestination.UsbFolder, freeBytes: Long?) {
+        forget(drive)
+        bytes = freeBytes
+    }
+
+    /** The volume [volumeId] left or mounted: when it holds the sampled drive, no sample until the next one. */
+    @Synchronized fun invalidate(volumeId: String) {
+        if (drive?.volumeId.equals(volumeId, ignoreCase = true)) forget(drive)
+    }
+
+    private fun forget(next: RecordingDestination.UsbFolder?) {
+        drive = next
+        bytes = null
+        generation++
+    }
+}
+
+/**
  * PLAN-072 Delivery 3: the qualification records a RAW take on [destination] is gated by. A drive has its own
  * (`saf:<volume>`); the phone keeps `mediastore-documents`. Every RAW lookup (the mode gate, the RES/FPS chooser,
  * Automatic, the settings row, the qualification prompt and run) passes the destination the next RAW take would use.

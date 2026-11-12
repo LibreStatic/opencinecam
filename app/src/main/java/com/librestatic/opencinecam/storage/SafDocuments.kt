@@ -32,15 +32,27 @@ internal class SafDocuments(val resolver: ContentResolver, val tree: Uri) {
         return describe(DocumentsContract.buildDocumentUriUsingTree(tree, childDocumentId(DocumentsContract.getDocumentId(parent), name)))
     }
 
-    /** The folder [name] inside [parent], created when missing. A file of that name is an error. */
+    /**
+     * The folder [name] inside [parent], created when missing. A file of that name is an error. When another
+     * creator made [name] first, the provider names ours `name (1)`: it is deleted again (it is still empty)
+     * and the other one is returned.
+     */
     fun directory(parent: Uri, name: String): Uri {
         child(parent, name)?.let { existing ->
             check(existing.mime == Document.MIME_TYPE_DIR) { "$name exists and is not a folder" }
             return existing.uri
         }
-        return requireNotNull(DocumentsContract.createDocument(resolver, parent, Document.MIME_TYPE_DIR, name)) {
+        val uri = requireNotNull(DocumentsContract.createDocument(resolver, parent, Document.MIME_TYPE_DIR, name)) {
             "The drive did not create the folder $name"
         }
+        val created = describe(uri)
+        if (created != null && created.name != name) {
+            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+            val existing = checkNotNull(child(parent, name)) { "The drive created ${created.name} instead of $name" }
+            check(existing.mime == Document.MIME_TYPE_DIR) { "$name exists and is not a folder" }
+            return existing.uri
+        }
+        return uri
     }
 
     /** A new folder inside [parent]; the provider may name it `name (1)` when [name] is taken. */

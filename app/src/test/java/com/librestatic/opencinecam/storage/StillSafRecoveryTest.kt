@@ -278,4 +278,20 @@ class StillSafRecoveryTest {
         assertEquals(listOf(listOf(phone, "0", null, null, null)), entries())
         assertFalse(File(stills, "E").exists())
     }
+
+    @Test fun groupsDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {
+        assertEquals(StillRecoveryReport(), journal().recover())
+        val lostVolume = "1234-ABCD"
+        val lost = DocumentsContract.buildTreeDocumentUri(FakeExternalStorageProvider.AUTHORITY, "$lostVolume:Rec")
+        val deferred = List(StillCaptureRecovery.MAX_DRIVE_GROUPS) { UUID.randomUUID().toString() }
+        val phone = UUID.randomUUID().toString()
+        database { db ->
+            deferred.forEach { db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)", arrayOf(it, lost.toString(), lostVolume)) }
+            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(phone))
+        }
+        assertEquals(StillRecoveryReport(unresolvedGroups = 1, deferredGroups = deferred.size), journal().recover())
+        // A drive group with the drive bound full forgets the oldest deferred entry, and only the entry.
+        journal().publish(destination) { id, _ -> id }
+        assertEquals(deferred.drop(1).toSet() + phone, entries().map { it[0] }.toSet())
+    }
 }

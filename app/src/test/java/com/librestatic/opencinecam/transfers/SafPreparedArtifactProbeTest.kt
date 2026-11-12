@@ -6,6 +6,10 @@ package com.librestatic.opencinecam.transfers
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
+import android.system.StructStat
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.librestatic.opencinecam.share.openShareFile
@@ -17,9 +21,12 @@ import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
 import com.librestatic.opencinecam.storage.SafRecordingRows
 import com.librestatic.opencinecam.storage.ShadowDocumentsProviderQuery
 import java.io.File
+import java.io.FileDescriptor
 import java.io.FileNotFoundException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -28,6 +35,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
 
 /**
  * PLAN-072 Delivery 2: a drive take's artifacts in the WebDAV outbox. The folder's marker is the drive's IS_PENDING,
@@ -104,6 +113,34 @@ class SafPreparedArtifactProbeTest {
         assertEquals(0, DriveDescriptors.registered(volume))
     }
 
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun theProbesDescriptorIsRegisteredWhileItInspects() {
+        val volume = FakeExternalStorageProvider.VOLUME
+        val seen = ArrayList<Int>()
+        ShadowFstatProbe.onFstat = { seen += DriveDescriptors.registered(volume) }
+        val failure = try {
+            runCatching { SafPreparedArtifactProbe(context.contentResolver).inspect(video, pending = false) }.exceptionOrNull()
+        } finally { ShadowFstatProbe.onFstat = null }
+        // The shadow ends the inspection at its first fstat, on the open descriptor.
+        assertTrue(failure.toString(), failure is ErrnoException)
+        assertEquals(listOf(1), seen)
+        assertEquals(0, DriveDescriptors.registered(volume))
+    }
+
+    @Test fun aCheckThatMeetsAReleasedDescriptorIsAnAbsentDrive() {
+        val changed = WebDavArtifactContentChanged()
+        assertNull(driveReleasedOr(null, released = false))
+        assertSame(changed, driveReleasedOr(changed, released = false))
+        // Released by DriveDescriptors: whatever the checks met on the closed descriptor is the drive leaving.
+        val absent = driveReleasedOr(changed, released = true)
+        assertTrue(absent.toString(), absent is WebDavSourceDriveAbsent && absent.cause === changed)
+        val closed = IllegalStateException("Prepared artifact descriptor is closed")
+        assertSame(closed, (driveReleasedOr(closed, released = true) as WebDavSourceDriveAbsent).cause)
+        assertTrue(driveReleasedOr(null, released = true) is WebDavSourceDriveAbsent)
+        val already = WebDavSourceDriveAbsent()
+        assertSame(already, driveReleasedOr(already, released = true))
+    }
+
     @Test fun onlyCanonicalDocumentsOfTheirOwnNameAndRoleAreObserved() {
         assertThrows(IllegalArgumentException::class.java) { observe(video.copy(displayName = "A002.mp4"), pending = false) }
         assertThrows(IllegalArgumentException::class.java) { observe(video.copy(uri = video.uri.replace("A001.mp4", "..%2FA001.mp4")), pending = false) }
@@ -122,5 +159,19 @@ class SafPreparedArtifactProbeTest {
         // A document of another tree, or an alias of one, is not an outbox source.
         assertThrows(IllegalArgumentException::class.java) { video.copy(sourceUri = video.sourceUri.replace("A001%2FA001.mp4", "A001%2F.%2FA001.mp4")) }
         assertThrows(IllegalArgumentException::class.java) { video.copy(sourceUri = video.sourceUri.replace("tree/FFF1-7571%3ATakes", "tree/FFF1-7571%3AOther")) }
+    }
+}
+
+/** Runs [onFstat] on each `Os.fstat` and then fails it, so a test sees the state while the probe holds its descriptor. */
+@Implements(Os::class)
+class ShadowFstatProbe {
+    companion object {
+        @Volatile var onFstat: (() -> Unit)? = null
+
+        @JvmStatic @Implementation
+        fun fstat(@Suppress("UNUSED_PARAMETER") descriptor: FileDescriptor): StructStat {
+            onFstat?.invoke()
+            throw ErrnoException("fstat", OsConstants.EBADF)
+        }
     }
 }

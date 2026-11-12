@@ -370,6 +370,12 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
 
     @Synchronized fun invalidate() { stamp = null; folders = null; takes.clear() }
 
+    /**
+     * Drops the takes kept for folder [documentId]: a file rewritten in place (from a computer) leaves the folder's last
+     * change as it was, so its cached take would never be read again.
+     */
+    @Synchronized fun forget(documentId: String) { takes.keys.removeAll { it.startsWith("$documentId|") } }
+
     companion object {
         val Shared = DriveCatalogCache()
     }
@@ -429,6 +435,7 @@ internal class DriveMediaCatalog(
         val visible = children.filterNot { it.name.startsWith('.') }.map { DocumentsContract.getDocumentId(it.uri) }
         check(visible.toSet() == ids.toSet() && visible.size == ids.size) { "Deletion selection changed; refresh gallery" }
         val fresh = driveCatalogTake(folderId, recording, children, read)?.take
+        if (fresh != selected) cache.forget(folderId)
         check(fresh == selected) { "Deletion selection changed; refresh gallery" }
         return DriveDeletion(docs, folder, confirmed)
     }
@@ -459,6 +466,8 @@ internal class DriveMediaCatalog(
         check(children.none { it.name == SafRecordingRows.MARKER }) { "Selected take is not committed" }
         var documents = emptyList<MetadataDocument>()
         val fresh = driveCatalogTake(folderId, recording, children, read) { documents = it }?.take
+        // The next refresh reads the folder again instead of offering the stale take.
+        if (fresh != selected) cache.forget(folderId)
         check(fresh != null) { "Selected media changed; refresh gallery" }
         requireUnchangedShareTake(selected, fresh)
         return MediaShareSnapshot(fresh, if (fresh.kind == LocalMediaKind.RAW_VIDEO) emptyList() else documents)

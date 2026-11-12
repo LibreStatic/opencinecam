@@ -46,7 +46,8 @@ class DriveMediaSafTest {
     }
 
     private fun catalog(cache: DriveCatalogCache = DriveCatalogCache()) = DriveMediaCatalog(context.contentResolver, { destination },
-        { granted }, { artifact -> MetadataDocument(artifact, context.contentResolver.openInputStream(artifact.uri.toUri())?.use { it.readBytes().decodeToString() }) })
+        { granted }, { artifact -> MetadataDocument(artifact, context.contentResolver.openInputStream(artifact.uri.toUri())?.use { it.readBytes().decodeToString() }) },
+        cache)
 
     private fun docUri(path: String) = DocumentsContract.buildDocumentUriUsingTree(tree, "${FakeExternalStorageProvider.VOLUME}:Takes/$path").toString()
 
@@ -145,6 +146,19 @@ class DriveMediaSafTest {
         assertTrue(gone is IllegalStateException && gone !is DriveNotConnectedException)
     }
 
+    @Test fun aTakeRewrittenInPlaceIsReadAgainAfterItsSnapshotFails() {
+        val cache = DriveCatalogCache()
+        val folder = recording("A001", 3_000_000)
+        val take = takes(catalog(cache)).single()
+        // Rewritten from a computer: the file changes, the folder's last change does not.
+        File(folder, "A001.mp4").writeText("media, rewritten in place")
+        folder.setLastModified(3_000_000)
+        assertTrue(runCatching { catalog(cache).shareSnapshot(take) }.exceptionOrNull() is IllegalStateException)
+        val fresh = takes(catalog(cache)).single()
+        assertEquals("media, rewritten in place".length.toLong(), fresh.primary.sizeBytes)
+        assertEquals(fresh, catalog(cache).shareSnapshot(fresh).take)
+    }
+
     @Test fun aShareSnapshotWithTheDriveUnpluggedSaysSo() {
         recording("A001", 3_000_000)
         val take = takes().single()
@@ -201,6 +215,19 @@ class DriveMediaSafTest {
         assertTrue(released)
         assertFalse(folder.exists())
         assertTrue(drive.file("Takes/OpenCineCam/A002/A002.mp4").exists())
+    }
+
+    @Test fun aDriveThatFailsAfterTheDeleteLeavesEveryFileUnknown() {
+        val folder = recording("A001", 3_000_000)
+        val take = takes().single()
+        drive.afterDelete = { drive.queryFailure = SecurityException("Permission revoked") }
+        val (result, released) = delete(take)
+        drive.queryFailure = null
+        assertEquals("Permission revoked", result.error)
+        assertEquals(listOf(MediaDeleteStatus.UNKNOWN, MediaDeleteStatus.UNKNOWN), result.files.map { it.status })
+        assertTrue(result.files.all { it.detail == "Permission revoked" })
+        assertTrue(released)
+        assertFalse(folder.exists())
     }
 
     @Test fun aChangedFolderIsNotDeleted() {

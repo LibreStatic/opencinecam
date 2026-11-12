@@ -174,6 +174,18 @@ class RecordingDestinationUiTest {
         assertFalse(holder.state.measuring)
     }
 
+    @Test fun aSupersededAdoptionChangesNothingAndShowsNoError() = runBlocking {
+        val backend = FakeBackend(RecordingFolderAdoption.Superseded).apply { nextSpeed = fast }
+        val holder = RecordingDestinationSettingsHolder(backend)
+        // The later choice (the phone) is what the store holds when the stale adoption returns.
+        holder.adopt(Uri.EMPTY) { backend.events += "changed" }
+        assertEquals(listOf("adopt"), backend.events)
+        assertNull(holder.state.rejection)
+        assertFalse(holder.state.checking)
+        assertFalse(holder.state.measuring)
+        assertFalse(holder.state.driveConfigured)
+    }
+
     @Test fun aFailedMeasurementKeepsThePreviousSpeedAndRemeasureUpdatesIt() = runBlocking {
         val backend = FakeBackend(RecordingFolderAdoption.Adopted("1A2B-3C4D", "WD")).apply { nextSpeed = fast }
         val holder = RecordingDestinationSettingsHolder(backend)

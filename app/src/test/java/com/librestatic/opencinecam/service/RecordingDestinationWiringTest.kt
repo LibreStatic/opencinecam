@@ -234,4 +234,54 @@ class RecordingDestinationWiringTest {
         // Never "continued" while on the drive.
         assertFalse(recordingDestinationStatus(back, "Elements", 5L, continuedOnPhone = true).continuedOnPhone)
     }
+
+    @Test fun theDriveFreeSpaceIsSampledOffTheCallerOneAtATime() {
+        val queued = ArrayDeque<Runnable>()
+        val samples = ArrayDeque(listOf(500L, 400L))
+        var calls = 0
+        val cache = DriveFreeSpaceCache({ queued.addLast(it) }) { calls++; samples.removeFirst() }
+        // Nothing before the first sample, and the read itself never samples.
+        assertNull(cache.read(drive))
+        assertEquals(0, calls)
+        assertNull(cache.read(drive))
+        assertEquals("one sample in flight", 1, queued.size)
+        queued.removeFirst().run()
+        assertEquals(500L, cache.read(drive))
+        queued.removeFirst().run()
+        assertEquals(400L, cache.read(drive))
+        assertEquals(2, calls)
+    }
+
+    @Test fun aDriveFreeSpaceSampleBelongsToItsDriveAndIsForgottenWhenItsVolumeChanges() {
+        val queued = ArrayDeque<Runnable>()
+        val other = RecordingDestination.UsbFolder(Uri.parse("content://$EXTERNAL_STORAGE_AUTHORITY/tree/0A1B-2C3D%3ARAW"), "0A1B-2C3D")
+        val cache = DriveFreeSpaceCache({ queued.addLast(it) }) { if (it == drive) 500L else 900L }
+        cache.store(drive, 500L)
+        assertEquals(500L, cache.read(drive))
+        // Another drive never reports the first one's figure, nor gets it from a sample still running for the first.
+        assertNull(cache.read(other))
+        queued.removeFirst().run()
+        assertNull(cache.read(other))
+        queued.removeFirst().run()
+        assertEquals(900L, cache.read(other))
+        // Its volume leaving or mounting again forgets the sample, and drops the one still running.
+        cache.invalidate("0a1b-2c3d")
+        queued.removeFirst().run()
+        assertNull(cache.read(other))
+        queued.removeFirst().run()
+        // Another volume changing keeps it.
+        cache.invalidate("FFF1-7571")
+        assertEquals(900L, cache.read(other))
+    }
+
+    @Test fun aRefusedDriveFreeSpaceSampleLetsTheNextReadTryAgain() {
+        var accept = false
+        val queued = ArrayDeque<Runnable>()
+        val cache = DriveFreeSpaceCache({ if (accept) queued.addLast(it) else throw java.util.concurrent.RejectedExecutionException() }) { 7L }
+        assertNull(cache.read(drive))
+        accept = true
+        assertNull(cache.read(drive))
+        queued.removeFirst().run()
+        assertEquals(7L, cache.read(drive))
+    }
 }

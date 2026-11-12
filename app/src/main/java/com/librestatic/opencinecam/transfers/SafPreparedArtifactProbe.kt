@@ -18,6 +18,7 @@ import com.librestatic.opencinecam.storage.driveFileRole
 import com.librestatic.opencinecam.storage.driveMime
 import com.librestatic.opencinecam.storage.externalStorageDocumentId
 import com.librestatic.opencinecam.storage.isDriveUri
+import com.librestatic.opencinecam.storage.useOnDrive
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -30,6 +31,14 @@ import java.util.concurrent.CancellationException
  */
 internal class WebDavSourceDriveAbsent(cause: Throwable? = null) : IOException("The USB drive holding the source is not connected", cause)
 
+/**
+ * How a drive source's descriptor checks end: [failure] (null when they passed), unless `DriveDescriptors` had already
+ * [released] the descriptor. Then the drive left, whatever the checks met on the closed descriptor (a closed or
+ * changed descriptor, EBADF, an unanswered query) is that, and the result is the transient [WebDavSourceDriveAbsent].
+ */
+internal fun driveReleasedOr(failure: Throwable?, released: Boolean): Throwable? =
+    if (!released || failure is WebDavSourceDriveAbsent) failure else WebDavSourceDriveAbsent(failure)
+
 /** What the drive lists for a prepared artifact: its document's name, size, last change and the MIME it is read with. */
 internal data class SafPreparedObservation(val displayName: String, val sizeBytes: Long, val modifiedMillis: Long, val mimeType: String)
 
@@ -39,7 +48,8 @@ internal data class SafPreparedObservation(val displayName: String, val sizeByte
  * group commit before the publication callback. So `pending` must equal "marker present", and a finalized artifact
  * is one whose folder holds no marker and whose document exists with the size its opened descriptor has. The
  * identity is the canonical document URI ([canonicalDriveDocumentUri]); the descriptor checks are those of
- * [MediaStorePreparedArtifactProbe], on the descriptor actually opened. An unreachable drive is [WebDavSourceDriveAbsent].
+ * [MediaStorePreparedArtifactProbe], on the descriptor actually opened, which is registered with `DriveDescriptors` while it
+ * is open (ADR-0037). An unreachable drive is [WebDavSourceDriveAbsent].
  */
 internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) : PreparedArtifactProbe {
     override fun inspect(artifact: PreparedCaptureArtifact, pending: Boolean): WebDavClipSnapshot {
@@ -50,7 +60,7 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         } catch (missing: FileNotFoundException) {
             throw absentOr(resolver, uri, missing)
         } ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
-        return descriptor.use {
+        return descriptor.useOnDrive(uri) {
             requireReadOnlyPreparedDescriptor(it)
             val firstStat = Os.fstat(it.fileDescriptor)
             val firstSize = it.statSize

@@ -60,7 +60,10 @@ import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PATH
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.storage.safFreeBytes
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.CancellationException
@@ -106,7 +109,11 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
         try {
             context.contentResolver.openFileDescriptor(take.primary.uri.toUri(), "r")?.use { descriptor ->
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel.use { channel ->
-                    CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
+                    // Indexing walks every frame: a take on the USB drive has both descriptors close with the drive (ADR-0037).
+                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), CloseOnce(channel, descriptor))
+                    try {
+                        CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
+                    } finally { driveHandle.unregister() }
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -134,7 +141,8 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         context.contentResolver.takePersistableUriPermission(tree, flags)
         val previous = preferences.getString(KEY_TREE, null)
-        if (previous != null && previous != tree.toString()) {
+        // The recording destination may use the same tree (or it as an alias), or an interrupted take may wait on it; its permission then stays.
+        if (previous != null && previous != tree.toString() && !RecordingDestinationStore(context).needsTree(previous.toUri())) {
             runCatching { context.contentResolver.releasePersistableUriPermission(previous.toUri(), flags) }
         }
         preferences.edit().putString(KEY_TREE, tree.toString()).apply()

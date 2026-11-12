@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 private val recordingRecoveryLock = Any()
 // IDs only: the registry must not retain a service/context. A process restart starts empty.
 private val liveRecordingGroups = mutableSetOf<String>()
+// Drive RAW takes a recovery pass is repairing outside the lock: no other pass, and no eviction, touches their entries.
+private val repairingRecordingGroups = mutableSetOf<String>()
 internal enum class RecordingMemberKind { VIDEO, AUDIO }
 /** [incompleteGroups] interrupted takes were kept: their outputs with bytes were published as incomplete (ADR-0011).
  * [rawTakes] is the PLAN-071 RAW video pass ([RawVideoRecovery]). It is not part of [RecordingCaptureRecovery.recover],
@@ -39,13 +41,25 @@ data class RecordingRecoveryReport(val discardedGroups: Int = 0, val unresolvedG
  *
  * PLAN-072: each take has one storage backend ([RecordingRowStore]), chosen at [start] and journalled with the take:
  * MediaStore on the phone (NULL `tree`), or a SAF folder on a drive (`tree`, `volume`, and `folder` once the take
- * folder exists). [mounted] says whether a drive volume (UUID) is mounted; tests replace it. */
+ * folder exists). [mounted] says whether a drive volume (UUID) is mounted; tests replace it.
+ *
+ * Phone takes and drive takes are bounded apart ([MAX_PHONE_TAKES], [MAX_DRIVE_TAKES]), so takes deferred on drives that
+ * never return cannot refuse a phone take. A drive take that finds its bound full forgets the oldest deferred drive entry
+ * (the journal row only; what is on that drive stays). */
 internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> Boolean)? = null) {
     internal val context = context.applicationContext
     private val resolver = this.context.contentResolver
-    private val database = File(this.context.noBackupFilesDir, "recording-recovery.sqlite")
+    private val database = File(this.context.noBackupFilesDir, DATABASE)
     private val mounted: (String) -> Boolean = mounted ?: { volume -> volumeMounted(this.context, volume) }
     private val mediaStore = MediaStoreRecordingRows(this.context)
+    /** Repairs a drive RAW take's `.ocraw` in place and says whether to keep it ([finishDriveRawTake]); tests replace it. */
+    internal var repairRaw: (Uri) -> RawTakeFileDecision = { uri ->
+        // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
+        // the entry stays for the next pass (ADR-0037).
+        requireNotNull(resolver.openFileDescriptor(uri, "rw")) { "RAW take could not be opened" }.useOnDrive(uri) { descriptor ->
+            DuplexFileChannel.open(descriptor.fileDescriptor).use { channel -> recoverRawTakeFile(channel).decision }
+        }
+    }
     internal fun key(id: String) = "${database.absolutePath}:$id"
 
     private fun open(): SQLiteDatabase {
@@ -65,22 +79,32 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 listOf("tree", "volume", "folder").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
                 version = 2
             }
-            db.rawQuery("SELECT COUNT(*) FROM captures", null).use {
-                check(it.moveToFirst() && it.getLong(0) in 0L..128L) { "Recording recovery capacity exceeded" }
-            }
+            check(count(db, phone = true) <= MAX_PHONE_TAKES && count(db, phone = false) <= MAX_DRIVE_TAKES) { "Recording recovery capacity exceeded" }
             return db
         } catch (failure: Throwable) { db.close(); throw failure }
     }
 
-    internal fun start(destination: RecordingDestination = RecordingDestination.Phone): RecordingRecoveryGroup = synchronized(recordingRecoveryLock) {
-        recover()
-        val id = UUID.randomUUID().toString()
-        val store: RecordingRowStore = when (destination) {
-            RecordingDestination.Phone -> mediaStore.also { rows -> collections.forEach { check(rows.rows(id, it, false).isEmpty()) { "Recording namespace already exists" } } }
-            is RecordingDestination.UsbFolder -> driveRows(id, destination)
+    /** The entries of phone takes (NULL `tree`) or of drive takes, committed or not. */
+    private fun count(db: SQLiteDatabase, phone: Boolean): Long =
+        db.rawQuery("SELECT COUNT(*) FROM captures WHERE tree IS ${if (phone) "NULL" else "NOT NULL"}", null).use {
+            check(it.moveToFirst()); it.getLong(0)
         }
-        journal(id, destination)
-        RecordingRecoveryGroup(this, id, store)
+
+    /**
+     * The recovery pass runs before the lock is taken for the new take, so a drive RAW repair it starts never holds up
+     * another take's start or stop ([recover]).
+     */
+    internal fun start(destination: RecordingDestination = RecordingDestination.Phone): RecordingRecoveryGroup {
+        recover()
+        return synchronized(recordingRecoveryLock) {
+            val id = UUID.randomUUID().toString()
+            val store: RecordingRowStore = when (destination) {
+                RecordingDestination.Phone -> mediaStore.also { rows -> collections.forEach { check(rows.rows(id, it, false).isEmpty()) { "Recording namespace already exists" } } }
+                is RecordingDestination.UsbFolder -> driveRows(id, destination)
+            }
+            journal(id, destination)
+            RecordingRecoveryGroup(this, id, store)
+        }
     }
 
     /**
@@ -88,12 +112,14 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * schema 2), and its folder holds only `<stem>.ocraw`: recovery tells the two apart by that file ([recoverDriveTake]).
      * Runs a recovery pass first, as [start] does, so an interrupted RAW take on the drive is resolved before the next one.
      */
-    internal fun startRaw(destination: RecordingDestination.UsbFolder): SafRawTakeJournal = synchronized(recordingRecoveryLock) {
+    internal fun startRaw(destination: RecordingDestination.UsbFolder): SafRawTakeJournal {
         recover()
-        val id = UUID.randomUUID().toString()
-        val store = driveRows(id, destination)
-        journal(id, destination)
-        SafRawTakeJournal(this, id, store)
+        return synchronized(recordingRecoveryLock) {
+            val id = UUID.randomUUID().toString()
+            val store = driveRows(id, destination)
+            journal(id, destination)
+            SafRawTakeJournal(this, id, store)
+        }
     }
 
     /** The take folder is created at the first output, so it is new: no namespace to check. */
@@ -105,14 +131,38 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /** Journals take [id] on [destination] and registers it live; under [recordingRecoveryLock]. */
     private fun journal(id: String, destination: RecordingDestination) {
         open().use { db ->
-            db.rawQuery("SELECT COUNT(*) FROM captures", null).use { check(it.moveToFirst() && it.getLong(0) < 128) }
             when (destination) {
-                RecordingDestination.Phone -> db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
-                is RecordingDestination.UsbFolder -> db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
-                    arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
+                RecordingDestination.Phone -> {
+                    check(count(db, phone = true) < MAX_PHONE_TAKES) { "Recording recovery capacity exceeded" }
+                    db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
+                }
+                is RecordingDestination.UsbFolder -> {
+                    if (count(db, phone = false) >= MAX_DRIVE_TAKES) forgetOldestDeferred(db)
+                    db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
+                        arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
+                }
             }
         }
         liveRecordingGroups.add(key(id))
+    }
+
+    /**
+     * Makes room for a drive take: deletes the entry of the oldest drive take no live group owns, no pass is repairing and
+     * that [recover] would defer (its drive absent or its grant gone). Only the entry goes; the take's folder stays on its
+     * drive, marker included. Fails when every drive entry could still be resolved. Under [recordingRecoveryLock].
+     */
+    private fun forgetOldestDeferred(db: SQLiteDatabase) {
+        val held = heldReadWriteTrees(resolver)
+        val oldest = db.rawQuery("SELECT id, tree, volume, folder FROM captures WHERE tree IS NOT NULL AND committed = 0 ORDER BY rowid", null).use { c ->
+            generateSequence { if (c.moveToNext()) listOf(c.getString(0), c.getString(1), c.getString(2), c.getString(3)) else null }.firstOrNull { (id, tree, volume, folder) ->
+                key(id) !in liveRecordingGroups && key(id) !in repairingRecordingGroups &&
+                    (volume == null || resolveDriveLocation(Uri.parse(tree), volume, folder?.let(Uri::parse), held, mounted) == null)
+            }
+        }
+        checkNotNull(oldest) { "Recording recovery capacity exceeded" }
+        check(db.delete("captures", "id = ? AND committed = 0", arrayOf(oldest[0])) == 1)
+        android.util.Log.w("RecordingRecovery", "Recovery journal full: forgot interrupted take ${oldest[0]} on drive ${oldest[2]}, " +
+            "deferred since its drive went; its files stay on the drive")
     }
 
     /** The live registry gives take [id] up; the next [recover] may resolve it. */
@@ -128,56 +178,93 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * Every journalled take no live group owns. A drive take whose volume is not mounted or whose tree permission is gone
      * is skipped and kept ([RecordingRecoveryReport.deferredGroups]); calling this again once the drive is back (a mount
      * event) retries it. Cheap when nothing is journalled: one SQLite read.
+     *
+     * Every entry is decided under [recordingRecoveryLock] except the scan of a drive RAW take, which can take minutes for
+     * a large take on USB: its entry is marked repairing under the lock, scanned with the lock released (as
+     * [RawVideoRecovery] does on the phone), and committed or discarded under the lock again. Meanwhile takes start and
+     * stop, and a concurrent pass skips the entry. No caller holds [recordingRecoveryLock]: it would stay held through the scan.
      */
-    fun recover(): RecordingRecoveryReport = synchronized(recordingRecoveryLock) {
-        open().use { db ->
-            val records = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT 129", null).use { c ->
-                buildList { while (c.moveToNext()) add(JournalRow(c.getString(0), c.getType(1), c.getLong(1), c.getString(2), c.getString(3), c.getString(4))) }
-            }
-            check(records.size <= 128)
-            var discarded = 0; var unresolved = 0; var incomplete = 0; var deferred = 0; var rawPublished = 0; var rawDeleted = 0
-            records.forEach { record ->
-                val id = record.id
+    fun recover(): RecordingRecoveryReport {
+        val repairs = mutableListOf<RawRepair>()
+        try {
+            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, repairs) } }
+            var rawPublished = 0; var rawDeleted = 0; var unresolved = 0
+            repairs.forEach { repair ->
                 try {
-                    requireId(id); check(record.type == Cursor.FIELD_TYPE_INTEGER && record.state in 0L..1L)
-                    if (key(id) !in liveRecordingGroups) {
-                        if (record.state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
-                        else if (record.tree == null) {
-                            if (publishIncomplete(db, id, mediaStore) > 0) incomplete++
-                            else { discardRows(db, id, mediaStore); discarded++ }
-                        } else when (recoverDriveTake(db, record)) {
-                            DriveRecovery.DEFERRED -> deferred++
-                            DriveRecovery.INCOMPLETE -> incomplete++
-                            DriveRecovery.DISCARDED -> discarded++
-                            DriveRecovery.COMMITTED -> Unit
-                            DriveRecovery.RAW_PUBLISHED -> rawPublished++
-                            DriveRecovery.RAW_DELETED -> rawDeleted++
-                        }
+                    val decision = repairRaw(repair.raw.uri)
+                    when (synchronized(recordingRecoveryLock) { open().use { db -> finishDriveRawTake(db, repair, decision) } }) {
+                        RawTakeFileDecision.PUBLISH -> rawPublished++
+                        RawTakeFileDecision.DELETE -> rawDeleted++
                     }
                 } catch (failure: Exception) {
                     unresolved++
-                    android.util.Log.e("RecordingRecovery", "Retained unresolved take $id", failure)
+                    android.util.Log.e("RecordingRecovery", "Retained unresolved take ${repair.id}", failure)
                 }
             }
-            if (discarded + unresolved + incomplete + deferred + rawPublished + rawDeleted > 0) {
-                android.util.Log.i("RecordingRecovery", "Recovered interrupted takes: publishedIncomplete=$incomplete discarded=$discarded " +
-                    "unresolved=$unresolved deferred=$deferred rawPublished=$rawPublished rawDeleted=$rawDeleted")
+            val report = decided.copy(unresolvedGroups = decided.unresolvedGroups + unresolved,
+                rawTakes = decided.rawTakes + RawVideoRecoveryReport(rawPublished, rawDeleted))
+            with(report) {
+                if (discardedGroups + unresolvedGroups + incompleteGroups + deferredGroups + rawTakes.published + rawTakes.deleted > 0) {
+                    android.util.Log.i("RecordingRecovery", "Recovered interrupted takes: publishedIncomplete=$incompleteGroups " +
+                        "discarded=$discardedGroups unresolved=$unresolvedGroups deferred=$deferredGroups " +
+                        "rawPublished=${rawTakes.published} rawDeleted=${rawTakes.deleted}")
+                }
             }
-            RecordingRecoveryReport(discarded, unresolved, incomplete, rawTakes = RawVideoRecoveryReport(rawPublished, rawDeleted),
-                deferredGroups = deferred)
+            return report
+        } finally {
+            if (repairs.isNotEmpty()) synchronized(recordingRecoveryLock) { repairs.forEach { repairingRecordingGroups.remove(key(it.id)) } }
         }
     }
 
+    /**
+     * The locked part of [recover]: every entry no live group owns and no pass is repairing. A drive RAW take is only
+     * marked repairing and added to [repairs]; the caller scans it with the lock released.
+     */
+    private fun decide(db: SQLiteDatabase, repairs: MutableList<RawRepair>): RecordingRecoveryReport {
+        val records = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?",
+            arrayOf((MAX_PHONE_TAKES + MAX_DRIVE_TAKES + 1).toString())).use { c ->
+            buildList { while (c.moveToNext()) add(JournalRow(c.getString(0), c.getType(1), c.getLong(1), c.getString(2), c.getString(3), c.getString(4))) }
+        }
+        check(records.size <= MAX_PHONE_TAKES + MAX_DRIVE_TAKES)
+        var discarded = 0; var unresolved = 0; var incomplete = 0; var deferred = 0
+        records.forEach { record ->
+            val id = record.id
+            try {
+                requireId(id); check(record.type == Cursor.FIELD_TYPE_INTEGER && record.state in 0L..1L)
+                if (key(id) !in liveRecordingGroups && key(id) !in repairingRecordingGroups) {
+                    if (record.state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
+                    else if (record.tree == null) {
+                        if (publishIncomplete(db, id, mediaStore) > 0) incomplete++
+                        else { discardRows(db, id, mediaStore); discarded++ }
+                    } else when (recoverDriveTake(db, record, repairs)) {
+                        DriveRecovery.DEFERRED -> deferred++
+                        DriveRecovery.INCOMPLETE -> incomplete++
+                        DriveRecovery.DISCARDED -> discarded++
+                        DriveRecovery.COMMITTED -> Unit
+                        DriveRecovery.RAW_REPAIR -> repairingRecordingGroups.add(key(id))
+                    }
+                }
+            } catch (failure: Exception) {
+                unresolved++
+                android.util.Log.e("RecordingRecovery", "Retained unresolved take $id", failure)
+            }
+        }
+        return RecordingRecoveryReport(discarded, unresolved, incomplete, deferredGroups = deferred)
+    }
+
     private data class JournalRow(val id: String, val type: Int, val state: Long, val tree: String?, val volume: String?, val folder: String?)
-    private enum class DriveRecovery { DEFERRED, INCOMPLETE, DISCARDED, COMMITTED, RAW_PUBLISHED, RAW_DELETED }
+    /** [RAW_REPAIR]: a RAW take, added to the pass's repairs for [recover] to scan with the lock released. */
+    private enum class DriveRecovery { DEFERRED, INCOMPLETE, DISCARDED, COMMITTED, RAW_REPAIR }
+    /** A drive RAW take [recover] marked repairing: its entry [id], its folder [store] as resolved, its `.ocraw` [raw]. */
+    private data class RawRepair(val id: String, val store: SafRecordingRows, val raw: SafDocument)
 
     /**
      * An uncommitted drive take. The `.occ-in-progress` marker in its folder is the drive's IS_PENDING: a folder without
      * it was committed (the marker went just before the journal update), so the entry is only pruned. No folder recorded
-     * means nothing reached the drive. A folder holding an `.ocraw` is a RAW take ([recoverDriveRawTake]). Otherwise the
-     * take is recovered like a MediaStore one, and the marker goes once its outputs with bytes are kept.
+     * means nothing reached the drive. A folder holding an `.ocraw` is a RAW take, added to [repairs] ([finishDriveRawTake]).
+     * Otherwise the take is recovered like a MediaStore one, and the marker goes once its outputs with bytes are kept.
      */
-    private fun recoverDriveTake(db: SQLiteDatabase, record: JournalRow): DriveRecovery {
+    private fun recoverDriveTake(db: SQLiteDatabase, record: JournalRow, repairs: MutableList<RawRepair>): DriveRecovery {
         val tree = Uri.parse(record.tree)
         val volume = requireNotNull(record.volume) { "Drive take without a volume" }
         // The drive under vold's other name answers through the folder picked there (resolveDriveLocation).
@@ -197,7 +284,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 check(db.delete("captures", "id = ? AND committed = 0", arrayOf(record.id)) == 1)
                 DriveRecovery.COMMITTED
             }
-            else -> store.rawOutput()?.let { raw -> recoverDriveRawTake(db, record.id, store, raw) }
+            else -> store.rawOutput()?.let { raw -> repairs += RawRepair(record.id, store, raw); DriveRecovery.RAW_REPAIR }
                 ?: if (publishIncomplete(db, record.id, store) > 0) DriveRecovery.INCOMPLETE
                 else { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
         }
@@ -208,26 +295,25 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * phone ([recoverRawTakeFile]: torn tail cut, index and end appended). With a frame its marker goes (the take is
      * published); without one the take is discarded, but only while the drive still answers: a read that failed because
      * the drive went quiet must never pass for an empty take. A failure leaves the entry for the next pass.
+     *
+     * [recover] runs the repair ([repairRaw]) with the lock released and then this, under the lock, with its [decision]:
+     * the entry must still be the uncommitted take the repair was decided for.
      */
-    private fun recoverDriveRawTake(db: SQLiteDatabase, id: String, store: SafRecordingRows, raw: SafDocument): DriveRecovery {
-        // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
-        // the entry stays for the next pass (ADR-0037).
-        val decision = requireNotNull(resolver.openFileDescriptor(raw.uri, "rw")) { "RAW take could not be opened" }.useOnDrive(raw.uri) { descriptor ->
-            DuplexFileChannel.open(descriptor.fileDescriptor).use { channel -> recoverRawTakeFile(channel).decision }
-        }
-        return when (decision) {
+    private fun finishDriveRawTake(db: SQLiteDatabase, repair: RawRepair, decision: RawTakeFileDecision): RawTakeFileDecision {
+        val (id, store, raw) = repair
+        check(state(db, id) == 0L && key(id) !in liveRecordingGroups) { "RAW take changed during its repair" }
+        when (decision) {
             RawTakeFileDecision.PUBLISH -> {
                 store.commit(id)
                 check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
                 runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
-                DriveRecovery.RAW_PUBLISHED
             }
             RawTakeFileDecision.DELETE -> {
                 check(store.reachable() && store.describe(raw.uri) != null) { "Recording drive unavailable" }
                 discardRows(db, id, store)
-                DriveRecovery.RAW_DELETED
             }
         }
+        return decision
     }
 
     /**
@@ -283,6 +369,11 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     internal fun allRows(id: String): Set<Uri> = mediaStore.allRows(id)
 
     companion object {
+        private const val DATABASE = "recording-recovery.sqlite"
+        /** Phone takes (NULL `tree`) journalled at once; a phone take beyond it is refused. */
+        internal const val MAX_PHONE_TAKES = 128
+        /** Drive takes journalled at once; a drive take beyond it forgets the oldest deferred one ([journal]). */
+        internal const val MAX_DRIVE_TAKES = 128
         internal val collections = listOf("DCIM", "Music", "Download")
         internal const val selection = "relative_path = ? AND owner_package_name = ?"
         internal fun path(id: String, root: String): String { requireId(id); require(root in collections); return "$root/OpenCineCam/OCC_TAKE_$id/" }
@@ -297,11 +388,33 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         fun begin(context: Context, destination: RecordingDestination = RecordingDestination.Phone): RecordingRecoveryGroup =
             RecordingCaptureRecovery(context).start(destination)
 
+        /** The trees of uncommitted drive takes in the journal, which recovery still needs the grants of ([journalledDriveTrees]). */
+        internal fun journalledTrees(context: Context): Set<String> =
+            journalledDriveTrees(File(context.applicationContext.noBackupFilesDir, DATABASE))
+
         /** Whether the volume with UUID [volume] is mounted read-write now. */
         internal fun volumeMounted(context: Context, volume: String): Boolean = runCatching {
             requireNotNull(context.getSystemService(StorageManager::class.java)).storageVolumes
                 .any { it.uuid.equals(volume, ignoreCase = true) && it.state == Environment.MEDIA_MOUNTED }
         }.getOrDefault(false)
+    }
+}
+
+/**
+ * The distinct `tree` of the uncommitted entries of the recovery journal [file] (recording or still: same table and
+ * columns), for [RecordingDestinationStore] to keep their grants. Takes no lock: SQLite serialises the read with a
+ * journal writer, so it is safe from any thread and under any lock. Never creates the journal: none, or one older than
+ * schema 2 (phone entries only), reads as empty. Never deletes one SQLite finds corrupt; the read fails instead.
+ */
+internal fun journalledDriveTrees(file: File): Set<String> {
+    if (!file.isFile) return emptySet()
+    // Read-write only so SQLite can roll back a writer's hot journal; no collator table is created.
+    return SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+        { throw IllegalStateException("Recovery journal is corrupt") }).use { db ->
+        if (db.version < 2) return@use emptySet()
+        db.rawQuery("SELECT DISTINCT tree FROM captures WHERE tree IS NOT NULL AND committed = 0", null).use { c ->
+            buildSet { while (c.moveToNext()) add(c.getString(0)) }
+        }
     }
 }
 

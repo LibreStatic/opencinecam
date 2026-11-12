@@ -4,10 +4,13 @@
 package com.librestatic.opencinecam.storage
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import androidx.core.content.edit
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import java.io.File
+import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -25,13 +28,27 @@ class RecordingDestinationStoreTest {
     private val probed = mutableListOf<Uri>()
     /** Every state the store asked the USB attach alias to take, in order. */
     private val attachHandler = mutableListOf<Boolean>()
+    /** Runs once inside the next probe, while the adoption waits on it. */
+    private var duringProbe: (() -> Unit)? = null
 
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        listOf(RECORDING_JOURNAL, STILL_JOURNAL).forEach { File(context.noBackupFilesDir, it).delete() }
     }
 
+    /** An uncommitted ([committed] 0) drive entry on [tree] in recovery journal [name], as a take or still group interrupted there leaves it. */
+    private fun journalled(name: String, tree: Uri, committed: Int = 0) =
+        SQLiteDatabase.openOrCreateDatabase(File(context.noBackupFilesDir, name), null).use { db ->
+            if (db.version == 0) {
+                db.execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL, tree TEXT, volume TEXT, folder TEXT)")
+                db.version = 2
+            }
+            db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, ?, ?, ?)",
+                arrayOf(UUID.randomUUID().toString(), committed, tree.toString(), volumeIdOfTree(tree)))
+        }
+
     private fun store() = RecordingDestinationStore(context,
-        probe = { tree -> probed += tree; probeResult },
+        probe = { tree -> probed += tree; duringProbe?.let { duringProbe = null; it() }; probeResult },
         driveAttachHandler = { enabled -> attachHandler += enabled })
 
     private fun held(tree: Uri) = context.contentResolver.persistedUriPermissions.any { it.uri == tree && it.isWritePermission }
@@ -162,6 +179,31 @@ class RecordingDestinationStoreTest {
     }
 
     @Test
+    fun aTreeWithAnInterruptedTakeJournalledOnItKeepsItsPermission() {
+        store().adopt(DRIVE)
+        // A take interrupted on the drive, deferred until it returns: recovery needs this grant then.
+        journalled(RECORDING_JOURNAL, DRIVE)
+        store().adopt(OTHER)
+        assertTrue(held(DRIVE))
+        // A receipt already committed needs nothing: switching away releases its tree.
+        journalled(RECORDING_JOURNAL, OTHER, committed = 1)
+        store().clear()
+        assertFalse(held(OTHER))
+        assertTrue(held(DRIVE))
+    }
+
+    @Test
+    fun aStillGroupKeepsItsTreeAndItsTwinUnderTheDrivesOtherName() {
+        store().adopt(DRIVE)
+        store().adopt(RENAMED)
+        journalled(STILL_JOURNAL, DRIVE)
+        store().clear()
+        // The journalled tree, and the same folder under the other volume name, which recovery resolves through.
+        assertTrue(held(DRIVE))
+        assertTrue(held(RENAMED))
+    }
+
+    @Test
     fun clearGoesBackToPhoneAndReleases() {
         store().adopt(DRIVE)
         store().setPolicy(DriveDisconnectPolicy.CONTINUE_ON_PHONE)
@@ -169,6 +211,54 @@ class RecordingDestinationStoreTest {
         assertEquals(RecordingDestination.Phone, store().configured())
         assertFalse(held(DRIVE))
         assertEquals(DriveDisconnectPolicy.CONTINUE_ON_PHONE, store().policy())
+    }
+
+    @Test
+    fun aClearDuringTheProbeWinsOverTheAdoption() {
+        store().adopt(DRIVE)
+        // The operator left the page mid-probe, came back and chose the phone before the probe finished.
+        duringProbe = { store().clear() }
+        assertEquals(RecordingFolderAdoption.Superseded, store().adopt(OTHER))
+        assertEquals(RecordingDestination.Phone, store().configured())
+        assertFalse(held(OTHER))
+        assertFalse(held(DRIVE))
+        assertEquals(listOf(true, false), attachHandler)
+    }
+
+    @Test
+    fun aLaterAdoptionDuringTheProbeWins() {
+        duringProbe = { store().adopt(OTHER) }
+        assertEquals(RecordingFolderAdoption.Superseded, store().adopt(DRIVE))
+        assertEquals(RecordingDestination.UsbFolder(OTHER, "1234-ABCD"), store().configured())
+        assertFalse(held(DRIVE))
+        assertTrue(held(OTHER))
+        // A superseded adoption of the tree the later one chose keeps its permission.
+        duringProbe = { store().adopt(DRIVE) }
+        assertEquals(RecordingFolderAdoption.Superseded, store().adopt(DRIVE))
+        assertEquals(RecordingDestination.UsbFolder(DRIVE, "FFF1-7571"), store().configured())
+        assertTrue(held(DRIVE))
+    }
+
+    @Test
+    fun aClearedStoreIsNotRevivedByAliasPromotion() {
+        store().adopt(DRIVE)
+        store().adopt(RENAMED)
+        store().clear()
+        assertEquals(ResolvedRecordingDestination(RecordingDestination.Phone, RecordingDestination.Phone, null), store().current(setOf("FFF1-7571")))
+        assertEquals(RecordingDestination.Phone, store().configured())
+        assertTrue(aliases().isEmpty())
+    }
+
+    @Test
+    fun usesTreeCoversTheTreeAndItsAliases() {
+        assertFalse(store().usesTree(DRIVE))
+        store().adopt(DRIVE)
+        store().adopt(RENAMED)
+        assertTrue(store().usesTree(RENAMED))
+        assertTrue(store().usesTree(DRIVE))
+        assertFalse(store().usesTree(OTHER))
+        store().clear()
+        assertFalse(store().usesTree(RENAMED))
     }
 
     @Test
@@ -350,6 +440,8 @@ class RecordingDestinationStoreTest {
         context.getSharedPreferences(RecordingDestinationStore.PREFS, Context.MODE_PRIVATE).getStringSet(RecordingDestinationStore.KEY_ALIASES, null).orEmpty()
 
     private companion object {
+        const val RECORDING_JOURNAL = "recording-recovery.sqlite"
+        const val STILL_JOURNAL = "still-recovery.sqlite"
         fun tree(id: String): Uri = Uri.parse("content://$EXTERNAL_STORAGE_AUTHORITY/tree/$id")
         val DRIVE = tree("FFF1-7571%3ARAW")
         /** The same drive, mounted by vold under its stable name after a mount was cut short. */

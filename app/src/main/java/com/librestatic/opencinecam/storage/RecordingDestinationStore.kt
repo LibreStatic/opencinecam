@@ -20,6 +20,8 @@ internal sealed interface RecordingFolderAdoption {
     /** [label] is the drive's name as the system describes it, or the folder's, when known. */
     data class Adopted(val volumeId: String, val label: String?) : RecordingFolderAdoption
     data class Rejected(val reason: RecordingFolderRejection) : RecordingFolderAdoption
+    /** A later [RecordingDestinationStore.adopt] or [RecordingDestinationStore.clear] ran meanwhile, and this one changed nothing. */
+    data object Superseded : RecordingFolderAdoption
 }
 
 /**
@@ -73,17 +75,20 @@ internal class RecordingDestinationStore(
             ?: return resolveRecordingDestination(RecordingDestination.Phone, mountedVolumeIds, true, driveArriving)
         val held = heldTrees()
         val usable = configured.treeUri in held && mountedVolumeIds.any { it.equals(configured.volumeId, ignoreCase = true) }
-        val resolved = if (usable) configured else promoteMountedAlias(mountedVolumeIds, held) ?: configured
-        return resolveRecordingDestination(resolved, mountedVolumeIds, resolved.treeUri in held, driveArriving)
+        // A tree promoteMountedAlias returns was held when it looked under the lock.
+        val promoted = if (usable) null else promoteMountedAlias(mountedVolumeIds)
+        val resolved = promoted ?: configured
+        return resolveRecordingDestination(resolved, mountedVolumeIds, promoted != null || configured.treeUri in held, driveArriving)
     }
 
     /**
      * Swaps in the first held alias whose volume is mounted, keeping the configured tree as an alias while its permission is
      * held; aliases whose permission went are dropped quietly. Null when no alias is mounted.
      */
-    private fun promoteMountedAlias(mountedVolumeIds: Set<String>, held: Set<Uri>): RecordingDestination.UsbFolder? = synchronized(ALIAS_LOCK) {
-        // Re-read under the lock: another caller may have promoted meanwhile.
+    private fun promoteMountedAlias(mountedVolumeIds: Set<String>): RecordingDestination.UsbFolder? = synchronized(ALIAS_LOCK) {
+        // Re-read under the lock: another caller may have promoted, adopted or cleared meanwhile.
         val primary = configured() as? RecordingDestination.UsbFolder ?: return null
+        val held = heldTrees()
         if (primary.treeUri in held && mountedVolumeIds.any { it.equals(primary.volumeId, ignoreCase = true) }) return primary
         val stored = aliases()
         if (stored.isEmpty()) return null
@@ -109,13 +114,15 @@ internal class RecordingDestinationStore(
      * tree gives its permission back; an adopted one replaces the previous tree, whose permission is
      * released unless the CinemaDNG export also uses it. A previous tree on the same drive under another volume name
      * ([sameDrive]) is kept as an alias instead; an alias under the new tree's volume name is replaced by it, and adopting
-     * another drive releases every alias.
+     * another drive releases every alias. When another [adopt] or a [clear] starts while this one probes, the later
+     * choice stands: this tree's permission is released unless shared and the result is [RecordingFolderAdoption.Superseded].
      */
     fun adopt(tree: Uri): RecordingFolderAdoption {
         val volume = when (val validation = validateRecordingTree(tree.authority, treeDocumentIdOf(tree))) {
             is TreeValidation.Rejected -> return RecordingFolderAdoption.Rejected(validation.reason)
             is TreeValidation.Ok -> validation.volumeId
         }
+        val choice = synchronized(ALIAS_LOCK) { ++generation }
         try {
             resolver.takePersistableUriPermission(tree, READ_WRITE)
         } catch (failure: SecurityException) {
@@ -126,20 +133,27 @@ internal class RecordingDestinationStore(
             releaseUnlessShared(tree)
             return RecordingFolderAdoption.Rejected(reason)
         }
-        val previous = preferences.getString(KEY_TREE, null)
         val label = driveLabel(volume) ?: folderLabel(tree)
-        val held = heldTrees()
-        // The previous tree and the aliases still held; one whose permission went is dropped quietly.
-        val candidates = (aliases() + setOfNotNull(previous)).filterTo(LinkedHashSet()) { it.toUri() in held } - tree.toString()
-        val keptAliases = keptDriveAliases(volume, preferences.getString(KEY_VOLUME, null), candidates)
-        preferences.edit {
-            putString(KEY_TREE, tree.toString())
-            putString(KEY_VOLUME, volume)
-            if (label != null) putString(KEY_LABEL, label) else remove(KEY_LABEL)
-            putAliases(keptAliases)
+        synchronized(ALIAS_LOCK) {
+            if (generation != choice) {
+                // The later choice may be this same folder, picked again: its permission then stays.
+                if (!usesTree(tree)) releaseUnlessShared(tree)
+                return RecordingFolderAdoption.Superseded
+            }
+            val previous = preferences.getString(KEY_TREE, null)
+            val held = heldTrees()
+            // The previous tree and the aliases still held; one whose permission went is dropped quietly.
+            val candidates = (aliases() + setOfNotNull(previous)).filterTo(LinkedHashSet()) { it.toUri() in held } - tree.toString()
+            val keptAliases = keptDriveAliases(volume, preferences.getString(KEY_VOLUME, null), candidates)
+            preferences.edit {
+                putString(KEY_TREE, tree.toString())
+                putString(KEY_VOLUME, volume)
+                if (label != null) putString(KEY_LABEL, label) else remove(KEY_LABEL)
+                putAliases(keptAliases)
+            }
+            (candidates - keptAliases).forEach { releaseUnlessShared(it.toUri()) }
+            syncDriveAttachHandler()
         }
-        (candidates - keptAliases).forEach { releaseUnlessShared(it.toUri()) }
-        syncDriveAttachHandler()
         return RecordingFolderAdoption.Adopted(volume, label)
     }
 
@@ -162,12 +176,21 @@ internal class RecordingDestinationStore(
 
     /** Back to the phone; the tree's permission and its aliases' go unless the CinemaDNG export also uses them. */
     fun clear() {
-        val previous = setOfNotNull(preferences.getString(KEY_TREE, null)) + aliases()
-        preferences.edit { remove(KEY_TREE); remove(KEY_VOLUME); remove(KEY_LABEL); remove(KEY_ALIASES) }
-        val held = heldTrees()
-        previous.filter { it.toUri() in held }.forEach { releaseUnlessShared(it.toUri()) }
-        syncDriveAttachHandler()
+        synchronized(ALIAS_LOCK) {
+            generation++
+            val previous = setOfNotNull(preferences.getString(KEY_TREE, null)) + aliases()
+            preferences.edit { remove(KEY_TREE); remove(KEY_VOLUME); remove(KEY_LABEL); remove(KEY_ALIASES) }
+            val held = heldTrees()
+            previous.filter { it.toUri() in held }.forEach { releaseUnlessShared(it.toUri()) }
+            syncDriveAttachHandler()
+        }
     }
+
+    /** Whether [tree] is the configured recording tree or one of its aliases, whose permission the destination needs. */
+    fun usesTree(tree: Uri): Boolean = tree.toString().let { it == preferences.getString(KEY_TREE, null) || it in aliases() }
+
+    /** Whether [tree]'s permission must stay held: the destination uses it ([usesTree]) or a journalled take waits on it. */
+    fun needsTree(tree: Uri): Boolean = usesTree(tree) || recoveryNeedsTree(tree)
 
     /**
      * Makes the USB attach alias match the configured destination: a candidate for USB drives only while one is the
@@ -190,13 +213,44 @@ internal class RecordingDestinationStore(
         if (aliases.isEmpty()) remove(KEY_ALIASES) else putStringSet(KEY_ALIASES, aliases)
     }
 
-    /** Releases [tree] unless it is the configured recording tree, one of its aliases or the CinemaDNG export's. */
+    /**
+     * Releases [tree] unless it is the configured recording tree, one of its aliases or the CinemaDNG export's, or recovery
+     * still needs it: an interrupted take or still group journalled on it, or on the same folder of the same drive under
+     * its other volume name ([sameDrive]), is deferred until its drive returns and is resolved with this grant. Such a
+     * grant then stays held once the entry is resolved. A journal that cannot be read keeps the grant.
+     */
     private fun releaseUnlessShared(tree: Uri) {
         val kept = setOfNotNull(preferences.getString(KEY_TREE, null),
             context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE).getString(CINEMADNG_EXPORT_TREE_KEY, null)) + aliases()
-        if (tree.toString() in kept) return
+        if (tree.toString() in kept || recoveryNeedsTree(tree)) return
         runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
             .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
+    }
+
+    /**
+     * Whether an interrupted take or still group is journalled on [tree], or on the same folder of the same drive under its
+     * other volume name, so recovery still needs the grant. True too when the journals cannot be read.
+     */
+    private fun recoveryNeedsTree(tree: Uri): Boolean {
+        // Lock-free reads (journalledDriveTrees), so this may run under ALIAS_LOCK without ordering against the journals' locks.
+        val journalled = try {
+            RecordingCaptureRecovery.journalledTrees(context) + StillCaptureRecovery.journalledTrees(context)
+        } catch (failure: Exception) {
+            Log.w(LOG_TAG, "The recovery journals could not be read: the folder permission is kept", failure)
+            return true
+        }
+        return journalled.any { it == tree.toString() || sameFolderOnDrive(it.toUri(), tree) }.also {
+            if (it) Log.i(LOG_TAG, "The folder permission is kept for an interrupted take still to recover")
+        }
+    }
+
+    /** Whether trees [a] and [b] are the same folder on the same drive under its two volume names. */
+    private fun sameFolderOnDrive(a: Uri, b: Uri): Boolean {
+        val idA = treeDocumentIdOf(a) ?: return false
+        val idB = treeDocumentIdOf(b) ?: return false
+        val volumeA = volumeIdOfDocumentId(idA) ?: return false
+        val volumeB = volumeIdOfDocumentId(idB) ?: return false
+        return a.authority == b.authority && sameDrive(volumeA, volumeB) && idA.substringAfter(':') == idB.substringAfter(':')
     }
 
     private fun driveLabel(volume: String): String? = runCatching {
@@ -217,8 +271,10 @@ internal class RecordingDestinationStore(
         const val KEY_ALIASES = "alias_trees"
         const val READ_WRITE = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         private const val LOG_TAG = "RecordingDestination"
-        /** Serialises alias promotion: [current] runs from several threads, each with its own store. */
+        /** Serialises changes to the tree and its aliases: [current] runs from several threads, each with its own store. */
         private val ALIAS_LOCK = Any()
+        /** Bumped by every [adopt] and [clear] under [ALIAS_LOCK], so an adoption whose probe outlived a later choice yields. */
+        private var generation = 0L
 
         /** Keyed by [driveIdentityOf]: a drive vold mounts under a suffixed name keeps its measurement. */
         fun speedKey(volume: String) = KEY_SPEED_PREFIX + driveIdentityOf(volume)

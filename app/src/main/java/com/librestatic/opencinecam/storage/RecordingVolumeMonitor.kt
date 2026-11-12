@@ -80,7 +80,7 @@ internal class VolumeEventTracker(initiallyMounted: Set<String> = emptySet()) {
 internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     private val context = context.applicationContext
     private val storage = requireNotNull(this.context.getSystemService(StorageManager::class.java))
-    private val tracker = VolumeEventTracker(removableVolumes().filter { it.second == Environment.MEDIA_MOUNTED }.mapTo(HashSet()) { it.first })
+    private val tracker = VolumeEventTracker(removableVolumes().orEmpty().filter { it.second == Environment.MEDIA_MOUNTED }.mapTo(HashSet()) { it.first })
     private val mountedState = MutableStateFlow(tracker.mountedVolumes)
     private val eventFlow = MutableSharedFlow<RecordingVolumeEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val unregister: () -> Unit
@@ -141,9 +141,9 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         return { runCatching { context.unregisterReceiver(receiver) } }
     }
 
-    /** Re-reads every removable volume; one missing from the list has been removed. */
+    /** Re-reads every removable volume; one missing from the list has been removed. A failed read changes nothing. */
     private fun rescan() {
-        val volumes = removableVolumes()
+        val volumes = removableVolumes() ?: return
         val present = volumes.mapTo(HashSet()) { it.first }
         volumes.forEach { (id, state) -> report(id, volumeStateKind(state)) }
         synchronized(tracker) { tracker.mountedVolumes }.filterNot { it in present }.forEach { report(it, VolumeStateKind.LEAVING) }
@@ -153,10 +153,10 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         intent.data?.path?.let { storage.getStorageVolume(File(it)) }?.uuid
     }.getOrNull()
 
-    /** Every removable volume with a UUID, upper case, and its state. */
-    private fun removableVolumes(): List<Pair<String, String>> = runCatching {
+    /** Every removable volume with a UUID, upper case, and its state; null when they could not be read. */
+    private fun removableVolumes(): List<Pair<String, String>>? = runCatching {
         storage.storageVolumes.mapNotNull { volume -> volume.uuid?.takeIf { volume.isRemovable }?.let { it.uppercase() to volume.state } }
-    }.onFailure { Log.w(LOG_TAG, "The storage volumes could not be read", it) }.getOrDefault(emptyList())
+    }.onFailure { Log.w(LOG_TAG, "The storage volumes could not be read", it) }.getOrNull()
 
     private companion object {
         const val LOG_TAG = "RecordingVolumeMonitor"

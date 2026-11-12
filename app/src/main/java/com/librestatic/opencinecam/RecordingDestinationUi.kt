@@ -179,6 +179,11 @@ internal class RecordingDestinationSettingsHolder(private val backend: Recording
             state = withContext(Dispatchers.IO) { backend.read() }.copy(rejection = result.reason)
             return@withContext
         }
+        if (result is RecordingFolderAdoption.Superseded) {
+            // A later choice (another folder, or the phone) stands and has told the service itself.
+            state = withContext(Dispatchers.IO) { backend.read() }
+            return@withContext
+        }
         state = withContext(Dispatchers.IO) { backend.read() }.copy(measuring = true)
         withContext(Dispatchers.IO) { onChanged() }
         measureAndPublish()

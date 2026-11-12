@@ -79,26 +79,39 @@ internal class WebDavMediaStoreArtifactSource(
                     override fun close() {
                         if (closed) return
                         closed = true
-                        driveHandle.unregister()
-                        if (closer.closed) throw WebDavSourceDriveAbsent()
-                        var failure: Throwable? = null
+                        // Registered until the descriptor is closed: the checks below still query the drive.
                         try {
-                            requireReadOnlyPreparedDescriptor(descriptor)
-                            val last = Os.fstat(descriptor.fileDescriptor)
-                            requireStat(descriptor, last, before.sizeBytes)
-                            if (!sameFile(first, last) || snapshot() != before ||
-                                !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
-                        } catch (problem: Throwable) { failure = problem }
-                        try { closer.close() } catch (problem: Throwable) {
-                            if (failure == null) failure = problem else failure.addSuppressed(problem)
+                            if (closer.closed) throw WebDavSourceDriveAbsent()
+                            var failure: Throwable? = null
+                            try {
+                                requireReadOnlyPreparedDescriptor(descriptor)
+                                val last = Os.fstat(descriptor.fileDescriptor)
+                                requireStat(descriptor, last, before.sizeBytes)
+                                if (!sameFile(first, last) || snapshot() != before ||
+                                    !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
+                            } catch (problem: Throwable) { failure = problem }
+                            if (closer.closed) {
+                                failure = driveReleasedOr(failure, released = true)
+                            } else {
+                                try { closer.close() } catch (problem: Throwable) {
+                                    if (failure == null) failure = problem else failure.addSuppressed(problem)
+                                }
+                            }
+                            failure?.let { throw it }
+                        } finally {
+                            driveHandle.unregister()
                         }
-                        failure?.let { throw it }
                     }
                 }
             } catch (failure: Throwable) {
-                driveHandle.unregister()
-                try { closer.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
-                throw failure
+                // Read before this close: already closed means the drive left during the checks.
+                val released = onDrive && closer.closed
+                try {
+                    try { closer.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+                } finally {
+                    driveHandle.unregister()
+                }
+                throw driveReleasedOr(failure, released) ?: failure
             }
         }
     }

@@ -31,10 +31,12 @@ internal fun executeDriveDelete(selected: LocalMediaTake, drive: DriveMediaCatal
     var results = confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }
     var error: String? = null
     var reservation: AutoCloseable? = null
+    var attempted = false
     try {
         reservation = reserve()
         val deletion = drive.deletionSnapshot(selected)
         var problem: String? = null
+        attempted = true
         try { android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder) }
         catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
         val reachable = deletion.docs.describe(deletion.docs.root) != null
@@ -49,7 +51,13 @@ internal fun executeDriveDelete(selected: LocalMediaTake, drive: DriveMediaCatal
         if (problem == null && deletion.docs.describe(deletion.folder) != null) problem = "The take folder remains on the drive"
         error = problem
     } catch (failure: Exception) {
-        error = failure.message ?: "Deletion preflight failed; no further files were attempted"
+        if (attempted) {
+            // The folder may be gone already: what the drive did is unknown, not "nothing deleted".
+            error = failure.message ?: "Deletion absence could not be verified"
+            results = results.map {
+                if (it.status == MediaDeleteStatus.NOT_ATTEMPTED) MediaDeleteFileResult(it.artifact, MediaDeleteStatus.UNKNOWN, error) else it
+            }
+        } else error = failure.message ?: "Deletion preflight failed; no further files were attempted"
     } finally {
         drive.invalidate()
         try { reservation?.close() } catch (failure: Exception) {

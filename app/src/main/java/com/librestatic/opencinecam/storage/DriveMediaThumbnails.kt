@@ -60,6 +60,8 @@ private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bi
         val preview = if (artifact.name.endsWith(".dng", ignoreCase = true)) exif?.thumbnailBitmap else null
         val decoded = preview ?: run {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            // ExifInterface read through a dup sharing this offset and left it past the header.
+            android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
             BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@run null
             var sample = 1
