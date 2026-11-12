@@ -215,6 +215,19 @@ class DriveMediaSafTest {
         assertEquals(fresh, cache.folders("drive", refresh = false) { error("The later listing is kept") })
     }
 
+    @Test fun ofTwoListingsRunningAtOnceTheOneStartedLastIsKept() {
+        val cache = DriveCatalogCache()
+        fun folder(id: String) = DriveFolder(Uri.parse("content://drive/$id"), id, recording = true, position = DrivePosition(1L, id))
+        val older = listOf(folder("A"))
+        val newer = listOf(folder("A"), folder("B"))
+        // The second refresh starts and finishes while the first is still reading the drive.
+        cache.folders("drive", refresh = true) {
+            assertEquals(newer, cache.folders("drive", refresh = true) { newer })
+            older
+        }
+        assertEquals(newer, cache.folders("drive", refresh = false) { error("The newer listing is kept") })
+    }
+
     @Test fun theListingIsReusedUntilRefreshedOrInvalidated() {
         val cache = DriveCatalogCache()
         recording("A001", 3_000_000)

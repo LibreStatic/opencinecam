@@ -349,20 +349,22 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
     private var folders: List<DriveFolder>? = null
     /** Counts [forget] and [invalidate]: a take or a listing whose read started before one of them is not kept. */
     private var generation = 0L
+    /** Counts the listings started: of two running at once, only the one started last is kept. */
+    private var listings = 0L
     private val takes = object : LinkedHashMap<String, DriveCatalogTake>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, DriveCatalogTake>?): Boolean = size > takeCapacity
     }
 
     /** The cached listing of [stamp] unless [refresh]; a listing that failed ([list] null) is not kept. */
     fun folders(stamp: String, refresh: Boolean, list: () -> List<DriveFolder>?): List<DriveFolder> {
-        val started = synchronized(this) {
+        val (started, listing) = synchronized(this) {
             if (stamp != this.stamp) { this.stamp = stamp; folders = null; takes.clear() }
             if (!refresh) folders?.let { return it }
-            generation
+            generation to ++listings
         }
         val listed = list()
-        // A listing that started before an invalidation may be older than the one kept since.
-        synchronized(this) { if (stamp == this.stamp && started == generation) folders = listed }
+        // A listing that started before an invalidation, or before another listing, may be older than the one kept since.
+        synchronized(this) { if (stamp == this.stamp && started == generation && listing == listings) folders = listed }
         return listed.orEmpty()
     }
 

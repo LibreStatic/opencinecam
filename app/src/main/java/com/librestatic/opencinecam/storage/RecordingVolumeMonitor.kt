@@ -84,6 +84,8 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     private val mountedState = MutableStateFlow(tracker.mountedVolumes)
     private val eventFlow = MutableSharedFlow<RecordingVolumeEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val unregister: () -> Unit
+    /** Counts the states the listener reported, under [tracker]'s lock: a rescan one of them overlapped is read again. */
+    private var reported = 0L
 
     val mounted: StateFlow<Set<String>> = mountedState.asStateFlow()
     val events: SharedFlow<RecordingVolumeEvent> = eventFlow.asSharedFlow()
@@ -100,10 +102,14 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         // ADR-0037: vold kills a process that still holds a descriptor on a leaving volume, so the take's write
         // descriptors close here, on the callback's thread, before the event waits behind the main queue.
         if (kind == VolumeStateKind.LEAVING) releaseDriveDescriptors(volumeId, "the drive is leaving")
-        publish(volumeId, kind)
+        synchronized(tracker) {
+            reported++
+            publish(volumeId, kind)
+        }
     }
 
-    private fun publish(volumeId: String, kind: VolumeStateKind) = synchronized(tracker) {
+    /** Under [tracker]'s lock. */
+    private fun publish(volumeId: String, kind: VolumeStateKind) {
         tracker.apply(volumeId, kind)?.let { event ->
             mountedState.value = tracker.mountedVolumes
             eventFlow.tryEmit(event)
@@ -143,12 +149,29 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         return { runCatching { context.unregisterReceiver(receiver) } }
     }
 
-    /** Re-reads every removable volume; one missing from the list has been removed. A failed read changes nothing. */
+    /**
+     * Re-reads every removable volume; one missing from the list has been removed. A failed read changes nothing. A read
+     * the listener overlapped (API 30+, where it runs on a binder thread) may be older than what it reported, so it is
+     * dropped and taken again; after [RESCAN_ATTEMPTS] the listener's reports stand.
+     */
     private fun rescan() {
-        val volumes = removableVolumes() ?: return
-        val present = volumes.mapTo(HashSet()) { it.first }
-        volumes.forEach { (id, state) -> report(id, volumeStateKind(state)) }
-        synchronized(tracker) { tracker.mountedVolumes }.filterNot { it in present }.forEach { report(it, VolumeStateKind.LEAVING) }
+        repeat(RESCAN_ATTEMPTS) {
+            val started = synchronized(tracker) { reported }
+            val volumes = removableVolumes() ?: return
+            val applied = synchronized(tracker) {
+                if (reported != started) return@synchronized false
+                val states = volumes.map { (id, state) -> id to volumeStateKind(state) }
+                val present = volumes.mapTo(HashSet()) { it.first }
+                val changes = states + tracker.mountedVolumes.filterNot { it in present }.map { it to VolumeStateKind.LEAVING }
+                changes.forEach { (id, kind) ->
+                    // As in report(): the descriptors close before the event is emitted.
+                    if (kind == VolumeStateKind.LEAVING) releaseDriveDescriptors(id, "the drive is leaving")
+                    publish(id, kind)
+                }
+                true
+            }
+            if (applied) return
+        }
     }
 
     private fun ejectingVolume(intent: Intent): String? = runCatching {
@@ -162,6 +185,7 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
 
     private companion object {
         const val LOG_TAG = "RecordingVolumeMonitor"
+        const val RESCAN_ATTEMPTS = 3
         val DIRECT = Executor { it.run() }
     }
 }

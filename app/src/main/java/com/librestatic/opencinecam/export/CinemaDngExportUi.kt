@@ -142,9 +142,7 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
         context.contentResolver.takePersistableUriPermission(tree, flags)
         val previous = preferences.getString(KEY_TREE, null)
         // The recording destination may use the same tree (or it as an alias), or an interrupted take may wait on it; its permission then stays.
-        if (previous != null && previous != tree.toString() && !RecordingDestinationStore(context).needsTree(previous.toUri())) {
-            runCatching { context.contentResolver.releasePersistableUriPermission(previous.toUri(), flags) }
-        }
+        if (previous != null && previous != tree.toString()) RecordingDestinationStore(context).releaseUnlessNeeded(previous.toUri())
         preferences.edit().putString(KEY_TREE, tree.toString()).apply()
         folder(tree)
     }.onFailure { Log.w("CinemaDngExport", "The folder permission could not be kept", it) }.getOrNull()

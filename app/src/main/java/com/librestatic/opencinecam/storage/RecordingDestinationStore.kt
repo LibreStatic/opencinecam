@@ -213,8 +213,23 @@ internal class RecordingDestinationStore(
     /** Whether [tree] is the configured recording tree or one of its aliases, whose permission the destination needs. */
     fun usesTree(tree: Uri): Boolean = tree.toString().let { it == preferences.getString(KEY_TREE, null) || it in aliases() }
 
-    /** Whether [tree]'s permission must stay held: the destination uses it ([usesTree]) or a journalled take waits on it. */
-    fun needsTree(tree: Uri): Boolean = usesTree(tree) || recoveryNeedsTree(tree)
+    /**
+     * Whether [tree]'s permission must stay held: the destination uses it ([usesTree]), an adoption is still probing it,
+     * or a journalled take waits on it.
+     */
+    fun needsTree(tree: Uri): Boolean = synchronized(ALIAS_LOCK) {
+        usesTree(tree) || tree.toString() in pendingAdoptions || recoveryNeedsTree(tree)
+    }
+
+    /**
+     * Releases [tree] for another owner of its grant (the CinemaDNG export leaving it) unless [needsTree]. The check and
+     * the release are one step against [adopt], which takes its grant and registers as pending under the same lock.
+     */
+    fun releaseUnlessNeeded(tree: Uri) = synchronized(ALIAS_LOCK) {
+        if (needsTree(tree)) return@synchronized
+        runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
+            .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
+    }
 
     /**
      * Makes the USB attach alias match the configured destination: a candidate for USB drives only while one is the
