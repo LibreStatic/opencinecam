@@ -47,6 +47,8 @@ data class ClipSidecarDocument(
     /** ADR-0011: `incomplete` on a take that was kept after a failure; absent on a complete take. */
     val takeStatus: String? = null,
     val failureReasons: List<String>? = null,
+    /** PLAN-072 Delivery 4: on a take that continues on the phone a drive take whose drive was lost; absent otherwise. */
+    val continuation: JsonObject? = null,
 )
 
 @Serializable
