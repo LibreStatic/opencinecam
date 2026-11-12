@@ -186,6 +186,21 @@ class DriveMediaSafTest {
         assertTrue(catalog().entries(refresh = true).isEmpty())
     }
 
+    @Test fun aTakeReadWhileItsFolderWasForgottenIsNotKept() {
+        recording("A001", 3_000_000)
+        val read = requireNotNull(catalog().entries(refresh = true).single().load())
+        val cache = DriveCatalogCache()
+        cache.folders("drive", refresh = false) { emptyList() }
+        val folder = DriveFolder(Uri.parse("content://drive/a"), "A", recording = true, position = DrivePosition(1L, "A"))
+        var loads = 0
+        // The folder's file is rewritten and forgotten while the first read is still running.
+        cache.take("drive", folder) { loads++; cache.forget("A"); read }
+        cache.take("drive", folder) { loads++; read }
+        assertEquals(2, loads)
+        cache.take("drive", folder) { loads++; read }
+        assertEquals(2, loads)
+    }
+
     @Test fun theListingIsReusedUntilRefreshedOrInvalidated() {
         val cache = DriveCatalogCache()
         recording("A001", 3_000_000)

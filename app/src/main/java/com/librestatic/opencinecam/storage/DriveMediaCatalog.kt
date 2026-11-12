@@ -347,6 +347,8 @@ internal data class DriveFolder(val uri: Uri, val documentId: String, val record
 internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
     private var stamp: String? = null
     private var folders: List<DriveFolder>? = null
+    /** Counts [forget] and [invalidate]: a take whose read started before one of them is not kept. */
+    private var generation = 0L
     private val takes = object : LinkedHashMap<String, DriveCatalogTake>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, DriveCatalogTake>?): Boolean = size > takeCapacity
     }
@@ -364,17 +366,20 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
 
     fun take(stamp: String, folder: DriveFolder, load: () -> DriveCatalogTake?): DriveCatalogTake? {
         val key = "${folder.documentId}|${folder.position.modifiedMillis}"
-        synchronized(this) { if (stamp == this.stamp) takes[key]?.let { return it } }
-        return load()?.also { found -> synchronized(this) { if (stamp == this.stamp) takes[key] = found } }
+        val started = synchronized(this) {
+            if (stamp == this.stamp) takes[key]?.let { return it }
+            generation
+        }
+        return load()?.also { found -> synchronized(this) { if (stamp == this.stamp && started == generation) takes[key] = found } }
     }
 
-    @Synchronized fun invalidate() { stamp = null; folders = null; takes.clear() }
+    @Synchronized fun invalidate() { stamp = null; folders = null; takes.clear(); generation++ }
 
     /**
      * Drops the takes kept for folder [documentId]: a file rewritten in place (from a computer) leaves the folder's last
      * change as it was, so its cached take would never be read again.
      */
-    @Synchronized fun forget(documentId: String) { takes.keys.removeAll { it.startsWith("$documentId|") } }
+    @Synchronized fun forget(documentId: String) { takes.keys.removeAll { it.startsWith("$documentId|") }; generation++ }
 
     companion object {
         val Shared = DriveCatalogCache()

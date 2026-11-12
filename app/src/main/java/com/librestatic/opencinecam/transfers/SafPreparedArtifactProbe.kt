@@ -4,12 +4,15 @@ package com.librestatic.opencinecam.transfers
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructStat
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
 import com.librestatic.opencinecam.storage.SafDocuments
 import com.librestatic.opencinecam.storage.SafRecordingRows
@@ -18,7 +21,6 @@ import com.librestatic.opencinecam.storage.driveFileRole
 import com.librestatic.opencinecam.storage.driveMime
 import com.librestatic.opencinecam.storage.externalStorageDocumentId
 import com.librestatic.opencinecam.storage.isDriveUri
-import com.librestatic.opencinecam.storage.useOnDrive
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.util.Locale
@@ -60,7 +62,20 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         } catch (missing: FileNotFoundException) {
             throw absentOr(resolver, uri, missing)
         } ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
-        return descriptor.useOnDrive(uri) {
+        // Held like useOnDrive, but a failure met on a descriptor DriveDescriptors released is the drive leaving.
+        val closer = CloseOnce(descriptor)
+        val handle = DriveDescriptors.registerDocument(uri, closer)
+        try {
+            return inspectOpened(descriptor, artifact, pending, before)
+        } catch (failure: Throwable) {
+            throw driveReleasedOr(failure, closer.closed) ?: failure
+        } finally {
+            try { closer.close() } finally { handle.unregister() }
+        }
+    }
+
+    private fun inspectOpened(descriptor: ParcelFileDescriptor, artifact: PreparedCaptureArtifact, pending: Boolean,
+        before: SafPreparedObservation): WebDavClipSnapshot = descriptor.let {
             requireReadOnlyPreparedDescriptor(it)
             val firstStat = Os.fstat(it.fileDescriptor)
             val firstSize = it.statSize
@@ -80,7 +95,6 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
                 mimeType = before.mimeType,
             )
         }
-    }
 
     private fun sameFileState(first: StructStat, last: StructStat): Boolean =
         first.st_dev == last.st_dev && first.st_ino == last.st_ino && first.st_mode == last.st_mode && first.st_nlink == last.st_nlink &&

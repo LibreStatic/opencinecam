@@ -91,7 +91,8 @@ internal class StillCaptureRecovery(context: Context,
                 // The drive's durable commit point: the folder no longer reads as in progress.
                 drive?.commit()
             } catch (failure: Throwable) {
-                try { discard(db, id) } catch (cleanup: Throwable) {
+                // An unconfirmed commit may have removed the marker: the files stay and recovery reads the drive.
+                if (failure !is StillCommitUnconfirmed) try { discard(db, id) } catch (cleanup: Throwable) {
                     if (cleanup !== failure) failure.addSuppressed(cleanup)
                 }
                 throw failure
@@ -321,6 +322,13 @@ internal class StillCaptureRecovery(context: Context,
 }
 
 /**
+ * The drive stopped answering right after a still group's marker was deleted, so whether the group is committed is
+ * unknown. Its files and journal entry stay: recovery prunes the entry when the marker is gone and discards the group
+ * when it is still there.
+ */
+internal class StillCommitUnconfirmed : IllegalStateException("Still group marker removal could not be confirmed")
+
+/**
  * PLAN-072: one still group on a drive, in its own folder `<tree>/OpenCineCam/Stills/<stem>/` (the provider may make it
  * `<stem> (1)`), where `<stem>` is the first file's name before its first dot. Files keep their final names from the
  * start. The hidden [SafRecordingRows.MARKER] in the folder is the group's IS_PENDING: it is created with the folder,
@@ -383,10 +391,14 @@ internal class SafStillRows(
 
     override fun delete(uri: String) { check(docs.delete(uri.toUri())) { "Still artifact compensation did not delete its document" } }
 
-    /** The group's durable commit point. [SafDocuments.delete] calls a document on an unplugged drive gone too, so the drive must still answer. */
+    /**
+     * The group's durable commit point. [SafDocuments.delete] calls a document on an unplugged drive gone too, so the
+     * drive must still answer; when it does not, the marker may or may not be gone ([StillCommitUnconfirmed]).
+     */
     fun commit() {
         val group = folder ?: return
-        check(docs.delete(markerOf(group)) && reachable()) { "Still group marker could not be removed" }
+        check(docs.delete(markerOf(group))) { "Still group marker could not be removed" }
+        if (!reachable()) throw StillCommitUnconfirmed()
     }
 
     /** Deletes the files, then the marker, then the folder: an interruption leaves the group pending for recovery. */

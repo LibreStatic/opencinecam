@@ -127,6 +127,17 @@ class SafPreparedArtifactProbeTest {
         assertEquals(0, DriveDescriptors.registered(volume))
     }
 
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aDriveReleasedDuringTheInspectionIsAnAbsentDrive() {
+        val volume = FakeExternalStorageProvider.VOLUME
+        ShadowFstatProbe.onFstat = { assertEquals(1, DriveDescriptors.releaseVolume(volume)) }
+        val failure = try {
+            runCatching { SafPreparedArtifactProbe(context.contentResolver).inspect(video, pending = false) }.exceptionOrNull()
+        } finally { ShadowFstatProbe.onFstat = null }
+        assertTrue(failure.toString(), failure is WebDavSourceDriveAbsent && failure.cause is ErrnoException)
+        assertEquals(0, DriveDescriptors.registered(volume))
+    }
+
     @Test fun aCheckThatMeetsAReleasedDescriptorIsAnAbsentDrive() {
         val changed = WebDavArtifactContentChanged()
         assertNull(driveReleasedOr(null, released = false))
