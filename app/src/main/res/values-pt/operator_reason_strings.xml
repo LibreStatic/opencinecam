@@ -11,4 +11,8 @@
     <string name="operator_reason_self_minimal">Desativado enquanto você se grava com controles mínimos.</string>
     <string name="operator_reason_no_exterior">Precisa da tela externa de um dobrável.</string>
     <string name="operator_reason_no_preset">Nenhum preset neste slot. Atribua um nas Configurações.</string>
+    <string name="operator_reason_no_zoom">Esta câmera não tem zoom.</string>
+    <string name="operator_reason_no_ev">Esta câmera não tem compensação de exposição.</string>
+    <string name="operator_reason_no_manual_exposure">Esta câmera define o ISO e o obturador sozinha.</string>
+    <string name="operator_reason_no_manual_focus">Esta câmera tem foco fixo.</string>
 </resources>

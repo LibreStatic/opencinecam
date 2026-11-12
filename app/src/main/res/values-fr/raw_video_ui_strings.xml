@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">Configuration vidéo RAW</string>
+    <string name="raw_video_automatic">Automatique</string>
+    <string name="raw_video_automatic_detail">Le débit qualifié le plus élevé</string>
+    <string name="raw_video_group_full">CAPTEUR ENTIER</string>
+    <string name="raw_video_group_crop">RECADRAGE CENTRAL</string>
+    <string name="raw_video_crop_note">Un recadrage n’enregistre que le centre du capteur : la même lecture, un champ de vision plus étroit.</string>
+    <string name="raw_video_config_frozen">La configuration se change entre deux prises.</string>
+    <string name="raw_video_rate">%1$d Mo/s</string>
+    <string name="raw_video_rate_and_time">%1$s · %2$s restantes</string>
+    <string name="raw_video_label_crop">%1$s · recadrage</string>
+    <string name="raw_video_label_compressed">Compressé</string>
+    <string name="raw_video_settings_active">Utilisée : %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">Aucune configuration n’est encore qualifiée sur cette caméra.</string>
+    <string name="raw_video_requalify">Qualifier à nouveau</string>
+    <string name="raw_video_requalify_note">Cela prend plusieurs minutes et la caméra n’est pas disponible pendant ce temps.</string>
+    <string name="raw_video_ring">TAMPON %1$d %%</string>
+    <string name="raw_video_frames">%1$d im.</string>
+    <string name="raw_video_ring_description">Tampon RAW rempli à %1$d %%, %2$d images écrites</string>
+    <string name="raw_video_config_help">La vidéo RAW enregistre chaque image sans compression dans Documents/OpenCineCam/RAW. Seules les tailles et cadences que ce téléphone a qualifiées sur son stockage sont proposées : chacune a réussi un long test de stockage et une prise réelle sans perdre d’image. Automatique choisit le débit qualifié le plus élevé. Un recadrage lit tout le capteur mais n’en enregistre que le centre, l’image est donc plus étroite. La durée indiquée correspond à l’espace libre à ce débit.</string>
+    <string name="gallery_raw_video">Vidéo RAW</string>
+    <string name="media_integrity_raw">Une prise OpenCine RAW. Le lecteur affiche un aperçu développé ; pour la qualité complète, copiez-la ou partagez-la vers un ordinateur et convertissez-la avec le convertisseur DNG de bureau.</string>
+    <string name="raw_video_audio_incomplete">Le son présente des coupures</string>
+    <string name="raw_video_risky_notice">Débit risqué : micro-saccades, latence ou fichier corrompu possibles</string>
+    <string name="raw_video_risky_label">%1$s, débit risqué</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · atteint %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Atteint %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">Le signe d’avertissement signale un débit risqué : le stockage est trop lent pour lui, une prise peut donc saccader, prendre du retard ou finir corrompue. Automatique ne le choisit jamais.</string>
+    <string name="raw_video_burst_minutes">%1$d min</string>
+    <string name="raw_video_burst_seconds">%1$d s</string>
+    <string name="raw_video_risky_notice_burst">Débit risqué : des images peuvent se perdre après environ %1$s (téléphone au repos)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">Compression RAW</string>
+    <string name="raw_compression_summary">Pour les configurations compressées</string>
+    <string name="raw_compression_lossless">Sans perte</string>
+    <string name="raw_video_label_near_lossless">Quasi sans perte</string>
+    <string name="raw_compression_help">S’applique aux configurations compressées. Sans perte conserve chaque valeur fournie par le capteur. Quasi sans perte regroupe les valeurs qui diffèrent de moins d’environ la moitié du bruit du capteur à l’ISO de l’image : l’écart reste caché dans le bruit et les fichiers sont encore plus petits, surtout en basse lumière. Les deux s’ouvrent dans la galerie, l’export CinemaDNG et les outils de bureau. Le temps restant suppose le même rapport prudent pour les deux.</string>
+</resources>

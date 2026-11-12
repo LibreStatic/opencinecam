@@ -203,8 +203,7 @@ internal fun InterviewOperatorControl(subject: SubjectDisplaySettings, modifier:
             Text(if (count == 0) position else stringResource(R.string.subject_interview_counter, index + 1, count),
                 color = Color(0xFFFFCF66), fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1,
                 modifier = Modifier.testTag("interview-operator-counter"))
-            if (count > 0) Text(subject.interviewQuestions[index], color = Color.White, fontSize = 13.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            if (count > 0) FitText(subject.interviewQuestions[index], color = Color.White, fontSize = 13.sp, maxLines = 1)
         }
         CineIconButton("interview-next", CineIcon.CHEVRON_RIGHT, R.string.subject_interview_next, Modifier.size(56.dp),
             enabled = index < count - 1) { step(1) }

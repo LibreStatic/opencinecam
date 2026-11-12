@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="lut_library_title">Biblioteca LUT de vista y grabación</string>
-    <string name="lut_library_help">Elegí explícitamente el dominio de entrada y el tipo de transformación; el nombre no determina ninguno. Sólo .cube 3D, 2–33 puntos por eje y hasta 2 MiB por archivo; 8 entradas / 16 MiB en total.</string>
+    <string name="lut_library_help">Elige explícitamente el dominio de entrada y el tipo de transformación; el nombre no determina ninguno. Sólo .cube 3D, 2–33 puntos por eje y hasta 2 MiB por archivo; 8 entradas / 16 MiB en total.</string>
     <string name="lut_preview_help">Las selecciones del operador y del sujeto sólo afectan sus vistas GPU independientes. La selección de grabación separada puede cambiar permanentemente los píxeles del video. Los instrumentos miden antes de la LUT. La salida usa códigos SDR, no HDR ni ACES. Todas las selecciones son locales y quedan fuera de los presets de cámara.</string>
     <string name="lut_name">Nombre en biblioteca (1–120 caracteres)</string>
     <string name="lut_kind">Tipo de transformación declarado</string>
@@ -19,9 +19,9 @@
     <string name="lut_delete_confirm">¿Quitar esta LUT? Se desactivarán las selecciones del operador, del sujeto y de grabación que la utilicen. Otras selecciones y los archivos ya guardados no cambian.</string>
     <string name="lut_cancel">Cancelar</string>
     <string name="lut_reset">Restablecer la biblioteca conservada</string>
-    <string name="lut_reset_confirm">¿Reemplazar la biblioteca conservada por una vacía? Esto elimina sus LUT originales y las tres selecciones locales. Exportá copias antes cuando estén disponibles.</string>
+    <string name="lut_reset_confirm">¿Reemplazar la biblioteca conservada por una vacía? Esto elimina sus LUT originales y las tres selecciones locales. Exporta copias antes cuando estén disponibles.</string>
     <string name="lut_corrupt">Biblioteca no disponible o dañada. Los bytes conservados no se borraron. Se suspende la activación de nuevas LUT hasta reabrirla o restablecerla explícitamente. Una grabación en curso conserva su configuración de archivo fijada.</string>
-    <string name="lut_error">La operación falló. Revisá los metadatos declarados, el formato, los límites y el almacenamiento. No se confirmó una importación ni exportación correcta.</string>
+    <string name="lut_error">La operación falló. Revisa los metadatos declarados, el formato, los límites y el almacenamiento. No se confirmó una importación ni exportación correcta.</string>
     <string name="lut_busy">Leyendo o escribiendo datos LUT…</string>
     <string name="lut_done">Operación completada</string>
     <string name="lut_empty">No hay LUT importadas</string>
@@ -45,7 +45,7 @@
     <string name="lut_recording_select">Seleccionar LUT para píxeles grabados…</string>
     <string name="lut_recording_selected">Selección de grabación (local, para próximas tomas)</string>
     <string name="lut_recording_disable">Desactivar LUT de archivo para próximas tomas</string>
-    <string name="lut_recording_confirm_help">¿Confirmás cambios permanentes en los píxeles? Esta LUT se integrará en las próximas grabaciones de video compatibles hasta desactivarla. Su efecto no se podrá quitar después de esos archivos. Es independiente de las vistas del operador y del sujeto; las fotos no cambian.</string>
+    <string name="lut_recording_confirm_help">¿Confirmas cambios permanentes en los píxeles? Esta LUT se integrará en las próximas grabaciones de video compatibles hasta desactivarla. Su efecto no se podrá quitar después de esos archivos. Es independiente de las vistas del operador y del sujeto; las fotos no cambian.</string>
     <string name="lut_recording_confirm">Confirmar LUT irreversible en archivo</string>
     <string name="lut_recording_status_disabled">Evidencia LUT de archivo: desactivada</string>
     <string name="lut_recording_status_waiting">Evidencia LUT de archivo: esperando aplicación nativa</string>
@@ -54,6 +54,6 @@
     <string name="lut_recording_status_failed">Evidencia LUT de archivo: falló; la selección no demuestra aplicación</string>
     <string name="lut_recording_pending">Hay un cambio de biblioteca pendiente para una próxima toma. El archivo actual conserva su configuración LUT fijada.</string>
     <string name="lut_recording_locked">Los controles LUT de archivo se bloquean durante la captura, preparación de grabación y finalización. Las selecciones de monitor siguen editables.</string>
-    <string name="lut_recording_library_unavailable">La biblioteca LUT todavía no está lista o no está disponible. Revisala o restablecela explícitamente en ajustes antes de grabar; su selección de archivo guardada no se omitirá silenciosamente.</string>
-    <string name="lut_recording_domain_mismatch">La entrada de la LUT de archivo no coincide con el dominio de señal de este modo. Elegí una LUT compatible o desactivala explícitamente antes de grabar.</string>
+    <string name="lut_recording_library_unavailable">La biblioteca LUT todavía no está lista o no está disponible. Revísala o restablécela explícitamente en ajustes antes de grabar; su selección de archivo guardada no se omitirá silenciosamente.</string>
+    <string name="lut_recording_domain_mismatch">La entrada de la LUT de archivo no coincide con el dominio de señal de este modo. Elige una LUT compatible o desactívala explícitamente antes de grabar.</string>
 </resources>

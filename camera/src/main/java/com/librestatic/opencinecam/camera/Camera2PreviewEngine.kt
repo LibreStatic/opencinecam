@@ -127,6 +127,8 @@ data class Camera2CameraDescriptor(
     val kelvinRange: IntRange? = null,
     /** SENSOR_INFO_PHYSICAL_SIZE in mm (width, height), when advertised. */
     val sensorSizeMm: Pair<Float, Float>? = null,
+    /** LENS_INFO_AVAILABLE_APERTURES as f-numbers; empty when not advertised. */
+    val aperturesFNumber: List<Float> = emptyList(),
     val tintSupported: Boolean = false,
     val availableAwbModes: Set<Int> = emptySet(),
     val exposureCapabilities: ExposureCapabilities = ExposureCapabilities(),
@@ -408,6 +410,25 @@ interface Camera2PreviewListener {
      */
     fun onPreviewGraphLoss(loss: PreviewGraphLoss) = Unit
     /**
+     * OCC-PLAN-071: the RAW_VIDEO graph could not be built ([reason] is [RawVideoReasons.GRAPH_REJECTED]).
+     * RAW is never dropped and no other take replaces it, so the service should mark the mode
+     * unavailable. Camera thread. The default reports it as a recoverable failure.
+     */
+    fun onRawVideoUnavailable(reason: String, message: String) = onFailure(reason, message, true)
+    /**
+     * A RAW take accepted by [Camera2PreviewEngine.startRawVideo] began: its consumer heard
+     * onRawTakeStarted. RAW thread (`occ-raw-video`). The RAW callbacks are separate from the
+     * recording ones because the engine owns no RAW output: the consumer finalizes the file.
+     */
+    fun onRawVideoStarted(config: RawVideoSessionConfig) = Unit
+    /** The sensor timestamp of the take's first RAW frame the consumer accepted. RAW thread. */
+    fun onRawVideoFirstFrame(sensorTimestampNs: Long) = Unit
+    /**
+     * The RAW take ended: [reason] null after [Camera2PreviewEngine.stopRawVideo], else a
+     * [RawVideoReasons] code. No consumer call follows it. Exactly once per accepted take. RAW thread.
+     */
+    fun onRawVideoStopped(reason: String?) = Unit
+    /**
      * A take that asked for HEVC records H.264 because the encoder refused the exact configuration
      * ([reason] is for logs); before [onRecordingStarted].
      */
@@ -476,6 +497,40 @@ class Camera2PreviewEngine(
     private val requestComposer = CaptureRequestComposer()
     private val imageThread = HandlerThread("OpenCineCamImage").apply { start() }
     private val imageHandler = Handler(imageThread.looper)
+    /** OCC-PLAN-071: the RAW_VIDEO reader thread; every consumer and RAW listener call runs here. */
+    private val rawVideoThread = HandlerThread("occ-raw-video").apply { start() }
+    private val rawVideoHandler = Handler(rawVideoThread.looper)
+    /**
+     * The RAW10 stream of a RAW_VIDEO session. Created and retired on cameraExecutor; its reader is
+     * drained, and finally closed, on [rawVideoHandler], so no image is closed under a consumer copy.
+     */
+    private class RawVideoStream(
+        val config: RawVideoSessionConfig,
+        val reader: ImageReader,
+        val surface: Surface,
+        val cameraId: String,
+        val characteristics: CameraCharacteristics,
+        /** The stream's camera; its sensor orientation gives the take's orientation at take start. */
+        val descriptor: Camera2CameraDescriptor,
+        val listener: Camera2PreviewListener,
+        /** The RAW10 minimum frame duration declared at the stream's size; null when the camera declares none. */
+        val declaredMinFrameDurationNs: Long?,
+        /** The device profile asks for the Qualcomm RAW frame-rate override ([QtiRawFrameRate]) on this camera. */
+        val qtiFrameRateOverride: Boolean,
+    ) {
+        /** cameraExecutor: the session whose repeating request targets [surface]. */
+        var session: CameraCaptureSession? = null
+        /** True once the repeating request (with [surface]) runs; takes are admitted only then. */
+        @Volatile var live = false
+    }
+    private class RawTake(val stream: RawVideoStream, val consumer: RawVideoFrameConsumer) {
+        /** RAW thread only. */
+        val state = RawVideoTakeState()
+    }
+    /** The RAW_VIDEO session the current startPreview asked for; null in every other mode. */
+    @Volatile private var activeRawVideo: RawVideoSessionConfig? = null
+    @Volatile private var rawVideoStream: RawVideoStream? = null
+    private val rawTake = java.util.concurrent.atomic.AtomicReference<RawTake?>(null)
     @Volatile private var generation = 0L
     private var camera: CameraDevice? = null
     private var session: CameraCaptureSession? = null
@@ -1368,6 +1423,13 @@ class Camera2PreviewEngine(
         lowLightAutoFps: Boolean = false,
         fpsLock: Boolean = false,
         lensLock: LensLockBinding? = null,
+        /**
+         * OCC-PLAN-071: build the RAW_VIDEO session, the GPU video viewfinder plus a RAW10 stream at
+         * this size and frame rate ([targetFps] and [gpuPreview] are implied). Takes then run
+         * through [startRawVideo]; [startVideo] is refused. A graph that cannot carry RAW is
+         * reported through [Camera2PreviewListener.onRawVideoUnavailable], never run without it.
+         */
+        rawVideo: RawVideoSessionConfig? = null,
     ) {
         if (disposed.get()) return
         if (appContext.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -1458,14 +1520,22 @@ class Camera2PreviewEngine(
                 this.displayRotationDegrees = displayRotationDegrees
                 this.logPreviewEnabled = openCineLog
                 this.logViewAssistEnabled = viewAssist
+                if (rawVideo != null && openCineLog) {
+                    activeRawVideo = null
+                    listener.onRawVideoUnavailable(RawVideoReasons.GRAPH_REJECTED, "RAW video does not run on the OCLog graph.")
+                    return@Runnable
+                }
+                this.activeRawVideo = rawVideo
                 // Night photo hands the viewfinder surface straight to the extension session, so it
                 // never shares a graph with the GPU monitor, video or LOG paths.
                 val nightRequested = nightExtensionEngaged(nightExtension, Build.VERSION.SDK_INT, descriptor.nightExtension) &&
-                    !openCineLog && videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG
-                this.gpuPhotoPreviewEnabled = gpuPhotoPreview && gpuPreview && !openCineLog && !nightRequested
+                    !openCineLog && videoProfile == null && logProfile == null && stillFormat == StillPhotoFormat.JPEG && rawVideo == null
+                this.gpuPhotoPreviewEnabled = gpuPhotoPreview && gpuPreview && !openCineLog && !nightRequested && rawVideo == null
                 // A photographic GPU monitor retains regular still readers, not a video/HFR graph.
                 this.activeVideoProfile = if (gpuPhotoPreviewEnabled) null
                     else videoProfile?.takeIf { it in descriptor.videoProfiles }
+                        // Constrained high-speed sessions refuse RAW (PLAN-071).
+                        ?.takeUnless { rawVideo != null && it.constrainedHighSpeed }
                 this.activeLogProfile = if (openCineLog) {
                     logProfile?.takeIf { it in descriptor.logProfiles }
                         ?: preferredLogProfile(descriptor.logProfiles, targetFps)
@@ -1473,7 +1543,9 @@ class Camera2PreviewEngine(
                 val supportedFps = activeLogProfile?.let { listOf(it.fps) }
                     ?: activeVideoProfile?.let { listOf(it.fps) }
                     ?: descriptor.availableFixedFps
-                this.requestedTargetFps = targetFps.takeIf { it in supportedFps }
+                // RAW_VIDEO runs at its qualified rate, which may lie outside the advertised fixed
+                // rates (the S24 delivers 60 fps RAW10 while claiming 30); the graph pre-check decides.
+                this.requestedTargetFps = rawVideo?.fps ?: targetFps.takeIf { it in supportedFps }
                     ?: preferredTargetFps(supportedFps)
                 val highSpeedProfile = activeLogProfile?.takeIf { it.constrainedHighSpeed }?.let {
                     Camera2VideoProfile(it.size, it.fps, true)
@@ -1495,12 +1567,12 @@ class Camera2PreviewEngine(
                 this.effectiveFps = null
                 this.fpsLockRequested = fpsLock
                 this.dynamicFpsOn = DynamicFps.enabled(
-                    lowLightAutoFps && descriptor.lowLightAutoFps,
+                    lowLightAutoFps && descriptor.lowLightAutoFps && rawVideo == null,
                     // The service offers it for regular VIDEO only; LOG/HLG and constrained HFR are refused here too.
                     DynamicFps.allowed(videoMode = true, logGraph = openCineLog,
                         constrainedHighSpeed = activeVideoProfile?.constrainedHighSpeed == true),
                 )
-                this.gpuPreviewEnabled = gpuPreview && !openCineLog && !nightRequested
+                this.gpuPreviewEnabled = (gpuPreview || rawVideo != null) && !openCineLog && !nightRequested
                 var analysisPipeline: OpenCineLogGpuPipeline? = null
                 if (openCineLog) {
                     val selectedLogProfile = activeLogProfile
@@ -1587,6 +1659,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                endTakeOnCameraLoss(RawVideoReasons.CAMERA_DISCONNECTED)
                                 listener.onFailure("camera-disconnected", "The selected camera disconnected.", true)
                             }
                         }
@@ -1596,6 +1669,7 @@ class Camera2PreviewEngine(
                             closeCameraDevice(device)
                             if (currentGeneration == generation) {
                                 camera = null
+                                endTakeOnCameraLoss(RawVideoReasons.CAMERA_ERROR)
                                 if (withdrawLensLock(LensLockUnavailable.OPEN_FAILED)) return
                                 listener.onFailure("camera-open-$error", "The selected camera could not be opened.", true)
                             }
@@ -1822,22 +1896,34 @@ class Camera2PreviewEngine(
     private fun configureGpuPreviewSession(device: CameraDevice, descriptor: Camera2CameraDescriptor, pipeline: OpenCineLogGpuPipeline, currentGeneration: Long) {
         val constrained = activeVideoProfile?.constrainedHighSpeed == true
         val input = pipeline.cameraInputSurface
+        // OCC-PLAN-071: RAW_VIDEO adds its RAW10 reader beside the GPU input; startPreview never
+        // pairs it with a constrained high-speed profile.
+        val rawConfig = activeRawVideo?.takeIf { !constrained }
+        val rawStream = if (rawConfig != null) openRawVideoStream(descriptor, rawConfig) ?: return else null
         fun sessionException(failure: Throwable) {
+            if (rawStream != null) retireRawVideoStream(rawStream, RawVideoReasons.SESSION_CLOSED)
             if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
-            listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
+            if (rawStream != null) rawVideoUnavailable("The camera rejected the RAW video stream: ${failure.message ?: failure.javaClass.simpleName}")
+            else listener?.onFailure("video-preview-gpu-session-exception", failure.message ?: "The GPU preview stream could not be created.", true)
         }
         val output = sessionOutput(input, ::sessionException) ?: return
         if (!constrained) applyStreamUse(output, descriptor, StreamRole.PREVIEW_AND_RECORDING)
+        val rawOutput = rawStream?.let { sessionOutput(it.surface, ::sessionException) ?: return }
         val configuration = SessionConfiguration(
             if (constrained) SessionConfiguration.SESSION_HIGH_SPEED else SessionConfiguration.SESSION_REGULAR,
-            listOf(output), cameraExecutor,
+            listOfNotNull(output, rawOutput), cameraExecutor,
             object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
-                    if (currentGeneration != generation || logPipeline !== pipeline || !gpuPreviewEnabled) { configured.close(); return }
+                    if (currentGeneration != generation || logPipeline !== pipeline || !gpuPreviewEnabled ||
+                        rawStream != null && rawVideoStream !== rawStream) { configured.close(); return }
                     session = configured
+                    rawStream?.session = configured
                     try {
                         val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(input)
+                            // The RAW10 surface stays a target for the whole session, so the stream is
+                            // warm when a take starts; between takes the reader closes every image.
+                            rawStream?.let { addTarget(it.surface) }
                             if (constrained) { applyEngineRequest(EngineRequestMode.HIGH_SPEED_PREVIEW); applyHighSpeedControls(this) } else {
                                 applyEngineRequest(EngineRequestMode.VIDEO_RECORD)
                                 applyTargetFps(this, descriptor)
@@ -1850,24 +1936,272 @@ class Camera2PreviewEngine(
                             val highSpeed = configured as CameraConstrainedHighSpeedCaptureSession
                             highSpeed.setRepeatingBurstRequests(highSpeed.createHighSpeedRequestList(builder.build()), cameraExecutor, callback)
                         } else configured.setPhotoAwareRepeatingRequest(builder.build(), cameraExecutor, callback)
+                        rawStream?.live = true
                         notifyZoomRange()
                     } catch (failure: Throwable) {
+                        if (rawStream != null) retireRawVideoStream(rawStream, RawVideoReasons.SESSION_CLOSED)
                         if (withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
-                        listener?.onFailure("video-preview-gpu-request-failed", failure.message ?: "GPU preview request failed.", true)
+                        if (rawStream != null) rawVideoUnavailable("The camera refused the RAW video request: ${failure.message ?: failure.javaClass.simpleName}")
+                        else listener?.onFailure("video-preview-gpu-request-failed", failure.message ?: "GPU preview request failed.", true)
                     }
                 }
                 override fun onConfigureFailed(configured: CameraCaptureSession) {
                     configured.close()
-                    if (currentGeneration == generation && !withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
+                    if (rawStream != null) retireRawVideoStream(rawStream, RawVideoReasons.SESSION_CLOSED)
+                    if (currentGeneration != generation || withdrawLensLock(LensLockUnavailable.CONFIGURE_FAILED)) return
+                    // ADR-0019: no retry without RAW; the service marks the mode unavailable.
+                    if (rawStream != null) rawVideoUnavailable("The camera rejected the GPU viewfinder with a RAW10 stream.")
+                    else listener?.onFailure("video-preview-gpu-session-failed", "The camera rejected the GPU preview stream.", true)
+                }
+                override fun onClosed(configured: CameraCaptureSession) {
+                    // The engine retires the stream before it closes or replaces a session itself, so a
+                    // close that finds the stream still bound is the session dying under it.
+                    if (rawStream != null && rawVideoStream === rawStream && rawStream.session === configured) {
+                        retireRawVideoStream(rawStream, RawVideoReasons.SESSION_LOST)
+                    }
                 }
             },
         )
         try {
-            configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD)
+            // The AE range is a session key: configured without it, the Razr's HAL reconfigures on the
+            // first request and then skips about one frame in six at 60 fps (PLAN-071 device probe).
+            val rawAeRange = if (rawStream != null) rawVideoFrameRatePlanFor(descriptor).aeRange?.let { (lower, upper) -> Range(lower, upper) } else null
+            configureProcessingSession(configuration, device, CameraDevice.TEMPLATE_RECORD, rawAeRange)
             createSessionRetryingWithoutStreamUse(device, descriptor, configuration)
         } catch (failure: Exception) {
             sessionException(failure)
         }
+    }
+
+    /**
+     * cameraExecutor: the RAW10 reader of a RAW_VIDEO session, after the graph pre-check. Null (and
+     * reported through [Camera2PreviewListener.onRawVideoUnavailable]) when the camera cannot carry
+     * [config]. Any stream left from an earlier session of this camera is retired first.
+     */
+    private fun openRawVideoStream(descriptor: Camera2CameraDescriptor, config: RawVideoSessionConfig): RawVideoStream? {
+        rawVideoStream?.let { retireRawVideoStream(it, RawVideoReasons.SESSION_CLOSED) }
+        val owner = listener ?: return null
+        val characteristics = try {
+            manager.getCameraCharacteristics(descriptor.cameraId)
+        } catch (failure: Exception) {
+            rawVideoUnavailable("Camera ${descriptor.cameraId} characteristics are unavailable: ${failure.message}")
+            return null
+        }
+        val streamMap = runCatching { characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }.getOrNull()
+        val raw10Sizes = runCatching {
+            streamMap?.getOutputSizes(ImageFormat.RAW10)?.map { it.width to it.height }
+        }.getOrNull().orEmpty()
+        val fpsRanges = descriptor.targetFpsRanges.map { it.lower to it.upper }
+        val decision = rawVideoGraphDecision(config, raw10Sizes, fpsRanges)
+        if (decision is RawVideoGraphDecision.Rejected) {
+            Log.w(TAG, "RAW video graph rejected on camera ${descriptor.cameraId}: ${decision.detail}")
+            rawVideoUnavailable(decision.detail)
+            return null
+        }
+        val reader = try {
+            ImageReader.newInstance(config.rawWidth, config.rawHeight, ImageFormat.RAW10, RAW_VIDEO_MAX_IMAGES)
+        } catch (failure: RuntimeException) {
+            rawVideoUnavailable("The RAW10 reader could not be created: ${failure.message}")
+            return null
+        }
+        val declaredMinFrameDurationNs = runCatching {
+            streamMap?.getOutputMinFrameDuration(ImageFormat.RAW10, Size(config.rawWidth, config.rawHeight))
+        }.getOrNull()?.takeIf { it > 0 }
+        val qtiOverride = deviceQuirks.resolve(descriptor.quirkCameraId).applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE)
+        val stream = RawVideoStream(
+            config, reader, reader.surface, descriptor.cameraId, characteristics, descriptor, owner, declaredMinFrameDurationNs, qtiOverride,
+        )
+        reader.setOnImageAvailableListener({ drainRawVideoReader(stream) }, rawVideoHandler)
+        rawVideoStream = stream
+        val plan = rawVideoFrameRatePlan(fpsRanges, config.fps, declaredMinFrameDurationNs, qtiOverride)
+        Log.i(TAG, "RAW video stream ${config.rawWidth}x${config.rawHeight} @${config.fps} on camera ${descriptor.cameraId}, " +
+            "graph range ${(decision as RawVideoGraphDecision.Accepted).fpsRange}, AE range ${plan.aeRange}, " +
+            "declared min frame ${declaredMinFrameDurationNs} ns, QTI override ${plan.vendorFrameDurationNs ?: "off"}")
+        return stream
+    }
+
+    /** cameraExecutor: reports the RAW_VIDEO graph as unavailable; RAW is never silently dropped. */
+    private fun rawVideoUnavailable(message: String) {
+        listener?.onRawVideoUnavailable(RawVideoReasons.GRAPH_REJECTED, message)
+    }
+
+    /**
+     * cameraExecutor: unbinds [stream]; its take, if any, ends with [reason] as a stream failure,
+     * and the reader closes on the RAW thread after any consumer call in progress. Idempotent.
+     */
+    private fun retireRawVideoStream(stream: RawVideoStream, reason: String) {
+        stream.live = false
+        if (rawVideoStream !== stream) return
+        rawVideoStream = null
+        stream.session = null
+        val retire = Runnable {
+            rawTake.get()?.takeIf { it.stream === stream }?.let { endRawTake(it, reason, streamFailure = true) }
+            stream.reader.setOnImageAvailableListener(null, null)
+            runCatching { stream.reader.close() }
+        }
+        if (!rawVideoHandler.post(retire)) retire.run()
+    }
+
+    /** Camera loss ends a RAW take with [reason] before any generic failure handling runs. */
+    private fun endRawTakeOnCameraLoss(reason: String) {
+        val stream = rawVideoStream ?: return
+        stream.live = false
+        val take = rawTake.get()?.takeIf { it.stream === stream } ?: return
+        rawVideoHandler.post { endRawTake(take, reason, streamFailure = true) }
+    }
+
+    /**
+     * RAW thread: drains [stream]'s reader in order. A take's frames go to its consumer, which copies
+     * them; every image is closed right after, and between takes at once. Never acquireLatestImage:
+     * a take must see every frame (ADR-0019).
+     */
+    private fun drainRawVideoReader(stream: RawVideoStream) {
+        while (true) {
+            val image = try { stream.reader.acquireNextImage() } catch (_: IllegalStateException) { null } ?: return
+            val take = rawTake.get()?.takeIf { it.stream === stream }
+            if (take == null) { image.close(); continue }
+            val timestampNs = image.timestamp
+            val outcome = try {
+                take.state.onFrame(timestampNs) { take.consumer.onRawFrame(image) }
+            } finally {
+                image.close()
+            }
+            when (outcome) {
+                is RawVideoTakeState.FrameOutcome.Delivered -> if (outcome.first) {
+                    runCatching { take.stream.listener.onRawVideoFirstFrame(timestampNs) }
+                }
+                is RawVideoTakeState.FrameOutcome.Ended -> settleRawTake(take, outcome.ending)
+                RawVideoTakeState.FrameOutcome.Discarded -> Unit
+            }
+        }
+    }
+
+    /**
+     * RAW thread: ends [take] with [reason] unless its ending is already decided; a stream failure or
+     * a consumer fault also cuts a pending result drain short (see [RawVideoTakeState]).
+     */
+    private fun endRawTake(take: RawTake, reason: String?, streamFailure: Boolean) {
+        val ending = take.state.end(reason, streamFailure) ?: return
+        settleRawTake(take, ending)
+    }
+
+    /**
+     * RAW thread: [take]'s ending was just decided. It finishes now, or, while it drains the results
+     * of its delivered frames, when [forwardRawResult] sees the last one or the drain times out.
+     * [take] stays in [rawTake] meanwhile, so no other take starts and no frame is taken.
+     */
+    private fun settleRawTake(take: RawTake, ending: RawTakeEnding) {
+        if (take.state.settled) {
+            finishRawTake(take, ending)
+            return
+        }
+        Log.i(TAG, "RAW take ending: reason=${ending.reason ?: "stop"} frames=${take.state.framesDelivered}; draining results")
+        // A no-op once the drain is over: drainTimedOut then returns null.
+        rawVideoHandler.postDelayed({ take.state.drainTimedOut()?.let { finishRawTake(take, it) } }, RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS)
+    }
+
+    /** RAW thread: [take] is over; called exactly once, when its state settled. The consumer hears nothing after. */
+    private fun finishRawTake(take: RawTake, ending: RawTakeEnding) {
+        rawTake.compareAndSet(take, null)
+        Log.i(TAG, "RAW take ended: reason=${ending.reason ?: "stop"} frames=${take.state.framesDelivered}")
+        if (ending.notifyStreamFailure) {
+            runCatching { take.consumer.onRawStreamFailed(requireNotNull(ending.reason)) }
+                .onFailure { Log.w(TAG, "RAW consumer failed in onRawStreamFailed", it) }
+        }
+        runCatching { take.stream.listener.onRawVideoStopped(ending.reason) }
+    }
+
+    /**
+     * cameraExecutor: hands a repeating-request result to the take on the RAW thread, while it is
+     * active and, once it ended, while it drains the results of the frames it delivered; the result
+     * of its last frame (or a later one) finishes it.
+     */
+    private fun forwardRawResult(result: TotalCaptureResult) {
+        val take = rawTake.get() ?: return
+        rawVideoHandler.post {
+            if (rawTake.get() !== take) return@post
+            val sensorTimestampNs = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
+            when (val outcome = take.state.onResult(sensorTimestampNs)) {
+                RawVideoTakeState.ResultOutcome.Discarded -> Unit
+                is RawVideoTakeState.ResultOutcome.Finished -> finishRawTake(take, outcome.ending)
+                is RawVideoTakeState.ResultOutcome.Forward -> {
+                    val failed = try {
+                        take.consumer.onRawResult(result)
+                        false
+                    } catch (failure: Exception) {
+                        Log.w(TAG, "RAW consumer failed in onRawResult", failure)
+                        true
+                    }
+                    when {
+                        outcome.finish != null -> finishRawTake(take, outcome.finish)
+                        failed -> endRawTake(take, RawVideoReasons.CONSUMER_FAILED, streamFailure = false)
+                    }
+                }
+            }
+        }
+    }
+
+    /** cameraExecutor: a lost buffer on the RAW10 surface is a missing frame, which ends the take. */
+    private fun noteRawBufferLost(target: Surface) {
+        val stream = rawVideoStream ?: return
+        if (target !== stream.surface) return
+        val take = rawTake.get()?.takeIf { it.stream === stream } ?: return
+        Log.w(TAG, "RAW10 buffer lost during a take")
+        rawVideoHandler.post { endRawTake(take, RawVideoReasons.FRAME_LOST, streamFailure = true) }
+    }
+
+    /**
+     * OCC-PLAN-071: starts a RAW take on the live RAW_VIDEO session. False when no RAW stream runs,
+     * a take is already active or a video take records. On true the take is accepted: [consumer]
+     * hears onRawTakeStarted and then every frame and result on the `occ-raw-video` thread, and the
+     * take ends exactly once with [Camera2PreviewListener.onRawVideoStopped]; a stream failure is
+     * also told to [consumer] through onRawStreamFailed, before that. A take that ended while the
+     * camera keeps running (stop, full ring) first drains the results of its delivered frames, up to
+     * [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS]; until it stopped, this returns false.
+     */
+    fun startRawVideo(consumer: RawVideoFrameConsumer): Boolean {
+        if (disposed.get() || recording) return false
+        val stream = rawVideoStream ?: return false
+        if (!stream.live) return false
+        val take = RawTake(stream, consumer)
+        if (!rawTake.compareAndSet(null, take)) return false
+        val begin = Runnable {
+            if (rawTake.get() !== take) return@Runnable
+            if (!stream.live || rawVideoStream !== stream) {
+                endRawTake(take, RawVideoReasons.SESSION_CLOSED, streamFailure = true)
+                return@Runnable
+            }
+            if (!take.state.begin()) return@Runnable
+            try {
+                // The same clockwise rotation ordinary video gives MediaRecorder as its orientation hint.
+                val orientation = jpegOrientation(stream.descriptor)
+                consumer.onRawTakeStarted(stream.cameraId, stream.characteristics, stream.config, orientation)
+            } catch (failure: Exception) {
+                Log.w(TAG, "RAW consumer failed in onRawTakeStarted", failure)
+                endRawTake(take, RawVideoReasons.CONSUMER_FAILED, streamFailure = false)
+                return@Runnable
+            }
+            runCatching { stream.listener.onRawVideoStarted(stream.config) }
+        }
+        if (!rawVideoHandler.post(begin)) {
+            rawTake.compareAndSet(take, null)
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Ends the active RAW take, if any; frames already queued before the stop still reach the
+     * consumer, later ones do not. The capture results of the delivered frames still follow: the
+     * take completes once the last frame's result went through (or a later result shows it was
+     * lost, or [RAW_TAKE_RESULT_DRAIN_TIMEOUT_MS] passed), so its last frame keeps its metadata.
+     * Completion is [Camera2PreviewListener.onRawVideoStopped] with the take's reason (null for
+     * this stop), after which the consumer gets no further call. The RAW stream keeps running for
+     * the next take.
+     */
+    fun stopRawVideo() {
+        val take = rawTake.get() ?: return
+        rawVideoHandler.post { endRawTake(take, null, streamFailure = false) }
     }
 
     /** Starting/stopping the encoder leaves the preview camera session and subject leases intact. */
@@ -1920,6 +2254,7 @@ class Camera2PreviewEngine(
                     recording = false
                     timelapseTake = false
                     reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                    settleOutputRetirements()
                 }
             })
     }
@@ -4032,6 +4367,8 @@ class Camera2PreviewEngine(
         videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
     ): Boolean {
         if (disposed.get() || gpuPhotoPreviewEnabled || bracketRequest.get() != null || accumulationRequest.get() != null || burstRequest.get() != null) return false
+        // RAW_VIDEO never falls back to an encoded take (ADR-0019); its takes go through startRawVideo.
+        if (activeRawVideo != null) return false
         require(outputFrameRate == null || (captureRate != null && outputFrameRate > 0))
         recorderCodecFallback = null
         require(separateAudioClock == null || audio == null && timelapse == null && projectRateOverride == null && recordingGeometry != null && captureRate == null)
@@ -4287,6 +4624,7 @@ class Camera2PreviewEngine(
                                 }
                             }
                             reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                            settleOutputRetirements()
                         }
                     },
                 )
@@ -4295,6 +4633,7 @@ class Camera2PreviewEngine(
                     logPipeline = null
                     passthroughVideoPipeline = false
                     recording = false
+                    settleOutputRetirements()
                     // Still this generation's take (checked above on this executor): the caller was
                     // already told `true`, so a rejected start must terminate it via onFailure.
                     if (!pipelineFailureReported.get()) {
@@ -4309,6 +4648,7 @@ class Camera2PreviewEngine(
                 logPipeline = null
                 passthroughVideoPipeline = false
                 recording = false
+                settleOutputRetirements()
                 listener?.onFailure("video-gpu-prepare-failed", failure.message ?: "GPU video recording could not be prepared.", true)
             }
         }
@@ -4374,6 +4714,7 @@ class Camera2PreviewEngine(
                     recording = false
                     lastLogRecordingEvidence = evidence
                     reportRecordingStopped(success, pipeline.recordingFileRetirement())
+                    settleOutputRetirements()
                 }
             },
         )
@@ -4588,8 +4929,17 @@ class Camera2PreviewEngine(
         listener?.onRecordingStopped(success && retired)
     }
 
-    /** Observer only: call after stopPreview (or a failed recording has already retired).
-     * A closed PFD wrapper, timeout, or queued stop is not a native retirement receipt. */
+    /** Receipts asked for while a recorder or GPU take still owned its output; camera executor only. */
+    private val pendingOutputRetirements = mutableListOf<CompletableFuture<Unit>>()
+
+    private fun recordingOutputLive(): Boolean = recorder != null || recorderRequest.get() != null || recording
+
+    /**
+     * Observer only. Completes once no recorder or GPU take owns the output and the retiring
+     * pipelines have closed; asked while a take is still ending (a failure reported mid-take, such
+     * as camera loss), it waits for that take to retire instead of failing (ADR-0033). A closed PFD
+     * wrapper, timeout, or queued stop is not a native retirement receipt.
+     */
     fun recordingOutputRetirement(): CompletableFuture<Unit> {
         val completion = CompletableFuture<Unit>()
         // close may retire/shut down the executor before this observer gets its queued turn.
@@ -4599,17 +4949,44 @@ class Camera2PreviewEngine(
         if (!disposed.get()) cameraExecutor.execute {
             val failure = retirementFailure
             if (failure != null) completion.completeExceptionally(failure)
-            else if (recorder != null || recorderRequest.get() != null || recording) {
-                completion.completeExceptionally(IllegalStateException("Recording output still has a native owner"))
-            } else {
-                val receipts = retiringPipelines.map { it.closeAsync() } + initializationRetirements.toList() +
-                    listOfNotNull(logPipeline?.recordingFileRetirement())
-                CompletableFuture.allOf(*receipts.toTypedArray()).whenComplete { _, error ->
-                    if (error == null) completion.complete(Unit) else completion.completeExceptionally(error)
-                }
-            }
+            else if (recordingOutputLive()) pendingOutputRetirements += completion
+            else completeOutputRetirement(completion)
         }
         return completion.thenApply { it }
+    }
+
+    private fun completeOutputRetirement(completion: CompletableFuture<Unit>) {
+        val receipts = retiringPipelines.map { it.closeAsync() } + initializationRetirements.toList() +
+            listOfNotNull(logPipeline?.recordingFileRetirement())
+        CompletableFuture.allOf(*receipts.toTypedArray()).whenComplete { _, error ->
+            if (error == null) completion.complete(Unit) else completion.completeExceptionally(error)
+        }
+    }
+
+    /**
+     * Settles waiting receipts once the output has no live owner. Deferred to the next executor
+     * turn so a close in progress has queued its pipeline retirement first.
+     */
+    private fun settleOutputRetirements() {
+        if (pendingOutputRetirements.isEmpty()) return
+        cameraExecutor.execute {
+            if (pendingOutputRetirements.isEmpty()) return@execute
+            val failure = retirementFailure
+            if (failure == null && recordingOutputLive()) return@execute
+            val waiting = pendingOutputRetirements.toList()
+            pendingOutputRetirements.clear()
+            waiting.forEach { if (failure != null) it.completeExceptionally(failure) else completeOutputRetirement(it) }
+        }
+    }
+
+    /** Camera loss ends the take where it stands, so its output can retire and publish as incomplete (ADR-0033). */
+    private fun endTakeOnCameraLoss(rawReason: String) {
+        endRawTakeOnCameraLoss(rawReason)
+        if (recording) logPipeline?.stopRecording()
+        recorderRequest.get()?.let { request ->
+            if (recording) runCatching { recorder?.stop() }.onFailure { Log.w(TAG, "MediaRecorder stop after camera loss failed", it) }
+            releaseRecorder(request)
+        }
     }
 
     fun stopPreview() {
@@ -5493,6 +5870,7 @@ class Camera2PreviewEngine(
                         pendingPreviewStartedReceipt = null
                         listener?.onPreviewStarted(appDescriptor(receipt.descriptor))
                     }
+                    forwardRawResult(result)
                     val sensorTimestamp = result.get(android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP)
                     updateEffectiveFps(sensorTimestamp)
                     auditCaptureResult(armedSession, result, sensorTimestamp)
@@ -5575,6 +5953,12 @@ class Camera2PreviewEngine(
                     runCatching { graphAuditor(armedSession).recordCaptureFailure() }
                     if (request.get(CaptureRequest.STATISTICS_FACE_DETECT_MODE) == faceDetectModeFor(activeDescriptor) &&
                         faceDetectModeFor(activeDescriptor) != null && faceDetectGate.onCaptureFailed()) reissueFaceDetect()
+                }
+
+                override fun onCaptureBufferLost(session: CameraCaptureSession, request: CaptureRequest, target: Surface, frameNumber: Long) {
+                    if (disposed.get() || callbackGeneration != generation || armedSession == null ||
+                        armedSession !== this@Camera2PreviewEngine.session) return
+                    noteRawBufferLost(target)
                 }
             }
     }
@@ -6038,14 +6422,19 @@ class Camera2PreviewEngine(
         return PictureControlReadback(sentSaturation, gotSaturation, sentSharpness, gotSharpness)
     }
 
-    /** Supply advertised expensive controls up front; later between-take changes may reconfigure HAL. */
-    private fun configureProcessingSession(configuration: SessionConfiguration, device: CameraDevice, template: Int) {
+    /**
+     * Supply advertised expensive controls up front; later between-take changes may reconfigure HAL.
+     * [aeRange], when given, is the AE target range the repeating request will carry, so the session
+     * is configured with it instead of reconfiguring on the first request.
+     */
+    private fun configureProcessingSession(configuration: SessionConfiguration, device: CameraDevice, template: Int, aeRange: Range<Int>? = null) {
         if (configuration.sessionType == SessionConfiguration.SESSION_HIGH_SPEED || configuration.sessionParameters != null) return
         val dynamicFps = activeDescriptor?.lowLightAutoFps == true && !isHighSpeedSession()
-        if (!dynamicFps && activeDescriptor?.imageProcessingCapabilities?.sessionControls.isNullOrEmpty()) return
+        if (aeRange == null && !dynamicFps && activeDescriptor?.imageProcessingCapabilities?.sessionControls.isNullOrEmpty()) return
         configuration.setSessionParameters(device.createCaptureRequest(template).apply {
             applyImageProcessing(this)
             applyDynamicFpsSession(this)
+            aeRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
         }.build())
     }
 
@@ -6250,7 +6639,37 @@ class Camera2PreviewEngine(
         if (notify) listener?.onTapFocusState(TapFocusState.IDLE)
     }
 
+    /** The RAW_VIDEO frame-rate plan for [descriptor] at the requested rate (PLAN-071). */
+    private fun rawVideoFrameRatePlanFor(descriptor: Camera2CameraDescriptor): RawVideoFrameRatePlan {
+        val stream = rawVideoStream?.takeIf { it.cameraId == descriptor.cameraId }
+        return rawVideoFrameRatePlan(
+            descriptor.targetFpsRanges.map { it.lower to it.upper },
+            requestedTargetFps,
+            stream?.declaredMinFrameDurationNs,
+            stream?.qtiFrameRateOverride == true,
+        )
+    }
+
     private fun applyTargetFps(builder: CaptureRequest.Builder, descriptor: Camera2CameraDescriptor) {
+        if (activeRawVideo != null) {
+            // RAW_VIDEO: [fps, fps] when advertised, else the closest range containing it (PLAN-071).
+            // A manual exposure adds SENSOR_FRAME_DURATION from the same rate in applyManualControls.
+            // Above the RAW10 declared limit on a QTI_RAW_FRAME_RATE_OVERRIDE camera the AE range stays
+            // within the limit and the vendor keys carry 1/fps; they stay on the builder for both the
+            // AE and the manual paths, and never reach a request outside a RAW_VIDEO session.
+            val stream = rawVideoStream?.takeIf { it.cameraId == descriptor.cameraId }
+            val plan = rawVideoFrameRatePlanFor(descriptor)
+            plan.aeRange?.let { (lower, upper) -> builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(lower, upper)) }
+            val frameDurationNs = plan.vendorFrameDurationNs
+            if (frameDurationNs != null) {
+                if (!QtiRawFrameRate.apply(builder, frameDurationNs)) {
+                    Log.w(TAG, "RAW video: the QTI frame-rate override keys could not be set on camera ${descriptor.cameraId}")
+                }
+            } else if (stream?.qtiFrameRateOverride == true) {
+                QtiRawFrameRate.clear(builder) // a reused builder must not keep an earlier, faster override
+            }
+            return
+        }
         descriptor.targetFpsRanges
             .firstOrNull { it.lower == requestedTargetFps && it.upper == requestedTargetFps }
             ?.let { builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
@@ -6764,6 +7183,7 @@ class Camera2PreviewEngine(
                 lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING) ?: CameraCharacteristics.LENS_FACING_EXTERNAL,
                 focalLengthsMm = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList().orEmpty(),
                 sensorSizeMm = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.let { it.width to it.height },
+                aperturesFNumber = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.toList().orEmpty(),
                 previewSize = previewSize,
                 jpegSize = map.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height },
                 heicSize = if (ImageFormat.HEIC in map.outputFormats)
@@ -7004,6 +7424,7 @@ class Camera2PreviewEngine(
     private fun failNativeRetirement(failure: Throwable) {
         if (retirementFailure == null) retirementFailure = failure
         nativeRetirement.completeExceptionally(requireNotNull(retirementFailure))
+        settleOutputRetirements()
     }
 
     private fun closeCameraDevice(device: CameraDevice) {
@@ -7082,6 +7503,9 @@ class Camera2PreviewEngine(
         clearTapFocusLocked(notify = true)
         runCatching { session?.stopRepeating() }
         runCatching { session?.abortCaptures() }
+        // Unbound before the session closes, so its onClosed is not mistaken for a lost session.
+        rawVideoStream?.let { retireRawVideoStream(it, RawVideoReasons.SESSION_CLOSED) }
+        activeRawVideo = null
         runCatching { session?.close() }
         session = null
         camera?.let(::closeCameraDevice)
@@ -7168,6 +7592,7 @@ class Camera2PreviewEngine(
         recorderOverGpuPreview = false
         // Release the acceptance fence last, never while MediaRecorder still owns native I/O.
         recorderRequest.compareAndSet(expected, null)
+        settleOutputRetirements()
     }
 
     private class BoundedDngOutput : ByteArrayOutputStream() {
@@ -7354,6 +7779,8 @@ class Camera2PreviewEngine(
             initializationRetirements.isEmpty()) {
             cameraExecutor.close()
             imageThread.quitSafely()
+            // Queued RAW reader retirements run first: quitSafely drains every due message.
+            rawVideoThread.quitSafely()
             nativeRetirement.complete(Unit)
         }
     }

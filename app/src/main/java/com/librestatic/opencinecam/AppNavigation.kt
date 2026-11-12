@@ -40,12 +40,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 internal enum class AppSection { CAPTURE, MEDIA, SETTINGS }
 
-internal enum class SettingsPage { MAIN, ABOUT, CAPABILITIES, STORAGE_BENCHMARK, LENS_CALIBRATION }
+internal enum class SettingsPage { MAIN, ABOUT, CAPABILITIES, STORAGE_BENCHMARK, LENS_CALIBRATION, NETWORK_DRIVE }
 
 /** How Media and Settings offer the way to the other sections. */
 internal enum class ShellNavigation { NONE, BOTTOM_BAR, RAIL }
@@ -125,7 +124,7 @@ private fun ShellRail(selected: AppSection, insets: WindowInsets, onSelect: (App
                 selected = selected == section,
                 onClick = { onSelect(section) },
                 icon = { ShellIcon(icon) },
-                label = { ShellLabel(label) },
+                label = { ShellLabel(label, scroll = selected == section) },
                 modifier = Modifier.testTag("nav-${section.name.lowercase()}"),
                 colors = colors,
             )
@@ -155,7 +154,7 @@ private fun ShellBottomBar(selected: AppSection, insets: WindowInsets, onSelect:
                 selected = selected == section,
                 onClick = { onSelect(section) },
                 icon = { ShellIcon(icon) },
-                label = { ShellLabel(label) },
+                label = { ShellLabel(label, scroll = selected == section) },
                 modifier = Modifier.testTag("nav-${section.name.lowercase()}"),
                 colors = colors,
             )
@@ -173,6 +172,7 @@ private fun ShellIcon(icon: CineIcon) {
 }
 
 @Composable
-private fun ShellLabel(@StringRes label: Int) {
-    Text(stringResource(label), maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun ShellLabel(@StringRes label: Int, scroll: Boolean) {
+    // Only the current section's label may move; the others keep the ellipsis.
+    FitText(stringResource(label), maxLines = 1, scroll = scroll)
 }

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_playback_setting">Reproducción RAW</string>
+    <string name="raw_playback_automatic">Automática</string>
+    <string name="raw_playback_frame_viewer">Visor de fotogramas</string>
+    <string name="raw_playback_realtime">Tiempo real</string>
+    <string name="raw_playback_help_summary">Tiempo real, o un fotograma a resolución completa a la vez</string>
+    <string name="raw_playback_help">Automática reproduce las tomas RAW en tiempo real a media resolución y omite fotogramas para no atrasarse. Si este dispositivo no da abasto, el visor pasa solo a fotograma por fotograma. Visor de fotogramas omite el tiempo real y muestra un fotograma a la vez a resolución completa, que puedes avanzar o recorrer. Solo se aplica a este dispositivo.</string>
+    <string name="raw_playback_fallback_notice">Mostrando fotograma por fotograma: este dispositivo no puede reproducir esta toma RAW en tiempo real</string>
+    <string name="raw_playback_try_realtime">Probar en tiempo real</string>
+    <string name="raw_playback_dropped">%1$d omitidos</string>
+    <string name="raw_playback_missing_corrupt">Fotograma dañado</string>
+    <string name="raw_playback_missing_unreadable">Fotograma ilegible</string>
+    <string name="raw_playback_missing_unsupported">Codificación de fotograma no compatible</string>
+    <string name="raw_playback_missing_codec">Códec RAW no disponible en este dispositivo</string>
+    <string name="raw_playback_missing_decode">No se pudo decodificar el fotograma</string>
+    <plurals name="raw_playback_frames">
+        <item quantity="one">%1$d fotograma</item>
+        <item quantity="many">%1$d fotogramas</item>
+        <item quantity="other">%1$d fotogramas</item>
+    </plurals>
+</resources>

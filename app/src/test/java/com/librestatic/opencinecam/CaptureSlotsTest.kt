@@ -26,6 +26,7 @@ class CaptureSlotsTest {
         assertEquals(video, captureSlots(CaptureMode.VIDEO))
         assertEquals(video, captureSlots(CaptureMode.LOG))
         assertEquals(video, captureSlots(CaptureMode.SLOW_MOTION))
+        assertEquals(video, captureSlots(CaptureMode.RAW_VIDEO))
     }
 
     @Test fun timeLapseSwapsTheFrameRateForTheInterval() {

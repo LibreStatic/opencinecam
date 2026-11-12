@@ -128,8 +128,8 @@ class ProxyConcurrentGraphDeviceTest {
             val clock = CaptureEpochClock(true, 48_000)
             val audioRecorder = WavAudioSidecarRecorder.create(context, "$token-live.mp4", settings, clock) { levels.incrementAndGet() }
             try {
-                SubjectPreviewGpuTest.Fixture(embeddedAudio = true).use { fixture ->
-                    val frame = RecordingFrameSize(128, 96)
+                SubjectPreviewGpuTest.Fixture(embeddedAudio = true, size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { fixture ->
+                    val frame = RecordingFrameSize(192, 144)
                     val geometry = RecordingGeometry(RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
                     ParcelFileDescriptor.open(recordingFile,
                         ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE or
@@ -217,7 +217,7 @@ class ProxyConcurrentGraphDeviceTest {
                 val entry = repository.catalog().single { it.takeId == published.id }
                 assertEquals(proxy, entry.result)
                 val after = probeProxyMedia(context, proxy.proxyUri.toUri())
-                verifyProxyVideoCorrespondence(probeProxyMedia(context, video.uri.toUri()), after, VideoDisplayGeometry(96, 64))
+                verifyProxyVideoCorrespondence(probeProxyMedia(context, video.uri.toUri()), after, VideoDisplayGeometry(192, 128))
                 assertEquals("audio/mp4a-latm", after.audio!!.mime)
                 val receipt = resolver.openInputStream(proxy.metadataUri.toUri())!!.use {
                     Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject }

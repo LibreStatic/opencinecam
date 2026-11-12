@@ -37,10 +37,10 @@ class PreciseVideoFramesDeviceTest {
                     try {
                         assertEquals(index, decoded.index)
                         assertEquals(pts[index], decoded.presentationTimeUs)
-                        assertEquals(96, decoded.bitmap.width)
-                        assertEquals(64, decoded.bitmap.height)
-                        assertColor(colors[index], decoded.bitmap.getPixel(24, 32))
-                        assertColor(Color.WHITE, decoded.bitmap.getPixel(72, 32))
+                        assertEquals(192, decoded.bitmap.width)
+                        assertEquals(128, decoded.bitmap.height)
+                        assertColor(colors[index], decoded.bitmap.getPixel(48, 64))
+                        assertColor(Color.WHITE, decoded.bitmap.getPixel(144, 64))
                     } finally { decoded.bitmap.recycle() }
                 }
             }
@@ -55,10 +55,10 @@ class PreciseVideoFramesDeviceTest {
                 val decoded = reader.frame(2)
                 try {
                     assertEquals(1_100_000L, decoded.presentationTimeUs)
-                    assertEquals(64, decoded.bitmap.width)
-                    assertEquals(96, decoded.bitmap.height)
-                    assertColor(Color.BLUE, decoded.bitmap.getPixel(32, 24))
-                    assertColor(Color.WHITE, decoded.bitmap.getPixel(32, 72))
+                    assertEquals(128, decoded.bitmap.width)
+                    assertEquals(192, decoded.bitmap.height)
+                    assertColor(Color.BLUE, decoded.bitmap.getPixel(64, 48))
+                    assertColor(Color.WHITE, decoded.bitmap.getPixel(64, 144))
                 } finally { decoded.bitmap.recycle() }
             }
         } finally { assertTrue(file.delete()) }
@@ -112,6 +112,7 @@ class PreciseVideoFramesDeviceTest {
 }
 
 /** Remux the independently generated AVC fixture without changing its samples or PTS.
+ * Generator: tools/fixtures/generate_precise_assets.sh (192x128, >=96 px for Qualcomm c2.qti).
  * The asset carries matching BT601 SDR limited-range container and bitstream declarations.
  * Caller owns this isolated cache file and deletes it when all readers have closed. */
 internal fun createPrecisePlaybackFixture(context: Context, rotation: Int = 0): File {
@@ -125,7 +126,7 @@ internal fun createPrecisePlaybackFixture(context: Context, rotation: Int = 0): 
         try {
             val assets = InstrumentationRegistry.getInstrumentation().context.assets
             val assetBytes = assets.open("e16-precise-sdr.mp4").use { input ->
-                val bytes = ByteArray(1689)
+                val bytes = ByteArray(1837)
                 var total = 0
                 while (total < bytes.size) {
                     val count = input.read(bytes, total, bytes.size - total)
@@ -133,20 +134,20 @@ internal fun createPrecisePlaybackFixture(context: Context, rotation: Int = 0): 
                     check(count > 0)
                     total += count
                 }
-                assertEquals(1688, total)
+                assertEquals(1836, total)
                 bytes.copyOf(total)
             }
-            assertEquals("f2baae46850ccd0b5eb2d05cc2df4ca6256d961b9b98803045dc4312ee3ca7a2",
+            assertEquals("381bc541cd08f18b010f9595e4a0a0beeadeda5340e99a78b32008f685e56c32",
                 MessageDigest.getInstance("SHA-256").digest(assetBytes).joinToString("") { "%02x".format(it.toInt() and 255) })
             assets.openFd("e16-precise-sdr.mp4").use { asset ->
-                assertEquals(1688L, asset.declaredLength)
+                assertEquals(1836L, asset.declaredLength)
                 extractor.setDataSource(asset.fileDescriptor, asset.startOffset, asset.declaredLength)
             }
             assertEquals(1, extractor.trackCount)
             val format = extractor.getTrackFormat(0)
             assertEquals(MediaFormat.MIMETYPE_VIDEO_AVC, format.getString(MediaFormat.KEY_MIME))
-            assertEquals(96, format.getInteger(MediaFormat.KEY_WIDTH))
-            assertEquals(64, format.getInteger(MediaFormat.KEY_HEIGHT))
+            assertEquals(192, format.getInteger(MediaFormat.KEY_WIDTH))
+            assertEquals(128, format.getInteger(MediaFormat.KEY_HEIGHT))
             // API30 may omit container color keys. These declarations come from the exact
             // SHA-bound asset above; ffprobe and SPS trace independently verify ISO 6/1/6 limited.
             val colors = mapOf(MediaFormat.KEY_COLOR_STANDARD to MediaFormat.COLOR_STANDARD_BT601_NTSC,

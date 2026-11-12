@@ -41,43 +41,92 @@ internal fun offsetProxyVideoFixture(context: Context, output: File, offsetUs: L
     } finally { extractor.release(); check(source.delete()) }
 }
 
-/** Fixture-only v0 MP4 edit insertion; consumes free space, preserving every media byte/offset. */
+/** Fixture-only v0 MP4 empty-edit insertion. Media bytes are never rewritten; chunk offsets are patched if mdat moves. */
 private fun prependFixtureEmptyEdit(file: File, offsetUs: Long) {
     val data = file.readBytes()
-    val view = ByteBuffer.wrap(data)
-    fun children(start: Int, end: Int): List<Int> {
-        val result = mutableListOf<Int>(); var position = start
-        while (position + 8 <= end) {
-            val size = view.getInt(position)
-            if (size == 1) break // mdat has an extended size and is never edited.
-            require(size >= 8 && position + size <= end)
-            result += position; position += size
-        }
-        return result
-    }
+    val v = ByteBuffer.wrap(data)
     fun type(at: Int) = String(data, at + 4, 4, Charsets.US_ASCII)
-    fun child(at: Int, name: String) = children(at + 8, at + view.getInt(at)).single { type(it) == name }
-    val top = children(0, data.size)
+    fun size(at: Int, end: Int): Int = when (val s = v.getInt(at)) {
+        0 -> end - at
+        1 -> Math.toIntExact(v.getLong(at + 8))
+        else -> s
+    }
+    fun kids(start: Int, end: Int): List<Int> = buildList {
+        var p = start
+        while (p + 8 <= end) { val s = size(p, end); require(s >= 8 && p + s <= end); add(p); p += s }
+    }
+    fun kidsOf(at: Int) = kids(at + 8, at + size(at, data.size))
+    fun child(at: Int, name: String) = kidsOf(at).single { type(it) == name }
+    fun childOrNull(at: Int, name: String) = kidsOf(at).singleOrNull { type(it) == name }
+
+    val top = kids(0, data.size)
     val moov = top.single { type(it) == "moov" }
-    val free = top.single { type(it) == "free" }
-    require(free == moov + view.getInt(moov) && view.getInt(free) >= 20)
-    val trak = child(moov, "trak"); val edts = child(trak, "edts"); val elst = child(edts, "elst")
-    val mvhd = child(moov, "mvhd"); val tkhd = child(trak, "tkhd")
-    require(data[elst + 8] == 0.toByte() && view.getInt(elst + 12) == 1)
+    val mdat = top.single { type(it) == "mdat" }
+    val moovEnd = moov + size(moov, data.size)
+    val mvhd = child(moov, "mvhd")
+    val trak = child(moov, "trak")
+    val tkhd = child(trak, "tkhd")
     require(data[mvhd + 8] == 0.toByte() && data[tkhd + 8] == 0.toByte())
-    val ticks = Math.multiplyExact(offsetUs, view.getInt(mvhd + 20).toLong())
+    val ticks = Math.multiplyExact(offsetUs, v.getInt(mvhd + 20).toLong())
     require(ticks % 1_000_000 == 0L)
     val gap = Math.toIntExact(ticks / 1_000_000)
-    for (atom in listOf(moov, trak, edts, elst)) view.putInt(atom, view.getInt(atom) + 12)
-    view.putInt(elst + 12, 2)
-    for (duration in listOf(mvhd + 24, tkhd + 28)) view.putInt(duration, Math.addExact(view.getInt(duration), gap))
-    val insert = elst + 16
-    val result = ByteArray(data.size)
-    data.copyInto(result, 0, 0, insert)
-    ByteBuffer.wrap(result).apply { position(insert) }.putInt(gap).putInt(-1).putShort(1).putShort(0)
-    data.copyInto(result, insert + 12, insert, free)
-    ByteBuffer.wrap(result).putInt(free + 12, view.getInt(free) - 12)
-    data.copyInto(result, free + 16, free + 4, free + 8)
-    data.copyInto(result, free + 20, free + 20, data.size)
-    file.writeBytes(result)
+
+    // 1. Build the insertion (read tkhd duration before it is patched).
+    val edts = childOrNull(trak, "edts")
+    val insertAt: Int
+    val insert: ByteArray
+    val grow: List<Int>
+    if (edts != null) {
+        val elst = child(edts, "elst")
+        require(data[elst + 8] == 0.toByte())
+        v.putInt(elst + 12, v.getInt(elst + 12) + 1)
+        insertAt = elst + 16
+        insert = ByteBuffer.allocate(12).putInt(gap).putInt(-1).putInt(0x0001_0000).array()
+        grow = listOf(moov, trak, edts, elst)
+    } else {
+        // No edit list means identity presentation; keep that as the second, normal edit.
+        insertAt = tkhd + size(tkhd, data.size)
+        insert = ByteBuffer.allocate(48)
+            .putInt(48).put("edts".toByteArray(Charsets.US_ASCII))
+            .putInt(40).put("elst".toByteArray(Charsets.US_ASCII)).putInt(0).putInt(2)
+            .putInt(gap).putInt(-1).putInt(0x0001_0000)
+            .putInt(v.getInt(tkhd + 28)).putInt(0).putInt(0x0001_0000)
+            .array()
+        grow = listOf(moov, trak)
+    }
+    val delta = insert.size
+
+    // 2. Decide where the extra bytes come from.
+    val free = top.firstOrNull { it == moovEnd && type(it) == "free" && size(it, data.size) >= delta + 8 }
+    if (free == null && mdat > moov) {
+        // mdat moves by delta: patch every chunk offset (positions are still the original ones here).
+        for (t in kidsOf(moov).filter { type(it) == "trak" }) {
+            val stbl = child(child(child(t, "mdia"), "minf"), "stbl")
+            childOrNull(stbl, "stco")?.let { b ->
+                repeat(v.getInt(b + 12)) { i -> val p = b + 16 + 4 * i; v.putInt(p, Math.addExact(v.getInt(p), delta)) }
+            }
+            childOrNull(stbl, "co64")?.let { b ->
+                repeat(v.getInt(b + 12)) { i -> val p = b + 16 + 8 * i; v.putLong(p, Math.addExact(v.getLong(p), delta.toLong())) }
+            }
+        }
+    } // else: mdat precedes moov (Samsung) or free absorbs delta: no media byte moves.
+
+    // 3. Patch durations and container sizes in place (all before insertAt, so positions are stable).
+    for (d in listOf(mvhd + 24, tkhd + 28)) v.putInt(d, Math.addExact(v.getInt(d), gap))
+    for (box in grow) v.putInt(box, Math.addExact(v.getInt(box), delta))
+
+    // 4. Splice.
+    val out = java.io.ByteArrayOutputStream(data.size + delta)
+    out.write(data, 0, insertAt)
+    out.write(insert)
+    if (free != null) {
+        val freeSize = size(free, data.size)
+        out.write(data, insertAt, free - insertAt)
+        out.write(ByteBuffer.allocate(8).putInt(freeSize - delta).put("free".toByteArray(Charsets.US_ASCII)).array())
+        out.write(data, free + 8 + delta, data.size - (free + 8 + delta))
+        check(out.size() == data.size)
+    } else {
+        out.write(data, insertAt, data.size - insertAt)
+    }
+    file.writeBytes(out.toByteArray())
 }

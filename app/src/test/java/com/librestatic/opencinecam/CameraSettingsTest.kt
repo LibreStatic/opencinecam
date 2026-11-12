@@ -57,6 +57,7 @@ class CameraSettingsTest {
         assertFalse(settings.horizonLevelEnabled)
         assertEquals(ModeSelectorStyle.DIAL, settings.modeSelectorStyle)
         assertFalse(settings.translucentChrome)
+        assertTrue(settings.scrollLongText)
         assertEquals(HapticPreferences(), settings.haptics)
         assertEquals(HapticLevel.SUBTLE, settings.haptics.level)
         assertTrue(settings.haptics.muteDuringTake)
@@ -216,6 +217,26 @@ class CameraSettingsTest {
         assertTrue(live.translucentChrome)
         assertEquals(ViewfinderScale.FILL, live.viewfinderScale)
         assertEquals(0.4f, live.chromeOpacity, 0f)
+    }
+
+    @Test
+    fun scrollLongTextAppliesLiveAndPersists() {
+        val next = CameraSettings().copy(scrollLongText = false)
+        assertFalse(CameraSettings().withLivePreferencesFrom(next).scrollLongText)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
+        assertFalse(CameraSettingsStore(memory).load().scrollLongText)
+        assertTrue(CameraSettingsStore(PresetPreferences()).load().scrollLongText)
+    }
+
+    @Test
+    fun rawVideoNearLosslessDefaultsOnPersistsAndStaysPendingDuringATake() {
+        assertTrue(CameraSettings().rawVideoNearLossless)
+        val next = CameraSettings().copy(rawVideoNearLossless = false)
+        // Structural: a running take keeps the compression it started with.
+        assertTrue(CameraSettings().withLivePreferencesFrom(next).rawVideoNearLossless)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
+        assertFalse(CameraSettingsStore(memory).load().rawVideoNearLossless)
+        assertTrue(CameraSettingsStore(PresetPreferences()).load().rawVideoNearLossless)
     }
 
     @Test

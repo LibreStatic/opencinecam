@@ -160,6 +160,8 @@ class DeviceProfilesTest {
         assertEquals("high-speed-prefer-physical-camera", QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA.id)
         assertEquals("moto-high-speed-session-keys", QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS.id)
         assertEquals(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS, QuirkEffect.fromId("moto-high-speed-session-keys"))
+        assertEquals("qti-raw-frame-rate-override", QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE.id)
+        assertEquals(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE, QuirkEffect.fromId("qti-raw-frame-rate-override"))
         assertNull(QuirkEffect.fromId("do-something-new"))
         assertNull(DeviceProfileQuirk("q", "recreate-session", true).knownEffect)
     }

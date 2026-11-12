@@ -48,6 +48,31 @@ fun probeClipMetadata(context: Context, uri: String, log: OcLogClip?): ClipMetad
     }
 }
 
+/** Blocking; the first audio track of [uri], or null when there is none or it cannot be read. */
+internal fun probeAudioMetadata(context: Context, uri: String): com.librestatic.opencinecam.AudioMetadata? {
+    val extractor = MediaExtractor()
+    return try {
+        extractor.setDataSource(context, Uri.parse(uri), null)
+        val format = (0 until extractor.trackCount).map(extractor::getTrackFormat)
+            .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true } ?: return null
+        val pcm = format.intOrNull(MediaFormat.KEY_PCM_ENCODING)
+        val depth = when (pcm) {
+            android.media.AudioFormat.ENCODING_PCM_8BIT -> 8
+            android.media.AudioFormat.ENCODING_PCM_16BIT -> 16
+            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 24
+            android.media.AudioFormat.ENCODING_PCM_32BIT, android.media.AudioFormat.ENCODING_PCM_FLOAT -> 32
+            else -> format.intOrNull("bits-per-sample")
+        }
+        com.librestatic.opencinecam.AudioMetadata(format.getString(MediaFormat.KEY_MIME), format.intOrNull(MediaFormat.KEY_SAMPLE_RATE),
+            format.intOrNull(MediaFormat.KEY_CHANNEL_COUNT), depth, float = pcm == android.media.AudioFormat.ENCODING_PCM_FLOAT,
+            bitRate = format.intOrNull(MediaFormat.KEY_BIT_RATE), durationUs = format.longOrNull(MediaFormat.KEY_DURATION)?.takeIf { it > 0 })
+    } catch (_: Exception) {
+        null
+    } finally {
+        runCatching { extractor.release() }
+    }
+}
+
 private fun estimateFrameRate(extractor: MediaExtractor): Double? {
     val times = ArrayList<Long>(60)
     while (times.size < 60) {

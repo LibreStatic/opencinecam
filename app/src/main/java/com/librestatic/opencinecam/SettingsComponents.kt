@@ -262,7 +262,12 @@ internal fun SettingsChoiceDialog(
  */
 @Composable
 internal fun SettingsPill(label: String, tag: String, selected: Boolean = false, enabled: Boolean = true,
-    role: Role = Role.RadioButton, icon: CineIcon? = null, onClick: () -> Unit) {
+    role: Role = Role.RadioButton, icon: CineIcon? = null,
+    /** Tints [icon] instead of the label colour, e.g. amber for a warning. */
+    iconTint: Color? = null,
+    /** Replaces the spoken label, e.g. to add a warning the glyph shows. */
+    description: String? = null,
+    onClick: () -> Unit) {
     androidx.compose.foundation.layout.Box(
         Modifier
             .heightIn(min = 48.dp)
@@ -271,13 +276,14 @@ internal fun SettingsPill(label: String, tag: String, selected: Boolean = false,
             .background(if (selected) SettingsAccent else SettingsSurfaceRaised)
             .border(1.dp, if (selected) SettingsAccent else SettingsBorder, RoundedCornerShape(24.dp))
             .selectable(selected = selected, enabled = enabled, role = role, onClick = hapticClick(HapticEvent.Select, onClick))
+            .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
             .testTag(tag)
             .padding(horizontal = if (icon == null) 16.dp else 12.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         val content = when { !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); selected -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (icon != null) CineGlyph(icon, content, Modifier.size(18.dp))
+            if (icon != null) CineGlyph(icon, if (enabled) iconTint ?: content else content, Modifier.size(18.dp))
             Text(label, color = content, maxLines = 1,
                 fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier.width(IntrinsicSize.Max).testTag("$tag-label"))

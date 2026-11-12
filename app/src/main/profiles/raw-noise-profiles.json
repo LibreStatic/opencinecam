@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "device": "blanc",
+      "cameraId": "0",
+      "rawWidth": 4000,
+      "rawHeight": 3000,
+      "blackLevel": 64,
+      "measured": "2026-11-04",
+      "source": "RawNoiseProbeDeviceTest, sunny static scene; a clamped at 0 where the fit was negative (ISO 1600: -0.058, ISO 3200: -0.049)",
+      "points": [
+        { "iso": 143, "a": 0.3747, "b": 0.04022 },
+        { "iso": 200, "a": 0.4825, "b": 0.05473 },
+        { "iso": 400, "a": 0.5855, "b": 0.10608 },
+        { "iso": 800, "a": 0.5264, "b": 0.21392 },
+        { "iso": 1600, "a": 0.0, "b": 0.43025 },
+        { "iso": 3200, "a": 0.0, "b": 0.86029 },
+        { "iso": 6400, "a": 0.5951, "b": 1.74443 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- In-app CinemaDNG export of RAW takes (PLAN-071 §8, route 2). -->
+<resources>
+    <string name="cinemadng_export_action">Export CinemaDNG</string>
+    <string name="cinemadng_export_title">Export CinemaDNG</string>
+    <string name="cinemadng_export_help">One DNG per frame, plus a WAV when the take has sound, in a folder DaVinci Resolve opens directly. The .ocraw stays as it is.</string>
+    <string name="cinemadng_export_destination">Destination</string>
+    <string name="cinemadng_export_documents">Documents</string>
+    <string name="cinemadng_export_choose_folder">Choose folder…</string>
+    <string name="cinemadng_export_compress">Compress with LJ92</string>
+    <string name="cinemadng_export_compress_help">Lossless. Roughly halves the size, but the export takes longer.</string>
+    <string name="cinemadng_export_measuring">Reading the take…</string>
+    <string name="cinemadng_export_unreadable">This take cannot be exported: its file is unreadable.</string>
+    <string name="cinemadng_export_no_frames">No frame of this take can be converted.</string>
+    <string name="cinemadng_export_frames">Frames: %1$d</string>
+    <string name="cinemadng_export_frames_audio">Frames: %1$d · with sound</string>
+    <string name="cinemadng_export_frames_skipped">%1$d frames cannot be converted (damaged) and will be skipped.</string>
+    <string name="cinemadng_export_space">Needs %1$s · %2$s free</string>
+    <string name="cinemadng_export_space_estimate">Needs about %1$s · %2$s free</string>
+    <string name="cinemadng_export_space_unknown">Needs %1$s. The free space here is unknown, so make sure the drive has room.</string>
+    <string name="cinemadng_export_space_short">Not enough space: needs %1$s, %2$s free.</string>
+    <string name="cinemadng_export_recording">Stop recording to export.</string>
+    <string name="cinemadng_export_busy">Another export is running.</string>
+    <string name="cinemadng_export_start">Start</string>
+    <string name="cinemadng_export_cancel">Cancel</string>
+    <string name="cinemadng_export_cancelling">Cancelling the export…</string>
+    <string name="cinemadng_export_preparing">Preparing the CinemaDNG export…</string>
+    <string name="cinemadng_export_running">Exporting CinemaDNG · %1$d/%2$d · %3$d%%</string>
+    <string name="cinemadng_export_dismiss">OK</string>
+    <string name="cinemadng_export_channel">Exports</string>
+    <string name="cinemadng_export_notification_title">Exporting %1$s</string>
+    <string name="cinemadng_export_notification_progress">%1$d of %2$d frames · %3$d%%</string>
+    <string name="cinemadng_export_done">Exported to %1$s</string>
+    <string name="cinemadng_export_done_frames">%1$d DNG frames, %2$s.</string>
+    <string name="cinemadng_export_done_frames_audio">%1$d DNG frames and the WAV, %2$s.</string>
+    <string name="cinemadng_export_skipped">%1$d frames skipped (damaged).</string>
+    <string name="cinemadng_export_audio_omitted">The sound is too long for a WAV and was left out.</string>
+    <string name="cinemadng_export_nomedia_failed">The folder has no .nomedia, so other gallery apps may list the frames.</string>
+    <string name="cinemadng_export_refused_recording">Export not started: a take is recording.</string>
+    <string name="cinemadng_export_cancelled">Export cancelled.</string>
+    <string name="cinemadng_export_stopped_recording">Export stopped because a take started recording.</string>
+    <string name="cinemadng_export_failed">Export failed.</string>
+    <string name="cinemadng_export_partial_deleted">The partial folder was deleted.</string>
+    <string name="cinemadng_export_partial_left">The partial folder %1$s could not be deleted; delete it by hand.</string>
+</resources>

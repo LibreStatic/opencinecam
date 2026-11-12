@@ -81,7 +81,7 @@ class ProxySidecarCompositionDeviceTest {
                 videoEnd, durationFloor, endFloor, remainder, rate, endCeiling, outputEnd,
                 audioStart, before.video.timestampsUs.min(), outputEnd - endCeiling, outputEnd - videoEnd)
             val output = File(directory, "proxy.mp4")
-            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(videoUri, output, 96, 64, 1_000_000,
+            val report = withTimeout(90_000) { ProxyTranscoder(context).transcode(videoUri, output, 192, 128, 1_000_000,
                 ProxySidecarExportInput(audioUri, pcm, timeline)) }
             if (videoOffsetUs > 0) {
                 output.copyTo(File(context.getExternalFilesDir(null), "$evidencePrefix-output-${if (flac) "flac" else "wav"}-$videoOffsetUs-$type.mp4"))

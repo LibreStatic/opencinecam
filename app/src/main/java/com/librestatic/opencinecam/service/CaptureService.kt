@@ -15,6 +15,7 @@ import com.librestatic.opencinecam.camera.TimelapseProgress
 import com.librestatic.opencinecam.fpsLockActive
 import com.librestatic.opencinecam.lowLightFpsActive
 import com.librestatic.opencinecam.recordingTimecodeJson
+import com.librestatic.opencinecam.reviewBlockedByTake
 import com.librestatic.opencinecam.camera.RecordingTimecodeReport
 import com.librestatic.opencinecam.captureEpochJson
 import com.librestatic.opencinecam.OperatorAction
@@ -116,6 +117,24 @@ import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.afterSavedProductionSlate
 import com.librestatic.opencinecam.storage.StillImageSaver
+import com.librestatic.opencinecam.RawVideoConfigKeys
+import com.librestatic.opencinecam.RawVideoConfigOption
+import com.librestatic.opencinecam.rawConfigLabelLocalized
+import com.librestatic.opencinecam.camera.RawVideoConfig
+import com.librestatic.opencinecam.camera.RawVideoQualificationSet
+import com.librestatic.opencinecam.camera.RawVideoReasons
+import com.librestatic.opencinecam.camera.RawVideoSessionConfig
+import com.librestatic.opencinecam.rawvideo.AudioRecordRawAudioSource
+import com.librestatic.opencinecam.rawvideo.RawAudioSource
+import com.librestatic.opencinecam.rawvideo.RawRingBudget
+import com.librestatic.opencinecam.rawvideo.RawTakeAudio
+import com.librestatic.opencinecam.rawvideo.RawTakeInfo
+import com.librestatic.opencinecam.rawvideo.RawTakeResult
+import com.librestatic.opencinecam.rawvideo.RawVideoRecorder
+import com.librestatic.opencinecam.storage.RawVideoOutput
+import com.librestatic.opencinecam.storage.RawVideoQualificationStore
+import com.librestatic.opencinecam.storage.RawVideoRecovery
+import com.librestatic.opencinecam.storage.RawVideoRecoveryReport
 import com.librestatic.opencinecam.storage.MotionLogRecorder
 import com.librestatic.opencinecam.storage.MotionLogTarget
 import com.librestatic.opencinecam.storage.VideoOutput
@@ -153,6 +172,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.Locale
+import androidx.annotation.StringRes
 import com.librestatic.opencinecam.CameraPreset
 import com.librestatic.opencinecam.CameraPresetCodec
 import com.librestatic.opencinecam.withLivePreferencesFrom
@@ -174,6 +195,38 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
+import com.librestatic.opencinecam.batteryPercentOf
+import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.rawQualificationOutcome
+import com.librestatic.opencinecam.RawQualificationOutcomeKind
+import com.librestatic.opencinecam.RawQualificationRefusals
+import com.librestatic.opencinecam.rawQualificationRunAbort
+import com.librestatic.opencinecam.rawQualificationShouldPost
+import com.librestatic.opencinecam.rawQualificationGateQualifiable
+import com.librestatic.opencinecam.rawQualificationStartRefusal
+import com.librestatic.opencinecam.rawQualificationStorageBusy
+import com.librestatic.opencinecam.RawQualificationStopReasons
+import com.librestatic.opencinecam.rawQualificationUiOf
+import com.librestatic.opencinecam.rawVideoModeFallback
+import com.librestatic.opencinecam.RawVideoQualificationInfo
+import com.librestatic.opencinecam.RawVideoQualificationUi
+import com.librestatic.opencinecam.readRawQualificationConditions
+import com.librestatic.opencinecam.rawvideo.RawQualificationEstimates
+import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
+import com.librestatic.opencinecam.rawvideo.RawQualificationPlan
+import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
+import com.librestatic.opencinecam.rawvideo.RawQualificationRisk
+import com.librestatic.opencinecam.rawvideo.RawQualificationTiming
+import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
+import com.librestatic.opencinecam.rawvideo.RawVideoQualificationOutcome
+import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
+import com.librestatic.opencinecam.RawQualificationItem
+import com.librestatic.opencinecam.rawQualificationItemsCameraChecked
+import com.librestatic.opencinecam.rawQualificationItemsFinished
+import com.librestatic.opencinecam.rawQualificationItemsOnProgress
+import com.librestatic.opencinecam.rawQualificationItemsWith
+import com.librestatic.opencinecam.rawQualificationPlanItems
+import com.librestatic.opencinecam.rawQualificationRunStatus
 
 const val ACTION_START_RECORDING = "com.librestatic.opencinecam.action.START_RECORDING"
 
@@ -366,11 +419,13 @@ class CaptureService : Service() {
         val intent = takeClipIntent
         val codecMime = takeClipCodecMime
         val mediaRecorder = takeClipMediaRecorder
+        val state = cameraState.value
+        val camera = takeCameraTracker?.also { it.sample(state) }?.result()
         takeClipMediaRecorder = null
         takeClipStartedAt = null
         takeClipIntent = null
         takeClipCodecMime = null
-        val state = cameraState.value
+        takeCameraTracker = null
         val facts = assembleClipFacts(ClipFactsInput(
             startedAt = started, intent = intent, cameraId = state.selectedCameraId, hardware = state.hardwareTruth,
             recordingWidth = state.recordingWidth, recordingHeight = state.recordingHeight, targetFps = state.targetFps,
@@ -380,7 +435,7 @@ class CaptureService : Service() {
             deviceProfile = clipDeviceProfile(state.selectedCameraId),
             noticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') },
             hardwareWarnings = emptyList(), stopReason = reasons.firstOrNull(), durationMs = activeRecordingElapsedMs(),
-            encodedFrames = encodedFrames, success = false, nativeRetired = false,
+            encodedFrames = encodedFrames, success = false, nativeRetired = false, camera = camera,
         ))
         return clipSidecarProvider { facts }
     }
@@ -528,6 +583,8 @@ class CaptureService : Service() {
     private val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
     private var timelapseAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
+    /** The viewfinder surface was lost or replaced during a RAW take, which cannot reconfigure the session: reattach when it ends. */
+    private var rawTakePreviewStale = false
     private var attachedPreviewRotationDegrees: Int = 0
     private var cameraSwitchGeneration = 0L
     private var recoveryGeneration = 0L
@@ -589,6 +646,8 @@ class CaptureService : Service() {
     @Volatile private var takeClipStartedAt: java.time.Instant? = null
     @Volatile private var takeClipCodecMime: String? = null
     @Volatile private var takeClipMediaRecorder: Boolean? = null
+    /** Samples the running take's camera settings from [cameraState] for the clip sidecar; null outside a take. */
+    @Volatile private var takeCameraTracker: ClipCameraTracker? = null
     /** Stable code of a Strict encoder refusal reported by the engine, consumed by the failed-start branch. */
     @Volatile private var pendingStartRefusal: String? = null
     /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
@@ -614,6 +673,7 @@ class CaptureService : Service() {
                 availableStorageBytes = free,
                 timecodeDisplay = timecodeTracker.currentDisplayTc()?.format(),
             )
+            publishRawVideoStats()
             enforceRuntimePolicy(free)
             mainHandler.postDelayed(this, RECORDING_TICK_MS)
         }
@@ -744,7 +804,7 @@ class CaptureService : Service() {
             val recordingReport = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
                 android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable", failure)
                 com.librestatic.opencinecam.storage.RecordingRecoveryReport(unresolvedGroups = 1)
-            }
+            }.let { it.copy(rawTakes = recoverRawTakes()) }
             mainHandler.post {
                 if (!serviceDestroyed) cameraState.value = cameraState.value.copy(stillRecovery = report, recordingRecovery = recordingReport)
             }
@@ -758,6 +818,10 @@ class CaptureService : Service() {
         repository.update { it.forOperatorStartup() }
         localBinder.applySettings(repository.states.value)
         settingsScope.launch { repository.states.collect { localBinder.applySettings(it) } }
+        // The network drive (PLAN-071 §8) never runs while a take prepares, records or finalises.
+        settingsScope.launch { cameraState.collect { com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(it.reviewBlockedByTake()) } }
+        // The clip sidecar's camera block follows the reported exposure, white balance and zoom while a take records.
+        settingsScope.launch { cameraState.collect { takeCameraTracker?.sample(it) } }
         settingsScope.launch {
             val library = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LutLibraries.get(this@CaptureService) }
             recordingLutLibrary = library
@@ -919,7 +983,7 @@ class CaptureService : Service() {
                                 if (serviceDestroyed || audioLevelEpoch.get() != epoch) return@failedAudio
                                 stopPreviewAudioMonitor(clearLevels = false)
                                 cameraState.update { it.copy(audioMonitoringActive = false,
-                                    message = "Audio monitor unavailable: ${failure.message}") }
+                                    message = getString(R.string.capture_audio_monitor_unavailable, failure.message ?: failure.javaClass.simpleName)) }
                             }
                         },
                         listeningSink = newAudioListeningSink(),
@@ -931,7 +995,7 @@ class CaptureService : Service() {
                     if (failure is PreviewAudioMonitorCreationFailure) rememberPreviewAudioRetirement(failure.retirement)
                     stopPreviewAudioMonitor(clearLevels = false)
                     cameraState.update { it.copy(audioMonitoringActive = false,
-                        message = "Audio monitor unavailable: ${failure.message}") }
+                        message = getString(R.string.capture_audio_monitor_unavailable, failure.message ?: failure.javaClass.simpleName)) }
                 }
             }
         }
@@ -1374,7 +1438,8 @@ class CaptureService : Service() {
         // SurfaceView the camera just released), which froze the viewfinder for the whole take.
         // A constrained high-speed take still reaches the encoder directly (startVideo); only the
         // 30 fps preview share goes through the GPU to the operator and subject windows.
-        mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE) ||
+        // RAW_VIDEO previews through the GPU path too (the engine forces it for a RAW session).
+        mode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE, CaptureMode.RAW_VIDEO) ||
         // The subject preview rides the GPU viewfinder in every mode it supports.
         (settings.subjectDisplay.wantsCameraPreview && subjectPreviewBlock(mode) == null) ||
         // A lens correction shows only on the GPU path.
@@ -1411,7 +1476,730 @@ class CaptureService : Service() {
         ?.activeStillSize?.let { (width, height) -> Size(width, height) }
 
     private fun previewKey(): List<Any?> = cameraState.value.let {
-        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive(), lowLightFpsActive(it, settings), currentLensLockBinding())
+        listOf(it.selectedCameraId, it.selectedMode, it.targetVideoWidth, it.targetVideoHeight, it.targetFps, desiredGpuViewfinder(), selectedStillPhotoFormat(), selectedStillSize(), nightExtensionActive(), lowLightFpsActive(it, settings), currentLensLockBinding(), rawVideoSessionConfig())
+    }
+
+    // OCC-PLAN-071 RAW video. Main-thread state unless marked otherwise.
+    private val rawRecorder by lazy { RawVideoRecorder() }
+    /** Serialises arming, disarming, take start and take stop (which joins the writer) off main. */
+    private val rawControl = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-raw-control") }
+    private val rawQualificationStore by lazy { RawVideoQualificationStore.forContext(this) }
+    /** Loaded on first use (one small file); [LocalBinder.refreshRawVideoQualifications] reloads it. */
+    @Volatile private var rawQualifications: RawVideoQualificationSet? = null
+    private val rawRaw10Sizes = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Int, Int>>>()
+    /** Cameras that refused the RAW_VIDEO graph in this service session (gate FAILED). */
+    private val rawVideoFailedCameras = mutableSetOf<String>()
+    /** The configuration (and near-lossless noise profile) the ring was last asked to arm for; null while disarmed. */
+    private var rawArmTarget: Pair<RawVideoConfig, com.librestatic.opencinecam.rawvideo.RawNoiseProfile?>? = null
+    /** Set (on the control thread) when the ring for this configuration could not be planned or allocated. */
+    @Volatile private var rawArmNoMemory: RawVideoConfig? = null
+    /** Why arming [rawArmNoMemory] failed: no RAM for the ring, or no encoder for a compressed configuration. */
+    @Volatile private var rawArmFailure: String = RawVideoServiceReasons.MEMORY
+    /** The ring armed now (set on the control thread), for the runtime risk ([rawVideoRingTooSmall]); null while disarmed. */
+    @Volatile private var rawArmedRing: com.librestatic.opencinecam.rawvideo.RawVideoArmState? = null
+    /** The mode RAW_VIDEO was entered from, restored when the camera refuses the RAW graph. */
+    private var rawModeFallback: CaptureMode? = null
+    private class RawTakeSession(val takeId: String, val config: RawVideoConfig) {
+        var started = false
+        var stopRequested = false
+    }
+    private var rawTake: RawTakeSession? = null
+
+    /**
+     * A RAW video qualification run (PLAN-071 decision 10). It owns the camera while it lasts: the
+     * preview is stopped, the RAW ring disarmed, and nothing reopens the camera until it ends.
+     */
+    private class RawQualificationSession(
+        val cameraId: String,
+        val sensorWidth: Int,
+        val sensorHeight: Int,
+        val estimateMs: Long,
+        /** A pass selects RAW_VIDEO (the selector and the onboarding); a requalification from Settings leaves the mode alone. */
+        val selectOnPass: Boolean,
+    ) {
+        lateinit var qualifier: RawVideoQualifier
+        /** Why the app stopped it ([RawQualificationStopReasons]); the first reason wins. */
+        @Volatile var stopReason: String? = null
+        /** Qualification thread only: the last progress posted to main, and when. */
+        var lastPosted: RawVideoQualificationUi? = null
+        var lastPostAtMs = 0L
+        var batteryReceiver: android.content.BroadcastReceiver? = null
+        /** Qualification thread (seeded on main before it starts): every configuration with its status. */
+        @Volatile var items: List<RawQualificationItem> = emptyList()
+    }
+    /** Set and cleared on main; non-null while a qualification runs. */
+    @Volatile private var rawQualificationSession: RawQualificationSession? = null
+    /** A qualification passed before the cameras were prepared (onboarding): RAW_VIDEO is selected once they are. */
+    private var rawQualificationSelectPending = false
+
+    private fun rawControlExecute(task: Runnable): Boolean = try {
+        rawControl.execute(task)
+        true
+    } catch (_: RejectedExecutionException) {
+        false
+    }
+
+    private fun rawQualifiedConfigs(cameraId: String): List<RawVideoConfig> = runCatching {
+        val set = rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it }
+        set.qualifiedConfigs(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion,
+            RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS, cameraId)
+    }.getOrElse { failure ->
+        android.util.Log.w("CaptureService", "RAW video qualifications unavailable", failure)
+        emptyList()
+    }
+
+    /** Configurations of [cameraId] the storage is too slow for, still choosable by hand ([RawQualificationRisk]). */
+    private fun rawRiskyRecordedConfigs(cameraId: String): List<RawVideoConfig> = runCatching {
+        val set = rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it }
+        RawQualificationRisk.riskyConfigs(set, rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion,
+            RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS, cameraId)
+    }.getOrElse { emptyList() }
+
+    /** RAW10 output sizes of [cameraId]; cached once read, an unreadable camera reads as none. */
+    private fun raw10Sizes(cameraId: String): List<Pair<Int, Int>> = rawRaw10Sizes[cameraId] ?: runCatching {
+        getSystemService(android.hardware.camera2.CameraManager::class.java).getCameraCharacteristics(cameraId)
+            .get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            ?.getOutputSizes(android.graphics.ImageFormat.RAW10)?.map { it.width to it.height }.orEmpty()
+    }.getOrNull()?.also { rawRaw10Sizes[cameraId] = it }.orEmpty()
+
+    /** Configurations of [cameraId] whose newest record failed for the camera, not the storage: their compressed twins stay out. */
+    private fun rawCameraFailedConfigs(cameraId: String): List<RawVideoConfig> = runCatching {
+        val set = rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it }
+        RawQualificationRisk.cameraFailedConfigs(set, rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion,
+            RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS, cameraId)
+    }.getOrElse { emptyList() }
+
+    /** The configurations a RAW_VIDEO session can run on [cameraId]: the qualified ones and the risky ones. */
+    private fun rawUsableConfigs(cameraId: String): List<RawVideoConfig> {
+        val sizes = raw10Sizes(cameraId)
+        return if (sizes.isEmpty()) emptyList() else rawVideoUsableConfigs(cameraId, sizes,
+            rawQualifiedConfigs(cameraId) + rawRiskyRecordedConfigs(cameraId), cameraFailed = rawCameraFailedConfigs(cameraId))
+    }
+
+    /**
+     * The armed configuration of [cameraId] when its ring is smaller than its newest qualification
+     * needed ([rawVideoRingTooSmall]): shown as risky while that ring stays armed, but never
+     * steering Automatic, which keeps choosing among the passed configurations.
+     */
+    private fun rawRuntimeRiskyConfig(cameraId: String, usable: List<RawVideoConfig>): RawVideoConfig? {
+        val armed = rawArmedRing ?: return null
+        val config = armed.config.takeIf { it.cameraId == cameraId && it in usable } ?: return null
+        val current = runCatching {
+            (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+                .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+        }.getOrElse { return null }
+        val record = rawVideoNewestRecord(current, RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS, config)
+        return config.takeIf { rawVideoRingTooSmall(record, armed.ringBytes) }
+    }
+
+    /**
+     * The burst estimate of each [risky] configuration whose newest record has one: how long a take
+     * lasts before the write cache fills and frames may drop ([RawVideoQualificationRecord.burstSeconds]).
+     */
+    private fun rawRiskyBurstSeconds(risky: Set<RawVideoConfig>): Map<RawVideoConfig, Long> {
+        if (risky.isEmpty()) return emptyMap()
+        val current = runCatching {
+            (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+                .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+        }.getOrElse { return emptyMap() }
+        return risky.mapNotNull { config ->
+            rawVideoNewestRecord(current, RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS, config)?.burstSeconds?.let { config to it }
+        }.toMap()
+    }
+
+    /**
+     * The bundled RAW noise profile a block-pack [config] records near-lossless with: its camera's,
+     * measured at its sensor size, with the native codec loaded and, unless [ignoreSetting], near-lossless
+     * chosen ([CameraSettings.rawVideoNearLossless]). Null means lossless block-pack.
+     */
+    private fun rawNearLosslessProfile(config: RawVideoConfig, ignoreSetting: Boolean = false): com.librestatic.opencinecam.rawvideo.RawNoiseProfile? =
+        if ((!ignoreSetting && !settings.rawVideoNearLossless) || config.encoding != RawVideoConfig.ENCODING_BLOCK_PACK ||
+            !com.librestatic.opencinecam.media.raw.NativeRawCodec.available) null
+        else com.librestatic.opencinecam.rawvideo.RawNoiseProfiles.forCamera(this, config.cameraId, config.sensorWidth, config.sensorHeight)
+
+    /** The risky ones among [usable] configurations of [cameraId]. */
+    private fun rawRiskyConfigs(cameraId: String, usable: List<RawVideoConfig>): Set<RawVideoConfig> =
+        if (usable.isEmpty()) emptySet() else rawVideoRiskyConfigs(usable, rawRiskyRecordedConfigs(cameraId))
+
+    /** The reduced-rate ones among [usable] configurations, with the rate each achieved ([rawVideoReducedRates]). */
+    private fun rawReducedRates(usable: List<RawVideoConfig>): Map<RawVideoConfig, Double?> {
+        if (usable.isEmpty()) return emptyMap()
+        val current = runCatching {
+            (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+                .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+        }.getOrElse { return emptyMap() }
+        return rawVideoReducedRates(usable, current, RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS)
+    }
+
+    /**
+     * [state] with the RAW_VIDEO gate, the qualified configurations and the selected one for
+     * [cameraId]. In RAW_VIDEO the take geometry and rate follow the selected configuration.
+     */
+    private fun withRawVideoGate(state: CameraUiState, cameraId: String?): CameraUiState {
+        val sizes = cameraId?.let(::raw10Sizes).orEmpty()
+        val usable = if (cameraId == null || sizes.isEmpty()) emptyList() else rawUsableConfigs(cameraId)
+        val risky = if (cameraId == null) emptySet() else rawRiskyConfigs(cameraId, usable)
+        val runtimeRisky = cameraId?.let { rawRuntimeRiskyConfig(it, usable) }
+        val burst = rawRiskyBurstSeconds(risky)
+        val reduced = rawReducedRates(usable)
+        val gate = rawVideoGate(sizes, usable, cameraId in rawVideoFailedCameras)
+        val available = gate == ModeGateState.AVAILABLE
+        // A risky or reduced-rate configuration runs only when chosen by hand: Automatic never resolves
+        // to one, so with only such ones and Automatic chosen nothing is selected and a take is refused.
+        val manualOnly = risky + reduced.keys
+        val selected = selectRawVideoConfig(usable, settings.rawVideoConfig, manualOnly).takeIf { available }
+        val next = state.copy(
+            modeGates = state.modeGates + (CaptureMode.RAW_VIDEO to gate),
+            // The runtime risk only warns (option and capture notice); selection above ignores it.
+            rawVideoOptions = if (available) usable.map {
+                RawVideoConfigOption.of(it, risky = it in risky || it == runtimeRisky, burstSeconds = burst[it], achievedFps = reduced[it])
+            } else emptyList(),
+            rawVideoSelectedKey = selected?.let(RawVideoConfigKeys::key),
+            rawVideoAutoKey = selectRawVideoConfig(usable, "", manualOnly).takeIf { available }?.let(RawVideoConfigKeys::key),
+            rawVideoNearLosslessAvailable = available && usable.any { rawNearLosslessProfile(it, ignoreSetting = true) != null },
+        )
+        return if (next.selectedMode == CaptureMode.RAW_VIDEO && selected != null) {
+            // The status line shows the RAW time left before a take too, so the free space is read here, not only by the REC ticker.
+            next.copy(targetFps = selected.fps, targetVideoWidth = selected.cropWidth, targetVideoHeight = selected.cropHeight,
+                availableStorageBytes = if (next.phase == CameraUiPhase.RECORDING) next.availableStorageBytes else recordingVolumeFreeBytes())
+        } else next
+    }
+
+    /** The configuration a RAW_VIDEO session runs, or null outside RAW_VIDEO or without a qualified one. */
+    private fun currentRawVideoConfig(state: CameraUiState = cameraState.value): RawVideoConfig? {
+        if (state.selectedMode != CaptureMode.RAW_VIDEO || state.modeGates[CaptureMode.RAW_VIDEO] != ModeGateState.AVAILABLE) return null
+        val cameraId = state.selectedCameraId ?: return null
+        return rawUsableConfigs(cameraId).firstOrNull { RawVideoConfigKeys.key(it) == state.rawVideoSelectedKey }
+    }
+
+    /** The RAW10 stream of the session: the full sensor readout at the selected rate (the recorder crops). */
+    private fun rawVideoSessionConfig(): RawVideoSessionConfig? =
+        currentRawVideoConfig()?.let { RawVideoSessionConfig(it.sensorWidth, it.sensorHeight, it.fps) }
+
+    /**
+     * Keeps the RAM ring armed for the current configuration while RAW_VIDEO is selected with a
+     * viewfinder, and frees it otherwise. Never during a take. The work runs on [rawControl].
+     */
+    private fun syncRawVideoArm() {
+        if (serviceDestroyed || rawTake != null) return
+        // A qualification allocates its own ring: the two never coexist.
+        val wanted = currentRawVideoConfig().takeIf { attachedPreviewSurface != null && rawQualificationSession == null }
+        // A block-pack configuration records near-lossless when its camera has a noise profile and the setting is on.
+        val noiseProfile = wanted?.let { rawNearLosslessProfile(it) }
+        val target = wanted?.let { it to noiseProfile }
+        if (target == rawArmTarget) return
+        rawArmTarget = target
+        rawControlExecute {
+            if (rawRecorder.isRecording) return@rawControlExecute
+            runCatching { rawRecorder.disarm() }
+            val wasArmed = rawArmedRing != null
+            rawArmedRing = null
+            if (wanted == null) {
+                rawArmNoMemory = null
+                if (wasArmed) postRawVideoGate()
+                return@rawControlExecute
+            }
+            val plan = runCatching { RawRingBudget.plan(this, wanted.bytesPerFrame.toInt()) }.getOrNull()
+            try {
+                checkNotNull(plan) { "no RAM budget for a ring of ${RawRingBudget.MIN_SLOTS} frames" }
+                val armed = rawRecorder.arm(wanted, plan.ringBytes, noiseProfile)
+                rawArmNoMemory = null
+                // Re-evaluate the runtime risk against the ring actually armed.
+                rawArmedRing = armed
+                postRawVideoGate()
+                android.util.Log.i("CaptureService", "RAW ring armed: ${armed.slotCount} slots of ${armed.slotBytes} bytes (${plan.limitedBy})" +
+                    if (armed.nearLossless) ", near-lossless (${noiseProfile?.id})" else "")
+            } catch (failure: Exception) {
+                rawArmFailure = if (failure is com.librestatic.opencinecam.rawvideo.RawVideoArmException) RawVideoServiceReasons.CODEC else RawVideoServiceReasons.MEMORY
+                rawArmNoMemory = wanted
+                android.util.Log.w("CaptureService", "RAW ring could not be armed", failure)
+                if (wasArmed) postRawVideoGate()
+            } catch (failure: OutOfMemoryError) {
+                rawArmFailure = RawVideoServiceReasons.MEMORY
+                rawArmNoMemory = wanted
+                android.util.Log.w("CaptureService", "RAW ring could not be allocated", failure)
+                if (wasArmed) postRawVideoGate()
+            }
+        }
+    }
+
+    /** Any thread: recompute the RAW_VIDEO gate and options on main (the armed ring changed). */
+    private fun postRawVideoGate() {
+        mainHandler.post {
+            if (!serviceDestroyed) cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+        }
+    }
+
+    /** The camera a qualification runs on: the selected one, or before the cameras are prepared (onboarding) the first back camera with RAW10. */
+    private fun rawQualificationCameraId(): String? = cameraState.value.selectedCameraId ?: runCatching {
+        val manager = getSystemService(android.hardware.camera2.CameraManager::class.java)
+        manager.cameraIdList.firstOrNull { id ->
+            manager.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) ==
+                android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK && raw10Sizes(id).isNotEmpty()
+        }
+    }.getOrNull()
+
+    /** The largest RAW10 size the qualifier reads, as [RawVideoQualifier] picks it. */
+    private fun rawQualificationSensorSize(cameraId: String): Pair<Int, Int>? =
+        raw10Sizes(cameraId).filter { (width, height) -> width > 0 && height > 0 && width % 4 == 0 }.maxByOrNull { (width, height) -> width.toLong() * height }
+
+    /** Main: what the qualification prompt and step show; a few small reads (cached characteristics, the store, StatFs). */
+    private fun rawQualificationInfo(): RawVideoQualificationInfo {
+        val cameraId = rawQualificationCameraId()
+            ?: return RawVideoQualificationInfo(null, ModeGateState.UNSUPPORTED, null)
+        val usable = rawUsableConfigs(cameraId)
+        val gate = rawVideoGate(raw10Sizes(cameraId), usable, cameraId in rawVideoFailedCameras)
+        val sensor = rawQualificationSensorSize(cameraId)
+        val free = recordingVolumeFreeBytes()
+        val space = if (sensor != null && free != null) {
+            RawQualificationEstimates.forFreeSpace(
+                RawQualificationPlan.DEFAULT, cameraId, sensor.first, sensor.second,
+                com.librestatic.opencinecam.media.raw.NativeRawCodec.available, free,
+            )
+        } else null
+        val previousFailure = usable.isEmpty() && runCatching {
+            (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+                .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+                .any { it.config.cameraId == cameraId && it.destinationId == RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS }
+        }.getOrDefault(false)
+        return RawVideoQualificationInfo(cameraId, gate, space, previousFailure)
+    }
+
+    /** Qualification thread: one progress report, posted to main at most about four times a second (and on every new step). */
+    private fun postRawQualificationProgress(session: RawQualificationSession, progress: RawQualificationProgress) {
+        if (progress.phase == RawQualificationPhase.DONE) return
+        val config = progress.spec?.let { spec ->
+            RawQualificationSpecs.parse(spec, session.cameraId, session.sensorWidth, session.sensorHeight)?.config
+        }
+        val label = config?.let { RawVideoConfigOption.of(it).label }
+        session.items = rawQualificationItemsOnProgress(session.items, progress, label,
+            config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L)
+        val ui = rawQualificationUiOf(progress, session.estimateMs, label).copy(items = session.items)
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!rawQualificationShouldPost(session.lastPosted, ui, now - session.lastPostAtMs)) return
+        postRawQualificationUi(session, ui, now)
+    }
+
+    /** Qualification thread: one run's result row; its configuration takes its status at once. */
+    private fun recordRawQualificationResult(session: RawQualificationSession, result: org.json.JSONObject) {
+        val kind = result.optString("kind")
+        if (kind != "live" && kind != RAW_QUALIFICATION_CAMERA_KIND) return
+        val spec = result.optString("spec").takeIf { it.isNotEmpty() } ?: return
+        val config = RawQualificationSpecs.parse(spec, session.cameraId, session.sensorWidth, session.sensorHeight)?.config
+        if (kind == RAW_QUALIFICATION_CAMERA_KIND) {
+            // A camera check's verdict comes at the end; until then its configuration reads as measured.
+            session.items = rawQualificationItemsCameraChecked(session.items, spec, config?.let { RawVideoConfigOption.of(it).label } ?: spec,
+                config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L, result.optDouble("achievedFps").takeIf { !it.isNaN() })
+            val last = session.lastPosted ?: return
+            postRawQualificationUi(session, last.copy(items = session.items), android.os.SystemClock.elapsedRealtime())
+            return
+        }
+        val codes = result.optJSONArray("reasonCodes")?.let { array -> (0 until array.length()).map(array::optString) }
+        val status = rawQualificationRunStatus(result.optString("status"), result.optString("reasonCode").ifEmpty { null },
+            codes ?: listOfNotNull(result.optString("reasonCode").ifEmpty { null }))
+        // The skip row carries the figure the qualifier decided on; otherwise the same timing gives it.
+        val needed = result.optLong("neededBytes", config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L)
+        val burstSeconds = if (result.isNull("burstSeconds")) null else result.optLong("burstSeconds")
+        val achievedFps = result.optDouble("achievedFps").takeIf { !it.isNaN() }
+        session.items = rawQualificationItemsWith(session.items, spec, status,
+            config?.let { RawVideoConfigOption.of(it).label } ?: spec, needed, burstSeconds, achievedFps)
+        val last = session.lastPosted ?: return
+        postRawQualificationUi(session, last.copy(items = session.items), android.os.SystemClock.elapsedRealtime())
+    }
+
+    private fun postRawQualificationUi(session: RawQualificationSession, ui: RawVideoQualificationUi, now: Long) {
+        session.lastPosted = ui
+        session.lastPostAtMs = now
+        mainHandler.post {
+            if (rawQualificationSession === session && !serviceDestroyed) cameraState.update { it.copy(rawVideoQualification = ui) }
+        }
+    }
+
+    /**
+     * Main: the run ended. Reloads the records, updates the gate, selects RAW_VIDEO when a configuration
+     * passed (or once the cameras are prepared), and reopens the viewfinder when a surface is attached.
+     */
+    private fun finishRawQualification(
+        session: RawQualificationSession,
+        outcome: RawVideoQualificationOutcome,
+        records: RawVideoQualificationSet,
+    ) {
+        if (rawQualificationSession !== session) return
+        rawQualificationSession = null
+        session.batteryReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
+        session.batteryReceiver = null
+        if (serviceDestroyed) return
+        rawQualifications = records
+        val usable = rawUsableConfigs(session.cameraId).let { all -> all - rawRiskyConfigs(session.cameraId, all) }
+        val kind = rawQualificationOutcome(outcome.status, usable.size, outcome.reasonCode)
+        val reason = when (kind) {
+            RawQualificationOutcomeKind.CANCELLED -> session.stopReason ?: RawQualificationStopReasons.USER
+            RawQualificationOutcomeKind.FAILED_TO_RUN -> outcome.reasonCode
+            else -> null
+        }
+        val result = RawVideoQualificationUi(
+            phase = RawQualificationPhase.DONE,
+            fraction = cameraState.value.rawVideoQualification?.fraction ?: 0f,
+            outcome = kind,
+            passedLabels = if (kind == RawQualificationOutcomeKind.PASSED) usable.map { RawVideoConfigOption.of(it).label } else emptyList(),
+            reason = reason,
+            remainingMs = 0L,
+            items = rawQualificationItemsFinished(session.items),
+            // The run stored nothing: whatever the camera was qualified for before still holds.
+            previousKept = rawQualificationStorageBusy(outcome.reasonCode) && rawUsableConfigs(session.cameraId).isNotEmpty(),
+        )
+        cameraState.value = withRawVideoGate(cameraState.value.copy(rawVideoQualification = result), cameraState.value.selectedCameraId)
+        // A requalification may fail every configuration that had passed: RAW video, if selected, gives way.
+        val fallback = cameraState.value.let { rawVideoModeFallback(it.selectedMode, it.modeGates, rawModeFallback, hasConfig = it.rawVideoSelectedKey != null) }
+        if (fallback != null) {
+            localBinder.selectMode(fallback, reopen = false)
+        } else if (kind == RawQualificationOutcomeKind.PASSED && session.selectOnPass) {
+            val current = cameraState.value
+            if (current.cameras.isNotEmpty() && current.selectedCameraId == session.cameraId &&
+                CameraUiState.isModeSelectable(current.modeGates[CaptureMode.RAW_VIDEO])) {
+                localBinder.selectMode(CaptureMode.RAW_VIDEO, reopen = false)
+            } else if (current.cameras.isEmpty()) {
+                rawQualificationSelectPending = true
+            }
+        }
+        val message = when (kind) {
+            RawQualificationOutcomeKind.PASSED ->
+                resources.getQuantityString(R.plurals.raw_qualification_message_ready, usable.size, usable.size)
+            RawQualificationOutcomeKind.NO_CONFIG ->
+                getString(R.string.raw_qualification_message_none, modeDisplayName(cameraState.value.selectedMode))
+            else -> null
+        }
+        if (message != null) cameraState.update { it.copy(message = message, messageTransient = true) }
+        val surface = attachedPreviewSurface?.takeIf { it.isValid }
+        if (surface == null || cameraState.value.descriptor == null || !localBinder.attachPreview(surface, attachedPreviewRotationDegrees)) syncRawVideoArm()
+    }
+
+    /** One RAW recovery pass; at service start and before each RAW take, never on main. */
+    private fun recoverRawTakes(): RawVideoRecoveryReport = try {
+        RawVideoRecovery(this).recover()
+    } catch (failure: Exception) {
+        android.util.Log.e("RawVideoRecovery", "Interrupted RAW takes could not be recovered", failure)
+        RawVideoRecoveryReport(unresolved = 1)
+    }
+
+    /** Main: the camera refused the RAW graph. RAW_VIDEO becomes FAILED for this camera and the operator returns to the previous mode. */
+    private fun rawVideoGraphRejected(reason: String, message: String) {
+        val cameraId = cameraState.value.selectedCameraId
+        if (reason == RawVideoReasons.GRAPH_REJECTED && cameraId != null) rawVideoFailedCameras += cameraId
+        cameraState.value = withRawVideoGate(cameraState.value, cameraId)
+        android.util.Log.w("CaptureService", "RAW video unavailable on camera $cameraId ($reason): $message")
+        syncRawVideoArm()
+        leaveFailedRawVideo()
+    }
+
+    /** Leaves RAW_VIDEO for the mode it was entered from (or VIDEO) once its gate is no longer AVAILABLE. */
+    private fun leaveFailedRawVideo() {
+        val current = cameraState.value
+        if (current.selectedMode != CaptureMode.RAW_VIDEO || rawTake != null || current.structuralSettingsFrozen ||
+            current.modeGates[CaptureMode.RAW_VIDEO] != ModeGateState.FAILED) return
+        val fallback = rawModeFallback?.takeIf { it != CaptureMode.RAW_VIDEO && CameraUiState.isModeSelectable(current.modeGates[it]) }
+            ?: CaptureMode.VIDEO
+        val text = getString(R.string.raw_video_unavailable, modeDisplayName(fallback))
+        pendingStatusMessage = text
+        localBinder.selectMode(fallback)
+        cameraState.update { it.copy(message = text, errorCode = RawVideoServiceReasons.FAILED) }
+    }
+
+    private fun formatBytes(bytes: Long): String = android.text.format.Formatter.formatFileSize(this, bytes)
+
+    private fun rawRefusalText(reason: String, config: RawVideoConfig?, freeBytes: Long?): String = when (reason) {
+        RawVideoServiceReasons.UNSUPPORTED -> getString(R.string.raw_video_unsupported)
+        RawVideoServiceReasons.FAILED -> getString(R.string.raw_video_failed)
+        RawVideoServiceReasons.MEMORY -> getString(R.string.raw_video_memory)
+        RawVideoServiceReasons.CODEC -> getString(R.string.raw_video_codec_unavailable)
+        RawVideoServiceReasons.STORAGE -> if (config == null || freeBytes == null) getString(R.string.raw_video_storage_unknown)
+            else getString(R.string.raw_video_storage, formatBytes(rawTakeMinimumFreeBytes(config)), formatBytes(freeBytes))
+        RawVideoServiceReasons.START_FAILED -> getString(R.string.raw_video_start_failed)
+        else -> getString(R.string.raw_video_not_qualified)
+    }
+
+    private fun rawEndText(reason: String): String = getString(when (rawTakeEndKind(reason)) {
+        RawTakeEndKind.RING_FULL -> R.string.raw_video_end_ring_full
+        RawTakeEndKind.WRITER -> R.string.raw_video_end_writer
+        RawTakeEndKind.STREAM -> R.string.raw_video_end_stream
+        RawTakeEndKind.FRAME -> R.string.raw_video_end_frame
+        RawTakeEndKind.STALLED -> R.string.raw_video_end_stalled
+        RawTakeEndKind.OTHER -> R.string.raw_video_end_other
+    })
+
+    /**
+     * Main: the record button in RAW_VIDEO. Starts a take (admission, foreground service, then the
+     * control thread opens the file, starts the recorder and only then the engine) or stops the
+     * running one. Never MediaRecorder, never an encoded fallback. Sound follows the video take's
+     * settings and permission check (PLAN-071 §7.1) and goes into the `.ocraw` as PCM16.
+     */
+    private fun toggleRawTake(audioForThisTake: Boolean? = null): Boolean {
+        rawTake?.let { return stopRawTake(it, null) }
+        val current = cameraState.value
+        if (current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) || current.recordingFinalizing ||
+            transferCapture.get() != null) return false
+        val config = currentRawVideoConfig(current)
+        val free = recordingVolumeFreeBytes()
+        val admission = admitRawTake(current.modeGates[CaptureMode.RAW_VIDEO], config, config != null && rawArmNoMemory == config, free)
+        if (admission is RawTakeAdmission.Refuse) {
+            val reason = if (admission.reason == RawVideoServiceReasons.MEMORY) rawArmFailure else admission.reason
+            cameraState.update { it.copy(message = rawRefusalText(reason, config, free), errorCode = reason, messageTransient = false) }
+            return false
+        }
+        val admitted = checkNotNull(config)
+        val audioRequested = when (RawTakeAudio.decide(audioForThisTake ?: settings.audioEnabled,
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)) {
+            RawTakeAudio.NONE -> false
+            RawTakeAudio.RECORD -> true
+            RawTakeAudio.REFUSE_PERMISSION -> {
+                cameraState.update { it.copy(message = getString(R.string.capture_microphone_permission_required),
+                    errorCode = "microphone-permission-required", messageTransient = false) }
+                return false
+            }
+        }
+        val audio: RawAudioSource? = if (audioRequested) {
+            val takeInput = takeAudioInput(cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings, true) ?: return false
+            stopPreviewAudioMonitor(clearLevels = false)
+            AudioRecordRawAudioSource(this, takeInput.settings, current.descriptor?.timestampSourceRealtime == true,
+                takeInput.guard, newAudioLevelConsumer(), newAudioListeningSink())
+        } else null
+        when (val start = foreground.start(audioRequested)) {
+            is ForegroundRecordingStart.Rejected -> {
+                cameraState.update { it.copy(message = start.failure.userMessage, errorCode = "recording-foreground-failed", messageTransient = false) }
+                return false
+            }
+            is ForegroundRecordingStart.Started -> startService(Intent(this, CaptureService::class.java))
+        }
+        val session = RawTakeSession(java.util.UUID.randomUUID().toString(), admitted)
+        rawTake = session
+        pendingStopReason = null
+        val captureNames = admittedCaptureNames()
+        cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, message = null, errorCode = null) }
+        submitCaptureState(stateCommands.takeDispatched())
+        if (!rawControlExecute { startRawTakeOnControl(session, captureNames, audio) }) rawTakeRefused(session, RawVideoServiceReasons.START_FAILED)
+        return true
+    }
+
+    /** Control thread: recovery pass, output, recorder (and its audio), then the engine (PLAN-071 order). */
+    private fun startRawTakeOnControl(session: RawTakeSession, captureNames: CaptureNameSnapshot, audio: RawAudioSource?) {
+        fun refuse(reason: String) = mainHandler.post { if (!serviceDestroyed) rawTakeRefused(session, reason) }
+        val recovered = recoverRawTakes()
+        if (recovered != RawVideoRecoveryReport()) mainHandler.post {
+            if (!serviceDestroyed) cameraState.update { state ->
+                val report = state.recordingRecovery ?: com.librestatic.opencinecam.storage.RecordingRecoveryReport()
+                state.copy(recordingRecovery = report.copy(rawTakes = RawVideoRecoveryReport(report.rawTakes.published + recovered.published,
+                    report.rawTakes.deleted + recovered.deleted, report.rawTakes.unresolved + recovered.unresolved)))
+            }
+        }
+        if (serviceDestroyed) { refuse(RawVideoServiceReasons.START_FAILED); return }
+        if (rawRecorder.armState?.config != session.config) {
+            refuse(if (rawArmNoMemory == session.config) rawArmFailure else RawVideoServiceReasons.START_FAILED)
+            return
+        }
+        var output: RawVideoOutput? = null
+        try {
+            output = RawVideoOutput.create(this, captureNames, session.takeId)
+            val appVersion = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull().orEmpty()
+            rawRecorder.start(output, RawTakeInfo(session.takeId, Build.MODEL, appVersion, mapOf("fingerprint" to Build.FINGERPRINT)), audio) { reason ->
+                // The recorder cannot keep up or failed: end the take; its reason comes back from stop().
+                android.util.Log.w("CaptureService", "RAW take must end: $reason")
+                previewEngine.stopRawVideo()
+            }
+        } catch (failure: Exception) {
+            android.util.Log.e("CaptureService", "RAW take could not start", failure)
+            if (!rawRecorder.isRecording) runCatching { output?.discard() }
+            refuse(RawVideoServiceReasons.START_FAILED)
+            return
+        }
+        if (!previewEngine.startRawVideo(rawRecorder)) {
+            // Nothing reached the file: stop() discards the empty output.
+            runCatching { rawRecorder.stop() }.onFailure { android.util.Log.e("CaptureService", "Refused RAW take did not close", it) }
+            refuse(RawVideoServiceReasons.START_FAILED)
+            return
+        }
+        mainHandler.post { if (!serviceDestroyed) rawTakeStarted(session) }
+    }
+
+    /** Main: the engine accepted the take; the REC state, timer and live policy are the video take's. */
+    private fun rawTakeStarted(session: RawTakeSession) {
+        if (rawTake !== session) return
+        session.started = true
+        if (cameraState.value.phase != CameraUiPhase.CAPTURING) {
+            // The camera failed or reopened meanwhile; the engine's stop callback finishes the take.
+            stopRawTake(session, null)
+            return
+        }
+        submitCaptureState(stateCommands.takeStarted())
+        val config = session.config
+        recordingStartedAtMs = android.os.SystemClock.elapsedRealtime()
+        activeRecordingPolicy = settings.recordingPolicy
+        // The live storage policy stops a take when less than its projected figure is left. A RAW
+        // take is admitted with RAW_TAKE_MIN_SECONDS of room, so that is its horizon, not a minute.
+        takeProjectedBytesPerMinute = rawTakeMinimumFreeBytes(config)
+        admissionWarning = null
+        takeSoftwareEncoder = null
+        takeCodecFallback = false
+        runtimeNotice = null
+        avNotice = null
+        cadenceNotice = null
+        avDiagnostics = null
+        val free = recordingVolumeFreeBytes()
+        lastKnownFreeBytes = free
+        val option = RawVideoConfigOption.of(config)
+        mainHandler.removeCallbacks(recordingTicker)
+        cameraState.update { it.copy(
+            phase = CameraUiPhase.RECORDING,
+            message = getString(R.string.raw_video_recording, rawConfigLabelLocalized(option.label,
+                getString(if (rawArmedRing?.nearLossless == true) R.string.raw_video_label_near_lossless else R.string.raw_video_label_compressed)),
+                kotlin.math.round(option.megabytesPerSecond).toLong()) +
+                " · " + rawTakeAudioLabel(),
+            recordingElapsedMs = 0L,
+            recordingPauseStatus = null,
+            recordingAvTiming = null,
+            recordingPausePending = false,
+            recordingWidth = config.cropWidth,
+            recordingHeight = config.cropHeight,
+            availableStorageBytes = free,
+            recordingWarning = null,
+            errorCode = null,
+            rawVideoRingPercent = 0,
+            rawVideoFramesWritten = 0L,
+        ) }
+        mainHandler.post(recordingTicker)
+        if (session.stopRequested) stopRawTake(session, null)
+    }
+
+    /** The REC line's audio part, as a video take shows it: the PCM format, or "no audio". */
+    private fun rawTakeAudioLabel(): String {
+        val sampleRate = rawRecorder.liveAudioSampleRate()
+        val channels = rawRecorder.liveAudioChannels()
+        return if (sampleRate == null || channels == null) getString(R.string.capture_no_audio)
+            else "PCM 16-bit · ${kiloHertzText(sampleRate, messageLocale)} kHz · $channels ch"
+    }
+
+    /** The saved notice's audio part: the PCM format, and a note when the sound did not start or has gaps. */
+    private fun rawSavedAudioSuffix(result: RawTakeResult): String {
+        val format = result.audioSampleRate?.let { savedAudioSuffix(SavedSidecarAudio(16, "PCM", it), "", messageLocale) }.orEmpty()
+        val note = when {
+            result.audioError != null && result.audioSampleRate == null -> getString(R.string.capture_lossless_audio_start_failed)
+            result.audioSampleRate != null && (result.audioDroppedFrames > 0 || result.audioError != null) ->
+                getString(R.string.raw_video_audio_incomplete)
+            else -> null
+        }
+        return format + note?.let { " · $it" }.orEmpty()
+    }
+
+    /** Main: stops [session]; before the engine accepted it the stop is remembered and applied then. */
+    private fun stopRawTake(session: RawTakeSession, reason: StableFailure?): Boolean {
+        if (reason != null && pendingStopReason == null) {
+            android.util.Log.w("CaptureService", "Stopping RAW take: ${reason.code} (${reason.component}) ${reason.userMessage}")
+            pendingStopReason = reason
+        }
+        if (!session.started) {
+            session.stopRequested = true
+            return true
+        }
+        if (cameraState.value.recordingFinalizing) return false
+        cameraState.value = cameraState.value.copy(recordingFinalizing = true)
+        previewEngine.stopRawVideo()
+        submitCaptureState(stateCommands.takeStopRequested())
+        return true
+    }
+
+    /** RAW thread: the engine ended the take. The recorder drains and closes on the control thread. */
+    private fun rawVideoTakeStopped(engineReason: String?) {
+        val finish = Runnable {
+            val result = if (rawRecorder.isRecording) {
+                try { rawRecorder.stop() } catch (failure: Exception) {
+                    android.util.Log.e("CaptureService", "RAW take did not finish", failure)
+                    null
+                }
+            } else null
+            mainHandler.post { if (!serviceDestroyed) finishRawTake(result, engineReason) }
+        }
+        if (!rawControlExecute(finish)) finish.run()
+    }
+
+    /** Main: publishes the end of the take, with its reason when it ended early. */
+    private fun finishRawTake(result: RawTakeResult?, engineReason: String?) {
+        val session = rawTake
+        if (session == null) {
+            android.util.Log.w("CaptureService", "RAW take ended without a session: ${result?.reason ?: engineReason}")
+            return
+        }
+        rawTake = null
+        mainHandler.removeCallbacks(recordingTicker)
+        val policy = pendingStopReason
+        pendingStopReason = null
+        submitCaptureState(stateCommands.takeEnded())
+        val reason = rawTakeEndReason(result?.reason, engineReason, null)
+        val outcome = when {
+            result?.uri != null -> getString(R.string.raw_video_saved, result.framesWritten,
+                String.format(java.util.Locale.getDefault(), "%.1f", result.mediaDurationNs / 1e9)) + rawSavedAudioSuffix(result)
+            result == null || result.framesWritten > 0 || result.outputError != null -> getString(R.string.raw_video_not_finalised)
+            else -> getString(R.string.raw_video_empty)
+        }
+        val message = when {
+            reason != null -> getString(R.string.take_stopped_reason, rawEndText(reason), outcome)
+            policy != null -> getString(R.string.take_stopped_reason, stopReasonText(policy), outcome)
+            else -> outcome
+        }
+        android.util.Log.i("CaptureService", "RAW take ${session.takeId} ended: reason=$reason policy=${policy?.code} " +
+            "frames=${result?.framesWritten} captured=${result?.framesCaptured} peakRing=${result?.peakRingFraction} error=${result?.outputError} " +
+            "audio=${result?.audioSampleRate} audioFrames=${result?.audioFramesWritten} audioDropped=${result?.audioDroppedFrames} audioError=${result?.audioError}")
+        retireAudioLevelConsumer(clearLevels = true)
+        runtimeNotice = null
+        avNotice = null
+        cadenceNotice = null
+        cameraState.update { it.copy(
+            phase = if (it.phase in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING)) {
+                if (result?.uri != null) CameraUiPhase.SAVED else CameraUiPhase.PREVIEWING
+            } else it.phase,
+            recordingFinalizing = false,
+            lastSavedUri = result?.uri?.toString() ?: it.lastSavedUri,
+            message = message,
+            messageTransient = false,
+            errorCode = reason,
+            recordingWarning = null,
+            rawVideoRingPercent = null,
+            rawVideoFramesWritten = null,
+        ) }
+        foreground.stop()
+        syncRawVideoArm()
+        leaveFailedRawVideo()
+        mainHandler.post { if (!serviceDestroyed) localBinder.applySettings(SettingsRepositories.get(this).states.value) }
+        if (rawTakePreviewStale) {
+            // A screen lock mid-take destroyed the SurfaceView; the session kept rendering to it and
+            // nothing could swap it. The camera is free again, so reopen the viewfinder on the live surface.
+            rawTakePreviewStale = false
+            mainHandler.post {
+                if (!serviceDestroyed) attachedPreviewSurface?.takeIf { it.isValid }?.let { localBinder.attachPreview(it, attachedPreviewRotationDegrees) }
+            }
+        }
+    }
+
+    /** Main: the take never started; back to previewing with the reason. */
+    private fun rawTakeRefused(session: RawTakeSession, reason: String) {
+        if (rawTake !== session) return
+        rawTake = null
+        pendingStopReason = null
+        retireAudioLevelConsumer(clearLevels = true)
+        foreground.stop()
+        submitCaptureState(stateCommands.takeEnded())
+        val text = rawRefusalText(reason, session.config, recordingVolumeFreeBytes())
+        if (cameraState.value.phase == CameraUiPhase.CAPTURING) refuseTakeStart(reason, text)
+        else cameraState.update { it.copy(message = text, errorCode = reason) }
+        syncRawVideoArm()
+        leaveFailedRawVideo()
+    }
+
+    /** Main, from the recording ticker: the ring fill and the frames on storage of the running take. */
+    private fun publishRawVideoStats() {
+        if (rawTake?.started != true) return
+        val stats = rawRecorder.liveStats()
+        if (!stats.recording) return
+        val percent = (stats.ringUsedFraction * 100).toInt().coerceIn(0, 100)
+        cameraState.update { it.copy(rawVideoRingPercent = percent, rawVideoFramesWritten = stats.framesWritten) }
     }
 
     private fun updateSubjectTarget() {
@@ -1652,15 +2440,15 @@ class CaptureService : Service() {
                         mainHandler.post {
                             if (serviceDestroyed) return@post
                             cameraState.update { it.copy(phase = CameraUiPhase.SAVED, lastSavedUri = uri.toString(),
-                                message = "JPEG saved: ${width}×$height", errorCode = null) }
+                                message = getString(R.string.capture_jpeg_saved, width, height), errorCode = null) }
                             localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value)
                         }
                     } catch (failure: Throwable) {
-                        fail("jpeg-save-failed", failure.message ?: "JPEG could not be saved.")
+                        fail("jpeg-save-failed", failureText(R.string.capture_jpeg_save_failed, failure))
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                fail("jpeg-save-busy", "The still-image writer is busy.")
+                fail("jpeg-save-busy", getString(R.string.capture_still_writer_busy))
             }
         }
 
@@ -1685,11 +2473,11 @@ class CaptureService : Service() {
                             }
                         }
                     } catch (failure: Throwable) {
-                        mainHandler.post { finishStillFailure(owner, "still-save-failed", failure.message ?: "The still capture could not be saved.") }
+                        mainHandler.post { finishStillFailure(owner, "still-save-failed", failureText(R.string.capture_still_save_failed, failure)) }
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                mainHandler.post { finishStillFailure(owner, "still-save-busy", "The still-image writer is busy.") }
+                mainHandler.post { finishStillFailure(owner, "still-save-busy", getString(R.string.capture_still_writer_busy)) }
             }
         }
 
@@ -1735,11 +2523,11 @@ class CaptureService : Service() {
                             }
                         }
                     } catch (failure: Throwable) {
-                        mainHandler.post { finishStillFailure(owner, "burst-save-failed", failure.message ?: "The burst could not be saved.") }
+                        mainHandler.post { finishStillFailure(owner, "burst-save-failed", failureText(R.string.capture_burst_save_failed, failure)) }
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                mainHandler.post { finishStillFailure(owner, "burst-save-busy", "The still-image writer is busy.") }
+                mainHandler.post { finishStillFailure(owner, "burst-save-busy", getString(R.string.capture_still_writer_busy)) }
             }
         }
 
@@ -1778,11 +2566,11 @@ class CaptureService : Service() {
                             }
                         }
                     } catch (failure: Throwable) {
-                        mainHandler.post { finishStillFailure(owner, "bracket-save-failed", failure.message ?: "The bracket could not be saved.") }
+                        mainHandler.post { finishStillFailure(owner, "bracket-save-failed", failureText(R.string.capture_bracket_save_failed, failure)) }
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                mainHandler.post { finishStillFailure(owner, "bracket-save-busy", "The still-image writer is busy.") }
+                mainHandler.post { finishStillFailure(owner, "bracket-save-busy", getString(R.string.capture_still_writer_busy)) }
             }
         }
 
@@ -1821,11 +2609,11 @@ class CaptureService : Service() {
                             }
                         }
                     } catch (failure: Throwable) {
-                        mainHandler.post { finishStillFailure(owner, "accumulation-save-failed", failure.message ?: "The accumulation could not be saved.") }
+                        mainHandler.post { finishStillFailure(owner, "accumulation-save-failed", failureText(R.string.capture_accumulation_save_failed, failure)) }
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                mainHandler.post { finishStillFailure(owner, "accumulation-save-busy", "The still-image writer is busy.") }
+                mainHandler.post { finishStillFailure(owner, "accumulation-save-busy", getString(R.string.capture_still_writer_busy)) }
             }
         }
 
@@ -1842,15 +2630,15 @@ class CaptureService : Service() {
                         mainHandler.post {
                             if (serviceDestroyed) return@post
                             cameraState.update { it.copy(phase = CameraUiPhase.SAVED, lastSavedUri = uri.toString(),
-                                message = "DNG saved: ${width}×$height", errorCode = null) }
+                                message = getString(R.string.capture_dng_saved, width, height), errorCode = null) }
                             localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value)
                         }
                     } catch (failure: Throwable) {
-                        fail("dng-save-failed", failure.message ?: "DNG could not be saved.")
+                        fail("dng-save-failed", failureText(R.string.capture_dng_save_failed, failure))
                     }
                 }
             } catch (_: RejectedExecutionException) {
-                fail("dng-save-busy", "The still-image writer is busy.")
+                fail("dng-save-busy", getString(R.string.capture_still_writer_busy))
             }
         }
 
@@ -1927,6 +2715,7 @@ class CaptureService : Service() {
             takeClipIntent = runCatching { clipIntentSnapshot() }.getOrNull()
             takeClipCodecMime = previewEngine.activeVideoCodec()?.mime
             takeClipMediaRecorder = previewEngine.recordsThroughMediaRecorder()
+            takeCameraTracker = ClipCameraTracker().also { it.sample(cameraState.value) }
             subjectSyncMarkers.begin(android.os.SystemClock.elapsedRealtimeNanos())
             audioSidecarRecorder?.let { sidecar ->
                 try {
@@ -1935,7 +2724,7 @@ class CaptureService : Service() {
                     synchronized(takeOwnershipLock) {
                         // A concurrent failure/recovery may already own (and finish) this sidecar.
                         if (audioSidecarRecorder === sidecar) {
-                            audioStartFailure = failure.message ?: "Lossless audio could not start."
+                            audioStartFailure = failureText(R.string.capture_lossless_audio_start_failed, failure)
                             audioSidecarRecorder = null
                         }
                     }
@@ -1951,8 +2740,8 @@ class CaptureService : Service() {
                     "REC ${width}×$height · ${hdrTakeFormat(cameraState.value).label} BT.2020 · HEVC Main10 · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
                 } else if (cameraState.value.selectedMode.usesLogGraph) {
                     val source = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
-                        "HFR ISP-derived · source depth not claimed"
-                    } else "HLG-derived 10-bit"
+                        getString(R.string.capture_source_hfr_isp_derived) + " · " + getString(R.string.capture_source_depth_not_claimed)
+                    } else getString(R.string.capture_source_hlg_derived)
                     "REC ${width}×$height · ${if (recordingLutIntent.get()?.lut != null) "LUT → SDR BT.709" else "OCLog2"} · HEVC Main10 · $source · ${cameraState.value.targetFps} fps · $activeRecordingAudioLabel"
                 } else if (cameraState.value.selectedMode == CaptureMode.TIME_LAPSE) {
                     val intervalLabel = formatTimelapseInterval(cameraState.value.timelapseIntervalMs)
@@ -2044,11 +2833,13 @@ class CaptureService : Service() {
             val clipIntent = takeClipIntent?.copy(timecodeEnabled = timecodeReport?.config?.enabled == true)
             val clipCodecMime = takeClipCodecMime
             val clipMediaRecorder = takeClipMediaRecorder
+            val clipState = cameraState.value
+            val clipCamera = takeCameraTracker?.also { it.sample(clipState) }?.result()
             takeClipMediaRecorder = null
             takeClipStartedAt = null
             takeClipIntent = null
             takeClipCodecMime = null
-            val clipState = cameraState.value
+            takeCameraTracker = null
             val clipDeviceProfile = clipDeviceProfile(clipState.selectedCameraId)
             val clipNoticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') }
             val clipStopReason = stopReason?.let { takeStopReason(it).name.lowercase().replace('_', '-') }
@@ -2145,7 +2936,7 @@ class CaptureService : Service() {
                                 deviceProfile = clipDeviceProfile, noticeCodes = clipNoticeCodes,
                                 hardwareWarnings = hardwareTruth?.warnings.orEmpty(), stopReason = clipStopReason,
                                 durationMs = durationMs, encodedFrames = encodedFrames,
-                                success = success, nativeRetired = nativeRetired,
+                                success = success, nativeRetired = nativeRetired, camera = clipCamera,
                             ))
                         }
                     }
@@ -2249,21 +3040,23 @@ class CaptureService : Service() {
                             val audioSaved = savedAudioSuffix(
                                 sidecarResult?.let { SavedSidecarAudio(it.bitDepth.bits, it.container, it.sampleRateHz) },
                                 takeAudioLabel,
+                                messageLocale,
                             )
+                            val seconds = durationMs / 1000.0
                             if (hlgEvidence != null) {
-                                "${HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG"} HDR Main10 saved · BT.2020$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                                getString(R.string.capture_hdr_video_saved, HdrVideoFormat.fromCurve(hlgEvidence.curve)?.label ?: "HLG", audioSaved, seconds) + captureEpochLabel(avTiming)
                             } else if (logEvidence != null) {
-                                val source = if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
-                                    "HFR ISP-derived"
-                                } else "HLG-derived 10-bit"
+                                val source = getString(if (logEvidence.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
+                                    R.string.capture_source_hfr_isp_derived
+                                } else R.string.capture_source_hlg_derived)
                                 val outputColor = if (bakedEvidence != null) "LUT → SDR BT.709" else "OCLog2"
-                                "$outputColor Main10 saved · $source + provenance$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                                getString(R.string.capture_log_video_saved, outputColor, source, audioSaved, seconds) + captureEpochLabel(avTiming)
                             }
-                            else "Video saved$audioSaved · ${durationMs / 1000.0}s" + captureEpochLabel(avTiming)
+                            else getString(R.string.capture_video_saved, audioSaved, seconds) + captureEpochLabel(avTiming)
                         } else if (savedIncomplete) {
                             getString(R.string.take_saved_incomplete,
                                 requestedAudioFailure ?: (finalization.incompleteReasons.ifEmpty { incompleteReasons }).joinToString(", "))
-                        } else requestedAudioFailure ?: "Video could not be finalized with verified provenance.") + registrationNotice)
+                        } else requestedAudioFailure ?: getString(R.string.capture_video_finalize_failed)) + registrationNotice)
                             .let { outcome -> if (stopReason == null) outcome else getString(R.string.take_stopped_reason, stopReasonText(stopReason), outcome) },
                         errorCode = if (finalizedSuccess) null else incompleteReasons.first(),
                         recordingElapsedMs = durationMs,
@@ -2275,7 +3068,7 @@ class CaptureService : Service() {
                     runCatching { output?.recoveryGroup?.beginSalvage() }
                     runCatching { take.audio?.prepareIncompleteCompletion(listOf(com.librestatic.opencinecam.storage.PUBLICATION_FAILED_REASON)) }
                     runCatching { output?.finish(false) }
-                    fail("video-save-failed", failure.message ?: "Video could not be saved.")
+                    fail("video-save-failed", failureText(R.string.capture_video_save_failed, failure))
                 } finally {
                     try { transferPublication?.close() } catch (problem: Exception) {
                         android.util.Log.e("CapturePublication", "Optional queue handle cleanup failed", problem)
@@ -2459,7 +3252,7 @@ class CaptureService : Service() {
             cameraState.value = cameraState.value.copy(
                 zoomRatio = accepted,
                 zoomEffectiveRatio = accepted,
-                message = "Zoom $requested× not accepted; kept ${accepted}×",
+                message = getString(R.string.capture_zoom_rejected, ratioText(requested, messageLocale), ratioText(accepted, messageLocale)),
                 messageTransient = true,
             )
         }
@@ -2501,6 +3294,14 @@ class CaptureService : Service() {
             )
         }
 
+        // OCC-PLAN-071: a refused RAW graph is not a camera failure. RAW is never dropped from the
+        // session, so the mode turns FAILED for this camera and the operator goes back to the previous one.
+        override fun onRawVideoUnavailable(reason: String, message: String) {
+            mainHandler.post { if (!serviceDestroyed) rawVideoGraphRejected(reason, message) }
+        }
+
+        override fun onRawVideoStopped(reason: String?) = rawVideoTakeStopped(reason)
+
         override fun onFailure(code: String, message: String, recoverable: Boolean) {
             calibrationCameraLost()
             retireAudioLevelConsumer()
@@ -2520,7 +3321,7 @@ class CaptureService : Service() {
                 val encodedFrames = previewEngine.encodedRecordingProgress()?.frameCount
                 abortTransferPublication(take.publication)
                 foreground.stop()
-                fail(code, message)
+                fail(code, engineFailureText(code, message) { getString(it) })
                 // ADR-0011: what the take recorded is published as incomplete once native retirement is proven.
                 salvageInterruptedTake(take, retirement, listOf(failureReason(code)), encodedFrames, cameraState.value.message)
                 retireRecordingRecoveryGuards(retirement)
@@ -2552,7 +3353,7 @@ class CaptureService : Service() {
             val current = cameraState.value
             val cameraId = current.selectedCameraId ?: return
             // The lens is structural: never changed under a take or a calibration run.
-            if (current.phase == CameraUiPhase.RECORDING || current.structuralSettingsFrozen || calibrationRun != null) return
+            if (current.phase == CameraUiPhase.RECORDING || current.structuralSettingsFrozen || calibrationRun != null || rawQualificationSession != null) return
             if (rejectLockedControl()) return
             if (physicalId != null && (!current.lensLock.available || current.lensLock.options.none { it.physicalId == physicalId })) return
             if (settings.lensLock[cameraId] == physicalId) return
@@ -2565,7 +3366,7 @@ class CaptureService : Service() {
         }
         /** Starts a calibration run on the selected logical camera; the capture screen must be showing. */
         fun startLensCalibration() {
-            if (serviceDestroyed || calibrationRun != null) return
+            if (serviceDestroyed || calibrationRun != null || rawQualificationSession != null) return
             calibrationStartDeadlineMs = android.os.SystemClock.elapsedRealtime() + calibrationStartWaitMs
             mainHandler.removeCallbacks(calibrationStartRetry)
             beginLensCalibration()
@@ -2750,7 +3551,7 @@ class CaptureService : Service() {
                     cameras = emptyList(),
                     selectedCameraId = null,
                     errorCode = "no-public-camera",
-                    message = "No public Camera2 camera is available.",
+                    message = getString(R.string.capture_no_public_camera),
                 )
             } else {
                 val selectedId = cameraState.value.selectedCameraId
@@ -2790,24 +3591,30 @@ class CaptureService : Service() {
                     targetVideoHeight = selectedHeight,
                     effectiveFps = null,
                     modeGates = cameraState.value.modeGates + mapOf(
-                        CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                        CaptureMode.LOG to if (preferred.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                        CaptureMode.HLG to if (preferred.supportsOpenCineLog && preferred.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                        CaptureMode.RAW_PHOTO to if (preferred.supportsRaw) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                        CaptureMode.LOG to if (preferred.supportsOpenCineLog) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                        CaptureMode.HLG to if (preferred.supportsOpenCineLog && preferred.logProfilesFor(CaptureMode.HLG).isNotEmpty()) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                        CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(preferred.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                     ),
                     errorCode = null,
                     message = null,
-                )
+                ).let { withRawVideoGate(it, selectedId) }
             }
             if (operatorStartupPending && preferred != null) {
                 operatorStartupPending = false
                 val saved = getSharedPreferences("operator-session", MODE_PRIVATE).getString("last-mode", null)
                 val last = CaptureMode.entries.firstOrNull { it.name == saved }
-                val available = cameraState.value.modeGates.filterValues { it == com.librestatic.opencinecam.ModeGateState.AVAILABLE }.keys
+                val available = cameraState.value.modeGates.filterValues { it == ModeGateState.AVAILABLE }.keys
                 selectMode(settings.operation.startupCaptureMode(last, available), reopen = false)
+            }
+            // A qualification that passed in the onboarding wizard, before there were cameras, opens in RAW video.
+            if (rawQualificationSelectPending && preferred != null) {
+                rawQualificationSelectPending = false
+                if (CameraUiState.isModeSelectable(cameraState.value.modeGates[CaptureMode.RAW_VIDEO])) selectMode(CaptureMode.RAW_VIDEO, reopen = false)
             }
             refreshLensLockState()
             refreshAudioCapabilities()
+            syncRawVideoArm()
         }
 
         /** Fully recovers the retained viewfinder after a capture or permission failure. */
@@ -2829,12 +3636,12 @@ class CaptureService : Service() {
             if (cameraState.value.phase == CameraUiPhase.ERROR) return
             val surface = attachedPreviewSurface
             if (surface?.isValid != true || !attachPreview(surface, attachedPreviewRotationDegrees)) {
-                fail("preview-recovery-surface-unavailable", "The camera surface is not available yet.")
+                fail("preview-recovery-surface-unavailable", getString(R.string.capture_preview_surface_unavailable))
                 return
             }
             mainHandler.postDelayed({
                 if (token == recoveryGeneration && cameraState.value.phase != CameraUiPhase.PREVIEWING) {
-                    fail("preview-recovery-timeout", "The camera could not recover the preview.")
+                    fail("preview-recovery-timeout", getString(R.string.capture_preview_recovery_timeout))
                 }
             }, PREVIEW_RECOVERY_TIMEOUT_MS)
         }
@@ -2846,7 +3653,7 @@ class CaptureService : Service() {
                 storageExecutor.execute {
                     val capabilities = runCatching { AndroidProfessionalAudioProbe(this@CaptureService).probe(requestedInput) }
                         .getOrElse {
-                            val message = "Audio capability probe failed: ${it.message}"
+                            val message = getString(R.string.capture_audio_probe_failed, it.message ?: it.javaClass.simpleName)
                             mainHandler.post {
                                 if (!serviceDestroyed) cameraState.update { state -> state.copy(message = message) }
                             }
@@ -2865,7 +3672,7 @@ class CaptureService : Service() {
                 }
             } catch (_: RejectedExecutionException) {
                 mainHandler.post {
-                    if (!serviceDestroyed) cameraState.update { it.copy(message = "Audio capability probe is busy.") }
+                    if (!serviceDestroyed) cameraState.update { it.copy(message = getString(R.string.capture_audio_probe_busy)) }
                 }
             }
         }
@@ -2875,8 +3682,13 @@ class CaptureService : Service() {
             if (!surface.isValid) return false
             attachedPreviewSurface = surface
             attachedPreviewRotationDegrees = displayRotationDegrees
+            // A RAW video qualification owns the camera: the viewfinder opens when it ends.
+            if (rawQualificationSession != null) return true
+            syncRawVideoArm()
             if (cameraState.value.structuralSettingsFrozen) {
-                return previewEngine.attachPreviewWhileRecording(surface, displayRotationDegrees)
+                val attached = previewEngine.attachPreviewWhileRecording(surface, displayRotationDegrees)
+                if (!attached && rawTake != null) rawTakePreviewStale = true
+                return attached
             }
             // A layout/rotation callback can reattach an already present GPU output after
             // onPreviewStarted. Replace only its EGL window, not the configured camera graph:
@@ -2909,6 +3721,7 @@ class CaptureService : Service() {
                     cameraState.value.selectedMode.usesLogGraph
                 },
                 lensLock = currentLensLockBinding(),
+                rawVideo = rawVideoSessionConfig(),
             )
             return true
         }
@@ -2919,6 +3732,12 @@ class CaptureService : Service() {
             cancelRecordingWhiteBalancePreparation()
             stopPreviewAudioMonitor(clearLevels = true)
             attachedPreviewSurface = null
+            // The capture screen went away under a qualification (the app left): stop it.
+            if (rawQualificationSession != null) {
+                cancelRawVideoQualification(RawQualificationStopReasons.PREVIEW_LOST)
+                return
+            }
+            syncRawVideoArm()
             val photoPreparing = cameraState.value.phase == CameraUiPhase.CAPTURING && cameraState.value.selectedMode in setOf(CaptureMode.PHOTO, CaptureMode.RAW_PHOTO, CaptureMode.BURST, CaptureMode.BRACKET, CaptureMode.LIGHT_TRAIL)
             val ownedStill = stillOwner.get()
             if (photoPreparing && previewEngine.cancelStill() && ownedStill != null) {
@@ -2926,13 +3745,19 @@ class CaptureService : Service() {
                 cameraState.update { it.copy(stillCapturePending = stillOwner.get() != null) }
             }
             if (cameraState.value.structuralSettingsFrozen && !photoPreparing) {
-                previewEngine.detachPreviewWhileRecording()
+                if (!previewEngine.detachPreviewWhileRecording() && rawTake != null) rawTakePreviewStale = true
                 return
             }
             // A live subject lease keeps the GPU graph (photo modes included) for the cover window.
             if (subjectSurfaces.current != null && settings.subjectDisplay.wantsCameraPreview &&
                 subjectPreviewBlock(cameraState.value.selectedMode) == null &&
-                previewEngine.detachOperatorFromActiveGpuPreview()) return
+                previewEngine.detachOperatorFromActiveGpuPreview()) {
+                // A still cancelled above has no owner left, so CAPTURING would stick without this.
+                if (photoPreparing && stillOwner.get() == null) {
+                    cameraState.update { it.copy(phase = CameraUiPhase.READY, stillCapturePending = false) }
+                }
+                return
+            }
             previewEngine.stopPreview()
             activePreviewKey = null
             submitCaptureState(stateCommands.previewStopped())
@@ -2984,7 +3809,7 @@ class CaptureService : Service() {
         fun selectCamera(cameraId: String) {
             cancelCountdown()
             val current = cameraState.value
-            if (current.structuralSettingsFrozen) return
+            if (current.structuralSettingsFrozen || rawQualificationSession != null) return
             val descriptor = current.cameras.firstOrNull { it.cameraId == cameraId } ?: return
             val videoProfile = normalizedVideoProfile(
                 descriptor, geometrySeeds.width(current.selectedMode), geometrySeeds.height(current.selectedMode), geometrySeeds.fps(current.selectedMode),
@@ -3017,15 +3842,16 @@ class CaptureService : Service() {
                 requestedAeCompensationIndex = 0,
                 requestedWhiteBalance = WhiteBalanceSelection.Auto,
                 phase = CameraUiPhase.OPENING,
-                message = "Camera $cameraId selected",
+                message = getString(R.string.capture_camera_selected, cameraId),
                 modeGates = current.modeGates + mapOf(
-                    CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                    CaptureMode.LOG to if (descriptor.supportsOpenCineLog) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                    CaptureMode.HLG to if (descriptor.supportsOpenCineLog && descriptor.logProfilesFor(CaptureMode.HLG).isNotEmpty()) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
-                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) com.librestatic.opencinecam.ModeGateState.AVAILABLE else com.librestatic.opencinecam.ModeGateState.UNSUPPORTED,
+                    CaptureMode.RAW_PHOTO to if (descriptor.supportsRaw) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                    CaptureMode.LOG to if (descriptor.supportsOpenCineLog) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                    CaptureMode.HLG to if (descriptor.supportsOpenCineLog && descriptor.logProfilesFor(CaptureMode.HLG).isNotEmpty()) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
+                    CaptureMode.SLOW_MOTION to if (com.librestatic.opencinecam.supportsSlowMotion(descriptor.videoProfiles.map { it.toSpec() })) ModeGateState.AVAILABLE else ModeGateState.UNSUPPORTED,
                 ),
-            )
+            ).let { withRawVideoGate(it, cameraId) }
             refreshLensLockState(cameraId)
+            syncRawVideoArm()
             if (surface?.isValid != true) return
             pendingSwitchPrevious = previous
             pendingSwitchTarget = cameraId
@@ -3052,6 +3878,7 @@ class CaptureService : Service() {
                     cameraState.value.selectedMode.usesLogGraph
                 },
                 lensLock = currentLensLockBinding(),
+                rawVideo = rawVideoSessionConfig(),
             )
             mainHandler.postDelayed({
                 if (switchToken != cameraSwitchGeneration || pendingSwitchTarget != cameraId) return@postDelayed
@@ -3061,8 +3888,9 @@ class CaptureService : Service() {
                 pendingSwitchPrevious = null
                 cameraSwitchGeneration++
                 pendingStatusMessage = getString(R.string.camera_switch_timeout, cameraId, fallbackId)
-                cameraState.value = cameraState.value.copy(selectedCameraId = fallbackId, phase = CameraUiPhase.OPENING)
+                cameraState.value = withRawVideoGate(cameraState.value.copy(selectedCameraId = fallbackId, phase = CameraUiPhase.OPENING), fallbackId)
                 refreshLensLockState(fallbackId)
+                syncRawVideoArm()
                 attachedPreviewSurface?.takeIf { it.isValid }?.let {
                     previewEngine.startPreview(
                         fallback,
@@ -3086,6 +3914,7 @@ class CaptureService : Service() {
                             cameraState.value.selectedMode.usesLogGraph
                         },
                         lensLock = currentLensLockBinding(),
+                        rawVideo = rawVideoSessionConfig(),
                     )
                 }
             }, CAMERA_SWITCH_TIMEOUT_MS)
@@ -3093,23 +3922,27 @@ class CaptureService : Service() {
 
         fun selectMode(mode: CaptureMode, reopen: Boolean = true) {
             cancelCountdown()
-            if (cameraState.value.structuralSettingsFrozen) return
+            if (cameraState.value.structuralSettingsFrozen || rawQualificationSession != null) return
             val current = cameraState.value
             if (!CameraUiState.isModeSelectable(current.modeGates[mode])) {
                 cameraState.value = current.copy(message = getString(R.string.gate_requires_preflight, modeDisplayName(mode)))
                 return
             }
+            val descriptor = current.descriptor
+            val selectedLogProfile = descriptor?.let {
+                normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
+            }.takeIf { mode.usesLogGraph }
             val changedSignalPath =
                 desiredGpuViewfinder(current.selectedMode) != desiredGpuViewfinder(mode) ||
                 selectedStillPhotoFormat(current.selectedMode) != selectedStillPhotoFormat(mode) ||
                 nightExtensionActive(current.selectedMode) != nightExtensionActive(mode) ||
                 (current.selectedMode.usesLogGraph) != (mode.usesLogGraph) ||
+                    // The RAW10 stream is part of the session graph.
+                    (current.selectedMode == CaptureMode.RAW_VIDEO) != (mode == CaptureMode.RAW_VIDEO) ||
                     (settings.subjectDisplay.wantsCameraPreview && (current.selectedMode == CaptureMode.VIDEO) != (mode == CaptureMode.VIDEO)) ||
-                    (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes)
-            val descriptor = current.descriptor
-            val selectedLogProfile = descriptor?.let {
-                normalizedLogProfile(it, mode, geometrySeeds.logWidth, geometrySeeds.logHeight, geometrySeeds.logFps)
-            }.takeIf { mode.usesLogGraph }
+                    (current.selectedMode in CameraUiState.videoProfileModes) != (mode in CameraUiState.videoProfileModes) ||
+                    // HLG takes only the HLG10 profiles, so LOG's ISP-derived ones need a new session.
+                    (current.selectedMode.usesLogGraph && mode.usesLogGraph && current.activeLogProfile != selectedLogProfile)
             val selectedVideoProfile = descriptor?.let {
                 normalizedVideoProfile(it, geometrySeeds.width(mode), geometrySeeds.height(mode), geometrySeeds.fps(mode))
             }.takeIf { mode in CameraUiState.videoProfileModes }
@@ -3139,8 +3972,11 @@ class CaptureService : Service() {
                 photoFlashReport = null,
                 torchStrengthReported = null,
                 message = null,
-            )
+            ).let { withRawVideoGate(it, it.selectedCameraId) }
+            if (mode == CaptureMode.RAW_VIDEO && current.selectedMode != CaptureMode.RAW_VIDEO) rawModeFallback = current.selectedMode
             getSharedPreferences("operator-session", MODE_PRIVATE).edit().putString("last-mode", mode.name).apply()
+            // LOG and HLG share the session; HLG always monitors through the Rec.709 view, LOG as set.
+            if (mode.usesLogGraph) previewEngine.setOpenCineLogViewAssist(settings.previewViewAssist(mode))
             if (changedSignalPath && reopen) {
                 val descriptor = cameraState.value.descriptor
                 val surface = attachedPreviewSurface
@@ -3169,6 +4005,7 @@ class CaptureService : Service() {
                         },
                         logProfile = cameraState.value.activeLogProfile.takeIf { mode.usesLogGraph },
                         lensLock = currentLensLockBinding(),
+                        rawVideo = rawVideoSessionConfig(),
                     )
                     }
                     // As in selectTargetFps: let the panel apply its high refresh-rate vote before a
@@ -3178,12 +4015,151 @@ class CaptureService : Service() {
                     } else start.run()
                 }
             }
+            syncRawVideoArm()
+        }
+
+        /**
+         * OCC-PLAN-071: persists the RAW video configuration [key] (one of [CameraUiState.rawVideoOptions],
+         * or empty for the highest data rate). Refused during a take; applySettings reopens the session.
+         */
+        fun selectRawVideoConfig(key: String): Boolean {
+            if (serviceDestroyed || !RawVideoConfigKeys.isValid(key) || cameraState.value.structuralSettingsFrozen) return false
+            if (key.isNotEmpty() && cameraState.value.rawVideoOptions.none { it.key == key }) return false
+            SettingsRepositories.get(this@CaptureService).update { it.copy(rawVideoConfig = key) }
+            return true
+        }
+
+        /** Rereads the RAW video qualification records (after a qualification run) and updates the gate. */
+        fun refreshRawVideoQualifications() {
+            if (serviceDestroyed) return
+            try {
+                storageExecutor.execute {
+                    val set = runCatching { rawQualificationStore.load() }.getOrElse { RawVideoQualificationSet() }
+                    mainHandler.post {
+                        if (serviceDestroyed) return@post
+                        rawQualifications = set
+                        val before = cameraState.value.rawVideoSelectedKey
+                        cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+                        if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && cameraState.value.rawVideoSelectedKey != before &&
+                            !cameraState.value.structuralSettingsFrozen) {
+                            attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+                        }
+                        syncRawVideoArm()
+                    }
+                }
+            } catch (_: RejectedExecutionException) {
+                // The service is closing.
+            }
+        }
+
+        /** OCC-PLAN-071: the camera a qualification would run on, its gate, and the duration and space for the free space now. Main thread. */
+        internal fun rawVideoQualificationEstimate(): RawVideoQualificationInfo = rawQualificationInfo()
+
+        /**
+         * Starts the RAW video qualification of [rawVideoQualificationEstimate]'s camera; null when it
+         * started, otherwise the refusal ([RawQualificationRefusals]), also
+         * shown on [CameraUiState.rawVideoQualification]. Works with or without a viewfinder: the
+         * camera the engine holds is released first and reopened at the end if a surface is attached.
+         * A camera qualified before is measured again (Settings); [selectOnPass] false keeps the mode
+         * as it is when something passes.
+         */
+        fun startRawVideoQualification(selectOnPass: Boolean = true): String? {
+            if (serviceDestroyed) return RawQualificationRefusals.BUSY
+            val current = cameraState.value
+            val conditions = readRawQualificationConditions(this@CaptureService)
+            val info = rawQualificationInfo()
+            val sensor = info.cameraId?.let(::rawQualificationSensorSize)
+            val refusal = rawQualificationStartRefusal(
+                running = rawQualificationSession != null,
+                phase = current.phase,
+                structuralSettingsFrozen = current.structuralSettingsFrozen,
+                takeActive = rawTake != null || stillOwner.get() != null || calibrationRun != null || captureCountdown.active != null,
+                transferring = transferCapture.get() != null || recordingWbPreparing,
+                blockers = conditions.blockers,
+                hasQualifiableCamera = info.cameraId != null && sensor != null && rawQualificationGateQualifiable(info.gate),
+            )
+            if (refusal != null) {
+                if (refusal != RawQualificationRefusals.RUNNING) cameraState.update {
+                    it.copy(rawVideoQualification = RawVideoQualificationUi(
+                        outcome = RawQualificationOutcomeKind.FAILED_TO_RUN, reason = refusal))
+                }
+                return refusal
+            }
+            val cameraId = checkNotNull(info.cameraId)
+            val size = checkNotNull(sensor)
+            val estimateMs = info.space?.estimate?.durationMs ?: 0L
+            val session = RawQualificationSession(cameraId, size.first, size.second, estimateMs, selectOnPass)
+            session.qualifier = RawVideoQualifier(
+                this@CaptureService,
+                cameraIds = listOf(cameraId),
+                listener = object : RawVideoQualifier.Listener {
+                    override fun onProgress(progress: RawQualificationProgress) =
+                        postRawQualificationProgress(session, progress)
+
+                    override fun onResult(result: org.json.JSONObject) = recordRawQualificationResult(session, result)
+                },
+            )
+            session.items = rawQualificationPlanItems(info.space)
+            cancelCountdown()
+            rawQualificationSession = session
+            rawQualificationSelectPending = false
+            // The RAW ring is freed (on rawControl) before the qualifier allocates its own.
+            syncRawVideoArm()
+            // Release the camera, as detachPreview does; nothing reopens it until the run ends.
+            previewEngine.stopPreview()
+            activePreviewKey = null
+            submitCaptureState(stateCommands.previewStopped())
+            cameraState.update {
+                it.copy(
+                    phase = if (it.cameras.isEmpty()) it.phase else CameraUiPhase.READY,
+                    rawVideoQualification = RawVideoQualificationUi(remainingMs = estimateMs, items = session.items),
+                    message = null,
+                )
+            }
+            // The battery running low stops the run; the qualifier handles heat itself.
+            val receiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: Intent?) {
+                    rawQualificationRunAbort(batteryPercentOf(intent))?.let { cancelRawVideoQualification(it) }
+                }
+            }
+            session.batteryReceiver = receiver
+            runCatching {
+                androidx.core.content.ContextCompat.registerReceiver(this@CaptureService, receiver,
+                    android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+            }.onFailure { session.batteryReceiver = null }
+            Thread({
+                // The engine closes the camera on its own executor, and the ring is disarmed on rawControl:
+                // both are done before the qualifier opens the camera and allocates its ring.
+                var waitedMs = 0L
+                while (waitedMs < RAW_QUALIFICATION_RELEASE_WAIT_MS && !session.qualifier.isCancelled) {
+                    Thread.sleep(100L)
+                    waitedMs += 100L
+                }
+                runCatching { rawControl.submit {}.get(30, java.util.concurrent.TimeUnit.SECONDS) }
+                val outcome = session.qualifier.run(rawQualificationStore)
+                val records = runCatching { rawQualificationStore.load() }.getOrElse { RawVideoQualificationSet() }
+                mainHandler.post { finishRawQualification(session, outcome, records) }
+            }, "occ-raw-qualification").start()
+            return null
+        }
+
+        /** Stops the running qualification; [reason] says why ([RawQualificationStopReasons]). Any thread. */
+        fun cancelRawVideoQualification(reason: String = RawQualificationStopReasons.USER) {
+            val session = rawQualificationSession ?: return
+            if (session.stopReason == null) session.stopReason = reason
+            session.qualifier.cancel()
+        }
+
+        /** Clears a finished qualification's result from the state; a running one stays. */
+        fun dismissRawVideoQualification() {
+            if (rawQualificationSession != null) return
+            cameraState.update { it.copy(rawVideoQualification = null) }
         }
 
         fun selectTargetFps(fps: Int) {
             cancelCountdown()
             val current = cameraState.value
-            if (current.structuralSettingsFrozen) return
+            if (current.structuralSettingsFrozen || rawQualificationSession != null) return
             if (fps == current.targetFps) return
             val descriptor = current.descriptor ?: return
             var effectiveFps = fps
@@ -3220,7 +4196,7 @@ class CaptureService : Service() {
                 effectiveFps = null,
                 messageTransient = transient,
                 message = fpsUnavailableNotice(transient, current.selectedMode, fps, effectiveFps)
-                    ?: "Target FPS $effectiveFps · fixed Camera2 range $effectiveFps–$effectiveFps",
+                    ?: getString(R.string.capture_target_fps, effectiveFps),
             )
             val surface = attachedPreviewSurface?.takeIf { it.isValid } ?: return
             val reopen = {
@@ -3248,6 +4224,7 @@ class CaptureService : Service() {
                             current.selectedMode.usesLogGraph
                         },
                         lensLock = currentLensLockBinding(),
+                        rawVideo = rawVideoSessionConfig(),
                     )
                 }
             }
@@ -3262,7 +4239,7 @@ class CaptureService : Service() {
 
         fun selectPhotoResolution(width: Int, height: Int) {
             val current = cameraState.value
-            if (rejectLockedControl() || current.structuralSettingsFrozen || current.phase == CameraUiPhase.CAPTURING) return
+            if (rejectLockedControl() || current.structuralSettingsFrozen || current.phase == CameraUiPhase.CAPTURING || rawQualificationSession != null) return
             if (current.selectedMode !in CameraUiState.photoResolutionModes || current.selectedMode == CaptureMode.RAW_PHOTO) return
             val size = width to height
             if (size !in current.availableStillSizes || size == current.activeStillSize) return
@@ -3273,7 +4250,7 @@ class CaptureService : Service() {
         /** [requestedFps] is the rate to keep at the new size when it offers it; slow motion passes a high-speed one. */
         fun selectVideoResolution(width: Int, height: Int, requestedFps: Int = cameraState.value.targetFps) {
             val current = cameraState.value
-            if (current.structuralSettingsFrozen || current.selectedMode !in CameraUiState.resolutionProfileModes) return
+            if (current.structuralSettingsFrozen || rawQualificationSession != null || current.selectedMode !in CameraUiState.resolutionProfileModes) return
             val descriptor = current.descriptor ?: return
             val selectedFps: Int
             val selectedHighSpeed: Boolean
@@ -3295,7 +4272,7 @@ class CaptureService : Service() {
                 selectedHighSpeed = choices.first { it.size.width == width && it.size.height == height && it.fps == selected.fps }.constrainedHighSpeed
                 sourceLabel = if (current.selectedMode == CaptureMode.HLG) "HLG · BT.2020 10-bit"
                 else if (selected.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
-                    "OCLog HFR · ISP-derived"
+                    "OCLog HFR · " + getString(R.string.capture_source_isp_derived)
                 } else "OCLog · HLG 10-bit"
             } else {
                 val choices = descriptor.videoProfiles.filter { it.size.width == width && it.size.height == height }
@@ -3309,7 +4286,7 @@ class CaptureService : Service() {
                 ) ?: return
                 selectedFps = selected.fps
                 selectedHighSpeed = choices.first { it.size.width == width && it.size.height == height && it.fps == selected.fps }.constrainedHighSpeed
-                sourceLabel = if (current.selectedMode == CaptureMode.TIME_LAPSE) "Timelapse" else "Video"
+                sourceLabel = getString(if (current.selectedMode == CaptureMode.TIME_LAPSE) R.string.time_lapse_mode else R.string.video_mode)
             }
             cameraState.value = current.copy(
                 phase = if (attachedPreviewSurface?.isValid == true) CameraUiPhase.OPENING else current.phase,
@@ -3319,7 +4296,7 @@ class CaptureService : Service() {
                 effectiveFps = null,
                 messageTransient = snappedFps || selectedFps != current.targetFps,
                 message = fpsUnavailableNotice(snappedFps || selectedFps != current.targetFps, current.selectedMode, current.targetFps, selectedFps)
-                    ?: "$sourceLabel ${width}×$height · $selectedFps fps${if (selectedHighSpeed) " · HIGH SPEED" else ""}",
+                    ?: "$sourceLabel ${width}×$height · $selectedFps fps${if (selectedHighSpeed) " · " + getString(R.string.capture_high_speed) else ""}",
             )
             if (current.selectedMode.usesLogGraph) {
                 attachedPreviewSurface?.takeIf { it.isValid }?.let { surface ->
@@ -3429,6 +4406,18 @@ class CaptureService : Service() {
                     (cameraState.value.selectedMode == CaptureMode.VIDEO && previous.lowLightAutoFps != settings.lowLightAutoFps)) {
                     attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
                 }
+                // OCC-PLAN-071: a new RAW configuration changes the RAW10 stream, so the session reopens
+                // when it resolves to another configuration; the ring is re-planned for its frame size.
+                // Lossless or near-lossless block-pack: the ring re-arms with the other encoder (same configuration).
+                if (previous.rawVideoNearLossless != settings.rawVideoNearLossless) syncRawVideoArm()
+                if (previous.rawVideoConfig != settings.rawVideoConfig) {
+                    val before = cameraState.value.rawVideoSelectedKey
+                    cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+                    if (cameraState.value.selectedMode == CaptureMode.RAW_VIDEO && cameraState.value.rawVideoSelectedKey != before) {
+                        attachedPreviewSurface?.takeIf { it.isValid }?.let { attachPreview(it, attachedPreviewRotationDegrees) }
+                    }
+                    syncRawVideoArm()
+                }
                 val onlyAudioDisplayChanged = previous.copy(audioListening = settings.audioListening,
                     audioListeningOutputDeviceId = settings.audioListeningOutputDeviceId,
                     audioMeter = settings.audioMeter, productionSlate = settings.productionSlate,
@@ -3449,7 +4438,7 @@ class CaptureService : Service() {
 
         private fun applyPresetCapture(preset: CameraPreset) {
             pendingPresetFocus = preset
-            val target = preset.mode.takeIf { cameraState.value.modeGates[it] == com.librestatic.opencinecam.ModeGateState.AVAILABLE }
+            val target = preset.mode.takeIf { cameraState.value.modeGates[it] == ModeGateState.AVAILABLE }
                 ?: cameraState.value.selectedMode
             selectMode(target, reopen = false)
             // selectMode resolves the preset geometry against this lens; re-open once so same-mode
@@ -3696,6 +4685,7 @@ class CaptureService : Service() {
         /** [reason] is the policy failure that ends the take; the take is still finalized and saved. */
         fun stopRecording(reason: StableFailure? = null): Boolean {
             cancelCountdown()
+            rawTake?.let { return stopRawTake(it, reason) }
             if (cancelRecordingWhiteBalancePreparation()) return true
             if (cameraState.value.phase != CameraUiPhase.RECORDING || cameraState.value.recordingFinalizing) return false
             // Publish before dispatch: a fast finalization callback must not be overwritten as pending.
@@ -3728,7 +4718,7 @@ class CaptureService : Service() {
         }
 
         fun captureSelf(audioForThisTake: Boolean? = null): Boolean {
-            if (!selfRecordingRole) return false
+            if (!selfRecordingRole || rawQualificationSession != null) return false
             if (cancelRecordingWhiteBalancePreparation()) return true
             if (cameraState.value.phase == CameraUiPhase.RECORDING) return stopRecording()
             if (captureCountdown.active != null) { cancelCountdown(); return true }
@@ -3767,13 +4757,15 @@ class CaptureService : Service() {
         }
 
         private fun capturePrimaryNow(audioForThisTake: Boolean?, whiteBalancePrepared: Boolean = false): Boolean {
-            if (serviceDestroyed || stillOwner.get() != null) return false
+            if (serviceDestroyed || stillOwner.get() != null || rawQualificationSession != null) return false
             if (whiteBalancePrepared) {
                 val reservation = transferCapture.get() ?: return false
                 if (!reservation.isRetired) return false
                 return captureAfterTransferRetirement(audioForThisTake, true, reservation)
             }
             if (cancelTransferPreparation()) return true
+            // OCC-PLAN-071: RAW_VIDEO has its own take path and never falls back to an encoded take.
+            if (rawTake != null || cameraState.value.selectedMode == CaptureMode.RAW_VIDEO) return toggleRawTake(audioForThisTake)
             val current = cameraState.value
             // STOP and WB cancellation remain immediate. Still-photo ownership is a separate H4 gate.
             if (recordingWbPreparing || current.phase == CameraUiPhase.RECORDING ||
@@ -3903,7 +4895,7 @@ class CaptureService : Service() {
             if (current.recordingFinalizing) return false
             if (current.phase != CameraUiPhase.PREVIEWING && current.phase != CameraUiPhase.SAVED && !(whiteBalancePrepared && current.phase == CameraUiPhase.CAPTURING)) return false
             // Every branch below starts clean; time-lapse never sets a label and must not inherit the last take's.
-            activeRecordingAudioLabel = "no audio"
+            activeRecordingAudioLabel = getString(R.string.capture_no_audio)
             if (settings.operation.lockDuringTake) previewEngine.cancelFocusPull()
             if (!whiteBalancePrepared && settings.recordingWhiteBalance == RecordingWhiteBalancePolicy.LOCK_ON_RECORD &&
                 current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG, CaptureMode.TIME_LAPSE)) {
@@ -3945,7 +4937,7 @@ class CaptureService : Service() {
                         zeroShutterLag = settings.zeroShutterLag && current.selectedMode == CaptureMode.PHOTO).also { accepted ->
                         if (!accepted) {
                             if (com.librestatic.opencinecam.stillFormatLostRaw(selectedStillPhotoFormat(), cameraState.value.previewGraphLoss)) finishStillFailure(owner, "still-raw-unavailable", getString(R.string.graph_fallback_raw))
-                            else finishStillFailure(owner, "still-capture-not-ready", "The selected still format is not ready on this camera.")
+                            else finishStillFailure(owner, "still-capture-not-ready", getString(R.string.capture_still_not_ready))
                         }
                     }
                 }
@@ -3958,7 +4950,7 @@ class CaptureService : Service() {
                         lastBurstPublication = null, photoFlashReport = null,
                         message = getString(R.string.burst_progress, 0, settings.burstCount))
                     previewEngine.captureBurst(settings.burstCount, aspect = settings.photoAspect, quality = settings.photoQuality).also { accepted ->
-                        if (!accepted) finishStillFailure(owner, "burst-not-ready", "Burst capture is not ready.")
+                        if (!accepted) finishStillFailure(owner, "burst-not-ready", getString(R.string.capture_burst_not_ready))
                     }
                 }
                 CaptureMode.BRACKET -> {
@@ -3970,7 +4962,7 @@ class CaptureService : Service() {
                         lastBracketPublication = null, photoFlashReport = null,
                         message = getString(R.string.bracket_capture_progress, 0, settings.bracket.count))
                     previewEngine.captureBracket(settings.bracket, settings.photoQuality, aspect = settings.photoAspect).also { accepted ->
-                        if (!accepted) finishStillFailure(owner, "bracket-not-ready", "The selected bracket is not available on this camera.")
+                        if (!accepted) finishStillFailure(owner, "bracket-not-ready", getString(R.string.capture_bracket_not_ready))
                     }
                 }
                 CaptureMode.LIGHT_TRAIL -> {
@@ -3982,7 +4974,7 @@ class CaptureService : Service() {
                         accumulationSaving = false, accumulationFinishing = false, lastAccumulationPublication = null, photoFlashReport = null,
                         message = getString(R.string.accumulation_capture_progress, 0, 0L, settings.accumulation.durationMs / 1000))
                     previewEngine.captureAccumulation(settings.accumulation, settings.photoQuality, aspect = settings.photoAspect).also { accepted ->
-                        if (!accepted) finishStillFailure(owner, "accumulation-not-ready", "Accumulation is not ready on this camera.")
+                        if (!accepted) finishStillFailure(owner, "accumulation-not-ready", getString(R.string.capture_accumulation_not_ready))
                     }
                 }
                 CaptureMode.VIDEO -> {
@@ -3994,7 +4986,7 @@ class CaptureService : Service() {
                         val descriptor = current.descriptor
                         val sourceSize = current.activeVideoProfile?.size ?: descriptor?.previewSize
                         if (sourceSize == null || descriptor == null) {
-                            fail("recording-geometry-unavailable", "Recording geometry is not available yet.")
+                            fail("recording-geometry-unavailable", getString(R.string.capture_recording_geometry_unavailable))
                             return false
                         }
                         val geometry = RecordingGeometryCalculator.calculate(
@@ -4009,7 +5001,7 @@ class CaptureService : Service() {
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                            fail("microphone-permission-required", "Grant microphone permission or disable audio before recording.")
+                            fail("microphone-permission-required", getString(R.string.capture_microphone_permission_required))
                             return false
                         }
                         val takeInput = takeAudioInput(cameraState.value.audioCapabilities
@@ -4059,12 +5051,12 @@ class CaptureService : Service() {
                             else -> null
                         }
                         activeRecordingAudioLabel = when {
-                            !audioRequested -> "no audio"
-                            embeddedAudio != null -> "AAC ${audioSettings.audioSampleRateHz / 1000.0} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
-                            else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${audioSettings.audioSampleRateHz / 1000.0} kHz · ${audioSettings.audioChannels} ch"
+                            !audioRequested -> getString(R.string.capture_no_audio)
+                            embeddedAudio != null -> "AAC ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
+                            else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioChannels} ch"
                         }
                         cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, recordingProjectRate = settings.videoProjectRate.takeIf { settings.videoOffSpeed },
-                            message = "Preparing video · $activeRecordingAudioLabel…") }
+                            message = getString(R.string.capture_preparing_video, activeRecordingAudioLabel)) }
                         dispatchTransferCapture()
                         reserveRecordingRecoveryGuard(output)
                         // Constrained high-speed takes must reach the encoder surface directly: the GPU
@@ -4114,7 +5106,7 @@ class CaptureService : Service() {
                                 pendingStartRefusal = null
                                 // A policy refusal is a soft one: the preview keeps running and the user can change the policy.
                                 if (refusal != null) refuseTakeStart(refusal, getString(R.string.video_hardware_encoder_unavailable))
-                                else if (cameraState.value.phase != CameraUiPhase.ERROR) fail("video-capture-not-ready", "The video surface is not ready.")
+                                else if (cameraState.value.phase != CameraUiPhase.ERROR) fail("video-capture-not-ready", getString(R.string.capture_video_surface_not_ready))
                             }
                         }
                     } catch (failure: Throwable) {
@@ -4125,7 +5117,7 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("video-output-failed", failure.message ?: "Video output could not be created.")
+                        fail("video-output-failed", failureText(R.string.capture_video_output_failed, failure))
                         false
                     }
                 }
@@ -4140,7 +5132,7 @@ class CaptureService : Service() {
                         val sourceSize = current.activeLogProfile?.size
                             ?: descriptor?.preferredLogProfile?.size
                         if (sourceSize == null || descriptor == null) {
-                            fail("recording-geometry-unavailable", "LOG geometry is not available yet.")
+                            fail("recording-geometry-unavailable", getString(R.string.capture_log_geometry_unavailable))
                             return false
                         }
                         val geometry = RecordingGeometryCalculator.calculate(
@@ -4155,7 +5147,7 @@ class CaptureService : Service() {
                         )
                         activeRecordingGeometry = geometry
                         if (requestedAudioEnabled && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                            fail("microphone-permission-required", "Grant microphone permission or disable audio before recording.")
+                            fail("microphone-permission-required", getString(R.string.capture_microphone_permission_required))
                             return false
                         }
                         val takeInput = takeAudioInput(cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings,
@@ -4203,21 +5195,21 @@ class CaptureService : Service() {
                             else -> error("Unsupported LOG audio format ${audioSettings.audioOutputFormat}.")
                         }
                         activeRecordingAudioLabel = when {
-                            !requestedAudioEnabled -> "no audio"
-                            embeddedAudio != null -> "AAC ${audioSettings.audioSampleRateHz / 1000.0} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
-                            else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${audioSettings.audioSampleRateHz / 1000.0} kHz · ${audioSettings.audioChannels} ch"
+                            !requestedAudioEnabled -> getString(R.string.capture_no_audio)
+                            embeddedAudio != null -> "AAC ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
+                            else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioChannels} ch"
                         }
                         cameraState.update { it.copy(
                             phase = CameraUiPhase.CAPTURING,
                             recordingProjectRate = null,
                             message = if (hlgTake) {
                                 if (hdrTakeFormat(current) == HdrVideoFormat.HDR10) {
-                                    "Preparing HDR10 · ${current.targetFps} fps · HLG10 → BT.2020 PQ → HEVC Main10 HDR10 · $activeRecordingAudioLabel…"
-                                } else "Preparing HLG · ${current.targetFps} fps · HLG10 → BT.2020 HLG → HEVC Main10 · $activeRecordingAudioLabel…"
+                                    getString(R.string.capture_preparing_hdr10, current.targetFps, activeRecordingAudioLabel)
+                                } else getString(R.string.capture_preparing_hlg, current.targetFps, activeRecordingAudioLabel)
                             } else if (current.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) {
-                                "Preparing OCLog2 HFR · ${current.targetFps} fps · ISP SDR → GLES → HEVC Main10 · source depth not claimed · $activeRecordingAudioLabel…"
+                                getString(R.string.capture_preparing_oclog_hfr, current.targetFps, activeRecordingAudioLabel)
                             } else {
-                                "Preparing OCLog2 · ${current.targetFps} fps · HLG10 → scene-linear BT.2020 → HEVC Main10 · $activeRecordingAudioLabel…"
+                                getString(R.string.capture_preparing_oclog, current.targetFps, activeRecordingAudioLabel)
                             },
                         ) }
                         dispatchTransferCapture()
@@ -4244,7 +5236,7 @@ class CaptureService : Service() {
                                 output.discardNeverRecorded()
                                 foreground.stop()
                                 if (cameraState.value.phase != CameraUiPhase.ERROR) {
-                                    fail("log-capture-not-ready", "The experimental OCLog2 pipeline is not ready.")
+                                    fail("log-capture-not-ready", getString(R.string.capture_log_pipeline_not_ready))
                                 }
                             }
                         }
@@ -4256,7 +5248,7 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("log-output-failed", failure.message ?: "OCLog2 output could not be created.")
+                        fail("log-output-failed", failureText(R.string.capture_log_output_failed, failure))
                         false
                     }
                 }
@@ -4316,7 +5308,7 @@ class CaptureService : Service() {
                                 abortTransferPublication()
                                 output.discardNeverRecorded()
                                 foreground.stop()
-                                fail("timelapse-not-ready", "The timelapse surface is not ready.")
+                                fail("timelapse-not-ready", getString(R.string.capture_timelapse_surface_not_ready))
                             }
                         }
                     } catch (failure: Throwable) {
@@ -4325,14 +5317,14 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("timelapse-output-failed", failure.message ?: "Timelapse output could not be created.")
+                        fail("timelapse-output-failed", failureText(R.string.capture_timelapse_output_failed, failure))
                         false
                     }
                 }
                 else -> {
                     val gate = current.modeGates.getValue(current.selectedMode)
                     cameraState.value = current.copy(
-                        message = if (gate == com.librestatic.opencinecam.ModeGateState.AVAILABLE) {
+                        message = if (gate == ModeGateState.AVAILABLE) {
                             getString(R.string.mode_integrating, modeDisplayName(current.selectedMode))
                         } else {
                             getString(R.string.gate_requires_preflight, modeDisplayName(current.selectedMode))
@@ -4355,12 +5347,20 @@ class CaptureService : Service() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        // The last client left: a qualification has no one to report to.
+        localBinder.cancelRawVideoQualification(RawQualificationStopReasons.APP_LEFT)
         if (!cameraState.value.structuralSettingsFrozen && cameraState.value.phase != CameraUiPhase.CAPTURING) stopSelf()
         return true
     }
 
     override fun onDestroy() {
         serviceDestroyed = true
+        rawQualificationSession?.let { session ->
+            // The qualifier ends on its own thread (within about two seconds) and releases the camera; nothing is stored.
+            localBinder.cancelRawVideoQualification(RawQualificationStopReasons.SERVICE_CLOSED)
+            session.batteryReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
+            session.batteryReceiver = null
+        }
         calibrationRun?.let { run ->
             run.lost = true
             run.runner?.abort(com.librestatic.opencinecam.camera.calibration.RunFailure.CAMERA_LOST)
@@ -4399,6 +5399,15 @@ class CaptureService : Service() {
         runCatching { take.video?.finish(false) }
         abortTransferPublication(take.publication)
         val retired = previewEngine.closeAsync()
+        // The closing engine ends a RAW take; whatever is still recording is finalized, then the ring is freed.
+        retired.whenComplete { _, _ ->
+            val teardown = Runnable {
+                runCatching { if (rawRecorder.isRecording) rawRecorder.stop() }
+                runCatching { rawRecorder.disarm() }
+            }
+            if (!rawControlExecute(teardown)) teardown.run()
+            rawControl.shutdown()
+        }
         CaptureStartup.released(previewEngine)
         retireRecordingRecoveryGuards(retired)
         retired.whenComplete { _, failure ->
@@ -4410,6 +5419,7 @@ class CaptureService : Service() {
         // completion callbacks are fenced by serviceDestroyed and the exact still owner.
         storageExecutor.shutdown()
         actor.close()
+        com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(false)
         super.onDestroy()
     }
 
@@ -4561,6 +5571,12 @@ class CaptureService : Service() {
             if (wasFrozen) localBinder.applySettings(SettingsRepositories.get(this@CaptureService).states.value)
         }
     }
+
+    /** The localized notice first; the platform's own detail, when it has one, follows for diagnosis. */
+    private fun failureText(@StringRes notice: Int, failure: Throwable): String =
+        listOfNotNull(getString(notice), failure.message?.takeIf { it.isNotBlank() }).joinToString(" · ")
+
+    private val messageLocale: Locale get() = resources.configuration.locales[0]
 
     private fun fail(code: String, message: String) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
@@ -4820,8 +5836,8 @@ class CaptureService : Service() {
 
     private fun fpsUnavailableNotice(transient: Boolean, mode: CaptureMode, requestedFps: Int, effectiveFps: Int): String? {
         if (!transient) return null
-        val ispNote = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) " · ISP-derived" else ""
-        return "$requestedFps fps unavailable at this resolution · using $effectiveFps fps$ispNote"
+        val ispNote = if (cameraState.value.activeLogProfile?.sourcePath == OpenCineLogSourcePath.SDR_BT709_ISP) " · " + getString(R.string.capture_source_isp_derived) else ""
+        return getString(R.string.capture_fps_unavailable, requestedFps, effectiveFps) + ispNote
     }
 
     private fun modeDisplayName(mode: CaptureMode): String = when (mode) {
@@ -4907,12 +5923,16 @@ class CaptureService : Service() {
     )
 
     companion object {
+        /** The `kind` of a camera check's result row ([com.librestatic.opencinecam.rawvideo.RawVideoQualifier]'s CAMERA stage). */
+        private const val RAW_QUALIFICATION_CAMERA_KIND = "camera"
         private const val LOST_INPUT_STOP_ATTEMPTS = 20
         private const val LOST_INPUT_STOP_RETRY_MS = 250L
         private const val OWNER_ID = "capture-service"
         private const val RECORDING_TICK_MS = 500L
         private const val CAMERA_SWITCH_TIMEOUT_MS = 6_000L
         private const val PREVIEW_RECOVERY_TIMEOUT_MS = 4_000L
+        /** How long a qualification waits for the engine to close the camera before opening it. */
+        private const val RAW_QUALIFICATION_RELEASE_WAIT_MS = 600L
         // High-speed sessions on some devices take ~2-3 s to open; 12 s is well past any healthy start.
         private const val PREVIEW_START_TIMEOUT_MS = 12_000L
         private const val PREVIEW_WATCHDOG_INTERVAL_MS = 1_000L

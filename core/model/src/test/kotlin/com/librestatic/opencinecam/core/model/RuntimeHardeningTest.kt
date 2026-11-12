@@ -33,6 +33,13 @@ class RuntimeHardeningTest {
         val adaptive = RuntimeHardeningPolicy(PolicyMode.ADAPTIVE)
         val warning = adaptive.evaluate(ThermalStatus.SEVERE, StoragePressure.LOW) as RuntimeHardeningDecision.Continue
         assertEquals(RuntimeAction.DEGRADE_MONITORING, warning.action)
+        val critical = adaptive.evaluate(ThermalStatus.CRITICAL, StoragePressure.SUFFICIENT) as RuntimeHardeningDecision.Continue
+        assertEquals(RuntimeAction.DEGRADE_MONITORING, critical.action)
+        for (policy in PolicyMode.entries) {
+            val emergency = RuntimeHardeningPolicy(policy).evaluate(ThermalStatus.EMERGENCY, StoragePressure.SUFFICIENT)
+            assertEquals(FailureCode.THERMAL_CRITICAL, (emergency as RuntimeHardeningDecision.Stopped).failure.code)
+        }
+        assertEquals(FailureCode.STORAGE_WRITE_FAILED, (adaptive.evaluate(ThermalStatus.CRITICAL, StoragePressure.INSUFFICIENT) as RuntimeHardeningDecision.Stopped).failure.code)
         val audio = adaptive.evaluate(ThermalStatus.NORMAL, StoragePressure.SUFFICIENT, RuntimeFault("audio", FailureCode.AUDIO_RUNTIME_FAILED, 10)) as RuntimeHardeningDecision.Continue
         assertEquals(RuntimeAction.WARNING, audio.action)
     }

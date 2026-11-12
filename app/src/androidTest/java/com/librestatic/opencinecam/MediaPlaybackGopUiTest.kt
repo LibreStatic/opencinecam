@@ -108,7 +108,7 @@ class MediaPlaybackGopUiTest {
         try {
             compose.waitUntil(10_000) {
                 colors = capture()
-                colors?.let { matches(gray, it.first) && matches(255, it.second) } == true
+                colors?.let { shows(index, native, it.first) && matches(255, it.second) } == true
             }
         } catch (failure: Throwable) {
             fun rgb(value: Int?) = value?.let { "${Color.red(it)},${Color.green(it)},${Color.blue(it)}" }
@@ -116,7 +116,7 @@ class MediaPlaybackGopUiTest {
             throw failure
         }
         val sample = requireNotNull(colors)
-        assertTrue("PTS=${pts[index]} must display only its own gray=$gray; actual=${sample.first}", matches(gray, sample.first))
+        assertTrue("PTS=${pts[index]} must display only its own gray=$gray; actual=${sample.first}", shows(index, native, sample.first))
         assertTrue("White spatial reference", matches(255, sample.second))
         expected()
         Log.i("E16GopUiProbe", "native=$native index=$index ptsUs=${pts[index]} expectedGray=$gray rgb=${Color.red(sample.first)},${Color.green(sample.first)},${Color.blue(sample.first)} exactComposited=true")
@@ -153,6 +153,9 @@ class MediaPlaybackGopUiTest {
                 screenshot.getPixel(rect.left + rect.width() * 3 / 4, rect.top + rect.height() / 2)
         } finally { screenshot.recycle() }
     }
+    // Direct output leaves colour to the platform compositor, which may or may not convert the transfer.
+    private fun shows(index: Int, native: Boolean, pixel: Int) =
+        matches(preciseGopExpectedGray[index], pixel) || (native && matches(preciseGopCodeGray[index], pixel))
     private fun matches(gray: Int, pixel: Int) = kotlin.math.abs(Color.red(pixel) - gray) <= 4 &&
         kotlin.math.abs(Color.green(pixel) - gray) <= 4 && kotlin.math.abs(Color.blue(pixel) - gray) <= 4
     private fun readers() = Thread.getAllStackTraces().keys.filter { it.name == "media-review-reader" && it.isAlive }.toSet()

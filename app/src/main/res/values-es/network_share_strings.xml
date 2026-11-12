@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The network drive (OCC-PLAN-071 §8, route 3). -->
+<resources>
+    <string name="network_share_title">Unidad de red</string>
+    <string name="network_share_settings_summary">Monta las tomas RAW en una computadora como carpetas CinemaDNG</string>
+    <string name="network_share_intro">Abre las tomas RAW desde una computadora en la misma Wi-Fi, punto de acceso o anclaje USB. Cada toma es una carpeta con sus fotogramas CinemaDNG y su WAV, más el .ocraw original si eliges mostrarlo. Desde la computadora no se puede cambiar ni borrar nada.</string>
+    <string name="network_share_switch">Compartir en red</string>
+    <string name="network_share_state_stopped">Apagada</string>
+    <string name="network_share_state_starting">Iniciando…</string>
+    <string name="network_share_state_running">Activa: la computadora ya puede conectarse</string>
+    <string name="network_share_stopped_idle">Se detuvo tras 15 minutos sin copiar nada.</string>
+    <string name="network_share_no_network">No hay Wi-Fi, punto de acceso ni anclaje USB, o la red que usaba ya no está. Conéctate a una red local y vuelve a encenderla.</string>
+    <string name="network_share_stopped_recording">Se detuvo porque empezó a grabarse una toma.</string>
+    <string name="network_share_refused_recording">No disponible mientras grabas.</string>
+    <string name="network_share_port_busy">No hay ningún puerto libre. Vuelve a intentarlo en un momento.</string>
+    <string name="network_share_stopped_timeout">Se detuvo: se alcanzó el límite de Android para transferencias en segundo plano.</string>
+    <string name="network_share_failed">No se pudo iniciar la unidad de red.</string>
+    <string name="network_share_addresses_title">Conéctate con</string>
+    <string name="network_share_address">Dirección</string>
+    <string name="network_share_user">Usuario</string>
+    <string name="network_share_password">Contraseña</string>
+    <string name="network_share_copy">Copiar</string>
+    <string name="network_share_copy_label">Copiar %1$s</string>
+    <string name="network_share_copied">Copiado</string>
+    <string name="network_share_connect_title">Cómo conectarte</string>
+    <string name="network_share_connect_windows">Windows: Explorador de archivos › Este equipo › Conectar unidad de red, y escribe la dirección como carpeta.</string>
+    <string name="network_share_connect_macos">macOS: Finder › Ir › Conectarse al servidor, y escribe la dirección.</string>
+    <string name="network_share_connect_linux">Linux: Archivos › Otras ubicaciones › Conectar al servidor, y escribe %1$s.</string>
+    <string name="network_share_windows_limit_help_summary">Windows copia hasta 50 MB por defecto, 4 GB como máximo</string>
+    <string name="network_share_windows_limit_help">El cliente WebDAV de Windows rechaza archivos de más de 50 MB si no amplías su límite. Los fotogramas DNG son más pequeños; el WAV de una toma larga puede no serlo. Si pones FileSizeLimitInBytes en HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters a 4294967295 y reinicias el servicio WebClient, el límite sube a 4 GB, el máximo de Windows. El .ocraw original, cuando se muestra, suele ser más grande, así que el Explorador de archivos no puede copiarlo: cópialo por USB o con WinSCP o rclone.</string>
+    <string name="network_share_copy_advice">Copia la carpeta de una toma al disco de la computadora antes de editar: los fotogramas se generan al leerlos, y es demasiado lento para reproducir desde la red.</string>
+    <string name="network_share_auto_stop">Se detiene sola tras 15 minutos sin copiar nada, cuando el teléfono sale de la red en la que se inició y cuando empieza a grabarse una toma. Para usar otra red, apágala y vuelve a encenderla.</string>
+    <string name="network_share_security_help_summary">Solo redes locales, una contraseña nueva cada vez</string>
+    <string name="network_share_security_help">La unidad solo escucha en las direcciones de Wi-Fi, punto de acceso y anclaje USB, nunca en datos móviles ni en una VPN, y solo en las redes que había al iniciarse. Pide el usuario y la contraseña que ves aquí, y la contraseña cambia cada vez que se inicia. Es de solo lectura. Nada va cifrado: los archivos que copias viajan sin cifrar y cualquiera en la red podría verlos, así que úsala solo en redes de confianza.</string>
+    <string name="network_share_channel">Unidad de red</string>
+    <string name="network_share_notification_title">Unidad de red activa</string>
+    <string name="network_share_notification_stop">Detener</string>
+    <string name="network_share_show_password">Mostrar contraseña</string>
+    <string name="network_share_hide_password">Ocultar contraseña</string>
+    <string name="network_share_show_originals">Mostrar los archivos .ocraw originales</string>
+    <string name="network_share_show_originals_help_summary">Los fotogramas DNG y el WAV son todo lo que necesita un editor</string>
+    <string name="network_share_show_originals_help">La carpeta de cada toma contiene sus fotogramas DNG y, si la toma tiene sonido, su WAV: todo lo que necesita un editor. El .ocraw original es la toma completa, tan grande como ella, a menudo muchos GB. El Explorador de archivos de Windows no puede copiar archivos de más de 4 GB, así que copia el original por USB o con un cliente WebDAV como WinSCP, Cyberduck o rclone. El cambio se aplica al instante, con la unidad en marcha o detenida.</string>
+</resources>

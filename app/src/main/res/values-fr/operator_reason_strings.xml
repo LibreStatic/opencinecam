@@ -11,4 +11,8 @@
     <string name="operator_reason_self_minimal">Désactivé pendant que vous vous filmez avec les commandes minimales.</string>
     <string name="operator_reason_no_exterior">Nécessite l\'écran extérieur d\'un appareil pliable.</string>
     <string name="operator_reason_no_preset">Aucun préréglage dans cet emplacement. Attribuez-en un dans les Réglages.</string>
+    <string name="operator_reason_no_zoom">Cet appareil ne peut pas zoomer.</string>
+    <string name="operator_reason_no_ev">Cet appareil n\'a pas de correction d\'exposition.</string>
+    <string name="operator_reason_no_manual_exposure">Cet appareil règle lui-même l\'ISO et l\'obturateur.</string>
+    <string name="operator_reason_no_manual_focus">Cet appareil a une mise au point fixe.</string>
 </resources>

@@ -129,6 +129,17 @@ data class CameraSettings(
     val lensLock: Map<String, String> = emptyMap(),
     /** Device-local, opt-in: GPU-crop the zoom the HAL holds back around an automatic lens switch, so the framing does not jump. */
     val smoothLensSwitch: Boolean = false,
+    /**
+     * OCC-PLAN-071: the chosen RAW video configuration as a [RawVideoConfigKeys] key (`full@30`,
+     * `1920x1080@60`); empty, unknown or no longer qualified means the highest qualified data rate.
+     */
+    val rawVideoConfig: String = "",
+    /**
+     * RAW compression quality of a block-pack (`+bp`) configuration: near-lossless (quantised to the
+     * sensor noise) when the camera has a noise profile, else lossless. The configuration key stays
+     * `+bp` either way; structural, so pending during a take.
+     */
+    val rawVideoNearLossless: Boolean = true,
     val photoAspect: com.librestatic.opencinecam.camera.PhotoAspectSelection = com.librestatic.opencinecam.camera.PhotoAspectSelection(),
     /** Local-only preference: asks supporting cameras for CONTROL_ENABLE_ZSL on eligible PHOTO stills. */
     val zeroShutterLag: Boolean = true,
@@ -151,6 +162,8 @@ data class CameraSettings(
     val modeSelectorStyle: ModeSelectorStyle = ModeSelectorStyle.DIAL,
     /** Viewfinder spans the whole screen and the chrome floats over it with translucent panels. */
     val translucentChrome: Boolean = false,
+    /** Single-line texts that do not fit scroll as a marquee instead of ending in an ellipsis. */
+    val scrollLongText: Boolean = true,
     val viewfinderScale: ViewfinderScale = ViewfinderScale.FIT,
     val chromeOpacity: Float = DEFAULT_CHROME_OPACITY,
     val recordingGeometryMode: RecordingGeometryMode = RecordingGeometryMode.COMPATIBLE,
@@ -334,6 +347,13 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             restoreExposureWhiteBalance = preferences.getBoolean("operator-restore-exposure-wb", true),
             restoreTorch = preferences.getBoolean("operator-restore-torch", false),
             lockDuringTake = preferences.getBoolean("operator-lock-during-take", false),
+            volumeUpLong = volumeGesturePreference("operator-volume-up-long"),
+            volumeDownLong = volumeGesturePreference("operator-volume-down-long"),
+            volumeUpDouble = volumeGesturePreference("operator-volume-up-double"),
+            volumeDownDouble = volumeGesturePreference("operator-volume-down-double"),
+            volumeBoth = volumeGesturePreference("operator-volume-both"),
+            volumePair = enumPreference("operator-volume-pair", VolumeKeyPair.NONE),
+            volumePairInverted = preferences.getBoolean("operator-volume-pair-inverted", false),
         ),
         imageProcessing = ImageProcessingSelection(
             stabilization = preferences.getString("image-stabilization", "DEFAULT")?.let { runCatching { StabilizationMode.valueOf(it) }.getOrNull() },
@@ -457,6 +477,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         lensCorrectionAlignment = preferences.getBoolean(KEY_LENS_CORRECTION_ALIGNMENT, true),
         lensLock = LensLockCodec.decode(preferences.getString(KEY_LENS_LOCK, null)),
         smoothLensSwitch = preferences.getBoolean(KEY_SMOOTH_LENS_SWITCH, false),
+        rawVideoConfig = preferences.getString(KEY_RAW_VIDEO_CONFIG, null)?.takeIf(RawVideoConfigKeys::isValid).orEmpty(),
+        rawVideoNearLossless = preferences.getBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, true),
         torchStrengthLevel = preferences.getInt(KEY_TORCH_STRENGTH, 0).takeIf { it > 0 },
         zebraEnabled = preferences.getBoolean("zebra-enabled", false),
         peakingEnabled = preferences.getBoolean("peaking-enabled", false),
@@ -472,6 +494,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         recordingPolicy = recordingPolicy,
         modeSelectorStyle = migratedModeSelectorStyle(),
         translucentChrome = preferences.getBoolean(KEY_TRANSLUCENT_CHROME, false),
+        scrollLongText = preferences.getBoolean(KEY_SCROLL_LONG_TEXT, true),
         viewfinderScale = enumPreference(KEY_VIEWFINDER_SCALE, ViewfinderScale.FIT),
         chromeOpacity = clampChromeOpacity(preferences.getFloat(KEY_CHROME_OPACITY, DEFAULT_CHROME_OPACITY)),
         recordingGeometryMode = enumPreference(KEY_RECORDING_GEOMETRY_MODE, RecordingGeometryMode.COMPATIBLE),
@@ -527,6 +550,13 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("operator-restore-exposure-wb", settings.operation.restoreExposureWhiteBalance)
             .putBoolean("operator-restore-torch", settings.operation.restoreTorch)
             .putBoolean("operator-lock-during-take", settings.operation.lockDuringTake)
+            .putString("operator-volume-up-long", settings.operation.volumeUpLong.name)
+            .putString("operator-volume-down-long", settings.operation.volumeDownLong.name)
+            .putString("operator-volume-up-double", settings.operation.volumeUpDouble.name)
+            .putString("operator-volume-down-double", settings.operation.volumeDownDouble.name)
+            .putString("operator-volume-both", settings.operation.volumeBoth.name)
+            .putString("operator-volume-pair", settings.operation.volumePair.name)
+            .putBoolean("operator-volume-pair-inverted", settings.operation.volumePairInverted)
             .putString("subject-mode", settings.subjectDisplay.mode.name)
             .putBoolean("subject-preview-mirror", settings.subjectDisplay.previewMirror)
             .putBoolean("subject-preview-view-assist", settings.subjectDisplay.previewViewAssist)
@@ -601,6 +631,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("playback-show-frame-position", settings.playback.showFramePosition)
             .putString("review-log-view", settings.playback.logView.name)
             .putBoolean("review-native-surface", settings.playback.nativeSurfaceFrames)
+            .putString("review-raw-playback", settings.playback.rawPlayback.name)
             .putBoolean("geotagging-enabled", settings.geotaggingEnabled)
             .putBoolean("gyroflow-log-enabled", settings.gyroflowLogEnabled)
             .putBoolean("capture-naming-enabled", settings.captureNaming.enabled)
@@ -664,6 +695,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_LENS_CORRECTION_ALIGNMENT, settings.lensCorrectionAlignment)
             .putString(KEY_LENS_LOCK, LensLockCodec.encode(settings.lensLock))
             .putBoolean(KEY_SMOOTH_LENS_SWITCH, settings.smoothLensSwitch)
+            .putString(KEY_RAW_VIDEO_CONFIG, settings.rawVideoConfig.takeIf(RawVideoConfigKeys::isValid).orEmpty())
+            .putBoolean(KEY_RAW_VIDEO_NEAR_LOSSLESS, settings.rawVideoNearLossless)
             .putString(KEY_PHOTO_FLASH, settings.photoFlash.mode.name)
             .putInt(KEY_PHOTO_FLASH_STRENGTH, settings.photoFlash.strength ?: 0)
             .putInt(KEY_TORCH_STRENGTH, settings.torchStrengthLevel ?: 0)
@@ -701,6 +734,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_RECORDING_POLICY, settings.recordingPolicy.name)
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
             .putBoolean(KEY_TRANSLUCENT_CHROME, settings.translucentChrome)
+            .putBoolean(KEY_SCROLL_LONG_TEXT, settings.scrollLongText)
             .putString(KEY_VIEWFINDER_SCALE, settings.viewfinderScale.name)
             .putFloat(KEY_CHROME_OPACITY, clampChromeOpacity(settings.chromeOpacity))
             .putString(KEY_RECORDING_GEOMETRY_MODE, settings.recordingGeometryMode.name)
@@ -752,7 +786,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             preferences.getBoolean("playback-loop", false), preferences.getBoolean("playback-show-frame-position", true),
             com.librestatic.opencinecam.storage.PreciseLogView.entries.firstOrNull { it.name == preferences.getString("review-log-view", null) }
                 ?: com.librestatic.opencinecam.storage.PreciseLogView.FLAT_LOG,
-            preferences.getBoolean("review-native-surface", false))
+            preferences.getBoolean("review-native-surface", false),
+            enumPreference("review-raw-playback", RawPlaybackMode.AUTOMATIC))
     }.getOrDefault(PlaybackSettings())
 
     private fun loadCaptureNaming() = runCatching {
@@ -854,6 +889,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
 
     private inline fun <reified T : Enum<T>> enumPreference(key: String, fallback: T): T =
         preferences.getString(key, null)?.let { saved -> enumValues<T>().firstOrNull { it.name == saved } } ?: fallback
+    /** A volume-key gesture never maps to the system volume; a stored one reads as no action. */
+    private fun volumeGesturePreference(key: String): OperatorAction =
+        enumPreference(key, OperatorAction.NONE).takeUnless { it == OperatorAction.SYSTEM_VOLUME } ?: OperatorAction.NONE
 
     /** One-time repair for releases that accidentally shipped without the approved carousel. */
     private fun migratedModeSelectorStyle(): ModeSelectorStyle {
@@ -933,6 +971,8 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_LENS_CORRECTION_ALIGNMENT = "lens-correction-alignment"
         const val KEY_LENS_LOCK = "lens-lock"
         const val KEY_SMOOTH_LENS_SWITCH = "smooth-lens-switch"
+        const val KEY_RAW_VIDEO_CONFIG = "raw-video-config"
+        const val KEY_RAW_VIDEO_NEAR_LOSSLESS = "raw-video-near-lossless"
         const val KEY_PHOTO_FLASH = "photo-flash-mode"
         const val KEY_PHOTO_FLASH_STRENGTH = "photo-flash-strength"
         const val KEY_TORCH_STRENGTH = "torch-strength-level"
@@ -950,6 +990,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_MODE_SELECTOR_STYLE = "mode-selector-style"
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
+        const val KEY_SCROLL_LONG_TEXT = "scroll-long-text"
         const val KEY_HAPTIC_LEVEL = "haptic-level"
         const val KEY_HAPTIC_CAPTURE = "haptic-capture"
         const val KEY_HAPTIC_CONTROLS = "haptic-controls"

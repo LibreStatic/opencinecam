@@ -20,4 +20,8 @@
     <string name="picture_help_summary">Controlli propri di questa fotocamera</string>
     <string name="picture_blocked_neutral_summary">Nessun effetto in LOG, HLG, RAW e alta velocità</string>
     <string name="picture_blocked_edge_off_summary">La nitidezza richiede il miglioramento dei bordi</string>
+    <string name="raw_video_config_help_summary">Sono offerte solo configurazioni qualificate</string>
+    <string name="scroll_long_text_help_summary">Il testo lungo scorre invece di troncarsi</string>
+    <string name="raw_compression_help_summary">Quasi senza perdita risparmia spazio, entro il rumore</string>
+    <string name="operator_volume_gestures_help_summary">Pressione lunga e doppia ritardano quella singola</string>
 </resources>

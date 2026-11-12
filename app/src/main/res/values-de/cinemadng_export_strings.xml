@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="cinemadng_export_action">CinemaDNG exportieren</string>
+    <string name="cinemadng_export_title">CinemaDNG exportieren</string>
+    <string name="cinemadng_export_help">Ein DNG pro Bild und eine WAV, wenn die Aufnahme Ton hat, in einem Ordner, den DaVinci Resolve direkt öffnet. Die .ocraw bleibt unverändert.</string>
+    <string name="cinemadng_export_destination">Ziel</string>
+    <string name="cinemadng_export_documents">Dokumente</string>
+    <string name="cinemadng_export_choose_folder">Ordner wählen…</string>
+    <string name="cinemadng_export_compress">Mit LJ92 komprimieren</string>
+    <string name="cinemadng_export_compress_help">Verlustfrei. Etwa halb so groß, aber der Export dauert länger.</string>
+    <string name="cinemadng_export_measuring">Aufnahme wird gelesen…</string>
+    <string name="cinemadng_export_unreadable">Diese Aufnahme lässt sich nicht exportieren: Ihre Datei ist nicht lesbar.</string>
+    <string name="cinemadng_export_no_frames">Kein Bild dieser Aufnahme lässt sich umwandeln.</string>
+    <string name="cinemadng_export_frames">Bilder: %1$d</string>
+    <string name="cinemadng_export_frames_audio">Bilder: %1$d · mit Ton</string>
+    <string name="cinemadng_export_frames_skipped">%1$d Bilder lassen sich nicht umwandeln (beschädigt) und werden übersprungen.</string>
+    <string name="cinemadng_export_space">Benötigt %1$s · %2$s frei</string>
+    <string name="cinemadng_export_space_estimate">Benötigt etwa %1$s · %2$s frei</string>
+    <string name="cinemadng_export_space_unknown">Benötigt %1$s. Der freie Speicher hier ist unbekannt, also sorge dafür, dass das Laufwerk Platz hat.</string>
+    <string name="cinemadng_export_space_short">Nicht genug Speicher: benötigt %1$s, %2$s frei.</string>
+    <string name="cinemadng_export_recording">Beende die Aufnahme, um zu exportieren.</string>
+    <string name="cinemadng_export_busy">Ein anderer Export läuft bereits.</string>
+    <string name="cinemadng_export_start">Starten</string>
+    <string name="cinemadng_export_cancel">Abbrechen</string>
+    <string name="cinemadng_export_cancelling">Export wird abgebrochen…</string>
+    <string name="cinemadng_export_preparing">CinemaDNG-Export wird vorbereitet…</string>
+    <string name="cinemadng_export_running">CinemaDNG-Export · %1$d/%2$d · %3$d%%</string>
+    <string name="cinemadng_export_dismiss">OK</string>
+    <string name="cinemadng_export_channel">Exporte</string>
+    <string name="cinemadng_export_notification_title">%1$s wird exportiert</string>
+    <string name="cinemadng_export_notification_progress">%1$d von %2$d Bildern · %3$d%%</string>
+    <string name="cinemadng_export_done">Exportiert nach %1$s</string>
+    <string name="cinemadng_export_done_frames">%1$d DNG-Bilder, %2$s.</string>
+    <string name="cinemadng_export_done_frames_audio">%1$d DNG-Bilder und die WAV, %2$s.</string>
+    <string name="cinemadng_export_skipped">%1$d Bilder übersprungen (beschädigt).</string>
+    <string name="cinemadng_export_audio_omitted">Der Ton ist zu lang für eine WAV und wurde weggelassen.</string>
+    <string name="cinemadng_export_nomedia_failed">Der Ordner hat keine .nomedia, daher können andere Galerie-Apps die Bilder anzeigen.</string>
+    <string name="cinemadng_export_refused_recording">Export nicht gestartet: Eine Aufnahme läuft.</string>
+    <string name="cinemadng_export_cancelled">Export abgebrochen.</string>
+    <string name="cinemadng_export_stopped_recording">Export gestoppt, weil eine Aufnahme begonnen hat.</string>
+    <string name="cinemadng_export_failed">Export fehlgeschlagen.</string>
+    <string name="cinemadng_export_partial_deleted">Der unvollständige Ordner wurde gelöscht.</string>
+    <string name="cinemadng_export_partial_left">Der unvollständige Ordner %1$s ließ sich nicht löschen; lösche ihn von Hand.</string>
+</resources>

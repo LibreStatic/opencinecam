@@ -20,4 +20,8 @@
     <string name="picture_help_summary">Vendor controls for this camera</string>
     <string name="picture_blocked_neutral_summary">No effect in LOG, HLG, RAW and high speed</string>
     <string name="picture_blocked_edge_off_summary">Sharpness needs edge enhancement on</string>
+    <string name="raw_video_config_help_summary">Only qualified configurations are offered</string>
+    <string name="scroll_long_text_help_summary">Long text scrolls instead of being cut</string>
+    <string name="raw_compression_help_summary">Near-lossless saves more space, within sensor noise</string>
+    <string name="operator_volume_gestures_help_summary">Hold and double press delay the single press</string>
 </resources>

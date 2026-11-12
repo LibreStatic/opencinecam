@@ -3,6 +3,22 @@
 
 package com.librestatic.opencinecam.driver
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import com.librestatic.opencinecam.export.CinemaDngDestinationChoice
+import com.librestatic.opencinecam.export.CinemaDngExportControl
+import com.librestatic.opencinecam.export.CinemaDngExportForm
+import com.librestatic.opencinecam.export.CinemaDngExportFormState
+import com.librestatic.opencinecam.export.CinemaDngExportOutcome
+import com.librestatic.opencinecam.export.CinemaDngExportPlan
+import com.librestatic.opencinecam.export.CinemaDngExportProgress
+import com.librestatic.opencinecam.export.CinemaDngExportState
+import com.librestatic.opencinecam.export.CinemaDngExporter
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
@@ -71,8 +87,27 @@ import com.librestatic.opencinecam.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.AdaptiveWindow
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
+import com.librestatic.opencinecam.OperatorAction
 import com.librestatic.opencinecam.OperatorPreferences
+import com.librestatic.opencinecam.VolumeKeyPair
 import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.OnboardingRawStage
+import com.librestatic.opencinecam.RawQualificationConditions
+import com.librestatic.opencinecam.RawQualificationFrame
+import com.librestatic.opencinecam.RawQualificationItem
+import com.librestatic.opencinecam.RawQualificationItemStatus
+import com.librestatic.opencinecam.RawQualificationOutcomeKind
+import com.librestatic.opencinecam.RawQualificationStep
+import com.librestatic.opencinecam.RawVideoConfigOption
+import com.librestatic.opencinecam.rawQualificationPlanItems
+import com.librestatic.opencinecam.RawVideoQualificationInfo
+import com.librestatic.opencinecam.RawVideoQualificationUi
+import com.librestatic.opencinecam.rawvideo.RawQualificationEstimate
+import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
+import com.librestatic.opencinecam.rawvideo.RawQualificationPlannedConfig
+import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
+import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
+import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureInitialPane
 import com.librestatic.opencinecam.CaptureMode
@@ -80,6 +115,12 @@ import com.librestatic.opencinecam.CaptureScopeVisibility
 import com.librestatic.opencinecam.CodecBadge
 import com.librestatic.opencinecam.CompositionGridMode
 import com.librestatic.opencinecam.GalleryFacts
+import com.librestatic.opencinecam.rawCodecBadge
+import com.librestatic.opencinecam.TakeDetailInputs
+import com.librestatic.opencinecam.TakeTechnicalDetails
+import com.librestatic.opencinecam.buildTakeDetails
+import com.librestatic.opencinecam.detailText
+import org.robolectric.RuntimeEnvironment
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
@@ -110,6 +151,7 @@ import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaPage
 import com.librestatic.opencinecam.storage.LocalMediaRelationStatus
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.rawVideoTake
 import com.librestatic.opencinecam.ui.theme.AppTheme
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
@@ -118,6 +160,14 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
+import com.librestatic.opencinecam.MediaZoomState
+import com.librestatic.opencinecam.PlaybackObservation
+import com.librestatic.opencinecam.PlaybackPhase
+import com.librestatic.opencinecam.PlaybackStageArea
 
 /*
  * Zero-argument Compose Driver entry points (AGENTS.md). Each one feeds fake state to the real
@@ -255,6 +305,448 @@ private fun driverAudioInput(confirmed: Boolean) = com.librestatic.opencinecam.m
 @Composable
 fun CaptureLandscape() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO))
 
+// RAW video (OCC-PLAN-071)
+
+/** An S24 Ultra-like main camera's qualified RAW10 configurations: the 4080×3060 sensor at 1.25 B/px, and two centre crops. */
+private val DriverRawVideoOptions: List<com.librestatic.opencinecam.RawVideoConfigOption> = buildList {
+    fun option(width: Int, height: Int, fps: Int, crop: Boolean) = com.librestatic.opencinecam.RawVideoConfigOption(
+        key = (if (crop) "${width}x$height" else "full") + "@$fps", label = "$width×$height · $fps fps",
+        bytesPerSecond = width.toLong() * height * 5 / 4 * fps, isCrop = crop)
+    listOf(15, 24, 30).forEach { add(option(4080, 3060, it, crop = false)) }
+    listOf(30, 60).forEach { add(option(3840, 2160, it, crop = true)) }
+    listOf(30, 60).forEach { add(option(1920, 1080, it, crop = true)) }
+}
+
+/**
+ * [DriverRawVideoOptions] with block-pack twins of 4080×3060 · 30 fps and 3840×2160 · 30 fps, each right
+ * after its uncompressed configuration (the gate's order); they read "· Near-lossless" while near-lossless is on.
+ */
+private val DriverRawVideoOptionsCompressed: List<com.librestatic.opencinecam.RawVideoConfigOption> = DriverRawVideoOptions.flatMap { option ->
+    val twin = when (option.key) {
+        "full@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 4080, 3060, 30, "bp")
+        "3840x2160@30" -> com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, 3840, 2160, 30, "bp")
+        else -> null
+    }
+    listOfNotNull(option, twin?.let { com.librestatic.opencinecam.RawVideoConfigOption.of(it) })
+}
+
+/**
+ * RAW video qualified on this camera, running full sensor at 30 fps (picked, not Automatic). With
+ * [compressed] the block-pack twins are offered too and the camera has a noise profile, so they can
+ * record near-lossless.
+ */
+private fun driverRawVideoState(phase: CameraUiPhase = CameraUiPhase.PREVIEWING, compressed: Boolean = false): CameraUiState =
+    driverCaptureState(CaptureMode.RAW_VIDEO, phase).let {
+        it.copy(modeGates = it.modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.AVAILABLE),
+            rawVideoOptions = if (compressed) DriverRawVideoOptionsCompressed else DriverRawVideoOptions,
+            rawVideoNearLosslessAvailable = compressed,
+            rawVideoSelectedKey = "full@30", rawVideoAutoKey = "full@30",
+            targetFps = 30, targetVideoWidth = 4080, targetVideoHeight = 3060, recordingWidth = 4080, recordingHeight = 3060)
+    }
+
+private val DriverRawVideoSettings = CameraSettings(histogramEnabled = true, rawVideoConfig = "full@30")
+
+/** RAW video previewing: RES and FPS read the configuration, the status line its rate and the time left. */
+@Composable
+fun CaptureRawVideo() = CaptureChrome(driverRawVideoState(), DriverRawVideoSettings)
+
+/**
+ * The same with every status fact: timecode, free space, time left and a 72 % battery (a
+ * Robolectric shadow; the device reports none headless). On a narrow phone the status line splits
+ * into two rows (`capture-status-line-top` / `-bottom`) instead of ending in an ellipsis.
+ */
+@Composable
+fun CaptureRawVideoStatus(): Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    remember {
+        val battery = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+        org.robolectric.Shadows.shadowOf(battery).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 72)
+    }
+    CaptureChrome(driverRawVideoState().copy(timecodeDisplay = "01:02:03:04"), DriverRawVideoSettings)
+}
+
+/**
+ * The RAW configuration chooser open (what RES or FPS opens in RAW video): Automatic, full sensor, crops,
+ * with the block-pack twins of 4080×3060 and 3840×2160 at 30 fps labelled "· Near-lossless".
+ */
+@Composable
+fun CaptureRawVideoConfig() = CaptureChrome(driverRawVideoState(compressed = true), DriverRawVideoSettings, CaptureInitialPane.RESOLUTION)
+
+/**
+ * RAW video with 4080×3060 at 60 fps qualified as risky and chosen by hand: the chooser open, its
+ * tile carrying the warning and the risk hint (`raw-video-config-risk-hint`), and the risky-rate
+ * notice (`raw-video-risky-notice`) under the zoom, with the Razr-like burst estimate (75 s: "about 1 min").
+ */
+@Composable
+fun CaptureRawVideoRisky() = CaptureChrome(
+    driverRawVideoState().let { state ->
+        val full60 = com.librestatic.opencinecam.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
+            burstSeconds = 75L)
+        state.copy(rawVideoOptions = state.rawVideoOptions.take(3) + full60 + state.rawVideoOptions.drop(3),
+            rawVideoSelectedKey = "full@60", targetFps = 60)
+    },
+    DriverRawVideoSettings.copy(rawVideoConfig = "full@60"),
+    CaptureInitialPane.RESOLUTION,
+)
+
+/**
+ * Reduced-rate configurations in the chooser (PLAN-071): 4080×3060 at 60 fps risky and reaching
+ * 51.9 fps, 3840×2160 at 60 fps qualified but reaching 49.1 fps. Their tiles lead with "Reaches … fps";
+ * Automatic still resolves to 4080×3060 at 30 fps, which reaches its target.
+ */
+@Composable
+fun CaptureRawVideoReducedRate() = CaptureChrome(
+    driverRawVideoState().let { state ->
+        val full60 = com.librestatic.opencinecam.RawVideoConfigOption("full@60", "4080×3060 · 60 fps", 936_360_000L, isCrop = false, isRisky = true,
+            burstSeconds = 75L, achievedFps = 51.9)
+        val options = (state.rawVideoOptions.take(3) + full60 + state.rawVideoOptions.drop(3))
+            .map { if (it.key == "3840x2160@60") it.copy(achievedFps = 49.1) else it }
+        state.copy(rawVideoOptions = options, rawVideoSelectedKey = "full@30")
+    },
+    DriverRawVideoSettings.copy(rawVideoConfig = ""),
+    CaptureInitialPane.RESOLUTION,
+)
+
+/** A RAW take at 00:42: the ring meter beside the REC timer, 37 % full and 1260 frames written. */
+@Composable
+fun CaptureRawVideoRecording() = CaptureChrome(
+    driverRawVideoState(CameraUiPhase.RECORDING).copy(recordingElapsedMs = 42_000L, rawVideoRingPercent = 37, rawVideoFramesWritten = 1_260L),
+    DriverRawVideoSettings,
+)
+
+/** The same take with the ring at 84 %: the meter turns red (amber from 50 %). */
+@Composable
+fun CaptureRawVideoRingHigh() = CaptureChrome(
+    driverRawVideoState(CameraUiPhase.RECORDING).copy(recordingElapsedMs = 42_000L, rawVideoRingPercent = 84, rawVideoFramesWritten = 1_260L),
+    DriverRawVideoSettings,
+)
+
+private fun driverRawCandidateState(): CameraUiState =
+    driverCaptureState(CaptureMode.VIDEO).let { it.copy(modeGates = it.modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.CANDIDATE)) }
+
+/**
+ * The default plan on a 4080×3060 sensor with what each run needs: with 26 GB free the two 60 fps
+ * configurations that need 54 and 81 GB (80 s runs) are skipped, the other six (40 s runs) are tested.
+ */
+private val DriverRawPlanNeeds = listOf(
+    "full@15" to 11_600_000_000L, "full@24" to 18_000_000_000L, "full@30" to 22_100_000_000L, "full@60" to 80_700_000_000L,
+    "3840x2160@30" to 15_100_000_000L, "3840x2160@60" to 53_900_000_000L, "1920x1080@30" to 4_600_000_000L, "1920x1080@60" to 8_100_000_000L,
+)
+
+private fun driverRawPlannedConfigs(freeBytes: Long): List<RawQualificationPlannedConfig> = DriverRawPlanNeeds.map { (spec, needed) ->
+    val run = requireNotNull(RawQualificationSpecs.parse(spec, "0", 4080, 3060))
+    RawQualificationPlannedConfig(spec, run.config, needed, fits = needed <= freeBytes)
+}
+
+/** A qualification estimate: about 12 min, [freeBytes] free, the configurations that do not fit skipped for space. */
+private fun driverRawQualificationInfo(
+    freeBytes: Long = 26_000_000_000L,
+    minimumFreeBytes: Long = 3L shl 30,
+    previousFailure: Boolean = false,
+): RawVideoQualificationInfo {
+    val configs = driverRawPlannedConfigs(freeBytes)
+    return RawVideoQualificationInfo(
+        cameraId = "0",
+        gate = ModeGateState.CANDIDATE,
+        space = RawQualificationSpaceEstimate(
+            estimate = RawQualificationEstimate(durationMs = 12 * 60_000L + 10_000L, freeBytesNeeded = 22_100_000_000L,
+                sweepFreeBytesNeeded = 3L shl 30, runCount = 15),
+            freeBytes = freeBytes,
+            skippedRuns = configs.count { !it.fits },
+            minimumFreeBytes = minimumFreeBytes,
+            configs = configs,
+            fullPlanFreeBytes = 80_700_000_000L,
+        ),
+        previousFailure = previousFailure,
+    )
+}
+
+/** RAW10 present but nothing qualified yet: the modes pane lists RAW video as choosable, with its gate label. */
+@Composable
+fun CaptureRawVideoCandidate() = CaptureChrome(driverRawCandidateState(), initialPane = CaptureInitialPane.MODES,
+    rawQualificationInfo = { driverRawQualificationInfo() })
+
+/** The phone's mode sheet with the RAW video candidate choosable. */
+@Composable
+fun CaptureRawVideoCandidateSheet() = CaptureChrome(driverRawCandidateState(), initialPane = CaptureInitialPane.MODE_SHEET,
+    rawQualificationInfo = { driverRawQualificationInfo() })
+
+/** RAW video chosen on a candidate: the prompt (a dialog, so use `tree`), with a partial-space line. */
+@Composable
+fun CaptureRawVideoQualifyPrompt() = CaptureChrome(driverRawCandidateState(), initialPane = CaptureInitialPane.MODES,
+    rawQualificationInfo = { driverRawQualificationInfo(freeBytes = 9_000_000_000L) }, initialRawQualifyPrompt = true)
+
+/** The prompt without enough free space for even the sweep: only a dismiss button. */
+@Composable
+fun CaptureRawVideoQualifyNoSpace() = CaptureChrome(driverRawCandidateState(), initialPane = CaptureInitialPane.MODES,
+    rawQualificationInfo = { driverRawQualificationInfo(freeBytes = 1_000_000_000L) }, initialRawQualifyPrompt = true)
+
+/** The onboarding's last question: qualify RAW video now or later. */
+@Composable
+fun OnboardingRawQuestion() = DriverTheme {
+    CompositionLocalProvider(LocalReducedMotion provides true) {
+        OnboardingScreen(splash = SplashHandoff(onScreen = false), onPermissionsChanged = {}, onFinished = {},
+            rawQualificationStep = { _ -> }, initialRawStage = OnboardingRawStage.QUESTION, initialRawInfo = driverRawQualificationInfo())
+    }
+}
+
+/** The qualification step as the mode selector opens it, over the app in the wizard's look. */
+@Composable
+private fun RawQualificationDriver(
+    conditions: RawQualificationConditions,
+    state: RawVideoQualificationUi?,
+    info: RawVideoQualificationInfo = driverRawQualificationInfo(),
+) = DriverTheme {
+    CompositionLocalProvider(LocalReducedMotion provides true) {
+        var shown by remember { mutableStateOf(state) }
+        RawQualificationFrame(hinge = null) {
+            RawQualificationStep(
+                info = info,
+                conditions = conditions,
+                state = shown,
+                onStart = { shown = RawVideoQualificationUi(phase = RawQualificationPhase.RING, remainingMs = 12 * 60_000L) },
+                onCancel = { shown = RawVideoQualificationUi(outcome = RawQualificationOutcomeKind.CANCELLED, reason = it) },
+                onLeave = { shown = null },
+            )
+        }
+    }
+}
+
+private val DriverRawReady = RawQualificationConditions(batteryPercent = 82, thermalStatus = 0)
+
+/** The preconditions all pass with 26 GB free: Start is enabled and two 60 fps configurations are skipped for space. */
+@Composable
+fun RawQualificationReady() = RawQualificationDriver(DriverRawReady, null)
+
+/** The preconditions all pass with room for every configuration: only a compact free-space line. */
+@Composable
+fun RawQualificationReadyAllFit() = RawQualificationDriver(DriverRawReady, null, driverRawQualificationInfo(freeBytes = 128_000_000_000L))
+
+/** Battery at 3 % and moderately warm: each check says what to do and Start is disabled. */
+@Composable
+fun RawQualificationBlocked() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 3, thermalStatus = 2), null)
+
+/** Battery at 35 % and cool: the battery row warns that the run may drain it, and Start stays enabled. */
+@Composable
+fun RawQualificationBatteryLow() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 35, thermalStatus = 0), null)
+
+/** The plan's items with [statuses] set by spec; the rest pending, or skipped when they do not fit. */
+private fun driverRawItems(vararg statuses: Pair<String, RawQualificationItemStatus>): List<RawQualificationItem> =
+    rawQualificationPlanItems(driverRawQualificationInfo().space).map { item ->
+        statuses.firstOrNull { it.first == item.spec }?.let { item.copy(status = it.second) } ?: item
+    }
+
+/** The camera's rate each fitting configuration's check measured, as the driver's screens show it. */
+private val DriverRawChecked = linkedMapOf(
+    "full@30" to 29.9, "full@24" to 24.0, "3840x2160@30" to 30.0, "full@15" to 15.0, "1920x1080@60" to 59.8, "1920x1080@30" to 30.0,
+)
+
+/** The plan's items with the camera checks of [checked] done (MEASURED, with their rates), then [more] statuses. */
+private fun driverRawCheckedItems(checked: Collection<String>, vararg more: Pair<String, RawQualificationItemStatus>): List<RawQualificationItem> =
+    driverRawItems(*(checked.map { it to RawQualificationItemStatus.MEASURED } + more).toTypedArray())
+        .map { item -> DriverRawChecked[item.spec]?.takeIf { item.spec in checked }?.let { item.copy(achievedFps = it) } ?: item }
+
+/**
+ * Camera check 4 of 15, heaviest first while the phone is cool: the two 60 fps configurations that do
+ * not fit stay "No space", 4080×3060 · 30 fps is measured, 24 fps is being checked at 23.4 fps live.
+ */
+@Composable
+fun RawQualificationRunning() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.CAMERA_CHECK, fraction = 0.09f, runIndex = 4, runCount = 15, specLabel = "4080×3060 · 24 fps",
+    remainingMs = 11 * 60_000L,
+    items = driverRawCheckedItems(listOf("full@30"), "full@24" to RawQualificationItemStatus.TESTING)
+        .map { if (it.spec == "full@24") it.copy(liveFps = 23.4) else it },
+))
+
+/** Camera check 7 of 15 on 1920×1080 · 60 fps, the camera delivering 49.8 fps (under the tolerance: amber). */
+@Composable
+fun RawQualificationRunningSlow() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawCheckedItems(listOf("full@30", "full@24", "3840x2160@30", "full@15"),
+        "1920x1080@60" to RawQualificationItemStatus.TESTING)
+        .map { if (it.spec == "1920x1080@60") it.copy(liveFps = 49.8) else it }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.CAMERA_CHECK, fraction = 0.15f, runIndex = 7, runCount = 15,
+        specLabel = items.first { it.spec == "1920x1080@60" }.label, remainingMs = 10 * 60_000L, items = items,
+    )
+})
+
+/**
+ * The compression benchmark, step 9 of 15, after every camera check: it streams 4080×3060 · 30 fps,
+ * the heaviest the camera delivered, at 29.7 fps; that row leads, highlighted and still Measured.
+ */
+@Composable
+fun RawQualificationRunningBench() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawCheckedItems(DriverRawChecked.keys)
+        .map { if (it.spec == "full@30") it.copy(benchmarking = true, benchLiveFps = 29.7) else it }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.ENCODE_BENCH, fraction = 0.22f, runIndex = 9, runCount = 15,
+        specLabel = items.first { it.spec == "full@30" }.label, remainingMs = 9 * 60_000L, items = items,
+    )
+})
+
+/** The storage rest after the camera work: the ring keeps 9 / 15, every fitting configuration Measured. */
+@Composable
+fun RawQualificationRunningRest() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.STORAGE_REST, fraction = 0.31f, runIndex = 9, runCount = 15, remainingMs = 8 * 60_000L,
+    items = driverRawCheckedItems(DriverRawChecked.keys),
+))
+
+/** The storage sweep after the rest, at 45 % overall: the ring keeps 9 / 15, every fitting configuration Measured. */
+@Composable
+fun RawQualificationRunningSweep() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.SWEEP, fraction = 0.45f, runIndex = 9, runCount = 15, remainingMs = 6 * 60_000L,
+    items = driverRawCheckedItems(DriverRawChecked.keys),
+))
+
+/**
+ * Late in the run, step 11 of 13: the descent stopped at 4080×3060 · 30 fps (Ready), and its compressed (block-pack)
+ * twin runs its own long run, the longest header label, which may break only before "· Compressed".
+ */
+@Composable
+fun RawQualificationRunningCompressed() = RawQualificationDriver(DriverRawReady, run {
+    val compressed = requireNotNull(RawQualificationSpecs.parse("full@30+bp", "0", 4080, 3060))
+    val label = RawVideoConfigOption.of(compressed.config).label
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.RUN, fraction = 0.8f, runIndex = 11, runCount = 13, specLabel = label, remainingMs = 2 * 60_000L,
+        items = driverRawCheckedItems(DriverRawChecked.keys - "full@30", "full@30" to RawQualificationItemStatus.PASSED)
+            .map { if (it.spec == "full@30") it.copy(achievedFps = 29.9) else it } +
+            RawQualificationItem("full@30+bp", label, 22_100_000_000L, RawQualificationItemStatus.TESTING, liveFps = 29.8),
+    )
+})
+
+/** Six configurations qualified, two skipped for space. */
+@Composable
+fun RawQualificationDone() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawItems(*DriverRawPlanNeeds.filter { it.second <= 26_000_000_000L }
+        .map { it.first to RawQualificationItemStatus.PASSED }.toTypedArray())
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.PASSED,
+        passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
+        items = items,
+    )
+})
+
+/**
+ * A run the heat cut short, as on the device: 4080×3060 and 3840×2160 at 60 fps failed, then the phone
+ * reached SEVERE and the qualifier skipped 3840×2160 and 1920×1080 at 30 fps ("Too hot", the heat hint).
+ */
+@Composable
+fun RawQualificationDoneHot() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawItems(
+        "full@15" to RawQualificationItemStatus.PASSED, "full@24" to RawQualificationItemStatus.PASSED,
+        "full@30" to RawQualificationItemStatus.PASSED, "full@60" to RawQualificationItemStatus.FAILED,
+        "3840x2160@30" to RawQualificationItemStatus.SKIPPED_HEAT, "3840x2160@60" to RawQualificationItemStatus.FAILED,
+        "1920x1080@30" to RawQualificationItemStatus.SKIPPED_HEAT, "1920x1080@60" to RawQualificationItemStatus.PASSED,
+    )
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.PASSED,
+        passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
+        items = items,
+    )
+})
+
+/**
+ * The Razr's result: its HAL delivers RAW at 30 fps at most, so the 60 fps configurations delivered
+ * no frames and are left out as "Camera limit"; everything at 15 to 30 fps qualified.
+ */
+@Composable
+fun RawQualificationDoneCameraLimit() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawItems(
+        "full@15" to RawQualificationItemStatus.PASSED, "full@24" to RawQualificationItemStatus.PASSED,
+        "full@30" to RawQualificationItemStatus.PASSED, "full@60" to RawQualificationItemStatus.CAMERA_LIMIT,
+        "3840x2160@30" to RawQualificationItemStatus.PASSED, "3840x2160@60" to RawQualificationItemStatus.CAMERA_LIMIT,
+        "1920x1080@30" to RawQualificationItemStatus.PASSED, "1920x1080@60" to RawQualificationItemStatus.CAMERA_LIMIT,
+    )
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.PASSED,
+        passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
+        items = items,
+    )
+})
+
+/**
+ * A second qualification soon after a full one: the sweep found the write cache still flushing, so
+ * the run stopped after it (`storage-not-rested`). "Storage needs to rest" with the rest hint
+ * (`raw-qualification-rest-hint`) and, the camera having been qualified before, the line saying
+ * that qualification is kept (`raw-qualification-rest-kept`).
+ */
+@Composable
+fun RawQualificationStorageBusy() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.FAILED_TO_RUN,
+    reason = RawVideoQualifier.REASON_STORAGE_NOT_RESTED, previousKept = true,
+    items = driverRawItems("full@15" to RawQualificationItemStatus.NOT_QUALIFIED, "full@60" to RawQualificationItemStatus.NOT_QUALIFIED),
+))
+
+/**
+ * The Razr-like result under the 1.1225x margin: 4080×3060 at 60 fps kept up with zero loss but its
+ * storage median sits under the margin, so it is "Risky rate" in its own card, with the burst
+ * estimate the sweep's cliff gives it (75 s: "frames may drop after about 1 min"); 3840×2160 and
+ * 1920×1080 at 60 fps and everything at 15 to 30 fps qualified.
+ */
+@Composable
+fun RawQualificationDoneRisky() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawItems(
+        "full@15" to RawQualificationItemStatus.PASSED, "full@24" to RawQualificationItemStatus.PASSED,
+        "full@30" to RawQualificationItemStatus.PASSED, "full@60" to RawQualificationItemStatus.RISKY,
+        "3840x2160@30" to RawQualificationItemStatus.PASSED, "3840x2160@60" to RawQualificationItemStatus.PASSED,
+        "1920x1080@30" to RawQualificationItemStatus.PASSED, "1920x1080@60" to RawQualificationItemStatus.PASSED,
+    ).map { if (it.spec == "full@60") it.copy(burstSeconds = 75L) else it }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.PASSED,
+        passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
+        items = items,
+    )
+})
+
+/**
+ * The Razr-like result with reduced-rate passes (PLAN-071): 4080×3060 at 60 fps risky and reaching
+ * 51.9 fps, 3840×2160 at 60 fps qualified but reaching 49.1 fps ("Reaches … fps"); every other
+ * configuration shows the rate it achieved at its target ("29.9 fps"). Rows are `raw-qualification-item-<spec>`.
+ */
+@Composable
+fun RawQualificationDoneReducedRate() = RawQualificationDriver(DriverRawReady, run {
+    val achieved = mapOf("full@15" to 15.0, "full@24" to 24.0, "full@30" to 29.9, "full@60" to 51.9, "3840x2160@30" to 30.0,
+        "3840x2160@60" to 49.1, "1920x1080@30" to 30.0, "1920x1080@60" to 59.9)
+    val items = driverRawItems(
+        "full@15" to RawQualificationItemStatus.PASSED, "full@24" to RawQualificationItemStatus.PASSED,
+        "full@30" to RawQualificationItemStatus.PASSED, "full@60" to RawQualificationItemStatus.RISKY,
+        "3840x2160@30" to RawQualificationItemStatus.PASSED, "3840x2160@60" to RawQualificationItemStatus.PASSED,
+        "1920x1080@30" to RawQualificationItemStatus.PASSED, "1920x1080@60" to RawQualificationItemStatus.PASSED,
+    ).map { it.copy(achievedFps = achieved[it.spec], burstSeconds = if (it.spec == "full@60") 75L else null) }
+    RawVideoQualificationUi(
+        phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.PASSED,
+        passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
+        items = items,
+    )
+})
+
+/** The run finished with no configuration sustained. */
+@Composable
+fun RawQualificationNone() = RawQualificationDriver(DriverRawReady, RawVideoQualificationUi(
+    phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.NO_CONFIG,
+))
+
+/**
+ * Settings with RAW video qualified: Capture holds the configuration row (`settings-raw-video`), with
+ * block-pack twins, the RAW compression row (`settings-raw-compression`: `raw-compression-lossless`,
+ * `raw-compression-near-lossless`) and "Qualify again" (`settings-raw-video-requalify`).
+ */
+@Composable
+fun SettingsRawVideo() = DriverTheme {
+    var settings by remember { mutableStateOf(DriverRawVideoSettings) }
+    SettingsScreen(driverRawVideoState(compressed = true), settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+        onSettingsChange = { settings = it }, onSelectRawVideoConfig = { key -> settings = settings.copy(rawVideoConfig = key) },
+        onRequalifyRawVideo = {})
+}
+
+/** Settings on a RAW video candidate: the row says nothing is qualified yet and points to the mode selector. */
+@Composable
+fun SettingsRawVideoCandidate() = DriverTheme {
+    val state = driverCaptureState(CaptureMode.VIDEO).let { it.copy(modeGates = it.modeGates + (CaptureMode.RAW_VIDEO to ModeGateState.CANDIDATE)) }
+    SettingsScreen(state, CameraSettings(), audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+        onSettingsChange = {})
+}
+
 /** The white balance dial open: a bottom sheet on a phone, a side pane where there is width. */
 @Composable
 fun CaptureSheetWb() = CaptureChrome(driverCaptureState(CaptureMode.VIDEO), initialPane = CaptureInitialPane.WHITE_BALANCE)
@@ -279,6 +771,10 @@ fun CaptureHlg() = CaptureChrome(
     },
     initialPane = CaptureInitialPane.MODES,
 )
+
+/** HLG with no pane open over a portrait 9:16 frame: the instruments stack in a column beside the lock keys. */
+@Composable
+fun CaptureHlgPortrait() = CaptureChrome(driverCaptureState(CaptureMode.HLG), previewAspectRatio = 9f / 16f)
 
 /** The monitoring toggles pane, with every scope switched on. */
 @Composable
@@ -359,6 +855,14 @@ fun SettingsRecording() = DriverTheme {
 @Composable
 fun SettingsRecordingPolicy() = DriverTheme {
     var settings by remember { mutableStateOf(CameraSettings(recordingPolicy = PolicyMode.ADAPTIVE)) }
+    SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
+        onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+}
+
+/** The settings hub with the volume keys as a zoom pair; Controls › Operator controls shows the pair rows. */
+@Composable
+fun SettingsVolumeKeys() = DriverTheme {
+    var settings by remember { mutableStateOf(CameraSettings(operation = OperatorPreferences(volumePair = VolumeKeyPair.ZOOM, volumeBoth = OperatorAction.CAPTURE))) }
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING), settings, audioPermissionGranted = true,
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
 }
@@ -486,7 +990,104 @@ fun GalleryInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection 
 @Composable
 fun GalleryInspectorProbed() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "7")
 
+/** The DNG photo's details: its EXIF in the Image and Camera and exposure sections, and the RAW section's colour filter. */
+@Composable
+fun GalleryPhotoInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "3")
+
+/** The WAV recorder track's details: the File and Audio sections only. */
+@Composable
+fun GalleryAudioInspector() = GalleryWith(FakeCatalog(SampleTakes), initialSelection = "6")
+
+/** Take 1's details while its files are still being read: the loading line in place of the sections. */
+@Composable
+fun GalleryInspectorLoading() = GalleryWith(PendingDetailsCatalog(FakeCatalog(SampleTakes)), initialSelection = "1")
+
+/** A catalog whose details never arrive. */
+private class PendingDetailsCatalog(source: MediaCatalogSource) : MediaCatalogSource by source {
+    override suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = awaitCancellation()
+}
+
 /** The media catalog with no takes yet. */
+/**
+ * The sample takes with two RAW video takes (`.ocraw`): RAW10 and near-lossless badges, size in place of the length;
+ * the first with its developed first frame (a fake gradient), the second whose frame gave no picture, so the placeholder.
+ */
+@Composable
+fun GalleryRaw() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes) { artifact ->
+    if (artifact == SampleRawTakes[1].take.primary) null else gradientThumbnail(artifact.name.hashCode())
+})
+
+/** A RAW take's details: Play and Share (no rename or delete), and the note that the player shows a developed preview. */
+@Composable
+fun GalleryRawInspector() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes), initialSelection = SampleRawTakes.first().take.id)
+
+/** The CinemaDNG export form for the first RAW take: Documents, LJ92 offered, two damaged frames, the size against the free space. */
+@Composable
+fun GalleryCinemaDngExport() = CinemaDngExportFormScreen(CinemaDngExportFormState(SampleExportTakeName, SampleExportPlan,
+    loading = false, choice = CinemaDngDestinationChoice.Documents, folder = SampleExportFolder, lj92Available = true,
+    compress = false, freeBytes = 26_400_000_000L, recording = false, busy = false))
+
+/** The same form exporting to a picked USB folder with LJ92 on: the size is an estimate and the free space unknown. */
+@Composable
+fun GalleryCinemaDngExportFolder() = CinemaDngExportFormScreen(CinemaDngExportFormState(SampleExportTakeName, SampleExportPlan,
+    loading = false, choice = SampleExportFolder, folder = SampleExportFolder, lj92Available = true,
+    compress = true, freeBytes = null, recording = false, busy = false))
+
+/** The form when the take does not fit: Start disabled, the shortfall spelled out. */
+@Composable
+fun GalleryCinemaDngExportNoSpace() = CinemaDngExportFormScreen(CinemaDngExportFormState(SampleExportTakeName, SampleExportPlan,
+    loading = false, choice = CinemaDngDestinationChoice.Documents, folder = null, lj92Available = false,
+    compress = false, freeBytes = 8_200_000_000L, recording = false, busy = false))
+
+/** The gallery while the first RAW take exports: frame count, percent and Cancel on its card. */
+@Composable
+fun GalleryRawExporting() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes), exports = FakeExports(SampleExportRunning))
+
+/** The exporting take's details: the progress and Cancel above the integrity section. */
+@Composable
+fun GalleryRawExportingInspector() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes),
+    initialSelection = SampleRawTakes.first().take.id, exports = FakeExports(SampleExportRunning))
+
+/** The in-app notice after an export: where it went, the frames and the damaged ones skipped. */
+@Composable
+fun GalleryRawExported() = GalleryWith(FakeCatalog(SampleRawTakes + SampleTakes), exports = FakeExports(
+    CinemaDngExportState.Finished(SampleRawTakes.first().take.primary.uri, SampleExportTakeName,
+        CinemaDngExportOutcome.Exported("Documents/OpenCineCam/CinemaDNG/$SampleExportTakeName", frames = 1_438, skipped = 2,
+            audio = true, audioOmitted = false, bytes = 19_520_000_000L, noMedia = true))))
+
+private val SampleExportTakeName by lazy { CinemaDngExporter.takeName(SampleRawTakes.first().take.primary.name) }
+
+/** A 60 s 24 fps 4080x3060 RAW10 take with sound, two frames damaged. */
+private val SampleExportPlan by lazy { CinemaDngExportPlan(SampleExportTakeName, frames = 1_440, convertible = 1_438, fixedBytes = 0L,
+    reencodedBytes = 1_438L * 15_640_000L, reencodedFrames = 1_438, wavBytes = 17_280_000L) }
+
+private val SampleExportFolder = CinemaDngDestinationChoice.Folder("content://com.android.externalstorage.documents/tree/1A2B-3C4D%3AFootage",
+    "Footage")
+
+private val SampleExportRunning by lazy { CinemaDngExportState.Running(SampleRawTakes.first().take.primary.uri, SampleExportTakeName,
+    CinemaDngExportProgress(done = 517, total = 1_440, skipped = 0, bytes = 517L * 15_640_000L)) }
+
+/** The form inside the dialog card's look; screenshots leave dialogs out, so the driver draws the card in the window. */
+@Composable
+private fun CinemaDngExportFormScreen(state: CinemaDngExportFormState) = DriverTheme {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+        androidx.compose.material3.Surface(Modifier.padding(24.dp).widthIn(max = 560.dp).heightIn(max = 680.dp).testTag("cinemadng-export-dialog"),
+            shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 6.dp) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CinemaDngExportForm(SampleRawTakes.first().take, state, onChoice = {}, onChooseFolder = {}, onCompress = {},
+                    onStart = {}, onCancel = {})
+            }
+        }
+    }
+}
+
+/** An export state that never changes; cancel and acknowledge do nothing. */
+internal class FakeExports(state: CinemaDngExportState) : CinemaDngExportControl {
+    override val states: StateFlow<CinemaDngExportState> = MutableStateFlow(state)
+    override fun cancel() {}
+    override fun acknowledge() {}
+}
+
 @Composable
 fun GalleryEmpty() = GalleryWith(FakeCatalog(emptyList()))
 
@@ -546,6 +1147,9 @@ private fun CaptureChrome(
     hardwareKeyboard: Boolean = false,
     foldState: FoldDisplayState = FoldDisplayState(),
     lensCalibration: LensCalibrationUiState = LensCalibrationUiState(),
+    previewAspectRatio: Float? = null,
+    rawQualificationInfo: (() -> RawVideoQualificationInfo?)? = null,
+    initialRawQualifyPrompt: Boolean = false,
 ) = DriverTheme(forceDark = true) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val window = AdaptiveWindow(maxWidth.value, maxHeight.value, hardwareKeyboard)
@@ -560,6 +1164,7 @@ private fun CaptureChrome(
                 binder = null,
                 settings = current,
                 landscape = window.landscape,
+                previewAspectRatio = previewAspectRatio,
                 zebra = current.zebraEnabled,
                 peaking = current.peakingEnabled,
                 histogram = current.histogramEnabled,
@@ -584,15 +1189,19 @@ private fun CaptureChrome(
                 onOpenSettings = {},
                 initialPane = initialPane,
                 lensCalibration = lensCalibration,
+                rawQualificationInfo = rawQualificationInfo,
+                initialRawQualifyPrompt = initialRawQualifyPrompt,
             )
         }
     }
 }
 
 @Composable
-internal fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null) = DriverTheme {
+internal fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null,
+    exports: CinemaDngExportControl? = null) = DriverTheme {
     MediaCatalogContent(GallerySettings(), onSettings = {}, source = source, onShare = {}, onDelete = {},
-        onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection, onOpen = {})
+        onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection,
+        exports = exports, onExport = {}, onOpen = {})
 }
 
 internal class FakeCatalog(private val takes: List<SampleTake>,
@@ -612,11 +1221,14 @@ internal class FakeCatalog(private val takes: List<SampleTake>,
         flowOf(takes.filter { it.take.id in ids && it.proxy != TakeProxyState.NONE }.associate { it.take.id to it.proxy })
 
     override suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = takes.firstOrNull { it.take.primary == artifact }?.probed
+
+    override suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = takes.firstOrNull { it.take == take }?.details
+        ?.let { buildTakeDetails(it(take), detailText(RuntimeEnvironment.getApplication())) }
 }
 
-/** A take with what MediaStore, its sidecars, the proxy queue and a probe of its file would say about it. */
+/** A take with what MediaStore, its sidecars, the proxy queue, a probe of its file and the inspector's readers would say about it. */
 internal class SampleTake(val take: LocalMediaTake, val facts: GalleryFacts? = null, val encoding: LocalMediaEncoding? = null,
-    val proxy: TakeProxyState = TakeProxyState.NONE, val probed: CodecBadge? = null)
+    val proxy: TakeProxyState = TakeProxyState.NONE, val probed: CodecBadge? = null, val details: ((LocalMediaTake) -> TakeDetailInputs)? = null)
 
 /** A stand-in frame: a two-colour gradient seeded by the file name, so takes are told apart. */
 private fun gradientThumbnail(seed: Int): Bitmap {
@@ -643,24 +1255,39 @@ private fun take(id: Int, name: String, mime: String, kind: LocalMediaKind, size
     return LocalMediaTake(id.toString(), primary, listOf(primary), listOf(sidecar), kind, slate, status)
 }
 
+/**
+ * RAW takes as the repository lists them: one `.ocraw` in Documents/OpenCineCam/RAW, no sidecar. Their
+ * only facts are the codec the file's first chunk declares: uncompressed RAW10, and near-lossless.
+ */
+internal val SampleRawTakes = listOf(
+    SampleTake(rawVideoTake(artifact(21, "OCC_TAKE_A001_S13_T01.ocraw", "application/octet-stream", 19_660_000_000L, 1_790_001_800L)),
+        facts = GalleryFacts(codec = rawCodecBadge("raw10")), details = { rawTakeInputs(it, compressed = false) }),
+    SampleTake(rawVideoTake(artifact(22, "OCC_TAKE_A001_S13_T02.ocraw", "application/octet-stream", 4_120_000_000L, 1_790_000_900L)),
+        facts = GalleryFacts(codec = rawCodecBadge("bpq")), details = { rawTakeInputs(it, compressed = true) }),
+)
+
 internal val SampleTakes = listOf(
     SampleTake(take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 3, goodTake = true), log = true),
-        GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY),
+        GalleryFacts(durationMs = 83_000L, width = 3840, height = 2160), LocalMediaEncoding("video/hevc", "Main10"), TakeProxyState.READY,
+        details = ::logTakeInputs),
     SampleTake(take(2, "OCC_TAKE_A001_S12_T02.mp4", "video/mp4", LocalMediaKind.VIDEO, 912_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "12", reel = "A001", takeNumber = 2), log = true),
         GalleryFacts(durationMs = 51_000L, width = 1920, height = 1080), LocalMediaEncoding("video/avc", "AVC_8"), TakeProxyState.MAKING),
-    SampleTake(take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null)),
+    SampleTake(take(3, "OCC_20260930_181522.dng", "image/x-adobe-dng", LocalMediaKind.PHOTO, 24_600_000L, slate = null),
+        details = { photoTakeInputs(it, dng = true) }),
     SampleTake(take(4, "OCC_20260930_181410.jpg", "image/jpeg", LocalMediaKind.PHOTO, 6_200_000L, slate = null,
-        status = LocalMediaRelationStatus.LEGACY)),
+        status = LocalMediaRelationStatus.LEGACY), details = { photoTakeInputs(it, dng = false) }),
     SampleTake(take(5, "OCC_TAKE_A001_S11_T01_room-tone.m4a", "audio/mp4", LocalMediaKind.AUDIO, 3_100_000L,
-        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)), GalleryFacts(durationMs = 62_000L)),
+        ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 1)), GalleryFacts(durationMs = 62_000L),
+        details = { audioTakeInputs(it, wav = false) }),
     SampleTake(take(6, "OCC_TAKE_A001_S11_T02_wild.wav", "audio/wav", LocalMediaKind.AUDIO, 21_800_000L,
         ProductionSlateSettings(project = "Night Market", scene = "11", takeNumber = 2)), GalleryFacts(durationMs = 75_000L),
-        LocalMediaEncoding(audioContainer = "WAV", audioSamples = "PCM_24")),
+        LocalMediaEncoding(audioContainer = "WAV", audioSamples = "PCM_24"), details = { audioTakeInputs(it, wav = true) }),
     SampleTake(take(7, "OCC_TAKE_A001_S10_T04.mp4", "video/mp4", LocalMediaKind.VIDEO, 640_000_000L,
         ProductionSlateSettings(project = "Night Market", camera = "A", scene = "10", reel = "A001", takeNumber = 4)),
-        GalleryFacts(durationMs = 42_000L, width = 1920, height = 1080), probed = CodecBadge("H.264", 8)),
+        GalleryFacts(durationMs = 42_000L, width = 1920, height = 1080), probed = CodecBadge("H.264", 8),
+        details = ::probedTakeInputs),
 )
 
 // Focus peaking
@@ -801,7 +1428,7 @@ fun SubjectStatus() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisp
 
 /** Exterior display, Status: REC 01:23 with an operator cue. */
 @Composable
-fun SubjectStatusRecording() = Subject(subjectRecording(), SubjectDisplaySettings(operatorCue = "Mirá a cámara"))
+fun SubjectStatusRecording() = Subject(subjectRecording(), SubjectDisplaySettings(operatorCue = "Mira a cámara"))
 
 /** Exterior display, teleprompter at rest with a cue. */
 @Composable
@@ -830,7 +1457,7 @@ fun SubjectReview() = Subject(driverCaptureState(CaptureMode.VIDEO), SubjectDisp
 @Composable
 fun SubjectInterview() = Subject(driverCaptureState(CaptureMode.VIDEO),
     SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW,
-        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usas?", "¿Qué consejo darías?")),
     SubjectSessionCues(interviewIndex = 1))
 
 /** Exterior display, digital slate. */
@@ -858,7 +1485,7 @@ fun SubjectFillLightSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
 @Composable
 fun SubjectInterviewSplit() = Subject(driverCaptureState(CaptureMode.VIDEO),
     SubjectDisplaySettings(mode = SubjectDisplayMode.INTERVIEW, splitPreviewModes = setOf(SubjectDisplayMode.INTERVIEW),
-        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usás?", "¿Qué consejo darías?")),
+        interviewQuestions = listOf("¿Cómo empezaste a filmar?", "¿Qué equipo usas?", "¿Qué consejo darías?")),
     SubjectSessionCues(interviewIndex = 1))
 
 /** Exterior display, split screen: the slate on top. */
@@ -950,4 +1577,91 @@ private fun AudioInputSettings(initial: CameraSettings) = DriverTheme {
     SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, audioCapabilities = capabilities),
         settings, audioPermissionGranted = true,
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it.normalizedFor(capabilities) })
+}
+
+/** The network drive page (PLAN-071 §8 route 3), stopped: the switch off, the originals hidden and the instructions below. */
+@Composable
+fun NetworkDrive() = NetworkDriveStoppedScreen(showOriginals = false)
+
+/** The same with the original `.ocraw` files shown (`network-drive-show-originals` on). */
+@Composable
+fun NetworkDriveOriginals() = NetworkDriveStoppedScreen(showOriginals = true)
+
+@Composable
+private fun NetworkDriveStoppedScreen(showOriginals: Boolean) = DriverTheme {
+    var originals by remember { mutableStateOf(showOriginals) }
+    com.librestatic.opencinecam.share.NetworkDriveContent(
+        state = com.librestatic.opencinecam.share.NetworkShareState.Stopped(),
+        takeActive = false,
+        showOriginals = originals,
+        onEnabledChange = {},
+        onShowOriginalsChange = { originals = it },
+        onCopy = { _, _, _ -> },
+        onBack = {},
+    )
+}
+
+/** The network drive running on Wi-Fi and the hotspot, with fake addresses; the password hidden, as it opens. */
+@Composable
+fun NetworkDriveRunning() = NetworkDriveRunningScreen(revealed = false)
+
+/** The same with the fake password revealed, grouped in fours. */
+@Composable
+fun NetworkDriveRunningRevealed() = NetworkDriveRunningScreen(revealed = true)
+
+@Composable
+private fun NetworkDriveRunningScreen(revealed: Boolean) = DriverTheme {
+    com.librestatic.opencinecam.share.NetworkDriveContent(
+        state = com.librestatic.opencinecam.share.NetworkShareState.Running(
+            urls = listOf("http://192.168.1.23:8642/", "http://192.168.43.1:8642/"),
+            user = "occ",
+            password = "k7pq2m9xwe4hjtna",
+        ),
+        takeActive = false,
+        showOriginals = false,
+        onEnabledChange = {},
+        onShowOriginalsChange = {},
+        onCopy = { _, _, _ -> },
+        onBack = {},
+        initialPasswordRevealed = revealed,
+    )
+}
+
+/** A 4:3 test chart: a gradient under a 12x9 grid with a ring in the middle, so zoom and pan read at a glance. */
+private fun zoomChart(): Bitmap {
+    val width = 1200
+    val height = 900
+    val bitmap = gradientThumbnail(7).let { Bitmap.createScaledBitmap(it, width, height, true) }
+    val canvas = Canvas(bitmap)
+    val line = Paint().apply { color = android.graphics.Color.WHITE; strokeWidth = 3f; isAntiAlias = true }
+    for (i in 0..12) canvas.drawLine(i * 100f, 0f, i * 100f, height.toFloat(), line)
+    for (j in 0..9) canvas.drawLine(0f, j * 100f, width.toFloat(), j * 100f, line)
+    val ring = Paint().apply { color = android.graphics.Color.YELLOW; style = Paint.Style.STROKE; strokeWidth = 12f; isAntiAlias = true }
+    canvas.drawCircle(width / 2f, height / 2f, 160f, ring)
+    val dot = Paint().apply { color = android.graphics.Color.RED; isAntiAlias = true }
+    canvas.drawCircle(300f, 200f, 40f, dot)
+    return bitmap
+}
+
+/**
+ * The review's photo stage in full screen ([PlaybackStageArea], which the dialog draws; the dialog itself is
+ * a window screenshots leave out and opens real sessions). Pinch with two `pointerInput` pointers on
+ * `media-playback-zoom-area`, drag with one while zoomed, double tap to toggle 2.5x; a single tap counts in
+ * the readout (`media-playback-zoom-readout`), as it would show or hide the full-screen chrome.
+ */
+@Composable
+fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
+    val chart = remember { zoomChart() }
+    val density = LocalDensity.current
+    val zoom = remember { MediaZoomState(density) }
+    val scope = rememberCoroutineScope()
+    var taps by remember { mutableIntStateOf(0) }
+    PlaybackStageArea(Modifier.fillMaxSize().testTag("media-playback-zoom-area"),
+        artifact(9001, "IMG_20261104_101500.jpg", "image/jpeg", 2_400_000, 1_793_000_000), video = false, photo = true,
+        aspect = chart.width.toFloat() / chart.height, state = PlaybackObservation(phase = PlaybackPhase.PAUSED, bitmap = chart),
+        shown = chart, poster = null, fullscreen = true, zoom = zoom, zoomScope = scope, zoomEnabled = true, surfaceZoom = false,
+        onTap = { taps++ }, onSurfaceView = {}, onSurfaceCreated = {}, onSurfaceChanged = { _, _, _ -> }, onSurfaceDestroyed = {}) {
+        Text("scale=%.2f x=%.0f y=%.0f taps=%d".format(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value, taps),
+            Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
+    }
 }

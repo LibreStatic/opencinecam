@@ -71,7 +71,8 @@
       "type": "string",
       "enum": [
         "high-speed-prefer-physical-camera",
-        "moto-high-speed-session-keys"
+        "moto-high-speed-session-keys",
+        "qti-raw-frame-rate-override"
       ]
     }
   },

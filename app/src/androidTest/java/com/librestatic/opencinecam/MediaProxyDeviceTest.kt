@@ -55,7 +55,7 @@ class MediaProxyDeviceTest {
             compose.onNodeWithTag("media-proxy-result",true).performScrollTo().assertTextEquals(context.getString(R.string.proxy_complete))
             result = runBlocking { MediaProxyRepository(context).existing(take) }
             val proxy = requireNotNull(result)
-            assertEquals(128,proxy.width); assertEquals(96,proxy.height)
+            assertEquals(192,proxy.width); assertEquals(144,proxy.height)
             assertEquals(sha(originalBytes),proxy.originalSha256)
             assertArrayEquals(originalBytes,resolver.openInputStream(original)!!.use { it.readBytes() })
             val relation = resolver.openInputStream(proxy.metadataUri.toUri())!!.use { Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject }
@@ -64,7 +64,7 @@ class MediaProxyDeviceTest {
             assertEquals(listOf(take),LocalMediaRepository(context).page(GallerySettings(),token).takes)
             runBlocking {
                 val before=probeProxyMedia(context,original);val after=probeProxyMedia(context,proxy.proxyUri.toUri())
-                verifyProxyCorrespondence(before,after,VideoDisplayGeometry(128,96))
+                verifyProxyCorrespondence(before,after,VideoDisplayGeometry(192, 144))
             }
             compose.onNodeWithTag("media-proxy-close",true).performClick()
             compose.galleryMenuAction(take.id, "proxy")

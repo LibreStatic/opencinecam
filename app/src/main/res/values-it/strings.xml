@@ -137,6 +137,8 @@
     <string name="mode_selector_summary">Scegli una ghiera tattile o una griglia di pulsanti adattiva.</string>
     <string name="translucent_chrome">Interfaccia traslucida</string>
     <string name="translucent_chrome_summary">Lascia che il mirino usi l\'intero schermo e fa fluttuare i controlli sopra di esso.</string>
+    <string name="scroll_long_text">Scorri i testi lunghi</string>
+    <string name="scroll_long_text_summary">Il testo che non entra scorre lentamente invece di essere troncato con i puntini di sospensione.</string>
     <string name="viewfinder_scale">Mirino</string>
     <string name="viewfinder_scale_fit">Adatta</string>
     <string name="viewfinder_scale_fill">Riempi</string>
@@ -364,6 +366,7 @@
     <string name="image_mode_video">EIS · elettronica</string>
     <string name="image_mode_preview">EIS · come anteprima</string>
     <string name="image_stabilization_help">OIS ed EIS si selezionano separatamente; il supporto simultaneo non è dedotto. L\'EIS può ritagliare o cambiare il campo visivo. Il funzionamento reale dipende da risoluzione, FPS e superfici di uscita; controlla i risultati segnalati, non solo le modalità dichiarate.</string>
+    <string name="scroll_long_text_help">Il testo su una riga che non entra nel suo spazio, come la riga di stato della ripresa, scorre lentamente così puoi leggerlo per intero, come sulle videocamere professionali. Si muove solo il testo che non entra; quello che entra resta fermo. Attende circa 1,5 secondi prima di scorrere e tra un passaggio e l\'altro. Con le animazioni di sistema disattivate non si muove mai. Disattiva l\'opzione per troncare i testi lunghi con i puntini di sospensione (…).</string>
     <string name="image_noise">Riduzione del rumore dell\'immagine</string>
     <string name="image_edge">Miglioramento dei bordi dell\'immagine</string>
     <string name="image_mode_fast">Veloce</string>
@@ -424,7 +427,7 @@
     <string name="presets_rename">Rinomina</string>
     <string name="presets_rename_help">Cambia solo il nome; le impostazioni salvate restano intatte.</string>
     <string name="operator_title">Controlli dell\'operatore</string>
-    <string name="operator_help">Tre pulsanti condividono le Impostazioni. I tasti volume agiscono una volta per pressione, solo nella schermata di acquisizione attiva; finestre di dialogo e Impostazioni mantengono il volume di sistema. Le azioni preset aprono sempre una revisione.</string>
+    <string name="operator_help">Tre pulsanti condividono le Impostazioni. I tasti volume agiscono solo nella schermata di acquisizione attiva; finestre di dialogo e Impostazioni mantengono il volume di sistema. Le azioni preset aprono sempre una revisione.</string>
     <string name="operator_button">Pulsante %1$d</string>
     <string name="operator_volume_up">Volume +</string>
     <string name="operator_volume_down">Volume −</string>
@@ -961,6 +964,7 @@
     <string name="caps_profile_quirk_off">%1$s (disattivata)</string>
     <string name="caps_quirk_high_speed_physical">L\'acquisizione ad alta velocità apre la fotocamera fisica che possiede la modalità</string>
     <string name="caps_quirk_moto_keys">Chiavi slow motion Motorola sulle richieste ad alta velocità</string>
+    <string name="caps_quirk_qti_raw_fps">RAW oltre il limite dichiarato di fps (Qualcomm)</string>
     <string name="caps_section_main10">Ultimo controllo del file Main10</string>
     <string name="caps_main10_none">Nessuna ripresa HLG o LOG è stata ancora controllata.</string>
     <string name="caps_main10_summary">Ripresa %1$s, controllata %2$s</string>

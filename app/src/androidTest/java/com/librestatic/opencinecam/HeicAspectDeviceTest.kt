@@ -22,7 +22,7 @@ class HeicAspectDeviceTest {
         "e8-heic-quadrants-rotated90.heic" else "e8-heic-quadrants.heic").use { it.readBytes() }
     private fun invoke(name: String, method: String, vararg arguments: Any?): Any? {
         try { return Class.forName("com.librestatic.opencinecam.camera.$name")
-            .declaredMethods.single { it.name == method }.apply { isAccessible = true }.invoke(null, *arguments) }
+            .declaredMethods.single { it.name == method && it.parameterCount == arguments.size }.apply { isAccessible = true }.invoke(null, *arguments) }
         catch (failure: InvocationTargetException) { throw requireNotNull(failure.cause) }
     }
     private fun crop(bytes: ByteArray, selection: PhotoAspectSelection = PhotoAspectSelection(true,1,1),

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_playback_setting">RAW playback</string>
+    <string name="raw_playback_automatic">Automatic</string>
+    <string name="raw_playback_frame_viewer">Frame viewer</string>
+    <string name="raw_playback_realtime">Real time</string>
+    <string name="raw_playback_help_summary">Real time, or one full-resolution frame at a time</string>
+    <string name="raw_playback_help">Automatic plays RAW takes in real time at half resolution and drops frames to keep time. If this device can\'t keep up, the viewer switches to frame by frame on its own. Frame viewer skips real time and shows one frame at a time at full resolution, which you can step through or scrub. Applies to this device only.</string>
+    <string name="raw_playback_fallback_notice">Showing frame by frame: this device can\'t play this RAW take in real time</string>
+    <string name="raw_playback_try_realtime">Try real time</string>
+    <string name="raw_playback_dropped">%1$d dropped</string>
+    <string name="raw_playback_missing_corrupt">Damaged frame</string>
+    <string name="raw_playback_missing_unreadable">Unreadable frame</string>
+    <string name="raw_playback_missing_unsupported">Frame encoding not supported</string>
+    <string name="raw_playback_missing_codec">RAW codec unavailable on this device</string>
+    <string name="raw_playback_missing_decode">Frame could not be decoded</string>
+    <plurals name="raw_playback_frames">
+        <item quantity="one">%1$d frame</item>
+        <item quantity="other">%1$d frames</item>
+    </plurals>
+</resources>

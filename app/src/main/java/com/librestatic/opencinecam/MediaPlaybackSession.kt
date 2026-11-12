@@ -12,8 +12,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Surface
 import androidx.core.net.toUri
+import com.librestatic.opencinecam.media.ocraw.OcrawMissingReason
 import com.librestatic.opencinecam.storage.*
-import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
@@ -33,6 +33,18 @@ internal data class PlaybackObservation(
     val hdrPreview: PreciseHdrPreview? = null,
     val nativeHdrTransfer: PreciseHdrTransfer? = null,
     val renderedAtNs: Long? = null,
+    /** RAW takes only ([RawPlaybackSession]): real time or frame by frame; null for every other session. */
+    val rawMode: RawPlaybackRunMode? = null,
+    /** RAW real time: frames skipped since the last Play to keep up with the clock. */
+    val droppedFrames: Int = 0,
+    /** RAW: why the shown frame could not be read; the previous image stays up. */
+    val missingFrame: OcrawMissingReason? = null,
+    /** RAW: the session left real time on its own because this device could not keep up. */
+    val rawFallback: Boolean = false,
+    /** RAW: the take's frame encoding, "RAW10" or "LJ92" ("RAW10+LJ92" for a mixed take). */
+    val rawCodec: String? = null,
+    /** A RAW take's audio sample rate; null when it is silent (PLAN-071 §7.1). */
+    val rawAudioSampleRate: Int? = null,
 )
 
 /** Native player sizes already include SAR/rotation. A paused exact frame owns its geometry. */
@@ -49,11 +61,11 @@ internal class MediaPlaybackSession(
     /** Sidecar-declared OCLog2 signal; exact CPU frames then honour [PlaybackSettings.logView]. */
     private val log: PreciseLogSignal? = null,
     private val observe: (PlaybackObservation) -> Unit,
-) : Closeable {
+) : PlaybackController {
     private val context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "media-review-reader") }
-    val retirement = java.util.concurrent.CompletableFuture<Unit>()
+    override val retirement = java.util.concurrent.CompletableFuture<Unit>()
     private var task: Future<*>? = null
     private var frames: PreciseVideoFrames? = null // worker-thread only
     @Volatile private var closed = false
@@ -251,7 +263,7 @@ internal class MediaPlaybackSession(
                             frameIndex = frame.index, positionUs = frame.presentationTimeUs, bitmap = frame.bitmap, frameColor = frame.color, hdrPreview = frame.hdrPreview)) }
         }
     }
-    fun setSurface(surface: Surface?) {
+    override fun setSurface(surface: Surface?) {
         if (closed || photo) return
         if (outputSurface === surface) return
         if (video && nativeSurfaceFrames) {
@@ -270,7 +282,7 @@ internal class MediaPlaybackSession(
         }
     }
     /** Lifecycle suspension retires output without replay; resumption restores only an exact still. */
-    fun suspendOutput() {
+    override fun suspendOutput() {
         if (closed) return
         if (!video || !nativeSurfaceFrames) { pause(); return }
         suspended = true
@@ -282,12 +294,12 @@ internal class MediaPlaybackSession(
         retirePlayer(); releaseFocus()
         if (state.phase != PlaybackPhase.ERROR) publish(state.copy(phase = PlaybackPhase.PAUSED, frameIndex = null, renderedAtNs = null))
     }
-    fun resumeOutput() {
+    override fun resumeOutput() {
         if (closed || !video || !nativeSurfaceFrames) return
         val wasSuspended = suspended; suspended = false
         if (wasSuspended && state.phase != PlaybackPhase.ERROR && hasSurface && state.timeline != null) decode(pendingFrameIndex)
     }
-    fun update(settings: PlaybackSettings) {
+    override fun update(settings: PlaybackSettings) {
         if (closed) return
         options = settings
         if (log != null && logView != settings.logView) {
@@ -308,7 +320,7 @@ internal class MediaPlaybackSession(
         return ownsFocus
     }
     private fun releaseFocus() { if (ownsFocus) { audio.abandonAudioFocusRequest(focus); ownsFocus = false } }
-    fun play() {
+    override fun play() {
         if (!closed && video && nativeSurfaceFrames) {
             if (suspended || !state.canPlay || state.phase !in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED)) return
             val position = if (state.phase == PlaybackPhase.ENDED) 0 else state.positionUs
@@ -329,7 +341,7 @@ internal class MediaPlaybackSession(
             seekNative(position)
         } catch (failure: Exception) { fail(failure.message) }
     }
-    fun pause() {
+    override fun pause() {
         if (!closed && video && nativeSurfaceFrames && !prepared && state.phase == PlaybackPhase.SEEKING) {
             ++generation; task?.cancel(true); retirePlayer(); releaseFocus()
             publish(state.copy(phase = PlaybackPhase.PAUSED, frameIndex = null, renderedAtNs = null))
@@ -346,7 +358,7 @@ internal class MediaPlaybackSession(
             else publish(state.copy(phase = PlaybackPhase.PAUSED, positionUs = time))
         } catch (failure: Exception) { fail(failure.message) }
     }
-    fun seek(timeUs: Long) {
+    override fun seek(timeUs: Long) {
         if (closed || photo || !prepared && !nativeSurfaceFrames || state.phase == PlaybackPhase.ERROR || !video && nativeSeeking) return
         if (video) state.timeline?.let { decode(it.indexAt(timeUs.coerceAtLeast(0))) }
         else try {
@@ -354,7 +366,7 @@ internal class MediaPlaybackSession(
             seekNative(timeUs.coerceIn(0, state.durationUs))
         } catch (failure: Exception) { fail(failure.message) }
     }
-    fun step(delta: Int) {
+    override fun step(delta: Int) {
         val timeline = state.timeline ?: return
         if (state.phase !in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED)) return
         decode(timeline.step(state.frameIndex ?: timeline.indexAt(state.positionUs), delta))

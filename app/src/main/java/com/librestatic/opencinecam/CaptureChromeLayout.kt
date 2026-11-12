@@ -237,3 +237,42 @@ internal fun railsPreviewViewport(
     val inner = reservedPreviewViewport(grownWidth, paneHeight, 0f, 0f, reserve, ratio, rightToLeft)
     return inner.copy(left = inner.left - grownLeft)
 }
+
+/**
+ * One status fact with its spaces made non-breaking, so a status line wrapped over a narrow column
+ * breaks only between facts ("3 min left" never splits into "3 min" and "left").
+ */
+internal fun String.unbroken(): String = replace(' ', '\u00A0')
+
+/** How the capture status line ([statusLineLayout]) lays out its facts. */
+internal enum class StatusLineLayout {
+    /** Every fact on one line. */
+    ONE_LINE,
+
+    /** Timecode, free space and battery on top; the time left under them. */
+    TWO_ROWS,
+
+    /** The one line wrapped over the caller's lines, cut with an ellipsis (a column with room for three). */
+    WRAP,
+
+    /** One line that scrolls ([cineMarquee]). */
+    MARQUEE,
+
+    /** The caller's lines cut with an ellipsis, as with the marquee off. */
+    ELLIPSIS,
+}
+
+/**
+ * Picks the status line layout from the widths in pixels: [availablePx] for the slot, [oneLinePx]
+ * for every fact on one line, [topPx] for the top row (timecode, free space, battery) and
+ * [bottomPx] for the bottom row (the time left), null when there is none. In order: one line when
+ * it fits; two rows when there is a bottom row and both rows fit, whatever [maxLines] says; the
+ * wrap for a caller with three lines or more; the marquee when it is on; otherwise the ellipsis.
+ */
+internal fun statusLineLayout(availablePx: Int, oneLinePx: Int, topPx: Int, bottomPx: Int?, maxLines: Int, marquee: Boolean): StatusLineLayout = when {
+    oneLinePx <= availablePx -> StatusLineLayout.ONE_LINE
+    bottomPx != null && topPx <= availablePx && bottomPx <= availablePx -> StatusLineLayout.TWO_ROWS
+    maxLines >= 3 -> StatusLineLayout.WRAP
+    marquee -> StatusLineLayout.MARQUEE
+    else -> StatusLineLayout.ELLIPSIS
+}

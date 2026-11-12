@@ -138,6 +138,55 @@ class ClipSidecarBuilderTest {
         assertFalse(document.media!!.getValue("sidecars").jsonArray.contains(JsonPrimitive("null")))
     }
 
+    @Test fun cameraSettingsAreWrittenUnderTheResolvedGraph() {
+        val camera = ClipCameraSettings(
+            cameraId = "0", focalLengthMm = 6.3f, focalLength35mm = 24.1f, aperture = 1.7f,
+            requestedExposureMode = "AUTO", reportedExposureMode = "AUTO",
+            iso = ClipSampledRange(400, 800, 320, 1250), exposureTimeNs = ClipSampledRange(20_833_333L, 20_833_333L, 10_000_000L, 33_333_333L),
+            whiteBalanceMode = "KELVIN", whiteBalanceKelvin = 5600, reportedCctStartK = 5400, reportedCctEndK = 5450, whiteBalanceTint = 0,
+            afMode = "CONTINUOUS_VIDEO", focusDistanceDiopters = 0.5f, zoom = ClipSampledRange(1f, 2f, 1f, 2f),
+            opticalStabilization = "ON", videoStabilization = "OFF", noiseReduction = "FAST", edge = "FAST", toneMap = "FAST",
+        )
+        val block = assertValid(encoded(facts(sdrGraph.copy(camera = camera)), context())).resolvedGraph.getValue("camera").jsonObject
+        assertEquals("known", block.getValue("knowledge").jsonPrimitive.content)
+        val expected = Json.parseToJsonElement("""
+            {"cameraId":"0","focalLengthMm":6.3,"focalLength35mm":24.1,"aperture":1.7,
+             "exposureMode":{"requested":"AUTO","reported":"AUTO"},
+             "iso":{"start":400,"end":800,"min":320,"max":1250},
+             "exposureTimeNs":{"start":20833333,"end":20833333,"min":10000000,"max":33333333},
+             "whiteBalance":{"mode":"KELVIN","kelvin":5600,"reportedCctStart":5400,"reportedCctEnd":5450,"tint":0},
+             "focus":{"afMode":"CONTINUOUS_VIDEO","distanceDiopters":0.5},
+             "zoom":{"start":1.0,"end":2.0},
+             "stabilization":{"ois":"ON","eis":"OFF"},
+             "processing":{"noiseReduction":"FAST","edge":"FAST","toneMap":"FAST"}}
+        """)
+        // Compared by value, so the writer may print 1.0 as 1 or 1.0.
+        assertEquals(numbersOf(expected), numbersOf(block.getValue("value")))
+    }
+
+    @Test fun cameraSettingsLeaveOutWhatWasNotReported() {
+        val camera = ClipCameraSettings(cameraId = "2", iso = ClipSampledRange(100, 100, 100, 100), afMode = "3")
+        val value = assertValid(encoded(facts(sdrGraph.copy(camera = camera)), context()))
+            .resolvedGraph.getValue("camera").jsonObject.getValue("value").jsonObject
+        assertEquals(setOf("cameraId", "iso", "focus"), value.keys)
+        assertEquals(setOf("afMode"), value.getValue("focus").jsonObject.keys)
+    }
+
+    @Test fun cameraSettingsAreUnknownWhenNothingWasSampled() {
+        listOf(null, ClipCameraSettings()).forEach { camera ->
+            val block = assertValid(encoded(facts(sdrGraph.copy(camera = camera)), context())).resolvedGraph.getValue("camera").jsonObject
+            assertEquals("unknown", block.getValue("knowledge").jsonPrimitive.content)
+            assertFalse("value" in block)
+        }
+    }
+
+    /** Every number in [element] keyed by its path, as a double, so `1` and `1.0` compare equal. */
+    private fun numbersOf(element: kotlinx.serialization.json.JsonElement, path: String = ""): Map<String, Any> = when (element) {
+        is JsonObject -> element.entries.flatMap { (key, child) -> numbersOf(child, "$path.$key").entries }.associate { it.key to it.value }
+        is JsonPrimitive -> mapOf(path to (if (element.isString) element.content else element.content.toDouble()))
+        else -> emptyMap()
+    }
+
     @Test fun nameOfTheSidecarFollowsTheVideoStem() {
         assertEquals("OCC_take.clip.json", clipSidecarName("OCC_take.mp4"))
     }

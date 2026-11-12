@@ -97,7 +97,7 @@ Follow the listed ADRs. Keep Unknown explicit, resources uniquely owned and boun
 
 ## 11. Expected File and Module Changes
 
-Primary paths: `core/model/src/main/kotlin/com/librestatic/opencinecam/core/model/DeviceSoakProtocol.kt`, `tools/soak_matrix.py`, `docs/release/`, `.github/workflows/`, `fastlane/`, and `evidence/`. The model and dependency-free CLI record the physical matrix and emit a deterministic per-scenario evidence bundle without fabricating device evidence.
+Primary paths: `core/model/src/main/kotlin/com/librestatic/opencinecam/core/model/DeviceSoakProtocol.kt`, `tools/soak_matrix.py`, `docs/release/`, `.github/workflows/`, `fastlane/`, and `evidence/`. The model and dependency-free CLI record the physical matrix and emit a deterministic per-scenario evidence bundle without fabricating device evidence. A `FOLD_TRANSITION` row may be `NOT_APPLICABLE` only when the target declares `"foldable": false`; any other `NOT_APPLICABLE` row is a failure and keeps the gate `NOT_RUN`.
 
 ## 12. State and Data-Flow Changes
 

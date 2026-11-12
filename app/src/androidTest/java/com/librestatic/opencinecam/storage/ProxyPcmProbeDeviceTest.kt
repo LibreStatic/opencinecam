@@ -69,8 +69,8 @@ class ProxyPcmProbeDeviceTest {
             val zeroFrames = File(directory, "zero-frames.wav")
             writeWav(zeroFrames, byteArrayOf(), 48_000, 2)
             val videoBytes = instrumentation.context.assets.open("e1-video.mp4").use { it.readBytes() }
-            assertEquals(5404, videoBytes.size)
-            assertEquals("a32963539eefe4fc0d14e76770d51e49c25108a31b9eda9176a022a94a9a99b6", sha(videoBytes))
+            assertEquals(2998, videoBytes.size)
+            assertEquals("ef61686b95a888116d97336057cedbb87463e16a7a4946f2d2331a1387b669dc", sha(videoBytes))
             val video = File(directory, "non-audio.mp4").apply { writeBytes(videoBytes) }
             for (file in listOf(empty, invalid, zeroFrames, video)) {
                 val before = file.readBytes()
@@ -159,6 +159,7 @@ class ProxyPcmProbeDeviceTest {
             var inputEnded = false
             var outputEnded = false
             var packets = 0
+            var maxFrame = 0
             val frameBytes = channels * 2
             val info = MediaCodec.BufferInfo()
             val deadline = SystemClock.elapsedRealtime() + 20_000
@@ -198,7 +199,7 @@ class ProxyPcmProbeDeviceTest {
                                 else {
                                     check(header != null) { "FLAC packet before STREAMINFO" }
                                     val bytes = ByteArray(buffer.remaining()); buffer.get(bytes)
-                                    stream.write(bytes); packets++
+                                    stream.write(bytes); packets++; maxFrame = maxOf(maxFrame, bytes.size)
                                 }
                             }
                             outputEnded = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
@@ -211,7 +212,8 @@ class ProxyPcmProbeDeviceTest {
             assertTrue("Multiple real FLAC packets including final partial block", packets > 1)
             val prefix = requireNotNull(header)
             // STREAMINFO packs rate/channels/bits and total sample frames at bytes18..25.
-            // Preserve every encoder bit except its unknown total-samples field, filled from input.
+            // Preserve every encoder bit except its unknown total-samples and max frame size
+            // fields, filled from the input and the packets exactly as the sidecar recorder does.
             val frames = (pcm.size / frameBytes).toLong()
             var packed = 0L
             for (i in 18..25) packed = (packed shl 8) or (prefix[i].toLong() and 255)
@@ -222,6 +224,7 @@ class ProxyPcmProbeDeviceTest {
             check(nativeTotal == 0L || nativeTotal == frames) { "Encoder STREAMINFO sample total contradicts submitted frames" }
             prefix[21] = ((prefix[21].toInt() and 0xf0) or ((frames ushr 32).toInt() and 15)).toByte()
             for (i in 0..3) prefix[22 + i] = (frames ushr (24 - i * 8)).toByte()
+            flacFrameSizeField(maxFrame).copyInto(prefix, FLAC_MAX_FRAME_SIZE_OFFSET)
             file.outputStream().use { it.write(prefix); stream.writeTo(it) }
             Log.i("E17ProxyPcmProbe", "FLAC fixture encoder=$name packets=$packets inputFrames=$frames actualElementaryPackets=true streamInfoNativeTotal=$nativeTotal streamInfoTotalFilledFromInput=true")
             return name

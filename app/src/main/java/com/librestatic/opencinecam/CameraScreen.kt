@@ -15,6 +15,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -273,6 +274,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var onboardingDone by remember { mutableStateOf(onboardingStore.isCompleted()) }
     // The tour was started again from About rather than on a first run.
     var tourReplay by rememberSaveable { mutableStateOf(false) }
+    // OCC-PLAN-071: the qualification step opened from the mode selector or Settings, and the mode to return to.
+    var rawStepOpen by rememberSaveable { mutableStateOf(false) }
+    var rawStepEntry by rememberSaveable { mutableStateOf(RawQualificationEntry.SELECTOR) }
+    var rawStepPreviousMode by rememberSaveable { mutableStateOf<CaptureMode?>(null) }
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
     val stateFlow = binder?.cameraStates ?: fallbackState
     val liveState = stateFlow.collectAsStateWithLifecycle()
@@ -355,8 +360,9 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         return
     }
 
-    val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE)
     val appHaptics = rememberAppHaptics(settings.haptics, state.phase == CameraUiPhase.RECORDING)
+    val operatorActions = rememberOperatorActions(state, settings, binder, foldDisplays, foldState, section == AppSection.CAPTURE,
+        onSettingsChanged = { settingsRepository.set(it) }, haptics = appHaptics)
     CompositionLocalProvider(LocalLiveCameraState provides liveState, LocalOperatorActions provides operatorActions,
         LocalAppHaptics provides appHaptics,
         LocalAudioListeningActions provides { binder?.reconnectAudioListening() }) {
@@ -377,6 +383,12 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                     binder?.cancelSelfTimer()
                     settingsPage = SettingsPage.MAIN
                     section = AppSection.SETTINGS
+                },
+                onOpenRawQualification = {
+                    binder?.cancelSelfTimer()
+                    rawStepEntry = RawQualificationEntry.SELECTOR
+                    rawStepPreviousMode = state.selectedMode
+                    rawStepOpen = true
                 },
             )
             }
@@ -443,6 +455,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onDelete = { binder?.deleteLensCalibration() },
                         )
                         }
+                    } else if (settingsPage == SettingsPage.NETWORK_DRIVE) {
+                        Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
+                            com.librestatic.opencinecam.share.NetworkDriveScreen(onBack = { settingsPage = SettingsPage.MAIN })
+                        }
                     } else {
                         settingsStateHolder.SaveableStateProvider("settings") {
                         SettingsScreen(
@@ -457,7 +473,14 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             onOpenCapabilities = { settingsPage = SettingsPage.CAPABILITIES },
                             onOpenStorageBenchmark = { settingsPage = SettingsPage.STORAGE_BENCHMARK },
                             onOpenLensCalibration = { settingsPage = SettingsPage.LENS_CALIBRATION },
+                            onOpenNetworkDrive = { settingsPage = SettingsPage.NETWORK_DRIVE },
                             onSetLensLock = binder?.let { owner -> { id -> owner.setLensLock(id) } },
+                            onSelectRawVideoConfig = binder?.let { owner -> { key -> owner.selectRawVideoConfig(key) } },
+                            // The step opens over Settings, which is still there once the result is dismissed.
+                            onRequalifyRawVideo = binder?.let { {
+                                rawStepEntry = RawQualificationEntry.SETTINGS
+                                rawStepOpen = true
+                            } },
                         )
                         }
                     }
@@ -485,6 +508,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     // Replaying the tour from About brings the wizard back at full strength.
     LaunchedEffect(onboardingDone) { if (!onboardingDone) handoff.snapTo(0f) }
     // An opaque themed floor under both layers: a fading frame never reveals the window.
+    // The marquee preference reaches every screen from here: the wizard, the app and the RAW step.
+    CompositionLocalProvider(LocalScrollLongText provides settings.scrollLongText) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     if (onboardingDone) Box(
         Modifier.fillMaxSize().graphicsLayer {
@@ -506,6 +531,18 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             handoff.animateTo(1f, tween(720, easing = LinearEasing))
         }
         MainContent()
+        // From the mode selector or Settings, or a run still going after the activity came back: the step over the app.
+        if (permissionGranted && (rawStepOpen || state.rawVideoQualification?.running == true)) {
+            RawQualificationFrame(foldState.hinge) {
+                RawQualificationStepHost(binder, state.rawVideoQualification, selectOnPass = rawQualificationSelectsOnPass(rawStepEntry), onLeave = { passed ->
+                    rawStepOpen = false
+                    val target = rawQualificationReturn(rawStepEntry, passed, rawStepPreviousMode ?: state.selectedMode)
+                    rawStepPreviousMode = null
+                    rawStepEntry = RawQualificationEntry.SELECTOR
+                    target.mode?.let { mode -> if (mode != state.selectedMode) binder?.selectMode(mode) }
+                })
+            }
+        }
     }
     if (wizardShown) Box(
         Modifier.fillMaxSize().graphicsLayer {
@@ -529,13 +566,24 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             },
             hinge = foldState.hinge,
             replay = tourReplay,
+            rawQualificationInfo = { binder?.rawVideoQualificationEstimate() },
+            rawQualificationStep = binder?.let { owner ->
+                { onLeave ->
+                    // A pass selects RAW video when the camera opens after the wizard (the service keeps it pending).
+                    RawQualificationStepHost(owner, state.rawVideoQualification, onLeave = { onLeave() })
+                }
+            },
         )
+    }
     }
     }
 
 }
 
 private const val HandoffWaitMillis = 1_500L
+
+/** The RAW video qualification prompt while open, with the estimate read when it opened. */
+private data class RawQualifyPromptState(val info: RawVideoQualificationInfo?)
 
 /** The instruments' first row (the 48 dp zoom anchors) plus a gap of about 8 dp: the calibration card stays below it. */
 private val CALIBRATION_CARD_TOP_CLEARANCE = 64.dp
@@ -608,6 +656,8 @@ internal fun CaptureSurface(
     onOpenMedia: () -> Unit,
     onOpenSettings: () -> Unit,
     fold: FoldDisplayState = FoldDisplayState(),
+    // OCC-PLAN-071: the RAW video qualification, started from the mode list's CANDIDATE entry.
+    onOpenRawQualification: () -> Unit = {},
 ) {
     val zebra = settings.zebraEnabled
     val peaking = settings.peakingEnabled
@@ -846,6 +896,7 @@ internal fun CaptureSurface(
             onLensCalibrationCancel = { binder?.cancelLensCalibration() },
             onLensCalibrationSave = { binder?.saveLensCalibration() },
             onLensCalibrationDiscard = { binder?.discardLensCalibration() },
+            onOpenRawQualification = onOpenRawQualification,
         )
         }
 
@@ -925,8 +976,8 @@ private fun MonitorToggle(icon: CineIcon, label: String, description: String, en
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         CineGlyph(icon, content, Modifier.size(20.dp))
-        Text(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
-            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        FitText(label, color = content, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2,
+            modifier = Modifier.weight(1f))
         if (on) CineGlyph(CineIcon.CHECK, content, Modifier.size(16.dp))
     }
 }
@@ -1353,7 +1404,7 @@ private sealed interface CapturePane {
 }
 
 /** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
-internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET, DISPLAYS }
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION }
 
 private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
@@ -1362,6 +1413,7 @@ private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.MODES -> CapturePane.Modes
     CaptureInitialPane.MODE_SHEET -> null
     CaptureInitialPane.DISPLAYS -> CapturePane.Displays
+    CaptureInitialPane.RESOLUTION -> CapturePane.Control(ControlDial.RESOLUTION)
 }
 
 @Composable
@@ -1403,6 +1455,10 @@ internal fun AdaptiveCaptureChrome(
     onLensCalibrationCancel: () -> Unit = {},
     onLensCalibrationSave: () -> Unit = {},
     onLensCalibrationDiscard: () -> Unit = {},
+    // OCC-PLAN-071: choosing RAW video on a CANDIDATE camera asks first; accepting opens the qualification step.
+    onOpenRawQualification: () -> Unit = {},
+    rawQualificationInfo: (() -> RawVideoQualificationInfo?)? = null,
+    initialRawQualifyPrompt: Boolean = false,
 ) {
     // One pane at a time: a control's dial, the modes or the monitoring toggles.
     var pane by remember { mutableStateOf(initialPane?.pane()) }
@@ -1463,7 +1519,30 @@ internal fun AdaptiveCaptureChrome(
 
     // The real-time rate Video had before slow motion raised it, restored when Video is chosen again.
     var normalVideoFps by rememberSaveable { mutableIntStateOf(30) }
+    // The prompt holds the estimate read when it opened; null while closed.
+    var rawQualifyPrompt by remember {
+        mutableStateOf(if (initialRawQualifyPrompt) RawQualifyPromptState(rawQualificationInfo?.invoke()) else null)
+    }
+    if (rawQualifyPrompt != null) {
+        RawVideoQualifyPrompt(
+            info = rawQualifyPrompt?.info,
+            onQualify = {
+                rawQualifyPrompt = null
+                pane = null
+                modeSheet = false
+                onOpenRawQualification()
+            },
+            onDismiss = { rawQualifyPrompt = null },
+        )
+    }
     val modeSelection = ModeSelection(displayedCaptureMode(state.selectedMode, settings.videoOffSpeed)) { mode ->
+        // A RAW video candidate is not selected: it asks to qualify the camera first (PLAN-071).
+        if (modeChoiceAction(mode, state.modeGates[mode]) == ModeChoiceAction.QUALIFY_RAW_VIDEO) {
+            rawQualifyPrompt = RawQualifyPromptState(
+                runCatching { (rawQualificationInfo ?: { binder?.rawVideoQualificationEstimate() }).invoke() }.getOrNull(),
+            )
+            return@ModeSelection
+        }
         // Slow motion is VIDEO recording off-speed; Video is the same path at normal speed.
         val slow = mode == CaptureMode.SLOW_MOTION
         val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
@@ -1506,7 +1585,8 @@ internal fun AdaptiveCaptureChrome(
                 label = modeLabel(mode),
                 gateLabel = if (gate != ModeGateState.AVAILABLE || experimental) gateLabel(gate, experimental) else null,
                 gateColor = gateColor(gate, experimental),
-                enabled = CameraUiState.isModeSelectable(gate),
+                // A RAW video candidate stays choosable: choosing it asks to qualify the camera (PLAN-071).
+                enabled = isModeChoosable(mode, gate),
                 selected = mode == displayedMode,
             )
         }
@@ -1950,8 +2030,9 @@ internal fun AdaptiveCaptureChrome(
         val instrumentBottom = bottomBound - 8.dp.px()
         val instrumentsHorizontal = if (hinge) landscape else rightBound - leftBound > bottomBound - topBound
         // The lock keys stand at the top end of the frame. A row of instruments that would run under
-        // them wraps to a line below instead (anchors, meter and histogram beside four lock keys).
-        val lockRowObstacle = if (chromeVisible && instrumentsHorizontal && topEndClusterWidthPx > 0) {
+        // them wraps to a line below instead (anchors, meter and histogram beside four lock keys);
+        // a column keeps its badges short of them.
+        val lockRowObstacle = if (chromeVisible && topEndClusterWidthPx > 0) {
             val clusterTop = (if (stackedFamily) topBar + 6.dp else 8.dp).px()
             val clusterBottom = clusterTop + 48.dp.px()
             val clusterInner = endChrome + 8.dp.px() + topEndClusterWidthPx + 8.dp.px()
@@ -2442,6 +2523,11 @@ private fun CameraUiState.resolutionName(mode: CaptureMode): String =
     if (mode in CameraUiState.photoResolutionModes) activeStillSize?.let { (w, h) -> megapixelName(w, h) } ?: "—"
     else resolutionShortName(targetVideoWidth, targetVideoHeight)
 
+/** RAW video offers Automatic plus each qualified configuration (PLAN-071); the other modes their sizes. */
+private fun rawOrResolutionChoiceCount(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate): Int =
+    if (mode == CaptureMode.RAW_VIDEO) state.rawVideoOptions.size.let { if (it == 0) 0 else it + 1 }
+    else state.resolutionChoices(mode, projectRate).size
+
 /** The six slots of [mode] with their current values, and why any of them cannot be driven now. */
 @Composable
 private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate): List<CaptureSlotModel> {
@@ -2452,7 +2538,7 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRa
     val auto = stringResource(R.string.auto_value)
     return captureSlots(mode).map { slot ->
         val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
-            state.aeCompensationSupported, resolutionChoices = state.resolutionChoices(mode, projectRate).size,
+            state.aeCompensationSupported, resolutionChoices = rawOrResolutionChoiceCount(state, mode, projectRate),
             nightPhoto = mode == CaptureMode.PHOTO && state.nightExtensionRunning)
         // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
         val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
@@ -2649,13 +2735,12 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
         settings.logViewAssistEnabled -> "OCLOG2 · HLG10 · VIEW ASSIST REC.709$qualification"
         else -> "OCLOG2 · HLG-DERIVED 10-BIT · FLAT$qualification"
     }
-    Text(
+    FitText(
         text,
         color = if (profile?.isVerified == true) VerifiedCyan else Color.White,
         fontSize = 9.sp,
         fontWeight = FontWeight.Bold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        maxLines = 2,
         modifier = modifier
             .testTag("log-source-badge")
             .background(Panel, RoundedCornerShape(5.dp))
@@ -2666,7 +2751,7 @@ private fun LogSourceBadge(state: CameraUiState, settings: CameraSettings, modif
 /** Same chip style as [LogSourceBadge]; shown only while CONTROL_LOW_LIGHT_BOOST_STATE reports ACTIVE. */
 @Composable
 private fun LowLightBoostBadge(modifier: Modifier = Modifier) {
-    Text(
+    FitText(
         stringResource(R.string.hud_low_light_boost),
         color = Color.White,
         fontSize = 9.sp,
@@ -2717,11 +2802,17 @@ private fun InstrumentStack(
     val showLensNotice = lensLockNoticeText(state.lensLock) != null
     // So does what the session's graph lost (RAW, the scopes) when the mode or monitors want it.
     val graphNotice = graphFallbackNoticeText(state.selectedMode, settings, state.previewGraphLoss)
-    val showNotice = showSuspension || showLensNotice || graphNotice != null
+    // And the warning that RAW video runs a configuration the storage is too slow for.
+    val showRawRisk = rawVideoActiveRisky(state)
+    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk
     if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
         val stretchHistogram = dedicatedPane && horizontal && showHistogram
+        // A column starts beside the lock keys, so its badges stop short of them and wrap.
+        val badgeMaxWidth = endObstacle?.takeIf { !horizontal }
+            ?.let { with(LocalDensity.current) { (maxWidth - it.x.toDp() - 8.dp).coerceIn(96.dp, 260.dp) } }
+            ?: 260.dp
         // The notice goes under the zoom, so the lens anchors never move when it comes and goes.
         // A row has no width to spare for it: there it takes its own line under the row.
         val notice: @Composable () -> Unit = {
@@ -2729,13 +2820,14 @@ private fun InstrumentStack(
             if (showSuspension) AnalysisSuspensionNotice(state, width)
             if (showLensNotice) LensLockNotice(state.lensLock, width)
             if (graphNotice != null) GraphFallbackNotice(graphNotice, width)
+            if (showRawRisk) RawVideoRiskyNotice(width, rawVideoActiveOption(state)?.burstSeconds)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
                 obstacle = if (horizontal && !stretchHistogram) endObstacle else null, obstacleAtStart = obstacleAtStart,
                 wrapCross = horizontal && showNotice, modifier = if (horizontal && showNotice) Modifier else Modifier.weight(1f)) {
-                if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = 260.dp))
-                if (showLowLight) LowLightBoostBadge()
+                if (showLogSource) LogSourceBadge(state, settings, Modifier.widthIn(max = badgeMaxWidth))
+                if (showLowLight) LowLightBoostBadge(Modifier.widthIn(max = badgeMaxWidth))
                 if (showZoom) ZoomReadout(state, binder)
                 if (showNotice && !horizontal) notice()
                 if (showAudio) AudioMeterHud(state, binder, meterSettings = settings.audioMeter)
@@ -3067,7 +3159,9 @@ private fun ModeDial(
     val selectedIndex = modes.indexOf(displayedMode).coerceAtLeast(0)
     val haptics = LocalAppHaptics.current
     val dialDescription = stringResource(R.string.mode_dial_description, modeLabel(displayedMode))
-    fun selectable(mode: CaptureMode): Boolean = CameraUiState.isModeSelectable(state.modeGates.getValue(mode))
+    // A RAW video candidate is choosable too: choosing it opens the qualification prompt (PLAN-071).
+    fun selectable(mode: CaptureMode): Boolean = isModeChoosable(mode, state.modeGates.getValue(mode))
+    fun asksFirst(mode: CaptureMode): Boolean = modeChoiceAction(mode, state.modeGates[mode]) == ModeChoiceAction.QUALIFY_RAW_VIDEO
     val labels = modes.map { modeLabel(it) }
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -3124,6 +3218,8 @@ private fun ModeDial(
                 val idx = focusedIndex.coerceIn(0, modes.lastIndex)
                 if (idx != selectedIndex && modes[idx] != displayedMode && selectable(modes[idx])) {
                     selectMode(modes[idx])
+                    // The prompt opens and the mode stays: the wheel returns to it.
+                    if (asksFirst(modes[idx])) listState.animateScrollToItem(selectedIndex)
                 } else if (idx != selectedIndex && !selectable(modes[idx])) {
                     haptics.perform(HapticEvent.Rejected)
                     listState.animateScrollToItem(selectedIndex)
@@ -3428,8 +3524,11 @@ private fun rememberBatteryPercent(): Int? {
 }
 
 /**
- * The top bar's one line of camera state: timecode when one runs, free space and battery. A value
- * the device does not report is left out rather than shown as a dash.
+ * The top bar's camera state: timecode when one runs, free space, the time left of a RAW video take
+ * and battery. A value the device does not report is left out rather than shown as a dash. When the
+ * one line does not fit, the time left moves to a second row ([statusLineLayout]); when even that
+ * does not fit, the line wraps over [maxLines] (three or more), scrolls ([cineMarquee]) or ends in
+ * an ellipsis.
  */
 @Composable
 private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifier, maxLines: Int = 1, textAlign: TextAlign? = null) {
@@ -3438,30 +3537,66 @@ private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifie
     // Low battery is a warning, not a failure: amber, never the recording red.
     val batteryColor = if (battery != null && battery <= 15) LocalCineColors.current.pending else OkGreen
     val free = state.availableStorageBytes?.let { stringResource(R.string.capture_status_free, formatBytes(it)) }
-    val text = androidx.compose.ui.text.buildAnnotatedString {
+    // RAW video fills a card in minutes, so the time left at its configuration sits beside the free space (PLAN-071).
+    val rawLeft = rawVideoStatusFacts(state)?.timeLeftMs?.let { stringResource(R.string.status_time_left, formatRecordTimeLeft(it)) }
+    fun line(withTimeLeft: Boolean, withRest: Boolean) = androidx.compose.ui.text.buildAnnotatedString {
         fun separator() { if (length > 0) append("  ·  ") }
-        state.timecodeDisplay?.let { tc ->
-            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("TC ") }
-            append(tc)
+        if (withRest) {
+            state.timecodeDisplay?.let { tc ->
+                withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("TC\u00A0") }
+                append(tc.unbroken())
+            }
+            free?.let { separator(); append(it.unbroken()) }
         }
-        free?.let { separator(); append(it) }
-        battery?.let {
+        if (withTimeLeft) rawLeft?.let { separator(); append(it.unbroken()) }
+        if (withRest) battery?.let {
             separator()
-            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("BAT ") }
+            withStyle(androidx.compose.ui.text.SpanStyle(color = muted)) { append("BAT\u00A0") }
             withStyle(androidx.compose.ui.text.SpanStyle(color = batteryColor)) { append("$it%") }
         }
     }
-    Text(
-        text,
+    val oneLine = line(withTimeLeft = true, withRest = true)
+    val top = line(withTimeLeft = false, withRest = true)
+    val bottom = rawLeft?.let { line(withTimeLeft = true, withRest = false) }
+    val style = LocalTextStyle.current.merge(TextStyle(
         color = MaterialTheme.colorScheme.onSurface,
         fontSize = 12.sp,
         lineHeight = 15.sp,
         fontWeight = FontWeight.SemiBold,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = textAlign,
-        modifier = modifier.testTag("capture-status-line"),
-    )
+        textAlign = textAlign ?: TextAlign.Unspecified,
+    ))
+    val marquee = rememberMarqueeActive()
+    val measurer = rememberTextMeasurer()
+    // The caller's size reaches the text as a minimum, so a centred line stays centred in its slot.
+    BoxWithConstraints(modifier.testTag("capture-status-line"), propagateMinConstraints = true) {
+        fun width(text: androidx.compose.ui.text.AnnotatedString) =
+            measurer.measure(text, style, softWrap = false, maxLines = 1).size.width
+        val layout = if (constraints.maxWidth == Constraints.Infinity) StatusLineLayout.ONE_LINE else statusLineLayout(
+            availablePx = constraints.maxWidth,
+            oneLinePx = width(oneLine),
+            topPx = width(top),
+            bottomPx = bottom?.let(::width),
+            maxLines = maxLines,
+            marquee = marquee,
+        )
+        when (layout) {
+            StatusLineLayout.ONE_LINE -> Text(oneLine, style = style, softWrap = false, maxLines = 1, overflow = TextOverflow.Clip)
+            StatusLineLayout.TWO_ROWS -> Column(
+                horizontalAlignment = when (textAlign) {
+                    TextAlign.Center -> Alignment.CenterHorizontally
+                    TextAlign.End, TextAlign.Right -> Alignment.End
+                    else -> Alignment.Start
+                },
+            ) {
+                Text(top, Modifier.testTag("capture-status-line-top"), style = style, softWrap = false, maxLines = 1)
+                Text(requireNotNull(bottom), Modifier.testTag("capture-status-line-bottom"), style = style, softWrap = false, maxLines = 1)
+            }
+            StatusLineLayout.WRAP, StatusLineLayout.ELLIPSIS ->
+                Text(oneLine, style = style, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+            StatusLineLayout.MARQUEE ->
+                Text(oneLine, Modifier.cineMarquee(), style = style, softWrap = false, maxLines = 1, overflow = TextOverflow.Clip)
+        }
+    }
 }
 
 /**
@@ -3478,12 +3613,20 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
     val hevcAvailable = remember(sdrProfile?.size, sdrProfile?.fps) {
         sdrProfile != null && hevcSdrSupported(sdrProfile.size.width, sdrProfile.size.height, sdrProfile.fps)
     }
+    val raw = state.selectedMode == CaptureMode.RAW_VIDEO
     val parts = buildList {
-        if (video) {
+        if (raw) {
+            // RAW video is uncompressed: never the encoder's bitrate, but the configuration's data rate
+            // and the time the free space lasts at it (PLAN-071). Its sound is PCM, on with the audio setting.
+            add("RAW10")
+            val facts = rawVideoStatusFacts(state)
+            facts?.let { val label = rawLocalizedLabel(it.label, it.isBlockPack && rawVideoNearLosslessActive(state, settings)); add(if (it.isCrop) stringResource(R.string.raw_video_label_crop, label) else label); add(stringResource(R.string.raw_video_rate, it.megabytesPerSecond)) }
+            add(if (settings.audioEnabled) "PCM " + formatAudioRate(settings.audioSampleRateHz) else stringResource(R.string.status_audio_off))
+            facts?.timeLeftMs?.let { add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it))) }
+        } else if (video) {
             add(when (state.selectedMode) {
                 CaptureMode.LOG -> "HEVC 10-bit LOG"
                 CaptureMode.HLG -> "HEVC 10-bit HLG"
-                CaptureMode.RAW_VIDEO -> "RAW 10-bit"
                 else -> resolveVideoCodec(settings.videoCodec, hevcAvailable).label
             })
             add("${settings.videoBitrateMbps} Mbps")
@@ -3499,13 +3642,13 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
         }
     }
     if (parts.isEmpty()) return
-    Text(
+    // Two lines when the facts fit in them; otherwise one line that scrolls, or the ellipsis with the marquee off.
+    FitText(
         parts.joinToString(" · "),
         color = Muted,
         fontSize = 12.sp,
         lineHeight = 15.sp,
         maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth().testTag("status-info-bar"),
     )
 }
@@ -3547,8 +3690,14 @@ private fun RecordingOverlay(
                     Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
                 }
             }
-            // Full width even on a phone: a narrower meter cut its "no signal" line short.
-            AudioMeterHud(state, binder)
+            val ringPercent = state.rawVideoRingPercent
+            if (ringPercent != null) {
+                // A RAW take records no sound: its ring buffer takes the audio meter's place (PLAN-071).
+                RawRingMeter(ringPercent, state.rawVideoFramesWritten ?: 0L)
+            } else {
+                // Full width even on a phone: a narrower meter cut its "no signal" line short.
+                AudioMeterHud(state, binder)
+            }
             ThermalHudChip(recording = true)
             OutOfFrameHudChip(state)
             Spacer(Modifier.weight(1f))
@@ -3562,13 +3711,12 @@ private fun RecordingOverlay(
         }
         // The Adaptive policy's live warning, on every layout: CaptureStatus is hidden while a take runs.
         state.recordingWarning?.let { warning ->
-            Text(
+            FitText(
                 warning,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 12.sp,
                 lineHeight = 15.sp,
                 maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.testTag("recording-warning")
                     .background(Panel, RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -3722,13 +3870,12 @@ private fun CaptureStatus(state: CameraUiState, modifier: Modifier = Modifier, c
         stringResource(R.string.recording_recovery_notice, it.discardedGroups, it.unresolvedGroups)
     }
     val status = listOfNotNull(recoveryNotice, recordingRecoveryNotice, baseStatus, controlNotice).joinToString(" · ").takeIf { it.isNotBlank() } ?: return
-    Text(
+    FitText(
         status,
         color = if (state.errorCode == null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
         fontSize = 12.sp,
         lineHeight = 15.sp,
         maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
         textAlign = if (chip) TextAlign.Center else null,
         modifier = if (chip) modifier
             .testTag("capture-status-chip")
@@ -3756,8 +3903,14 @@ private fun ManualControlDial(
     if (state.descriptor == null) return
     CompositionLocalProvider(LocalPanelHeaderVisible provides (showHeader && LocalPanelHeaderVisible.current)) {
         when (control) {
-            ControlDial.RESOLUTION -> ResolutionDial(state, binder, settings.videoProjectRate, onClose)
-            ControlDial.FPS -> FpsDial(state, binder, settings.videoProjectRate, onClose)
+            // RAW video picks size and rate together from the qualified configurations (PLAN-071).
+            ControlDial.RESOLUTION, ControlDial.FPS -> if (state.selectedMode == CaptureMode.RAW_VIDEO) {
+                RawVideoConfigDial(state, settings, onSelect = { key -> binder?.selectRawVideoConfig(key) }, onClose = onClose)
+            } else if (control == ControlDial.RESOLUTION) {
+                ResolutionDial(state, binder, settings.videoProjectRate, onClose)
+            } else {
+                FpsDial(state, binder, settings.videoProjectRate, onClose)
+            }
             ControlDial.WB -> WbDial(state, binder, onClose)
             ControlDial.EV -> EvDial(state, binder, onClose)
             ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
@@ -3767,10 +3920,6 @@ private fun ManualControlDial(
         }
     }
 }
-
-/** High-speed sessions leave exposure and white balance to the camera. */
-private fun CameraUiState.highSpeedSession(): Boolean =
-    activeVideoProfile?.constrainedHighSpeed == true || activeLogProfile?.constrainedHighSpeed == true
 
 /** The one large value a panel is about, centred over its controls. */
 @Composable
@@ -3817,16 +3966,9 @@ private fun ExposureDial(
                 Modifier.testTag("exposure-unavailable"))
             return@PanelColumn
         }
-        val isoMin = descriptor.sensitivityRange?.lower?.toDouble() ?: 50.0
-        val isoMax = descriptor.sensitivityRange?.upper?.toDouble() ?: 6400.0
-        val timeMin = descriptor.exposureTimeRangeNs?.lower?.toDouble() ?: 100_000.0
-        val timeMax = descriptor.exposureTimeRangeNs?.upper?.toDouble() ?: 1_000_000_000.0
-        val mode = settings.exposure.mode
+        val (isoMin, isoMax, timeMin, timeMax) = exposureControlRanges(descriptor)
         // The camera picks this value itself in full auto and in the other value's priority mode.
-        val autoHere = mode == ExposureMode.AUTO || mode == (if (iso) ExposureMode.SHUTTER_PRIORITY else ExposureMode.ISO_PRIORITY)
-        val angle = !iso && settings.exposure.shutterUnit == ShutterUnit.ANGLE
-        val isoValue = if (autoHere) state.sensitivityIso ?: state.requestedIso else state.requestedIso ?: state.sensitivityIso
-        val timeValue = if (autoHere) state.exposureTimeNs ?: state.requestedExposureTimeNs else state.requestedExposureTimeNs ?: state.exposureTimeNs
+        val (autoHere, angle, isoValue, timeValue) = exposureControlValue(iso, state, settings)
         val value = when {
             iso -> isoValue?.let { "ISO $it" }
             angle && !autoHere -> String.format(java.util.Locale.ROOT, "%.1f°", settings.exposure.angleTenths / 10f)
@@ -3848,21 +3990,11 @@ private fun ExposureDial(
                 else -> logPosition((timeValue ?: 16_666_667L).toDouble(), timeMin, timeMax)
             },
             onValueChange = { position ->
-                if (iso) {
-                    onSettingsChanged(settings.copy(exposure = settings.exposure.copy(
-                        mode = if (mode == ExposureMode.ISO_PRIORITY || !manual) ExposureMode.ISO_PRIORITY else ExposureMode.MANUAL,
-                        iso = logValue(position, isoMin, isoMax).toInt(),
-                        timeNs = if (mode == ExposureMode.AUTO) state.exposureTimeNs ?: settings.exposure.timeNs else settings.exposure.timeNs,
-                    )))
-                } else {
-                    val intent = settings.exposure.copy(
-                        mode = if (mode == ExposureMode.SHUTTER_PRIORITY || !manual) ExposureMode.SHUTTER_PRIORITY else ExposureMode.MANUAL,
-                        iso = if (mode == ExposureMode.AUTO) state.sensitivityIso ?: settings.exposure.iso else settings.exposure.iso,
-                    )
-                    onSettingsChanged(settings.copy(exposure = if (angle) {
-                        intent.copy(angleTenths = (position * 3599 + 1).roundToInt().coerceIn(1, 3600))
-                    } else intent.copy(timeNs = logValue(position, timeMin, timeMax).toLong())))
-                }
+                onSettingsChanged(settings.copy(exposure = when {
+                    iso -> exposureWithIso(settings, state, manual, logValue(position, isoMin, isoMax).toInt())
+                    angle -> exposureWithShutter(settings, state, manual, angleTenths = (position * 3599 + 1).roundToInt())
+                    else -> exposureWithShutter(settings, state, manual, timeNs = logValue(position, timeMin, timeMax).toLong())
+                }))
             },
             modifier = Modifier.fillMaxWidth().height(48.dp).testTag(if (iso) "iso-slider" else "shutter-slider"),
         )
@@ -4120,7 +4252,10 @@ internal fun SettingsContent(
     audioPermissionBlocked: Boolean = false,
     onOpenStorageBenchmark: (() -> Unit)? = null,
     onOpenLensCalibration: (() -> Unit)? = null,
+    onOpenNetworkDrive: (() -> Unit)? = null,
     onSetLensLock: ((String?) -> Unit)? = null,
+    onSelectRawVideoConfig: ((String) -> Unit)? = null,
+    onRequalifyRawVideo: (() -> Unit)? = null,
 ) {
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
@@ -4166,6 +4301,10 @@ internal fun SettingsContent(
             OperatorSettings(state, settings, onSettingsChange)
         }
         if ("webdav-queue" in visibleIds) settingsCard("webdav-queue") { WebDavQueueSettingsSection() }
+        if ("network-drive" in visibleIds && onOpenNetworkDrive != null) settingsCard("network-drive") {
+            SettingsLinkRow(stringResource(R.string.network_share_title), stringResource(R.string.network_share_settings_summary), onOpenNetworkDrive,
+                Modifier.testTag("settings-open-network-drive"))
+        }
         if ("presets" in visibleIds) settingsCard("presets") {
             PresetSettings(state, settings, onApplyPreset)
         }
@@ -4243,6 +4382,17 @@ internal fun SettingsContent(
                     { onSettingsChange(settings.copy(chromeOpacity = clampChromeOpacity((it * 20f).roundToInt() / 20f))) },
                     MIN_CHROME_OPACITY..MAX_CHROME_OPACITY, steps = 10, sliderModifier = Modifier.testTag("chrome-opacity"))
             }
+        }
+        if ("scroll-long-text" in visibleIds) settingsCard("scroll-long-text") {
+            SettingsToggleRow(
+                title = stringResource(R.string.scroll_long_text),
+                summary = stringResource(R.string.scroll_long_text_summary),
+                checked = settings.scrollLongText,
+                modifier = Modifier.testTag("settings-scroll-long-text"),
+                onCheckedChange = { onSettingsChange(settings.copy(scrollLongText = it)) },
+            )
+            SettingsHelp(stringResource(R.string.scroll_long_text_help_summary), stringResource(R.string.scroll_long_text_help),
+                tag = "scroll-long-text-help")
         }
         if ("audio" in visibleIds) settingsCard("audio") {
             SettingsToggleRow(
@@ -4435,6 +4585,13 @@ internal fun SettingsContent(
         }
         if ("lens-lock" in visibleIds && state.lensLock.available && onSetLensLock != null) settingsCard("lens-lock") {
             LensLockSettings(state, onSetLensLock)
+        }
+        // OCC-PLAN-071: offered once the camera has RAW10 output, qualified (the chooser) or not yet (why, and Qualify).
+        if ("raw-video" in visibleIds && state.modeGates[CaptureMode.RAW_VIDEO] in setOf(ModeGateState.AVAILABLE, ModeGateState.CANDIDATE)) {
+            settingsCard("raw-video") {
+                RawVideoSettings(state, settings, onSelectRawVideoConfig, onRequalifyRawVideo,
+                    onNearLosslessChange = { onSettingsChange(settings.copy(rawVideoNearLossless = it)) })
+            }
         }
         if ("timecode" in visibleIds) settingsCard("timecode") {
             TimecodeSettings(settings, onSettingsChange)

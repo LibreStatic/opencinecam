@@ -5,12 +5,14 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import androidx.core.net.toUri
 import android.system.StructStat
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
+import java.io.FileDescriptor
 import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Locale
@@ -28,13 +30,13 @@ class MediaStorePreparedArtifactProbe(private val resolver: ContentResolver) : P
             ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
         return descriptor.use {
             requireReadOnlyPreparedDescriptor(it)
-            val firstStat = Os.fstat(it.fileDescriptor)
+            val firstStat = statOrChanged(it.fileDescriptor)
             val firstSize = it.statSize
             check(OsConstants.S_ISREG(firstStat.st_mode) && firstSize > 0 && firstSize == firstStat.st_size) {
                 "Prepared artifact has no complete regular-file bytes"
             }
             val after = readMetadata(identity, artifact, pending)
-            val lastStat = Os.fstat(it.fileDescriptor)
+            val lastStat = statOrChanged(it.fileDescriptor)
             val lastSize = it.statSize
             check(before == after && sameFileState(firstStat, lastStat) && firstSize == lastSize) {
                 "Prepared artifact changed during inspection"
@@ -124,6 +126,14 @@ class MediaStorePreparedArtifactProbe(private val resolver: ContentResolver) : P
     private fun text(cursor: Cursor, column: Int): String {
         check(cursor.getType(column) == Cursor.FIELD_TYPE_STRING) { "Prepared artifact text metadata is invalid" }
         return requireNotNull(cursor.getString(column))
+    }
+
+    /** Samsung's FUSE fails fstat with ENOENT on an open descriptor once its row is renamed: that is a change, not an I/O fault. */
+    private fun statOrChanged(fd: FileDescriptor): StructStat = try {
+        Os.fstat(fd)
+    } catch (e: ErrnoException) {
+        if (e.errno == OsConstants.ENOENT || e.errno == OsConstants.ESTALE) throw IllegalStateException("Prepared artifact changed during inspection", e)
+        throw e
     }
 
     private fun sameFileState(first: StructStat, last: StructStat): Boolean =

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <string name="media_playback_close">Fechar revisão</string>
+    <string name="media_playback_member">Ficheiro %1$d de %2$d: %3$s</string>
+    <string name="media_playback_previous_member">Ficheiro anterior</string>
+    <string name="media_playback_next_member">Ficheiro seguinte</string>
+    <string name="media_playback_previous_take">Take anterior</string>
+    <string name="media_playback_next_take">Take seguinte</string>
+    <string name="media_playback_loading">A ler o ficheiro…</string>
+    <string name="media_playback_page_error">Não foi possível ler a página seguinte. Tente Take seguinte novamente.</string>
+    <string name="media_playback_paused">Em pausa</string>
+    <string name="media_playback_playing">A reproduzir · o tempo do leitor é aproximado</string>
+    <string name="media_playback_ended">Fim do ficheiro</string>
+    <string name="media_playback_error">Falha na leitura do ficheiro; nenhum fotograma aproximado foi substituído.</string>
+    <string name="media_playback_closed">Leitor fechado</string>
+    <string name="media_playback_exact">O fotograma %1$d de %2$d é mostrado exatamente como está guardado no ficheiro, em %3$s s.</string>
+    <string name="media_playback_estimated">Posição do leitor: %1$d ms</string>
+    <string name="media_playback_pause">Pausar</string>
+    <string name="media_playback_play">Reproduzir</string>
+    <string name="media_playback_start">Ir para o início</string>
+    <string name="media_playback_end">Ir para o fim</string>
+    <string name="media_playback_previous_frame">Fotograma anterior</string>
+    <string name="media_playback_next_frame">Fotograma seguinte</string>
+    <string name="media_playback_seek_label">Posição de procura (pausa a reprodução)</string>
+    <string name="media_playback_color_interpreted">Cor interpretada a partir das etiquetas da faixa, não verificada. O PTS exato não muda. A reprodução contínua usa a interpretação de cor do próprio leitor. Esta escolha é reposta ao sair deste item.</string>
+    <string name="media_playback_color_tags">Interpretação da faixa: padrão %1$d, intervalo %2$d. Descodificador: padrão %3$d, intervalo %4$d.</string>
+    <string name="media_playback_color_strict">Voltar à leitura de cor estrita</string>
+    <string name="media_playback_hdr_preview">Amostras %1$s descodificadas em 10 bits · os fotogramas em pausa precisos usam uma pré-visualização SDR com tone mapping (referência de 203 nits; ecrã HLG de 1000 nits). A reprodução contínua usa o pipeline de cor do sistema. Isto não verifica a fidelidade de apresentação HDR nativa; os originais não mudam.</string>
+    <string name="media_playback_dng_preview">DNG — pré-visualização descodificada pela plataforma (%1$d × %2$d px). O ficheiro RAW original não muda.</string>
+</resources>

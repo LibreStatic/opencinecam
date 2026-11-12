@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="subject_out_of_frame_title">Aviso de fora de campo</string>
+    <string name="subject_out_of_frame">Avisar quando o rosto sair da área gravada</string>
+    <string name="subject_out_of_frame_delay">Atraso do aviso: %1$d s</string>
+    <string name="subject_out_of_frame_help">Usa a deteção de rostos da própria câmara quando a configuração de captura ativa a oferece. As posições dos rostos ficam na memória e nunca são guardadas nem gravadas nos metadados.</string>
+    <string name="subject_out_of_frame_banner">Está fora de campo</string>
+    <string name="subject_out_of_frame_hud">FORA DE CAMPO</string>
+    <string name="subject_out_of_frame_unavailable">Indisponível: a câmara ou o modo de captura atual não oferece deteção de rostos. A gravação em alta cadência de fotogramas (câmara lenta) nunca a oferece.</string>
+</resources>

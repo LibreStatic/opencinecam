@@ -26,8 +26,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
-/** A codec name and, when the take declares it, the sample depth ("HEVC" 10, "WAV" 32 float). */
-internal data class CodecBadge(val name: String, val bits: Int? = null, val float: Boolean = false)
+/**
+ * A codec name and, when the take declares it, the sample depth ("HEVC" 10, "WAV" 32 float). A
+ * compressed RAW take's badge is words, [label], shown in place of [name].
+ */
+internal data class CodecBadge(val name: String, val bits: Int? = null, val float: Boolean = false, @StringRes val label: Int? = null)
 
 /** What a card and the inspector say about a take beyond its MediaStore facts. */
 internal data class TakeBadges(val codec: CodecBadge? = null, val proxy: TakeProxyState = TakeProxyState.NONE,
@@ -45,6 +48,21 @@ internal fun codecBadge(kind: LocalMediaKind, mime: String, name: String, encodi
     LocalMediaKind.VIDEO -> videoCodecBadge(encoding?.videoMime, encoding?.videoProfile)
     LocalMediaKind.PHOTO -> photoCodecBadge(mime, name)
     LocalMediaKind.AUDIO -> audioCodecBadge(mime, name, encoding?.audioContainer, encoding?.audioSamples)
+    // The encoding is in the file, not in a sidecar: until [GalleryFacts.codec] has read it, only "RAW".
+    LocalMediaKind.RAW_VIDEO -> CodecBadge("RAW")
+}
+
+/**
+ * A RAW take's badge from the `encoding` of its first `METADATA` chunk (PLAN-071): RAW10 when the
+ * key is absent, as in takes recorded before compression, and plain "RAW" for a value this build
+ * does not know.
+ */
+internal fun rawCodecBadge(encoding: String?): CodecBadge = when (encoding) {
+    null, "raw10" -> CodecBadge("RAW10")
+    "lj92" -> CodecBadge("LJ92")
+    "bp" -> CodecBadge("RAW", label = R.string.media_badge_raw_lossless)
+    "bpq" -> CodecBadge("RAW", label = R.string.media_badge_raw_near_lossless)
+    else -> CodecBadge("RAW")
 }
 
 /** The OCLog sidecar names the profile as "Main10" for HEVC or "AVC_<CodecProfileLevel>" for H.264. */
@@ -87,6 +105,26 @@ internal fun rememberProbedCodec(take: LocalMediaTake, source: MediaCatalogSourc
     return codec
 }
 
+/** The cache key of a take's details: a file rewritten in place (same id, new size or time) is read again. */
+internal fun takeDetailsKey(take: LocalMediaTake): String = "${take.id}|${take.primary.sizeBytes}|${take.primary.modifiedSeconds}"
+
+/**
+ * The details of the take open in the inspector, read once per [takeDetailsKey] while the gallery lives
+ * ([cache] keeps failures too, as null): [TakeDetailsLoad.Loading] until the read finishes.
+ */
+@Composable
+internal fun rememberTakeDetails(take: LocalMediaTake, source: MediaCatalogSource, cache: MutableMap<String, TakeTechnicalDetails?>): TakeDetailsLoad {
+    val key = takeDetailsKey(take)
+    var load by remember(key) { mutableStateOf(if (key in cache) TakeDetailsLoad.Loaded(cache[key]) else TakeDetailsLoad.Loading) }
+    LaunchedEffect(source, key) {
+        if (key in cache) { load = TakeDetailsLoad.Loaded(cache[key]); return@LaunchedEffect }
+        val read = try { source.details(take) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+        currentCoroutineContext().ensureActive()
+        cache[key] = read; load = TakeDetailsLoad.Loaded(read)
+    }
+    return load
+}
+
 internal fun photoCodecBadge(mime: String, name: String): CodecBadge? {
     val format = when (mime.lowercase(Locale.ROOT)) {
         "image/x-adobe-dng" -> "DNG"
@@ -125,6 +163,7 @@ internal fun audioCodecBadge(mime: String, name: String, container: String?, sam
 @Composable
 @ReadOnlyComposable
 internal fun codecBadgeText(badge: CodecBadge): String = when {
+    badge.label != null -> stringResource(badge.label)
     badge.bits == null -> badge.name
     badge.float -> stringResource(R.string.media_badge_depth_float, badge.name, badge.bits)
     else -> stringResource(R.string.media_badge_depth, badge.name, badge.bits)

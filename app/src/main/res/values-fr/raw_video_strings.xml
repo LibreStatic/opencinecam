@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_video_not_qualified">La vidéo RAW n’est pas encore qualifiée sur cette caméra. Lancez d’abord la qualification vidéo RAW.</string>
+    <string name="raw_video_unsupported">Cette caméra n’a pas de sortie RAW10 et ne peut donc pas enregistrer de vidéo RAW.</string>
+    <string name="raw_video_failed">Cette caméra a refusé le flux vidéo RAW. La vidéo RAW y est indisponible jusqu’au redémarrage de l’app.</string>
+    <string name="raw_video_unavailable">La caméra a refusé le flux vidéo RAW. Passage en %1$s.</string>
+    <string name="raw_video_memory">Mémoire libre insuffisante pour le tampon d’images RAW. Fermez d’autres apps et réessayez.</string>
+    <string name="raw_video_codec_unavailable">Impossible de démarrer l’encodeur RAW. Choisissez une configuration RAW non compressée.</string>
+    <string name="raw_video_storage">Stockage libre insuffisant pour une prise RAW : %1$s nécessaires pour 10 secondes, %2$s libres.</string>
+    <string name="raw_video_storage_unknown">L’espace libre n’a pas pu être lu ; la prise RAW n’a donc pas démarré.</string>
+    <string name="raw_video_start_failed">La prise RAW n’a pas pu démarrer.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d Mo/s</string>
+    <string name="raw_video_saved">Prise RAW enregistrée : %1$d images, %2$s s</string>
+    <string name="raw_video_not_finalised">La prise RAW n’a pas été finalisée ; elle sera récupérée au prochain démarrage.</string>
+    <string name="raw_video_empty">La prise RAW n’a enregistré aucune image.</string>
+    <string name="raw_video_end_ring_full">le stockage n’a pas suivi le flux RAW</string>
+    <string name="raw_video_end_writer">le fichier RAW n’a pas pu être écrit</string>
+    <string name="raw_video_end_stream">la caméra a cessé de fournir des images RAW</string>
+    <string name="raw_video_end_frame">une image RAW a été perdue</string>
+    <string name="raw_video_end_stalled">l’écriture RAW ne répondait plus</string>
+    <string name="raw_video_end_other">la prise RAW a échoué</string>
+</resources>

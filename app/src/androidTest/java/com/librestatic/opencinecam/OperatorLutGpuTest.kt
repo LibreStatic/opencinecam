@@ -59,8 +59,10 @@ class OperatorLutGpuTest {
         }
         error("Rendered window image did not arrive")
     }
+    /** Centre column of chart band [band] in a frame [width] pixels wide. */
+    private fun bandX(width: Int, band: Int) = band * width / chart.size + width / (2 * chart.size)
     private fun colorAt(image: Image, x: Int): Int {
-        val plane = image.planes[0]; val i = 48 * plane.rowStride + x * plane.pixelStride
+        val plane = image.planes[0]; val i = image.height / 2 * plane.rowStride + x * plane.pixelStride
         return Color.rgb(plane.buffer.get(i).toInt() and 255, plane.buffer.get(i + 1).toInt() and 255,
             plane.buffer.get(i + 2).toInt() and 255)
     }
@@ -72,9 +74,9 @@ class OperatorLutGpuTest {
         val rgb = lut.cube.sample(Color.red(color) / 255f, Color.green(color) / 255f, Color.blue(color) / 255f)
         return Color.rgb((rgb[0]*255).roundToInt(), (rgb[1]*255).roundToInt(), (rgb[2]*255).roundToInt())
     }
-    private fun assertChart(image: Image, transformed: Boolean) {
-        assertEquals(128, image.width); assertEquals(96, image.height)
-        chart.forEachIndexed { i, color -> assertColor(if (transformed) mapped(color) else color, colorAt(image, i*32+16), 5) }
+    private fun assertChart(image: Image, transformed: Boolean, size: android.util.Size = android.util.Size(128, 96)) {
+        assertEquals(size.width, image.width); assertEquals(size.height, image.height)
+        chart.forEachIndexed { i, color -> assertColor(if (transformed) mapped(color) else color, colorAt(image, bandX(image.width, i)), 5) }
     }
     private fun submit(f: SubjectPreviewGpuTest.Fixture): Long {
         drain(f.operator)
@@ -83,8 +85,9 @@ class OperatorLutGpuTest {
         val window = field<EGLSurface>(f, "sourceWindow")
         check(EGL14.eglMakeCurrent(display, window, window, field<EGLContext>(f, "sourceContext")))
         GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
+        val band = f.size.width / chart.size
         chart.forEachIndexed { i, color ->
-            GLES30.glScissor(i*32, 0, 32, 96)
+            GLES30.glScissor(i*band, 0, band, f.size.height)
             GLES30.glClearColor(Color.red(color)/255f, Color.green(color)/255f, Color.blue(color)/255f, 1f)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
         }
@@ -152,7 +155,7 @@ class OperatorLutGpuTest {
                     chart.forEachIndexed { index, color ->
                         val expected = cube.sample(Color.red(color)/255f, Color.green(color)/255f, Color.blue(color)/255f)
                         assertColor(Color.rgb((expected[0]*255).roundToInt(), (expected[1]*255).roundToInt(),
-                            (expected[2]*255).roundToInt()), colorAt(image, index*32+16), 5)
+                            (expected[2]*255).roundToInt()), colorAt(image, bandX(image.width, index)), 5)
                     }
                 }
             }
@@ -189,7 +192,7 @@ class OperatorLutGpuTest {
                         chart.forEachIndexed { i, color ->
                             val rgb = operator?.cube?.sample(Color.red(color)/255f, Color.green(color)/255f, Color.blue(color)/255f)
                             val expected = rgb?.let { Color.rgb((it[0]*255).roundToInt(), (it[1]*255).roundToInt(), (it[2]*255).roundToInt()) } ?: color
-                            assertColor(expected, colorAt(image, i*32+16), 5)
+                            assertColor(expected, colorAt(image, bandX(image.width, i)), 5)
                         }
                     }
                     val status = f.statuses.lastOrNull()
@@ -200,7 +203,7 @@ class OperatorLutGpuTest {
                                 val rgb = subject?.takeIf { subjectState == OperatorLutState.ACTIVE }?.cube?.sample(
                                     Color.red(color)/255f, Color.green(color)/255f, Color.blue(color)/255f)
                                 val expected = rgb?.let { Color.rgb((it[0]*255).roundToInt(), (it[1]*255).roundToInt(), (it[2]*255).roundToInt()) } ?: color
-                                assertColor(expected, colorAt(image, i*32+16), 5)
+                                assertColor(expected, colorAt(image, bandX(image.width, i)), 5)
                             }
                             checked = true
                         }
@@ -245,7 +248,8 @@ class OperatorLutGpuTest {
         val file = File.createTempFile("operator-lut-", ".mp4", InstrumentationRegistry.getInstrumentation().targetContext.cacheDir)
         try {
             SubjectPreviewGpuTest.Fixture(operatorPreview = true, embeddedAudio = true,
-                onAnalysisFrame = { frames += it }, onLutStatus = { statuses += it }).use { f ->
+                onAnalysisFrame = { frames += it }, onLutStatus = { statuses += it },
+                size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { f ->
                 onGl(f) { f.pipeline.setMonitoringOptions(MonitoringOptions(waveformEnabled = true,
                     vectorscopeEnabled = true, falseColorEnabled = true, refreshHz = 10)) }
                 val before = analysis(f, frames)
@@ -256,7 +260,7 @@ class OperatorLutGpuTest {
                 f.reader.setOnImageAvailableListener({ reader ->
                     try {
                         reader.acquireLatestImage()?.use { image ->
-                            val colors = chart.indices.map { colorAt(image, it*32+16) }
+                            val colors = chart.indices.map { colorAt(image, bandX(image.width, it)) }
                             subject.complete(colors)
                             val receipt = f.statuses.lastOrNull()
                             if (receipt?.lutStatus?.selectionId == duringIdentity.get() &&
@@ -285,7 +289,7 @@ class OperatorLutGpuTest {
                 }
                 val stopped = CountDownLatch(1); val failure = AtomicReference<Throwable?>()
                 ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_TRUNCATE).use { output ->
-                    val size = RecordingFrameSize(128, 96)
+                    val size = RecordingFrameSize(192, 144)
                     val geometry = RecordingGeometry(RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, size, size, size)
                     try {
                         assertTrue(f.pipeline.startRecording(output, 2_000_000, geometry, recordingLut = recordingLut,
@@ -317,7 +321,7 @@ class OperatorLutGpuTest {
                         }
                         repeat(12) {
                             submit(f)
-                            awaitImage(requireNotNull(f.operator)).use { image -> assertChart(image, true) }
+                            awaitImage(requireNotNull(f.operator)).use { image -> assertChart(image, true, f.size) }
                         }
                         if (recordingLut != null) {
                             val actual = requireNotNull(frames.lastOrNull())
@@ -363,11 +367,11 @@ class OperatorLutGpuTest {
                 for (time in listOf(times.first(), times.last())) {
                     val bitmap = requireNotNull(retriever.getFrameAtTime(time, MediaMetadataRetriever.OPTION_CLOSEST))
                     try {
-                        assertEquals(128, bitmap.width); assertEquals(96, bitmap.height)
+                        assertEquals(192, bitmap.width); assertEquals(144, bitmap.height)
                         chart.forEachIndexed { i, color ->
                             val rgb = recordingLut?.cube?.sample(Color.red(color)/255f, Color.green(color)/255f, Color.blue(color)/255f)
                             val expected = rgb?.let { Color.rgb((it[0]*255).roundToInt(), (it[1]*255).roundToInt(), (it[2]*255).roundToInt()) } ?: color
-                            assertColor(expected, bitmap.getPixel(i*32+16, 48), 35)
+                            assertColor(expected, bitmap.getPixel(bandX(bitmap.width, i), bitmap.height / 2), 35)
                         }
                     } finally { bitmap.recycle() }
                 }

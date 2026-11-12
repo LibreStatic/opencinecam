@@ -17,6 +17,10 @@ class SettingsCatalogTest {
         for (query in listOf("vibracion", "haptic", "vibración")) assertTrue(query, "haptics" in SettingsCatalog.search(query, null) { "" })
         assertTrue("haptics" in SettingsCatalog.search("", SettingsCategory.CONTROLS) { "" })
     }
+    @Test fun volumeKeyGesturesAreSearchableInEveryLanguage() {
+        for (query in listOf("volume hold", "doble pulsación", "both keys", "deux touches", "doppio", "beide Tasten", "volumen zoom", "pair ISO", "obturador", "Fokus"))
+            assertTrue(query, "operator-controls" in SettingsCatalog.search(query, null) { "" })
+    }
     @Test fun categoryFiltersAndUnknownSearchIsEmpty() {
         assertFalse("torch" in SettingsCatalog.search("", SettingsCategory.AUDIO) { "" })
         assertTrue(SettingsCatalog.search("no-such-setting", null) { "" }.isEmpty())

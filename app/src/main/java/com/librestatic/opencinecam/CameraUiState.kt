@@ -216,6 +216,24 @@ data class CameraUiState(
     val timelapseMissedIntervals: Long = 0,
     val timelapseEncoder: String? = null,
     val timelapseHardwareEncoder: Boolean? = null,
+    /** OCC-PLAN-071: the current camera's qualified RAW video configurations, highest data rate first. */
+    val rawVideoOptions: List<RawVideoConfigOption> = emptyList(),
+    /** The [rawVideoOptions] key a RAW_VIDEO session runs; null when the camera has none qualified. */
+    val rawVideoSelectedKey: String? = null,
+    /** The [rawVideoOptions] key Automatic resolves to, whatever the operator chose; null when none is qualified. */
+    val rawVideoAutoKey: String? = null,
+    /**
+     * The camera's block-pack ([RawVideoConfigOption.isBlockPack]) options can record near-lossless:
+     * it has a bundled RAW noise profile and the native codec loaded. [CameraSettings.rawVideoNearLossless]
+     * applies only then; otherwise block-pack records lossless.
+     */
+    val rawVideoNearLosslessAvailable: Boolean = false,
+    /** Ring occupancy (0..100) of the running RAW take; null outside one. A take stops at 90 (ADR-0019). */
+    val rawVideoRingPercent: Int? = null,
+    /** Frames the running RAW take has written to its file; null outside one. */
+    val rawVideoFramesWritten: Long? = null,
+    /** The RAW video qualification running, or how the last one ended until it is dismissed; null otherwise. */
+    val rawVideoQualification: RawVideoQualificationUi? = null,
     /** OCC-PLAN-068 U7: derived framing only (no face geometry); never persisted. */
     val subjectFraming: com.librestatic.opencinecam.camera.SubjectFramingStatus = com.librestatic.opencinecam.camera.SubjectFramingStatus(),
 ) {

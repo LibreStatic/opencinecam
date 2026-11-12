@@ -43,7 +43,10 @@ internal fun SettingsScreen(
     onOpenCapabilities: (() -> Unit)? = null,
     onOpenStorageBenchmark: (() -> Unit)? = null,
     onOpenLensCalibration: (() -> Unit)? = null,
+    onOpenNetworkDrive: (() -> Unit)? = null,
     onSetLensLock: ((String?) -> Unit)? = null,
+    onSelectRawVideoConfig: ((String) -> Unit)? = null,
+    onRequalifyRawVideo: (() -> Unit)? = null,
 ) {
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { kotlinx.coroutines.flow.MutableStateFlow(FoldDisplayState()) }
@@ -102,7 +105,7 @@ internal fun SettingsScreen(
                 if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = gutter, vertical = 16.dp))
                 listStates.SaveableStateProvider(if (searching) "search" else (category ?: SettingsCategory.CAPTURE).name) {
-                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities, audioPermissionBlocked = audioPermissionBlocked, onOpenStorageBenchmark = onOpenStorageBenchmark, onOpenLensCalibration = onOpenLensCalibration, onSetLensLock = onSetLensLock)
+                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities, audioPermissionBlocked = audioPermissionBlocked, onOpenStorageBenchmark = onOpenStorageBenchmark, onOpenLensCalibration = onOpenLensCalibration, onOpenNetworkDrive = onOpenNetworkDrive, onSetLensLock = onSetLensLock, onSelectRawVideoConfig = onSelectRawVideoConfig, onRequalifyRawVideo = onRequalifyRawVideo)
                 }
             }
         }

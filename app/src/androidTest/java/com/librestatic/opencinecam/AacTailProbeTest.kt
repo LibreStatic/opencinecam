@@ -92,10 +92,10 @@ class AacTailProbeTest {
         // Reuse the actual GLES/Surface recording fixture instead of assuming a byte-buffer layout.
         val stopped = java.util.concurrent.CountDownLatch(1)
         val saved = java.util.concurrent.atomic.AtomicBoolean(false)
-        SubjectPreviewGpuTest.Fixture().use { fixture ->
+        SubjectPreviewGpuTest.Fixture(size = SubjectPreviewGpuTest.Fixture.RECORDING_SIZE).use { fixture ->
             android.os.ParcelFileDescriptor.open(output, android.os.ParcelFileDescriptor.MODE_CREATE or
                 android.os.ParcelFileDescriptor.MODE_TRUNCATE or android.os.ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
-                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(128, 96)
+                val frame = com.librestatic.opencinecam.camera.RecordingFrameSize(192, 144)
                 val geometry = com.librestatic.opencinecam.camera.RecordingGeometry(
                     com.librestatic.opencinecam.camera.RecordingGeometryMode.COMPATIBLE, 0, 0, 0, 0, 0, frame, frame, frame)
                 assertTrue(fixture.pipeline.startRecording(descriptor, 12000000, geometry,
@@ -201,6 +201,14 @@ class AacTailProbeTest {
         File(directory, "$stem.m4a").copyTo(copy, overwrite = true)
         val before = copy.readBytes()
         var windowResult: com.librestatic.opencinecam.camera.AacSourceWindowResult? = null
+        // The window also requires the muxer's 1024-tick cadence. An encoder that advances PTS by a
+        // fixed truncated step (21333 us at 48 kHz: c2.sec.aac.encoder on the Galaxy S24) drifts
+        // until the muxer writes a 1023-tick packet; the window must reject that without touching
+        // the file, like a truncated tail.
+        val firstPtsUs = packets.getJSONObject(0).getLong("ptsUs")
+        val cadence = (1 until packets.length()).all { i ->
+            Math.round((packets.getJSONObject(i).getLong("ptsUs") - firstPtsUs) * rate / 1_000_000.0) == i * 1024L
+        }
         java.io.RandomAccessFile(copy, "rw").use { file ->
             val access = object : com.librestatic.opencinecam.camera.ProjectMp4File {
                 override val size: Long get() = file.length()
@@ -212,7 +220,7 @@ class AacTailProbeTest {
             // Production requires priming + source <= encoded frames. Whether an encoder flushed its tail without
             // padding is encoder behaviour (some, e.g. the API 36 software encoder, do), so derive the expectation
             // from the packets actually produced instead of assuming every encoder truncates.
-            val complete = (2048L + inputFrames) <= packets.length() * 1024L
+            val complete = cadence && (2048L + inputFrames) <= packets.length() * 1024L
             if (complete) windowResult = com.librestatic.opencinecam.camera.finalizeAacSourceWindow(access, window)
             else {
                 try {
@@ -237,7 +245,7 @@ class AacTailProbeTest {
             } finally { extractor.release() }
         }
         return JSONObject().put("stem", stem).put("encoder", name).put("eosOnData", eosOnData)
-            .put("fixturePrimingFrames", 2048).put("windowApplied", windowResult != null)
+            .put("fixturePrimingFrames", 2048).put("windowApplied", windowResult != null).put("cadence1024", cadence)
             .put("windowOffsetUs", if (eosOnData) 250123 else 0)
             .put("windowMovieTimescale", windowResult?.movieTimescale ?: JSONObject.NULL)
             .put("windowDurationTicks", windowResult?.presentationDurationTicks ?: JSONObject.NULL)

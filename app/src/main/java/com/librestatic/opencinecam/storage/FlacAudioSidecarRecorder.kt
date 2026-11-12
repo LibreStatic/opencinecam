@@ -77,6 +77,7 @@ class FlacAudioSidecarRecorder private constructor(
     @Volatile private var failure: Throwable? = null
     @Volatile private var inputBytes = 0L
     @Volatile private var encodedBytes = 0L
+    @Volatile private var maxFrameBytes = 0
     private var startedAtElapsedNs = 0L
     private var stoppedAtElapsedNs = 0L
     private var routedInputDeviceId: Int? = null
@@ -289,6 +290,8 @@ class FlacAudioSidecarRecorder private constructor(
         if (salvaging) runCatching { captureTiming.requireComplete(capturedResult.frames) } else captureTiming.requireComplete(capturedResult.frames)
         // A failed encoder leaves a truncated stream: its STREAMINFO sample count would be wrong.
         if (failure == null) patchTotalSamples(inputBytes / (settings.audioChannels * settings.audioBitDepth.bits / 8))
+        // Also true for a salvaged stream: every frame written so far fits.
+        patchMaxFrameSize(maxFrameBytes)
         output.channel.force(true)
         output.close()
         descriptor.close()
@@ -405,6 +408,7 @@ class FlacAudioSidecarRecorder private constructor(
                                 writeFlacHeader(buffer.toByteArray())
                                 headerWritten = true
                             } else if (!codecConfig) {
+                                maxFrameBytes = maxOf(maxFrameBytes, info.size)
                                 while (buffer.hasRemaining()) encodedBytes += output.channel.write(buffer)
                             }
                         }
@@ -456,6 +460,15 @@ class FlacAudioSidecarRecorder private constructor(
             value = value ushr 8
         }
         check(Os.pwrite(descriptor.fileDescriptor, packed, 0, packed.size, STREAMINFO_SAMPLE_FIELD_OFFSET) == packed.size)
+    }
+
+    /**
+     * The encoder emits STREAMINFO before any frame, so its frame sizes read 0 (unknown). Samsung's
+     * extractor sizes its read buffer from max_frame_size and fails on larger frames, so fill it in.
+     */
+    private fun patchMaxFrameSize(bytes: Int) {
+        val field = flacFrameSizeField(bytes)
+        check(Os.pwrite(descriptor.fileDescriptor, field, 0, field.size, FLAC_MAX_FRAME_SIZE_OFFSET.toLong()) == field.size)
     }
 
     private fun attachEffects() {
@@ -693,4 +706,13 @@ class FlacAudioSidecarRecorder private constructor(
         private fun ByteArray.startsWith(prefix: ByteArray): Boolean =
             size >= prefix.size && prefix.indices.all { this[it] == prefix[it] }
     }
+}
+
+/** File offset of STREAMINFO's 24-bit max_frame_size: after "fLaC", the block header and 7 bytes. */
+internal const val FLAC_MAX_FRAME_SIZE_OFFSET = 15
+
+/** One encoder output buffer is one FLAC frame; 0 means unknown in STREAMINFO. */
+internal fun flacFrameSizeField(bytes: Int): ByteArray {
+    require(bytes in 0 until (1 shl 24)) { "FLAC frame size is outside STREAMINFO range." }
+    return byteArrayOf((bytes ushr 16).toByte(), (bytes ushr 8).toByte(), bytes.toByte())
 }

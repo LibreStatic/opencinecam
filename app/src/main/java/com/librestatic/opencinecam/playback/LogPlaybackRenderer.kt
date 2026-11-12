@@ -17,6 +17,7 @@ import com.librestatic.opencinecam.camera.GpuEglDisplayLease
 import com.librestatic.opencinecam.camera.OpenCineLogYcbcrConversion
 import com.librestatic.opencinecam.storage.PreciseLogSignal
 import com.librestatic.opencinecam.storage.PreciseLogView
+import com.librestatic.opencinecam.zoomedQuad
 import java.io.Closeable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -43,6 +44,9 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
     private var view = view
     private var width = 0
     private var height = 0
+    private var zoomScale = 1f
+    private var zoomX = 0f
+    private var zoomY = 0f
     private var closed = false
     private val textureMatrix = FloatArray(16)
     /** True when the shader converts raw YCbCr; false means the driver's sampler conversion is trusted. */
@@ -56,6 +60,15 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
     fun setView(value: PreciseLogView) { handler.post { if (!closed) { view = value; draw() } } }
 
     fun resize(newWidth: Int, newHeight: Int) { handler.post { if (!closed) { width = newWidth; height = newHeight; draw() } } }
+
+    /**
+     * The review's zoom, as a `graphicsLayer` on the surface would apply it: [scale] around the centre,
+     * then the pan [offsetX]/[offsetY] as fractions of the surface's width and height (y down). Fractions,
+     * not pixels, so the holder's buffer size never has to match the view's.
+     */
+    fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {
+        handler.post { if (!closed) { zoomScale = scale; zoomX = offsetX; zoomY = offsetY; draw() } }
+    }
 
     /** Blocks until the EGL window surface is gone, so the SurfaceHolder may destroy its Surface afterwards. */
     override fun close() {
@@ -149,6 +162,8 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uView"), if (view == PreciseLogView.REC709) 1 else 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uViewGain"), signal.viewGain.toFloat())
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uLegacyBt709"), if (signal.legacyBt709Primaries) 1 else 0)
+        GLES30.glUniform4fv(GLES30.glGetUniformLocation(program, "uZoom"), 1,
+            zoomedQuad(intArrayOf(0, 0, width, height), width, height, zoomScale, zoomX, zoomY), 0)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, QUAD)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
@@ -215,10 +230,12 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
         private val VERTEX_SHADER = """
             #version 300 es
             uniform mat4 uTextureMatrix;
+            // (scale x, scale y, offset x, offset y) in NDC; the texture coordinates stay on the untransformed quad.
+            uniform vec4 uZoom;
             layout(location = 0) in vec2 aPosition;
             out vec2 vTexCoord;
             void main() {
-                gl_Position = vec4(aPosition, 0.0, 1.0);
+                gl_Position = vec4(aPosition * uZoom.xy + uZoom.zw, 0.0, 1.0);
                 vTexCoord = (uTextureMatrix * vec4((aPosition + 1.0) * 0.5, 0.0, 1.0)).xy;
             }
         """.trimIndent()

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_video_not_qualified">El video RAW todavía no está calificado en esta cámara. Ejecuta primero la calificación de video RAW.</string>
+    <string name="raw_video_unsupported">Esta cámara no tiene salida RAW10, así que no puede grabar video RAW.</string>
+    <string name="raw_video_failed">Esta cámara rechazó el flujo de video RAW. El video RAW no está disponible en ella hasta que se reinicie la app.</string>
+    <string name="raw_video_unavailable">La cámara rechazó el flujo de video RAW. Se cambió a %1$s.</string>
+    <string name="raw_video_memory">No hay memoria libre suficiente para el búfer de fotogramas RAW. Cierra otras apps e inténtalo de nuevo.</string>
+    <string name="raw_video_codec_unavailable">No se pudo iniciar el codificador RAW. Elige una configuración RAW sin comprimir.</string>
+    <string name="raw_video_storage">No hay almacenamiento libre suficiente para una toma RAW: se necesitan %1$s para 10 segundos y hay %2$s libres.</string>
+    <string name="raw_video_storage_unknown">No se pudo leer el espacio libre, así que la toma RAW no se inició.</string>
+    <string name="raw_video_start_failed">La toma RAW no pudo iniciarse.</string>
+    <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
+    <string name="raw_video_saved">Toma RAW guardada: %1$d fotogramas, %2$s s</string>
+    <string name="raw_video_not_finalised">La toma RAW no se finalizó; se recuperará en el próximo inicio.</string>
+    <string name="raw_video_empty">La toma RAW no grabó ningún fotograma.</string>
+    <string name="raw_video_end_ring_full">el almacenamiento no pudo seguir el ritmo del flujo RAW</string>
+    <string name="raw_video_end_writer">no se pudo escribir el archivo RAW</string>
+    <string name="raw_video_end_stream">la cámara dejó de entregar fotogramas RAW</string>
+    <string name="raw_video_end_frame">se perdió un fotograma RAW</string>
+    <string name="raw_video_end_stalled">el escritor RAW dejó de responder</string>
+    <string name="raw_video_end_other">la toma RAW falló</string>
+</resources>

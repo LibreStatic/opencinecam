@@ -137,6 +137,8 @@
     <string name="mode_selector_summary">Wähle ein haptisches Drehrad oder ein adaptives Schaltflächenraster.</string>
     <string name="translucent_chrome">Transluzente Oberfläche</string>
     <string name="translucent_chrome_summary">Der Sucher nutzt den gesamten Bildschirm, die Bedienelemente schweben darüber.</string>
+    <string name="scroll_long_text">Lange Texte scrollen</string>
+    <string name="scroll_long_text_summary">Text, der nicht passt, läuft langsam durch, statt mit Auslassungspunkten abgeschnitten zu werden.</string>
     <string name="viewfinder_scale">Sucher</string>
     <string name="viewfinder_scale_fit">Einpassen</string>
     <string name="viewfinder_scale_fill">Füllen</string>
@@ -364,6 +366,7 @@
     <string name="image_mode_video">EIS · elektronisch</string>
     <string name="image_mode_preview">EIS · wie Vorschau</string>
     <string name="image_stabilization_help">OIS und EIS werden getrennt gewählt; gleichzeitige Unterstützung wird nicht angenommen. EIS kann das Bild beschneiden oder das Sichtfeld ändern. Der tatsächliche Betrieb hängt von Auflösung, FPS und Ausgabeflächen ab; prüfe die gemeldeten Ergebnisse, nicht nur die beworbenen Modi.</string>
+    <string name="scroll_long_text_help">Einzeiliger Text, der nicht in seinen Platz passt, etwa die Statuszeile der Aufnahme, läuft langsam durch, damit du ihn ganz lesen kannst, wie bei professionellen Kameras. Nur Text, der nicht passt, bewegt sich; passender Text bleibt stehen. Vor dem Durchlauf und zwischen den Durchläufen wartet er etwa 1,5 Sekunden. Bei ausgeschalteten Systemanimationen bewegt er sich nie. Schalte die Option aus, um langen Text stattdessen mit Auslassungspunkten (…) abzuschneiden.</string>
     <string name="image_noise">Bildrauschunterdrückung</string>
     <string name="image_edge">Bildkantenverstärkung</string>
     <string name="image_mode_fast">Schnell</string>
@@ -424,7 +427,7 @@
     <string name="presets_rename">Umbenennen</string>
     <string name="presets_rename_help">Nur der Name ändert sich; die gespeicherten Einstellungen bleiben unverändert.</string>
     <string name="operator_title">Operator-Steuerung</string>
-    <string name="operator_help">Drei Tasten teilen sich die Einstellungen. Lautstärketasten wirken einmal pro Druck, nur im fokussierten Aufnahmebildschirm; Dialoge und Einstellungen behalten die Systemlautstärke. Preset-Aktionen öffnen immer eine Prüfung.</string>
+    <string name="operator_help">Drei Tasten teilen sich die Einstellungen. Lautstärketasten wirken nur im fokussierten Aufnahmebildschirm; Dialoge und Einstellungen behalten die Systemlautstärke. Preset-Aktionen öffnen immer eine Prüfung.</string>
     <string name="operator_button">Taste %1$d</string>
     <string name="operator_volume_up">Lauter</string>
     <string name="operator_volume_down">Leiser</string>
@@ -961,6 +964,7 @@
     <string name="caps_profile_quirk_off">%1$s (ausgeschaltet)</string>
     <string name="caps_quirk_high_speed_physical">Highspeed-Aufnahme öffnet die physische Kamera, die den Modus besitzt</string>
     <string name="caps_quirk_moto_keys">Motorola-Zeitlupenschlüssel bei Highspeed-Anfragen</string>
+    <string name="caps_quirk_qti_raw_fps">RAW über der angegebenen Bildratengrenze (Qualcomm)</string>
     <string name="caps_section_main10">Letzte Main10-Dateiprüfung</string>
     <string name="caps_main10_none">Noch keine HLG- oder LOG-Aufnahme geprüft.</string>
     <string name="caps_main10_summary">%1$s-Aufnahme, geprüft %2$s</string>

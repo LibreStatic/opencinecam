@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volume-key gestures and pairs in Settings › Controls › Operator controls. -->
+    <string name="operator_volume_keys">Teclas de volumen</string>
+    <string name="operator_volume_pair_none">Acciones separadas</string>
+    <string name="operator_volume_pair_zoom">Zoom</string>
+    <string name="operator_volume_pair_ev">EV</string>
+    <string name="operator_volume_pair_iso">ISO</string>
+    <string name="operator_volume_pair_shutter">Obturador</string>
+    <string name="operator_volume_pair_focus">Foco</string>
+    <string name="operator_volume_pair_none_summary">Cada tecla hace sus propias acciones</string>
+    <string name="operator_volume_pair_summary">Pulsa para un paso, mantén para seguir cambiando</string>
+    <string name="operator_volume_pair_invert">Invertir dirección</string>
+    <string name="operator_volume_up_long">Subir volumen: mantener</string>
+    <string name="operator_volume_up_double">Subir volumen: doble pulsación</string>
+    <string name="operator_volume_down_long">Bajar volumen: mantener</string>
+    <string name="operator_volume_down_double">Bajar volumen: doble pulsación</string>
+    <string name="operator_volume_both">Ambas teclas</string>
+    <string name="operator_volume_gestures_help">Si una tecla tiene acción al mantener o con doble pulsación, o si Ambas teclas tiene una acción, su pulsación simple actúa al soltarla o cuando pasa la ventana de doble pulsación. Sin ellas actúa al instante, lo que conviene al obturador. Como par, cada pulsación da un paso y mantener la tecla sigue cambiando el valor: subir acerca el zoom, aumenta EV e ISO, alarga el obturador y enfoca más lejos. Invertir dirección intercambia las teclas.</string>
+</resources>

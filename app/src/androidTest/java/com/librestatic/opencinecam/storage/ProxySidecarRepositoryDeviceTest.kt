@@ -153,7 +153,7 @@ class ProxySidecarRepositoryDeviceTest {
             val entry = repository.catalog().single { it.takeId == take.id }
             assertEquals(proxy, entry.result)
             val after = probeProxyMedia(context, proxy.proxyUri.toUri())
-            verifyProxyVideoCorrespondence(original, after, VideoDisplayGeometry(96, 64))
+            verifyProxyVideoCorrespondence(original, after, VideoDisplayGeometry(192, 128))
             assertEquals("audio/mp4a-latm", after.audio!!.mime)
             val json = resolver.openInputStream(proxy.metadataUri.toUri())!!.use { Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject }
             assertEquals("sidecar-pcm-normalized-calibrated-aac", json.getValue("audioPolicy").jsonPrimitive.content)

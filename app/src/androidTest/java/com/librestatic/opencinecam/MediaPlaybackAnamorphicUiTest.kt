@@ -22,7 +22,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
-/** Cropped96x62 AVC/SAR2:1 must display192:62 (or62:192 after90deg), in CPU stills,
+/** Cropped192x124 AVC/SAR2:1 must display384:124 = 192:62 (or62:192 after90deg), in CPU stills,
  * native exact stills and continuous video. Composited SDR screenshots do not prove HDR. */
 class MediaPlaybackAnamorphicUiTest {
     @get:Rule val compose = createComposeRule()
@@ -118,7 +118,7 @@ class MediaPlaybackAnamorphicUiTest {
             node("dialog").assertDoesNotExist()
             awaitReaderRetirement(existingReaders)
             assertEquals(originalHash, digest(file.readBytes()))
-            Log.i("E16AnamorphicProbe", "rotation=$rotation native=$native visibleRaster=96x62 codedRaster=96x64 sar=2:1 exactPtsUs=$pts composedCorrespondingColors=true floor850000Us=400000 continuousDarPreserved=true returnedToCpu=true originalUnchanged=true settingsUnchanged=true readersRetired=true")
+            Log.i("E16AnamorphicProbe", "rotation=$rotation native=$native visibleRaster=192x124 codedRaster=192x128 sar=2:1 exactPtsUs=$pts composedCorrespondingColors=true floor850000Us=400000 continuousDarPreserved=true returnedToCpu=true originalUnchanged=true settingsUnchanged=true readersRetired=true")
         } finally {
             compose.runOnIdle { visible.value = false }
             awaitReaderRetirement(existingReaders)
@@ -171,12 +171,12 @@ class MediaPlaybackAnamorphicUiTest {
                 try {
                     assertEquals(pts[index], frame.presentationTimeUs)
                     assertEquals(index, frame.index)
-                    assertEquals(if (rotation == 0) 96 else 62, frame.bitmap.width)
-                    assertEquals(if (rotation == 0) 62 else 96, frame.bitmap.height)
-                    assertEquals(if (rotation == 0) 192 else 62, frame.displayWidth)
-                    assertEquals(if (rotation == 0) 62 else 192, frame.displayHeight)
-                    val color = if (rotation == 0) frame.bitmap.getPixel(24, 31) else frame.bitmap.getPixel(31, 24)
-                    val white = if (rotation == 0) frame.bitmap.getPixel(72, 31) else frame.bitmap.getPixel(31, 72)
+                    assertEquals(if (rotation == 0) 192 else 124, frame.bitmap.width)
+                    assertEquals(if (rotation == 0) 124 else 192, frame.bitmap.height)
+                    assertEquals(if (rotation == 0) 384 else 124, frame.displayWidth)
+                    assertEquals(if (rotation == 0) 124 else 384, frame.displayHeight)
+                    val color = if (rotation == 0) frame.bitmap.getPixel(48, 62) else frame.bitmap.getPixel(62, 48)
+                    val white = if (rotation == 0) frame.bitmap.getPixel(144, 62) else frame.bitmap.getPixel(62, 144)
                     assertTrue("CPU crop retained corresponding frame color", matches(colors[index], color))
                     assertTrue("CPU crop retained white reference", matches(Color.WHITE, white))
                 } finally { frame.bitmap.recycle() }

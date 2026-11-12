@@ -23,7 +23,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -53,7 +52,7 @@ internal fun SettingsTopBar(
         Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
             Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.semantics { heading() })
-            subtitle?.let { Text(it, color = SettingsMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            subtitle?.let { FitText(it, color = SettingsMuted, fontSize = 12.sp, maxLines = 1) }
         }
         action?.invoke()
     }

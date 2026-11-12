@@ -38,12 +38,19 @@ internal sealed interface ReadbackDifference {
 
 /** Sensors round exposure to whole lines, so a report this close to the request is the same shutter. */
 private const val TIME_TOLERANCE = 0.01
+/** Some HALs quantise sensitivity to their gain steps (Samsung reports 398 for 400); this close (relative, at least [ISO_TOLERANCE_MIN]) it is the requested ISO. */
+private const val ISO_TOLERANCE = 0.01
+private const val ISO_TOLERANCE_MIN = 2
 /** The reported colour temperature is an estimate; this close it matches the request. */
 private const val TEMPERATURE_TOLERANCE_K = 100
 /** The lens settles on a manual focus distance over several frames; this close (in diopters) it is the requested focus. */
 private const val FOCUS_TOLERANCE_DIOPTERS = 0.3f
 /** The measured frame rate is a smoothed estimate from sensor timestamps; this close (relative) it is the requested rate. */
 private const val FPS_TOLERANCE = 0.05
+
+/** Whether a reported ISO is the requested one, within [ISO_TOLERANCE] or [ISO_TOLERANCE_MIN], whichever is wider. */
+internal fun isoWithinTolerance(requested: Int, reported: Int): Boolean =
+    abs(reported - requested) <= maxOf(ISO_TOLERANCE_MIN.toDouble(), requested * ISO_TOLERANCE)
 
 internal fun antibandingOf(code: Int?): Antibanding? = when (code) {
     CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO -> Antibanding.AUTO
@@ -67,7 +74,7 @@ internal fun exposureReadbackDifferences(
 ): List<ReadbackDifference> = buildList {
     if (reportedMode != null && reportedMode != requested.mode) add(ReadbackDifference.Mode(reportedMode))
     val iso = requested.iso
-    if (iso != null && reportedIso != null && reportedIso != iso) add(ReadbackDifference.Iso(reportedIso))
+    if (iso != null && reportedIso != null && !isoWithinTolerance(iso, reportedIso)) add(ReadbackDifference.Iso(reportedIso))
     val time = requested.timeNs
     if (time != null && reportedTimeNs != null && abs(reportedTimeNs - time) > time * TIME_TOLERANCE) {
         add(ReadbackDifference.ExposureTime(reportedTimeNs))
@@ -110,8 +117,8 @@ internal fun pictureControlReadbackDifferences(readback: PictureControlReadback?
 }
 
 /**
- * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO and time
- * (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
+ * The pairs the HUD judges, one per control the user actually requested: exposure mode, ISO (within
+ * [ISO_TOLERANCE], at least [ISO_TOLERANCE_MIN]) and time (the time within [TIME_TOLERANCE]), antibanding, metering, a fixed colour temperature (within
  * [TEMPERATURE_TOLERANCE_K]), the AF mode and, under manual focus, the focus distance (within
  * [FOCUS_TOLERANCE_DIOPTERS]), the frame rate (within [FPS_TOLERANCE]), the processing modes actually submitted, and the vendor picture
  * controls. Automatic values, unknown reports and cleared requests produce no pair.
@@ -121,7 +128,9 @@ internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = build
         if (requested != null && reported != null) add(ReadbackSample(key, requested.toString(), reported.toString(), within))
     }
     state.reportedExposureMode?.let { add("android.control.aeMode", state.requestedExposureMode.name, it.name, it == state.requestedExposureMode) }
-    add("android.sensor.sensitivity", state.requestedIso, state.sensitivityIso, state.requestedIso == state.sensitivityIso)
+    val iso = state.requestedIso
+    val reportedIso = state.sensitivityIso
+    if (iso != null && reportedIso != null) add("android.sensor.sensitivity", iso, reportedIso, isoWithinTolerance(iso, reportedIso))
     val time = state.requestedExposureTimeNs
     val reportedTime = state.exposureTimeNs
     if (time != null && reportedTime != null) add("android.sensor.exposureTime", "$time ns", "$reportedTime ns", abs(reportedTime - time) <= time * TIME_TOLERANCE)
@@ -154,11 +163,14 @@ internal fun readbackSamples(state: CameraUiState): List<ReadbackSample> = build
     }
 }
 
-private val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
-private val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
-private val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
-private val TONEMAP_MODES = mapOf(0 to "CONTRAST_CURVE", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "GAMMA_VALUE", 4 to "PRESET_CURVE")
-private val AWB_MODES = mapOf(1 to "AUTO", 2 to "INCANDESCENT", 3 to "FLUORESCENT", 4 to "WARM_FLUORESCENT", 5 to "DAYLIGHT",
+// Camera2 mode names by value; the clip sidecar's camera block ([com.librestatic.opencinecam.service.ClipCameraTracker]) shares them.
+internal val OPTICAL_MODES = mapOf(0 to "OFF", 1 to "ON")
+internal val VIDEO_MODES = mapOf(0 to "OFF", 1 to "ON", 2 to "PREVIEW_STABILIZATION")
+internal val PROCESSING_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "MINIMAL", 4 to "ZERO_SHUTTER_LAG")
+internal val EDGE_MODES = mapOf(0 to "OFF", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "ZERO_SHUTTER_LAG")
+internal val TONEMAP_MODES = mapOf(0 to "CONTRAST_CURVE", 1 to "FAST", 2 to "HIGH_QUALITY", 3 to "GAMMA_VALUE", 4 to "PRESET_CURVE")
+internal val AF_MODES = mapOf(0 to "OFF", 1 to "AUTO", 2 to "MACRO", 3 to "CONTINUOUS_VIDEO", 4 to "CONTINUOUS_PICTURE", 5 to "EDOF")
+internal val AWB_MODES = mapOf(1 to "AUTO", 2 to "INCANDESCENT", 3 to "FLUORESCENT", 4 to "WARM_FLUORESCENT", 5 to "DAYLIGHT",
     6 to "CLOUDY_DAYLIGHT", 7 to "TWILIGHT", 8 to "SHADE")
 
 /**
@@ -212,9 +224,13 @@ internal fun requestedReportedLines(state: CameraUiState): List<Pair<String, Str
 internal fun routeLine(hud: HardwareTruthHudState): String =
     "${readback(hud.requested[ROUTE_KEY] ?: "logical", hud.reported[ROUTE_KEY])} · ${hud.routeTruth.name}"
 
-/** One line per recorded requested/reported mismatch, oldest first. */
-internal fun discrepancyLines(hud: HardwareTruthHudState): List<Pair<String, String>> =
-    hud.discrepancyHistory.map { it.key to "${readback(it.requested, it.reported)} · ${it.explanation}" }
+/**
+ * One line per recorded requested/reported mismatch, oldest first. The card's heading already says
+ * the values differ, so only the still route, whose mismatch means something else, adds [routeNote]
+ * (localized by the caller; the English explanation stays in the take sidecar).
+ */
+internal fun discrepancyLines(hud: HardwareTruthHudState, routeNote: String? = null): List<Pair<String, String>> =
+    hud.discrepancyHistory.map { it.key to readback(it.requested, it.reported) + if (it.key == ROUTE_KEY && routeNote != null) " · $routeNote" else "" }
 
 private fun readback(requested: String?, reported: String?): String = "${requested ?: "—"} → ${reported ?: "—"}"
 

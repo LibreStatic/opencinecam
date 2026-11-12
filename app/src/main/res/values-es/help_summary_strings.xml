@@ -6,7 +6,7 @@
     <string name="proxy_policy_help_summary">Los cambios rigen desde el próximo intento</string>
     <string name="subject_out_of_frame_unavailable_summary">Requiere detección de rostros, no disponible aquí</string>
     <string name="subject_slate_sync_scope_summary">Se dispara una vez por toma, al grabar</string>
-    <string name="subject_review_help_summary">Mostrá tomas en la pantalla externa desde la galería</string>
+    <string name="subject_review_help_summary">Muestra tomas en la pantalla externa desde la galería</string>
     <string name="media_share_lut_help_summary">Un LUT faltante frena el envío si no se excluye</string>
     <string name="playback_settings_help_summary">Solo afecta al visor de la galería</string>
     <string name="playback_settings_direct_output_help_summary">Pausa más rápida; el color lo maneja el sistema</string>
@@ -15,9 +15,13 @@
     <string name="pro_metering_help_summary">Qué parte del encuadre define la exposición</string>
     <string name="pro_wb_record_help_summary">Si el balance de blancos puede cambiar en la toma</string>
     <string name="photo_quality_help_summary">Solo compresión JPEG/HEIC, no DNG</string>
-    <string name="image_stabilization_help_summary">EIS puede recortar; revisá el resultado</string>
+    <string name="image_stabilization_help_summary">EIS puede recortar; revisa el resultado</string>
     <string name="image_picture_profile_help_summary">Curva de tonos de la cámara: Estándar, Plano o Cine</string>
     <string name="picture_help_summary">Controles propios de esta cámara</string>
     <string name="picture_blocked_neutral_summary">Sin efecto en LOG, HLG, RAW y alta velocidad</string>
     <string name="picture_blocked_edge_off_summary">Requiere Nitidez de imagen activada</string>
+    <string name="raw_video_config_help_summary">Solo se ofrecen configuraciones calificadas</string>
+    <string name="scroll_long_text_help_summary">El texto largo se desplaza, no se corta</string>
+    <string name="raw_compression_help_summary">Casi sin pérdida ahorra más espacio, dentro del ruido</string>
+    <string name="operator_volume_gestures_help_summary">Mantener y doble pulsación demoran la pulsación simple</string>
 </resources>

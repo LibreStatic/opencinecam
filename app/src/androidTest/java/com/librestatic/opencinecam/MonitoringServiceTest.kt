@@ -277,7 +277,9 @@ class MonitoringServiceTest {
         }
         val snapshot = requireNotNull(accepted)
         val scopes = requireNotNull(snapshot.monitoringScopes)
-        assertEquals(MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR, scopes.domain)
+        // VIDEO always runs the GPU viewfinder, whose analysis reads the BT.709 codes it
+        // renders; only the plain ISP YUV reader estimates SDR from the sensor output.
+        assertEquals(if (snapshot.gpuViewfinder) MonitoringSignalDomain.SDR_BT709_CODE else MonitoringSignalDomain.ISP_YUV_ESTIMATED_SDR, scopes.domain)
         assertTrue(scopes.sampleCount in 1..MonitoringScopeFrame.MAX_PIXELS)
         assertEquals(scopes.sampleCount.toLong(), scopes.sampledWidth.toLong() * scopes.sampledHeight)
         for ((active, grid) in listOf(options.waveformEnabled to scopes.waveformDensity,

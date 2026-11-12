@@ -20,4 +20,8 @@
     <string name="picture_help_summary">Controles próprios desta câmera</string>
     <string name="picture_blocked_neutral_summary">Sem efeito em LOG, HLG, RAW e alta velocidade</string>
     <string name="picture_blocked_edge_off_summary">A nitidez requer o realce de bordas ativo</string>
+    <string name="raw_video_config_help_summary">Só são oferecidas configurações qualificadas</string>
+    <string name="scroll_long_text_help_summary">Texto longo rola em vez de ser cortado</string>
+    <string name="raw_compression_help_summary">Quase sem perda poupa espaço, dentro do ruído</string>
+    <string name="operator_volume_gestures_help_summary">Segurar e toque duplo atrasam o toque simples</string>
 </resources>

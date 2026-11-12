@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071: the RAW video qualification prompt, step and onboarding question. -->
+    <string name="raw_qualification_prompt_title">Qualificar o vídeo RAW?</string>
+    <string name="raw_qualification_prompt_body">Mede o armazenamento e a câmera em cada configuração RAW, para que o vídeo RAW ofereça só o que este dispositivo aguenta sem perder quadros.</string>
+    <string name="raw_qualification_duration">Leva cerca de %1$d min.</string>
+    <string name="raw_qualification_temp_files">Grava arquivos temporários e depois os apaga. O telefone pode esquentar.</string>
+    <string name="raw_qualification_camera_busy">A câmera fica indisponível enquanto isso.</string>
+    <string name="raw_qualification_space_partial">As configurações mais rápidas serão puladas por falta de espaço: %1$s livres.</string>
+    <string name="raw_qualification_no_space">Espaço livre insuficiente: precisa de %1$s e há %2$s livres.</string>
+    <string name="raw_qualification_previous_failure">A última qualificação não encontrou nenhuma configuração que este dispositivo aguente.</string>
+    <string name="raw_qualification_prompt_start">Qualificar agora</string>
+    <string name="raw_qualification_prompt_later">Agora não</string>
+    <string name="raw_qualification_prompt_dismiss">OK</string>
+
+    <string name="onb_raw_label">Vídeo RAW</string>
+    <string name="onb_raw_question_title">Qualificar o vídeo RAW agora?</string>
+    <string name="onb_raw_question_body">Esta câmera pode gravar vídeo RAW depois de qualificada neste dispositivo. Você também pode fazer isso mais tarde escolhendo Vídeo RAW no seletor de modos.</string>
+    <string name="onb_raw_now">Qualificar agora</string>
+    <string name="onb_raw_later">Mais tarde</string>
+
+    <string name="raw_qualification_title">Qualificar vídeo RAW</string>
+    <string name="raw_qualification_check_battery">Bateria em %1$d%% ou mais</string>
+    <string name="raw_qualification_check_battery_fix">Carregue primeiro até pelo menos %1$d%% (agora %2$d%%).</string>
+    <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_warn">%1$d%%. A qualificação pode esgotá-la: conecte o carregador se puder.</string>
+    <string name="raw_qualification_check_cool">Temperatura normal</string>
+    <string name="raw_qualification_check_cool_fix">Deixe o telefone esfriar primeiro.</string>
+    <string name="raw_qualification_blocked">A qualificação não pode ser feita agora. Você pode fazê-la mais tarde escolhendo Vídeo RAW no seletor de modos.</string>
+    <string name="raw_qualification_start">Iniciar</string>
+    <string name="raw_qualification_later">Mais tarde</string>
+    <string name="raw_qualification_cancelled_note">Qualificação cancelada. Nada foi salvo.</string>
+
+    <string name="raw_qualification_running_title">Qualificando o vídeo RAW</string>
+    <string name="raw_qualification_step_preparing">Preparando</string>
+    <string name="raw_qualification_step_storage">Teste de armazenamento</string>
+    <string name="raw_qualification_step_resting">Pausa antes do teste de armazenamento</string>
+    <string name="raw_qualification_step_camera">Verificação da câmera</string>
+    <string name="raw_qualification_step_compression">Medindo a compressão</string>
+    <string name="raw_qualification_step_cooling">Resfriando</string>
+    <string name="raw_qualification_step_waiting">Esperando o telefone esfriar</string>
+    <string name="raw_qualification_step_saving">Salvando os resultados</string>
+    <string name="raw_qualification_remaining">Faltam cerca de %1$s</string>
+    <string name="raw_qualification_running_notice">Mantenha a bateria acima de %1$d%% e o app aberto.</string>
+    <string name="raw_qualification_cancel">Cancelar</string>
+
+    <plurals name="raw_qualification_done_passed">
+        <item quantity="one">%d configuração pronta</item>
+        <item quantity="many">%d configurações prontas</item>
+        <item quantity="other">%d configurações prontas</item>
+    </plurals>
+    <string name="raw_qualification_done_passed_body">Estas opções podem gravar sem perder quadros.</string>
+    <string name="raw_qualification_done_none">Nenhuma configuração qualificada</string>
+    <string name="raw_qualification_done_none_body">Este dispositivo não aguentou nenhuma configuração RAW sem perder quadros, então o vídeo RAW continua desativado.</string>
+    <string name="raw_qualification_done_failed">Não foi possível fazer a qualificação</string>
+    <string name="raw_qualification_done">Concluído</string>
+
+    <string name="raw_qualification_reason_battery">Parou porque a bateria ficou abaixo de %1$d%%.</string>
+    <string name="raw_qualification_reason_app_left">Parou porque o app foi para segundo plano.</string>
+    <string name="raw_qualification_reason_busy">A câmera estava ocupada com uma tomada.</string>
+    <string name="raw_qualification_reason_not_ready">A verificação de bateria ou temperatura não passou.</string>
+    <string name="raw_qualification_reason_unsupported">Esta câmera não pode gravar vídeo RAW.</string>
+    <string name="raw_qualification_reason_error">Um erro a interrompeu antes que pudesse medir algo.</string>
+
+    <plurals name="raw_qualification_message_ready">
+        <item quantity="one">Vídeo RAW pronto: %d configuração</item>
+        <item quantity="many">Vídeo RAW pronto: %d configurações</item>
+        <item quantity="other">Vídeo RAW pronto: %d configurações</item>
+    </plurals>
+    <string name="raw_qualification_message_none">Nenhuma configuração RAW qualificada; continua em %1$s</string>
+    <string name="raw_video_qualify_hint">Escolha o modo Vídeo RAW para qualificar este dispositivo.</string>
+
+    <!-- The restyled step: chips, the space section, per-configuration statuses. -->
+    <string name="raw_qualification_intro">Mede o armazenamento e a câmera para oferecer só o que seu telefone consegue gravar sem perder quadros.</string>
+    <string name="raw_qualification_chip_duration">≈ %1$d min</string>
+    <string name="raw_qualification_chip_camera">Sem câmera</string>
+    <string name="raw_qualification_chip_warm">Esquenta</string>
+    <string name="raw_qualification_space_title">Não dá para qualificar tudo com o espaço disponível</string>
+    <string name="raw_qualification_space_body">Serão testadas as configurações que cabem no armazenamento livre do seu telefone.</string>
+    <string name="raw_qualification_space_free">%1$s livres</string>
+    <string name="raw_qualification_space_tested">Serão testadas</string>
+    <string name="raw_qualification_space_skipped">Puladas por falta de espaço</string>
+    <string name="raw_qualification_needs">precisa de %1$s</string>
+    <string name="raw_qualification_space_footer">Libere espaço para testá-las depois.</string>
+    <string name="raw_qualification_status_ready">Pronta</string>
+    <string name="raw_qualification_status_testing">Testando</string>
+    <string name="raw_qualification_status_pending">Pendente</string>
+    <string name="raw_qualification_status_measured">Medida</string>
+    <string name="raw_qualification_status_skipped">Sem espaço</string>
+    <string name="raw_qualification_status_failed">Falhou</string>
+    <string name="raw_qualification_status_not_qualified">Não qualificada</string>
+    <string name="raw_qualification_item_skipped">pulada por espaço · precisa de %1$s</string>
+    <string name="raw_qualification_item_not_qualified">não qualificada</string>
+    <string name="raw_qualification_retry_hint">Se você liberar espaço, poderá qualificar de novo em Configurações › Vídeo RAW.</string>
+    <string name="raw_qualification_status_too_hot">Muito quente</string>
+    <string name="raw_qualification_item_too_hot">pulada: o telefone estava muito quente</string>
+    <string name="raw_qualification_status_camera_limit">Limite da câmera</string>
+    <string name="raw_qualification_item_camera_limit">esta câmera não entrega RAW a %1$d\u00A0fps</string>
+    <string name="raw_qualification_heat_hint">Deixe o telefone esfriar e qualifique de novo em Configurações › Vídeo RAW.</string>
+    <string name="raw_qualification_overall">Progresso total</string>
+    <string name="raw_qualification_status_risky">Taxa arriscada</string>
+    <string name="raw_qualification_item_risky">armazenamento lento demais para esta taxa</string>
+    <!-- The rate the camera achieved beside a qualified or risky configuration (PLAN-071); the second form below its target. -->
+    <string name="raw_qualification_item_fps">%1$.1f fps</string>
+    <string name="raw_qualification_item_reaches">Atinge %1$.1f fps</string>
+    <string name="raw_qualification_item_live_fps">%1$.1f / %2$d fps</string>
+    <string name="raw_qualification_risky_body">Você pode escolhê-las, mas o armazenamento é lento demais para a taxa delas: uma tomada pode ter microtravamentos, atraso ou ficar corrompida.</string>
+    <string name="raw_qualification_done_risky_only">Só taxas arriscadas</string>
+    <string name="raw_qualification_done_risky_only_body">Nenhuma configuração foi qualificada com segurança. Você ainda pode escolher uma taxa arriscada no vídeo RAW, por sua conta e risco.</string>
+    <string name="raw_qualification_item_risky_burst">armazenamento lento demais para esta taxa; pode perder quadros após cerca de %1$s (com o telefone em repouso)</string>
+    <string name="raw_qualification_rest_title">O armazenamento precisa descansar</string>
+    <string name="raw_qualification_rest_body">O armazenamento do telefone ainda está gravando dados das últimas gravações, então a velocidade dele não pode ser medida de forma justa.</string>
+    <string name="raw_qualification_rest_hint">Deixe o telefone parado por cerca de uma hora, sem gravar, e depois qualifique de novo.</string>
+    <string name="raw_qualification_rest_kept">Sua qualificação anterior continua valendo.</string>
+</resources>

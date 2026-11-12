@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="raw_playback_setting">RAW-Wiedergabe</string>
+    <string name="raw_playback_automatic">Automatisch</string>
+    <string name="raw_playback_frame_viewer">Einzelbildansicht</string>
+    <string name="raw_playback_realtime">Echtzeit</string>
+    <string name="raw_playback_help_summary">Echtzeit oder ein Bild nach dem anderen in voller Auflösung</string>
+    <string name="raw_playback_help">Automatisch spielt RAW-Aufnahmen in Echtzeit mit halber Auflösung ab und lässt Bilder aus, um im Takt zu bleiben. Kommt dieses Gerät nicht mit, wechselt der Viewer von selbst zur Einzelbildansicht. Die Einzelbildansicht überspringt die Echtzeit und zeigt jeweils ein Bild in voller Auflösung, durch das du schrittweise blättern oder scrubben kannst. Gilt nur für dieses Gerät.</string>
+    <string name="raw_playback_fallback_notice">Einzelbildansicht: Dieses Gerät kann diese RAW-Aufnahme nicht in Echtzeit abspielen</string>
+    <string name="raw_playback_try_realtime">Echtzeit versuchen</string>
+    <string name="raw_playback_dropped">%1$d ausgelassen</string>
+    <string name="raw_playback_missing_corrupt">Beschädigtes Bild</string>
+    <string name="raw_playback_missing_unreadable">Unlesbares Bild</string>
+    <string name="raw_playback_missing_unsupported">Bildkodierung nicht unterstützt</string>
+    <string name="raw_playback_missing_codec">RAW-Codec auf diesem Gerät nicht verfügbar</string>
+    <string name="raw_playback_missing_decode">Bild konnte nicht dekodiert werden</string>
+    <plurals name="raw_playback_frames">
+        <item quantity="one">%1$d Bild</item>
+        <item quantity="other">%1$d Bilder</item>
+    </plurals>
+</resources>

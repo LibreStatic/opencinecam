@@ -68,12 +68,13 @@ class BundledDeviceQuirksTest {
     }
 
     @Test
-    fun theRazrRearCameraGetsBothHighSpeedQuirks() {
+    fun theRazrRearCameraGetsBothHighSpeedQuirksAndTheRawFrameRateOverride() {
         val resolution = razr().resolve("0")
         assertEquals(ProfileStatus.ACTIVE, resolution.status)
         assertEquals(ProfileBuildCheck.VERIFIED, resolution.buildCheck)
         assertTrue(resolution.applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA))
         assertTrue(resolution.applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS))
+        assertTrue(resolution.applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE))
         assertEquals(emptyList<String>(), resolution.warnings)
     }
 
@@ -93,6 +94,7 @@ class BundledDeviceQuirksTest {
             assertEquals(ProfileStatus.UNKNOWN, resolution.status)
             assertFalse(resolution.applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA))
             assertFalse(resolution.applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS))
+            assertFalse(resolution.applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE))
         }
     }
 

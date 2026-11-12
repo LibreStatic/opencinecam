@@ -6,7 +6,56 @@
     "policy": "Strict"
   },
   "resolvedGraph": {
-    "video": "AVC/SDR8"
+    "video": "AVC/SDR8",
+    "camera": {
+      "knowledge": "known",
+      "value": {
+        "cameraId": "0",
+        "focalLengthMm": 6.3,
+        "focalLength35mm": 24.1,
+        "aperture": 1.7,
+        "exposureMode": {
+          "requested": "AUTO",
+          "reported": "AUTO"
+        },
+        "iso": {
+          "start": 400,
+          "end": 800,
+          "min": 320,
+          "max": 1250
+        },
+        "exposureTimeNs": {
+          "start": 20833333,
+          "end": 20833333,
+          "min": 10000000,
+          "max": 33333333
+        },
+        "whiteBalance": {
+          "mode": "KELVIN",
+          "kelvin": 5600,
+          "reportedCctStart": 5400,
+          "reportedCctEnd": 5450,
+          "tint": 0
+        },
+        "focus": {
+          "afMode": "CONTINUOUS_VIDEO",
+          "distanceDiopters": 0.5
+        },
+        "zoom": {
+          "start": 1.0,
+          "end": 2.0
+        },
+        "stabilization": {
+          "ois": "ON",
+          "eis": "OFF"
+        },
+        "processing": {
+          "noiseReduction": "FAST",
+          "edge": "FAST",
+          "toneMap": "FAST"
+        }
+      }
+    }
   },
   "events": [],
   "validation": []

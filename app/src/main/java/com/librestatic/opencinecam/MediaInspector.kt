@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.share.copyToClipboard
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaRelationStatus
@@ -59,7 +62,8 @@ internal fun integrityExplanation(status: LocalMediaRelationStatus): Int = when 
 @Composable
 internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, source: MediaCatalogSource,
     thumbnails: GalleryThumbnailCache, facts: GalleryFacts?, badges: TakeBadges, actions: GalleryTakeActions,
-    onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    onOpen: (LocalMediaArtifact) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier,
+    progress: (@Composable () -> Unit)? = null, technical: TakeDetailsLoad? = null) {
     val context = LocalContext.current
     val window = LocalAdaptiveWindow.current
     Column(modifier.fillMaxWidth().testTag("gallery-details-${take.id}"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -72,7 +76,11 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(12.dp))) {
             val poster = rememberGalleryThumbnail(take.primary, source, settings.autoThumbnails, thumbnails)
             GalleryThumbnailTile(take, poster, settings.autoThumbnails, facts, Modifier.matchParentSize(), tag = "gallery-poster")
-            if (take.kind != LocalMediaKind.PHOTO && (poster.bitmap != null || settings.autoThumbnails)) {
+            val playAction = actions.play
+            // A RAW take's placeholder glyph sits where the overlay would, so it gets the overlay only over its picture;
+            // without one it plays from the Play action below.
+            if (playAction != null && take.kind != LocalMediaKind.PHOTO &&
+                (poster.bitmap != null || settings.autoThumbnails && !take.kind.thumbnailFailureShowsPlaceholder())) {
                 val play = stringResource(R.string.media_action_play)
                 Box(
                     Modifier
@@ -80,7 +88,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                         .size(56.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.82f))
-                        .clickable(onClickLabel = play, role = Role.Button, onClick = actions.play)
+                        .clickable(onClickLabel = play, role = Role.Button, onClick = playAction)
                         .semantics { contentDescription = play }
                         .testTag("gallery-inspector-poster-play"),
                     contentAlignment = Alignment.Center,
@@ -88,19 +96,18 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("gallery-title-${take.id}"),
-                color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2,
-                overflow = TextOverflow.Ellipsis)
+            FitText(takeTitleText(context, take), Modifier.fillMaxWidth().testTag("gallery-title-${take.id}"),
+                color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 2)
             // Without a slate the title already is the capture time.
             if (takeTitle(take.slate) != TakeTitle.CaptureTime) {
                 Text(remember(take.primary.modifiedSeconds) { takeTimeText(context, take.primary.modifiedSeconds) },
                     Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
-            Text(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-file-name-${take.id}"), color = SettingsMuted,
-                fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            FitText(take.primary.name, Modifier.fillMaxWidth().testTag("gallery-file-name-${take.id}"), color = SettingsMuted,
+                fontSize = 11.sp, maxLines = 2)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            DetailChip(stringResource(galleryKindLabel(take.kind.galleryKind())))
+            DetailChip(stringResource(take.kind.kindLabel()))
             formatTakeDuration(facts?.durationMs)?.let { DetailChip(it) }
             resolutionBadge(facts?.width, facts?.height)?.let { DetailChip(it) }
             badges.codec?.let { DetailChip(codecBadgeText(it), tag = "gallery-details-codec-${take.id}") }
@@ -111,13 +118,15 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             badges.proxy.label()?.let { DetailChip(stringResource(it), color = badges.proxy.tint, tag = "gallery-details-proxy-${take.id}") }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, actions.play)
+            actions.play?.let { InspectorAction("gallery-inspector-play", take.kind.primaryActionGlyph(), take.kind.primaryActionLabel(), SettingsAccent, it) }
             actions.share?.let { InspectorAction("gallery-inspector-share", CineIcon.SHARE, R.string.media_action_share, action = it) }
+            actions.export?.let { InspectorAction("gallery-inspector-export", CineIcon.FILES, R.string.cinemadng_export_action, action = it) }
             actions.rename?.let { InspectorAction("gallery-inspector-rename", CineIcon.RENAME, R.string.media_action_rename, action = it) }
             actions.proxy?.let { InspectorAction("gallery-inspector-proxy", CineIcon.PROXY, R.string.media_action_proxy, action = it) }
             actions.delete?.let { InspectorAction("gallery-inspector-delete", CineIcon.DELETE, R.string.media_action_delete,
                 MaterialTheme.colorScheme.error, it) }
         }
+        progress?.invoke()
         DetailSection(R.string.media_section_integrity) {
             val attention = takeNeedsAttention(take.relationStatus)
             val tint = if (attention) GalleryWarning else LocalCineColors.current.ok
@@ -127,11 +136,13 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
                     color = tint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
             Text(
-                if (badges.incompleteReasons.isEmpty()) stringResource(integrityExplanation(take.relationStatus))
+                if (take.kind == LocalMediaKind.RAW_VIDEO) stringResource(R.string.media_integrity_raw)
+                else if (badges.incompleteReasons.isEmpty()) stringResource(integrityExplanation(take.relationStatus))
                 else stringResource(R.string.take_saved_incomplete, badges.incompleteReasons.joinToString(", ")),
                 Modifier.fillMaxWidth().testTag("gallery-integrity-${take.id}"), color = SettingsMuted,
                 fontSize = 12.sp, lineHeight = 16.sp)
         }
+        TechnicalSections(take, technical)
         if (settings.showSlate) DetailSection(R.string.media_section_slate) { GallerySlate(take) }
         if (settings.showTechnical) DetailSection(R.string.media_section_properties) { GalleryTechnical(take.primary, "primary-${take.id}") }
         GalleryFiles(take, settings.showTechnical, onOpen)
@@ -171,14 +182,57 @@ private fun InspectorAction(tag: String, icon: CineIcon, label: Int, tint: Color
 }
 
 @Composable
-private fun DetailSection(title: Int, content: @Composable ColumnScope.() -> Unit) {
+private fun DetailSection(title: Int, content: @Composable ColumnScope.() -> Unit) = DetailSection(stringResource(title), null, content)
+
+@Composable
+private fun DetailSection(title: String, tag: String?, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(SettingsSurfaceRaised).border(1.dp, SettingsBorder, shape).padding(12.dp),
+        Modifier.fillMaxWidth().clip(shape).background(SettingsSurfaceRaised).border(1.dp, SettingsBorder, shape).padding(12.dp)
+            .then(tag?.let { Modifier.testTag(it) } ?: Modifier),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(stringResource(title), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         content()
+    }
+}
+
+/** The grouped label and value details read from the take's files, shown whatever the technical setting says. */
+@Composable
+private fun TechnicalSections(take: LocalMediaTake, technical: TakeDetailsLoad?) {
+    when (technical) {
+        null -> Unit
+        TakeDetailsLoad.Loading -> Text(stringResource(R.string.media_detail_loading), Modifier.fillMaxWidth().testTag("gallery-detail-loading"),
+            color = SettingsMuted, fontSize = 12.sp)
+        is TakeDetailsLoad.Loaded -> technical.details?.let { details ->
+            DetailGroupKind.entries.forEach { kind ->
+                val group = details.group(kind)?.takeIf { it.rows.isNotEmpty() } ?: return@forEach
+                val name = kind.name.lowercase()
+                DetailSection(stringResource(kind.title(take.kind)), "gallery-detail-$name") {
+                    SelectionContainer { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { group.rows.forEach { TechnicalRow(it, name) } } }
+                }
+            }
+        }
+    }
+}
+
+/** One label and its value; the value wraps rather than truncates, and a copyable one gets a copy key. */
+@Composable
+private fun TechnicalRow(row: DetailRow, kind: String) {
+    val context = LocalContext.current
+    val label = stringResource(row.label)
+    Row(Modifier.fillMaxWidth().testTag("gallery-detail-$kind-${row.key}"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, Modifier.weight(0.42f), color = SettingsMuted, fontSize = 12.sp, lineHeight = 16.sp)
+        // The copy key sits inside the value column, so every row's values start at the same edge.
+        Row(Modifier.weight(0.58f), verticalAlignment = Alignment.CenterVertically) {
+            Text(row.value, Modifier.weight(1f).testTag("gallery-detail-$kind-${row.key}-value"), color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp, lineHeight = 16.sp)
+            if (row.copyable) DisableSelection {
+                CineIconButton("gallery-detail-${row.key}-copy", CineIcon.FILES, stringResource(R.string.media_detail_copy), tint = SettingsMuted) {
+                    copyToClipboard(context, label, row.value)
+                }
+            }
+        }
     }
 }
 
@@ -228,8 +282,8 @@ private fun GalleryFiles(take: LocalMediaTake, technical: Boolean, onOpen: (Loca
             val tint = if (expanded) SettingsAccent else MaterialTheme.colorScheme.onSurface
             CineGlyph(CineIcon.FILES, tint, Modifier.size(20.dp))
             Text(stringResource(R.string.media_section_files), color = tint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            Text(summary, Modifier.weight(1f).testTag("gallery-files-${take.id}-label"), color = SettingsMuted, fontSize = 12.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            FitText(summary, Modifier.weight(1f).testTag("gallery-files-${take.id}-label"), color = SettingsMuted, fontSize = 12.sp,
+                maxLines = 2)
             CineGlyph(if (expanded) CineIcon.COLLAPSE else CineIcon.EXPAND, tint, Modifier.size(16.dp))
         }
         if (expanded) {

@@ -41,18 +41,29 @@ import com.librestatic.opencinecam.ui.theme.SyncWindowBackground
 import com.librestatic.opencinecam.ui.theme.rememberAppTheme
 
 class MainActivity : ComponentActivity() {
-    private val operatorKeys = OperatorKeyLatch()
+    private val operatorKeyTimers = android.os.Handler(android.os.Looper.getMainLooper())
+    private val operatorKeys = VolumeKeyGestures(object : VolumeKeyScheduler {
+        override fun now() = SystemClock.uptimeMillis()
+        override fun schedule(delayMs: Long, task: () -> Unit): () -> Unit {
+            val runnable = Runnable(task); operatorKeyTimers.postDelayed(runnable, delayMs)
+            return { operatorKeyTimers.removeCallbacks(runnable) }
+        }
+    }, longPressMs = android.view.ViewConfiguration.getLongPressTimeout().toLong(), doubleTapMs = android.view.ViewConfiguration.getDoubleTapTimeout().toLong())
     private val shortcuts = ShortcutDispatcher()
     private val locationOwner = Any()
     private var operatorKeyOwner: Any? = null
-    private var operatorKeyMapping: ((Int) -> OperatorAction?)? = null
-    internal var operatorAction: ((OperatorAction) -> Unit)? = null
-    internal fun installOperatorKeys(owner: Any, mapping: (Int) -> OperatorAction?) {
-        operatorKeys.clear(); operatorKeyOwner = owner; operatorKeyMapping = mapping
+    private var operatorKeyPreferences: (() -> OperatorPreferences?)? = null
+    internal var operatorKeyHandler: VolumeKeyHandler? = null
+        private set
+    /** [preferences] answers null while the keys are not the capture screen's (a dialog, an editor). */
+    internal fun installOperatorKeys(owner: Any, preferences: () -> OperatorPreferences?, handler: VolumeKeyHandler) {
+        operatorKeys.clear(); operatorKeyOwner = owner; operatorKeyPreferences = preferences; operatorKeyHandler = handler
     }
+    /** The capture screen stopped taking operator input (a dialog, an editor): a held key acts no more. */
+    internal fun settleOperatorKeys() = operatorKeys.settle()
     internal fun removeOperatorKeys(owner: Any) {
         if (operatorKeyOwner !== owner) return
-        operatorKeys.clear(); operatorKeyOwner = null; operatorKeyMapping = null; operatorAction = null
+        operatorKeys.clear(); operatorKeyOwner = null; operatorKeyPreferences = null; operatorKeyHandler = null
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -69,11 +80,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handleOperatorKey(keyCode: Int, event: android.view.KeyEvent, down: Boolean): Boolean {
         if (keyCode != android.view.KeyEvent.KEYCODE_VOLUME_UP && keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false
-        val mapping = operatorKeyMapping?.invoke(keyCode)
+        val preferences = operatorKeyPreferences?.invoke()
         val imeVisible = androidx.core.view.ViewCompat.getRootWindowInsets(window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
-        val eligible = !imeVisible && hasWindowFocus() && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && mapping != null
-        return operatorKeys.dispatch(keyCode, down, event.repeatCount, event.isCanceled,
-            eligible, mapping ?: OperatorAction.SYSTEM_VOLUME) { operatorAction?.invoke(it) }
+        val eligible = !imeVisible && hasWindowFocus() && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) && preferences != null
+        return operatorKeys.dispatch(keyCode, down, event.repeatCount, event.isCanceled, preferences.takeIf { eligible }, operatorKeyHandler)
     }
     /** Keyboard shortcuts get only the presses the window's views did not use (a focused text field keeps its letters). */
     private fun handleShortcut(keyCode: Int, event: android.view.KeyEvent): Boolean {

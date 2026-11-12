@@ -279,13 +279,13 @@ class ProxyQueueProcessDeathTest {
         val result = requireNotNull(MediaProxyRepository(context).existing(fixture.take))
         assertEquals(id, result.proxyId); assertEquals(TOTAL_FRAMES, result.frames)
         assertEquals(settings.videoBitrateMbps * 1_000_000, result.requestedBitrate)
-        assertEquals(128, result.width); assertEquals(96, result.height)
+        assertEquals(192, result.width); assertEquals(144, result.height)
         val output = probeProxyMedia(context, result.proxyUri.toUri())
         assertEquals(fixture.probe.video.timestampsUs.sorted(), output.video.timestampsUs.sorted())
         assertEquals(fixture.probe.video.durationUs, output.video.durationUs)
         assertEquals(fixture.probe.video.durationUs, result.durationUs)
         assertNull(output.audio)
-        verifyProxyCorrespondence(fixture.probe, output, VideoDisplayGeometry(128, 96))
+        verifyProxyCorrespondence(fixture.probe, output, VideoDisplayGeometry(192, 144))
         assertEquals(fixture.hash, proxyHash(context, fixture.take.primary.uri.toUri()))
         assertFalse(candidate(id).exists())
         assertEquals(2, ownedRows(id).size)
@@ -298,7 +298,7 @@ class ProxyQueueProcessDeathTest {
         var original: Uri? = null
         try {
             val immutable = instrumentation.context.assets.open("e1-video.mp4").use { it.readBytes() }
-            assertEquals(5404, immutable.size)
+            assertEquals(2998, immutable.size)
             assertEquals(SEED_SHA, digest(immutable)); seed.writeBytes(immutable)
             val extractor = MediaExtractor()
             val packets = mutableListOf<Packet>()
@@ -307,7 +307,7 @@ class ProxyQueueProcessDeathTest {
                 extractor.setDataSource(seed.path); assertEquals(1, extractor.trackCount)
                 format = extractor.getTrackFormat(0)
                 assertEquals("video/avc", format.getString(MediaFormat.KEY_MIME))
-                assertEquals(128, format.getInteger(MediaFormat.KEY_WIDTH)); assertEquals(96, format.getInteger(MediaFormat.KEY_HEIGHT))
+                assertEquals(192, format.getInteger(MediaFormat.KEY_WIDTH)); assertEquals(144, format.getInteger(MediaFormat.KEY_HEIGHT))
                 extractor.selectTrack(0)
                 while (extractor.sampleTime >= 0) {
                     val bytes = ByteArray(extractor.sampleSize.toInt())
@@ -382,7 +382,7 @@ class ProxyQueueProcessDeathTest {
             }
             val probe = probeProxyMedia(context, uri)
             assertEquals(TOTAL_FRAMES, probe.video.timestampsUs.size)
-            assertNull(probe.audio); assertEquals(VideoDisplayGeometry(128, 96), probe.geometry)
+            assertNull(probe.audio); assertEquals(VideoDisplayGeometry(192, 144), probe.geometry)
             val hash = proxyHash(context, uri)
             assertEquals(digest(expanded.readBytes()), hash)
             Log.i(TAG, "FIXTURE uri=$uri bytes=${expanded.length()} sha256=$hash seed=$SEED_SHA repeatedPackets=$TOTAL_FRAMES cycleUs=$cycleUs durationUs=${probe.video.durationUs} ptsSha256=${timestampsHash(probe.video.timestampsUs)} csdAndEveryPacketExact=true")
@@ -434,7 +434,7 @@ class ProxyQueueProcessDeathTest {
 
     private companion object {
         const val TAG = "E17ProxyDeath"
-        const val SEED_SHA = "a32963539eefe4fc0d14e76770d51e49c25108a31b9eda9176a022a94a9a99b6"
+        const val SEED_SHA = "ef61686b95a888116d97336057cedbb87463e16a7a4946f2d2331a1387b669dc"
         const val REPEATS = 1000
         const val TOTAL_FRAMES = 12 * REPEATS
         val ACTIVE = setOf(ProxyJobStatus.QUEUED, ProxyJobStatus.RUNNING, ProxyJobStatus.CANCELLING)

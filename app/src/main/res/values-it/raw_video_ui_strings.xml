@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OCC-PLAN-071 slice F: the RAW video chooser, ring meter and gallery entry. -->
+    <string name="raw_video_config_title">Configurazione video RAW</string>
+    <string name="raw_video_automatic">Automatica</string>
+    <string name="raw_video_automatic_detail">La velocità qualificata più alta</string>
+    <string name="raw_video_group_full">SENSORE INTERO</string>
+    <string name="raw_video_group_crop">RITAGLIO CENTRALE</string>
+    <string name="raw_video_crop_note">Un ritaglio registra solo il centro del sensore: stessa lettura, campo visivo più stretto.</string>
+    <string name="raw_video_config_frozen">La configurazione si cambia tra una ripresa e l’altra.</string>
+    <string name="raw_video_rate">%1$d MB/s</string>
+    <string name="raw_video_rate_and_time">%1$s · %2$s rimasti</string>
+    <string name="raw_video_label_crop">%1$s · ritaglio</string>
+    <string name="raw_video_label_compressed">Compresso</string>
+    <string name="raw_video_settings_active">In uso: %1$s · %2$s</string>
+    <string name="raw_video_not_qualified_summary">Nessuna configurazione è ancora qualificata su questa fotocamera.</string>
+    <string name="raw_video_requalify">Qualifica di nuovo</string>
+    <string name="raw_video_requalify_note">Richiede alcuni minuti e nel frattempo la fotocamera non è disponibile.</string>
+    <string name="raw_video_ring">BUFFER %1$d%%</string>
+    <string name="raw_video_frames">%1$d fot.</string>
+    <string name="raw_video_ring_description">Buffer RAW pieno al %1$d%%, %2$d fotogrammi scritti</string>
+    <string name="raw_video_config_help">Il video RAW scrive ogni fotogramma senza compressione in Documents/OpenCineCam/RAW. Sono offerte solo le dimensioni e le cadenze che questo telefono ha qualificato sulla sua memoria: ognuna ha superato un lungo test di archiviazione e una ripresa reale senza perdere fotogrammi. Automatica sceglie la velocità qualificata più alta. Un ritaglio legge tutto il sensore ma ne registra solo il centro, quindi l’immagine è più stretta. Il tempo mostrato indica quanto dura lo spazio libero a quella velocità.</string>
+    <string name="gallery_raw_video">Video RAW</string>
+    <string name="media_integrity_raw">Una ripresa OpenCine RAW. Il lettore mostra un’anteprima sviluppata; per la qualità piena, copiala o condividila su un computer e convertila con il convertitore DNG per desktop.</string>
+    <string name="raw_video_audio_incomplete">L\'audio ha delle interruzioni</string>
+    <string name="raw_video_risky_notice">Velocità rischiosa: possibili micro-scatti, latenza o un file danneggiato</string>
+    <string name="raw_video_risky_label">%1$s, velocità rischiosa</string>
+    <!-- A configuration the camera delivers under its target rate (a reduced-rate pass): its label, and its tile detail before the rate and time left. -->
+    <string name="raw_video_reduced_label">%1$s · raggiunge %2$.1f fps</string>
+    <string name="raw_video_reduced_detail">Raggiunge %1$.1f fps · %2$s</string>
+    <string name="raw_video_config_risk_hint">Il segnale di avviso indica una velocità rischiosa: la memoria è troppo lenta, quindi una ripresa può scattare, andare in ritardo o risultare danneggiata. Automatico non la sceglie mai.</string>
+    <string name="raw_video_burst_minutes">%1$d min</string>
+    <string name="raw_video_burst_seconds">%1$d s</string>
+    <string name="raw_video_risky_notice_burst">Velocità rischiosa: dopo circa %1$s può perdere fotogrammi (con il telefono a riposo)</string>
+    <!-- RAW compression of block-pack configurations: lossless or near-lossless (quantised to the sensor noise). -->
+    <string name="raw_compression_title">Compressione RAW</string>
+    <string name="raw_compression_summary">Per le configurazioni compresse</string>
+    <string name="raw_compression_lossless">Senza perdita</string>
+    <string name="raw_video_label_near_lossless">Quasi senza perdita</string>
+    <string name="raw_compression_help">Si applica alle configurazioni compresse. Senza perdita conserva ogni valore fornito dal sensore. Quasi senza perdita unisce i valori che differiscono meno di circa metà del rumore del sensore all’ISO del fotogramma: la differenza resta nascosta nel rumore e i file diventano ancora più piccoli, soprattutto con poca luce. Entrambi si aprono nella galleria, nell’esportazione CinemaDNG e negli strumenti desktop. Il tempo rimanente usa lo stesso rapporto prudente per entrambi.</string>
+</resources>

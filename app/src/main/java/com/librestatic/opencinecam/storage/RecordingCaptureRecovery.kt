@@ -18,8 +18,11 @@ private val recordingRecoveryLock = Any()
 // IDs only: the registry must not retain a service/context. A process restart starts empty.
 private val liveRecordingGroups = mutableSetOf<String>()
 internal enum class RecordingMemberKind { VIDEO, AUDIO }
-/** [incompleteGroups] interrupted takes were kept: their outputs with bytes were published as incomplete (ADR-0011). */
-data class RecordingRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0, val incompleteGroups: Int = 0)
+/** [incompleteGroups] interrupted takes were kept: their outputs with bytes were published as incomplete (ADR-0011).
+ * [rawTakes] is the PLAN-071 RAW video pass ([RawVideoRecovery]). It is not part of [RecordingCaptureRecovery.recover],
+ * which runs before every video take: the service runs it once at start and before each RAW take, and merges it here. */
+data class RecordingRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0, val incompleteGroups: Int = 0,
+    val rawTakes: RawVideoRecoveryReport = RawVideoRecoveryReport())
 
 /** A take spans asynchronous native writers; unlike a still it cannot hold a thread monitor
  * throughout capture. This registry protects the exact take until its real writers retire.

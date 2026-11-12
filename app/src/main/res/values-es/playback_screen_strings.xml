@@ -18,9 +18,9 @@
     <string name="playback_screen_exact_error_title">No pudimos activar cuadros exactos en este dispositivo.</string>
     <string name="playback_screen_exact_error_message">La reproducción sigue disponible.</string>
     <string name="playback_screen_read_error_title">No pudimos leer este archivo.</string>
-    <string name="playback_screen_read_error_message">El original no cambió. Intentá leerlo de nuevo.</string>
+    <string name="playback_screen_read_error_message">El original no cambió. Intenta leerlo de nuevo.</string>
     <string name="playback_screen_color_error_title">No se puede leer el color de este clip con exactitud.</string>
-    <string name="playback_screen_color_error_message">Podés interpretarlo con las etiquetas SDR de la pista; la precisión del color no se verifica.</string>
+    <string name="playback_screen_color_error_message">Puedes interpretarlo con las etiquetas SDR de la pista; la precisión del color no se verifica.</string>
     <string name="playback_screen_stage_error_title">Vista de monitoreo OCLog2 no disponible</string>
     <string name="playback_screen_stage_error_message">El clip se muestra sin la etapa de vista LOG.</string>
     <string name="playback_screen_info">Detalles del clip</string>

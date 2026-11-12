@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.lifecycle.Lifecycle
+import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import org.junit.Assert.*
@@ -100,6 +101,9 @@ class PublishedAudioReviewDeviceTest {
         node("error-detail").assertDoesNotExist()
         node("close").performClick()
         node("dialog").assertDoesNotExist()
+        // The search left the IME up, and the shell hides its navigation while the IME shows.
+        Espresso.closeSoftKeyboard()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(context.getString(R.string.capture_tab)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(context.getString(R.string.capture_tab)).performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithTag("media-action").fetchSemanticsNodes().isNotEmpty() }
         android.util.Log.i("PublishedAudioReviewProbe", "format=$format uri=${audio.uri} durationMs=$durationMs actualAudioRecordPublication=true activityCatalogMemberNavigation=true plays=true backgroundPauses=true returnedToCapture=true")
