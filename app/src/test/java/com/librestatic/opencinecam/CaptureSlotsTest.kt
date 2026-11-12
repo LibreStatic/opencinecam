@@ -16,10 +16,13 @@ class CaptureSlotsTest {
             val slots = captureSlots(mode)
             assertEquals("$mode", 6, slots.size)
             assertEquals("$mode", CaptureSlot.RESOLUTION, slots.first())
-            // Slow motion gives FOCUS, which a high-speed session holds, to the take length.
-            if (mode == CaptureMode.SLOW_MOTION) assertEquals("$mode", CaptureSlot.WB, slots.last())
-            else assertEquals("$mode", listOf(CaptureSlot.WB, CaptureSlot.FOCUS), slots.takeLast(2))
+            assertEquals("$mode", listOf(CaptureSlot.WB, CaptureSlot.FOCUS), slots.takeLast(2))
             assertEquals("$mode", slots.size, slots.toSet().size)
+            // High-speed slow motion gives FOCUS, which that session holds, to the take length.
+            val highSpeed = captureSlots(mode, highSpeed = true)
+            assertEquals("$mode", 6, highSpeed.size)
+            assertEquals("$mode", highSpeed.size, highSpeed.toSet().size)
+            if (mode == CaptureMode.SLOW_MOTION) assertEquals("$mode", CaptureSlot.WB, highSpeed.last()) else assertEquals("$mode", slots, highSpeed)
         }
     }
 
@@ -30,14 +33,15 @@ class CaptureSlotsTest {
         assertEquals(video, captureSlots(CaptureMode.RAW_VIDEO))
     }
 
-    @Test fun slowMotionSwapsFocusForTheTakeLength() {
+    @Test fun highSpeedSlowMotionSwapsFocusForTheTakeLength() {
         assertEquals(
             listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.LENGTH, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB),
-            captureSlots(CaptureMode.SLOW_MOTION),
+            captureSlots(CaptureMode.SLOW_MOTION, highSpeed = true),
         )
-        assertFalse(CaptureSlot.FOCUS in captureSlots(CaptureMode.SLOW_MOTION))
+        // A regular session can pull focus, so its slow motion keeps the video row.
+        assertEquals(captureSlots(CaptureMode.VIDEO), captureSlots(CaptureMode.SLOW_MOTION, highSpeed = false))
         CaptureMode.entries.filter { it != CaptureMode.SLOW_MOTION }.forEach {
-            assertFalse("$it", CaptureSlot.LENGTH in captureSlots(it))
+            assertFalse("$it", CaptureSlot.LENGTH in captureSlots(it, highSpeed = true))
         }
     }
 

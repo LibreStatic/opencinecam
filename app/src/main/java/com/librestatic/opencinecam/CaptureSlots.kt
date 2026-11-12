@@ -58,15 +58,16 @@ internal enum class CaptureSlot { RESOLUTION, FPS, INTERVAL, LENGTH, SHUTTER, IS
 
 /**
  * RES always leads. Video, LOG and RAW video: RES · FPS · SHUTTER · ISO · WB · FOCUS. Stills: RES · SHUTTER ·
- * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval. Slow motion swaps FOCUS,
- * which a high-speed session always holds, for the take length.
+ * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval. Slow motion in a high-speed session
+ * ([highSpeed]), which holds focus itself, swaps FOCUS for the take length; at a rate a regular
+ * session records, focus stays drivable, so the row is the video one and takes are not bounded.
  */
-internal fun captureSlots(mode: CaptureMode): List<CaptureSlot> = when {
+internal fun captureSlots(mode: CaptureMode, highSpeed: Boolean = false): List<CaptureSlot> = when {
     mode == CaptureMode.TIME_LAPSE ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.INTERVAL, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
-    mode == CaptureMode.SLOW_MOTION ->
+    mode == CaptureMode.SLOW_MOTION && highSpeed ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.LENGTH, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB)
-    mode in CameraUiState.frameRateModes || mode == CaptureMode.RAW_VIDEO ->
+    mode in CameraUiState.frameRateModes || mode == CaptureMode.SLOW_MOTION || mode == CaptureMode.RAW_VIDEO ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
     else -> listOf(CaptureSlot.RESOLUTION, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS)
 }

@@ -2698,6 +2698,8 @@ class CaptureService : Service() {
                 cameraState.value = current.copy(recordingPauseStatus = status, recordingPausePending = false,
                     recordingElapsedMs = status.activeElapsedAt(android.os.SystemClock.elapsedRealtime()))
                 scheduleTimelapseAutoStop()
+                // A bounded take counts active time: no stop while paused, the rest of its length on resume.
+                scheduleTakeLengthAutoStop()
             }
         }
 
@@ -4688,7 +4690,7 @@ class CaptureService : Service() {
                 mainHandler.post {
                     if (cameraState.value.recordingPauseStatus?.takeId == status.takeId) {
                         cameraState.update { it.copy(recordingPausePending = false) }
-                        if (!changed) scheduleTimelapseAutoStop()
+                        if (!changed) { scheduleTimelapseAutoStop(); scheduleTakeLengthAutoStop() }
                     }
                 }
             }
@@ -4806,7 +4808,8 @@ class CaptureService : Service() {
             val admissionAudio = current.selectedMode != CaptureMode.TIME_LAPSE && (audioForThisTake ?: settings.audioEnabled)
             val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
-            val takeLimitMs = com.librestatic.opencinecam.takeLengthLimitMs(current.selectedMode, settings)
+            val takeLimitMs = com.librestatic.opencinecam.takeLengthLimitMs(current.selectedMode, settings,
+                current.activeVideoProfile?.constrainedHighSpeed == true)
             admissionWarning = null
             takeSoftwareEncoder = null
             takeCodecFallback = false

@@ -25,10 +25,12 @@ class ModeSelectionTest {
 
     @Test fun onlyAnOffSpeedVideoTakeWithALengthIsBounded() {
         val ten = CameraSettings(videoOffSpeed = true, slowMotionTakeLengthSeconds = 10)
-        assertEquals(10_000L, takeLengthLimitMs(CaptureMode.VIDEO, ten))
-        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(slowMotionTakeLengthSeconds = 0)))
-        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(videoOffSpeed = false)))
-        for (mode in listOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE, CaptureMode.PHOTO)) assertNull(takeLengthLimitMs(mode, ten))
+        assertEquals(10_000L, takeLengthLimitMs(CaptureMode.VIDEO, ten, highSpeed = true))
+        // A regular session has no LENGTH slot, so the stored length does not bound its takes.
+        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten, highSpeed = false))
+        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(slowMotionTakeLengthSeconds = 0), highSpeed = true))
+        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(videoOffSpeed = false), highSpeed = true))
+        for (mode in listOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE, CaptureMode.PHOTO)) assertNull(takeLengthLimitMs(mode, ten, highSpeed = true))
     }
 
     @Test fun slowMotionNeedsAHighSpeedProfile() {

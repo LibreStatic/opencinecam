@@ -2542,7 +2542,7 @@ private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRa
     val manualIso = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
     val manualShutter = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
     val auto = stringResource(R.string.auto_value)
-    return captureSlots(mode).map { slot ->
+    return captureSlots(mode, highSpeed).map { slot ->
         val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
             state.aeCompensationSupported, resolutionChoices = rawOrResolutionChoiceCount(state, mode, projectRate),
             nightPhoto = mode == CaptureMode.PHOTO && state.nightExtensionRunning)
