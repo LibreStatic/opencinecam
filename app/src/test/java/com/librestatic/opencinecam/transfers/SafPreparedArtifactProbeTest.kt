@@ -138,6 +138,18 @@ class SafPreparedArtifactProbeTest {
         assertEquals(0, DriveDescriptors.registered(volume))
     }
 
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aDriveThatStopsAnsweringBeforeItsDescriptorIsReleasedIsAnAbsentDrive() {
+        val volume = FakeExternalStorageProvider.VOLUME
+        // The drive goes before the volume monitor releases the descriptor: the failed fstat is still the drive leaving.
+        ShadowFstatProbe.onFstat = { drive.mounted = false }
+        val failure = try {
+            runCatching { SafPreparedArtifactProbe(context.contentResolver).inspect(video, pending = false) }.exceptionOrNull()
+        } finally { ShadowFstatProbe.onFstat = null }
+        assertTrue(failure.toString(), failure is WebDavSourceDriveAbsent && failure.cause is ErrnoException)
+        assertEquals(0, DriveDescriptors.registered(volume))
+    }
+
     /** A stream of the drive's video, opened while fstat works; its close-time check then fails with an errno. */
     private fun closeWithAFailingCheck(beforeClose: () -> Unit): Throwable? {
         val spec = WebDavArtifactSpec("00000000-0000-0000-0000-000000000003", WebDavArtifactRole.VIDEO, video.uri, "A001.mp4", 11)

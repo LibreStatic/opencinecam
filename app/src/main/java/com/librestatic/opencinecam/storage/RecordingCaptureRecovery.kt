@@ -47,7 +47,8 @@ private fun releaseLive(key: String) {
 
 /**
  * The scan of one drive RAW take, run with the journal unlocked. [cancel] (a take starting on a drive) closes what the
- * scan reads through, so it fails with an I/O error and its entry waits for the pass after that take.
+ * scan reads through, so it fails with an I/O error and its entry waits for the pass after that take. A scan that had
+ * already read all it needed returns its decision, and that is committed: the work is done, and the commit is brief.
  */
 internal class RawRepairScan {
     private var held: AutoCloseable? = null

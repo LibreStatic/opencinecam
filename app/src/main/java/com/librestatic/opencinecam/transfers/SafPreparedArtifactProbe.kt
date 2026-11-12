@@ -6,6 +6,7 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructStat
@@ -69,7 +70,12 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         val snapshot = try {
             inspectOpened(descriptor, artifact, pending, before)
         } catch (failure: Throwable) {
-            val reported = driveReleasedOr(failure, closer.closed) ?: failure
+            // A drive that stopped answering before DriveDescriptors released the descriptor fails the same way.
+            val reported = (driveReleasedOr(failure, closer.closed) ?: failure).let {
+                if (it !is WebDavSourceDriveAbsent && (it is ErrnoException || it is IOException) && !driveAnswers(resolver, uri)) {
+                    WebDavSourceDriveAbsent(it)
+                } else it
+            }
             // A close that fails too must not replace what the inspection met: the hasher waits only for an absent drive.
             try { closer.close() } catch (closing: Throwable) { reported.addSuppressed(closing) } finally { handle.unregister() }
             throw reported
