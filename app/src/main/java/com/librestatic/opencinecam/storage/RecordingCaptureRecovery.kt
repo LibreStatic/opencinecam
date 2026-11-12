@@ -258,8 +258,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             // up a take starting on the phone, whose own pass needs the lock. The claims keep other passes off these entries.
             val journal = LockedJournal()
             claims.forEach { record ->
+                var outcome: DriveRecovery? = null
                 try {
-                    when (recoverDriveTake(journal, record, repairs)) {
+                    outcome = recoverDriveTake(journal, record, repairs)
+                    when (outcome) {
                         DriveRecovery.DEFERRED -> deferred++
                         DriveRecovery.INCOMPLETE -> incomplete++
                         DriveRecovery.DISCARDED -> discarded++
@@ -268,6 +270,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 } catch (failure: Exception) {
                     unresolved++
                     android.util.Log.e("RecordingRecovery", "Retained unresolved take ${record.id}", failure)
+                } finally {
+                    // Released once decided, so the drive bound can forget a deferred entry during the RAW scans below;
+                    // only an entry with a repair still to run stays claimed.
+                    if (outcome != DriveRecovery.RAW_REPAIR) synchronized(recordingRecoveryLock) { repairingRecordingGroups.remove(key(record.id)) }
                 }
             }
             repairs.forEach { repair ->

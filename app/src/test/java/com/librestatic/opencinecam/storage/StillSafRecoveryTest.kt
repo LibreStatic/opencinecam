@@ -20,6 +20,9 @@ import com.librestatic.opencinecam.camera.StillImageKind
 import com.librestatic.opencinecam.camera.StillImagePayload
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -328,6 +331,38 @@ class StillSafRecoveryTest {
         assertFalse(ran)
         assertTrue(entries().none { it[2] != null })
         assertFalse(stills.exists())
+    }
+
+    @Test fun aDriveThatStallsDuringRecoveryHoldsUpNoStill() {
+        val interruptedId = interrupted("F.jpg" to byteArrayOf(6))
+        val stalled = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        // The pass's first question to the drive hangs until the test lets it go.
+        drive.onQuery = { drive.onQuery = null; stalled.countDown(); check(resume.await(30, TimeUnit.SECONDS)) }
+        val threads = Executors.newFixedThreadPool(2)
+        try {
+            val pass = threads.submit<StillRecoveryReport> { journal().recover() }
+            assertTrue(stalled.await(30, TimeUnit.SECONDS))
+            // A still saved meanwhile takes the journal lock: the stalled drive does not hold it.
+            threads.submit<String> {
+                journal().publish(destination) { _, rows ->
+                    val store = requireNotNull(rows)
+                    store.writeClosed(store.insert("G.jpg", "image/jpeg", false), byteArrayOf(7))
+                    "saved"
+                }
+            }.get(10, TimeUnit.SECONDS)
+            assertFalse(pass.isDone)
+            assertEquals(listOf(interruptedId), entries().map { it[0] })
+
+            resume.countDown()
+            assertEquals(StillRecoveryReport(discardedGroups = 1), pass.get(30, TimeUnit.SECONDS))
+            assertTrue(entries().isEmpty())
+            assertFalse(File(stills, "F").exists())
+        } finally {
+            drive.onQuery = null
+            resume.countDown()
+            threads.shutdownNow()
+        }
     }
 
     @Test fun groupsDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {

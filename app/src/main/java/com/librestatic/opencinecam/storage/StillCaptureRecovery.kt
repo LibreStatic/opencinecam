@@ -46,7 +46,35 @@ internal class StillCaptureRecovery(context: Context,
     private val databaseFile = File(this.context.noBackupFilesDir, DATABASE)
     private val mounted: (String) -> Boolean = mounted ?: { volume -> RecordingCaptureRecovery.volumeMounted(this.context, volume) }
 
-    fun recover(): StillRecoveryReport = synchronized(processLock) { open().use(::recoverLocked) }
+    /**
+     * Resolves the journal. Drive groups are claimed under [processLock] and resolved outside it, each journal change a
+     * short step under the lock again, so a drive provider that stalls holds up no still (phone or drive) meanwhile.
+     */
+    fun recover(): StillRecoveryReport {
+        val claims = mutableListOf<Receipt>()
+        val locked = synchronized(processLock) { open().use { recoverLocked(it, claims) } }
+        var discarded = locked.discardedGroups
+        var unresolved = locked.unresolvedGroups
+        var deferred = locked.deferredGroups
+        try {
+            for (receipt in claims) try {
+                when (recoverDriveGroup(receipt)) {
+                    DriveRecovery.DEFERRED -> deferred++
+                    DriveRecovery.DISCARDED -> discarded++
+                    DriveRecovery.COMMITTED -> Unit
+                }
+            } catch (failure: Exception) {
+                unresolved++
+                android.util.Log.e("StillRecovery", "Retained unresolved capture receipt ${receipt.id}", failure)
+            } finally {
+                // Released as each is decided, so a full drive bound can forget the deferred ones meanwhile.
+                synchronized(processLock) { claimedDriveGroups.remove(receipt.id) }
+            }
+        } finally {
+            synchronized(processLock) { claimedDriveGroups.removeAll(claims.mapTo(HashSet()) { it.id }) }
+        }
+        return StillRecoveryReport(discarded, unresolved, deferred)
+    }
 
     /** A MediaStore group: [block] gets the id and the images and metadata relative paths of its namespace. */
     fun <T> publish(block: (String, String, String) -> T): T = publish(RecordingDestination.Phone) { id, _ ->
@@ -60,7 +88,8 @@ internal class StillCaptureRecovery(context: Context,
      */
     internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T = synchronized(processLock) {
         open().use { db ->
-            recoverLocked(db)
+            // Phone groups only: drive groups are left to [recover], so a stalled drive never holds up a still here.
+            recoverLocked(db, claims = null)
             val id = UUID.randomUUID().toString()
             // The group folder is created at the first file, so it is new: no namespace to check.
             val drive = (destination as? RecordingDestination.UsbFolder)?.let { target ->
@@ -174,13 +203,13 @@ internal class StillCaptureRecovery(context: Context,
      * Makes room for a drive group: deletes the entry of the oldest uncommitted drive group that [recoverLocked] would
      * defer (its drive absent or its grant gone). Only the entry goes; the group's folder stays on its drive, marker
      * included. Fails when every drive entry could still be resolved. Under [processLock], which spans every writer, so
-     * no entry here belongs to a group being written.
+     * no entry here belongs to a group being written; one [recover] is resolving is skipped.
      */
     private fun forgetOldestDeferred(db: SQLiteDatabase) {
         val held = heldReadWriteTrees(resolver)
         val oldest = db.rawQuery("SELECT id, tree, volume, folder FROM captures WHERE tree IS NOT NULL AND committed = 0 ORDER BY folder IS NOT NULL, rowid", null).use { c ->
-            generateSequence { if (c.moveToNext()) listOf(c.getString(0), c.getString(1), c.getString(2), c.getString(3)) else null }.firstOrNull { (_, tree, volume, folder) ->
-                volume == null || resolveDriveLocation(Uri.parse(tree), volume, folder?.let(Uri::parse), held, mounted) == null
+            generateSequence { if (c.moveToNext()) listOf(c.getString(0), c.getString(1), c.getString(2), c.getString(3)) else null }.firstOrNull { (id, tree, volume, folder) ->
+                id !in claimedDriveGroups && (volume == null || resolveDriveLocation(Uri.parse(tree), volume, folder?.let(Uri::parse), held, mounted) == null)
             }
         }
         checkNotNull(oldest) { "Interrupted still journal is full" }
@@ -199,7 +228,11 @@ internal class StillCaptureRecovery(context: Context,
     private data class Receipt(val id: String, val type: Int, val state: Long, val tree: String?, val volume: String?, val folder: String?)
     private enum class DriveRecovery { DEFERRED, DISCARDED, COMMITTED }
 
-    private fun recoverLocked(db: SQLiteDatabase): StillRecoveryReport {
+    /**
+     * Under [processLock]: prunes committed entries and discards phone groups. An uncommitted drive group is added to
+     * [claims] for [recover] to resolve outside the lock, or left alone when [claims] is null or another pass holds it.
+     */
+    private fun recoverLocked(db: SQLiteDatabase, claims: MutableList<Receipt>?): StillRecoveryReport {
         val receipts = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?", arrayOf((MAX_GROUPS + MAX_DRIVE_GROUPS + 1).toString())).use { cursor ->
             buildList { while (cursor.moveToNext()) add(Receipt(cursor.getString(0), cursor.getType(1), cursor.getLong(1),
                 cursor.getString(2), cursor.getString(3), cursor.getString(4))) }
@@ -207,7 +240,6 @@ internal class StillCaptureRecovery(context: Context,
         check(receipts.size <= MAX_GROUPS + MAX_DRIVE_GROUPS)
         var discarded = 0
         var unresolved = 0
-        var deferred = 0
         for (receipt in receipts) {
             val id = receipt.id
             try {
@@ -215,26 +247,23 @@ internal class StillCaptureRecovery(context: Context,
                 check(receipt.type == Cursor.FIELD_TYPE_INTEGER && receipt.state in 0L..1L)
                 if (receipt.state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
                 else if (receipt.tree == null) { discard(db, id); discarded++ }
-                else when (recoverDriveGroup(db, receipt)) {
-                    DriveRecovery.DEFERRED -> deferred++
-                    DriveRecovery.DISCARDED -> discarded++
-                    DriveRecovery.COMMITTED -> Unit
-                }
+                else if (claims != null && claimedDriveGroups.add(id)) claims += receipt
             } catch (failure: Exception) {
                 unresolved++
                 android.util.Log.e("StillRecovery", "Retained unresolved capture receipt $id", failure)
             }
         }
-        return StillRecoveryReport(discarded, unresolved, deferred)
+        return StillRecoveryReport(discarded, unresolved)
     }
 
     /**
      * An uncommitted drive group. Its volume absent or its grant gone: kept for a later pass. No folder journalled:
      * nothing reached the drive. A folder without the marker was committed (the marker goes just before the journal
      * update), so the entry is only pruned. Otherwise the group is discarded like an uncommitted MediaStore one. A
-     * drive that does not answer is never read as empty: [SafStillRows] fails instead and the entry stays.
+     * drive that does not answer is never read as empty: [SafStillRows] fails instead and the entry stays. Outside
+     * [processLock], on an entry claimed in [claimedDriveGroups]: only the entry's removal takes the lock.
      */
-    private fun recoverDriveGroup(db: SQLiteDatabase, receipt: Receipt): DriveRecovery {
+    private fun recoverDriveGroup(receipt: Receipt): DriveRecovery {
         val tree = Uri.parse(receipt.tree)
         val volume = requireNotNull(receipt.volume) { "Drive still group without a volume" }
         // The drive under vold's other name answers through the folder picked there (resolveDriveLocation).
@@ -245,15 +274,20 @@ internal class StillCaptureRecovery(context: Context,
             // The marker read as missing, which a drive that vanished meanwhile or a provider that gave no answer also
             // reads as: only the folder's own listing without it confirms the commit.
             check(store.listsNoMarker()) { "Still group marker state is unconfirmed" }
-            check(db.delete("captures", "id = ? AND committed = 0", arrayOf(receipt.id)) == 1)
+            forgetClaimed(receipt.id)
             return DriveRecovery.COMMITTED
         }
-        discard(db, receipt.id, location)
+        store.discard()
+        forgetClaimed(receipt.id)
         return DriveRecovery.DISCARDED
     }
 
-    /** [resolved] is where a recovered drive group answers now; without it the journalled location is used. */
-    private fun discard(db: SQLiteDatabase, id: String, resolved: DriveLocation? = null) {
+    /** Removes the uncommitted entry of a claimed drive group, a short step under [processLock]. */
+    private fun forgetClaimed(id: String) = synchronized(processLock) {
+        open().use { db -> check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1) }
+    }
+
+    private fun discard(db: SQLiteDatabase, id: String) {
         requireId(id)
         check(!committed(db, id)) { "Committed captures must never be discarded" }
         val location = db.rawQuery("SELECT tree, folder FROM captures WHERE id = ?", arrayOf(id)).use {
@@ -261,8 +295,7 @@ internal class StillCaptureRecovery(context: Context,
             it.getString(0) to it.getString(1)
         }
         location.first?.let { tree ->
-            val at = resolved ?: DriveLocation(Uri.parse(tree), location.second?.let(Uri::parse))
-            SafStillRows(context, at.tree, at.folder) { error("A discarded still group never creates its folder") }.discard()
+            SafStillRows(context, Uri.parse(tree), location.second?.let(Uri::parse)) { error("A discarded still group never creates its folder") }.discard()
             check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1)
             return
         }
@@ -312,6 +345,8 @@ internal class StillCaptureRecovery(context: Context,
 
     companion object {
         private val processLock = Any()
+        /** Drive groups a [recover] is resolving outside [processLock]; guarded by it. */
+        private val claimedDriveGroups = HashSet<String>()
         private const val DATABASE = "still-recovery.sqlite"
         /** Phone groups (NULL `tree`) journalled at once; a phone still beyond it is refused. */
         internal const val MAX_GROUPS = 128
@@ -433,7 +468,8 @@ internal class SafStillRows(
         }
         failure?.let { throw it }
         check(files(group).isEmpty()) { "Interrupted still file remains" }
-        check(docs.delete(markerOf(group)) && reachable()) { "Still group marker could not be removed" }
+        // A provider that gave no answer reads as a marker already gone: only the folder's own listing confirms it.
+        check(docs.delete(markerOf(group)) && reachable() && listsNoMarker()) { "Still group marker could not be removed" }
         if (docs.children(group).isEmpty()) check(docs.delete(group)) { "Still group folder could not be removed" }
     }
 

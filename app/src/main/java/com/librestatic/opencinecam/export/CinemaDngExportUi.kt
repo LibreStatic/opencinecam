@@ -208,7 +208,10 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     }
     val state = CinemaDngExportFormState(CinemaDngExporter.takeName(take.primary.name), plan, loading, choice, folder,
         environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running)
-    MediaDialogFrame("cinemadng-export-dialog", onDismiss) {
+    // An admission under way cannot be taken back (it may already have queued the export), so the dialog stays until it
+    // answers rather than closing on an export that then starts anyway.
+    val dismiss = { if (!starting) onDismiss() }
+    MediaDialogFrame("cinemadng-export-dialog", dismiss) {
         CinemaDngExportForm(take, state,
             onChoice = { choice = it },
             onChooseFolder = { runCatching { picker.launch(null) } },
@@ -225,7 +228,7 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
                     }
                 }
             },
-            onCancel = onDismiss)
+            onCancel = dismiss)
     }
 }
 
