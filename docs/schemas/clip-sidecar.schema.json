@@ -206,7 +206,10 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "enum": [
+        "1.0.0",
+        "1.1.0"
+      ]
     },
     "recordingId": {
       "type": "string",

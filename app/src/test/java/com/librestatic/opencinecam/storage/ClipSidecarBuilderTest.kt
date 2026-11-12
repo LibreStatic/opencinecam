@@ -55,7 +55,7 @@ class ClipSidecarBuilderTest {
 
     @Test fun completeTakeIsValidAndDescribesIntentAndGraph() {
         val document = assertValid(encoded(facts(), context()))
-        assertEquals("1.0.0", document.schemaVersion)
+        assertEquals("1.1.0", document.schemaVersion)
         assertEquals(id, document.recordingId)
         assertEquals("2026-10-22T10:15:30.250Z", document.createdAt)
         assertEquals("STRICT", document.intent.getValue("recordingPolicy").jsonObject.getValue("value").jsonPrimitive.content)

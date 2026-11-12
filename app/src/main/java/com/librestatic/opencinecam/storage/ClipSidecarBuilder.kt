@@ -367,7 +367,7 @@ private fun mediaJson(facts: ClipTakeFacts, context: ClipSidecarPrepareContext):
 /** The clip sidecar of one take as the typed [ClipSidecarDocument]; pure, so every branch is host-testable. */
 internal fun buildClipSidecar(facts: ClipTakeFacts, context: ClipSidecarPrepareContext): ClipSidecarDocument =
     ClipSidecarDocument(
-        schemaVersion = "1.0.0",
+        schemaVersion = "1.1.0",
         recordingId = context.recordingId,
         createdAt = facts.startedAt.toString(),
         intent = intentJson(facts.intent),
