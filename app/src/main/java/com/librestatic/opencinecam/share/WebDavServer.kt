@@ -436,7 +436,7 @@ internal class WebDavServer(
         var length = 0L
         for (part in parts) length += part.toByteArray(Charsets.UTF_8).size
         writeHead(output, 207, listOf("Content-Type" to XML_TYPE, "Content-Length" to length.toString()), keepAlive)
-        streamBody(connection, activity) {
+        streamBody(connection, output, activity) {
             for (part in parts) {
                 output.write(part.toByteArray(Charsets.UTF_8))
                 connection.lastProgressMs.set(clock.nowMs())
@@ -483,7 +483,7 @@ internal class WebDavServer(
     }
 
     private fun sendFile(file: ShareFile, offset: Long, length: Long, output: OutputStream, connection: Connection) {
-        streamBody(connection, activity = length > 0) {
+        streamBody(connection, output, activity = length > 0) {
             val channel = ProgressChannel(output) { connection.lastProgressMs.set(clock.nowMs()) }
             try {
                 file.writeRange(offset, length, channel)
@@ -498,13 +498,19 @@ internal class WebDavServer(
         }
     }
 
-    /** Writes a body under the stall reaper; [activity] bodies also hold off the idle stop while they stream. */
-    private inline fun streamBody(connection: Connection, activity: Boolean, body: () -> Unit) {
+    /**
+     * Writes a body to [output] under the stall reaper and flushes it there: the buffered tail can block
+     * on a client that stopped reading as much as any earlier write. [activity] bodies also hold off the
+     * idle stop while they stream.
+     */
+    private inline fun streamBody(connection: Connection, output: OutputStream, activity: Boolean, body: () -> Unit) {
         if (activity) streaming.incrementAndGet()
         connection.lastProgressMs.set(clock.nowMs())
         connection.writing = true
         try {
             body()
+            connection.lastProgressMs.set(clock.nowMs())
+            output.flush()
         } finally {
             connection.writing = false
             if (activity) {
