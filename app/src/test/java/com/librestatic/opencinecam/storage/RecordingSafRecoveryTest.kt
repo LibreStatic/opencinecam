@@ -317,6 +317,23 @@ class RecordingSafRecoveryTest {
         assertTrue(entries().isEmpty())
     }
 
+    @Test fun anUnansweredMarkerOrFolderQueryNeverDropsTheReceipt() {
+        val id = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        // The marker's own query finds nothing, yet the folder still lists it: the take was not committed.
+        drive.unanswered = setOf(SafRecordingRows.MARKER)
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+        // The same for the take folder: its parent still lists it, so nothing is discarded.
+        drive.unanswered = setOf(takeDir().name)
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+
+        drive.unanswered = emptySet()
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertTrue(entries().isEmpty())
+    }
+
     @Test fun takeWithNoFolderJournalledNeverReachedTheDrive() {
         assertEquals(RecordingRecoveryReport(), journal().recover())
         val id = UUID.randomUUID().toString()

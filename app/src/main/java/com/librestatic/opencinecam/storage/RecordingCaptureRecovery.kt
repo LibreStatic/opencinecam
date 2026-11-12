@@ -280,12 +280,14 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         return when {
             record.folder == null -> { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
             !store.folderExists() -> {
-                // A drive that went quiet reads as "no folder" too: the receipt goes only while the drive still answers.
+                // A drive that went quiet, or gave no answer, reads as "no folder" too: its parent's listing confirms it.
+                check(store.listsNoFolder()) { "Recording take folder state is unconfirmed" }
                 check(store.reachable()) { "Recording drive unavailable" }
                 discardRows(db, record.id, store); DriveRecovery.DISCARDED
             }
             !store.markerExists() -> {
-                // The marker read as missing: make sure the drive still answered rather than vanished meanwhile.
+                // The marker read as missing: only the folder's own listing without it confirms the commit.
+                check(store.listsNoMarker()) { "Recording take marker state is unconfirmed" }
                 check(store.folderExists()) { "Recording drive unavailable" }
                 check(db.delete("captures", "id = ? AND committed = 0", arrayOf(record.id)) == 1)
                 DriveRecovery.COMMITTED
@@ -633,7 +635,11 @@ internal class SafRecordingRows(
     /** Deletes the outputs, then the marker, then the folder: an interruption leaves the take pending for recovery. */
     override fun discard(id: String) {
         val take = folder ?: return
-        if (!folderExists()) { check(reachable()) { "Recording drive unavailable" }; return }
+        if (!folderExists()) {
+            check(listsNoFolder()) { "Recording take folder state is unconfirmed" }
+            check(reachable()) { "Recording drive unavailable" }
+            return
+        }
         var failure: Throwable? = null
         for (doc in outputs()) {
             try { delete(doc.uri) } catch (problem: Throwable) {
@@ -646,9 +652,23 @@ internal class SafRecordingRows(
         if (docs.children(take).isEmpty()) check(docs.delete(take)) { "Recording take folder could not be removed" }
     }
 
-    /** [SafDocuments.delete] calls a document on an unplugged drive gone too: the drive must still answer afterwards. */
+    /**
+     * [SafDocuments.delete] calls a document on an unplugged drive, or one the provider gave no answer for, gone too:
+     * the folder must list without the marker and the drive still answer afterwards.
+     */
     private fun deleteMarker(take: Uri) {
-        check(docs.delete(markerOf(take)) && reachable()) { "Recording take marker could not be removed" }
+        check(docs.delete(markerOf(take)) && listsNoMarker() && reachable()) { "Recording take marker could not be removed" }
+    }
+
+    /** True when the folder's listing answers and holds no marker; a listing the drive does not give throws. */
+    internal fun listsNoMarker(): Boolean = folder?.let { take -> docs.children(take).none { it.name == MARKER } } ?: false
+
+    /** True when the folder's parent lists no such folder, or is gone itself; a listing the drive does not give throws. */
+    internal fun listsNoFolder(): Boolean {
+        val id = DocumentsContract.getDocumentId(folder ?: return false)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(docs.tree, if ('/' in id) id.substringBeforeLast('/') else id.substringBefore(':') + ":")
+        if (docs.describe(parent) == null) return true
+        return docs.children(parent).none { DocumentsContract.getDocumentId(it.uri) == id }
     }
 
     /** The picked folder answers: the drive is mounted and the grant holds. */

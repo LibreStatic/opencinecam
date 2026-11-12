@@ -1019,6 +1019,11 @@ class CaptureService : Service() {
                     }
                 }.onFailure { android.util.Log.w("RawVideoQualifier", "Qualification scratch on $volumeId not purged", it) }
             }
+        } catch (failure: java.util.concurrent.RejectedExecutionException) {
+            android.util.Log.w("StillRecovery", "Still recovery after $volumeId mounted not queued; the service's next start retries it", failure)
+        }
+        // Queued on its own: a full storage queue must not cost the drive's takes their recovery pass.
+        try {
             recoveryExecutor.execute {
                 // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
                 // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.
@@ -1039,7 +1044,7 @@ class CaptureService : Service() {
                 }
             }
         } catch (failure: java.util.concurrent.RejectedExecutionException) {
-            android.util.Log.w("RecordingRecovery", "Recovery after $volumeId mounted not queued; the next take start retries it", failure)
+            android.util.Log.w("RecordingRecovery", "Recovery after $volumeId mounted not queued; the drive's next mount or the service's next start retries it", failure)
         }
     }
 
@@ -2523,18 +2528,13 @@ class CaptureService : Service() {
     private fun startRawTakeOnControl(session: RawTakeSession, captureNames: CaptureNameSnapshot, audio: RawAudioSource?) {
         fun refuse(reason: String) = mainHandler.post { if (!serviceDestroyed) rawTakeRefused(session, reason) }
         val recovered = recoverRawTakes()
-        // PLAN-072 Delivery 3: interrupted takes on a drive (RAW ones included) wait in the take journal; resolve them too.
-        val journalled = if (session.destination.configured is RecordingDestination.UsbFolder) try {
-            com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover()
-        } catch (failure: Exception) {
-            android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable before a RAW take", failure)
-            null
-        } else null
-        val pass = (journalled ?: com.librestatic.opencinecam.storage.RecordingRecoveryReport()).let { it.copy(rawTakes = it.rawTakes + recovered) }
-        if (pass.copy(deferredGroups = 0) != com.librestatic.opencinecam.storage.RecordingRecoveryReport()) mainHandler.post {
+        // Interrupted takes on a drive wait in the take journal for its next mount or the service's next start: scanning
+        // a large RAW take here would hold this one in CAPTURING, and reading the drive meanwhile competes with its writes.
+        val pass = com.librestatic.opencinecam.storage.RecordingRecoveryReport(rawTakes = recovered)
+        if (pass != com.librestatic.opencinecam.storage.RecordingRecoveryReport()) mainHandler.post {
             if (!serviceDestroyed) cameraState.update { state ->
-                state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, pass).let {
-                    if (journalled == null) it.copy(deferredGroups = state.recordingRecovery?.deferredGroups ?: 0) else it })
+                state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, pass)
+                    .copy(deferredGroups = state.recordingRecovery?.deferredGroups ?: 0))
             }
         }
         if (serviceDestroyed) { refuse(RawVideoServiceReasons.START_FAILED); return }

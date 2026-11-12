@@ -401,8 +401,9 @@ internal class SafStillRows(
         // A drive that throws instead of answering leaves the marker's fate as unknown as one that is gone.
         val removed = try { docs.delete(markerOf(group)) } catch (failure: Exception) { throw StillCommitUnconfirmed(failure) }
         check(removed) { "Still group marker could not be removed" }
-        val answers = try { reachable() } catch (failure: Exception) { throw StillCommitUnconfirmed(failure) }
-        if (!answers) throw StillCommitUnconfirmed()
+        // A provider that gave no answer reads as a marker already gone: only the folder's own listing confirms it.
+        val confirmed = try { listsNoMarker() && reachable() } catch (failure: Exception) { throw StillCommitUnconfirmed(failure) }
+        if (!confirmed) throw StillCommitUnconfirmed()
     }
 
     /** Deletes the files, then the marker, then the folder: an interruption leaves the group pending for recovery. */

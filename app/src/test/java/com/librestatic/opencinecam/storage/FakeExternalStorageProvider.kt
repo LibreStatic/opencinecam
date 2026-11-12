@@ -45,6 +45,8 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     var availableBytes: Long = 64L shl 30
     /** When set, every document query throws it (a grant revoked under the reader, say). */
     var queryFailure: RuntimeException? = null
+    /** Names of documents whose own query finds nothing although their folder still lists them (a provider that gave no answer). */
+    var unanswered: Set<String> = emptySet()
     /** Runs before a document is created, e.g. to have another creator take the name first. */
     var beforeCreate: (() -> Unit)? = null
     /** Runs after a document is deleted. */
@@ -68,6 +70,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
         queryFailure?.let { throw it }
         queriesBeforeUnplug?.let { left -> if (left <= 0) mounted = false else queriesBeforeUnplug = left - 1 }
+        if (documentId.substringAfterLast('/').substringAfterLast(':') in unanswered) throw FileNotFoundException("No answer for $documentId")
         return MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply { addDocument(this, documentId, existing(documentId)) }
     }
 

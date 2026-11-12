@@ -46,15 +46,18 @@ internal fun executeDriveDelete(
         beginDeletion()
         var problem: String? = null
         attempted = true
-        try { android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder) }
-        catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
-        val reachable = deletion.docs.describe(deletion.docs.root) != null
-        results = if (!reachable) {
-            problem = problem ?: "The USB drive stopped answering"
-            confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.UNKNOWN, problem) }
-        } else confirmed.map { artifact ->
+        try {
+            if (!android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder)) problem = "The drive did not delete the take folder"
+        } catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
+        val answers = { deletion.docs.describe(deletion.docs.root) != null }
+        val observed = if (!answers()) null else confirmed.map { artifact ->
             if (deletion.docs.describe(artifact.uri.toUri()) == null) MediaDeleteFileResult(artifact, MediaDeleteStatus.ABSENT_VERIFIED)
             else MediaDeleteFileResult(artifact, MediaDeleteStatus.RETAINED, problem)
+        }
+        // A drive that left while the files were read back makes each look absent: it must still answer afterwards.
+        results = if (observed != null && answers()) observed else {
+            problem = problem ?: "The USB drive stopped answering"
+            confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.UNKNOWN, problem) }
         }
         if (problem == null && results.any { it.status != MediaDeleteStatus.ABSENT_VERIFIED }) problem = "Conditional deletion did not remove the selected identity"
         if (problem == null && deletion.docs.describe(deletion.folder) != null) problem = "The take folder remains on the drive"
