@@ -218,6 +218,24 @@ class RecordingSafRecoveryTest {
         assertTrue(entries().isEmpty())
     }
 
+    @Test fun takeIsRecoveredThroughTheSameFolderPickedUnderTheDrivesOtherName() {
+        val id = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        // vold mounts the drive as FFF1-7571-01 after a cut-short mount: the recorded name is gone.
+        drive.volume = "${FakeExternalStorageProvider.VOLUME}-01"
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        // Another folder of the renamed drive is not the take's tree.
+        check(drive.file("Other").mkdir())
+        FakeExternalStorageProvider.grant(context, drive.tree("Other"))
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+
+        FakeExternalStorageProvider.grant(context, drive.tree("Rec"))
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
+        assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
+        assertTrue(entries().none { it[0] == id })
+    }
+
     @Test fun takeAbortedWhileItsDriveIsGoneStaysJournalledForRecovery() {
         val group = journal().start(destination)
         val member = group.member(RecordingMemberKind.VIDEO)

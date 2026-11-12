@@ -41,10 +41,21 @@ internal fun externalStorageDocumentId(uri: String): String? {
 
 /** The document id of [uri] when it names a visible file directly inside the folder [folderId]; null otherwise. */
 internal fun driveMemberDocumentId(uri: String, folderId: String): String? {
-    val id = externalStorageDocumentId(uri) ?: return null
+    val id = onVolumeOf(externalStorageDocumentId(uri) ?: return null, folderId)
     if (!id.startsWith("$folderId/")) return null
     val name = id.substring(folderId.length + 1)
     return id.takeIf { SafDocuments.isPlainName(name) && !name.startsWith('.') }
+}
+
+/**
+ * [id] as the volume of [reference] names it: a sidecar written while the drive was `FFF1-7571` still says so once vold
+ * mounts it as `FFF1-7571-01` ([sameDrive]), and it names the same file. Unchanged for another drive or the same name.
+ */
+internal fun onVolumeOf(id: String, reference: String): String {
+    val volume = id.substringBefore(':', "")
+    val mounted = reference.substringBefore(':', "")
+    if (volume.isEmpty() || mounted.isEmpty() || volume == mounted || !sameDrive(volume, mounted)) return id
+    return mounted + id.substring(volume.length)
 }
 
 /** The take folder holding the document [uri]: its document id up to the last `/`, or null. */
@@ -138,10 +149,13 @@ internal fun takeMemberCollection(uri: String): MediaDeleteCollection? {
 
 /**
  * Whether two references name the same take member. A drive file is compared by its document id, as
- * [catalogTake] binds a sidecar's reference, since the recorder may write it in another URI form.
+ * [catalogTake] binds a sidecar's reference, since the recorder may write it in another URI form or under
+ * the drive's other volume name ([onVolumeOf]).
  */
 internal fun sameTakeMemberUri(a: String, b: String): Boolean = a == b ||
-    isDriveUri(a) && isDriveUri(b) && externalStorageDocumentId(a)?.let { it == externalStorageDocumentId(b) } == true
+    isDriveUri(a) && isDriveUri(b) && externalStorageDocumentId(a)?.let { idA ->
+        externalStorageDocumentId(b)?.let { idB -> onVolumeOf(idA, idB) == idB }
+    } == true
 
 /**
  * Whether [takeId] may name a proxied take whose primary is [originalUri]: a legacy file, a declared recording, or

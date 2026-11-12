@@ -198,22 +198,22 @@ internal class StillCaptureRecovery(context: Context,
     private fun recoverDriveGroup(db: SQLiteDatabase, receipt: Receipt): DriveRecovery {
         val tree = Uri.parse(receipt.tree)
         val volume = requireNotNull(receipt.volume) { "Drive still group without a volume" }
-        if (!mounted(volume) || !holdsTree(tree)) return DriveRecovery.DEFERRED
-        val store = SafStillRows(context, tree, receipt.folder?.let(Uri::parse)) { error("A recovered still group never creates its folder") }
+        // The drive under vold's other name answers through the folder picked there (resolveDriveLocation).
+        val location = resolveDriveLocation(tree, volume, receipt.folder?.let(Uri::parse), heldReadWriteTrees(resolver), mounted)
+            ?: return DriveRecovery.DEFERRED
+        val store = SafStillRows(context, location.tree, location.folder) { error("A recovered still group never creates its folder") }
         if (receipt.folder != null && store.folderExists() && !store.markerExists()) {
             // The marker read as missing: make sure the drive still answered rather than vanished meanwhile.
             check(store.folderExists()) { "Still drive unavailable" }
             check(db.delete("captures", "id = ? AND committed = 0", arrayOf(receipt.id)) == 1)
             return DriveRecovery.COMMITTED
         }
-        discard(db, receipt.id)
+        discard(db, receipt.id, location)
         return DriveRecovery.DISCARDED
     }
 
-    private fun holdsTree(tree: Uri): Boolean =
-        resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission && it.isWritePermission }
-
-    private fun discard(db: SQLiteDatabase, id: String) {
+    /** [resolved] is where a recovered drive group answers now; without it the journalled location is used. */
+    private fun discard(db: SQLiteDatabase, id: String, resolved: DriveLocation? = null) {
         requireId(id)
         check(!committed(db, id)) { "Committed captures must never be discarded" }
         val location = db.rawQuery("SELECT tree, folder FROM captures WHERE id = ?", arrayOf(id)).use {
@@ -221,7 +221,8 @@ internal class StillCaptureRecovery(context: Context,
             it.getString(0) to it.getString(1)
         }
         location.first?.let { tree ->
-            SafStillRows(context, Uri.parse(tree), location.second?.let(Uri::parse)) { error("A discarded still group never creates its folder") }.discard()
+            val at = resolved ?: DriveLocation(Uri.parse(tree), location.second?.let(Uri::parse))
+            SafStillRows(context, at.tree, at.folder) { error("A discarded still group never creates its folder") }.discard()
             check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1)
             return
         }

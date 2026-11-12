@@ -180,8 +180,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private fun recoverDriveTake(db: SQLiteDatabase, record: JournalRow): DriveRecovery {
         val tree = Uri.parse(record.tree)
         val volume = requireNotNull(record.volume) { "Drive take without a volume" }
-        if (!mounted(volume) || !holdsTree(tree)) return DriveRecovery.DEFERRED
-        val store = SafRecordingRows(context, tree, record.folder?.let(Uri::parse)) { error("A recovered take never creates its folder") }
+        // The drive under vold's other name answers through the folder picked there (resolveDriveLocation).
+        val location = resolveDriveLocation(tree, volume, record.folder?.let(Uri::parse), heldReadWriteTrees(resolver), mounted)
+            ?: return DriveRecovery.DEFERRED
+        val store = SafRecordingRows(context, location.tree, location.folder) { error("A recovered take never creates its folder") }
         return when {
             record.folder == null -> { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
             !store.folderExists() -> {
@@ -225,9 +227,6 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             }
         }
     }
-
-    private fun holdsTree(tree: Uri): Boolean =
-        resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission && it.isWritePermission }
 
     /**
      * Publishes the outputs with bytes of an interrupted take as incomplete and deletes the empty ones,

@@ -132,6 +132,10 @@ class DriveMediaCatalogTest {
         listOf(doc("$folder/sub/A001.mp4"), doc("$folder/.occ-in-progress"), doc("${folder}2/A001.mp4"), doc(folder),
             "content://media/external_primary/video/media/12", "content://evil.documents/tree/x/document/${enc("$folder/A001.mp4")}")
             .forEach { assertNull(it, driveMemberDocumentId(it, folder)) }
+        val renamedFolder = "FFF1-7571-01:" + folder.substringAfter(':')
+        assertEquals("$renamedFolder/A001.mp4", driveMemberDocumentId(doc("$folder/A001.mp4"), renamedFolder))
+        assertEquals("$folder/A001.mp4", driveMemberDocumentId(doc("$renamedFolder/A001.mp4"), folder))
+        assertNull(driveMemberDocumentId(doc("FFF1-7572:" + folder.substringAfter(':') + "/A001.mp4"), folder))
         assertTrue(isDriveUri(doc("$folder/A001.mp4")))
         assertFalse(isDriveUri("content://media/external_primary/video/media/12"))
         assertEquals("WD Elements/Takes/OpenCineCam/A001/A001.mp4", drivePath("WD Elements", doc("$folder/A001.mp4")))
@@ -215,6 +219,17 @@ class DriveMediaCatalogTest {
             assertEquals(outside, LocalMediaRelationStatus.INVALID_METADATA,
                 catalogTake(namespace, listOf(video), listOf(sidecar(videoJson(outside))))?.relationStatus)
         }
+        // A sidecar written while the drive was FFF1-7571 names the same file once vold mounts it as FFF1-7571-01.
+        val renamed = MediaNamespace(bundle, true, "FFF1-7571-01:" + folder.substringAfter(':'))
+        val moved = member("A001.mp4", LocalMediaKind.VIDEO, renamed, 1, doc("${renamed.driveFolder}/A001.mp4"))
+        assertEquals(LocalMediaRelationStatus.DECLARED,
+            catalogTake(renamed, listOf(moved), listOf(sidecar(videoJson(video.artifact.uri))))?.relationStatus)
+        assertEquals(LocalMediaRelationStatus.DECLARED,
+            catalogTake(namespace, listOf(video), listOf(sidecar(videoJson(moved.artifact.uri))))?.relationStatus)
+        assertTrue(sameTakeMemberUri(video.artifact.uri, moved.artifact.uri))
+        // Another drive is never an alias.
+        assertEquals(LocalMediaRelationStatus.INVALID_METADATA, catalogTake(renamed, listOf(moved),
+            listOf(sidecar(videoJson(doc("FFF1-7572:" + folder.substringAfter(':') + "/A001.mp4")))))?.relationStatus)
         // A sibling in the folder that is not listed is a missing member, not an invalid reference.
         assertEquals(LocalMediaRelationStatus.INCOMPLETE,
             catalogTake(namespace, listOf(video), listOf(sidecar(videoJson(doc("$folder/A002.mp4")))))?.relationStatus)

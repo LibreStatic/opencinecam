@@ -206,6 +206,19 @@ class StillSafRecoveryTest {
         assertEquals(emptyList<List<String?>>(), entries())
     }
 
+    @Test fun groupIsRecoveredThroughTheSameFolderPickedUnderTheDrivesOtherName() {
+        interrupted("B.jpg" to byteArrayOf(5))
+        // vold mounts the drive as FFF1-7571-01 after a cut-short mount: the recorded name is gone.
+        drive.volume = "${FakeExternalStorageProvider.VOLUME}-01"
+        assertEquals(StillRecoveryReport(deferredGroups = 1), journal().recover())
+        assertTrue(File(stills, "B/B.jpg").isFile)
+
+        FakeExternalStorageProvider.grant(context, drive.tree("Rec"))
+        assertEquals(StillRecoveryReport(discardedGroups = 1), journal().recover())
+        assertFalse(File(stills, "B").exists())
+        assertEquals(emptyList<List<String?>>(), entries())
+    }
+
     @Test fun driveThatDoesNotAnswerIsNeverReadAsEmpty() {
         interrupted("C.jpg" to byteArrayOf(5))
         drive.mounted = false

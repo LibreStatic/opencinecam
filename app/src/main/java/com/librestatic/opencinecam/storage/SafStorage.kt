@@ -74,3 +74,36 @@ internal fun volumeIdOfDocumentId(documentId: String?): String? {
 /** The document URI of the folder [tree] grants, to create documents in or query. */
 internal fun treeDocumentUri(tree: Uri): Uri =
     DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+
+/** Where a journalled drive take or still group is now: its tree and folder as recorded, or their twins under the drive's mounted name. */
+internal data class DriveLocation(val tree: Uri, val folder: Uri?)
+
+/**
+ * The location a recovery journal recorded ([tree] on [volume], with [folder] under it) as the drive answers now, or null
+ * to leave the entry for a later pass. As recorded while that volume is mounted and its grant is in [held]. Otherwise the
+ * same folder picked on the same drive under another volume name ([sameDrive]: vold's `-01` rename, see
+ * [driveIdentityOf]), when that tree is in [held] and its volume mounted; [folder] is then rebuilt under that tree with
+ * its path unchanged. The journal keeps what it recorded, so the entry also resolves when the old name returns.
+ */
+internal fun resolveDriveLocation(tree: Uri, volume: String, folder: Uri?, held: Set<Uri>, mounted: (String) -> Boolean): DriveLocation? {
+    if (mounted(volume) && tree in held) return DriveLocation(tree, folder)
+    val treeId = treeDocumentIdOf(tree) ?: return null
+    val treeName = volumeIdOfDocumentId(treeId) ?: return null
+    val path = treeId.substringAfter(':')
+    for (candidate in held) {
+        if (candidate.authority != EXTERNAL_STORAGE_AUTHORITY) continue
+        val id = treeDocumentIdOf(candidate) ?: continue
+        val name = volumeIdOfDocumentId(id) ?: continue
+        if (name == treeName || !sameDrive(name, treeName) || id.substringAfter(':') != path || !mounted(name)) continue
+        if (folder == null) return DriveLocation(candidate, null)
+        val folderId = runCatching { DocumentsContract.getDocumentId(folder) }.getOrNull() ?: return null
+        if (volumeIdOfDocumentId(folderId) != treeName) return null
+        return DriveLocation(candidate,
+            DocumentsContract.buildDocumentUriUsingTree(candidate, id.substringBefore(':') + ":" + folderId.substringAfter(':')))
+    }
+    return null
+}
+
+/** The trees this app holds a persisted read and write grant for. */
+internal fun heldReadWriteTrees(resolver: ContentResolver): Set<Uri> =
+    resolver.persistedUriPermissions.filter { it.isReadPermission && it.isWritePermission }.mapTo(LinkedHashSet()) { it.uri }
