@@ -40,6 +40,8 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     lateinit var directory: File
     var volume: String = VOLUME
     var mounted = true
+    /** When set, the drive answers this many more document queries and then goes away (it is unplugged mid-read). */
+    var queriesBeforeUnplug: Int? = null
     var availableBytes: Long = 64L shl 30
 
     override fun onCreate(): Boolean = true
@@ -57,8 +59,10 @@ class FakeExternalStorageProvider : DocumentsProvider() {
             .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_CREATE or Root.FLAG_SUPPORTS_IS_CHILD)
     }
 
-    override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor =
-        MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply { addDocument(this, documentId, existing(documentId)) }
+    override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
+        queriesBeforeUnplug?.let { left -> if (left <= 0) mounted = false else queriesBeforeUnplug = left - 1 }
+        return MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply { addDocument(this, documentId, existing(documentId)) }
+    }
 
     override fun queryChildDocuments(parentDocumentId: String, projection: Array<out String>?, sortOrder: String?): Cursor {
         val parent = existing(parentDocumentId)

@@ -274,6 +274,27 @@ class RecordingSafRecoveryTest {
         assertArrayEquals(before, File(takeDir(), "A001.timing.json").readBytes())
     }
 
+    @Test fun driveThatGoesQuietDuringRecoveryNeverDropsTheReceipt() {
+        val id = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        val stale = RecordingCaptureRecovery(context) { true }
+        // Gone before the folder is read: "no folder" is the drive not answering, not a take that never reached it.
+        drive.mounted = false
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), stale.recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+
+        // Gone between the folder and the marker: a marker that reads as missing is not a committed take.
+        drive.mounted = true
+        drive.queriesBeforeUnplug = 1
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), stale.recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+
+        drive.queriesBeforeUnplug = null
+        drive.mounted = true
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertTrue(entries().isEmpty())
+    }
+
     @Test fun takeWithNoFolderJournalledNeverReachedTheDrive() {
         assertEquals(RecordingRecoveryReport(), journal().recover())
         val id = UUID.randomUUID().toString()

@@ -183,8 +183,15 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         if (!mounted(volume) || !holdsTree(tree)) return DriveRecovery.DEFERRED
         val store = SafRecordingRows(context, tree, record.folder?.let(Uri::parse)) { error("A recovered take never creates its folder") }
         return when {
-            record.folder == null || !store.folderExists() -> { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
+            record.folder == null -> { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
+            !store.folderExists() -> {
+                // A drive that went quiet reads as "no folder" too: the receipt goes only while the drive still answers.
+                check(store.reachable()) { "Recording drive unavailable" }
+                discardRows(db, record.id, store); DriveRecovery.DISCARDED
+            }
             !store.markerExists() -> {
+                // The marker read as missing: make sure the drive still answered rather than vanished meanwhile.
+                check(store.folderExists()) { "Recording drive unavailable" }
                 check(db.delete("captures", "id = ? AND committed = 0", arrayOf(record.id)) == 1)
                 DriveRecovery.COMMITTED
             }
