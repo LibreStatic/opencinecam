@@ -150,13 +150,13 @@ class RecordingRecoveryDeviceTest {
         val id = UUID.randomUUID().toString()
         f.receipt(id, 0L)
         val row = f.direct(id, "Music", "future.wav", "audio/wav", pending = 1)
-        f.database { it.version = 2 }
+        f.database { it.version = 3 }
         val beforeDatabase = f.databaseFile.readBytes()
         val beforeRow = f.digest(row)
         assertThrows(IllegalStateException::class.java) { RecordingCaptureRecovery(f.context).recover() }
         assertArrayEquals(beforeDatabase, f.databaseFile.readBytes())
         assertEquals(beforeRow, f.digest(row))
-        f.database { assertEquals(2, it.version); it.version = 1 }
+        f.database { assertEquals(3, it.version); it.version = 2 }
         assertEquals(RecordingRecoveryReport(incompleteGroups = 1), f.journal.recover())
         f.adopt(f.journal.allRows(id))
         assertEquals(0, f.pending(row))

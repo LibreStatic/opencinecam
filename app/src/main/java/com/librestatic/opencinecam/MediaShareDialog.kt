@@ -90,6 +90,7 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
     val scope = rememberCoroutineScope()
     var busy by remember(owner) { mutableStateOf(false) }
     var failed by remember(owner) { mutableStateOf(false) }
+    var driveMissing by remember(owner) { mutableStateOf(false) }
     var cleanupFailed by remember(owner) { mutableStateOf(false) }
     var launched by remember(owner) { mutableStateOf(false) }
     var files by remember(owner) { mutableStateOf<List<PreparedMediaShareFile>>(emptyList()) }
@@ -143,7 +144,8 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
                         Text(stringResource(R.string.media_share_temporary), Modifier.fillMaxWidth().testTag("media-share-temporary"),
                             color = SettingsMuted, fontSize = 13.sp)
                         if (busy) Text(stringResource(R.string.media_share_preparing), Modifier.fillMaxWidth().testTag("media-share-preparing"))
-                        if (failed) Text(stringResource(R.string.media_share_error), Modifier.fillMaxWidth().testTag("media-share-error"),
+                        if (failed) Text(stringResource(if (driveMissing) R.string.media_drive_not_connected else R.string.media_share_error),
+                            Modifier.fillMaxWidth().testTag("media-share-error"),
                             color = MaterialTheme.colorScheme.error)
                         if (cleanupFailed) Text(stringResource(R.string.media_share_cleanup_error), Modifier.fillMaxWidth().testTag("media-share-cleanup-error"))
                         if (launched) {
@@ -155,7 +157,7 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
                 }
                 OutlinedButton(onClick = {
                     if (!busy && !launched && canPrepare && owner.valid.get()) {
-                        busy = true; failed = false; cleanupFailed = false
+                        busy = true; failed = false; driveMissing = false; cleanupFailed = false
                         owner.job = scope.launch {
                             var prepared: MediaSharePreparation? = null
                             try {
@@ -173,7 +175,7 @@ internal fun MediaShareDialogContent(take: LocalMediaTake, settings: MediaSharin
                                 files = result.files.toList()
                                 launched = true
                             } catch (cancelled: CancellationException) { throw cancelled }
-                            catch (_: Exception) { if (owner.valid.get()) failed = true }
+                            catch (failure: Exception) { if (owner.valid.get()) { failed = true; driveMissing = failure.driveNotConnected() } }
                             finally {
                                 val failure = withContext(NonCancellable + Dispatchers.IO) {
                                     runCatching { prepared?.discard() }.exceptionOrNull()

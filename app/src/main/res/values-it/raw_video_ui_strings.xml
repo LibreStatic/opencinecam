@@ -19,7 +19,7 @@
     <string name="raw_video_ring">BUFFER %1$d%%</string>
     <string name="raw_video_frames">%1$d fot.</string>
     <string name="raw_video_ring_description">Buffer RAW pieno al %1$d%%, %2$d fotogrammi scritti</string>
-    <string name="raw_video_config_help">Il video RAW scrive ogni fotogramma senza compressione in Documents/OpenCineCam/RAW. Sono offerte solo le dimensioni e le cadenze che questo telefono ha qualificato sulla sua memoria: ognuna ha superato un lungo test di archiviazione e una ripresa reale senza perdere fotogrammi. Automatica sceglie la velocità qualificata più alta. Un ritaglio legge tutto il sensore ma ne registra solo il centro, quindi l’immagine è più stretta. Il tempo mostrato indica quanto dura lo spazio libero a quella velocità.</string>
+    <string name="raw_video_config_help">Il video RAW scrive ogni fotogramma senza compressione in Documents/OpenCineCam/RAW, o sull’unità USB quando è la destinazione di registrazione. Sono offerte solo le dimensioni e le cadenze qualificate su quella memoria: ognuna ha superato un lungo test di archiviazione e una ripresa reale senza perdere fotogrammi. Automatica sceglie la velocità qualificata più alta. Un ritaglio legge tutto il sensore ma ne registra solo il centro, quindi l’immagine è più stretta. Il tempo mostrato indica quanto dura lo spazio libero a quella velocità.</string>
     <string name="gallery_raw_video">Video RAW</string>
     <string name="media_integrity_raw">Una ripresa OpenCine RAW. Il lettore mostra un’anteprima sviluppata; per la qualità piena, copiala o condividila su un computer e convertila con il convertitore DNG per desktop.</string>
     <string name="raw_video_audio_incomplete">L\'audio ha delle interruzioni</string>

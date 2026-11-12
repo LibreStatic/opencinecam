@@ -12,6 +12,7 @@
     <string name="raw_video_recording">REC RAW10 · %1$s · %2$d Mo/s</string>
     <string name="raw_video_saved">Prise RAW enregistrée : %1$d images, %2$s s</string>
     <string name="raw_video_not_finalised">La prise RAW n’a pas été finalisée ; elle sera récupérée au prochain démarrage.</string>
+    <string name="raw_video_not_finalised_drive">La prise RAW n’a pas été finalisée ; elle sera récupérée à la prochaine connexion du disque USB.</string>
     <string name="raw_video_empty">La prise RAW n’a enregistré aucune image.</string>
     <string name="raw_video_end_ring_full">le stockage n’a pas suivi le flux RAW</string>
     <string name="raw_video_end_writer">le fichier RAW n’a pas pu être écrit</string>

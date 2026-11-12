@@ -7,7 +7,6 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.os.Bundle
-import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import com.librestatic.opencinecam.storage.RAW_VIDEO_EXTENSION
 import com.librestatic.opencinecam.storage.RAW_VIDEO_PATH
@@ -49,26 +48,25 @@ internal class MediaStoreShareTakes(context: Context) : ShareTakeSource {
                     // The provider may ignore parts of the selection: check every row again.
                     if (id <= 0 || size < 0 || cursor.getString(5) != context.packageName || cursor.getInt(6) != 0 || !isRawVideoRow(path, name)) continue
                     val uri = ContentUris.withAppendedId(collection, id)
-                    add(ShareTake(uri.toString(), name, size, modifiedSeconds * 1000) { open(uri) })
+                    add(ShareTake(uri.toString(), name, size, modifiedSeconds * 1000) { openShareFile(resolver, uri) })
                 }
             }
         }
     }
 
-    private fun open(uri: android.net.Uri): ShareOpenFile {
-        val descriptor = resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("take unavailable")
-        val stream = try { FileInputStream(descriptor.fileDescriptor) } catch (error: RuntimeException) { descriptor.close(); throw error }
-        return object : ShareOpenFile {
-            override val channel: FileChannel = stream.channel
-            override fun close() {
-                try { stream.close() } finally { closeQuietly(descriptor) }
-            }
-        }
-    }
-
-    private fun closeQuietly(descriptor: ParcelFileDescriptor) = runCatching { descriptor.close() }
-
     private companion object {
         const val MAX_TAKES = 1000
+    }
+}
+
+/** A read-only descriptor on [uri] (a MediaStore row or a drive document) as a [ShareOpenFile]. */
+internal fun openShareFile(resolver: ContentResolver, uri: android.net.Uri): ShareOpenFile {
+    val descriptor = resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("take unavailable")
+    val stream = try { FileInputStream(descriptor.fileDescriptor) } catch (error: RuntimeException) { descriptor.close(); throw error }
+    return object : ShareOpenFile {
+        override val channel: FileChannel = stream.channel
+        override fun close() {
+            try { stream.close() } finally { runCatching { descriptor.close() } }
+        }
     }
 }

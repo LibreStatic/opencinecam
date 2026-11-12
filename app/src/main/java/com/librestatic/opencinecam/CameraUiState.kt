@@ -52,6 +52,22 @@ fun com.librestatic.opencinecam.camera.Camera2CameraDescriptor.logProfilesFor(mo
 
 enum class ModeGateState { AVAILABLE, CANDIDATE, UNSUPPORTED, FAILED }
 
+/**
+ * PLAN-072: the recording destination as the HUD and settings show it; no URIs. [configuredDrive]: the operator chose a
+ * USB folder. [onDrive]: the running take, encoded or RAW video, writes to it, or the next one would when idle (RAW video
+ * too since Delivery 3). [fallback]: why a configured drive is not used. [driveLabel] and [driveFreeBytes]
+ * (null when the provider gives no figure or the drive is not in use) describe the drive.
+ */
+data class RecordingDestinationStatus(
+    val configuredDrive: Boolean = false,
+    val onDrive: Boolean = false,
+    val fallback: com.librestatic.opencinecam.storage.DestinationFallback? = null,
+    val driveLabel: String? = null,
+    val driveFreeBytes: Long? = null,
+    /** PLAN-072 Delivery 4: the running take continues on the phone a take whose drive was lost; cleared when it stops. */
+    val continuedOnPhone: Boolean = false,
+)
+
 data class CameraUiState(
     val operatorLutStatus: com.librestatic.opencinecam.camera.OperatorLutStatus = com.librestatic.opencinecam.camera.OperatorLutStatus(),
     val subjectLutStatus: com.librestatic.opencinecam.camera.OperatorLutStatus = com.librestatic.opencinecam.camera.OperatorLutStatus(),
@@ -236,6 +252,8 @@ data class CameraUiState(
     val rawVideoQualification: RawVideoQualificationUi? = null,
     /** OCC-PLAN-068 U7: derived framing only (no face geometry); never persisted. */
     val subjectFraming: com.librestatic.opencinecam.camera.SubjectFramingStatus = com.librestatic.opencinecam.camera.SubjectFramingStatus(),
+    /** PLAN-072: where encoded video takes go (the running take's, or the next one's when idle). */
+    val recordingDestination: RecordingDestinationStatus = RecordingDestinationStatus(),
 ) {
     val whiteBalancePreparing: Boolean
         get() = phase == CameraUiPhase.CAPTURING && recordingWhiteBalanceStatus in setOf(

@@ -46,6 +46,11 @@ class RawVideoQualifierTest {
         assertTrue(listener.results.isEmpty())
         assertEquals(RawQualificationPhase.DONE, listener.progress.last().phase)
         assertEquals(1.0, listener.progress.last().fraction, 0.0)
+        assertEquals(0L, listener.progress.last().remainingMs)
+        // Where the time went is reported even for a run that never started a step.
+        assertEquals(0, outcome.report.getJSONArray("steps").length())
+        assertTrue(outcome.report.has("elapsedMs"))
+        assertTrue(outcome.report.isNull("storageModel"))
     }
 
     @Test fun withoutARaw10CameraItIsUnknownAndUnsupported() {

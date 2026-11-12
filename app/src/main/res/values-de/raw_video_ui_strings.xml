@@ -19,7 +19,7 @@
     <string name="raw_video_ring">PUFFER %1$d%%</string>
     <string name="raw_video_frames">%1$d B.</string>
     <string name="raw_video_ring_description">RAW-Puffer zu %1$d%% gefüllt, %2$d Bilder geschrieben</string>
-    <string name="raw_video_config_help">RAW-Video schreibt jedes Bild unkomprimiert nach Documents/OpenCineCam/RAW. Angeboten werden nur Größen und Bildraten, die dieses Telefon auf seinem Speicher qualifiziert hat: Jede hat einen langen Speichertest und eine Live-Aufnahme ohne verlorenes Bild bestanden. Automatisch wählt die höchste qualifizierte Rate. Ein Ausschnitt liest den ganzen Sensor aus, speichert aber nur die Mitte, das Bild wird also enger. Die angezeigte Zeit gibt an, wie lange der freie Speicher bei dieser Rate reicht.</string>
+    <string name="raw_video_config_help">RAW-Video schreibt jedes Bild unkomprimiert nach Documents/OpenCineCam/RAW oder auf das USB-Laufwerk, wenn es das Aufnahmeziel ist. Angeboten werden nur Größen und Bildraten, die auf diesem Speicher qualifiziert sind: Jede hat einen langen Speichertest und eine Live-Aufnahme ohne verlorenes Bild bestanden. Automatisch wählt die höchste qualifizierte Rate. Ein Ausschnitt liest den ganzen Sensor aus, speichert aber nur die Mitte, das Bild wird also enger. Die angezeigte Zeit gibt an, wie lange der freie Speicher bei dieser Rate reicht.</string>
     <string name="gallery_raw_video">RAW-Video</string>
     <string name="media_integrity_raw">Eine OpenCine-RAW-Aufnahme. Der Player zeigt eine entwickelte Vorschau; für die volle Qualität kopiere oder teile sie auf einen Computer und wandle sie dort mit dem DNG-Konverter für den Desktop um.</string>
     <string name="raw_video_audio_incomplete">Der Ton hat Lücken</string>

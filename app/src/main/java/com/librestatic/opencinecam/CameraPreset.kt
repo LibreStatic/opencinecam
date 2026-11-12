@@ -234,6 +234,8 @@ object CameraPresetCodec {
         lensCorrectionAlignment = current.lensCorrectionAlignment,
         lensLock = current.lensLock,
         smoothLensSwitch = current.smoothLensSwitch,
+        // Whether the interface rotates with the system lock on is a habit of this phone, not a portable key.
+        rotateWhenLocked = current.rotateWhenLocked,
         proxy = current.proxy,
         timecodeRememberPosition = current.timecodeRememberPosition,
         timecodeResetRevision = current.timecodeResetRevision,

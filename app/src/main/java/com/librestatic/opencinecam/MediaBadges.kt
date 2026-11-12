@@ -34,7 +34,9 @@ internal data class CodecBadge(val name: String, val bits: Int? = null, val floa
 
 /** What a card and the inspector say about a take beyond its MediaStore facts. */
 internal data class TakeBadges(val codec: CodecBadge? = null, val proxy: TakeProxyState = TakeProxyState.NONE,
-    val incompleteReasons: List<String> = emptyList())
+    val incompleteReasons: List<String> = emptyList(),
+    /** The take lives on the recording drive (PLAN-072): its card says `USB`, as the capture chip does. */
+    val onDrive: Boolean = false)
 
 internal fun codecBadge(take: LocalMediaTake, encoding: LocalMediaEncoding?): CodecBadge? =
     codecBadge(take.kind, take.primary.mimeType, take.primary.name, encoding)

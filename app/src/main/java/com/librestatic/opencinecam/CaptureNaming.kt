@@ -80,3 +80,14 @@ fun captureFileStem(bundleId: String, naming: CaptureNameSnapshot? = null): Stri
     }.trimEnd('.', '_', ' ').ifEmpty { "untitled" }
     return "${prefix}_$bundleId"
 }
+
+/**
+ * PLAN-072 Delivery 4: the stem of continuation [index] (1, 2…) of a take whose stem is [parentStem], `<parentStem>_cont<index>`.
+ * The continuation records on the phone after the drive take was lost, so its files sort beside that take's; the parent's
+ * prefix is bounded to 160 UTF-8 bytes and its UUID is fixed, so the suffix still leaves room for every role suffix.
+ */
+fun continuationFileStem(parentStem: String, index: Int): String {
+    require(index >= 1) { "Continuation index starts at 1" }
+    require(parentStem.isNotBlank() && parentStem.none { it in "/\\" }) { "Invalid parent stem" }
+    return "${parentStem}_cont$index"
+}

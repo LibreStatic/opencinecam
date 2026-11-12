@@ -23,6 +23,7 @@ import java.util.UUID
  * Unlike [VideoOutput], this row is not a member of a [RecordingRecoveryGroup]: those namespaces are
  * per-take folders under DCIM, Music and Download, and the RAW destination is a shared Documents
  * folder. Recovery therefore enumerates this app's pending `.ocraw` rows in that folder instead.
+ * A take on a USB drive uses [SafRawVideoOutput] instead (PLAN-072 Delivery 3).
  */
 class RawVideoOutput private constructor(
     private val context: Context,
@@ -83,15 +84,19 @@ class RawVideoOutput private constructor(
         const val MIME_TYPE = "application/octet-stream"
         const val EXTENSION = ".ocraw"
 
-        /** Inserts the pending row and opens it for writing. [takeId] must be a UUID string. */
+        /**
+         * Inserts the pending row and opens it for writing. [takeId] must be a UUID string. [stem] replaces the usual
+         * `captureFileStem(takeId, captureNames)` (PLAN-072 Delivery 4: a continuation is named after the drive take).
+         */
         fun create(
             context: Context,
             captureNames: CaptureNameSnapshot? = null,
             takeId: String = UUID.randomUUID().toString(),
+            stem: String? = null,
         ): RawVideoOutput {
             val app = context.applicationContext
             val resolver = app.contentResolver
-            val requested = captureFileStem(takeId, captureNames) + EXTENSION
+            val requested = (stem ?: captureFileStem(takeId, captureNames)) + EXTENSION
             val uri = RawVideoRecovery.insertLive {
                 requireNotNull(resolver.insert(collection(), ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, requested)

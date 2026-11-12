@@ -49,11 +49,14 @@ object SettingsCatalog {
         SettingEntry("haptics", SettingsCategory.CONTROLS, R.string.haptics_title, "haptica haptico vibracion vibrar haptic haptics vibration feedback tacto touch respuesta tactil silenciar mute toma take"),
         SettingEntry("translucent-chrome", SettingsCategory.CONTROLS, R.string.translucent_chrome, "interfaz translucida translucent transparente transparent semitransparente pantalla completa full screen visor viewfinder ajustar fit rellenar fill recortar crop opacidad opacity inmersivo immersive"),
         SettingEntry("scroll-long-text", SettingsCategory.CONTROLS, R.string.scroll_long_text, "desplazar texto largo textos largos marquesina marquee scroll scrolling desplazamiento elipsis ellipsis puntos suspensivos recortado cortado truncado truncate animacion animation movimiento motion"),
+        SettingEntry("rotate-when-locked", SettingsCategory.CONTROLS, R.string.rotate_when_locked, "rotate rotation orientation auto-rotate autorotate lock landscape portrait girar rotacion orientacion bloqueo bloqueada giro automatico horizontal vertical drehen drehung ausrichtung sperre pivoter rotation verrouillage paysage ruotare rotazione blocco orizzontale verticale rodar girar rotacao bloqueio paisagem retrato"),
         SettingEntry("audio", SettingsCategory.AUDIO, R.string.audio_recording, "mic microphone microfono permiso permission"),
         SettingEntry("audio-permission", SettingsCategory.AUDIO, R.string.grant_microphone, "mic microphone microfono permiso permission"),
         SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
         SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
         SettingEntry("recording-policy", SettingsCategory.RECORDING, R.string.recording_policy_title, "strict estricto adaptive adaptativo politica policy detener stop degradar degrade aviso warning termico thermal almacenamiento storage espacio space deriva drift cadencia cadence toma take"),
+        SettingEntry(RECORDING_DESTINATION_SETTING_ID, SettingsCategory.RECORDING, R.string.recording_destination_title, "destination destino storage almacenamiento ssd usb usb-c drive disco unidad external externo externa exfat fat32 folder carpeta phone telefono movil memoria memory pendrive hdd grabar record save guardar"),
+        SettingEntry(RECORDING_DRIVE_DISCONNECT_SETTING_ID, SettingsCategory.RECORDING, R.string.recording_drive_disconnect_title, "ssd usb drive disco unidad external externo externa desconectar disconnect desconexion disconnection unplug desenchufar stop detener save guardar continue continuar phone telefono destination destino storage almacenamiento"),
         SettingEntry("bitrate", SettingsCategory.RECORDING, R.string.video_bitrate, "video calidad quality Mbps"),
         SettingEntry("video-codec", SettingsCategory.RECORDING, R.string.video_codec, "video codec codificador H.264 AVC HEVC H.265 formato format tamaño size archivo file"),
         SettingEntry("low-light-fps", SettingsCategory.RECORDING, R.string.low_light_fps_title, "low light fps frame rate auto automatic automatica poca luz cuadros fotogramas cadencia cadence variable VFR 60 30 dinamica dynamic IQ nocturno brillo brighter profesional professional"),
@@ -83,7 +86,7 @@ object SettingsCatalog {
         SettingEntry("smooth-lens-switch", SettingsCategory.CAPTURE, R.string.smooth_lens_switch, "zoom lente lens cambio switch salto jump suavizar smooth fundido blend transicion transition encuadre framing tele gran angular wide ultrawide pellizco pinch"),
         SettingEntry("lens-calibration", SettingsCategory.CAPTURE, R.string.lens_cal_title, "lens lente objetivo calibration calibracion calibrar zoom colour color match igualar sensor multi camera wide ultrawide tele telephoto framing encuadre alineacion alignment correction correccion switch cambio"),
         SettingEntry("lens-lock", SettingsCategory.CAPTURE, R.string.lens_lock_title, "lens lock bloqueo lente objetivo zoom digital zoom digital switch lens cambio cambiar ultra wide ultrawide gran angular tele telephoto fijar pin"),
-        SettingEntry("raw-video", SettingsCategory.CAPTURE, R.string.raw_video_config_title, "RAW video vídeo RAW10 OCRAW sin comprimir uncompressed configuracion configuration recorte crop sensor MB/s capacidad capacity minutos minutes cualificar qualify compresion compression comprimido compressed sin perdida lossless casi sin perdida near-lossless ruido noise"),
+        SettingEntry("raw-video", SettingsCategory.CAPTURE, R.string.raw_video_config_title, "RAW video vídeo RAW10 OCRAW sin comprimir uncompressed configuracion configuration recorte crop sensor MB/s capacidad capacity minutos minutes cualificar qualify calificar recalificar calificada calificado qualifizieren qualifiziert qualifier qualifiee qualificare qualifica qualificata qualificar qualificada Konfiguration configurazione configuracao compresion compression Komprimierung komprimiert compressione compressao comprimido compressed sin perdida lossless casi sin perdida near-lossless ruido noise"),
         SettingEntry("timecode", SettingsCategory.RECORDING, R.string.settings_timecode, "timecode SMPTE tiempo FPS drop frame DF NDF"),
         SettingEntry("gyroflow-log", SettingsCategory.RECORDING, R.string.gyroflow_log_title, "gyroflow gyro gyroscope giroscopio acelerometro accelerometer gcsv movimiento motion estabilizacion stabilization sensor IMU video LOG HLG privacidad privacy"),
         SettingEntry("camera-capabilities", SettingsCategory.DIAGNOSTICS, R.string.caps_title, "capacidades capabilities parametros parameters caracteristicas characteristics camera2 camara camera sensor lente lens soporte support compatibilidad compatibility hardware nivel level ISO RAW HLG HDR fps alta velocidad high speed formatos formats informe report"),
@@ -93,14 +96,29 @@ object SettingsCatalog {
         SettingEntry("about", SettingsCategory.DIAGNOSTICS, R.string.about_title, "about acerca licencia license version ayuda help"),
     )
 
+    /** The settings whose own title holds every word of [query]: a search shows them before the keyword matches. */
+    fun titleMatches(query: String, label: (Int) -> String): Set<String> {
+        val words = normalize(query).split(Regex("\\s+")).filter(String::isNotEmpty)
+        if (words.isEmpty()) return emptySet()
+        return entries.filter { entry ->
+            val title = normalize(label(entry.title))
+            val tokens by lazy { title.split(Regex("[^\\p{L}\\p{N}]+")) }
+            words.all { word -> if (word.length <= SHORT_WORD) tokens.any { it.startsWith(word) } else word in title }
+        }.mapTo(linkedSetOf()) { it.id }
+    }
+
     fun search(query: String, category: SettingsCategory?, label: (Int) -> String): Set<String> {
         val words = normalize(query).split(Regex("\\s+")).filter(String::isNotEmpty)
         return entries.filter { entry ->
-            (category == null || entry.category == category) && words.all { word ->
-                word in normalize("${label(entry.title)} ${label(entry.category.title)} ${entry.keywords}")
-            }
+            if (category != null && entry.category != category) return@filter false
+            val text = normalize("${label(entry.title)} ${label(entry.category.title)} ${entry.keywords}")
+            val tokens by lazy { text.split(Regex("[^\\p{L}\\p{N}]+")) }
+            words.all { word -> if (word.length <= SHORT_WORD) tokens.any { it.startsWith(word) } else word in text }
         }.mapTo(linkedSetOf()) { it.id }
     }
+
+    /** A query word this short must start a word: as a loose substring "raw" would also find "ultrawide". */
+    private const val SHORT_WORD = 3
 
     private fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFD)
         .replace(Regex("\\p{M}+"), "").lowercase(Locale.ROOT)
@@ -143,6 +161,7 @@ fun CameraSettings.withLivePreferencesFrom(next: CameraSettings): CameraSettings
     modeSelectorStyle = next.modeSelectorStyle,
     translucentChrome = next.translucentChrome,
     scrollLongText = next.scrollLongText,
+    rotateWhenLocked = next.rotateWhenLocked,
     viewfinderScale = next.viewfinderScale,
     chromeOpacity = next.chromeOpacity,
 )

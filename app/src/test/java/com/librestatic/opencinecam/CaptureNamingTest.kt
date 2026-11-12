@@ -62,4 +62,14 @@ class CaptureNamingTest {
         assertEquals("Next_$id",captureFileStem(id,next))
         assertTrue(runCatching { original.copy(epochMillis=-1) }.isFailure)
     }
+    @Test fun aContinuationKeepsTheParentStemAndAddsItsIndex() {
+        // PLAN-072 Delivery 4: the phone part of a take whose drive was lost is named after the drive part, legacy or templated.
+        assertEquals("OCC_${id}_cont1", continuationFileStem(captureFileStem(id), 1))
+        val templated = captureFileStem(id, snapshot("{scene}_T{take}"))
+        assertEquals("${templated}_cont1", continuationFileStem(templated, 1))
+        assertEquals("${templated}_cont2", continuationFileStem(templated, 2))
+        assertTrue(runCatching { continuationFileStem(templated, 0) }.isFailure)
+        assertTrue(runCatching { continuationFileStem(" ", 1) }.isFailure)
+        assertTrue(runCatching { continuationFileStem("a/b", 1) }.isFailure)
+    }
 }

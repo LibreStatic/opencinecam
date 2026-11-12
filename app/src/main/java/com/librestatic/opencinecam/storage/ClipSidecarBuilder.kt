@@ -129,7 +129,25 @@ internal data class ClipTakeFacts(
     val nativeRetired: Boolean,
     /** Files of the take besides the video and its metadata sidecar: the separate audio file and its sidecar. */
     val audioFiles: List<String> = emptyList(),
+    /** PLAN-072 Delivery 4: set when this take continues on the phone a drive take whose drive was lost. */
+    val continuation: ClipContinuation? = null,
 )
+
+/**
+ * PLAN-072 Delivery 4: the link from a continuation take on the phone to the drive take it continues. [of] is the
+ * parent's bundle id (its recording id), [previousName] its primary file's name, [index] 1 for the first continuation,
+ * [reason] the parent's stop code (`drive-disconnected` or `drive-write-failed`).
+ */
+internal data class ClipContinuation(val of: String, val previousName: String, val index: Int, val reason: String) {
+    init { require(index >= 1 && of.isNotBlank() && previousName.isNotBlank() && reason.isNotBlank()) }
+}
+
+private fun continuationJson(link: ClipContinuation): JsonObject = buildJsonObject {
+    put("of", link.of)
+    put("previousName", link.previousName)
+    put("index", link.index)
+    put("reason", link.reason)
+}
 
 enum class ClipStepStatus(val wire: String) { PASS("pass"), FAIL("fail"), NOT_RUN("notRun") }
 
@@ -359,6 +377,7 @@ internal fun buildClipSidecar(facts: ClipTakeFacts, context: ClipSidecarPrepareC
         media = mediaJson(facts, context),
         takeStatus = context.incompleteReasons?.let { IncompleteTake.STATUS_INCOMPLETE },
         failureReasons = context.incompleteReasons?.distinct(),
+        continuation = facts.continuation?.let(::continuationJson),
     )
 
 /**

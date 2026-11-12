@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationPlannedConfig
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpecs
+import com.librestatic.opencinecam.rawvideo.RawQualificationRisk
 import com.librestatic.opencinecam.rawvideo.RawQualificationStaging
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
 import com.librestatic.opencinecam.rawvideo.RawQualificationStatus
@@ -61,6 +62,9 @@ class RawVideoQualificationFlowTest {
         assertTrue(RawQualificationConditions(batteryPercent = 5, thermalStatus = 0).batteryWarning)
         assertTrue(RawQualificationConditions(batteryPercent = 49, thermalStatus = 0).batteryWarning)
         assertFalse(RawQualificationConditions(batteryPercent = 50, thermalStatus = 0).batteryWarning)
+        // On the charger the run cannot drain it, so nothing to warn about; under the minimum it still blocks.
+        assertFalse(RawQualificationConditions(batteryPercent = 35, thermalStatus = 0, charging = true).batteryWarning)
+        assertEquals(listOf(RawQualificationBlocker.BATTERY_LOW), RawQualificationConditions(batteryPercent = 3, thermalStatus = 0, charging = true).blockers)
         assertFalse(RawQualificationConditions(batteryPercent = null, thermalStatus = 0).batteryWarning)
         // Blocked, not warned.
         assertFalse(RawQualificationConditions(batteryPercent = 4, thermalStatus = 0).batteryWarning)
@@ -79,13 +83,13 @@ class RawVideoQualificationFlowTest {
         assertEquals(listOf(RawQualificationBlocker.BATTERY_LOW, RawQualificationBlocker.TOO_WARM), RawQualificationBlocker.entries.toList())
     }
 
-    @Test fun moderateThermalBlocksButLightDoesNot() {
-        assertEquals(listOf(RawQualificationBlocker.TOO_WARM), rawQualificationReadiness(90, thermalStatus = 2))
-        assertTrue(rawQualificationReadiness(90, thermalStatus = 1).isEmpty())
+    @Test fun severeThermalBlocksButModerateDoesNot() {
+        assertEquals(listOf(RawQualificationBlocker.TOO_WARM), rawQualificationReadiness(90, thermalStatus = 3))
+        assertTrue(rawQualificationReadiness(90, thermalStatus = 2).isEmpty())
     }
 
     @Test fun everyBlockerIsListed() {
-        val conditions = RawQualificationConditions(batteryPercent = 3, thermalStatus = 2)
+        val conditions = RawQualificationConditions(batteryPercent = 3, thermalStatus = 3)
         assertEquals(
             listOf(RawQualificationBlocker.BATTERY_LOW, RawQualificationBlocker.TOO_WARM),
             conditions.blockers,
@@ -193,24 +197,25 @@ class RawVideoQualificationFlowTest {
         assertEquals(RawQualificationStepText.SAVING, rawQualificationStepText(RawQualificationPhase.DONE))
     }
 
-    @Test fun remainingTimeScalesWithTheFractionLeft() {
-        assertEquals(600_000L, rawQualificationRemainingMs(1_000_000L, 0.4))
-        assertEquals(1_000_000L, rawQualificationRemainingMs(1_000_000L, -1.0))
-        assertEquals(0L, rawQualificationRemainingMs(1_000_000L, 1.5))
+    @Test fun theUiShowsTheTimeLeftTheQualifierReports() {
+        // The qualifier's own figure, not a fixed estimate scaled by the fraction.
+        val run = rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.RUN, 0.4, 3, 16, "full@24", remainingMs = 1_234_000L), null)
+        assertEquals(1_234_000L, run.remainingMs)
+        assertEquals(0L, rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.RUN, 0.4, remainingMs = -5L), null).remainingMs)
     }
 
     @Test fun uiLabelsOnlyTheConfigurationSteps() {
-        val run = rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.RUN, 0.4, 3, 16, "full@24"), 1_000_000L, "4080×3060 · 24 fps")
+        val run = rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.RUN, 0.4, 3, 16, "full@24", remainingMs = 600_000L), "4080×3060 · 24 fps")
         assertEquals("4080×3060 · 24 fps", run.specLabel)
         assertEquals(3, run.runIndex)
         assertEquals(16, run.runCount)
         assertEquals(0.4f, run.fraction, 1e-6f)
         assertEquals(600_000L, run.remainingMs)
         assertTrue(run.running)
-        val sweep = rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.SWEEP, 0.05), 1_000_000L, "ignored")
+        val sweep = rawQualificationUiOf(RawQualificationProgress(RawQualificationPhase.SWEEP, 0.05), "ignored")
         assertNull(sweep.specLabel)
         for (phase in listOf(RawQualificationPhase.CAMERA_CHECK, RawQualificationPhase.ENCODE_BENCH)) {
-            assertEquals("4080×3060 · 24 fps", rawQualificationUiOf(RawQualificationProgress(phase, 0.5, 4, 9, "full@24"), 1_000_000L, "4080×3060 · 24 fps").specLabel)
+            assertEquals("4080×3060 · 24 fps", rawQualificationUiOf(RawQualificationProgress(phase, 0.5, 4, 9, "full@24"), "4080×3060 · 24 fps").specLabel)
         }
     }
 
@@ -355,6 +360,22 @@ class RawVideoQualificationFlowTest {
         assertEquals(RawQualificationItemStatus.SKIPPED_HEAT, rawQualificationRunStatus("FAIL", RawQualificationStaging.REASON_THERMAL_LIMIT))
         assertEquals(RawQualificationItemStatus.SKIPPED_HEAT,
             rawQualificationRunStatus("FAIL", "fps-not-reached", listOf("fps-not-reached", RawQualificationStaging.REASON_THERMAL_LIMIT)))
+    }
+
+    @Test fun aHotRunTheSweepAlreadyFailedReadsAsTheStorage() {
+        // The Razr on a 91 MB/s USB drive: every long run reached SEVERE, but the sweep had ruled the storage out.
+        val drive = listOf("sweep-median-margin-fail", "buffer-backlog-exceeded", "raw-frame-loss", "ring-overflow", "ring-peak-exceeded",
+            RawQualificationStaging.REASON_THERMAL_LIMIT)
+        assertEquals(RawQualificationItemStatus.STORAGE_LIMIT, rawQualificationRunStatus("FAIL", drive.first(), drive))
+        val twin = listOf(RawQualificationStaging.REASON_THERMAL_LIMIT, "sweep-median-margin-fail", "buffer-backlog-exceeded")
+        assertEquals(RawQualificationItemStatus.STORAGE_LIMIT, rawQualificationRunStatus("FAIL", twin.first(), twin))
+        assertEquals(RawQualificationItemStatus.STORAGE_LIMIT, rawQualificationRunStatus("FAIL", RawQualificationStaging.REASON_THERMAL_LIMIT,
+            listOf(RawQualificationStaging.REASON_THERMAL_LIMIT, RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED)))
+        // Frames lost in a hot run with a sweep that passed: the heat may have caused them.
+        assertEquals(RawQualificationItemStatus.SKIPPED_HEAT, rawQualificationRunStatus("FAIL", "raw-frame-loss",
+            listOf("raw-frame-loss", "ring-overflow", RawQualificationStaging.REASON_THERMAL_LIMIT)))
+        // Without the heat the same storage reasons stay risky.
+        assertEquals(RawQualificationItemStatus.RISKY, rawQualificationRunStatus("FAIL", drive.first(), drive.dropLast(1)))
     }
 
     @Test fun aCameraFpsLimitIsItsOwnStatus() {
@@ -609,7 +630,7 @@ class RawVideoQualificationFlowTest {
         for (phase in listOf(RawQualificationPhase.STORAGE_REST, RawQualificationPhase.SWEEP)) {
             val progress = RawQualificationProgress(phase, 0.3, runIndex = 9, runCount = 17)
             assertSame(checked, rawQualificationItemsOnProgress(checked, progress, null, 0L))
-            val ui = rawQualificationUiOf(progress, 900_000L, null)
+            val ui = rawQualificationUiOf(progress, null)
             assertEquals(9, ui.runIndex)
             assertEquals(17, ui.runCount)
             assertNull(ui.specLabel)

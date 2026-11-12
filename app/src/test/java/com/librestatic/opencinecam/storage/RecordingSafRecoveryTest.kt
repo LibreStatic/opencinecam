@@ -1,0 +1,462 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 OpenCineCam contributors */
+
+package com.librestatic.opencinecam.storage
+
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import android.net.Uri
+import android.provider.DocumentsContract
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
+import com.librestatic.opencinecam.media.ocraw.OcrawHeader
+import com.librestatic.opencinecam.media.ocraw.OcrawStreamReader
+import com.librestatic.opencinecam.media.ocraw.OcrawStreamWriter
+import com.librestatic.opencinecam.media.ocraw.OcrawTimeBase
+import java.io.File
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.util.UUID
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+
+/** PLAN-072 slice B: the take journal and its SAF backend against [FakeExternalStorageProvider]. */
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35], shadows = [ShadowDocumentsProviderQuery::class])
+class RecordingSafRecoveryTest {
+    @get:Rule val temp = TemporaryFolder()
+    private lateinit var context: Context
+    private lateinit var drive: FakeExternalStorageProvider
+    private lateinit var tree: Uri
+    private lateinit var databaseFile: File
+    private val destination get() = RecordingDestination.UsbFolder(tree, FakeExternalStorageProvider.VOLUME)
+
+    @Before fun setUp() {
+        context = ApplicationProvider.getApplicationContext()
+        drive = FakeExternalStorageProvider.install(temp.newFolder("drive"))
+        check(drive.file("Rec").mkdir())
+        tree = drive.tree("Rec")
+        FakeExternalStorageProvider.grant(context, tree)
+        databaseFile = File(context.noBackupFilesDir, "recording-recovery.sqlite")
+        databaseFile.delete()
+    }
+
+    private fun journal() = RecordingCaptureRecovery(context) { it.equals(drive.volume, ignoreCase = true) && drive.mounted }
+
+    private fun <T> database(block: (SQLiteDatabase) -> T): T =
+        SQLiteDatabase.openDatabase(databaseFile.path, null, SQLiteDatabase.OPEN_READWRITE).use(block)
+
+    private fun entries(): List<List<String?>> = database { db ->
+        db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id", null).use { c ->
+            buildList { while (c.moveToNext()) add((0..4).map { c.getString(it) }) }
+        }
+    }
+
+    private fun takeDir(name: String = "A001") = drive.file("Rec/OpenCineCam/$name")
+    private fun write(uri: Uri, bytes: ByteArray) =
+        requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
+
+    /** An interrupted drive take as a dead process leaves it: journalled, its folder and marker, outputs as written. */
+    private fun interrupted(vararg outputs: Pair<String, ByteArray>): String {
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        val id = UUID.randomUUID().toString()
+        database { it.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)", arrayOf(id, tree.toString(), drive.volume)) }
+        val rows = SafRecordingRows(context, tree, null) { folder ->
+            database { db -> db.execSQL("UPDATE captures SET folder = ? WHERE id = ?", arrayOf(folder.toString(), id)) }
+        }
+        outputs.forEach { (name, bytes) ->
+            val root = when (name.substringAfterLast('.')) { "mp4" -> "DCIM"; "wav", "flac" -> "Music"; else -> "Download" }
+            write(rows.insert(id, root, name, "application/octet-stream"), bytes)
+        }
+        return id
+    }
+
+    @Test fun versionOneJournalMigratesWithItsRowsStayingOnMediaStore() {
+        val id = UUID.randomUUID().toString()
+        val committed = UUID.randomUUID().toString()
+        SQLiteDatabase.openOrCreateDatabase(databaseFile, null).use { db ->
+            db.execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)))")
+            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
+            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 1)", arrayOf(committed))
+            db.version = 1
+        }
+        // The MediaStore take cannot be resolved here (no primary volume under Robolectric): it is kept, not discarded.
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
+        assertEquals(listOf(listOf(id, "0", null, null, null)), entries())
+        assertEquals(2, database { it.version })
+
+        database { it.version = 3 }
+        val before = databaseFile.readBytes()
+        assertThrows(IllegalStateException::class.java) { journal().recover() }
+        assertArrayEquals(before, databaseFile.readBytes())
+    }
+
+    @Test fun driveTakeCommitsByRemovingItsMarker() {
+        val group = journal().start(destination)
+        assertEquals(listOf(listOf(group.id, "0", tree.toString(), "FFF1-7571", null)), entries())
+        val video = group.member(RecordingMemberKind.VIDEO)
+        val audio = group.member(RecordingMemberKind.AUDIO)
+        val mp4 = video.insert("A001.mp4", "video/mp4", metadata = false)
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        assertEquals(DocumentsContract.buildDocumentUriUsingTree(tree, "FFF1-7571:Rec/OpenCineCam/A001").toString(), entries().single()[4])
+        write(mp4, ByteArray(64) { 1 })
+        val timing = video.insert("A001.timing.json", "application/json", metadata = true).also { write(it, "{}".toByteArray()) }
+        val clip = video.insertClipSidecar("A001.clip.json").also { write(it, "{}".toByteArray()) }
+        val gyro = video.insertAuxiliary("A001.gcsv", GyroflowLog.MIME_TYPE).also { write(it, "t,x".toByteArray()) }
+        val wav = audio.insert("A001.wav", "audio/wav", metadata = false).also { write(it, ByteArray(16)) }
+        val audioJson = audio.insert("A001.audio.json", "application/json", metadata = true).also { write(it, "{}".toByteArray()) }
+
+        video.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, mp4.toString(), "A001.mp4"),
+            PreparedCaptureArtifact(CaptureArtifactRole.VIDEO_METADATA, timing.toString(), "A001.timing.json"),
+            PreparedCaptureArtifact(CaptureArtifactRole.CLIP_METADATA, clip.toString(), "A001.clip.json")))
+        listOf(gyro, timing, clip, mp4).forEach { video.publish(it, "publication failed") }
+        video.published()
+        // Not committed while a member is still pending.
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        assertEquals("0", entries().single()[1])
+
+        audio.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, wav.toString(), "A001.wav"),
+            PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, audioJson.toString(), "A001.audio.json")))
+        audio.publish(audioJson, "publication failed"); audio.publish(wav, "publication failed")
+        audio.published()
+
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
+        assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.clip.json", "A001.gcsv", "A001.wav", "A001.audio.json"),
+            takeDir().list()!!.toSet())
+        assertEquals(64L, File(takeDir(), "A001.mp4").length())
+        assertTrue(entries().isEmpty())
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        assertEquals(6, takeDir().list()!!.size)
+    }
+
+    @Test fun preparationRequiresTheMarkerAndASecondTakeGetsItsOwnFolder() {
+        val first = journal().start(destination)
+        val member = first.member(RecordingMemberKind.VIDEO)
+        val mp4 = member.insert("A001.mp4", "video/mp4", metadata = false).also { write(it, ByteArray(8)) }
+        val second = journal().start(destination)
+        val other = second.member(RecordingMemberKind.VIDEO)
+        other.insert("A001.mp4", "video/mp4", metadata = false)
+        assertTrue(File(takeDir("A001 (1)"), "A001.mp4").isFile)
+        assertTrue(File(takeDir("A001 (1)"), SafRecordingRows.MARKER).isFile)
+
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).delete())
+        assertThrows(IllegalStateException::class.java) {
+            member.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, mp4.toString(), "A001.mp4")))
+        }
+        other.abort()
+        assertFalse(takeDir("A001 (1)").exists())
+        assertEquals(listOf(first.id), entries().map { it[0] })
+    }
+
+    @Test fun abortedDriveTakeRemovesItsFilesMarkerAndFolder() {
+        val group = journal().start(destination)
+        val member = group.member(RecordingMemberKind.AUDIO)
+        member.insert("B002.wav", "audio/wav", metadata = false)
+        member.insert("B002.audio.json", "application/json", metadata = true)
+        assertEquals(3, takeDir("B002").list()!!.size)
+        member.abort()
+        assertFalse(takeDir("B002").exists())
+        assertTrue(drive.file("Rec/OpenCineCam").isDirectory)
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun interruptedDriveTakeWithBytesIsPublishedIncomplete() {
+        val id = interrupted("A001.mp4" to ByteArray(100) { 2 }, "A001.timing.json" to """{"schema":"opencinecam.recording.v1"}""".toByteArray(),
+            "A001.gcsv" to ByteArray(0), "A001.wav" to ByteArray(40) { 3 })
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
+        assertEquals(setOf("A001.mp4", "A001.timing.json", "A001.wav", "A001.audio.incomplete.json"), takeDir().list()!!.toSet())
+        assertEquals(100L, File(takeDir(), "A001.mp4").length())
+        assertEquals(40L, File(takeDir(), "A001.wav").length())
+        val timing = File(takeDir(), "A001.timing.json").readText()
+        assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(timing))
+        assertTrue(timing.contains("\"takeStatus\": \"incomplete\""))
+        assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(File(takeDir(), "A001.audio.incomplete.json").readText()))
+        assertTrue(entries().none { it[0] == id })
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+    }
+
+    @Test fun interruptedDriveTakeWithoutBytesLeavesNoFolder() {
+        val id = interrupted("C003.mp4" to ByteArray(0), "C003.timing.json" to ByteArray(0))
+        assertEquals(RecordingRecoveryReport(discardedGroups = 1), journal().recover())
+        assertFalse(takeDir("C003").exists())
+        assertTrue(entries().none { it[0] == id })
+    }
+
+    @Test fun takeOnAnAbsentDriveIsDeferredAndRecoveredOnceItIsBack() {
+        val id = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        drive.mounted = false
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        assertEquals("0", entries().single { it[0] == id }[1])
+
+        // A lost folder permission defers it too: the drive's files are never judged without access.
+        drive.mounted = true
+        context.contentResolver.releasePersistableUriPermission(tree, FakeExternalStorageProvider.READ_WRITE)
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+
+        FakeExternalStorageProvider.grant(context, tree)
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertFalse(File(takeDir(), SafRecordingRows.MARKER).exists())
+        assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun takeAbortedWhileItsDriveIsGoneStaysJournalledForRecovery() {
+        val group = journal().start(destination)
+        val member = group.member(RecordingMemberKind.VIDEO)
+        write(member.insert("A001.mp4", "video/mp4", metadata = false), ByteArray(10) { 1 })
+        drive.mounted = false
+        // An unplugged drive answers like an empty folder; that must never pass for "nothing to keep".
+        assertThrows(IllegalStateException::class.java) { member.abort() }
+        assertEquals("0", entries().single()[1])
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        drive.mounted = true
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun keptTakeIsLeftAloneUntilItsOwnerRelinquishesIt() {
+        val group = journal().start(destination)
+        val member = group.member(RecordingMemberKind.VIDEO)
+        write(member.insert("A001.mp4", "video/mp4", metadata = false), ByteArray(10) { 1 })
+        // A drive pulled mid-take: the publication failed and the output keeps its bytes, still owned by this process.
+        member.keepBytes()
+        drive.mounted = false
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        drive.mounted = true
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+
+        // The service is done with the take: the drive's next mount recovers it in this same process.
+        group.relinquish()
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun relinquishedTakeWaitsForItsNativeWriter() {
+        val group = journal().start(destination)
+        val member = group.member(RecordingMemberKind.VIDEO)
+        write(member.insert("A001.mp4", "video/mp4", metadata = false), ByteArray(10) { 1 })
+        val writer = group.retainNativeWriter()
+        member.keepBytes()
+        group.relinquish()
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        writer.close()
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+    }
+
+    @Test fun takeWhoseMarkerIsGoneWasCommittedAndIsOnlyPruned() {
+        val id = interrupted("A001.mp4" to ByteArray(10) { 1 }, "A001.timing.json" to "{}".toByteArray())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).delete())
+        val before = File(takeDir(), "A001.timing.json").readBytes()
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        assertTrue(entries().none { it[0] == id })
+        assertEquals(setOf("A001.mp4", "A001.timing.json"), takeDir().list()!!.toSet())
+        assertArrayEquals(before, File(takeDir(), "A001.timing.json").readBytes())
+    }
+
+    @Test fun takeWithNoFolderJournalledNeverReachedTheDrive() {
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+        val id = UUID.randomUUID().toString()
+        database { it.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)", arrayOf(id, tree.toString(), drive.volume)) }
+        assertEquals(RecordingRecoveryReport(discardedGroups = 1), journal().recover())
+        assertTrue(entries().isEmpty())
+        assertFalse(drive.file("Rec/OpenCineCam").exists())
+    }
+
+    @Test fun mediaStoreEntriesAreLeftToTheirOwnBackend() {
+        val drivePending = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        val phonePending = UUID.randomUUID().toString()
+        val phoneCommitted = UUID.randomUUID().toString()
+        database { db ->
+            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(phonePending))
+            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 1)", arrayOf(phoneCommitted))
+        }
+        // The phone take goes through MediaStore, unavailable here, so it stays unresolved; the drive take recovers.
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1, incompleteGroups = 1), journal().recover())
+        assertEquals(listOf(listOf(phonePending, "0", null, null, null)), entries())
+        assertTrue(entries().none { it[0] == drivePending })
+        assertNull(entries().firstOrNull { it[0] == phoneCommitted })
+    }
+
+    // PLAN-072 Delivery 3: RAW video takes on the drive.
+
+    /** [frames] 32x8 RAW10 frames written through [channel], closed cleanly when [finish], else left as a crash leaves it. */
+    private fun writeOcraw(channel: FileChannel, frames: Int, finish: Boolean) {
+        val writer = OcrawStreamWriter(channel, OcrawHeader(ByteArray(16) { it.toByte() }), OcrawTimeBase(1, 1_000_000_000))
+        writer.writeMetadata(mapOf("cameraId" to "0", "crop" to "0 0 32 8"), 0)
+        repeat(frames) { index ->
+            val header = OcrawFrameHeader.raw10(32, 8, 0, 0, 1_000L + index, index.toLong())
+            writer.writeRawFrame(header, ByteBuffer.wrap(ByteArray(header.dataLength) { index.toByte() }), 1_000L + index)
+        }
+        if (finish) writer.finish() else writer.abort()
+    }
+
+    /** The bytes of an `.ocraw` a killed process leaves: [frames] complete frames and a torn tail. */
+    private fun killedOcraw(frames: Int): ByteArray {
+        val file = temp.newFile()
+        RandomAccessFile(file, "rw").use { writeOcraw(it.channel, frames, finish = false) }
+        return file.readBytes() + ByteArray(120) { 7 }
+    }
+
+    private fun scan(file: File) = RandomAccessFile(file, "r").use { OcrawStreamReader(it.channel).scan() }
+
+    @Test fun rawTakeOnTheDriveKeepsItsNameAndPublishesByRemovingItsMarker() {
+        val takeId = UUID.randomUUID().toString()
+        val output = SafRawVideoOutput.create(context, destination, takeId = takeId, recovery = journal())
+        val name = "OCC_$takeId.ocraw"
+        assertEquals(name, output.displayName)
+        val folder = takeDir("OCC_$takeId")
+        assertEquals(setOf(name, SafRecordingRows.MARKER), folder.list()!!.toSet())
+        assertTrue(RawVideoRecovery.isLive(output.uri))
+        val entry = entries().single()
+        assertEquals(listOf("0", tree.toString(), "FFF1-7571"), entry.subList(1, 4))
+        assertEquals(DocumentsContract.buildDocumentUriUsingTree(tree, "FFF1-7571:Rec/OpenCineCam/OCC_$takeId").toString(), entry[4])
+        // A take being written is never recovered under its writer.
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+
+        writeOcraw(output.channel, frames = 4, finish = true)
+        assertEquals(output.uri, output.publish())
+        assertEquals(setOf(name), folder.list()!!.toSet())
+        assertTrue(scan(File(folder, name)).cleanlyClosed)
+        assertEquals(4, scan(File(folder, name)).frameCount)
+        assertFalse(RawVideoRecovery.isLive(output.uri))
+        assertTrue(entries().isEmpty())
+        assertEquals(output.uri, output.publish())
+    }
+
+    @Test fun emptyRawTakeOnTheDriveLeavesNoFolder() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        output.discard()
+        assertTrue(drive.file("Rec/OpenCineCam").list()!!.isEmpty())
+        assertTrue(entries().isEmpty())
+        assertFalse(RawVideoRecovery.isLive(output.uri))
+    }
+
+    @Test fun rawTakeWhoseDriveWentStaysJournalledAndIsRecoveredOnItsReturn() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        val name = output.displayName
+        writeOcraw(output.channel, frames = 3, finish = false)
+        drive.mounted = false
+        // The marker cannot go: the take is relinquished, still journalled, and deferred while the drive is away.
+        assertThrows(Exception::class.java) { output.publish() }
+        assertFalse(RawVideoRecovery.isLive(output.uri))
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        drive.mounted = true
+        val report = journal().recover()
+        assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(published = 1)), report)
+        val folder = takeDir(name.removeSuffix(".ocraw"))
+        assertEquals(setOf(name), folder.list()!!.toSet())
+        assertTrue(scan(File(folder, name)).cleanlyClosed)
+        assertEquals(3, scan(File(folder, name)).frameCount)
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun rawTakeOnTheDriveRegistersItsDescriptorsUntilItCloses() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        assertEquals(1, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+        writeOcraw(output.channel, frames = 2, finish = true)
+        output.publish()
+        assertEquals(0, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+        assertEquals(0, DriveDescriptors.releaseVolume(FakeExternalStorageProvider.VOLUME))
+    }
+
+    @Test fun rawTakeReleasedWithItsDriveFailsItsWritesAndIsLeftForRecovery() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        val name = output.displayName
+        writeOcraw(output.channel, frames = 3, finish = false)
+        // The drive leaves: its descriptors close at once, under the writer.
+        assertEquals(1, DriveDescriptors.releaseVolume(FakeExternalStorageProvider.VOLUME.lowercase()))
+        assertFalse(output.channel.isOpen)
+        assertThrows(java.nio.channels.ClosedChannelException::class.java) { output.channel.write(ByteBuffer.wrap(ByteArray(4))) }
+        // Even with the drive still mounted the take is not committed as is: it stays journalled for recovery.
+        assertThrows(IllegalStateException::class.java) { output.publish() }
+        assertFalse(RawVideoRecovery.isLive(output.uri))
+        assertEquals(0, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+        val folder = takeDir(name.removeSuffix(".ocraw"))
+        assertEquals(setOf(name, SafRecordingRows.MARKER), folder.list()!!.toSet())
+        assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(published = 1)), journal().recover())
+        assertEquals(setOf(name), folder.list()!!.toSet())
+        assertEquals(3, scan(File(folder, name)).frameCount)
+    }
+
+    @Test fun interruptedRawTakeWithFramesIsRepairedAndPublished() {
+        val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
+        assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(published = 1)), journal().recover())
+        assertEquals(setOf("A001.ocraw"), takeDir().list()!!.toSet())
+        val repaired = scan(File(takeDir(), "A001.ocraw"))
+        assertTrue(repaired.errors.toString(), repaired.cleanlyClosed)
+        assertEquals(2, repaired.frameCount)
+        assertTrue(entries().none { it[0] == id })
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+    }
+
+    @Test fun interruptedRawTakeWithoutFramesIsDiscarded() {
+        val id = interrupted("A001.ocraw" to killedOcraw(frames = 0))
+        assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(deleted = 1)), journal().recover())
+        assertFalse(takeDir().exists())
+        assertTrue(entries().none { it[0] == id })
+    }
+
+    @Test fun interruptedRawTakeOnAnAbsentDriveIsDeferred() {
+        val bytes = killedOcraw(frames = 1)
+        interrupted("A001.ocraw" to bytes)
+        drive.mounted = false
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        drive.mounted = true
+        context.contentResolver.releasePersistableUriPermission(tree, FakeExternalStorageProvider.READ_WRITE)
+        assertEquals(RecordingRecoveryReport(deferredGroups = 1), journal().recover())
+        // Untouched while deferred: neither repaired nor deleted.
+        assertArrayEquals(bytes, File(takeDir(), "A001.ocraw").readBytes())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        FakeExternalStorageProvider.grant(context, tree)
+        assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(published = 1)), journal().recover())
+    }
+
+    @Test fun qualificationScratchPurgeTouchesOnlyItsHiddenFolder() {
+        val take = interrupted("A001.mp4" to ByteArray(10) { 1 })
+        val scratch = RawQualificationDriveScratch(context.contentResolver, tree)
+        val live = scratch.create("sweep")
+        val orphan = scratch.create("long-0")
+        RawVideoRecovery.release(orphan)
+        val scratchDir = drive.file("Rec/OpenCineCam/${RawQualificationDriveScratch.FOLDER}")
+        assertEquals(2, scratchDir.list()!!.size)
+        assertTrue(scratchDir.list()!!.all { it.startsWith(RawVideoQualificationRows.NAME_PREFIX) && it.endsWith(".ocraw") })
+        File(drive.file("Rec"), "notes.ocraw").writeText("mine")
+        assertEquals(64L shl 30, scratch.freeBytes())
+
+        // The orphan goes; the scratch being written, the interrupted take and the user's own files stay.
+        assertEquals(1, scratch.purgeOrphans())
+        assertEquals(1, scratchDir.list()!!.size)
+        assertTrue(File(drive.file("Rec"), "notes.ocraw").isFile)
+        assertTrue(File(takeDir(), "A001.mp4").isFile)
+        assertTrue(entries().any { it[0] == take })
+        scratch.delete(live)
+        assertFalse(RawVideoRecovery.isLive(live))
+        assertTrue(scratchDir.list()!!.isEmpty())
+        // A drive that does not answer purges nothing, and one never qualified has no folder to purge.
+        drive.mounted = false
+        assertEquals(0, scratch.purgeOrphans())
+        drive.mounted = true
+        assertEquals(0, RawQualificationDriveScratch(context.contentResolver, drive.tree()).purgeOrphans())
+    }
+}

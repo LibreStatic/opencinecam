@@ -3,6 +3,7 @@ package com.librestatic.opencinecam
 
 import android.content.ContentResolver
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
@@ -17,6 +18,9 @@ import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
+import com.librestatic.opencinecam.storage.drivePath
+import com.librestatic.opencinecam.storage.isDriveUri
 import com.librestatic.opencinecam.storage.isClipSidecarAttachment
 import com.librestatic.opencinecam.storage.parseOcLogSidecar
 import java.text.DateFormat
@@ -47,7 +51,13 @@ internal suspend fun readTakeDetails(context: Context, take: LocalMediaTake): Ta
         return try { block() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
     }
     val root = read { primaryVolumeRoot(context) }
-    val files = take.originals.map { artifact -> DetailFile(artifact, read { artifactPath(root, relativePath(resolver, artifact), artifact.name) }) }
+    val driveLabel = if (take.originals.any { isDriveUri(it.uri) }) read { driveLabel(context) } else null
+    val files = take.originals.map { artifact ->
+        DetailFile(artifact, read {
+            if (isDriveUri(artifact.uri)) driveLabel?.let { drivePath(it, artifact.uri) }
+            else artifactPath(root, relativePath(resolver, artifact), artifact.name)
+        })
+    }
     var input = TakeDetailInputs(take.kind, files)
     when (take.kind) {
         LocalMediaKind.VIDEO -> {
@@ -56,7 +66,7 @@ internal suspend fun readTakeDetails(context: Context, take: LocalMediaTake): Ta
             val log = documents.firstNotNullOfOrNull { parseOcLogSidecar(it, take.primary.uri) }
             val hdr = documents.firstNotNullOfOrNull(::parseHdrVideoSidecar)
             val video = read { probeClipMetadata(context, take.primary.uri, log) }
-            val bitrate = read { mediaStoreBitrate(resolver, take.primary) }
+            val bitrate = read { if (isDriveUri(take.primary.uri)) containerBitrate(context, take.primary) else mediaStoreBitrate(resolver, take.primary) }
             // A separate WAV or FLAC is the take's sound; otherwise the track muxed into the video.
             val sound = take.originals.firstOrNull { it.mimeType.startsWith("audio/") } ?: take.primary
             val audio = read { probeAudioMetadata(context, sound.uri) }
@@ -83,6 +93,21 @@ private fun mediaStoreBitrate(resolver: ContentResolver, artifact: LocalMediaArt
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
     return resolver.query(artifact.uri.toUri(), arrayOf(MediaStore.Video.VideoColumns.BITRATE), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0).takeIf { it > 0 } else null
+    }
+}
+
+/** The recording drive's name as the system described it at adoption, else "USB drive" (PLAN-072). */
+private fun driveLabel(context: Context): String =
+    RecordingDestinationStore(context).label()?.takeIf { it.isNotBlank() } ?: context.getString(R.string.recording_destination_usb)
+
+/** A drive file has no MediaStore row; its container's declared bit rate stands in. */
+private fun containerBitrate(context: Context, artifact: LocalMediaArtifact): Long? {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, artifact.uri.toUri())
+        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()?.takeIf { it > 0 }
+    } finally {
+        retriever.release()
     }
 }
 

@@ -162,9 +162,8 @@ internal class ProxyDeletionJournal(directory: File) {
 
     private fun validateIdentity(intent: ProxyDeletionIntent) {
         require(canonicalMediaId(intent.jobId))
-        require(mediaOriginalIdentity(intent.originalUri)?.first == LocalMediaKind.VIDEO)
-        require(intent.takeId == "legacy:${intent.originalUri}" ||
-            intent.takeId.startsWith("take:") && canonicalMediaId(intent.takeId.removePrefix("take:")))
+        require(takeOriginalKind(intent.originalUri) == LocalMediaKind.VIDEO)
+        require(proxyTakeIdBinds(intent.takeId, intent.originalUri))
         require(SHA.matches(intent.originalSha256))
         require(setOf(intent.originalUri, intent.video.uri, intent.metadata.uri).size == 3)
         require(intent.video.owner == intent.metadata.owner)

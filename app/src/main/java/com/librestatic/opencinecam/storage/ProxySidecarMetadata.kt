@@ -18,20 +18,20 @@ internal fun selectProxySidecar(take: LocalMediaTake, documents: List<MetadataDo
         take.id.startsWith("take:") && canonicalMediaId(take.id.removePrefix("take:"))) { "Declared recording take required" }
     require(take.originals.size == 2 && take.primary in take.originals &&
         take.originals.map { it.uri }.distinct().size == 2 && take.primary.mimeType == "video/mp4" &&
-        mediaOriginalIdentity(take.primary.uri)?.first == LocalMediaKind.VIDEO) { "Exactly one primary video and one sidecar required" }
+        takeOriginalKind(take.primary.uri) == LocalMediaKind.VIDEO) { "Exactly one primary video and one sidecar required" }
     val audio = take.originals.single { it.uri != take.primary.uri }
     val container = when (audio.mimeType) {
         "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave" -> ProxySidecarContainer.WAV
         "audio/flac" -> ProxySidecarContainer.FLAC
         else -> error("Associated audio is not a WAV/FLAC sidecar")
     }
-    require(mediaOriginalIdentity(audio.uri)?.first == LocalMediaKind.AUDIO && audio.sizeBytes > 0)
+    require(takeOriginalKind(audio.uri) == LocalMediaKind.AUDIO && audio.sizeBytes > 0)
     require(take.metadata.size == 2 && documents.size == 2 && take.metadata.toSet().size == 2 &&
         documents.map { it.artifact }.toSet() == take.metadata.toSet() &&
         (take.originals + take.metadata).map { it.uri }.distinct().size == 4) { "Complete exact sidecar metadata snapshot required" }
     val parsed = documents.map { doc ->
         require(!doc.disappeared && doc.artifact.mimeType == "application/json" &&
-            mediaDeleteIdentity(doc.artifact.uri)?.collection == MediaDeleteCollection.METADATA)
+            takeMemberCollection(doc.artifact.uri) == MediaDeleteCollection.METADATA)
         val text = requireNotNull(doc.text) { "Sidecar metadata read unavailable" }
         require(text.length <= 512 * 1024 && Charsets.UTF_8.newEncoder().canEncode(text))
         val bytes = text.toByteArray()
@@ -49,8 +49,9 @@ internal fun selectProxySidecar(take: LocalMediaTake, documents: List<MetadataDo
     require(v.string("schema") in setOf("opencinecam.recording.v1", "opencinecam.av-timing.v1",
         "opencinecam.recording-color.v1", "opencinecam.recording-audio.v1", "opencinecam.recording-timing.v1",
         "opencinecam.timecode.v1", "opencinecam-oclog-sidecar-v2")) { "Unknown sidecar video metadata schema" }
-    require(v.string("videoUri") == take.primary.uri && v.string("bundleId") == take.id.removePrefix("take:"))
-    require(a.string("audioUri") == audio.uri && a.string("file") == audio.name && a.string("container") == container.name)
+    // A drive take's references are bound by document id, as the catalog binds them (PLAN-072).
+    require(sameTakeMemberUri(v.string("videoUri"), take.primary.uri) && v.string("bundleId") == take.id.removePrefix("take:"))
+    require(sameTakeMemberUri(a.string("audioUri"), audio.uri) && a.string("file") == audio.name && a.string("container") == container.name)
     if ("bundleId" in audioDoc.second) require(a.string("bundleId") == take.id.removePrefix("take:"))
     // A foreign cross-role reference is not a second way to select a member.
     require("videoUri" !in audioDoc.second && "audioUri" !in videoDoc.second)

@@ -58,7 +58,10 @@ import com.librestatic.opencinecam.SettingsPillRow
 import com.librestatic.opencinecam.SettingsSwitchRow
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PATH
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.safFreeBytes
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -94,7 +97,7 @@ internal fun rememberCinemaDngExportEnvironment(): CinemaDngExportEnvironment {
 }
 
 private class AndroidCinemaDngExportEnvironment(private val context: Context) : CinemaDngExportEnvironment {
-    private val preferences = context.getSharedPreferences("cinemadng_export", Context.MODE_PRIVATE)
+    private val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
     override val lj92Available: Boolean get() = NativeRawCodec.available
     override val states get() = CinemaDngExportRuntime.states
     override fun recording() = CinemaDngExportRuntime.recording(context)
@@ -144,7 +147,7 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
         safFolderLabel(context.contentResolver, tree) ?: tree.lastPathSegment?.substringAfterLast(':').orEmpty())
 
     private companion object {
-        const val KEY_TREE = "tree"
+        const val KEY_TREE = CINEMADNG_EXPORT_TREE_KEY
     }
 }
 

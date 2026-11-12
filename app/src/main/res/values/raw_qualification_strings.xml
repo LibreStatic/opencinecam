@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Battery at %1$d%% or more</string>
     <string name="raw_qualification_check_battery_fix">Charge it to at least %1$d%% first (now %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · charging</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. The qualification may use all of it: plug in the charger if you can.</string>
     <string name="raw_qualification_check_cool">Normal temperature</string>
     <string name="raw_qualification_check_cool_fix">Let the phone cool down first.</string>
@@ -74,8 +75,12 @@
     <string name="raw_qualification_chip_camera">No camera</string>
     <string name="raw_qualification_chip_warm">Gets warm</string>
     <string name="raw_qualification_space_title">Not everything can be qualified with the space available</string>
-    <string name="raw_qualification_space_body">The configurations that fit in your phone\'s free storage will be tested.</string>
+    <string name="raw_qualification_space_body">Only the configurations that fit in the free space will be tested.</string>
     <string name="raw_qualification_space_free">%1$s free</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">Testing the USB drive %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">Testing the USB drive</string>
+    <string name="raw_qualification_target_phone">Testing the phone’s storage</string>
     <string name="raw_qualification_space_tested">Will be tested</string>
     <string name="raw_qualification_space_skipped">Skipped for lack of space</string>
     <string name="raw_qualification_needs">needs %1$s</string>

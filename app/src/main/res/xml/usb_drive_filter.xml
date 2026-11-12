@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 OpenCineCam contributors -->
+<!-- PLAN-072: USB mass storage (class 8). The framework also matches a device's interface classes. -->
+<resources>
+    <usb-device class="8" />
+</resources>

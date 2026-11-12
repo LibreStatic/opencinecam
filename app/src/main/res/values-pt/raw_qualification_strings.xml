@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Bateria em %1$d%% ou mais</string>
     <string name="raw_qualification_check_battery_fix">Carregue primeiro até pelo menos %1$d%% (agora %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · carregando</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. A qualificação pode esgotá-la: conecte o carregador se puder.</string>
     <string name="raw_qualification_check_cool">Temperatura normal</string>
     <string name="raw_qualification_check_cool_fix">Deixe o telefone esfriar primeiro.</string>
@@ -76,8 +77,12 @@
     <string name="raw_qualification_chip_camera">Sem câmera</string>
     <string name="raw_qualification_chip_warm">Esquenta</string>
     <string name="raw_qualification_space_title">Não dá para qualificar tudo com o espaço disponível</string>
-    <string name="raw_qualification_space_body">Serão testadas as configurações que cabem no armazenamento livre do seu telefone.</string>
+    <string name="raw_qualification_space_body">Serão testadas as configurações que cabem no espaço livre do armazenamento testado.</string>
     <string name="raw_qualification_space_free">%1$s livres</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">Testando a unidade USB %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">Testando a unidade USB</string>
+    <string name="raw_qualification_target_phone">Testando o armazenamento do telefone</string>
     <string name="raw_qualification_space_tested">Serão testadas</string>
     <string name="raw_qualification_space_skipped">Puladas por falta de espaço</string>
     <string name="raw_qualification_needs">precisa de %1$s</string>

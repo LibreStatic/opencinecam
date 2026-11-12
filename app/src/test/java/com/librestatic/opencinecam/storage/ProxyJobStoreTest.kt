@@ -39,6 +39,33 @@ class ProxyJobStoreTest {
         store.write(listOf(multi)); assertEquals(listOf(multi), store.read())
     }
 
+    /** A job for a take on the recording drive (PLAN-072), keyed by its folder as one whose sidecars declare no bundle. */
+    private fun driveJob(folder: String = "FFF1-7571:Takes/OpenCineCam/A001"): ProxyJob {
+        fun doc(id: String) = "content://$EXTERNAL_STORAGE_AUTHORITY/tree/${safUriEncode("FFF1-7571:Takes")}/document/${safUriEncode(id)}"
+        val video = LocalMediaArtifact(doc("$folder/A001.mp4"), "A001.mp4", "video/mp4", 4096, 1700000000)
+        val audio = LocalMediaArtifact(doc("$folder/A001.wav"), "A001.wav", "audio/x-wav", 2048, 1700000000)
+        val sidecar = LocalMediaArtifact(doc("$folder/A001.recording.json"), "A001.recording.json", "application/json", 300, 1700000000)
+        val log = LocalMediaArtifact(doc("$folder/A001.gcsv"), "A001.gcsv", "application/octet-stream", 300, 1700000000)
+        return ProxyJob(UUID(9, 1).toString(), LocalMediaTake("drive:$folder", video, listOf(video, audio), listOf(sidecar), LocalMediaKind.VIDEO,
+            null, LocalMediaRelationStatus.MISSING_METADATA, listOf(log)), ProxySettings(), ProxyJobStatus.QUEUED)
+    }
+
+    @Test fun aDriveTakeJobRoundTripsAndForeignDriveReferencesAreRefused() {
+        val dir = folder(); val store = ProxyJobStore(dir); val value = driveJob()
+        store.write(listOf(value)); assertEquals(listOf(value), ProxyJobStore(dir).read())
+        val take = value.take
+        val other = driveJob("FFF1-7571:Takes/OpenCineCam/A002").take
+        val invalid = listOf(
+            take.copy(id = "drive:FFF1-7571:Takes/OpenCineCam/A002"), // another folder's key
+            take.copy(primary = take.originals[1], kind = LocalMediaKind.VIDEO), // an audio file as the video
+            take.copy(metadata = listOf(take.primary.copy(uri = take.primary.uri.replace("A001.mp4", "A001.ocraw")))),
+            take.copy(originals = listOf(take.primary, take.originals[1].copy(uri = take.originals[1].uri.replace("%3A", "%3a")))),
+        )
+        for (bad in invalid) assertThrows(Exception::class.java) { store.write(listOf(value.copy(take = bad))) }
+        store.write(listOf(value, driveJob().copy(id = UUID(9, 2).toString(), take = other)))
+        assertEquals(2, store.read().size)
+    }
+
     @Test fun missingDirectoryMeansEmptyButBackupIsNeverMistakenForEmpty() {
         val dir = File(folder(), "new"); val store = ProxyJobStore(dir)
         assertEquals(emptyList<ProxyJob>(), store.read()); assertFalse(dir.exists())

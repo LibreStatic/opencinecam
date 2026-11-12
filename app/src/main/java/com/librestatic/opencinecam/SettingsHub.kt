@@ -47,6 +47,7 @@ internal fun SettingsScreen(
     onSetLensLock: ((String?) -> Unit)? = null,
     onSelectRawVideoConfig: ((String) -> Unit)? = null,
     onRequalifyRawVideo: (() -> Unit)? = null,
+    onRecordingDestinationChanged: () -> Unit = {},
 ) {
     val foldCoordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { kotlinx.coroutines.flow.MutableStateFlow(FoldDisplayState()) }
@@ -61,7 +62,9 @@ internal fun SettingsScreen(
     val ids = SettingsCatalog.search(query, if (query.isBlank()) category else null, context::getString)
         .let { if (hasGyroscope) it else it - "gyroflow-log" }
         .let { found -> if (state.descriptor.offersHdr10Video) found else found - HDR_FORMAT_SETTING_ID }
+        .let { found -> if (rawVideoSettingsShown(state.modeGates[CaptureMode.RAW_VIDEO])) found else found - "raw-video" }
     val searching = query.isNotBlank()
+    val leading = remember(query, context) { if (query.isBlank()) emptySet() else SettingsCatalog.titleMatches(query, context::getString) }
     val open: (SettingsCategory) -> Unit = { selectedName = it.name; query = "" }
     HingeSafeSettingsPane(fold.hinge) {
     BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -105,7 +108,7 @@ internal fun SettingsScreen(
                 if (visible.isEmpty()) Text(stringResource(R.string.settings_no_results), color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = gutter, vertical = 16.dp))
                 listStates.SaveableStateProvider(if (searching) "search" else (category ?: SettingsCategory.CAPTURE).name) {
-                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities, audioPermissionBlocked = audioPermissionBlocked, onOpenStorageBenchmark = onOpenStorageBenchmark, onOpenLensCalibration = onOpenLensCalibration, onOpenNetworkDrive = onOpenNetworkDrive, onSetLensLock = onSetLensLock, onSelectRawVideoConfig = onSelectRawVideoConfig, onRequalifyRawVideo = onRequalifyRawVideo)
+                    SettingsContent(state, settings, audioPermissionGranted, onRequestAudioPermission, onOpenAbout, onSettingsChange, visible, onApplyPreset, onOpenCapabilities, audioPermissionBlocked = audioPermissionBlocked, onOpenStorageBenchmark = onOpenStorageBenchmark, onOpenLensCalibration = onOpenLensCalibration, onOpenNetworkDrive = onOpenNetworkDrive, onSetLensLock = onSetLensLock, onSelectRawVideoConfig = onSelectRawVideoConfig, onRequalifyRawVideo = onRequalifyRawVideo, onRecordingDestinationChanged = onRecordingDestinationChanged, leadingIds = leading)
                 }
             }
         }

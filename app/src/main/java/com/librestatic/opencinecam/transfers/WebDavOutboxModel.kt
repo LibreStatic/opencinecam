@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.transfers
 
+import com.librestatic.opencinecam.storage.canonicalDriveDocumentUri
 import java.net.URI
 import java.util.UUID
 
@@ -335,8 +336,10 @@ private fun requireCompleteArtifactSet(artifacts: List<WebDavArtifactSpec>) {
     require(artifacts.none { it.role == WebDavArtifactRole.AUDIO_METADATA } || artifacts.any { it.role == WebDavArtifactRole.AUDIO })
 }
 
+/** A canonical MediaStore item, or (PLAN-072) a canonical document on the recording drive. */
 private fun requireMediaStoreItem(value: String) {
     require(value.length <= 1024)
+    if (canonicalDriveDocumentUri(value)) return
     val uri = try { URI(value) } catch (_: Exception) { throw IllegalArgumentException("Invalid media item") }
     require(uri.scheme == "content" && uri.rawAuthority == "media" && uri.rawQuery == null && uri.rawFragment == null)
     val path = uri.path ?: throw IllegalArgumentException("Invalid media item")

@@ -9,11 +9,15 @@ import android.system.StructStat
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
+import com.librestatic.opencinecam.storage.isDriveUri
 import java.io.FileNotFoundException
+import java.io.IOException
 import java.io.InputStream
 
 /**
- * Strict source for all published take roles. Each source owns only its independently opened
+ * Strict source for all published take roles, on the phone or (PLAN-072) on the USB drive: [CaptureArtifactProbe]
+ * picks the probe by URI, and the descriptor checks below hold for either.
+ * Each source owns only its independently opened
  * read-only descriptor; the provider's rows and the capture writer are never modified or closed.
  */
 internal class WebDavMediaStoreArtifactSource(
@@ -31,7 +35,14 @@ internal class WebDavMediaStoreArtifactSource(
                 WebDavArtifactRole.CLIP_METADATA -> CaptureArtifactRole.CLIP_METADATA
             }, spec.sourceUri, spec.sourceName,
         )
-        private val probe = MediaStorePreparedArtifactProbe(resolver)
+        private val probe = CaptureArtifactProbe(resolver)
+        private val onDrive = isDriveUri(spec.sourceUri)
+
+        /** A drive pulled out mid-read fails with a plain I/O error: report it as the transient [WebDavSourceDriveAbsent]. */
+        private fun <T> reading(block: () -> T): T = try { block() } catch (failure: IOException) {
+            if (!onDrive || failure is WebDavSourceDriveAbsent || failure is WebDavArtifactContentChanged) throw failure
+            throw absentOr(resolver, spec.sourceUri.toUri(), failure)
+        }
 
         override fun snapshot(): WebDavClipSnapshot = probe.inspect(prepared, pending = false).also {
             requireHashSnapshot(spec, it)
@@ -39,7 +50,7 @@ internal class WebDavMediaStoreArtifactSource(
 
         override fun open(): InputStream {
             val before = snapshot()
-            val descriptor = resolver.openFileDescriptor(spec.sourceUri.toUri(), "r")
+            val descriptor = reading { resolver.openFileDescriptor(spec.sourceUri.toUri(), "r") }
                 ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
             try {
                 requireReadOnlyPreparedDescriptor(descriptor)
@@ -49,10 +60,10 @@ internal class WebDavMediaStoreArtifactSource(
                 val input = ParcelFileDescriptor.AutoCloseInputStream(descriptor)
                 return object : InputStream() {
                     private var closed = false
-                    override fun read(): Int { check(!closed); return input.read() }
+                    override fun read(): Int { check(!closed); return reading { input.read() } }
                     override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
                         check(!closed)
-                        return input.read(bytes, offset, length)
+                        return reading { input.read(bytes, offset, length) }
                     }
                     override fun close() {
                         if (closed) return

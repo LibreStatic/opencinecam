@@ -9,7 +9,6 @@ import kotlinx.serialization.json.*
 import org.json.JSONObject
 import com.librestatic.opencinecam.CaptureLocationSnapshot
 import com.librestatic.opencinecam.captureLocationJson
-import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -18,7 +17,6 @@ import java.io.File
 import com.librestatic.opencinecam.camera.RecordingGeometry
 import com.librestatic.opencinecam.media.storage.ClipFinalizationResult
 import com.librestatic.opencinecam.media.storage.ClipRecoveryDecision
-import com.librestatic.opencinecam.media.storage.ContentResolverClipRows
 import com.librestatic.opencinecam.media.storage.decideClipRecovery
 import com.librestatic.opencinecam.media.storage.finalizeClip
 
@@ -47,8 +45,12 @@ class VideoOutput private constructor(
     private var retainedBytes = false
     private var neverRecorded = false
     private var writtenSidecarJson: String? = null
+    // ADR-0037: a take on a drive registers its descriptor, so a leaving drive closes it at once (vold kills a holder).
+    // The muxer writes through its own duplicate; after an early release the close below does nothing.
+    private val descriptorCloser = CloseOnce(descriptor)
+    private val driveHandle = DriveDescriptors.registerDocument(uri, descriptorCloser)
     private val transaction = PendingOutputTransaction(uri, {
-        descriptor.close()
+        try { descriptorCloser.close() } finally { driveHandle.unregister() }
         descriptorRetired = true
     }, ::deleteOwned)
 
@@ -243,7 +245,7 @@ class VideoOutput private constructor(
 
     private fun publishIncompleteOwned() {
         val result = finalizeClip(
-            ContentResolverClipRows(context.contentResolver), uri, sidecarUri,
+            recoveryMember.clipRows, uri, sidecarUri,
             muxerFinalized = incompleteMuxerFinalized, bytesWritten = incompleteBytes,
             sidecarBytes = null, correlationId = recoveryGroup.id, attachments = listOfNotNull(motionLogUri, clipSidecarUri),
         )
@@ -257,25 +259,11 @@ class VideoOutput private constructor(
     private fun publishOwned() {
         check(preparedOutput != null) { "Output identities must be prepared before publication" }
         if (incompleteReasons != null) return publishIncompleteOwned()
-        val resolver = context.contentResolver
-        motionLogUri?.let { log ->
-            check(resolver.update(log, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
-                "Motion log publication did not update its owned row"
-            }
-        }
-        sidecarUri?.let { sidecar ->
-            check(resolver.update(sidecar, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
-                "Sidecar publication did not update its owned row"
-            }
-        }
-        clipSidecarUri?.let { clip ->
-            check(resolver.update(clip, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
-                "Clip sidecar publication did not update its owned row"
-            }
-        }
-        check(resolver.update(uri, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null) == 1) {
-            "Video publication did not update its owned row"
-        }
+        // The take's backend publishes: MediaStore clears IS_PENDING, a drive take checks the document (its marker goes at commit).
+        motionLogUri?.let { log -> recoveryMember.publish(log, "Motion log publication did not update its owned row") }
+        sidecarUri?.let { sidecar -> recoveryMember.publish(sidecar, "Sidecar publication did not update its owned row") }
+        clipSidecarUri?.let { clip -> recoveryMember.publish(clip, "Clip sidecar publication did not update its owned row") }
+        recoveryMember.publish(uri, "Video publication did not update its owned row")
         recoveryMember.published()
     }
 
@@ -349,11 +337,20 @@ class VideoOutput private constructor(
 
     companion object {
         fun create(context: Context, productionSlate: ProductionSlateSettings? = null,
-            captureNames: CaptureNameSnapshot? = null): VideoOutput {
+            captureNames: CaptureNameSnapshot? = null): VideoOutput =
+            create(context, productionSlate, captureNames, destination = RecordingDestination.Phone)
+
+        /**
+         * PLAN-072: the take, its sidecars and any audio member that joins its group are written to [destination].
+         * [stem] replaces the usual `captureFileStem(group.id, captureNames)`: a continuation on the phone is named
+         * after the drive take it continues ([com.librestatic.opencinecam.continuationFileStem]), not its own bundle id.
+         */
+        internal fun create(context: Context, productionSlate: ProductionSlateSettings?,
+            captureNames: CaptureNameSnapshot?, destination: RecordingDestination, stem: String? = null): VideoOutput {
             require(captureNames == null || productionSlate == null || captureNames.slate == productionSlate)
-            val group = RecordingCaptureRecovery.begin(context)
+            val group = RecordingCaptureRecovery.begin(context, destination)
             val member = group.member(RecordingMemberKind.VIDEO)
-            val name = captureFileStem(group.id, captureNames) + ".mp4"
+            val name = (stem ?: captureFileStem(group.id, captureNames)) + ".mp4"
             var descriptor: ParcelFileDescriptor? = null
             return try {
                 val uri = member.insert(name, "video/mp4", metadata = false)

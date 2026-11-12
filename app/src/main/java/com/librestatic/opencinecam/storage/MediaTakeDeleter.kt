@@ -11,9 +11,52 @@ import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 
 /** Called only after confirmation. Execute off the UI thread without cancellation after admission.
  * No rollback/atomicity promise: each row's observed outcome is reported and failures stop the set. */
-class MediaTakeDeleter internal constructor(private val access: MediaDeleteAccess) {
-    constructor(context: Context) : this(MediaStoreDeleteAccess(context))
-    fun delete(selected: LocalMediaTake): MediaDeleteResult = executeMediaDelete(selected, access)
+class MediaTakeDeleter internal constructor(private val access: MediaDeleteAccess, private val drive: DriveMediaCatalog? = null) {
+    constructor(context: Context) : this(MediaStoreDeleteAccess(context), LocalMediaRepository(context).drive)
+    /** A take on the recording drive (PLAN-072) goes with its folder, under the same reservation as a phone take. */
+    fun delete(selected: LocalMediaTake): MediaDeleteResult =
+        if (!selected.onDrive) executeMediaDelete(selected, access)
+        else if (drive == null) MediaDeleteResult((selected.originals + selected.metadata + selected.attachments)
+            .map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }, "Drive deletion unavailable")
+        else executeDriveDelete(selected, drive, access::reserve)
+}
+
+/**
+ * Deletes a drive take's folder in one provider call, after [DriveMediaCatalog.deletionSnapshot] re-read it and found
+ * exactly the confirmed files in a take folder of the drive. Absence is then observed per file; a drive that stops
+ * answering leaves every file UNKNOWN, never verified. The catalog's cache is dropped whatever the outcome.
+ */
+internal fun executeDriveDelete(selected: LocalMediaTake, drive: DriveMediaCatalog, reserve: () -> AutoCloseable): MediaDeleteResult {
+    val confirmed = selected.originals + selected.metadata + selected.attachments
+    var results = confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }
+    var error: String? = null
+    var reservation: AutoCloseable? = null
+    try {
+        reservation = reserve()
+        val deletion = drive.deletionSnapshot(selected)
+        var problem: String? = null
+        try { android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder) }
+        catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
+        val reachable = deletion.docs.describe(deletion.docs.root) != null
+        results = if (!reachable) {
+            problem = problem ?: "The USB drive stopped answering"
+            confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.UNKNOWN, problem) }
+        } else confirmed.map { artifact ->
+            if (deletion.docs.describe(artifact.uri.toUri()) == null) MediaDeleteFileResult(artifact, MediaDeleteStatus.ABSENT_VERIFIED)
+            else MediaDeleteFileResult(artifact, MediaDeleteStatus.RETAINED, problem)
+        }
+        if (problem == null && results.any { it.status != MediaDeleteStatus.ABSENT_VERIFIED }) problem = "Conditional deletion did not remove the selected identity"
+        if (problem == null && deletion.docs.describe(deletion.folder) != null) problem = "The take folder remains on the drive"
+        error = problem
+    } catch (failure: Exception) {
+        error = failure.message ?: "Deletion preflight failed; no further files were attempted"
+    } finally {
+        drive.invalidate()
+        try { reservation?.close() } catch (failure: Exception) {
+            error = listOfNotNull(error, failure.message ?: "Deletion reservation release failed").joinToString("; ")
+        }
+    }
+    return MediaDeleteResult(results, error)
 }
 
 internal class MediaStoreDeleteAccess(context: Context) : MediaDeleteAccess {

@@ -12,12 +12,13 @@ import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress
+import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.rawvideo.RawQualificationRisk
 import com.librestatic.opencinecam.rawvideo.RawQualificationSpaceEstimate
 import com.librestatic.opencinecam.rawvideo.RawQualificationStaging
 import com.librestatic.opencinecam.rawvideo.RawQualificationStatus
+import com.librestatic.opencinecam.rawvideo.RawQualificationStorageModel
 import com.librestatic.opencinecam.rawvideo.RawVideoQualifier
-import kotlin.math.roundToLong
 
 /*
  * OCC-PLAN-071: how the app leads an operator into the RAW video qualification. Choosing RAW video
@@ -58,22 +59,28 @@ internal const val RAW_QUALIFICATION_WARN_BATTERY_PERCENT = 50
 /** A running qualification stops below this. */
 internal const val RAW_QUALIFICATION_ABORT_BATTERY_PERCENT = 5
 
-/** [PowerManager.THERMAL_STATUS_LIGHT]: none or light is cool enough to start. */
-internal const val RAW_QUALIFICATION_MAX_THERMAL_STATUS = 1
+/**
+ * [PowerManager.THERMAL_STATUS_MODERATE]: none, light or moderate may start. A phone with a hub and a drive attached sits at
+ * moderate (the Razr reaches it at a 39 °C skin), and the run itself waits for the heat before its heavy sessions.
+ */
+internal const val RAW_QUALIFICATION_MAX_THERMAL_STATUS = 2
 
 /** Why the qualification cannot start now. */
 internal enum class RawQualificationBlocker { BATTERY_LOW, TOO_WARM }
 
-/** The battery and the temperature the qualification step checks; a null battery level is unknown (no battery). */
-internal data class RawQualificationConditions(val batteryPercent: Int?, val thermalStatus: Int) {
+/**
+ * The battery and the temperature the qualification step checks; a null battery level is unknown (no battery).
+ * [charging] is the phone on external power, which the run cannot drain.
+ */
+internal data class RawQualificationConditions(val batteryPercent: Int?, val thermalStatus: Int, val charging: Boolean = false) {
     val blockers: List<RawQualificationBlocker> get() = rawQualificationReadiness(batteryPercent, thermalStatus)
 
     /**
      * A known battery level that may start but is under [RAW_QUALIFICATION_WARN_BATTERY_PERCENT]:
-     * a warning, never a blocker.
+     * a warning, never a blocker, and none while [charging].
      */
     val batteryWarning: Boolean
-        get() = batteryPercent != null &&
+        get() = !charging && batteryPercent != null &&
             batteryPercent >= RAW_QUALIFICATION_MIN_BATTERY_PERCENT &&
             batteryPercent < RAW_QUALIFICATION_WARN_BATTERY_PERCENT
 }
@@ -194,7 +201,9 @@ data class RawVideoQualificationUi(
  * MEASURED ran (a camera check, or a session that ended) and waits for its verdict, which the
  * qualifier writes at the end.
  */
-enum class RawQualificationItemStatus { PENDING, TESTING, MEASURED, PASSED, RISKY, FAILED, CAMERA_LIMIT, NOT_QUALIFIED, SKIPPED_SPACE, SKIPPED_HEAT }
+enum class RawQualificationItemStatus {
+    PENDING, TESTING, MEASURED, PASSED, RISKY, FAILED, STORAGE_LIMIT, CAMERA_LIMIT, NOT_QUALIFIED, SKIPPED_SPACE, SKIPPED_HEAT
+}
 
 /**
  * One configuration of a qualification: [label] reads like a [RawVideoConfigOption] label (compressed
@@ -249,10 +258,16 @@ internal const val RAW_QUALIFICATION_SPACE_SKIP = "insufficient-space"
 /** The skip reason the qualifier writes when the phone stays at SEVERE or hotter before a run. */
 internal const val RAW_QUALIFICATION_THERMAL_SKIP = "thermal-skip"
 
+/** The storage reasons the sweep alone decides, with no camera running: no heat during a run explains them. */
+internal val RAW_QUALIFICATION_SWEEP_REASONS: Set<String> =
+    setOf(RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL, RawQualificationRisk.REASON_SUSTAINED_RATE_EXCEEDED)
+
 /**
  * A run's status from its result row: PASS passed, a failure the camera's declared frame rate
- * explains CAMERA_LIMIT, a failure the heat caused ([RawQualificationStaging.REASON_THERMAL_LIMIT])
- * SKIPPED_HEAT, a FAIL whose [reasonCodes] are all the storage's RISKY, any other FAIL failed, a
+ * explains CAMERA_LIMIT, a FAIL whose [reasonCodes] are all the storage's RISKY, a hot run
+ * ([RawQualificationStaging.REASON_THERMAL_LIMIT]) the storage sweep had already failed
+ * ([RAW_QUALIFICATION_SWEEP_REASONS]: measured without the camera, so the heat does not explain it)
+ * STORAGE_LIMIT, any other failure the heat caused SKIPPED_HEAT, any other FAIL failed, a
  * skip for space SKIPPED_SPACE, a skip for heat SKIPPED_HEAT (never judged, so not "not
  * qualified"), any other skip NOT_QUALIFIED. [reasonCodes] defaults to [reasonCode] alone.
  */
@@ -265,8 +280,9 @@ internal fun rawQualificationRunStatus(
     reasonCode == RAW_QUALIFICATION_SPACE_SKIP -> RawQualificationItemStatus.SKIPPED_SPACE
     reasonCode == RAW_QUALIFICATION_THERMAL_SKIP -> RawQualificationItemStatus.SKIPPED_HEAT
     reasonCode == RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT -> RawQualificationItemStatus.CAMERA_LIMIT
-    RawQualificationStaging.REASON_THERMAL_LIMIT in reasonCodes -> RawQualificationItemStatus.SKIPPED_HEAT
     status == "FAIL" && RawQualificationRisk.isStorageOnly(reasonCodes) -> RawQualificationItemStatus.RISKY
+    RawQualificationStaging.REASON_THERMAL_LIMIT in reasonCodes ->
+        if (reasonCodes.any { it in RAW_QUALIFICATION_SWEEP_REASONS }) RawQualificationItemStatus.STORAGE_LIMIT else RawQualificationItemStatus.SKIPPED_HEAT
     status == "FAIL" -> RawQualificationItemStatus.FAILED
     else -> RawQualificationItemStatus.NOT_QUALIFIED
 }
@@ -479,19 +495,18 @@ private val RAW_QUALIFICATION_SPEC_PHASES = setOf(
     RawQualificationPhase.THERMAL_WAIT, RawQualificationPhase.COOLING,
 )
 
-/** The time left of a run planned at [estimatedTotalMs], [fraction] done. */
-internal fun rawQualificationRemainingMs(estimatedTotalMs: Long, fraction: Double): Long =
-    (estimatedTotalMs.coerceAtLeast(0) * (1.0 - fraction.coerceIn(0.0, 1.0))).roundToLong()
-
-/** [progress] as the UI shows it; [specLabel] is the label of `progress.spec`, when it names one. */
-internal fun rawQualificationUiOf(progress: RawQualificationProgress, estimatedTotalMs: Long, specLabel: String?): RawVideoQualificationUi =
+/**
+ * [progress] as the UI shows it; [specLabel] is the label of `progress.spec`, when it names one. The time left is the
+ * qualifier's own ([RawQualificationProgress.remainingMs]), corrected as the run goes.
+ */
+internal fun rawQualificationUiOf(progress: RawQualificationProgress, specLabel: String?): RawVideoQualificationUi =
     RawVideoQualificationUi(
         phase = progress.phase,
         fraction = progress.fraction.coerceIn(0.0, 1.0).toFloat(),
         runIndex = progress.runIndex,
         runCount = progress.runCount,
         specLabel = specLabel.takeIf { progress.phase in RAW_QUALIFICATION_SPEC_PHASES },
-        remainingMs = rawQualificationRemainingMs(estimatedTotalMs, progress.fraction),
+        remainingMs = progress.remainingMs.coerceAtLeast(0),
     )
 
 /** True when [last] and [next] differ enough to post: a new phase or step, or [intervalMs] since the last post. */
@@ -501,15 +516,25 @@ internal fun rawQualificationShouldPost(last: RawVideoQualificationUi?, next: Ra
 
 /**
  * What the qualification prompt and step know before a run: the camera it would qualify, its RAW
- * video gate, the duration and space for the free space now ([space], null when unknown) and
- * whether this build's last qualification found nothing ([previousFailure]).
+ * video gate, the duration and space for the free space now ([space], null when unknown), whether
+ * this build's last qualification found nothing ([previousFailure]) and which storage it measures
+ * ([target], null when no USB drive is configured, so phone-only users see nothing new).
  */
 internal data class RawVideoQualificationInfo(
     val cameraId: String?,
     val gate: ModeGateState?,
     val space: RawQualificationSpaceEstimate?,
     val previousFailure: Boolean = false,
+    val target: RawQualificationTarget? = null,
+    /** What is known of the storage the run would test, which [space]'s duration was planned with; the qualifier starts from it. */
+    val storage: RawQualificationStorageModel? = null,
 )
+
+/**
+ * PLAN-072 Delivery 3: the storage a qualification measures when a USB drive is configured: the drive ([drive] true,
+ * named [driveLabel] when known), or the phone standing in for a drive that is not usable now.
+ */
+internal data class RawQualificationTarget(val drive: Boolean, val driveLabel: String? = null)
 
 /** Where the qualification step was opened from. */
 internal enum class RawQualificationEntry { ONBOARDING, SELECTOR, SETTINGS }
@@ -573,9 +598,12 @@ internal fun batteryPercentOf(intent: Intent?): Int? {
     return if (present && level >= 0 && scale > 0) (level * 100 / scale) else null
 }
 
+/** Whether an ACTION_BATTERY_CHANGED intent says the phone is on external power (charger, USB, wireless or dock). */
+internal fun batteryChargingOf(intent: Intent?): Boolean = (intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+
 /** Reads the conditions now: the sticky battery broadcast and the thermal status. */
 internal fun readRawQualificationConditions(context: Context): RawQualificationConditions {
     val battery = runCatching { context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }.getOrNull()
     val thermal = runCatching { context.getSystemService(PowerManager::class.java)?.currentThermalStatus }.getOrNull() ?: PowerManager.THERMAL_STATUS_NONE
-    return RawQualificationConditions(batteryPercentOf(battery), thermal)
+    return RawQualificationConditions(batteryPercentOf(battery), thermal, batteryChargingOf(battery))
 }

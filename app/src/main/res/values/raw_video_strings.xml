@@ -13,6 +13,7 @@
     <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
     <string name="raw_video_saved">RAW take saved: %1$d frames, %2$s s</string>
     <string name="raw_video_not_finalised">The RAW take was not finalised; it will be recovered at the next start.</string>
+    <string name="raw_video_not_finalised_drive">The RAW take was not finalised; it will be recovered when the USB drive is connected again.</string>
     <string name="raw_video_empty">The RAW take recorded no frame.</string>
     <string name="raw_video_end_ring_full">storage could not keep up with the RAW stream</string>
     <string name="raw_video_end_writer">the RAW file could not be written</string>

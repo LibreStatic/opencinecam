@@ -276,6 +276,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     var tourReplay by rememberSaveable { mutableStateOf(false) }
     // OCC-PLAN-071: the qualification step opened from the mode selector or Settings, and the mode to return to.
     var rawStepOpen by rememberSaveable { mutableStateOf(false) }
+    // The wizard's own qualification step is up, over the app composed under it.
+    var wizardRawStepShown by remember { mutableStateOf(false) }
     var rawStepEntry by rememberSaveable { mutableStateOf(RawQualificationEntry.SELECTOR) }
     var rawStepPreviousMode by rememberSaveable { mutableStateOf<CaptureMode?>(null) }
     val fallbackState = remember { MutableStateFlow(CameraUiState()) }
@@ -481,6 +483,7 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                                 rawStepEntry = RawQualificationEntry.SETTINGS
                                 rawStepOpen = true
                             } },
+                            onRecordingDestinationChanged = { binder?.refreshRecordingDestination() },
                         )
                         }
                     }
@@ -532,7 +535,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         }
         MainContent()
         // From the mode selector or Settings, or a run still going after the activity came back: the step over the app.
-        if (permissionGranted && (rawStepOpen || state.rawVideoQualification?.running == true)) {
+        val rawStepShown = permissionGranted && (rawStepOpen || state.rawVideoQualification?.running == true)
+        // The step covers the viewfinder: the camera rests while it is up, and reopens after onLeave chose the mode.
+        LaunchedEffect(binder, rawStepShown, wizardRawStepShown) { binder?.holdPreviewForRawQualification(rawStepShown || wizardRawStepShown) }
+        if (rawStepShown) {
             RawQualificationFrame(foldState.hinge) {
                 RawQualificationStepHost(binder, state.rawVideoQualification, selectOnPass = rawQualificationSelectsOnPass(rawStepEntry), onLeave = { passed ->
                     rawStepOpen = false
@@ -570,6 +576,10 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
             rawQualificationStep = binder?.let { owner ->
                 { onLeave ->
                     // A pass selects RAW video when the camera opens after the wizard (the service keeps it pending).
+                    DisposableEffect(Unit) {
+                        wizardRawStepShown = true
+                        onDispose { wizardRawStepShown = false }
+                    }
                     RawQualificationStepHost(owner, state.rawVideoQualification, onLeave = { onLeave() })
                 }
             },
@@ -2287,6 +2297,7 @@ internal fun AdaptiveCaptureChrome(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 3, textAlign = TextAlign.Center)
+                            CaptureDestinationChip(state)
                             if (!recording) {
                                 ThermalHudChip()
                                 OutOfFrameHudChip(state)
@@ -2329,6 +2340,7 @@ internal fun AdaptiveCaptureChrome(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         CaptureStatusLine(state, Modifier.fillMaxWidth(), maxLines = 2)
+                        CaptureDestinationChip(state)
                         if (!recording) {
                             ThermalHudChip()
                             OutOfFrameHudChip(state)
@@ -2633,6 +2645,7 @@ private fun CaptureTopBar(
             if (showThumbnail) MediaThumbnailAction(state.lastSavedUri, onOpenMedia)
             if (showStatus) {
                 CaptureStatusLine(state, Modifier.fillMaxWidth().padding(horizontal = 4.dp), maxLines = 3, textAlign = TextAlign.Center)
+                CaptureDestinationChip(state)
                 ThermalHudChip()
                 OutOfFrameHudChip(state)
             }
@@ -2655,6 +2668,7 @@ private fun CaptureTopBar(
         else Spacer(Modifier.width(4.dp))
         if (showStatus) {
             CaptureStatusLine(state, Modifier.weight(1f))
+            CaptureDestinationChip(state)
             ThermalHudChip()
             OutOfFrameHudChip(state)
         } else Spacer(Modifier.weight(1f))
@@ -2804,7 +2818,11 @@ private fun InstrumentStack(
     val graphNotice = graphFallbackNoticeText(state.selectedMode, settings, state.previewGraphLoss)
     // And the warning that RAW video runs a configuration the storage is too slow for.
     val showRawRisk = rawVideoActiveRisky(state)
-    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk
+    // And, idle, that the next take goes to the phone because the configured drive cannot be used (PLAN-072).
+    val destinationNotice = captureDestinationFallbackText(state, recording)
+    // Recording, that the take continues on the phone because its drive was lost (PLAN-072 Delivery 4).
+    val showContinued = captureDestinationContinued(state)
+    val showNotice = showSuspension || showLensNotice || graphNotice != null || showRawRisk || destinationNotice != null || showContinued
     if (!showAudio && !showLogSource && !showZoom && !showHistogram && !showNotice && !showLowLight) return
     BoxWithConstraints(modifier) {
         val histogramWidth = (maxWidth * .34f).coerceIn(112.dp, 240.dp)
@@ -2816,11 +2834,14 @@ private fun InstrumentStack(
         // The notice goes under the zoom, so the lens anchors never move when it comes and goes.
         // A row has no width to spare for it: there it takes its own line under the row.
         val notice: @Composable () -> Unit = {
-            val width = Modifier.widthIn(max = minOf(maxWidth, if (horizontal) 360.dp else 280.dp))
+            // In a column it starts beside the lock keys like the badges, so it stops short of them too.
+            val width = Modifier.widthIn(max = if (horizontal) minOf(maxWidth, 360.dp) else minOf(maxWidth, 280.dp, badgeMaxWidth))
             if (showSuspension) AnalysisSuspensionNotice(state, width)
             if (showLensNotice) LensLockNotice(state.lensLock, width)
             if (graphNotice != null) GraphFallbackNotice(graphNotice, width)
             if (showRawRisk) RawVideoRiskyNotice(width, rawVideoActiveOption(state)?.burstSeconds)
+            if (destinationNotice != null) CaptureDestinationFallbackNotice(destinationNotice, width)
+            if (showContinued) CaptureDestinationContinuedNotice(width)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FittingStack(horizontal, spacing = 8.dp, fillLast = stretchHistogram,
@@ -3536,7 +3557,7 @@ private fun CaptureStatusLine(state: CameraUiState, modifier: Modifier = Modifie
     val muted = Muted
     // Low battery is a warning, not a failure: amber, never the recording red.
     val batteryColor = if (battery != null && battery <= 15) LocalCineColors.current.pending else OkGreen
-    val free = state.availableStorageBytes?.let { stringResource(R.string.capture_status_free, formatBytes(it)) }
+    val free = captureStatusFreeBytes(state)?.let { stringResource(R.string.capture_status_free, formatBytes(it)) }
     // RAW video fills a card in minutes, so the time left at its configuration sits beside the free space (PLAN-071).
     val rawLeft = rawVideoStatusFacts(state)?.timeLeftMs?.let { stringResource(R.string.status_time_left, formatRecordTimeLeft(it)) }
     fun line(withTimeLeft: Boolean, withRest: Boolean) = androidx.compose.ui.text.buildAnnotatedString {
@@ -3632,7 +3653,7 @@ private fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
             add("${settings.videoBitrateMbps} Mbps")
             add(if (silent) stringResource(R.string.status_audio_off)
                 else audioOutputLabel(settings.audioOutputFormat) + " " + formatAudioRate(settings.audioSampleRateHz))
-            recordTimeLeftMs(state.availableStorageBytes, settings.videoBitrateMbps)?.let {
+            recordTimeLeftMs(captureStatusFreeBytes(state), settings.videoBitrateMbps)?.let {
                 add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it)))
             }
         }
@@ -4256,7 +4277,11 @@ internal fun SettingsContent(
     onSetLensLock: ((String?) -> Unit)? = null,
     onSelectRawVideoConfig: ((String) -> Unit)? = null,
     onRequalifyRawVideo: (() -> Unit)? = null,
+    onRecordingDestinationChanged: () -> Unit = {},
+    /** Cards a search names in their title: they come first, the rest keep the page's order. */
+    leadingIds: Set<String> = emptySet(),
 ) {
+    val recordingDestination = rememberRecordingDestinationSettings()
     // One column of equal-width cards, capped and centred for the pane's width class; the gutter
     // is content padding so the whole pane still scrolls. Rows lay out side by side when the
     // card is wide enough for a label and a control column.
@@ -4270,6 +4295,9 @@ internal fun SettingsContent(
         contentPadding = PaddingValues(horizontal = gutter.dp, vertical = 16.dp),
         verticalItemSpacing = 12.dp,
     ) {
+        // The cards are collected in page order and emitted below, so a search can lead with the ones it names.
+        val cards = mutableListOf<Pair<String, @Composable () -> Unit>>()
+        fun settingsCard(key: String, content: @Composable () -> Unit) { cards += key to content }
         if ("media-sharing" in visibleIds) settingsCard("media-sharing") {
             MediaSharingSettingsControls(settings.mediaSharing, onSettings = { onSettingsChange(settings.copy(mediaSharing = it)) })
         }
@@ -4394,6 +4422,11 @@ internal fun SettingsContent(
             SettingsHelp(stringResource(R.string.scroll_long_text_help_summary), stringResource(R.string.scroll_long_text_help),
                 tag = "scroll-long-text-help")
         }
+        if ("rotate-when-locked" in visibleIds) settingsCard("rotate-when-locked") {
+            SettingsToggleRow(stringResource(R.string.rotate_when_locked), stringResource(R.string.rotate_when_locked_summary),
+                settings.rotateWhenLocked, modifier = Modifier.testTag("settings-rotate-when-locked"),
+                onCheckedChange = { onSettingsChange(settings.copy(rotateWhenLocked = it)) })
+        }
         if ("audio" in visibleIds) settingsCard("audio") {
             SettingsToggleRow(
                 title = stringResource(R.string.audio_recording),
@@ -4486,6 +4519,19 @@ internal fun SettingsContent(
         }
         if (RECORDING_POLICY_SETTING_ID in visibleIds) settingsCard(RECORDING_POLICY_SETTING_ID) {
             RecordingPolicySettings(settings, onSettingsChange)
+        }
+        if (RECORDING_DESTINATION_SETTING_ID in visibleIds) settingsCard(RECORDING_DESTINATION_SETTING_ID) {
+            RecordingDestinationSettings(recordingDestination, state.recordingDestination, recordingDestinationChangeAllowed(state),
+                benchmarkRequiredBytesPerSecond(state.selectedMode, settings, state.targetFps,
+                    state.activeVideoProfile?.constrainedHighSpeed == true),
+                onRecordingDestinationChanged)
+        }
+        if (RECORDING_DRIVE_DISCONNECT_SETTING_ID in visibleIds && recordingDestination.state.driveConfigured) {
+            settingsCard(RECORDING_DRIVE_DISCONNECT_SETTING_ID) {
+                RecordingDriveDisconnectSettings(recordingDestination.state.policy, enabled = true) {
+                    recordingDestination.setPolicy(it, onRecordingDestinationChanged)
+                }
+            }
         }
         if ("low-light-fps" in visibleIds && state.descriptor?.lowLightAutoFps == true) settingsCard("low-light-fps") {
             LowLightFpsSettings(state, settings, onSettingsChange)
@@ -4587,7 +4633,7 @@ internal fun SettingsContent(
             LensLockSettings(state, onSetLensLock)
         }
         // OCC-PLAN-071: offered once the camera has RAW10 output, qualified (the chooser) or not yet (why, and Qualify).
-        if ("raw-video" in visibleIds && state.modeGates[CaptureMode.RAW_VIDEO] in setOf(ModeGateState.AVAILABLE, ModeGateState.CANDIDATE)) {
+        if ("raw-video" in visibleIds && rawVideoSettingsShown(state.modeGates[CaptureMode.RAW_VIDEO])) {
             settingsCard("raw-video") {
                 RawVideoSettings(state, settings, onSelectRawVideoConfig, onRequalifyRawVideo,
                     onNearLosslessChange = { onSettingsChange(settings.copy(rawVideoNearLossless = it)) })
@@ -4622,6 +4668,7 @@ internal fun SettingsContent(
         if ("about" in visibleIds) settingsCard("about") {
             SettingsLinkRow(stringResource(R.string.about_title), stringResource(R.string.about_settings_summary), onOpenAbout)
         }
+        cards.sortedByDescending { it.first in leadingIds }.forEach { (key, content) -> this.settingsCard(key, content) }
     }
     }
     }

@@ -177,7 +177,7 @@ class LocalMediaCatalogDeviceTest {
                 assertArrayEquals(before,file.readBytes())
             }
             rejectsPreservingBytes();assertTrue(file.delete())
-            SQLiteDatabase.openOrCreateDatabase(file,null).use { it.execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY, committed)");it.version=2 }
+            SQLiteDatabase.openOrCreateDatabase(file,null).use { it.execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY, committed)");it.version=3 }
             rejectsPreservingBytes()
             SQLiteDatabase.openDatabase(file.path,null,SQLiteDatabase.OPEN_READWRITE).use {
                 it.version=1;it.execSQL("INSERT INTO captures VALUES(?,?)",arrayOf(UUID.randomUUID().toString(),"invalid"))

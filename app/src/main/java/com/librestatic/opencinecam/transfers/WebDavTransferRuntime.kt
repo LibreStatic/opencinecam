@@ -368,7 +368,7 @@ class WebDavTransferRuntime internal constructor(
         val enrollment = CaptureTransferEnrollmentFile(context).load(id) ?: return WebDavTransferMessage.ERROR
         checkWork(current)
         if (enrollment.endpointId != bundle.endpointId || enrollment.endpointRevision != bundle.endpointRevision) return WebDavTransferMessage.ERROR
-        val source = WebDavMediaStoreArtifactSource(context.contentResolver)
+        val source = WebDavMediaStoreArtifactSource(context.contentResolver) // Phone and drive (PLAN-072) sources.
         val factory: (URI) -> HttpURLConnection = { uri ->
             synchronized(gate) {
                 checkWork(current)
@@ -395,7 +395,11 @@ class WebDavTransferRuntime internal constructor(
             } else first
             checkWork(current)
             when (result) {
-                is WebDavWorkerResult.Held -> return if (result.reason == WebDavWorkerHold.AUTHENTICATION) WebDavTransferMessage.AUTHENTICATION else WebDavTransferMessage.ERROR
+                is WebDavWorkerResult.Held -> return when (result.reason) {
+                    WebDavWorkerHold.AUTHENTICATION -> WebDavTransferMessage.AUTHENTICATION
+                    WebDavWorkerHold.SOURCE_ABSENT -> WebDavTransferMessage.WAITING_DRIVE
+                    else -> WebDavTransferMessage.ERROR
+                }
                 is WebDavWorkerResult.Stopped -> return stopMessage(result.reason)
                 WebDavWorkerResult.Attention, WebDavWorkerResult.Stale -> return WebDavTransferMessage.ERROR
                 is WebDavWorkerResult.Applied -> Unit

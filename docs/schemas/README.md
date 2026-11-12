@@ -19,3 +19,4 @@ JSON Schema 2020-12 files here are canonical external contracts. Runtime models 
 - `validation`: the `Recorded` and `FileVerified` evidence steps (`pass`, `fail` or `notRun`).
 - `media`: display name, duration, encoded frames, and the take's other sidecars and audio files.
 - `takeStatus: "incomplete"` and `failureReasons` appear only on incomplete takes, with one `incomplete:<reason>` event per reason.
+- `continuation` appears only on a take that continues on the phone a take whose USB drive was lost mid-take (OCC-PLAN-072 Delivery 4): `of` is the drive take's `recordingId`, `previousName` its video file name, `index` 1 for the first continuation, and `reason` `drive-disconnected` or `drive-write-failed`. The drive take's own sidecar is not rewritten. Like `resolvedGraph.camera`, it was added without changing the `1.0.0` constant.

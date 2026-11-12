@@ -94,6 +94,7 @@ private fun transferMessage(message: WebDavTransferMessage): Int = when (message
     WebDavTransferMessage.UNCERTAIN -> R.string.webdav_transfer_uncertain
     WebDavTransferMessage.ERROR -> R.string.webdav_transfer_error
     WebDavTransferMessage.CANCELLED -> R.string.webdav_transfer_cancelled
+    WebDavTransferMessage.WAITING_DRIVE -> R.string.webdav_transfer_waiting_drive
 }
 
 private fun bundleStatus(state: WebDavBundleState): Int = when (state) {

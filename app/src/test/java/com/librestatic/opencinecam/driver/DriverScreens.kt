@@ -269,6 +269,55 @@ fun CaptureCodecFallback() = CaptureChrome(
         recordingWarning = stringResource(R.string.video_codec_fallback_warning)),
 )
 
+/** Video with the next take going to the USB drive: the USB chip, and the drive's own free space in the status line. */
+@Composable
+fun CaptureDestinationSsd() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(availableStorageBytes = 41_000_000_000L,
+        recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, onDrive = true,
+            driveLabel = "WD Elements", driveFreeBytes = 1_734_000_000_000L)),
+)
+
+/** Video with a drive configured but not connected: the amber PHONE chip and the notice under the zoom. */
+@Composable
+fun CaptureDestinationFallback() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(
+        recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+            fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_NOT_CONNECTED, driveLabel = "WD Elements")),
+)
+
+/**
+ * Video with a drive configured that is still spinning up (a USB storage device attached moments ago, its volume not
+ * mounted yet): the amber PHONE chip and the "USB drive starting" notice under the zoom.
+ */
+@Composable
+fun CaptureDestinationStarting() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(
+        recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+            fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_STARTING, driveLabel = "WD Elements")),
+)
+
+/**
+ * Video with the configured drive mounted under another volume name (vold's stable name, `FFF1-7571-01`, after a mount
+ * was cut short): the amber PHONE chip and the "Choose USB folder again" notice under the zoom.
+ */
+@Composable
+fun CaptureDestinationRenamed() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO).copy(
+        recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+            fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_RENAMED, driveLabel = "WD Elements")),
+)
+
+/**
+ * PLAN-072 Delivery 4: the drive was lost mid-take and the take goes on on the phone (a new `_cont1` take, 4 s in):
+ * the amber PHONE chip and the "continuing on the phone" notice under the zoom while it records.
+ */
+@Composable
+fun CaptureDestinationContinued() = CaptureChrome(
+    driverCaptureState(CaptureMode.VIDEO, CameraUiPhase.RECORDING).copy(recordingElapsedMs = 4_000L,
+        recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, driveLabel = "WD Elements",
+            continuedOnPhone = true)),
+)
+
 /** Capture chrome while a video take is recording at 01:23. */
 @Composable
 fun CaptureRecording() = CaptureChrome(
@@ -414,6 +463,33 @@ fun CaptureRawVideoRecording() = CaptureChrome(
     DriverRawVideoSettings,
 )
 
+
+/**
+ * RAW video with the next take going to the USB drive (PLAN-072 Delivery 3): the USB chip beside the status line, whose
+ * free space and minutes left are the drive's (1.7 TB), and the chooser's times left too.
+ */
+@Composable
+fun CaptureRawVideoSsd() = CaptureChrome(
+    driverRawVideoState().copy(availableStorageBytes = 41_000_000_000L, recordingDestination = DriverDriveStatus),
+    DriverRawVideoSettings,
+)
+
+/** A RAW take on the drive at 00:42: the service feeds the drive's free space while it records. */
+@Composable
+fun CaptureRawVideoSsdRecording() = CaptureChrome(
+    driverRawVideoState(CameraUiPhase.RECORDING).copy(recordingElapsedMs = 42_000L, rawVideoRingPercent = 12, rawVideoFramesWritten = 1_260L,
+        availableStorageBytes = 1_714_000_000_000L, recordingDestination = DriverDriveStatus),
+    DriverRawVideoSettings,
+)
+
+/** RAW video with the drive configured but not connected: the amber PHONE chip and the notice, gated by the phone. */
+@Composable
+fun CaptureRawVideoDriveFallback() = CaptureChrome(
+    driverRawVideoState().copy(recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+        fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_NOT_CONNECTED, driveLabel = "WD Elements")),
+    DriverRawVideoSettings,
+)
+
 /** The same take with the ring at 84 %: the meter turns red (amber from 50 %). */
 @Composable
 fun CaptureRawVideoRingHigh() = CaptureChrome(
@@ -443,6 +519,7 @@ private fun driverRawQualificationInfo(
     freeBytes: Long = 26_000_000_000L,
     minimumFreeBytes: Long = 3L shl 30,
     previousFailure: Boolean = false,
+    target: com.librestatic.opencinecam.RawQualificationTarget? = null,
 ): RawVideoQualificationInfo {
     val configs = driverRawPlannedConfigs(freeBytes)
     return RawVideoQualificationInfo(
@@ -458,8 +535,13 @@ private fun driverRawQualificationInfo(
             fullPlanFreeBytes = 80_700_000_000L,
         ),
         previousFailure = previousFailure,
+        target = target,
     )
 }
+
+/** A USB drive the next RAW take would use (PLAN-072 Delivery 3), with 1.7 TB free. */
+private fun driverDriveQualificationInfo() = driverRawQualificationInfo(freeBytes = 1_734_000_000_000L,
+    target = com.librestatic.opencinecam.RawQualificationTarget(drive = true, driveLabel = "WD Elements"))
 
 /** RAW10 present but nothing qualified yet: the modes pane lists RAW video as choosable, with its gate label. */
 @Composable
@@ -475,6 +557,12 @@ fun CaptureRawVideoCandidateSheet() = CaptureChrome(driverRawCandidateState(), i
 @Composable
 fun CaptureRawVideoQualifyPrompt() = CaptureChrome(driverRawCandidateState(), initialPane = CaptureInitialPane.MODES,
     rawQualificationInfo = { driverRawQualificationInfo(freeBytes = 9_000_000_000L) }, initialRawQualifyPrompt = true)
+
+/** RAW video chosen with an unqualified USB drive in use: the prompt qualifies the drive and says so. */
+@Composable
+fun CaptureRawVideoQualifyPromptDrive() = CaptureChrome(
+    driverRawCandidateState().copy(recordingDestination = DriverDriveStatus), initialPane = CaptureInitialPane.MODES,
+    rawQualificationInfo = { driverDriveQualificationInfo() }, initialRawQualifyPrompt = true)
 
 /** The prompt without enough free space for even the sweep: only a dismiss button. */
 @Composable
@@ -518,17 +606,30 @@ private val DriverRawReady = RawQualificationConditions(batteryPercent = 82, the
 @Composable
 fun RawQualificationReady() = RawQualificationDriver(DriverRawReady, null)
 
+/** The step qualifying the USB drive: "Testing the USB drive WD Elements" above the checklist, the drive's free space below. */
+@Composable
+fun RawQualificationReadyDrive() = RawQualificationDriver(DriverRawReady, null, driverDriveQualificationInfo())
+
+/** The step with a drive configured but not connected: the phone is qualified, and the step says so. */
+@Composable
+fun RawQualificationReadyDriveAbsent() = RawQualificationDriver(DriverRawReady, null,
+    driverRawQualificationInfo(target = com.librestatic.opencinecam.RawQualificationTarget(drive = false)))
+
 /** The preconditions all pass with room for every configuration: only a compact free-space line. */
 @Composable
 fun RawQualificationReadyAllFit() = RawQualificationDriver(DriverRawReady, null, driverRawQualificationInfo(freeBytes = 128_000_000_000L))
 
 /** Battery at 3 % and moderately warm: each check says what to do and Start is disabled. */
 @Composable
-fun RawQualificationBlocked() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 3, thermalStatus = 2), null)
+fun RawQualificationBlocked() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 3, thermalStatus = 3), null)
 
 /** Battery at 35 % and cool: the battery row warns that the run may drain it, and Start stays enabled. */
 @Composable
 fun RawQualificationBatteryLow() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 35, thermalStatus = 0), null)
+
+/** Battery at 35 % on the charger: the battery row passes with "35% · charging" and no warning. */
+@Composable
+fun RawQualificationBatteryCharging() = RawQualificationDriver(RawQualificationConditions(batteryPercent = 35, thermalStatus = 0, charging = true), null)
 
 /** The plan's items with [statuses] set by spec; the rest pending, or skipped when they do not fit. */
 private fun driverRawItems(vararg statuses: Pair<String, RawQualificationItemStatus>): List<RawQualificationItem> =
@@ -643,6 +744,21 @@ fun RawQualificationDoneHot() = RawQualificationDriver(DriverRawReady, run {
         passedLabels = items.filter { it.status == RawQualificationItemStatus.PASSED }.map { it.label },
         items = items,
     )
+})
+
+/**
+ * The Razr on a 91 MB/s USB drive: the sweep ruled the drive out for everything but 1920×1080 at 30 fps, whose own run
+ * the heat cut. The rest read "storage too slow for this rate" although their runs also reached SEVERE.
+ */
+@Composable
+fun RawQualificationDoneSlowDrive() = RawQualificationDriver(DriverRawReady, run {
+    val items = driverRawItems(
+        "full@15" to RawQualificationItemStatus.STORAGE_LIMIT, "full@24" to RawQualificationItemStatus.STORAGE_LIMIT,
+        "full@30" to RawQualificationItemStatus.STORAGE_LIMIT, "full@60" to RawQualificationItemStatus.STORAGE_LIMIT,
+        "3840x2160@30" to RawQualificationItemStatus.STORAGE_LIMIT, "3840x2160@60" to RawQualificationItemStatus.STORAGE_LIMIT,
+        "1920x1080@30" to RawQualificationItemStatus.SKIPPED_HEAT, "1920x1080@60" to RawQualificationItemStatus.STORAGE_LIMIT,
+    )
+    RawVideoQualificationUi(phase = RawQualificationPhase.DONE, fraction = 1f, outcome = RawQualificationOutcomeKind.NO_CONFIG, items = items)
 })
 
 /**
@@ -867,6 +983,95 @@ fun SettingsVolumeKeys() = DriverTheme {
         onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
 }
 
+/** A fake recording destination store: what the rows show, with picking and clearing answered in memory. */
+private class DriverRecordingDestinationBackend(
+    private var current: com.librestatic.opencinecam.RecordingDestinationSettingsState,
+) : com.librestatic.opencinecam.RecordingDestinationSettingsBackend {
+    override fun read() = current
+    override fun adopt(tree: android.net.Uri): com.librestatic.opencinecam.storage.RecordingFolderAdoption =
+        com.librestatic.opencinecam.storage.RecordingFolderAdoption.Adopted("1A2B-3C4D", current.label)
+    override fun clear() { current = current.copy(driveConfigured = false) }
+    override fun setPolicy(policy: com.librestatic.opencinecam.storage.DriveDisconnectPolicy) { current = current.copy(policy = policy) }
+    /** Measuring again gives the same figure, as a real drive would within a few percent. */
+    override fun measure() = current.speed
+}
+
+@Composable
+private fun SettingsWithRecordingDestination(
+    stored: com.librestatic.opencinecam.RecordingDestinationSettingsState,
+    status: com.librestatic.opencinecam.RecordingDestinationStatus,
+    initialSettings: CameraSettings = CameraSettings(),
+    targetFps: Int = 30,
+) = DriverTheme {
+    var settings by remember { mutableStateOf(initialSettings) }
+    val holder = remember { com.librestatic.opencinecam.RecordingDestinationSettingsHolder(DriverRecordingDestinationBackend(stored)) }
+    // The service would describe the drive; Phone clears it here, as the service's refresh would.
+    val shown = if (holder.state.driveConfigured) status else com.librestatic.opencinecam.RecordingDestinationStatus()
+    CompositionLocalProvider(com.librestatic.opencinecam.LocalRecordingDestinationSettings provides holder) {
+        SettingsScreen(CameraUiState(phase = CameraUiPhase.PREVIEWING, recordingDestination = shown, targetFps = targetFps), settings, audioPermissionGranted = true,
+            onRequestAudioPermission = {}, onOpenAbout = {}, onSettingsChange = { settings = it })
+    }
+}
+
+private val DriverDriveStatus = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, onDrive = true,
+    driveLabel = "WD Elements", driveFreeBytes = 1_734_000_000_000L)
+
+/**
+ * Settings with a USB drive configured and connected, measured at 412 MB/s; `click tag=settings-category-RECORDING`
+ * shows the two rows.
+ */
+@Composable
+fun SettingsRecordingDestination() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+        speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
+    DriverDriveStatus,
+)
+
+/** The same drive plugged in moments ago and still spinning up: the status line says it is starting, with no Measure speed. */
+@Composable
+fun SettingsRecordingDestinationStarting() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+        speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
+    com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+        fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_STARTING, driveLabel = "WD Elements"),
+)
+
+/**
+ * The same drive mounted under another volume name: the status line asks for the folder again, Change folder is offered
+ * and Measure speed is not.
+ */
+@Composable
+fun SettingsRecordingDestinationRenamed() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements",
+        speed = com.librestatic.opencinecam.storage.DriveSpeed(412_300_000L, 398_000_000L, 1_762_560_000_000L)),
+    com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+        fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_RENAMED, driveLabel = "WD Elements"),
+)
+
+/** A drive measured at 9.1 MB/s with 40 Mb/s video at 60 fps, which needs about 10 MB/s: the amber warning. */
+@Composable
+fun SettingsRecordingDestinationSlowDrive() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "Generic flash",
+        speed = com.librestatic.opencinecam.storage.DriveSpeed(9_100_000L, 7_800_000L, 1_762_560_000_000L)),
+    DriverDriveStatus.copy(driveLabel = "Generic flash", driveFreeBytes = 58_000_000_000L),
+    CameraSettings(videoBitrateMbps = 40),
+    targetFps = 60,
+)
+
+/** The drive just picked, its write speed being measured. */
+@Composable
+fun SettingsRecordingDestinationMeasuring() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(driveConfigured = true, label = "WD Elements", measuring = true),
+    DriverDriveStatus,
+)
+
+/** Settings after a FAT32 drive was turned down: the phone is still the destination and the row says to format it as exFAT. */
+@Composable
+fun SettingsRecordingDestinationRejected() = SettingsWithRecordingDestination(
+    com.librestatic.opencinecam.RecordingDestinationSettingsState(rejection = com.librestatic.opencinecam.storage.RecordingFolderRejection.FILE_SIZE_LIMIT),
+    com.librestatic.opencinecam.RecordingDestinationStatus(),
+)
+
 private val FakeInventory = listOf(
     CameraInventory("0", null, listOf(CharacteristicEntry("android.lens.facing", "BACK"),
         CharacteristicEntry("android.sensor.info.sensitivityRange", "[50, 6400]")), lensFacing = 1, focalLengthsMm = listOf(6.9f), sensorSizeMm = 9.6f to 7.2f),
@@ -1006,6 +1211,17 @@ fun GalleryInspectorLoading() = GalleryWith(PendingDetailsCatalog(FakeCatalog(Sa
 private class PendingDetailsCatalog(source: MediaCatalogSource) : MediaCatalogSource by source {
     override suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = awaitCancellation()
 }
+
+/**
+ * The sample takes with two on the recording drive (PLAN-072), merged by date: a video take with its WAV and an
+ * undeclared still, each with the USB badge and no rename in its menu.
+ */
+@Composable
+fun GalleryDrive() = GalleryWith(FakeCatalog(SampleWithDriveTakes))
+
+/** The drive video take's details: the USB chip, its paths as the drive's name and folder, and no Rename. */
+@Composable
+fun GalleryDriveInspector() = GalleryWith(FakeCatalog(SampleWithDriveTakes), initialSelection = SampleDriveTakes.first().take.id)
 
 /** The media catalog with no takes yet. */
 /**
@@ -1265,6 +1481,35 @@ internal val SampleRawTakes = listOf(
     SampleTake(rawVideoTake(artifact(22, "OCC_TAKE_A001_S13_T02.ocraw", "application/octet-stream", 4_120_000_000L, 1_790_000_900L)),
         facts = GalleryFacts(codec = rawCodecBadge("bpq")), details = { rawTakeInputs(it, compressed = true) }),
 )
+
+private const val DriveTree = "FFF1-7571:Takes"
+
+/** A file in a take folder of the recording drive, as the gallery lists it: a document URI under the adopted tree. */
+private fun driveArtifact(folder: String, name: String, mime: String, sizeBytes: Long, modified: Long) = LocalMediaArtifact(
+    "content://com.android.externalstorage.documents/tree/${android.net.Uri.encode(DriveTree)}/document/${android.net.Uri.encode("$DriveTree/OpenCineCam/$folder/$name")}",
+    name, mime, sizeBytes, modified)
+
+/**
+ * Takes on the recording drive: a declared video take with its WAV, a RAW take (its folder's `.ocraw`) and a still
+ * folder whose sidecar was lost.
+ */
+internal val SampleDriveTakes = run {
+    val modified = 1_790_000_000L - 5_400L
+    val video = driveArtifact("OCC_TAKE_A001_S14_T01", "OCC_TAKE_A001_S14_T01.mp4", "video/mp4", 1_820_000_000L, modified)
+    val sound = driveArtifact("OCC_TAKE_A001_S14_T01", "OCC_TAKE_A001_S14_T01.wav", "audio/x-wav", 27_600_000L, modified)
+    val sidecar = driveArtifact("OCC_TAKE_A001_S14_T01", "OCC_TAKE_A001_S14_T01.json", "application/json", 3_900L, modified)
+    val raw = driveArtifact("OCC_TAKE_A001_S15_T01", "OCC_TAKE_A001_S15_T01.ocraw", "application/octet-stream", 31_400_000_000L, modified - 3_600L)
+    val still = driveArtifact("Stills/OCC_20260930_175010", "OCC_20260930_175010.jpg", "image/jpeg", 7_400_000L, 1_790_000_000L - 16_200L)
+    listOf(
+        SampleTake(LocalMediaTake("take:6f1c0f7e-2b8d-4e0a-9a51-0c3b7d2e9f14", video, listOf(video, sound), listOf(sidecar),
+            LocalMediaKind.VIDEO, ProductionSlateSettings(project = "Night Market", camera = "A", scene = "14", reel = "A001", takeNumber = 1),
+            LocalMediaRelationStatus.DECLARED), GalleryFacts(durationMs = 96_000L, width = 3840, height = 2160),
+            LocalMediaEncoding("video/hevc", "Main10"), details = ::driveTakeInputs),
+        SampleTake(rawVideoTake(raw), facts = GalleryFacts(codec = rawCodecBadge("raw10")), details = { rawTakeInputs(it, compressed = false) }),
+        SampleTake(LocalMediaTake("drive:$DriveTree/OpenCineCam/Stills/OCC_20260930_175010", still, listOf(still), emptyList(),
+            LocalMediaKind.PHOTO, null, LocalMediaRelationStatus.MISSING_METADATA)),
+    )
+}
 
 internal val SampleTakes = listOf(
     SampleTake(take(1, "OCC_TAKE_A001_S12_T03.mp4", "video/mp4", LocalMediaKind.VIDEO, 1_480_000_000L,
@@ -1665,3 +1910,6 @@ fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
             Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
     }
 }
+
+/** The sample takes and the drive's, newest first, as the merged gallery lists them. */
+internal val SampleWithDriveTakes = (SampleTakes + SampleDriveTakes).sortedByDescending { it.take.primary.modifiedSeconds }

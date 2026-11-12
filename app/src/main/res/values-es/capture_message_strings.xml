@@ -23,6 +23,7 @@
     <string name="capture_log_video_saved">Video %1$s Main10 guardado · %2$s + procedencia%3$s · %4$.1f s</string>
     <string name="capture_video_finalize_failed">No se pudo finalizar el video con procedencia verificada.</string>
     <string name="capture_video_save_failed">No se pudo guardar el video.</string>
+    <string name="capture_video_not_finalised_drive">La toma no se finalizó; se recuperará cuando vuelvas a conectar la unidad USB.</string>
     <string name="capture_source_isp_derived">derivado del ISP</string>
     <string name="capture_source_hfr_isp_derived">HFR derivado del ISP</string>
     <string name="capture_source_hlg_derived">10 bits derivado de HLG</string>

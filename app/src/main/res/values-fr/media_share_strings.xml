@@ -21,4 +21,5 @@
     <string name="media_share_launched">Sélecteur Android ouvert — la livraison n\'est pas vérifiée.</string>
     <string name="media_share_prepared_files">Fichiers préparés : %1$d</string>
     <string name="media_share_chooser">Envoyer les fichiers de capture sélectionnés</string>
+    <string name="media_drive_not_connected">Le disque USB contenant cette prise n’est pas connecté. Branchez-le et réessayez ; rien n’a été modifié.</string>
 </resources>

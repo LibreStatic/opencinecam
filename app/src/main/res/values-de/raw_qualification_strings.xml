@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Akku bei %1$d%% oder mehr</string>
     <string name="raw_qualification_check_battery_fix">Lade ihn zuerst auf mindestens %1$d%% (jetzt %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · wird geladen</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. Die Qualifizierung kann ihn ganz leeren: Schließ das Ladegerät an, wenn du kannst.</string>
     <string name="raw_qualification_check_cool">Normale Temperatur</string>
     <string name="raw_qualification_check_cool_fix">Lass das Telefon zuerst abkühlen.</string>
@@ -74,8 +75,12 @@
     <string name="raw_qualification_chip_camera">Keine Kamera</string>
     <string name="raw_qualification_chip_warm">Wird warm</string>
     <string name="raw_qualification_space_title">Mit dem freien Speicher lässt sich nicht alles qualifizieren</string>
-    <string name="raw_qualification_space_body">Getestet werden die Konfigurationen, die in den freien Speicher deines Telefons passen.</string>
+    <string name="raw_qualification_space_body">Getestet werden die Konfigurationen, die in den freien Platz des getesteten Speichers passen.</string>
     <string name="raw_qualification_space_free">%1$s frei</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">Getestet wird das USB-Laufwerk %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">Getestet wird das USB-Laufwerk</string>
+    <string name="raw_qualification_target_phone">Getestet wird der Telefonspeicher</string>
     <string name="raw_qualification_space_tested">Wird getestet</string>
     <string name="raw_qualification_space_skipped">Aus Platzmangel übersprungen</string>
     <string name="raw_qualification_needs">braucht %1$s</string>

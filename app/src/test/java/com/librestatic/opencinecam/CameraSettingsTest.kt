@@ -58,6 +58,7 @@ class CameraSettingsTest {
         assertEquals(ModeSelectorStyle.DIAL, settings.modeSelectorStyle)
         assertFalse(settings.translucentChrome)
         assertTrue(settings.scrollLongText)
+        assertTrue(settings.rotateWhenLocked)
         assertEquals(HapticPreferences(), settings.haptics)
         assertEquals(HapticLevel.SUBTLE, settings.haptics.level)
         assertTrue(settings.haptics.muteDuringTake)
@@ -226,6 +227,20 @@ class CameraSettingsTest {
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
         assertFalse(CameraSettingsStore(memory).load().scrollLongText)
         assertTrue(CameraSettingsStore(PresetPreferences()).load().scrollLongText)
+    }
+
+    @Test
+    fun rotateWhenLockedAppliesLivePersistsAndStaysLocal() {
+        val next = CameraSettings().copy(rotateWhenLocked = false)
+        assertFalse(CameraSettings().withLivePreferencesFrom(next).rotateWhenLocked)
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(next)
+        assertFalse(CameraSettingsStore(memory).load().rotateWhenLocked)
+        assertTrue(CameraSettingsStore(PresetPreferences()).load().rotateWhenLocked)
+        // A per-device preference: never in a preset, and applying one keeps the phone's choice.
+        assertFalse("rotate-when-locked" in CameraPresetCodec.portableKeys)
+        val decoded = CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Look", settings = next))).settings
+        assertTrue(decoded.rotateWhenLocked)
+        assertFalse(CameraPresetCodec.mergeLocal(decoded, next).rotateWhenLocked)
     }
 
     @Test

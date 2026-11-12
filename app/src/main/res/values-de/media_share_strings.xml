@@ -21,4 +21,5 @@
     <string name="media_share_launched">Android-Auswahl geöffnet – die Zustellung ist nicht verifiziert.</string>
     <string name="media_share_prepared_files">Vorbereitete Dateien: %1$d</string>
     <string name="media_share_chooser">Ausgewählte Aufnahmedateien senden</string>
+    <string name="media_drive_not_connected">Das USB-Laufwerk mit dieser Aufnahme ist nicht verbunden. Schließe es an und versuche es erneut; nichts wurde verändert.</string>
 </resources>

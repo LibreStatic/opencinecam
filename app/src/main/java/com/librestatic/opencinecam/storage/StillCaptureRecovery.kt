@@ -7,45 +7,84 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.database.sqlite.transaction
+import androidx.core.net.toUri
 import java.io.File
 import java.util.UUID
 
 /** Restart recovery deliberately discards uncommitted still groups, including visible members.
- * A committed group is never compensated. This is not cross-provider or power-loss atomicity. */
-data class StillRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0)
+ * A committed group is never compensated. This is not cross-provider or power-loss atomicity.
+ * [deferredGroups] uncommitted groups on a drive (PLAN-072) were kept because the drive is not mounted or its
+ * folder permission is gone; a later pass with the drive back resolves them. */
+data class StillRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0, val deferredGroups: Int = 0)
 
 /** Private, pre-insert ownership journal. Each group reserves its own UUID subdirectory in both
  * collections, so a provider-renamed item is still attributable in the insert/receipt crash gap.
  * No prefix scans, timestamp heuristics, transfer receipts, or inference from IS_PENDING=0.
  * The process-wide monitor spans the whole writer, not just journal operations: another service
  * can start while the old service's storage executor is draining.
+ *
+ * PLAN-072: a group is on MediaStore (NULL `tree`) or in its own folder on a drive (`tree`, `volume`, and `folder`
+ * once it exists, journalled before the first file in it). [SafStillRows] keeps the drive's IS_PENDING as the
+ * folder's in-progress marker; deleting it is the drive group's durable commit point. [mounted] says whether a
+ * drive volume (UUID) is mounted; tests replace it.
  */
 internal class StillCaptureRecovery(context: Context,
     private val checkpoint: (String, String) -> Unit = { _, _ -> },
+    mounted: ((String) -> Boolean)? = null,
 ) {
     private val context = context.applicationContext
     private val resolver = this.context.contentResolver
     private val databaseFile = File(this.context.noBackupFilesDir, "still-recovery.sqlite")
+    private val mounted: (String) -> Boolean = mounted ?: { volume -> RecordingCaptureRecovery.volumeMounted(this.context, volume) }
 
     fun recover(): StillRecoveryReport = synchronized(processLock) { open().use(::recoverLocked) }
 
-    fun <T> publish(block: (String, String, String) -> T): T = synchronized(processLock) {
+    /** A MediaStore group: [block] gets the id and the images and metadata relative paths of its namespace. */
+    fun <T> publish(block: (String, String, String) -> T): T = publish(RecordingDestination.Phone) { id, _ ->
+        block(id, relativePath(id, false), relativePath(id, true))
+    }
+
+    /**
+     * A group on [destination]. [block] gets the id and, on a drive, the store that writes the group's folder
+     * (null on the phone, where the caller builds its MediaStore store from [relativePath]).
+     */
+    internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T = synchronized(processLock) {
         open().use { db ->
             recoverLocked(db)
             check(count(db) < MAX_GROUPS) { "Interrupted still journal is full" }
             val id = UUID.randomUUID().toString()
-            // Reserve an empty namespace before allocating even the first provider row.
-            for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
-                "Still capture namespace already exists"
+            val drive = when (destination) {
+                RecordingDestination.Phone -> {
+                    // Reserve an empty namespace before allocating even the first provider row.
+                    for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
+                        "Still capture namespace already exists"
+                    }
+                    db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
+                    null
+                }
+                // The group folder is created at the first file, so it is new: no namespace to check.
+                is RecordingDestination.UsbFolder -> {
+                    require(destination.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
+                    db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
+                        arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
+                    SafStillRows(context, destination.treeUri, null) { folder ->
+                        check(db.update("captures", ContentValues().apply { put("folder", folder.toString()) },
+                            "id = ? AND committed = 0 AND tree IS NOT NULL AND folder IS NULL", arrayOf(id)) == 1) {
+                            "Still group folder was not journalled"
+                        }
+                    }
+                }
             }
-            db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
             val result: T
             try {
                 checkpoint("RESERVED", id)
-                result = block(id, relativePath(id, false), relativePath(id, true))
+                result = block(id, drive)
                 checkpoint("BEFORE_COMMIT", id)
+                // The drive's durable commit point: the folder no longer reads as in progress.
+                drive?.commit()
             } catch (failure: Throwable) {
                 try { discard(db, id) } catch (cleanup: Throwable) {
                     if (cleanup !== failure) failure.addSuppressed(cleanup)
@@ -55,6 +94,11 @@ internal class StillCaptureRecovery(context: Context,
             try {
                 check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
             } catch (failure: Throwable) {
+                if (drive != null) {
+                    // Its marker is gone, so the drive group is committed: recovery prunes the entry, never the files.
+                    android.util.Log.w("StillRecovery", "Committed drive group $id kept its journal entry", failure)
+                    return result
+                }
                 // A commit can report an ambiguous failure. Never delete if its durable state
                 // says COMMITTED, and never guess if reading that state also fails.
                 val committed = try { committed(db, id) } catch (readFailure: Throwable) {
@@ -82,11 +126,19 @@ internal class StillCaptureRecovery(context: Context,
             { throw IllegalStateException("Interrupted still journal is corrupt") })
         try {
             db.execSQL("PRAGMA synchronous=FULL")
-            check(db.version in 0..1) { "Unsupported interrupted still journal version" }
+            check(db.version in 0..2) { "Unsupported interrupted still journal version" }
             if (db.version == 0) {
                 db.transaction {
-                    execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)))")
-                    version = 1
+                    execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY NOT NULL, committed INTEGER NOT NULL CHECK(committed IN (0,1)), " +
+                        "tree TEXT, volume TEXT, folder TEXT)")
+                    version = 2
+                }
+            } else if (db.version == 1) {
+                db.transaction {
+                    // Version 1 rows are MediaStore groups: the new columns stay NULL. A column already present is kept.
+                    val columns = rawQuery("PRAGMA table_info(captures)", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(1)) } }
+                    listOf("tree", "volume", "folder").filter { it !in columns }.forEach { execSQL("ALTER TABLE captures ADD COLUMN $it TEXT") }
+                    version = 2
                 }
             }
             check(count(db) <= MAX_GROUPS) { "Interrupted still journal exceeds capacity" }
@@ -105,30 +157,74 @@ internal class StillCaptureRecovery(context: Context,
             it.getLong(0) == 1L
         }
 
+    private data class Receipt(val id: String, val type: Int, val state: Long, val tree: String?, val volume: String?, val folder: String?)
+    private enum class DriveRecovery { DEFERRED, DISCARDED, COMMITTED }
+
     private fun recoverLocked(db: SQLiteDatabase): StillRecoveryReport {
-        val receipts = db.rawQuery("SELECT id, committed FROM captures ORDER BY id LIMIT ?", arrayOf((MAX_GROUPS + 1).toString())).use { cursor ->
-            buildList { while (cursor.moveToNext()) add(Triple(cursor.getString(0), cursor.getType(1), cursor.getLong(1))) }
+        val receipts = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?", arrayOf((MAX_GROUPS + 1).toString())).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(Receipt(cursor.getString(0), cursor.getType(1), cursor.getLong(1),
+                cursor.getString(2), cursor.getString(3), cursor.getString(4))) }
         }
         check(receipts.size <= MAX_GROUPS)
         var discarded = 0
         var unresolved = 0
-        for ((id, type, state) in receipts) {
+        var deferred = 0
+        for (receipt in receipts) {
+            val id = receipt.id
             try {
                 requireId(id)
-                check(type == Cursor.FIELD_TYPE_INTEGER && state in 0L..1L)
-                if (state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
-                else { discard(db, id); discarded++ }
+                check(receipt.type == Cursor.FIELD_TYPE_INTEGER && receipt.state in 0L..1L)
+                if (receipt.state == 1L) db.delete("captures", "id = ? AND committed = 1", arrayOf(id))
+                else if (receipt.tree == null) { discard(db, id); discarded++ }
+                else when (recoverDriveGroup(db, receipt)) {
+                    DriveRecovery.DEFERRED -> deferred++
+                    DriveRecovery.DISCARDED -> discarded++
+                    DriveRecovery.COMMITTED -> Unit
+                }
             } catch (failure: Exception) {
                 unresolved++
                 android.util.Log.e("StillRecovery", "Retained unresolved capture receipt $id", failure)
             }
         }
-        return StillRecoveryReport(discarded, unresolved)
+        return StillRecoveryReport(discarded, unresolved, deferred)
     }
+
+    /**
+     * An uncommitted drive group. Its volume absent or its grant gone: kept for a later pass. No folder journalled:
+     * nothing reached the drive. A folder without the marker was committed (the marker goes just before the journal
+     * update), so the entry is only pruned. Otherwise the group is discarded like an uncommitted MediaStore one. A
+     * drive that does not answer is never read as empty: [SafStillRows] fails instead and the entry stays.
+     */
+    private fun recoverDriveGroup(db: SQLiteDatabase, receipt: Receipt): DriveRecovery {
+        val tree = Uri.parse(receipt.tree)
+        val volume = requireNotNull(receipt.volume) { "Drive still group without a volume" }
+        if (!mounted(volume) || !holdsTree(tree)) return DriveRecovery.DEFERRED
+        val store = SafStillRows(context, tree, receipt.folder?.let(Uri::parse)) { error("A recovered still group never creates its folder") }
+        if (receipt.folder != null && store.folderExists() && !store.markerExists()) {
+            // The marker read as missing: make sure the drive still answered rather than vanished meanwhile.
+            check(store.folderExists()) { "Still drive unavailable" }
+            check(db.delete("captures", "id = ? AND committed = 0", arrayOf(receipt.id)) == 1)
+            return DriveRecovery.COMMITTED
+        }
+        discard(db, receipt.id)
+        return DriveRecovery.DISCARDED
+    }
+
+    private fun holdsTree(tree: Uri): Boolean =
+        resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission && it.isWritePermission }
 
     private fun discard(db: SQLiteDatabase, id: String) {
         requireId(id)
         check(!committed(db, id)) { "Committed captures must never be discarded" }
+        val location = db.rawQuery("SELECT tree, folder FROM captures WHERE id = ?", arrayOf(id)).use {
+            check(it.count == 1 && it.moveToFirst()) { "Still ownership receipt disappeared" }
+            it.getString(0) to it.getString(1)
+        }
+        location.first?.let { tree ->
+            SafStillRows(context, Uri.parse(tree), location.second?.let(Uri::parse)) { error("A discarded still group never creates its folder") }.discard()
+            check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1)
+            return
+        }
         var failure: Throwable? = null
         for (metadata in listOf(false, true)) {
             try {
@@ -185,5 +281,114 @@ internal class StillCaptureRecovery(context: Context,
         fun collection(metadata: Boolean): Uri = if (metadata)
             MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    }
+}
+
+/**
+ * PLAN-072: one still group on a drive, in its own folder `<tree>/OpenCineCam/Stills/<stem>/` (the provider may make it
+ * `<stem> (1)`), where `<stem>` is the first file's name before its first dot. Files keep their final names from the
+ * start. The hidden [SafRecordingRows.MARKER] in the folder is the group's IS_PENDING: it is created with the folder,
+ * before [recordFolder] journals it and before any file, and deleted only at [commit]. [folder] is null until the
+ * first [insert]; recovery passes the journalled one.
+ */
+internal class SafStillRows(
+    context: Context,
+    private val tree: Uri,
+    folder: Uri?,
+    private val recordFolder: (Uri) -> Unit,
+) : StillPublicationStore {
+    private val resolver = context.contentResolver
+    private val docs = SafDocuments(resolver, tree)
+    internal var folder: Uri? = folder
+        private set
+
+    override fun insert(displayName: String, mimeType: String, metadata: Boolean): String {
+        require(SafDocuments.isPlainName(displayName) && !displayName.startsWith('.')) { "Not a still file name: $displayName" }
+        return docs.newFile(folder ?: createFolder(displayName), displayName).uri.toString()
+    }
+
+    private fun createFolder(firstName: String): Uri {
+        val base = docs.directory(docs.directory(docs.root, SafRecordingRows.BASE_FOLDER), STILLS_FOLDER)
+        val created = docs.newDirectory(base, firstName.substringBefore('.'))
+        try {
+            docs.newFile(created.uri, SafRecordingRows.MARKER)
+            recordFolder(created.uri)
+        } catch (failure: Throwable) {
+            try { check(docs.delete(created.uri)) { "The still folder could not be removed" } } catch (problem: Throwable) { failure.addSuppressed(problem) }
+            throw failure
+        }
+        folder = created.uri
+        return created.uri
+    }
+
+    override fun writeClosed(uri: String, bytes: ByteArray) {
+        requireNotNull(resolver.openOutputStream(uri.toUri(), "wt")) { "Still artifact writer unavailable" }.use { it.write(bytes) }
+    }
+
+    /** Name, place in the group folder, size and read-back SHA-256, with the group still in progress before and after. */
+    override fun verify(uri: String, displayName: String, mimeType: String, size: Long, sha256: String) {
+        val document = uri.toUri()
+        fun verifyIdentity() {
+            val actual = docs.describe(document)
+            check(actual != null && actual.name == displayName && actual.mime != DocumentsContract.Document.MIME_TYPE_DIR && inFolder(document)) {
+                "Still artifact identity changed"
+            }
+            check(markerExists()) { "Still group is no longer in progress" }
+        }
+        verifyIdentity()
+        resolver.verifyStillBytes(document, size, sha256)
+        verifyIdentity()
+    }
+
+    /** Nothing to flip on a drive: the group becomes visible at [commit]. 1 while the file still exists. */
+    override fun publish(uri: String): Int = if (docs.describe(uri.toUri()) != null && inFolder(uri.toUri())) 1 else 0
+
+    override fun delete(uri: String) { check(docs.delete(uri.toUri())) { "Still artifact compensation did not delete its document" } }
+
+    /** The group's durable commit point. [SafDocuments.delete] calls a document on an unplugged drive gone too, so the drive must still answer. */
+    fun commit() {
+        val group = folder ?: return
+        check(docs.delete(markerOf(group)) && reachable()) { "Still group marker could not be removed" }
+    }
+
+    /** Deletes the files, then the marker, then the folder: an interruption leaves the group pending for recovery. */
+    fun discard() {
+        val group = folder ?: return
+        if (!folderExists()) { check(reachable()) { "Still drive unavailable" }; return }
+        var failure: Throwable? = null
+        for (doc in files(group)) {
+            try { check(docs.delete(doc.uri)) { "Interrupted still file could not be deleted" } } catch (problem: Throwable) {
+                if (failure == null) failure = problem else if (failure !== problem) failure!!.addSuppressed(problem)
+            }
+        }
+        failure?.let { throw it }
+        check(files(group).isEmpty()) { "Interrupted still file remains" }
+        check(docs.delete(markerOf(group)) && reachable()) { "Still group marker could not be removed" }
+        if (docs.children(group).isEmpty()) check(docs.delete(group)) { "Still group folder could not be removed" }
+    }
+
+    /** The picked folder answers: the drive is mounted and the grant holds. */
+    fun reachable(): Boolean = docs.describe(docs.root) != null
+
+    fun folderExists(): Boolean = folder?.let { docs.describe(it)?.mime == DocumentsContract.Document.MIME_TYPE_DIR } ?: false
+    fun markerExists(): Boolean = folder?.let { docs.describe(markerOf(it)) != null } ?: false
+
+    private fun files(group: Uri): List<SafDocument> = docs.children(group).filter { it.name != SafRecordingRows.MARKER }
+        .also { check(it.size <= MAX_FILES) { "Still group folder exceeds its file bound" } }
+
+    private fun markerOf(group: Uri): Uri = DocumentsContract.buildDocumentUriUsingTree(tree,
+        SafDocuments.childDocumentId(DocumentsContract.getDocumentId(group), SafRecordingRows.MARKER))
+
+    private fun inFolder(uri: Uri): Boolean {
+        val group = folder ?: return false
+        val parent = DocumentsContract.getDocumentId(group)
+        val child = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return false
+        return child.startsWith("$parent/") && '/' !in child.substring(parent.length + 1)
+    }
+
+    internal companion object {
+        const val STILLS_FOLDER = "Stills"
+        /** Both MediaStore namespaces of a group hold up to 11 rows each; on a drive they share one folder. */
+        private const val MAX_FILES = 22
     }
 }

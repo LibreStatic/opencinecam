@@ -93,6 +93,8 @@ private val stopMessages = setOf(
 private val transientMessages = setOf(
     WebDavTransferMessage.WAITING_RECORDING, WebDavTransferMessage.WAITING_MEDIA, WebDavTransferMessage.NETWORK_UNAVAILABLE,
     WebDavTransferMessage.CELLULAR_CONSENT_REQUIRED, WebDavTransferMessage.UNCERTAIN,
+    // A drive take whose USB drive is unplugged (PLAN-072): retried with backoff, never stopped as a missing source.
+    WebDavTransferMessage.WAITING_DRIVE,
 )
 
 /**

@@ -178,8 +178,9 @@ internal class MediaProxyRepository(context: Context) {
             "Proxy receipt filename does not bind its take"
         }
         require(canonicalMediaId(string("proxyId")))
-        require(mediaOriginalIdentity(string("originalUri"))?.first == LocalMediaKind.VIDEO)
-        require(takeId == "legacy:${string("originalUri")}" || takeId.startsWith("take:") && canonicalMediaId(takeId.removePrefix("take:")))
+        // The original may be a drive file (PLAN-072); its proxy is always on the phone.
+        require(takeOriginalKind(string("originalUri")) == LocalMediaKind.VIDEO)
+        require(proxyTakeIdBinds(takeId, string("originalUri")))
         require(mediaDeleteIdentity(string("proxyUri"))?.collection == MediaDeleteCollection.VIDEO &&
             mediaDeleteIdentity(string("metadataUri"))?.collection == MediaDeleteCollection.METADATA)
         require(setOf(string("originalUri"), string("proxyUri"), string("metadataUri")).size == 3)
@@ -588,9 +589,28 @@ internal class MediaProxyRepository(context: Context) {
     /** Listeners must only schedule work; they run on the releasing thread. */
     fun addReleaseListener(listener: () -> Unit) { releaseListeners += listener }
 
-    /** Full-content hash, reused only while MediaStore reports the same size/mtime/generation. */
-    private suspend fun originalHash(uri: Uri): String = originalHashes.hash(uri.toString(), { sourceStamp(uri) }) { proxyHash(context, uri) }
+    /**
+     * Full-content hash, reused only while MediaStore reports the same size/mtime/generation. A drive file has no
+     * generation: its document's size and last change (milliseconds) stand in, generation 0. An unplugged drive's
+     * read fails as [DriveNotConnectedException], so the job fails with that plain reason and deletes nothing.
+     */
+    private suspend fun originalHash(uri: Uri): String = originalHashes.hash(uri.toString(), { sourceStamp(uri) }) {
+        try { proxyHash(context, uri) } catch (failure: java.io.IOException) {
+            if (isDriveUri(uri.toString()) && driveDetached(uri)) throw DriveNotConnectedException().apply { initCause(failure) }
+            throw failure
+        }
+    }
+    private fun driveDetached(uri: Uri): Boolean = runCatching {
+        val docs = SafDocuments(resolver, android.provider.DocumentsContract.buildTreeDocumentUri(uri.authority,
+            android.provider.DocumentsContract.getTreeDocumentId(uri)))
+        docs.describe(docs.root) == null
+    }.getOrDefault(true)
     private fun sourceStamp(uri: Uri): ProxySourceStamp? {
+        if (isDriveUri(uri.toString())) return runCatching {
+            SafDocuments(resolver, android.provider.DocumentsContract.buildTreeDocumentUri(uri.authority,
+                android.provider.DocumentsContract.getTreeDocumentId(uri))).describe(uri)
+                ?.takeIf { it.size >= 0 && it.modifiedMillis > 0 }?.let { ProxySourceStamp(it.size, it.modifiedMillis, 0L) }
+        }.getOrNull()
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return null
         return runCatching {
             resolver.query(uri, arrayOf(MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
