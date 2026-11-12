@@ -18,6 +18,7 @@ import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.useOnDrive
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.storage.drivePath
 import com.librestatic.opencinecam.storage.isDriveUri
@@ -135,7 +136,7 @@ private fun exifSnapshot(resolver: ContentResolver, artifact: LocalMediaArtifact
 
 /** One channel for the whole read: the leading metadata, then the frame index (chunk and frame headers only). */
 private fun ocrawSummary(resolver: ContentResolver, artifact: LocalMediaArtifact): OcrawSummary? =
-    resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
+    resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
         java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
             val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
             val leading = reader.leadingMetadata().orEmpty()

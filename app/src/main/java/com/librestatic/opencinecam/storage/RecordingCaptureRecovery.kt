@@ -210,7 +210,9 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * the drive went quiet must never pass for an empty take. A failure leaves the entry for the next pass.
      */
     private fun recoverDriveRawTake(db: SQLiteDatabase, id: String, store: SafRecordingRows, raw: SafDocument): DriveRecovery {
-        val decision = requireNotNull(resolver.openFileDescriptor(raw.uri, "rw")) { "RAW take could not be opened" }.use { descriptor ->
+        // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
+        // the entry stays for the next pass (ADR-0037).
+        val decision = requireNotNull(resolver.openFileDescriptor(raw.uri, "rw")) { "RAW take could not be opened" }.useOnDrive(raw.uri) { descriptor ->
             DuplexFileChannel.open(descriptor.fileDescriptor).use { channel -> recoverRawTakeFile(channel).decision }
         }
         return when (decision) {
