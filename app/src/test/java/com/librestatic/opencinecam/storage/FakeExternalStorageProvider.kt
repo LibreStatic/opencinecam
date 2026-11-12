@@ -72,6 +72,8 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     }
 
     override fun queryChildDocuments(parentDocumentId: String, projection: Array<out String>?, sortOrder: String?): Cursor {
+        queryFailure?.let { throw it }
+        queriesBeforeUnplug?.let { left -> if (left <= 0) mounted = false else queriesBeforeUnplug = left - 1 }
         val parent = existing(parentDocumentId)
         if (!parent.isDirectory) throw FileNotFoundException("$parentDocumentId is not a folder")
         return MatrixCursor(projection ?: DOCUMENT_COLUMNS).apply {

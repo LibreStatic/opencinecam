@@ -66,13 +66,16 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         // Held like useOnDrive, but a failure met on a descriptor DriveDescriptors released is the drive leaving.
         val closer = CloseOnce(descriptor)
         val handle = DriveDescriptors.registerDocument(uri, closer)
-        try {
-            return inspectOpened(descriptor, artifact, pending, before)
+        val snapshot = try {
+            inspectOpened(descriptor, artifact, pending, before)
         } catch (failure: Throwable) {
-            throw driveReleasedOr(failure, closer.closed) ?: failure
-        } finally {
-            try { closer.close() } finally { handle.unregister() }
+            val reported = driveReleasedOr(failure, closer.closed) ?: failure
+            // A close that fails too must not replace what the inspection met: the hasher waits only for an absent drive.
+            try { closer.close() } catch (closing: Throwable) { reported.addSuppressed(closing) } finally { handle.unregister() }
+            throw reported
         }
+        try { closer.close() } finally { handle.unregister() }
+        return snapshot
     }
 
     private fun inspectOpened(descriptor: ParcelFileDescriptor, artifact: PreparedCaptureArtifact, pending: Boolean,

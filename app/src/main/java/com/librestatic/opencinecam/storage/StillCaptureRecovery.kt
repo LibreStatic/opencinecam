@@ -232,8 +232,9 @@ internal class StillCaptureRecovery(context: Context,
             ?: return DriveRecovery.DEFERRED
         val store = SafStillRows(context, location.tree, location.folder) { error("A recovered still group never creates its folder") }
         if (receipt.folder != null && store.folderExists() && !store.markerExists()) {
-            // The marker read as missing: make sure the drive still answered rather than vanished meanwhile.
-            check(store.folderExists()) { "Still drive unavailable" }
+            // The marker read as missing, which a drive that vanished meanwhile or a provider that gave no answer also
+            // reads as: only the folder's own listing without it confirms the commit.
+            check(store.listsNoMarker()) { "Still group marker state is unconfirmed" }
             check(db.delete("captures", "id = ? AND committed = 0", arrayOf(receipt.id)) == 1)
             return DriveRecovery.COMMITTED
         }
@@ -425,6 +426,9 @@ internal class SafStillRows(
 
     fun folderExists(): Boolean = folder?.let { docs.describe(it)?.mime == DocumentsContract.Document.MIME_TYPE_DIR } ?: false
     fun markerExists(): Boolean = folder?.let { docs.describe(markerOf(it)) != null } ?: false
+
+    /** True when the folder's listing answers and holds no marker; a listing the drive does not give throws. */
+    fun listsNoMarker(): Boolean = folder?.let { group -> docs.children(group).none { it.name == SafRecordingRows.MARKER } } ?: false
 
     private fun files(group: Uri): List<SafDocument> = docs.children(group).filter { it.name != SafRecordingRows.MARKER }
         .also { check(it.size <= MAX_FILES) { "Still group folder exceeds its file bound" } }
