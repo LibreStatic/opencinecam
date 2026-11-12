@@ -46,13 +46,14 @@ internal class SafDocuments(val resolver: ContentResolver, val tree: Uri) {
             "The drive did not create the folder $name"
         }
         val created = describe(uri)
-        if (created != null && created.name != name) {
-            runCatching { DocumentsContract.deleteDocument(resolver, uri) }
-            val existing = checkNotNull(child(parent, name)) { "The drive created ${created.name} instead of $name" }
-            check(existing.mime == Document.MIME_TYPE_DIR) { "$name exists and is not a folder" }
-            return existing.uri
+        if (created?.name == name) return uri
+        // Named otherwise, or not described at all: only a folder the drive lists under [name] is the one asked for.
+        if (created != null) runCatching { DocumentsContract.deleteDocument(resolver, uri) }
+        val existing = checkNotNull(child(parent, name)) {
+            if (created != null) "The drive created ${created.name} instead of $name" else "The drive did not confirm the folder $name"
         }
-        return uri
+        check(existing.mime == Document.MIME_TYPE_DIR) { "$name exists and is not a folder" }
+        return existing.uri
     }
 
     /** A new folder inside [parent]; the provider may name it `name (1)` when [name] is taken. */

@@ -660,6 +660,18 @@ class CaptureService : Service() {
         ArrayBlockingQueue(16),
         ThreadPoolExecutor.AbortPolicy(),
     )
+    /**
+     * Interrupted takes are recovered here, not on [storageExecutor]: repairing a RAW take on a drive scans the whole
+     * file, which would hold up still saves and take finalization, and fill their queue, for minutes.
+     */
+    private val recoveryExecutor = ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(4),
+        ThreadPoolExecutor.AbortPolicy(),
+    )
     /** Free bytes on the primary external volume MediaStore writes takes to (not the app's private files), RAW video's included. */
     @Suppress("DEPRECATION")
     private fun phoneVolumeFreeBytes(): Long? = runCatching { StatFs(Environment.getExternalStorageDirectory().absolutePath).availableBytes }.getOrNull()
@@ -1006,6 +1018,8 @@ class CaptureService : Service() {
                         com.librestatic.opencinecam.storage.RawQualificationDriveScratch(contentResolver, configured.treeUri).purgeOrphans()
                     }
                 }.onFailure { android.util.Log.w("RawVideoQualifier", "Qualification scratch on $volumeId not purged", it) }
+            }
+            recoveryExecutor.execute {
                 // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
                 // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.
                 val report = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
@@ -1214,12 +1228,16 @@ class CaptureService : Service() {
                 android.util.Log.e("StillRecovery", "Interrupted capture journal unavailable", failure)
                 com.librestatic.opencinecam.storage.StillRecoveryReport(unresolvedGroups = 1)
             }
+            mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(stillRecovery = report) } }
+        }
+        recoveryExecutor.execute {
             val recordingReport = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
                 android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable", failure)
                 com.librestatic.opencinecam.storage.RecordingRecoveryReport(unresolvedGroups = 1)
             }.let { it.copy(rawTakes = it.rawTakes + recoverRawTakes()) }
+            // Merged: a drive mounted meanwhile may have reported its own pass already.
             mainHandler.post {
-                if (!serviceDestroyed) cameraState.value = cameraState.value.copy(stillRecovery = report, recordingRecovery = recordingReport)
+                if (!serviceDestroyed) cameraState.update { it.copy(recordingRecovery = mergeRecordingRecovery(it.recordingRecovery, recordingReport)) }
             }
         }
         recordingVolumeMonitor = try { RecordingVolumeMonitor(this) } catch (failure: Exception) {
@@ -6114,6 +6132,7 @@ class CaptureService : Service() {
         // Accepted still publications finish on orderly service destruction. New jobs reject;
         // completion callbacks are fenced by serviceDestroyed and the exact still owner.
         storageExecutor.shutdown()
+        recoveryExecutor.shutdown()
         driveFreeSpaceExecutor.shutdown()
         actor.close()
         com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(false)

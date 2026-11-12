@@ -76,6 +76,10 @@ internal interface MediaDeleteAccess {
     fun reserve(): AutoCloseable
     fun preflight(selected: LocalMediaTake): MediaDeletePlan
     fun beginDeletion(plan: MediaDeletePlan) {}
+    /** A drive take passed its own preflight under [reserve]: the stand-in for [preflight]'s binding of the proxy source. */
+    fun bindDriveSource(selected: LocalMediaTake) {}
+    /** Before a drive take's folder goes: what [beginDeletion] does for a phone take. */
+    fun beginDriveDeletion() {}
     fun delete(row: MediaDeleteRow): Int
     fun isAbsent(row: MediaDeleteRow): Boolean
     fun verifyEmpty(plan: MediaDeletePlan)

@@ -24,6 +24,7 @@ import androidx.work.workDataOf
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_ACTIVE_TREES_KEY
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_LEFT_TREES_KEY
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
@@ -78,7 +79,9 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         val recording = RecordingDestinationStore(context)
         recording.withGrants {
             val left = preferences.getStringSet(CINEMADNG_EXPORT_LEFT_TREES_KEY, null).orEmpty()
-            if (left.isEmpty() || workerRunning || store.states.value is CinemaDngExportState.Running) return@withGrants
+            // The lease covers an export WorkManager kept across a process death, where the state restarts idle.
+            if (left.isEmpty() || workerRunning || store.states.value is CinemaDngExportState.Running ||
+                preferences.contains(CINEMADNG_EXPORT_ACTIVE_TREES_KEY)) return@withGrants
             val current = preferences.getString(CINEMADNG_EXPORT_TREE_KEY, null)
             // The recording destination may use the same tree, or an interrupted take may wait on it; its permission then stays.
             // Forgotten first: a folder still listed as left keeps its grant.
@@ -87,14 +90,37 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         }
     }
 
+    /**
+     * An export is queued: its lease is stored before the work, so a folder left meanwhile keeps its grant even when the
+     * process dies before the worker runs. The set also holds the folder of work WorkManager kept from an earlier
+     * process, which a new request does not replace. [endLease] drops it. [tree] is null for Documents, which needs no grant.
+     */
+    private fun lease(context: Context, tree: String?) {
+        val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
+        RecordingDestinationStore(context).withGrants {
+            val held = preferences.getStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, null).orEmpty()
+            // An empty set still marks an export as queued.
+            check(preferences.edit().putStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, held + listOfNotNull(tree)).commit()) { "The export folder lease was not stored" }
+        }
+    }
+
+    /** No export is queued or running any more: the lease goes, and with it the grants of the folders left meanwhile. */
+    fun endLease(context: Context) {
+        val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
+        RecordingDestinationStore(context).withGrants { preferences.edit().remove(CINEMADNG_EXPORT_ACTIVE_TREES_KEY).commit() }
+        releaseLeftFolders(context)
+    }
+
     /** Starts [request]; false while another export runs. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
         val app = context.applicationContext
         if (!store.begin(request.takeUri, request.takeName)) return false
         appContext = app
         try {
+            lease(app, request.treeUri)
             WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
         } catch (failure: Exception) {
+            runCatching { endLease(app) }
             store.finish(request.takeUri, request.takeName,
                 CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
         }
@@ -108,6 +134,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         // Work cancelled before it started never runs, so nothing else would end the state.
         if (!workerRunning) {
             store.finish(running.takeUri, running.takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
+            appContext?.let { runCatching { endLease(it) } }
         }
     }
 
@@ -155,7 +182,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             return withContext(NonCancellable + Dispatchers.IO) { finish(takeUri, takeName, export(takeUri, takeName, tree, compress)) }
         } finally {
             runtime.workerRunning = false
-            runCatching { runtime.releaseLeftFolders(applicationContext) }
+            runCatching { runtime.endLease(applicationContext) }
         }
     }
 
@@ -174,7 +201,8 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             return descriptor.use {
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(it.fileDescriptor)).channel.use { channel ->
                     // A take on the USB drive: both descriptors close with the drive (ADR-0037) and the export fails on its next read.
-                    val driveHandle = DriveDescriptors.registerDocument(takeUri.toUri(), CloseOnce(channel, it))
+                    val closer = CloseOnce(channel, it)
+                    val driveHandle = DriveDescriptors.registerDocument(takeUri.toUri(), closer)
                     try {
                     val exporter = CinemaDngExporter(channel, takeName, encoder?.let(CinemaDngWriter.Lj92Encoder::native), decoderThreads = 2)
                     var lastNotified = 0L
@@ -189,7 +217,10 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
                             notify(PROGRESS_NOTIFICATION_ID, progressNotification(takeName, progress))
                         }
                     }
-                    } finally { driveHandle.unregister() }
+                    } finally {
+                        // Closed while still registered: a drive pulled now finds them closed, never open and unwatched.
+                        try { closer.close() } finally { driveHandle.unregister() }
+                    }
                 }
             }
         } catch (failure: Exception) {

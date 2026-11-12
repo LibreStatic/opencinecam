@@ -242,7 +242,7 @@ class DriveMediaSafTest {
 
     private fun delete(take: com.librestatic.opencinecam.storage.LocalMediaTake, catalog: DriveMediaCatalog = catalog()): Pair<MediaDeleteResult, Boolean> {
         var released = false
-        val result = executeDriveDelete(take, catalog) { AutoCloseable { released = true } }
+        val result = executeDriveDelete(take, catalog, { AutoCloseable { released = true } })
         return result to released
     }
 
@@ -257,6 +257,25 @@ class DriveMediaSafTest {
         assertTrue(released)
         assertFalse(folder.exists())
         assertTrue(drive.file("Takes/OpenCineCam/A002/A002.mp4").exists())
+    }
+
+    @Test fun aQueuedProxyJobIsStoppedBeforeTheFolderGoes() {
+        val folder = recording("A001", 3_000_000)
+        val take = takes().first()
+        val steps = mutableListOf<String>()
+        val result = executeDriveDelete(take, catalog(), { AutoCloseable { steps += "released" } },
+            bindSource = { steps += "bound ${it.id == take.id} ${folder.exists()}" }, beginDeletion = { steps += "stopped ${folder.exists()}" })
+        assertNull(result.error)
+        assertEquals(listOf("bound true true", "stopped true", "released"), steps)
+        assertFalse(folder.exists())
+    }
+
+    @Test fun aProxyJobThatCannotBeStoppedKeepsTheTake() {
+        val folder = recording("A001", 3_000_000)
+        val result = executeDriveDelete(takes().first(), catalog(), { AutoCloseable { } }, beginDeletion = { error("Proxy queue persistence unavailable") })
+        assertEquals("Proxy queue persistence unavailable", result.error)
+        assertTrue(result.files.all { it.status == MediaDeleteStatus.NOT_ATTEMPTED })
+        assertTrue(folder.exists())
     }
 
     @Test fun aDriveThatFailsAfterTheDeleteLeavesEveryFileUnknown() {

@@ -12,6 +12,8 @@ internal const val CINEMADNG_EXPORT_PREFS = "cinemadng_export"
 internal const val CINEMADNG_EXPORT_TREE_KEY = "tree"
 /** The folders the export left while an export that may still write to them is queued or running. */
 const val CINEMADNG_EXPORT_LEFT_TREES_KEY = "leftTrees"
+/** The folders of the exports queued or running; a string set that outlives the process, as the queued work does. */
+const val CINEMADNG_EXPORT_ACTIVE_TREES_KEY = "activeTrees"
 
 /** The free bytes of the root holding [tree], when its provider reports them. */
 internal fun safFreeBytes(resolver: ContentResolver, tree: Uri): Long? = runCatching {

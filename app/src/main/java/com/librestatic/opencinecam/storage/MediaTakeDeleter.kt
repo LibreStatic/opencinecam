@@ -18,7 +18,7 @@ class MediaTakeDeleter internal constructor(private val access: MediaDeleteAcces
         if (!selected.onDrive) executeMediaDelete(selected, access)
         else if (drive == null) MediaDeleteResult((selected.originals + selected.metadata + selected.attachments)
             .map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }, "Drive deletion unavailable")
-        else executeDriveDelete(selected, drive, access::reserve)
+        else executeDriveDelete(selected, drive, access::reserve, access::bindDriveSource, access::beginDriveDeletion)
 }
 
 /**
@@ -26,7 +26,13 @@ class MediaTakeDeleter internal constructor(private val access: MediaDeleteAcces
  * exactly the confirmed files in a take folder of the drive. Absence is then observed per file; a drive that stops
  * answering leaves every file UNKNOWN, never verified. The catalog's cache is dropped whatever the outcome.
  */
-internal fun executeDriveDelete(selected: LocalMediaTake, drive: DriveMediaCatalog, reserve: () -> AutoCloseable): MediaDeleteResult {
+internal fun executeDriveDelete(
+    selected: LocalMediaTake,
+    drive: DriveMediaCatalog,
+    reserve: () -> AutoCloseable,
+    bindSource: (LocalMediaTake) -> Unit = {},
+    beginDeletion: () -> Unit = {},
+): MediaDeleteResult {
     val confirmed = selected.originals + selected.metadata + selected.attachments
     var results = confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.NOT_ATTEMPTED) }
     var error: String? = null
@@ -35,6 +41,9 @@ internal fun executeDriveDelete(selected: LocalMediaTake, drive: DriveMediaCatal
     try {
         reservation = reserve()
         val deletion = drive.deletionSnapshot(selected)
+        // A proxy job queued for this take stops before its source goes, as for a phone take.
+        bindSource(selected)
+        beginDeletion()
         var problem: String? = null
         attempted = true
         try { android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder) }
@@ -97,6 +106,8 @@ internal class MediaStoreDeleteAccess(context: Context) : MediaDeleteAccess {
     override fun beginDeletion(plan: MediaDeletePlan) {
         sourceLease?.invalidateForDeletion()
     }
+    override fun bindDriveSource(selected: LocalMediaTake) { sourceLease?.bind(selected) }
+    override fun beginDriveDeletion() { sourceLease?.invalidateForDeletion() }
     override fun delete(row: MediaDeleteRow): Int {
         require(row.owner == context.packageName)
         val condition = mediaDeleteCondition(row)
