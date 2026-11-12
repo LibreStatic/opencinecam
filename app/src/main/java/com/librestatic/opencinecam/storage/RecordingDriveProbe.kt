@@ -93,13 +93,19 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
         private var document: Uri? = null
 
         override fun create(): Boolean {
+            // A probe file an earlier probe could not delete would make the provider name this one `.occ-probe (1)`.
+            runCatching {
+                val documents = SafDocuments(resolver, tree)
+                documents.child(documents.root, PROBE_NAME)?.let { leftover -> documents.delete(leftover.uri) }
+            }.onFailure { Log.w(LOG_TAG, "A leftover probe file could not be removed", it) }
             document = DocumentsContract.createDocument(resolver, treeDocumentUri(tree), PROBE_MIME_TYPE, PROBE_NAME)
             return document != null
         }
 
         override fun open(): DriveProbeFile {
-            val descriptor = resolver.openFileDescriptor(checkNotNull(document), "rw") ?: throw IOException("the probe file could not be opened")
-            return DescriptorProbeFile(descriptor)
+            val uri = checkNotNull(document)
+            val descriptor = resolver.openFileDescriptor(uri, "rw") ?: throw IOException("the probe file could not be opened")
+            return DescriptorProbeFile(uri, descriptor)
         }
 
         override fun delete() {
@@ -107,7 +113,11 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
         }
     }
 
-    private class DescriptorProbeFile(private val descriptor: ParcelFileDescriptor) : DriveProbeFile {
+    /** ADR-0037: registered with [DriveDescriptors] while open, so a drive pulled mid-probe has the descriptor closed. */
+    private class DescriptorProbeFile(uri: Uri, private val descriptor: ParcelFileDescriptor) : DriveProbeFile {
+        private val closer = CloseOnce(descriptor)
+        private val driveHandle = DriveDescriptors.registerDocument(uri, closer)
+
         override fun writeAndReadBack(bytes: ByteArray): ByteArray {
             val fd = descriptor.fileDescriptor
             var written = 0
@@ -130,7 +140,9 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
             if (Os.fstat(fd).st_size != length) throw ErrnoException("ftruncate", OsConstants.EFBIG)
         }
 
-        override fun close() = descriptor.close()
+        override fun close() {
+            try { closer.close() } finally { driveHandle.unregister() }
+        }
     }
 
     private companion object {

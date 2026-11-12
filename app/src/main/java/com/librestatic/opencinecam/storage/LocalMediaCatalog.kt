@@ -129,12 +129,18 @@ internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, que
 internal const val CATALOG_CANDIDATE_BATCH = 64
 /** MediaStore candidates examined per page; drive takes, already listed, do not count against it. */
 internal const val CATALOG_SCAN_BUDGET = 120
+/**
+ * Drive takes loaded per page (PLAN-072): each load lists a take folder and reads its sidecars over USB, so a filter
+ * that matches nothing must not read the whole drive in one page. Spent, the page ends where the drive stopped.
+ */
+internal const val CATALOG_DRIVE_LOAD_BUDGET = 100
 
 /**
  * One gallery page: the MediaStore candidates of every kind and the drive's takes (PLAN-072), merged by
  * modified time. A drive take comes out just before the first MediaStore candidate it is newer than (older
  * than, oldest first), so at an equal second the phone's comes first; drive takes past the last candidate
- * read wait for the next page, unless MediaStore is exhausted. [candidates], [drive] and [readTake] do the
+ * read wait for the next page, unless MediaStore is exhausted. At most [CATALOG_DRIVE_LOAD_BUDGET] drive takes
+ * are loaded per page, so a page may end short, even empty, with a cursor. [candidates], [drive] and [readTake] do the
  * IO; [blocked] reads the recovery journals and runs after the candidates are collected.
  */
 internal fun catalogPage(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int,
@@ -157,10 +163,16 @@ internal fun catalogPage(settings: GallerySettings, query: String, cursor: Local
     val groups = mutableMapOf<MediaNamespace, LocalMediaTake?>()
     val encodings = mutableMapOf<String, LocalMediaEncoding>()
     val result = mutableListOf<LocalMediaTake>()
-    /** Emits the drive takes ahead of a candidate modified at [seconds] (all of them when null); true once the page is full. */
+    var driveLoads = 0
+    /**
+     * Emits the drive takes ahead of a candidate modified at [seconds] (all of them when null); true once the page is
+     * full or the drive's load budget is spent with a take still due, which ends the page before that candidate.
+     */
     fun drainDrive(seconds: Long?): Boolean {
         while (result.size < limit && pendingDrive.isNotEmpty() &&
             (seconds == null || pendingDrive.first().position.ahead(seconds, settings.newestFirst))) {
+            if (driveLoads == CATALOG_DRIVE_LOAD_BUDGET) return true
+            driveLoads++
             val entry = pendingDrive.removeFirst()
             drivePosition = entry.position
             val found = entry.load() ?: continue

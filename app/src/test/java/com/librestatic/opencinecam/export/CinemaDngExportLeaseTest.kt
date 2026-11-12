@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -51,5 +52,50 @@ class CinemaDngExportLeaseTest {
 
         assertEquals(before, CinemaDngExportRuntime.states.value)
         assertFalse(context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE).contains(CINEMADNG_EXPORT_ACTIVE_TREES_KEY))
+    }
+
+    @Test fun cancelMarksTheExportAtOnceAndEndsItsLeaseInTheBackground() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
+        val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
+        val runtime = CinemaDngExportRuntime
+        val deferred = mutableListOf<Runnable>()
+        val background = runtime.background
+        runtime.background = { deferred += it }
+        try {
+            runtime.appContext = context
+            // An export admitted and queued, its worker not started: an empty lease still marks it queued.
+            assertTrue(runtime.store.begin("content://media/external/file/42", "B001"))
+            preferences.edit().putStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, emptySet()).commit()
+
+            runtime.cancel()
+            val marked = runtime.states.value
+            assertTrue(marked is CinemaDngExportState.Running && marked.cancelling)
+            // The lease end (folder-grant lock, a commit, journal reads) did not run on the calling thread.
+            assertTrue(preferences.contains(CINEMADNG_EXPORT_ACTIVE_TREES_KEY))
+            assertEquals(1, deferred.size)
+
+            deferred.removeAt(0).run()
+            val ended = runtime.states.value
+            assertTrue(ended is CinemaDngExportState.Finished &&
+                (ended.outcome as? CinemaDngExportOutcome.Stopped)?.reason == CinemaDngStopReason.CANCELLED)
+            assertFalse(preferences.contains(CINEMADNG_EXPORT_ACTIVE_TREES_KEY))
+
+            // A cancellation whose background step runs after its export ended and a new one began leaves the new one alone.
+            runtime.acknowledge()
+            assertTrue(runtime.store.begin("content://media/external/file/43", "B002"))
+            runtime.cancel()
+            runtime.store.finish("content://media/external/file/43", "B002", CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true))
+            runtime.acknowledge()
+            assertTrue(runtime.store.begin("content://media/external/file/44", "B003"))
+            deferred.removeAt(0).run()
+            val untouched = runtime.states.value
+            assertTrue(untouched is CinemaDngExportState.Running && !untouched.cancelling && untouched.takeUri.endsWith("/44"))
+        } finally {
+            runtime.background = background
+            runtime.store.finish("", "", CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
+            runtime.acknowledge()
+            preferences.edit().clear().commit()
+        }
     }
 }

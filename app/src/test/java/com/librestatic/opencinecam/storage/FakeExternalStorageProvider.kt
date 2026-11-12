@@ -47,8 +47,14 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     var queryFailure: RuntimeException? = null
     /** Names of documents whose own query finds nothing although their folder still lists them (a provider that gave no answer). */
     var unanswered: Set<String> = emptySet()
+    /** Names of documents whose opening fails although they exist (a drive that stopped answering a read). */
+    @Volatile var unopenable: Set<String> = emptySet()
+    /** When false the roots query reports no free space, as the real provider does to apps without `MANAGE_DOCUMENTS`. */
+    var reportsAvailableBytes = true
     /** Runs before a document is created, e.g. to have another creator take the name first. */
     var beforeCreate: (() -> Unit)? = null
+    /** How many documents were created. */
+    val creates = java.util.concurrent.atomic.AtomicInteger()
     /** Runs after a document is deleted. */
     var afterDelete: (() -> Unit)? = null
     /** Runs at each document query, on the caller's thread, e.g. to stall it like a drive that stopped answering. */
@@ -65,7 +71,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     override fun queryRoots(projection: Array<out String>?): Cursor = MatrixCursor(projection ?: ROOT_COLUMNS).apply {
         if (!mounted) return@apply
         newRow().add(Root.COLUMN_ROOT_ID, volume).add(Root.COLUMN_DOCUMENT_ID, "$volume:")
-            .add(Root.COLUMN_TITLE, "Drive").add(Root.COLUMN_AVAILABLE_BYTES, availableBytes)
+            .add(Root.COLUMN_TITLE, "Drive").add(Root.COLUMN_AVAILABLE_BYTES, if (reportsAvailableBytes) availableBytes else null)
             .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_CREATE or Root.FLAG_SUPPORTS_IS_CHILD)
     }
 
@@ -90,6 +96,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
 
     override fun createDocument(parentDocumentId: String, mimeType: String, displayName: String): String {
         beforeCreate?.let { beforeCreate = null; it() }
+        creates.incrementAndGet()
         val parent = existing(parentDocumentId)
         require(parent.isDirectory) { "Parent document isn't a directory" }
         val (base, extension) = when {
@@ -126,6 +133,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
         val file = fileOf(documentId)
         if (!mounted || (!file.exists() && !mode.contains('w'))) throw FileNotFoundException("Missing file for $documentId")
         if (file.isDirectory) throw FileNotFoundException("$documentId is a folder")
+        if (file.name in unopenable) throw FileNotFoundException("$documentId did not answer")
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
     }
 

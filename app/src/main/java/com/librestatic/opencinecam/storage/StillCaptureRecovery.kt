@@ -89,83 +89,136 @@ internal class StillCaptureRecovery(context: Context,
      * A group on [destination]. [block] gets the id and, on a drive, the store that writes the group's folder
      * (null on the phone, where the caller builds its MediaStore store from [relativePath]). A drive folder whose grant
      * is no longer held puts the group on the phone.
+     *
+     * A phone group is written under [processLock] throughout. A drive group is journalled and claimed in
+     * [claimedDriveGroups] under it, then written and committed with the lock released, each journal step taking it
+     * again: a drive that stalls holds up neither a phone still nor [recover], which skip a claimed entry.
      */
-    internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T = synchronized(processLock) {
-        open().use { db ->
-            // Phone groups only: drive groups are left to [recover], so a stalled drive never holds up a still here.
-            recoverLocked(db, claims = null)
-            val id = UUID.randomUUID().toString()
-            // The group folder is created at the first file, so it is new: no namespace to check.
-            val drive = (destination as? RecordingDestination.UsbFolder)?.let { target ->
-                require(target.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
-                // A switch back to the phone ([RecordingDestinationStore.clear], same lock) between resolving this
-                // destination and here may have released the grant; once the entry is journalled, a later one keeps it.
-                // Lock order: processLock, then the store's; nothing under the store's lock takes processLock.
-                val grants = RecordingDestinationStore(context)
-                grants.withGrants {
-                    if (!grants.holdsGrant(target.treeUri)) {
-                        android.util.Log.w("StillRecovery", "The drive folder's permission is gone: the still goes to the phone")
-                        return@withGrants null
-                    }
-                    if (count(db, phone = false) >= MAX_DRIVE_GROUPS) forgetOldestDeferred(db)
-                    db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
-                        arrayOf(id, target.treeUri.toString(), target.volumeId.uppercase()))
-                    SafStillRows(context, target.treeUri, null) { folder ->
-                        check(db.update("captures", ContentValues().apply { put("folder", folder.toString()) },
-                            "id = ? AND committed = 0 AND tree IS NOT NULL AND folder IS NULL", arrayOf(id)) == 1) {
-                            "Still group folder was not journalled"
+    internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T {
+        val id = UUID.randomUUID().toString()
+        val drive = synchronized(processLock) {
+            open().use { db ->
+                // Phone groups only: drive groups are left to [recover], so a stalled drive never holds up a still here.
+                recoverLocked(db, claims = null)
+                // The group folder is created at the first file, so it is new: no namespace to check.
+                val drive = (destination as? RecordingDestination.UsbFolder)?.let { target ->
+                    require(target.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
+                    // A switch back to the phone ([RecordingDestinationStore.clear], same lock) between resolving this
+                    // destination and here may have released the grant; once the entry is journalled, a later one keeps it.
+                    // Lock order: processLock, then the store's; nothing under the store's lock takes processLock.
+                    val grants = RecordingDestinationStore(context)
+                    grants.withGrants {
+                        if (!grants.holdsGrant(target.treeUri)) {
+                            android.util.Log.w("StillRecovery", "The drive folder's permission is gone: the still goes to the phone")
+                            return@withGrants null
+                        }
+                        if (count(db, phone = false) >= MAX_DRIVE_GROUPS) forgetOldestDeferred(db)
+                        db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
+                            arrayOf(id, target.treeUri.toString(), target.volumeId.uppercase()))
+                        claimedDriveGroups.add(id)
+                        SafStillRows(context, target.treeUri, null) { folder ->
+                            journalStep { stepDb ->
+                                check(stepDb.update("captures", ContentValues().apply { put("folder", folder.toString()) },
+                                    "id = ? AND committed = 0 AND tree IS NOT NULL AND folder IS NULL", arrayOf(id)) == 1) {
+                                    "Still group folder was not journalled"
+                                }
+                            }
                         }
                     }
                 }
+                drive ?: return publishPhone(db, id, block)
             }
-            if (drive == null) {
-                check(count(db, phone = true) < MAX_GROUPS) { "Interrupted still journal is full" }
-                // Reserve an empty namespace before allocating even the first provider row.
-                for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
-                    "Still capture namespace already exists"
-                }
-                db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
+        }
+        try {
+            return publishDrive(id, drive, block)
+        } finally {
+            synchronized(processLock) { claimedDriveGroups.remove(id) }
+            // A switch back to the phone ([RecordingDestinationStore.clear]) defers the grant's release while this group is
+            // journalled uncommitted; nothing else releases it before the next recovery pass.
+            runCatching { RecordingDestinationStore(context).releaseDeferred() }
+                .onFailure { android.util.Log.w("StillRecovery", "Deferred folder permissions could not be released", it) }
+        }
+    }
+
+    /** Under [processLock] throughout: the phone group [id], whose namespace is reserved here. */
+    private fun <T> publishPhone(db: SQLiteDatabase, id: String, block: (String, SafStillRows?) -> T): T {
+        check(count(db, phone = true) < MAX_GROUPS) { "Interrupted still journal is full" }
+        // Reserve an empty namespace before allocating even the first provider row.
+        for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
+            "Still capture namespace already exists"
+        }
+        db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
+        val result: T
+        try {
+            checkpoint("RESERVED", id)
+            result = block(id, null)
+            checkpoint("BEFORE_COMMIT", id)
+        } catch (failure: Throwable) {
+            try { discard(db, id) } catch (cleanup: Throwable) {
+                if (cleanup !== failure) failure.addSuppressed(cleanup)
             }
-            val result: T
-            try {
-                checkpoint("RESERVED", id)
-                result = block(id, drive)
-                checkpoint("BEFORE_COMMIT", id)
-                // The drive's durable commit point: the folder no longer reads as in progress.
-                drive?.commit()
-            } catch (failure: Throwable) {
-                // An unconfirmed commit may have removed the marker: the files stay and recovery reads the drive.
-                if (failure !is StillCommitUnconfirmed) try { discard(db, id) } catch (cleanup: Throwable) {
+            throw failure
+        }
+        try {
+            check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
+        } catch (failure: Throwable) {
+            // A commit can report an ambiguous failure. Never delete if its durable state
+            // says COMMITTED, and never guess if reading that state also fails.
+            val committed = try { committed(db, id) } catch (readFailure: Throwable) {
+                failure.addSuppressed(readFailure); throw failure
+            }
+            if (!committed) {
+                try { discard(db, id) } catch (cleanup: Throwable) {
                     if (cleanup !== failure) failure.addSuppressed(cleanup)
                 }
                 throw failure
             }
-            try {
-                check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
-            } catch (failure: Throwable) {
-                if (drive != null) {
-                    // Its marker is gone, so the drive group is committed: recovery prunes the entry, never the files.
-                    android.util.Log.w("StillRecovery", "Committed drive group $id kept its journal entry", failure)
-                    return result
-                }
-                // A commit can report an ambiguous failure. Never delete if its durable state
-                // says COMMITTED, and never guess if reading that state also fails.
-                val committed = try { committed(db, id) } catch (readFailure: Throwable) {
-                    failure.addSuppressed(readFailure); throw failure
-                }
-                if (!committed) {
-                    try { discard(db, id) } catch (cleanup: Throwable) {
-                        if (cleanup !== failure) failure.addSuppressed(cleanup)
-                    }
-                    throw failure
-                }
-            }
-            checkpoint("COMMITTED", id)
-            // Cleanup is outside the compensation region. A retained COMMITTED receipt is inert.
-            runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
-            result
         }
+        checkpoint("COMMITTED", id)
+        // Cleanup is outside the compensation region. A retained COMMITTED receipt is inert.
+        runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
+        return result
     }
+
+    /**
+     * The drive group [id], journalled and claimed by [publish]: written and committed with [processLock] released, each
+     * journal change a short step under it ([journalStep]).
+     */
+    private fun <T> publishDrive(id: String, drive: SafStillRows, block: (String, SafStillRows?) -> T): T {
+        val result: T
+        try {
+            checkpoint("RESERVED", id)
+            result = block(id, drive)
+            checkpoint("BEFORE_COMMIT", id)
+            // The drive's durable commit point: the folder no longer reads as in progress.
+            drive.commit()
+        } catch (failure: Throwable) {
+            // An unconfirmed commit may have removed the marker: the files stay and recovery reads the drive.
+            if (failure !is StillCommitUnconfirmed) try {
+                drive.discard()
+                journalStep { db -> check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1) }
+            } catch (cleanup: Throwable) {
+                if (cleanup !== failure) failure.addSuppressed(cleanup)
+            }
+            throw failure
+        }
+        try {
+            journalStep { db ->
+                check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
+            }
+        } catch (failure: Throwable) {
+            // Its marker is gone, so the drive group is committed: recovery prunes the entry, never the files.
+            android.util.Log.w("StillRecovery", "Committed drive group $id kept its journal entry", failure)
+            return result
+        }
+        checkpoint("COMMITTED", id)
+        // Cleanup is outside the compensation region. A retained COMMITTED receipt is inert.
+        runCatching { journalStep { db -> db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) } }
+        return result
+    }
+
+    /** One short journal step under [processLock], on its own connection. */
+    private fun <T> journalStep(block: (SQLiteDatabase) -> T): T = synchronized(processLock) { open().use(block) }
 
     private fun open(): SQLiteDatabase {
         check(context.noBackupFilesDir.isDirectory) { "Private capture storage unavailable" }
@@ -206,8 +259,8 @@ internal class StillCaptureRecovery(context: Context,
     /**
      * Makes room for a drive group: deletes the entry of the oldest uncommitted drive group that [recoverLocked] would
      * defer (its drive absent or its grant gone). Only the entry goes; the group's folder stays on its drive, marker
-     * included. Fails when every drive entry could still be resolved. Under [processLock], which spans every writer, so
-     * no entry here belongs to a group being written; one [recover] is resolving is skipped.
+     * included. Fails when every drive entry could still be resolved. Under [processLock], which spans every phone writer;
+     * a drive group being written, or one [recover] is resolving, is claimed in [claimedDriveGroups] and skipped.
      */
     private fun forgetOldestDeferred(db: SQLiteDatabase) {
         val held = heldReadWriteTrees(resolver)
@@ -349,7 +402,7 @@ internal class StillCaptureRecovery(context: Context,
 
     companion object {
         private val processLock = Any()
-        /** Drive groups a [recover] is resolving outside [processLock]; guarded by it. */
+        /** Drive groups a [recover] is resolving, or [publish] writing, outside [processLock]; guarded by it. */
         private val claimedDriveGroups = HashSet<String>()
         private const val DATABASE = "still-recovery.sqlite"
         /** Phone groups (NULL `tree`) journalled at once; a phone still beyond it is refused. */

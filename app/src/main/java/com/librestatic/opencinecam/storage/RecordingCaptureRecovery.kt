@@ -173,7 +173,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /** The take folder is created at the first output, so it is new: no namespace to check. */
     private fun driveRows(id: String, destination: RecordingDestination.UsbFolder): SafRecordingRows {
         require(destination.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
-        return SafRecordingRows(context, destination.treeUri, null) { folder -> recordFolder(id, folder) }
+        // Called from the take's own operations, which run with the journal unlocked ([RecordingRecoveryGroup]).
+        return SafRecordingRows(context, destination.treeUri, null) { folder -> synchronized(recordingRecoveryLock) { recordFolder(id, folder) } }
     }
 
     /** Journals take [id] on [destination] and registers it live; under [recordingRecoveryLock]. */
@@ -224,7 +225,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /** The live registry gives take [id] up; the next [recover] may resolve it. */
     internal fun release(id: String) = synchronized(recordingRecoveryLock) { releaseLive(key(id)) }
 
-    /** The take folder exists on the drive: journal it before any output is created in it. */
+    /** The take folder exists on the drive: journal it before any output is created in it. Under [recordingRecoveryLock]. */
     private fun recordFolder(id: String, folder: Uri) = open().use { db ->
         check(db.update("captures", ContentValues().apply { put("folder", folder.toString()) },
             "id = ? AND committed = 0 AND tree IS NOT NULL AND folder IS NULL", arrayOf(id)) == 1) { "Recording take folder was not journalled" }
@@ -362,7 +363,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private class HeldJournal(private val db: SQLiteDatabase) : JournalAccess {
         override fun <T> step(block: (SQLiteDatabase) -> T): T = block(db)
     }
-    /** For a claimed drive entry ([decide]): no other pass touches it meanwhile, and no live take has its id. */
+    /**
+     * For a claimed drive entry ([decide]): no other pass touches it meanwhile, and no live take has its id. Or for a live
+     * take's own [discard]: no pass touches it while it is live.
+     */
     private inner class LockedJournal : JournalAccess {
         override fun <T> step(block: (SQLiteDatabase) -> T): T = synchronized(recordingRecoveryLock) { open().use(block) }
     }
@@ -444,7 +448,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
         val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
-            readText = { uri -> runCatching { resolver.openInputStream(uri)?.use(::readBoundedSidecar) }.getOrNull() })
+            readText = ::readRecoveredSidecar)
         if (published == 0) return 0
         store.commit(id)
         journal.step { db ->
@@ -454,7 +458,17 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         return published
     }
 
-    internal fun commit(id: String) = open().use { db ->
+    /**
+     * A recovered take's sidecar text, null when it is too large ([readBoundedSidecar]). A MediaStore row that cannot be
+     * read gives null too (as [ownedRowBytes] reads it). On a drive a read that fails throws: a drive that stalled or went
+     * quiet must never have the take's sidecar replaced by a minimal one ([recoverIncompleteTake]).
+     */
+    private fun readRecoveredSidecar(uri: Uri): String? =
+        if (uri.authority == MediaStore.AUTHORITY) runCatching { resolver.openInputStream(uri)?.use(::readBoundedSidecar) }.getOrNull()
+        else requireNotNull(resolver.openInputStream(uri)) { "Recording sidecar could not be read" }.useOnDrive(uri, ::readBoundedSidecar)
+
+    /** Records take [id] committed; a short step under [recordingRecoveryLock]. */
+    internal fun commit(id: String) = synchronized(recordingRecoveryLock) { open().use { db ->
         try {
             check(db.update("captures", ContentValues().apply { put("committed", 1) }, "id = ? AND committed = 0", arrayOf(id)) == 1)
         } catch (failure: Throwable) {
@@ -463,9 +477,13 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         }
         // Never make failure to prune COMMITTED revoke a valid capture.
         runCatching { db.delete("captures", "id = ? AND committed = 1", arrayOf(id)) }
-    }
+    } }
 
-    internal fun discard(id: String, store: RecordingRowStore) = open().use { discardRows(HeldJournal(it), id, store) }
+    /**
+     * Discards live take [id]: [store]'s outputs are deleted with [recordingRecoveryLock] released (a drive that stalls
+     * holds up no take start), each journal step taking it. The caller keeps the take live until this returns.
+     */
+    internal fun discard(id: String, store: RecordingRowStore) = discardRows(LockedJournal(), id, store)
     private fun state(db: SQLiteDatabase, id: String): Long? = db.rawQuery("SELECT committed FROM captures WHERE id = ?", arrayOf(id)).use {
         if (!it.moveToFirst()) null else {
             check(it.count == 1 && it.getType(0) == Cursor.FIELD_TYPE_INTEGER && it.getLong(0) in 0L..1L)
@@ -852,9 +870,17 @@ internal data class RecordingRow(val uri: Uri, val name: String, val mime: Strin
     /** The video member's second metadata row, the canonical clip sidecar; prepared as CLIP_METADATA. */
     val clip: Boolean = false)
 
-/** Enrolment closes when preparation begins. All members must publish before a durable commit. */
+/**
+ * Enrolment closes when preparation begins. All members must publish before a durable commit.
+ *
+ * The take's operations are serialized on its own [lock], not on [recordingRecoveryLock]: they ask the backend (a drive
+ * that may stall), and a take starting on the main thread needs the journal lock. Only the journal steps and the live
+ * registry take [recordingRecoveryLock], nested inside [lock] (never the other way round). No recovery pass touches the
+ * take while it is live, so it leaves the registry only after its last backend step.
+ */
 class RecordingRecoveryGroup internal constructor(private val journal: RecordingCaptureRecovery, val id: String,
     private val store: RecordingRowStore) {
+    private val lock = Any()
     private val members = linkedMapOf<RecordingMemberKind, RecordingRecoveryMember>()
     private var preparationStarted = false
     private var aborted = false
@@ -870,7 +896,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
      * ADR-0011 incomplete publication: from here a member's abort withdraws only that member (its rows
      * are deleted) instead of discarding the whole take, and a member that [keepBytes] never deletes.
      */
-    internal fun beginSalvage() = synchronized(recordingRecoveryLock) {
+    internal fun beginSalvage() = synchronized(lock) {
         // After an unconfirmed commit recovery owns the take: every salvage step (audio first, then video) stops here,
         // before it writes a sidecar a recovery pass may be reading or publishing.
         if (commitUnknown) throw RecordingCommitUnconfirmed()
@@ -879,24 +905,24 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     /** The member holds bytes that must not be deleted by any later compensation; [published] still needs the real publication. */
-    internal fun keepBytes(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) { member.keepBytes = true }
+    internal fun keepBytes(member: RecordingRecoveryMember) = synchronized(lock) { member.keepBytes = true }
 
-    internal fun member(kind: RecordingMemberKind): RecordingRecoveryMember = synchronized(recordingRecoveryLock) {
+    internal fun member(kind: RecordingMemberKind): RecordingRecoveryMember = synchronized(lock) {
         check(!preparationStarted && !aborted && !committed && kind !in members) { "Take enrolment is closed or duplicate" }
         RecordingRecoveryMember(this, kind).also { members[kind] = it }
     }
 
     /** Extra native ownership, independent of the caller's ParcelFileDescriptor wrapper. */
-    internal fun retainNativeWriter(): AutoCloseable = synchronized(recordingRecoveryLock) {
+    internal fun retainNativeWriter(): AutoCloseable = synchronized(lock) {
         check(!preparationStarted && !aborted && !committed)
         nativeWriters++
         val retired = AtomicBoolean(false)
-        AutoCloseable { synchronized(recordingRecoveryLock) {
+        AutoCloseable { synchronized(lock) {
             if (retired.compareAndSet(false, true)) { nativeWriters--; finishIfReady(); releaseIfRelinquished() }
         } }
     }
 
-    internal fun insert(member: RecordingRecoveryMember, name: String, mime: String, metadata: Boolean, clip: Boolean = false): Uri = synchronized(recordingRecoveryLock) {
+    internal fun insert(member: RecordingRecoveryMember, name: String, mime: String, metadata: Boolean, clip: Boolean = false): Uri = synchronized(lock) {
         check(!clip || metadata && member.kind == RecordingMemberKind.VIDEO)
         check(!aborted && !committed && !member.prepared && member.rows.count { !it.auxiliary } < (if (member.kind == RecordingMemberKind.VIDEO) 3 else 2))
         check(member.rows.none { !it.auxiliary && it.metadata == metadata && it.clip == clip })
@@ -910,7 +936,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     /** Withdraws the clip sidecar row of a take whose sidecar could not be written; the take itself is untouched. */
-    internal fun removeClip(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
+    internal fun removeClip(member: RecordingRecoveryMember) = synchronized(lock) {
         check(!aborted && !committed && !member.prepared)
         member.rows.firstOrNull { it.clip }?.let { row ->
             store.delete(row.uri)
@@ -920,7 +946,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     /** The one extra Download row a video take may own. A provider that mangles the identity is undone. */
-    internal fun insertAuxiliary(member: RecordingRecoveryMember, name: String, mime: String): Uri = synchronized(recordingRecoveryLock) {
+    internal fun insertAuxiliary(member: RecordingRecoveryMember, name: String, mime: String): Uri = synchronized(lock) {
         check(!aborted && !committed && !member.prepared && member.kind == RecordingMemberKind.VIDEO)
         check(member.rows.none { it.auxiliary })
         require(name.isNotBlank() && '/' !in name && name.length <= 180 && mime == GyroflowLog.MIME_TYPE)
@@ -934,7 +960,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         uri
     }
 
-    internal fun removeAuxiliary(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
+    internal fun removeAuxiliary(member: RecordingRecoveryMember) = synchronized(lock) {
         check(!aborted && !committed && !member.prepared)
         member.rows.firstOrNull { it.auxiliary }?.let { row ->
             store.delete(row.uri)
@@ -943,7 +969,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         Unit
     }
 
-    internal fun prepared(member: RecordingRecoveryMember, artifacts: List<PreparedCaptureArtifact>) = synchronized(recordingRecoveryLock) {
+    internal fun prepared(member: RecordingRecoveryMember, artifacts: List<PreparedCaptureArtifact>) = synchronized(lock) {
         // The caller certifies its native writer and both stream wrappers actually closed.
         member.retired = true
         check(!aborted && !committed) { "Take has already terminated" }
@@ -964,7 +990,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         member.prepared = true
     }
 
-    internal fun published(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
+    internal fun published(member: RecordingRecoveryMember) = synchronized(lock) {
         if (committed) return@synchronized
         // A retry never reports as published a take whose commit is left to recovery.
         if (commitUnknown) throw RecordingCommitUnconfirmed()
@@ -975,12 +1001,12 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     /** Publishes one of [member]'s prepared outputs on the take's backend (MediaStore: IS_PENDING=0); [failure] when it did not. */
-    internal fun publish(member: RecordingRecoveryMember, uri: Uri, failure: String) = synchronized(recordingRecoveryLock) {
+    internal fun publish(member: RecordingRecoveryMember, uri: Uri, failure: String) = synchronized(lock) {
         store.publish(member.rows.firstOrNull { it.uri == uri } ?: error(failure), failure)
     }
 
     /** Idempotent compensation of an output [member] created, also after commit (an explicit legacy discard). */
-    internal fun deleteOwned(uri: Uri, failure: String) = synchronized(recordingRecoveryLock) { store.deleteOwned(uri, failure) }
+    internal fun deleteOwned(uri: Uri, failure: String) = synchronized(lock) { store.deleteOwned(uri, failure) }
 
     /** Row operations for a member's own incomplete publication (`finalizeClip`). */
     internal val clipRows: ClipRows<Uri> get() = store.clipRows
@@ -991,17 +1017,17 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
      * remains, so the next [RecordingCaptureRecovery.recover] (a drive's mount event) resolves it instead of only a new process.
      * True when a drive's take is left pending: a mount pass may have skipped it while it was live, so the caller queues one.
      */
-    fun relinquish(): Boolean = synchronized(recordingRecoveryLock) {
+    fun relinquish(): Boolean = synchronized(lock) {
         relinquished = true
         releaseIfRelinquished()
         !committed && !discarded && store is SafRecordingRows
     }
 
     private fun releaseIfRelinquished() {
-        if (relinquished && !committed && !discarded && nativeWriters == 0) releaseLive(journal.key(id))
+        if (relinquished && !committed && !discarded && nativeWriters == 0) journal.release(id)
     }
 
-    internal fun abort(member: RecordingRecoveryMember) = synchronized(recordingRecoveryLock) {
+    internal fun abort(member: RecordingRecoveryMember) = synchronized(lock) {
         member.retired = true
         // A commit whose marker may be gone leaves the take to recovery, which reads the drive: nothing is deleted here.
         if (committed || discarded || commitUnknown) return@synchronized
@@ -1028,16 +1054,16 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
 
     private fun finishIfReady() {
         if (committed || discarded || commitUnknown || nativeWriters != 0 || members.values.any { !it.retired }) return
-        if (aborted) {
-            // No native owner remains; failed cleanup is eligible for the next recovery retry.
-            releaseLive(journal.key(id))
-            journal.discard(id, store)
-            discarded = true
-        } else if (members.isNotEmpty() && members.values.all { it.withdrawn }) {
-            // Every output was empty and has been removed: nothing is left to publish.
-            releaseLive(journal.key(id))
-            journal.discard(id, store)
-            discarded = true
+        if (aborted || members.isNotEmpty() && members.values.all { it.withdrawn }) {
+            // Aborted, or every output was empty and has been removed: nothing is left to publish. No native owner
+            // remains; the take leaves the live registry after its cleanup, and a failed cleanup is eligible for the next
+            // recovery retry.
+            try {
+                journal.discard(id, store)
+                discarded = true
+            } finally {
+                journal.release(id)
+            }
         } else if (members.isNotEmpty() && members.values.filter { !it.withdrawn }.all { it.prepared && it.published }) {
             val rows = members.values.filter { !it.withdrawn }.flatMap { it.rows }
             check(store.allRows(id) == rows.map { it.uri }.toSet()) { "Take membership changed before commit" }
@@ -1047,7 +1073,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
                 // The take may be committed: no later abort may discard it. The next recovery pass resolves the entry,
                 // pruning it when the folder lists no marker and recovering the take when the marker is still there.
                 commitUnknown = true
-                releaseLive(journal.key(id))
+                journal.release(id)
                 throw failure
             }
             try { journal.commit(id) } catch (failure: Exception) {
@@ -1055,12 +1081,12 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
                 // discard it, and recovery prunes the entry.
                 if (store is SafRecordingRows) {
                     commitUnknown = true
-                    releaseLive(journal.key(id))
+                    journal.release(id)
                 }
                 throw failure
             }
             committed = true
-            releaseLive(journal.key(id))
+            journal.release(id)
         }
     }
 }
@@ -1097,18 +1123,20 @@ internal class RecordingRecoveryMember(internal val group: RecordingRecoveryGrou
  */
 internal class SafRawTakeJournal internal constructor(private val journal: RecordingCaptureRecovery, val id: String,
     private val store: SafRecordingRows) {
+    /** Serializes this take's steps; the drive is asked with [recordingRecoveryLock] released ([RecordingRecoveryGroup]). */
+    private val lock = Any()
     private var done = false
     /** [commit] ran but could not confirm its marker went ([RecordingCommitUnconfirmed]): recovery owns the take. */
     private var unconfirmed = false
 
     /** The take's `.ocraw` document, named exactly [name]. */
-    fun create(name: String): Uri = synchronized(recordingRecoveryLock) {
+    fun create(name: String): Uri = synchronized(lock) {
         check(!done) { "RAW take has already terminated" }
         store.insert(id, "Download", name, SafDocuments.OCTET_STREAM)
     }
 
     /** The take is complete on the drive: its marker goes, then its journal entry. A failure leaves both for recovery. */
-    fun commit() = synchronized(recordingRecoveryLock) {
+    fun commit() = synchronized(lock) {
         if (done) return@synchronized
         // A retry never reports as committed a take left to recovery.
         if (unconfirmed) throw RecordingCommitUnconfirmed()
@@ -1129,15 +1157,19 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
     }
 
     /** The take holds no frame: its file, marker and folder go, then the entry. A drive that does not answer keeps them. */
-    fun discard() = synchronized(recordingRecoveryLock) {
+    fun discard() = synchronized(lock) {
         if (done || unconfirmed) return@synchronized
-        journal.release(id)
-        journal.discard(id, store)
-        done = true
+        // Live until its files are gone, so no recovery pass reads them meanwhile; a failure leaves them to the next pass.
+        try {
+            journal.discard(id, store)
+            done = true
+        } finally {
+            journal.release(id)
+        }
     }
 
     /** This process gives the take up without finishing it: the next [RecordingCaptureRecovery.recover] repairs it. */
-    fun relinquish() = synchronized(recordingRecoveryLock) { if (!done) journal.release(id) }
+    fun relinquish() = synchronized(lock) { if (!done) journal.release(id) }
 }
 
 /**

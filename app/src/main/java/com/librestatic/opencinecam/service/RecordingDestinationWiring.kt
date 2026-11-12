@@ -109,6 +109,44 @@ internal fun driveLeavingStopsTake(takeDestination: RecordingDestination?, leavi
     takeDestination is RecordingDestination.UsbFolder && takeDestination.volumeId.equals(leavingVolumeId, ignoreCase = true)
 
 /**
+ * PLAN-072: an encoded take that now records must be stopped for its lost drive: its drive left while it was still
+ * starting ([lostAtStart], when the stop path refuses anything but RECORDING), or the take writes to a drive that is not
+ * among the [mounted] volumes (a volume event missed). [monitored] false (no volume monitor) reads nothing as missing.
+ */
+internal fun takeDriveLostAtStart(lostAtStart: Boolean, takeDestination: RecordingDestination?, mounted: Set<String>, monitored: Boolean): Boolean {
+    val drive = takeDestination as? RecordingDestination.UsbFolder ?: return false
+    return lostAtStart || monitored && mounted.none { it.equals(drive.volumeId, ignoreCase = true) }
+}
+
+/**
+ * PLAN-072: one recovery pass at a time per kind on a bounded single-thread executor: a [request] while a pass waits
+ * only adds its item, so the queue holds at most one pass of each kind and a burst is never refused. The pass clears
+ * its "queued" mark before it drains the items, so a request arriving while it runs queues exactly one follow-up and
+ * every item reaches a pass. A refused execute leaves the items for the next request. Thread-safe.
+ */
+internal class CoalescedPass<T>(private val executor: java.util.concurrent.Executor, private val pass: (List<T>) -> Unit) {
+    private val queued = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val due = java.util.concurrent.ConcurrentLinkedQueue<T>()
+
+    /** Adds [item] to the next pass and queues it unless one waits; false when the executor refused it. */
+    fun request(item: T): Boolean {
+        due += item
+        if (!queued.compareAndSet(false, true)) return true
+        return try {
+            executor.execute {
+                queued.set(false)
+                val items = generateSequence { due.poll() }.toList()
+                if (items.isNotEmpty()) pass(items)
+            }
+            true
+        } catch (failure: java.util.concurrent.RejectedExecutionException) {
+            queued.set(false)
+            false
+        }
+    }
+}
+
+/**
  * The failure a drive take is stopped with: the drive left ([writeFailed] false, a volume event) or a write to it
  * failed ([writeFailed] true, ENODEV before any event). Stop and save keeps what reached the drive.
  */

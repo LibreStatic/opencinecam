@@ -725,8 +725,33 @@ class CaptureService : Service() {
     private var continuationStarting: ContinuationRequest? = null
     @Volatile private var takeContinuation: ContinuationRequest? = null
 
+    /**
+     * PLAN-072, main: the encoded take's drive left while the take was still starting (CAPTURING, its output already on
+     * the drive), when the stop path refuses anything but RECORDING. The take is stopped for its lost drive as soon as it
+     * records, so the drive stop, and its continuation decision, runs as for a drive lost mid-take. Cleared with the take.
+     */
+    @Volatile private var driveLostAtTakeStart = false
+
+    /**
+     * Main, once an encoded take records: its drive left during the start window (or the event was missed), so it is
+     * stopped now through the drive stop path. False when nothing was due.
+     */
+    private fun stopTakeLostAtStart(): Boolean {
+        // A volume read, never a drive read: a drive that answers slowly is not taken for a lost one.
+        if (pendingStopReason != null || cameraState.value.recordingFinalizing) return false
+        if (!takeDriveLostAtStart(driveLostAtTakeStart, takeDestination?.destination, mountedRecordingVolumes(),
+                monitored = recordingVolumeMonitor != null)) return false
+        android.util.Log.w("RecordingDestination", "The take's drive is gone (" +
+            (if (driveLostAtTakeStart) "it left while the take started" else "not mounted") + "); stopping it for the lost drive")
+        driveLostAtTakeStart = false
+        (takeDestination?.destination as? RecordingDestination.UsbFolder)?.let { releaseDriveDescriptors(it.volumeId, "the drive left as the take started") }
+        stopTakeForLostDrive(writeFailed = false)
+        return true
+    }
+
     /** The take ended or never started: the next take's destination shows again. */
     private fun clearTakeDestination() {
+        driveLostAtTakeStart = false
         takeContinuation = null
         if (takeDestination == null) return
         takeDestination = null
@@ -794,6 +819,7 @@ class CaptureService : Service() {
         takeDestination = resolved
         nextTakeDestination = resolved
         takeContinuation = continuation
+        driveLostAtTakeStart = false
         cameraState.update { it.copy(recordingDestination = recordingDestinationStatus(resolved, it.recordingDestination.driveLabel,
             it.recordingDestination.driveFreeBytes, continuedOnPhone = continuation != null)) }
     }
@@ -901,7 +927,11 @@ class CaptureService : Service() {
                 if (rawQualificationSession != null && rawGateDestinationId == RawVideoQualificationStore.destinationIdForDrive(event.volumeId)) {
                     localBinder.cancelRawVideoQualification(RawQualificationStopReasons.DRIVE_LOST)
                 }
-                if (driveLeavingStopsTake(takeDestination?.destination, event.volumeId)) stopTakeForLostDrive(writeFailed = false)
+                if (driveLeavingStopsTake(takeDestination?.destination, event.volumeId)) {
+                    // An encoded take still starting cannot be stopped yet: it is stopped for its drive once it records.
+                    if (rawTake == null && cameraState.value.phase == CameraUiPhase.CAPTURING) driveLostAtTakeStart = true
+                    else stopTakeForLostDrive(writeFailed = false)
+                }
             }
             is RecordingVolumeEvent.Mounted -> recoverRecordingsOnMount(event.volumeId)
         }
@@ -973,7 +1003,12 @@ class CaptureService : Service() {
      * the start path shows, plus a line saying the take could not continue. Never while another take or a qualification runs.
      */
     private fun startDriveContinuation() {
-        val request = driveContinuation.consume() ?: run { refreshRawGate(); return releaseContinuationForeground() }
+        val request = driveContinuation.consume() ?: run {
+            // Vetoed or expired in the gap: the preview audio monitor the drive part's end deferred to it starts now.
+            refreshRawGate()
+            releaseContinuationForeground()
+            return startPreviewAudioMonitorIfEligible()
+        }
         if (serviceDestroyed) return
         val current = cameraState.value
         val busy = current.selectedMode != request.mode || current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) ||
@@ -996,41 +1031,32 @@ class CaptureService : Service() {
                 refreshRawGate()
             }
             releaseContinuationForeground()
+            // No take follows: the preview audio monitor the drive part's end deferred to the continuation starts now.
+            startPreviewAudioMonitorIfEligible()
         }
     }
 
     /**
      * Main: the foreground service the drive part kept for its continuation is dropped once no continuation will start
      * (cancelled, expired or refused). Not while a take records or the drive part still finalizes: that path stops it.
+     * The started-service lifetime the drive part's end kept for the continuation goes with it, as at any take's end; a
+     * bound operator or exterior keeps the service, and settings frozen (a qualification) keep it as [onUnbind] does.
      */
     private fun releaseContinuationForeground() {
         val current = cameraState.value
         if (serviceDestroyed || rawTake != null || current.recordingFinalizing ||
             current.phase in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING)) return
         foreground.stop()
+        if (!current.structuralSettingsFrozen) stopSelf()
     }
 
-    /** Takes interrupted on a drive wait in the journal until it mounts again: recover them now, as at service start. */
+    /**
+     * Takes interrupted on a drive wait in the journal until it mounts again: recover them now, as at service start. The
+     * still pass also purges the drive's qualification scratch; both passes coalesce with any already queued, so a burst
+     * of mounts costs one pass each and never a refused one, and the volume is kept until a pass has handled it.
+     */
     private fun recoverRecordingsOnMount(volumeId: String) {
-        try {
-            // Not [storageExecutor]: a drive that stalls here must not hold up the still saves queued there.
-            recoveryExecutor.execute {
-                // Interrupted still groups on the drive are discarded, as at service start; a still being saved holds the journal lock.
-                runCatching { stillSaver.recoverInterrupted() }
-                    .onFailure { android.util.Log.e("StillRecovery", "Interrupted still journal unavailable after $volumeId mounted", it) }
-                releaseDeferredGrants()
-                // A RAW qualification killed mid-run left scratch files in the drive's .occ-qualify folder; nothing else is touched.
-                runCatching {
-                    val configured = RecordingDestinationStore(this).current(setOf(volumeId)).destination as? RecordingDestination.UsbFolder
-                    if (configured != null && configured.volumeId.equals(volumeId, ignoreCase = true)) {
-                        com.librestatic.opencinecam.storage.RawQualificationDriveScratch(contentResolver, configured.treeUri).purgeOrphans()
-                    }
-                }.onFailure { android.util.Log.w("RawVideoQualifier", "Qualification scratch on $volumeId not purged", it) }
-            }
-        } catch (failure: java.util.concurrent.RejectedExecutionException) {
-            android.util.Log.w("StillRecovery", "Still recovery after $volumeId mounted not queued; the service's next start retries it", failure)
-        }
-        // Queued on its own: a full storage queue must not cost the drive's takes their recovery pass.
+        queueStillRecovery(StillRecoveryRequest(scratchVolume = volumeId), "$volumeId mounted")
         queueRecordingRecovery("$volumeId mounted")
     }
 
@@ -1055,31 +1081,82 @@ class CaptureService : Service() {
             .onFailure { android.util.Log.w("RecordingDestination", "Deferred folder permissions not released", it) }
     }
 
-    /** Queues a pass over the journal of interrupted takes; takes on a drive that is not mounted are kept for a later one. */
-    private fun queueRecordingRecovery(cause: String) {
-        try {
-            recoveryExecutor.execute {
-                // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
-                // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.
-                val report = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
-                    android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable after $cause", failure)
-                    return@execute
-                }
-                releaseDeferredGrants()
-                val recovered = report.incompleteGroups + report.rawTakes.published
-                if (report.discardedGroups + report.unresolvedGroups + recovered + report.rawTakes.deleted == 0) return@execute
-                mainHandler.post {
-                    if (!serviceDestroyed) cameraState.update { state ->
-                        val idle = state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)
-                        state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, report)).let {
-                            if (idle && recovered > 0) it.copy(message = getString(R.string.recording_drive_takes_recovered, recovered),
-                                messageTransient = true) else it
-                        }
-                    }
+    /** What a still recovery pass was asked for: the startup report published, or a mounted drive's scratch purged. */
+    private data class StillRecoveryRequest(val publishReport: Boolean = false, val scratchVolume: String? = null)
+    /** What a journal pass was asked for: [cause] for the log; [startup] also runs the phone's RAW recovery and always publishes. */
+    private data class JournalRecoveryRequest(val cause: String, val startup: Boolean = false)
+
+    /*
+     * PLAN-072: [recoveryExecutor] runs one thread over a short queue, and a RAW repair can hold it for minutes, so its
+     * work is coalesced instead of queued per request ([CoalescedPass]): at most one still pass and one journal pass wait
+     * at a time, a request arriving while a pass runs queues exactly one follow-up, and every request's item (a volume
+     * to purge, a cause, the startup report) reaches a pass. Not [storageExecutor]: recovery asks drives, and one that
+     * stalls must not hold up the still saves queued there.
+     */
+    private val stillRecoveryPass = CoalescedPass<StillRecoveryRequest>(recoveryExecutor) { runStillRecoveryPass(it) }
+    private val journalRecoveryPass = CoalescedPass<JournalRecoveryRequest>(recoveryExecutor) { runRecordingRecoveryPass(it) }
+
+    /** Queues a still recovery pass unless one is already waiting. Any thread. */
+    private fun queueStillRecovery(request: StillRecoveryRequest, cause: String) {
+        if (!stillRecoveryPass.request(request)) {
+            android.util.Log.w("StillRecovery", "Still recovery after $cause not queued; the service's next start retries it")
+        }
+    }
+
+    /** Recovery thread: interrupted still groups (a still being saved holds the journal lock), then the drives' scratch. */
+    private fun runStillRecoveryPass(requests: List<StillRecoveryRequest>) {
+        // Interrupted still groups on a drive are discarded, as at service start.
+        val report = try { stillSaver.recoverInterrupted() } catch (failure: Exception) {
+            android.util.Log.e("StillRecovery", "Interrupted capture journal unavailable", failure)
+            com.librestatic.opencinecam.storage.StillRecoveryReport(unresolvedGroups = 1)
+        }
+        releaseDeferredGrants()
+        // A RAW qualification killed mid-run left scratch files in the drive's .occ-qualify folder; nothing else is touched.
+        for (volumeId in requests.mapNotNull { it.scratchVolume }.distinct()) runCatching {
+            val configured = RecordingDestinationStore(this).current(setOf(volumeId)).destination as? RecordingDestination.UsbFolder
+            if (configured != null && configured.volumeId.equals(volumeId, ignoreCase = true)) {
+                com.librestatic.opencinecam.storage.RawQualificationDriveScratch(contentResolver, configured.treeUri).purgeOrphans()
+            }
+        }.onFailure { android.util.Log.w("RawVideoQualifier", "Qualification scratch on $volumeId not purged", it) }
+        if (requests.any { it.publishReport }) mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(stillRecovery = report) } }
+    }
+
+    /**
+     * Queues a pass over the journal of interrupted takes unless one is already waiting; takes on a drive that is not
+     * mounted are kept for a later one. [startup] is the service start's pass. Any thread.
+     */
+    private fun queueRecordingRecovery(cause: String, startup: Boolean = false) {
+        if (!journalRecoveryPass.request(JournalRecoveryRequest(cause, startup))) {
+            android.util.Log.w("RecordingRecovery", "Recovery after $cause not queued; the drive's next mount or the service's next start retries it")
+        }
+    }
+
+    /** Recovery thread: one journal pass for every request drained, merged into the state's report. */
+    private fun runRecordingRecoveryPass(requests: List<JournalRecoveryRequest>) {
+        val startup = requests.any { it.startup }
+        val causes = requests.filterNot { it.startup }
+        val cause = requests.map { it.cause }.distinct().joinToString(", ")
+        // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
+        // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.
+        val report = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
+            android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable after $cause", failure)
+            if (!startup) return
+            com.librestatic.opencinecam.storage.RecordingRecoveryReport(unresolvedGroups = 1)
+        }.let { if (startup) it.copy(rawTakes = it.rawTakes + recoverRawTakes()) else it }
+        releaseDeferredGrants()
+        val recovered = report.incompleteGroups + report.rawTakes.published
+        if (!startup && report.discardedGroups + report.unresolvedGroups + recovered + report.rawTakes.deleted == 0) return
+        // Merged: a drive mounted meanwhile may have reported its own pass already. Only a pass a drive or a take asked
+        // for says what it recovered; the startup report is shown by the recovery card alone.
+        val announce = causes.isNotEmpty()
+        mainHandler.post {
+            if (!serviceDestroyed) cameraState.update { state ->
+                val idle = state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)
+                state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, report)).let {
+                    if (announce && idle && recovered > 0) it.copy(message = getString(R.string.recording_drive_takes_recovered, recovered),
+                        messageTransient = true) else it
                 }
             }
-        } catch (failure: java.util.concurrent.RejectedExecutionException) {
-            android.util.Log.w("RecordingRecovery", "Recovery after $cause not queued; the drive's next mount or the service's next start retries it", failure)
         }
     }
 
@@ -1124,6 +1201,8 @@ class CaptureService : Service() {
                     if (takeDestination?.destination is RecordingDestination.UsbFolder && free != null) it.copy(driveFreeBytes = free) else it },
             )
             publishRawVideoStats()
+            // PLAN-072: backstop for a drive lost while the take started (the flag, or a volume event this service missed).
+            if (rawTake == null) stopTakeLostAtStart()
             // ENODEV can reach a sidecar writer before any volume event: its thread stops and the take would go on without audio.
             if (takeDestination?.destination is RecordingDestination.UsbFolder && pendingStopReason == null &&
                 audioSidecarRecorder?.writerFailed == true) {
@@ -1264,26 +1343,8 @@ class CaptureService : Service() {
         }, onDevices = { devices ->
             mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(audioListeningOutputs = devices) } }
         })
-        // Not [storageExecutor]: still recovery asks drives, and one that stalls must not hold up the still saves queued there.
-        recoveryExecutor.execute {
-            val report = try { stillSaver.recoverInterrupted() } catch (failure: Exception) {
-                android.util.Log.e("StillRecovery", "Interrupted capture journal unavailable", failure)
-                com.librestatic.opencinecam.storage.StillRecoveryReport(unresolvedGroups = 1)
-            }
-            releaseDeferredGrants()
-            mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(stillRecovery = report) } }
-        }
-        recoveryExecutor.execute {
-            val recordingReport = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
-                android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable", failure)
-                com.librestatic.opencinecam.storage.RecordingRecoveryReport(unresolvedGroups = 1)
-            }.let { it.copy(rawTakes = it.rawTakes + recoverRawTakes()) }
-            releaseDeferredGrants()
-            // Merged: a drive mounted meanwhile may have reported its own pass already.
-            mainHandler.post {
-                if (!serviceDestroyed) cameraState.update { it.copy(recordingRecovery = mergeRecordingRecovery(it.recordingRecovery, recordingReport)) }
-            }
-        }
+        queueStillRecovery(StillRecoveryRequest(publishReport = true), "service start")
+        queueRecordingRecovery("service start", startup = true)
         recordingVolumeMonitor = try { RecordingVolumeMonitor(this) } catch (failure: Exception) {
             android.util.Log.e("RecordingDestination", "Removable volumes cannot be watched; takes go to the phone", failure)
             null
@@ -2264,7 +2325,11 @@ class CaptureService : Service() {
     private fun rawQualificationSensorSize(cameraId: String): Pair<Int, Int>? =
         raw10Sizes(cameraId).filter { (width, height) -> width > 0 && height > 0 && width % 4 == 0 }.maxByOrNull { (width, height) -> width.toLong() * height }
 
-    /** Main: what the qualification prompt and step show; a few small reads (cached characteristics, the store, StatFs). */
+    /**
+     * Main: what the qualification prompt and step show; a few small reads (cached characteristics, the store, StatFs).
+     * PLAN-072: a drive's free space is its last sample ([cachedDestinationFreeBytes]), never a provider call on main;
+     * with no sample yet there is no space estimate. The qualifier reads the drive afresh on its own thread.
+     */
     private fun rawQualificationInfo(): RawVideoQualificationInfo {
         val cameraId = rawQualificationCameraId()
             ?: return RawVideoQualificationInfo(null, ModeGateState.UNSUPPORTED, null)
@@ -2272,7 +2337,7 @@ class CaptureService : Service() {
         val gate = rawVideoGate(raw10Sizes(cameraId), usable, cameraId in rawVideoFailedCameras)
         val sensor = rawQualificationSensorSize(cameraId)
         val destination = nextTakeDestination
-        val free = destinationFreeBytes(destination.destination)
+        val free = cachedDestinationFreeBytes(destination.destination)
         val storage = rawQualificationStorageModel(cameraId, destination.destination)
         val space = if (sensor != null && free != null) {
             RawQualificationEstimates.forFreeSpace(
@@ -3400,6 +3465,8 @@ class CaptureService : Service() {
             pendingStopReason = null
             scheduleTimelapseAutoStop()
             mainHandler.post(recordingTicker)
+            // PLAN-072: a drive that left while this take was starting ends it now, through the drive stop path.
+            stopTakeLostAtStart()
         }
 
         override fun onRecordingStopped(success: Boolean) {
@@ -3502,8 +3569,13 @@ class CaptureService : Service() {
             val clipSoftwareEncoder = takeSoftwareEncoder
             // PLAN-072 Delivery 4: the continuation starts after both the reservation release and the end of [finishTake].
             val continuationGate = java.util.concurrent.atomic.AtomicInteger(2)
+            // Set when the reservation release left the preview audio monitor to the continuation: a continuation vetoed
+            // or expired before the gate opens must not leave the monitor off.
+            val monitorDeferred = java.util.concurrent.atomic.AtomicBoolean(false)
             fun continuationStep() {
-                if (continuationGate.decrementAndGet() == 0 && driveContinuation.isPending) mainHandler.post { startDriveContinuation() }
+                if (continuationGate.decrementAndGet() != 0) return
+                if (driveContinuation.isPending) mainHandler.post { startDriveContinuation() }
+                else if (monitorDeferred.get()) startPreviewAudioMonitorIfEligible()
             }
             // Publication reads the MP4 back, writes MediaStore and the sidecars. It runs on the storage
             // thread so the engine can bring the preview back at once; recordingFinalizing keeps the next
@@ -3762,7 +3834,9 @@ class CaptureService : Service() {
                     // Delivery 4) starts instead, once the reservation is released and this runnable has stopped the
                     // foreground service, so that stop can never land on the continuation's own.
                     if (transferReservation == null) continuationStep()
-                    releaseTransferCapture(transferReservation) { if (driveContinuation.isPending) continuationStep() else startPreviewAudioMonitorIfEligible() }
+                    releaseTransferCapture(transferReservation) {
+                        if (driveContinuation.isPending) { monitorDeferred.set(true); continuationStep() } else startPreviewAudioMonitorIfEligible()
+                    }
                 }
                 if (timecodeTracker.continuationStorageFailed) cameraState.value = cameraState.value.copy(
                     message = cameraState.value.message.orEmpty() + " · " + getString(R.string.timecode_continuity_failed))

@@ -23,6 +23,9 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,6 +70,8 @@ class RecordingSafRecoveryTest {
             buildList { while (c.moveToNext()) add((0..4).map { c.getString(it) }) }
         }
     }
+
+    private fun schemaOf(json: String) = Json.parseToJsonElement(json).jsonObject.getValue("schema").jsonPrimitive.content
 
     private fun takeDir(name: String = "A001") = drive.file("Rec/OpenCineCam/$name")
     private fun write(uri: Uri, bytes: ByteArray) =
@@ -193,6 +198,40 @@ class RecordingSafRecoveryTest {
         assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(File(takeDir(), "A001.audio.incomplete.json").readText()))
         assertTrue(entries().none { it[0] == id })
         assertEquals(RecordingRecoveryReport(), journal().recover())
+    }
+
+    @Test fun aSidecarTheDriveDoesNotLetBeReadIsNeverReplacedAndTheTakeStaysJournalled() {
+        val sidecar = """{"schema":"opencinecam.av-timing.v1","frames":[1,2,3]}"""
+        val id = interrupted("A001.mp4" to ByteArray(100) { 2 }, "A001.timing.json" to sidecar.toByteArray())
+        drive.unopenable = setOf("A001.timing.json")
+
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
+
+        assertEquals(sidecar, File(takeDir(), "A001.timing.json").readText())
+        assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+        assertEquals(setOf("A001.mp4", "A001.timing.json"), takeDir().list()!!.toSet() - SafRecordingRows.MARKER)
+        assertEquals(listOf(id), entries().map { it[0] })
+
+        // Once the drive answers again the take is recovered with its own sidecar.
+        drive.unopenable = emptySet()
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        val timing = File(takeDir(), "A001.timing.json").readText()
+        assertEquals("opencinecam.av-timing.v1", schemaOf(timing))
+        assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(timing))
+        assertTrue(entries().none { it[0] == id })
+    }
+
+    @Test fun anOversizeSidecarIsStillReplacedByTheMinimalOne() {
+        val oversize = "{\"pad\":\"" + "x".repeat(RECOVERED_SIDECAR_LIMIT) + "\"}"
+        val id = interrupted("A001.mp4" to ByteArray(100) { 2 }, "A001.timing.json" to oversize.toByteArray())
+
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+
+        val timing = File(takeDir(), "A001.timing.json").readText()
+        assertTrue(timing.length < RECOVERED_SIDECAR_LIMIT)
+        assertEquals("opencinecam.recording.v1", schemaOf(timing))
+        assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(timing))
+        assertTrue(entries().none { it[0] == id })
     }
 
     @Test fun interruptedDriveTakeWithoutBytesLeavesNoFolder() {
@@ -603,6 +642,40 @@ class RecordingSafRecoveryTest {
 
             resume.countDown()
             assertEquals(1, pass.get(30, TimeUnit.SECONDS).incompleteGroups)
+            assertEquals(listOf(next.id), entries().map { it[0] })
+            next.relinquish()
+        } finally {
+            drive.onQuery = null
+            resume.countDown()
+            threads.shutdownNow()
+        }
+    }
+
+    @Test fun aDriveThatStallsDuringALiveTakesWriteHoldsUpNoTakeStart() {
+        val group = journal().start(destination)
+        val video = group.member(RecordingMemberKind.VIDEO)
+        val stalled = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        // The take's first question to the drive (its folder) hangs until the test lets it go.
+        drive.onQuery = { drive.onQuery = null; stalled.countDown(); check(resume.await(30, TimeUnit.SECONDS)) }
+        val threads = Executors.newFixedThreadPool(2)
+        try {
+            val insert = threads.submit<Uri> { video.insert("A001.mp4", "video/mp4", metadata = false) }
+            assertTrue(stalled.await(30, TimeUnit.SECONDS))
+            // A take starting meanwhile (on the main thread in the service) takes the journal lock: the stalled take does not hold it.
+            val next = threads.submit<RecordingRecoveryGroup> { journal().start(destination) }.get(10, TimeUnit.SECONDS)
+            // A recovery pass leaves both live takes alone.
+            assertEquals(RecordingRecoveryReport(), threads.submit<RecordingRecoveryReport> { journal().recover() }.get(10, TimeUnit.SECONDS))
+            assertFalse(insert.isDone)
+            assertEquals(setOf(group.id, next.id), entries().map { it[0] }.toSet())
+
+            resume.countDown()
+            insert.get(30, TimeUnit.SECONDS)
+            assertTrue(File(takeDir(), "A001.mp4").isFile)
+            assertEquals(DocumentsContract.buildDocumentUriUsingTree(tree, "FFF1-7571:Rec/OpenCineCam/A001").toString(),
+                entries().single { it[0] == group.id }[4])
+            video.abort()
+            assertFalse(takeDir().exists())
             assertEquals(listOf(next.id), entries().map { it[0] })
             next.relinquish()
         } finally {

@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.withContext
 
 /** One export as the gallery asks for it; [treeUri] null means `Documents/OpenCineCam/CinemaDNG/`. */
@@ -168,11 +169,24 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     /** Serialises an admission's begin, lease and enqueue with [cancel]. */
     private val admission = Any()
 
-    override fun cancel() = synchronized(admission) { cancelAdmitted() }
+    /**
+     * Where [cancel] ends the export: it waits for an admission under way and may end the lease, which takes the
+     * folder-grant lock, commits and reads the recovery journals and the outbox, so never on the caller's (main) thread.
+     */
+    @Volatile internal var background: (Runnable) -> Unit = { Dispatchers.IO.asExecutor().execute(it) }
+
+    /**
+     * Marks the export cancelling at once, for the UI; the rest runs on [background], serialised with [start] by
+     * [admission], so a cancellation that lands during an admission still cancels the work that admission enqueues.
+     */
+    override fun cancel() {
+        if (!store.cancelling()) return
+        background(Runnable { synchronized(admission) { cancelAdmitted() } })
+    }
 
     private fun cancelAdmitted() {
-        val running = store.states.value as? CinemaDngExportState.Running ?: return
-        store.cancelling()
+        // Only the export marked above: one that ended meanwhile, or a new one that began after it, is left alone.
+        val running = (store.states.value as? CinemaDngExportState.Running)?.takeIf { it.cancelling } ?: return
         appContext?.let { runCatching { WorkManager.getInstance(it).cancelUniqueWork(UNIQUE_WORK) } }
         // Work cancelled before it started never runs, so nothing else would end the state.
         if (!workerRunning) {

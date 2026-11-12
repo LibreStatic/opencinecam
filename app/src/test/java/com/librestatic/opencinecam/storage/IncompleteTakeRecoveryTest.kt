@@ -68,6 +68,17 @@ class IncompleteTakeRecoveryTest {
         assertEquals(listOf("sidecar:s", "publish:s", "publish:v"), rows.events)
     }
 
+    @Test fun aSidecarReadThatFailsStopsTheTakeBeforeAnythingIsWritten() {
+        val fake = Rows()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        val failure = java.io.IOException("the drive stopped answering")
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { throw failure })
+        }
+        assertTrue(thrown === failure)
+        assertTrue(fake.events.isEmpty())
+    }
+
     @Test fun zeroByteMediaAndItsSidecarAreDeletedAndNothingIsPublished() {
         val (published, rows, inserted) = recover(listOf(
             row("DCIM", "v", "take.mp4", "video/mp4", 0), row("Download", "s", "take.timing.json", "application/json", 12)))

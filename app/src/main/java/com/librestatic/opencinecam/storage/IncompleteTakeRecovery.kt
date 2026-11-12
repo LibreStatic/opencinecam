@@ -29,7 +29,8 @@ internal const val RECOVERED_SIDECAR_LIMIT = 1 shl 20
  * (IS_PENDING=0) with a sidecar that says `takeStatus: incomplete`, reason `process-death`. The sidecar
  * is the take's pending one when it exists, else a new `<stem>.incomplete.json`. Motion logs travel with
  * their video. Returns how many rows were published; failures propagate so the journal entry survives
- * for another attempt (publishing is idempotent).
+ * for another attempt (publishing is idempotent). [readText] gives null only for a sidecar recovery ignores (too large,
+ * or unreadable on the phone); a read that fails on a drive throws, so the sidecar is never rewritten as a minimal one.
  */
 internal fun <U> recoverIncompleteTake(
     bundleId: String,
@@ -54,6 +55,9 @@ internal fun <U> recoverIncompleteTake(
         val clipSidecar = if (video) json.firstOrNull { it.handle !in consumed && it.name == stem + CLIP_SIDECAR_SUFFIX } else null
         clipSidecar?.let { consumed += it.handle }
         val keep = decideClipRecovery(muxerFinalized = false, bytesWritten = bytes) != ClipRecoveryDecision.DELETE
+        // Read before anything is written: a read that fails throws here, so the take's sidecar is never replaced (or,
+        // through finalizeClip's own failure path, deleted) on a read that did not answer, and the entry stays for a retry.
+        val existingText = if (keep) existing?.handle?.let(readText) else null
         if (keep && clipSidecar != null && clipSidecar.bytes != 0L) markRecoveredClipSidecar(bundleId, clipSidecar, clipRows, readText)
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
         val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
@@ -61,7 +65,7 @@ internal fun <U> recoverIncompleteTake(
         val publishable = attachments.filter { it.bytes != 0L }.map { it.handle }
         val result = finalizeClip(
             clipRows, clip.handle, sidecar, muxerFinalized = false, bytesWritten = bytes,
-            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existing?.handle?.let(readText)).toByteArray() },
+            sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText).toByteArray() },
             correlationId = bundleId, attachments = if (keep) publishable else attachments.map { it.handle },
         )
         when (result) {

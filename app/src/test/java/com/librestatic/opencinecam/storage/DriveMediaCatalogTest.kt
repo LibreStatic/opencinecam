@@ -110,6 +110,35 @@ class DriveMediaCatalogTest {
             pages(rows, drive, blocked = setOf("drive:$treeId/OpenCineCam/Night")).flatten())
     }
 
+    @Test fun aFilterMatchingFewDriveTakesReadsTheDriveInBoundedPages() {
+        // 250 drive takes, every 120th a photo, interleaved with phone videos and photos; the PHOTO filter rejects
+        // almost every drive take, so without a load budget the first page would read all of them.
+        val rows = (1L..90L).map { phone(it, 10_000 - it * 100, if (it % 30 == 0L) LocalMediaKind.PHOTO else LocalMediaKind.VIDEO) }
+        val entries = (0 until 250).map { driveEntry("T%03d".format(it), (10_000 - it * 37L) * 1000 + 500,
+            if (it % 120 == 0) LocalMediaKind.PHOTO else LocalMediaKind.VIDEO) }
+        var loads = 0
+        val drive = entries.map { entry -> DriveCatalogEntry(entry.position) { loads++; entry.load() } }
+        val settings = GallerySettings(kind = GalleryMediaKind.PHOTO)
+        val matches = mutableListOf<String>()
+        var cursor: LocalMediaCursor? = null
+        var pageCount = 0
+        do {
+            loads = 0
+            val page = catalogPage(settings, "", cursor, 3, mediaStore(rows, true), { drive }, { emptySet() }) { _, _, _ -> error("No namespaces") }
+            assertTrue("A page loaded $loads drive takes", loads <= CATALOG_DRIVE_LOAD_BUDGET)
+            matches += page.takes.map { it.id }
+            cursor = page.next
+            check(++pageCount < 100) { "The cursor never ended" }
+        } while (cursor != null)
+        assertTrue("The budget never stopped a page", pageCount > 2)
+        // The unfiltered merge, which every take matches, filtered afterwards: the same takes in the same order.
+        val photos = rows.filter { it.kind == LocalMediaKind.PHOTO }.map { "legacy:${it.artifact.uri}" } +
+            entries.filterIndexed { index, _ -> index % 120 == 0 }.map { "drive:${it.position.folderId}" }
+        val expected = pages(rows, drive, limit = 60).flatten().filter { it in photos }
+        assertEquals(6, expected.size)
+        assertEquals(expected, matches)
+    }
+
     @Test fun aDriveExhaustedEarlierIsNotReadAgain() {
         val rows = (1L..4L).map { phone(it, 100 - it) }
         val drive = listOf(driveEntry("New", 500_000))

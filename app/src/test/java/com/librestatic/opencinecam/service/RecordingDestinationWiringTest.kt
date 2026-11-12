@@ -81,6 +81,63 @@ class RecordingDestinationWiringTest {
         assertFalse(driveLeavingStopsTake(null, "FFF1-7571"))
     }
 
+    @Test fun aTakeWhoseDriveLeftWhileStartingIsStoppedOnceItRecords() {
+        // The Leaving event arrived during CAPTURING: the flag stops the take even if the drive is back in the set.
+        assertTrue(takeDriveLostAtStart(lostAtStart = true, drive, mounted = setOf("FFF1-7571"), monitored = true))
+        // A missed event: the take's drive is no longer mounted (ids compared without case).
+        assertTrue(takeDriveLostAtStart(lostAtStart = false, drive, mounted = emptySet(), monitored = true))
+        assertFalse(takeDriveLostAtStart(lostAtStart = false, drive, mounted = setOf("fff1-7571"), monitored = true))
+        // No volume monitor: nothing reads as unmounted.
+        assertFalse(takeDriveLostAtStart(lostAtStart = false, drive, mounted = emptySet(), monitored = false))
+        // A phone take, or no take, never stops for a drive.
+        assertFalse(takeDriveLostAtStart(lostAtStart = true, phone, mounted = emptySet(), monitored = true))
+        assertFalse(takeDriveLostAtStart(lostAtStart = true, null, mounted = emptySet(), monitored = true))
+    }
+
+    @Test fun recoveryRequestsCoalesceIntoOnePendingPassWithoutLosingAnItem() {
+        val queued = ArrayDeque<Runnable>()
+        val executor = java.util.concurrent.Executor { queued.addLast(it) }
+        val passes = mutableListOf<List<String>>()
+        val pass = CoalescedPass<String>(executor) { passes += it }
+        assertTrue(pass.request("start"))
+        assertTrue(pass.request("A mounted"))
+        assertTrue(pass.request("B mounted"))
+        assertEquals("a burst queues one pass", 1, queued.size)
+        queued.removeFirst().run()
+        assertEquals(listOf(listOf("start", "A mounted", "B mounted")), passes)
+        // With nothing waiting, the next request queues a pass again.
+        pass.request("take relinquished")
+        assertEquals(1, queued.size)
+        queued.removeFirst().run()
+        assertEquals(listOf("take relinquished"), passes.last())
+        // A pass that starts clears its mark before draining, so a request racing it queues a follow-up.
+        lateinit var follow: CoalescedPass<String>
+        follow = CoalescedPass(java.util.concurrent.Executor { queued.addLast(it) }) { items ->
+            passes += items
+            if (items == listOf("first")) follow.request("during")
+        }
+        follow.request("first")
+        queued.removeFirst().run()
+        assertEquals("the request during the run queued a follow-up", 1, queued.size)
+        queued.removeFirst().run()
+        assertEquals(listOf("during"), passes.last())
+    }
+
+    @Test fun aRefusedRecoveryPassKeepsItsItemsForTheNextRequest() {
+        var refuse = true
+        val queued = ArrayDeque<Runnable>()
+        val executor = java.util.concurrent.Executor {
+            if (refuse) throw java.util.concurrent.RejectedExecutionException("full") else queued.addLast(it)
+        }
+        val passes = mutableListOf<List<String>>()
+        val pass = CoalescedPass<String>(executor) { passes += it }
+        assertFalse(pass.request("A mounted"))
+        refuse = false
+        assertTrue(pass.request("B mounted"))
+        queued.removeFirst().run()
+        assertEquals(listOf(listOf("A mounted", "B mounted")), passes)
+    }
+
     @Test fun aLostDriveIsItsOwnStopReason() {
         assertEquals(TakeStopReason.DRIVE_LOST, takeStopReason(driveLostFailure(writeFailed = false)))
         assertEquals(TakeStopReason.DRIVE_LOST, takeStopReason(driveLostFailure(writeFailed = true)))

@@ -45,9 +45,14 @@ internal fun driveThumbnail(context: Context, artifact: LocalMediaArtifact, size
 
 private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int): Bitmap? {
     val retriever = MediaMetadataRetriever()
+    val uri = artifact.uri.toUri()
     return try {
-        retriever.setDataSource(context, artifact.uri.toUri())
-        retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size, size)
+        // Opened here and held for the drive's volume monitor, not inside the retriever: a frame decode can outlast
+        // the drive, and only a registered descriptor is closed on a pull (ADR-0037).
+        context.contentResolver.openFileDescriptor(uri, "r")?.useOnDrive(uri) { descriptor ->
+            retriever.setDataSource(descriptor.fileDescriptor)
+            retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size, size)
+        }
     } finally {
         retriever.release()
     }

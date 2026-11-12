@@ -365,6 +365,68 @@ class StillSafRecoveryTest {
         }
     }
 
+    @Test fun aDriveThatStallsWhileAStillIsWrittenHoldsUpNoOtherStillNorRecovery() {
+        assertEquals(StillRecoveryReport(), journal().recover())
+        val stalled = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        val threads = Executors.newFixedThreadPool(3)
+        try {
+            val slow = threads.submit<String> {
+                journal().publish(destination) { _, rows ->
+                    val store = requireNotNull(rows)
+                    val uri = store.insert("S.jpg", "image/jpeg", false)
+                    // The drive's next answer hangs until the test lets it go.
+                    drive.onQuery = { drive.onQuery = null; stalled.countDown(); check(resume.await(30, TimeUnit.SECONDS)) }
+                    check(store.publish(uri) == 1)
+                    store.writeClosed(uri, byteArrayOf(5))
+                    "slow"
+                }
+            }
+            assertTrue(stalled.await(30, TimeUnit.SECONDS))
+            val slowId = entries().single()[0]
+            // Recovery skips the group being written, and returns.
+            assertEquals(StillRecoveryReport(), threads.submit<StillRecoveryReport> { journal().recover() }.get(10, TimeUnit.SECONDS))
+            // Another still on the drive is saved meanwhile.
+            assertEquals("saved", threads.submit<String> {
+                journal().publish(destination) { _, rows ->
+                    val store = requireNotNull(rows)
+                    store.writeClosed(store.insert("T.jpg", "image/jpeg", false), byteArrayOf(7))
+                    "saved"
+                }
+            }.get(10, TimeUnit.SECONDS))
+            // A phone still gets the journal lock too (MediaStore itself is missing here, so it fails rather than waits).
+            val phone = threads.submit<String> { journal().publish { _, _, _ -> "phone" } }
+            val phoneOutcome = runCatching { phone.get(10, TimeUnit.SECONDS) }.exceptionOrNull()
+            assertFalse(phoneOutcome is java.util.concurrent.TimeoutException)
+            assertFalse(slow.isDone)
+            assertEquals(listOf(slowId), entries().map { it[0] })
+
+            resume.countDown()
+            assertEquals("slow", slow.get(30, TimeUnit.SECONDS))
+            assertTrue(entries().isEmpty())
+            assertArrayEquals(byteArrayOf(5), File(stills, "S/S.jpg").readBytes())
+            assertFalse(File(stills, "S/${SafRecordingRows.MARKER}").exists())
+            assertArrayEquals(byteArrayOf(7), File(stills, "T/T.jpg").readBytes())
+        } finally {
+            drive.onQuery = null
+            resume.countDown()
+            threads.shutdownNow()
+        }
+    }
+
+    @Test fun aGrantDeferredWhileADriveStillWasWrittenIsReleasedOnceItCommits() {
+        val prefs = context.getSharedPreferences(RecordingDestinationStore.PREFS, Context.MODE_PRIVATE)
+        journal().publish(destination) { _, rows ->
+            val store = requireNotNull(rows)
+            store.writeClosed(store.insert("G.jpg", "image/jpeg", false), byteArrayOf(7))
+            // A switch back to the phone meanwhile: the grant stays while the group is journalled, its release deferred.
+            prefs.edit().putStringSet(RecordingDestinationStore.KEY_DEFERRED_RELEASES, setOf(tree.toString())).commit()
+        }
+        assertTrue(entries().isEmpty())
+        assertTrue(context.contentResolver.persistedUriPermissions.none { it.uri == tree })
+        assertTrue(prefs.getStringSet(RecordingDestinationStore.KEY_DEFERRED_RELEASES, null).isNullOrEmpty())
+    }
+
     @Test fun groupsDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {
         assertEquals(StillRecoveryReport(), journal().recover())
         val lostVolume = "1234-ABCD"
