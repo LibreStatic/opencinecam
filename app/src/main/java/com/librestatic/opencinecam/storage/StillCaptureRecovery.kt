@@ -33,7 +33,9 @@ data class StillRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroup
  *
  * Phone groups and drive groups are bounded apart ([MAX_GROUPS], [MAX_DRIVE_GROUPS]), so groups deferred on drives that
  * never return cannot refuse a phone still. A drive group that finds its bound full forgets the oldest deferred drive
- * entry (the journal row only; what is on that drive stays).
+ * entry, one without a folder first (nothing of it reached a drive). Only the journal row goes: a folder left on that
+ * drive keeps its marker, so the gallery leaves it out, as it would until recovery discarded it (an uncommitted group is
+ * never published).
  */
 internal class StillCaptureRecovery(context: Context,
     private val checkpoint: (String, String) -> Unit = { _, _ -> },
@@ -168,7 +170,7 @@ internal class StillCaptureRecovery(context: Context,
      */
     private fun forgetOldestDeferred(db: SQLiteDatabase) {
         val held = heldReadWriteTrees(resolver)
-        val oldest = db.rawQuery("SELECT id, tree, volume, folder FROM captures WHERE tree IS NOT NULL AND committed = 0 ORDER BY rowid", null).use { c ->
+        val oldest = db.rawQuery("SELECT id, tree, volume, folder FROM captures WHERE tree IS NOT NULL AND committed = 0 ORDER BY folder IS NOT NULL, rowid", null).use { c ->
             generateSequence { if (c.moveToNext()) listOf(c.getString(0), c.getString(1), c.getString(2), c.getString(3)) else null }.firstOrNull { (_, tree, volume, folder) ->
                 volume == null || resolveDriveLocation(Uri.parse(tree), volume, folder?.let(Uri::parse), held, mounted) == null
             }

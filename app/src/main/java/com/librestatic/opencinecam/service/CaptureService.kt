@@ -1040,6 +1040,9 @@ class CaptureService : Service() {
         if (pending && !serviceDestroyed) queueRecordingRecovery("a drive take was left pending")
     }
 
+    /** The take recording to a drive ended, and an interrupted RAW take's repair had waited for it: queue its pass now. */
+    private val rawRepairDue: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a RAW repair waited for a take on a drive") }
+
     /** Queues a pass over the journal of interrupted takes; takes on a drive that is not mounted are kept for a later one. */
     private fun queueRecordingRecovery(cause: String) {
         try {
@@ -1232,6 +1235,7 @@ class CaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onRawRepairDue = rawRepairDue
         audioInputMonitor = AudioInputMonitor(this, ::onAudioInputsChanged).also { it.register() }
         mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
@@ -6081,6 +6085,7 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.run { if (onRawRepairDue === rawRepairDue) onRawRepairDue = null }
         // A drive take's continuation never outlives the service (PLAN-072 Delivery 4).
         driveContinuation.veto()
         recordingVolumeMonitor?.close()

@@ -559,7 +559,7 @@ class RecordingSafRecoveryTest {
         val scanning = CountDownLatch(1)
         val resume = CountDownLatch(1)
         // The scan of a take of tens of GB on USB, held until the test lets it finish.
-        val repairing = journal().apply { repairRaw = { scanning.countDown(); check(resume.await(30, TimeUnit.SECONDS)); RawTakeFileDecision.PUBLISH } }
+        val repairing = journal().apply { repairRaw = { _, _ -> scanning.countDown(); check(resume.await(30, TimeUnit.SECONDS)); RawTakeFileDecision.PUBLISH } }
         val threads = Executors.newFixedThreadPool(2)
         try {
             val pass = threads.submit<RecordingRecoveryReport> { repairing.recover() }
@@ -586,12 +586,75 @@ class RecordingSafRecoveryTest {
 
     @Test fun failedDriveRawRepairStaysJournalledForTheNextPass() {
         val id = interrupted("A001.ocraw" to killedOcraw(frames = 1))
-        val failing = journal().apply { repairRaw = { throw java.io.IOException("drive left mid-scan") } }
+        val failing = journal().apply { repairRaw = { _, _ -> throw java.io.IOException("drive left mid-scan") } }
         assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), failing.recover())
         assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
         assertEquals("0", entries().single { it[0] == id }[1])
         assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(published = 1)), journal().recover())
         assertTrue(entries().isEmpty())
+    }
+
+    @Test fun rawRepairWaitsWhileATakeRecordsToADriveAndIsDueWhenItEnds() {
+        val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
+        val due = java.util.concurrent.atomic.AtomicInteger()
+        RecordingCaptureRecovery.onRawRepairDue = { due.incrementAndGet() }
+        try {
+            val take = journal().start(destination)
+            // The scan would read the drive the take writes to: the entry waits, untouched.
+            val waiting = journal().apply { repairRaw = { _, _ -> error("scanned beside a live drive take") } }
+            assertEquals(RecordingRecoveryReport(deferredGroups = 1), waiting.recover())
+            assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+            assertEquals(setOf(id, take.id), entries().map { it[0] }.toSet())
+            assertEquals(0, due.get())
+
+            take.relinquish()
+            assertEquals(1, due.get())
+            assertEquals(1, journal().recover().rawTakes.published)
+        } finally {
+            RecordingCaptureRecovery.onRawRepairDue = null
+        }
+    }
+
+    @Test fun aTakeStartingOnADriveCancelsARawRepairInFlight() {
+        val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
+        val scanning = CountDownLatch(1)
+        val closed = CountDownLatch(1)
+        val due = java.util.concurrent.atomic.AtomicInteger()
+        RecordingCaptureRecovery.onRawRepairDue = { due.incrementAndGet() }
+        // A scan reading through a descriptor the pass holds: it ends when that is closed under it.
+        val repairing = journal().apply {
+            repairRaw = { _, scan ->
+                scan.hold(AutoCloseable { closed.countDown() })
+                scanning.countDown()
+                check(closed.await(30, TimeUnit.SECONDS))
+                throw java.io.IOException("descriptor closed mid-scan")
+            }
+        }
+        val threads = Executors.newSingleThreadExecutor()
+        try {
+            val pass = threads.submit<RecordingRecoveryReport> { repairing.recover() }
+            assertTrue(scanning.await(30, TimeUnit.SECONDS))
+            val take = journal().start(destination)
+            // Cancelled, not failed: the entry is deferred with its bytes and marker in place.
+            assertEquals(RecordingRecoveryReport(deferredGroups = 1), pass.get(30, TimeUnit.SECONDS))
+            assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
+            assertEquals(setOf(id, take.id), entries().map { it[0] }.toSet())
+
+            take.relinquish()
+            assertEquals(1, due.get())
+            assertEquals(1, journal().recover().rawTakes.published)
+        } finally {
+            RecordingCaptureRecovery.onRawRepairDue = null
+            threads.shutdownNow()
+        }
+    }
+
+    @Test fun aRawRepairScanCancelledBeforeItOpensClosesWhatItIsGiven() {
+        val scan = RawRepairScan().apply { cancel() }
+        var closes = 0
+        assertThrows(java.io.IOException::class.java) { scan.hold(AutoCloseable { closes++ }) }
+        assertEquals(1, closes)
+        assertTrue(scan.cancelled)
     }
 
     @Test fun takesDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {
@@ -613,6 +676,15 @@ class RecordingSafRecoveryTest {
         val take = journal().start(destination)
         assertEquals(deferred.drop(1).toSet() + phone + take.id, entries().map { it[0] }.toSet())
         take.relinquish()
+
+        // An entry without a folder goes before an older one with a folder: nothing of it reached a drive.
+        val lostFolder = DocumentsContract.buildDocumentUriUsingTree(lost, "$lostVolume:Rec/OpenCineCam/A001")
+        val foldered = deferred.drop(1).take(3)
+        database { db -> foldered.forEach { db.execSQL("UPDATE captures SET folder = ? WHERE id = ?", arrayOf(lostFolder.toString(), it)) } }
+        val second = journal().start(destination)
+        assertTrue(entries().map { it[0] }.containsAll(foldered))
+        assertFalse(deferred[4] in entries().map { it[0] })
+        second.relinquish()
 
         // An entry a pass could still resolve is never forgotten: on a drive that reads as mounted but does not answer,
         // every entry stays unresolved, and with the bound full the next drive take is refused.
