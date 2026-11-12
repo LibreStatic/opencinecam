@@ -43,7 +43,8 @@ internal data class CinemaDngExportRequest(val takeUri: String, val takeName: St
 internal object CinemaDngExportRuntime : CinemaDngExportControl {
     val store = CinemaDngExportStates()
     override val states get() = store.states
-    @Volatile private var appContext: Context? = null
+    /** Set by [start] and by the worker itself: WorkManager restarts an export after process death, where [start] never ran. */
+    @Volatile internal var appContext: Context? = null
     @Volatile internal var workerRunning = false
 
     /**
@@ -100,6 +101,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
         val takeName = inputData.getString(CinemaDngExportRuntime.KEY_TAKE_NAME) ?: return Result.failure()
         val tree = inputData.getString(CinemaDngExportRuntime.KEY_TREE_URI)
         val compress = inputData.getBoolean(CinemaDngExportRuntime.KEY_COMPRESS, false)
+        runtime.appContext = applicationContext
         runtime.workerRunning = true
         try {
             if (isStopped) return finish(takeUri, takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
@@ -107,6 +109,10 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             try {
                 setForeground(foregroundInfo(takeName, null))
             } catch (failure: CancellationException) {
+                // Cancelled before anything was written: cancel() left the state to this worker, so it ends here.
+                withContext(NonCancellable) {
+                    finish(takeUri, takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
+                }
                 throw failure
             } catch (failure: Exception) {
                 Log.w(LOG_TAG, "The export continues without a foreground service", failure)
