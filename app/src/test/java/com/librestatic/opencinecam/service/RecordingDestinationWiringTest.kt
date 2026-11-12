@@ -274,6 +274,24 @@ class RecordingDestinationWiringTest {
         assertEquals(900L, cache.read(other))
     }
 
+    @Test fun aStalledDriveFreeSpaceSampleDoesNotHoldBackAnotherDrives() {
+        val queued = ArrayDeque<Runnable>()
+        val other = RecordingDestination.UsbFolder(Uri.parse("content://$EXTERNAL_STORAGE_AUTHORITY/tree/0A1B-2C3D%3ARAW"), "0A1B-2C3D")
+        val cache = DriveFreeSpaceCache({ queued.addLast(it) }) { if (it == drive) 500L else 900L }
+        assertNull(cache.read(drive))
+        // The first drive's sample never returns; the drive chosen after it is sampled all the same.
+        val stalled = queued.removeFirst()
+        assertNull(cache.read(other))
+        queued.removeFirst().run()
+        assertEquals(900L, cache.read(other))
+        queued.removeFirst().run()
+        // When the stalled sample does return, it changes nothing and a sample in flight stays the only one.
+        assertEquals(900L, cache.read(other))
+        stalled.run()
+        assertEquals(900L, cache.read(other))
+        assertEquals(1, queued.size)
+    }
+
     @Test fun aRefusedDriveFreeSpaceSampleLetsTheNextReadTryAgain() {
         var accept = false
         val queued = ArrayDeque<Runnable>()

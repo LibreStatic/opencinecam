@@ -686,9 +686,11 @@ class CaptureService : Service() {
     /**
      * PLAN-072: the drive's free space for the main thread (the REC ticker, the take start), sampled on its own thread so
      * a provider call never runs on main, least of all while a failing drive's loss must be handled there. Not
-     * [storageExecutor], whose bounded queue refuses work when full.
+     * [storageExecutor], whose bounded queue refuses work when full. Two threads at most: a sample stalled on a failing
+     * drive must not hold back the one of the drive chosen after it, and a third is refused until one returns.
      */
-    private val driveFreeSpaceExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-drive-free") }
+    private val driveFreeSpaceExecutor = java.util.concurrent.ThreadPoolExecutor(0, 2, 30L, java.util.concurrent.TimeUnit.SECONDS,
+        java.util.concurrent.SynchronousQueue()) { task -> Thread(task, "occ-drive-free") }
     private val driveFreeSpace = DriveFreeSpaceCache(driveFreeSpaceExecutor) { driveFreeBytes(contentResolver, it.treeUri) }
 
     /** PLAN-072: removable volumes, for the destination and its disconnects; null when StorageManager is unavailable. */

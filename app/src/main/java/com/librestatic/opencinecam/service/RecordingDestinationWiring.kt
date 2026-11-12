@@ -41,26 +41,27 @@ internal class DriveFreeSpaceCache(
     private var bytes: Long? = null
     /** Bumped whenever the sample is forgotten or replaced, so an older sample still running is dropped. */
     private var generation = 0L
-    private var sampling = false
+    /** The [generation] the sample in flight was started for; a sample of an earlier one never holds back a new one. */
+    private var sampling: Long? = null
 
-    /** The last sample of [drive], null when there is none yet; starts a new sample unless one is running. */
+    /** The last sample of [drive], null when there is none yet; starts a new sample unless one is running for it. */
     fun read(drive: RecordingDestination.UsbFolder): Long? {
         val (value, started) = synchronized(this) {
             if (drive != this.drive) forget(drive)
-            if (sampling) return bytes
-            sampling = true
+            if (sampling == generation) return bytes
+            sampling = generation
             bytes to generation
         }
         try {
             executor.execute {
                 val sampled = runCatching { sample(drive) }.getOrNull()
                 synchronized(this) {
-                    sampling = false
+                    if (sampling == started) sampling = null
                     if (generation == started) bytes = sampled
                 }
             }
         } catch (_: java.util.concurrent.RejectedExecutionException) {
-            synchronized(this) { sampling = false }
+            synchronized(this) { if (sampling == started) sampling = null }
         }
         return value
     }

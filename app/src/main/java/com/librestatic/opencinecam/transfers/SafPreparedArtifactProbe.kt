@@ -58,10 +58,11 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         val before = safPreparedObservation(resolver, artifact, pending)
         val uri = artifact.uri.toUri()
         val descriptor = try {
-            resolver.openFileDescriptor(uri, "r")
+            // Null is a provider that died: missing only when the drive still answers, like a refused open.
+            resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
         } catch (missing: FileNotFoundException) {
             throw absentOr(resolver, uri, missing)
-        } ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
+        }
         // Held like useOnDrive, but a failure met on a descriptor DriveDescriptors released is the drive leaving.
         val closer = CloseOnce(descriptor)
         val handle = DriveDescriptors.registerDocument(uri, closer)

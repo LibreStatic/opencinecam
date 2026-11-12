@@ -41,7 +41,7 @@ internal fun driveFreeBytes(resolver: ContentResolver, tree: Uri): Long? {
             val base = docs.directory(docs.root, SafRecordingRows.BASE_FOLDER)
             (docs.child(base, DRIVE_VOLUME_PROBE)?.uri ?: docs.newFile(base, DRIVE_VOLUME_PROBE).uri).also { driveVolumeProbes[key] = it }
         }
-        requireNotNull(resolver.openFileDescriptor(probe, "r")).use { descriptor ->
+        requireNotNull(resolver.openFileDescriptor(probe, "r")).useOnDrive(probe) { descriptor ->
             val stat = android.system.Os.fstatvfs(descriptor.fileDescriptor)
             stat.f_bavail * stat.f_frsize
         }

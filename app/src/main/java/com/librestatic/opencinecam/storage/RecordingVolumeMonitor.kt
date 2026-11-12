@@ -90,6 +90,8 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
 
     init {
         unregister = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) registerCallback() else registerReceiver()
+        // The listener reports changes only: a volume the seed read missed, or one that changed before it registered, is read here.
+        rescan()
     }
 
     override fun close() = unregister()

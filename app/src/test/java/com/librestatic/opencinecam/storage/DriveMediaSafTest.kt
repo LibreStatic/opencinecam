@@ -201,6 +201,20 @@ class DriveMediaSafTest {
         assertEquals(2, loads)
     }
 
+    @Test fun aListingStartedBeforeAnInvalidationDoesNotReplaceALaterOne() {
+        val cache = DriveCatalogCache()
+        fun folder(id: String) = DriveFolder(Uri.parse("content://drive/$id"), id, recording = true, position = DrivePosition(1L, id))
+        val stale = listOf(folder("A"))
+        val fresh = listOf(folder("A"), folder("B"))
+        // The drive changes and is listed again while the first listing is still running.
+        assertEquals(stale, cache.folders("drive", refresh = false) {
+            cache.invalidate()
+            assertEquals(fresh, cache.folders("drive", refresh = false) { fresh })
+            stale
+        })
+        assertEquals(fresh, cache.folders("drive", refresh = false) { error("The later listing is kept") })
+    }
+
     @Test fun theListingIsReusedUntilRefreshedOrInvalidated() {
         val cache = DriveCatalogCache()
         recording("A001", 3_000_000)

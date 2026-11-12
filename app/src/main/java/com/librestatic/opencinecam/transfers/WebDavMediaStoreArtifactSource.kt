@@ -54,8 +54,9 @@ internal class WebDavMediaStoreArtifactSource(
 
         override fun open(): InputStream {
             val before = snapshot()
-            val descriptor = reading { resolver.openFileDescriptor(spec.sourceUri.toUri(), "r") }
-                ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
+            val descriptor = reading {
+                resolver.openFileDescriptor(spec.sourceUri.toUri(), "r") ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
+            }
             val closer = CloseOnce(descriptor)
             val driveHandle = DriveDescriptors.registerDocument(spec.sourceUri.toUri(), closer)
             try {
@@ -68,14 +69,16 @@ internal class WebDavMediaStoreArtifactSource(
                     private var closed = false
                     /** The drive left and [DriveDescriptors] closed the descriptor: nothing more can be read or checked. */
                     private fun requireHeld() { if (closer.closed) throw WebDavSourceDriveAbsent() }
-                    override fun read(): Int { check(!closed); requireHeld(); return reading { input.read() } }
-                    override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
+                    /** A read that fails on a descriptor [DriveDescriptors] closed meanwhile is the drive leaving too. */
+                    private fun <T> held(read: () -> T): T {
                         check(!closed)
                         requireHeld()
-                        return try { reading { input.read(bytes, offset, length) } } catch (failure: IOException) {
+                        return try { reading(read) } catch (failure: IOException) {
                             if (closer.closed && failure !is WebDavSourceDriveAbsent) throw WebDavSourceDriveAbsent(failure) else throw failure
                         }
                     }
+                    override fun read(): Int = held { input.read() }
+                    override fun read(bytes: ByteArray, offset: Int, length: Int): Int = held { input.read(bytes, offset, length) }
                     override fun close() {
                         if (closed) return
                         closed = true
