@@ -317,6 +317,19 @@ class StillSafRecoveryTest {
         assertFalse(File(stills, "E").exists())
     }
 
+    @Test fun aStillForADriveWhoseGrantWentGoesToThePhone() {
+        assertEquals(StillRecoveryReport(), journal().recover())
+        // Settings went back to the phone after the capture resolved its destination: the grant is gone.
+        context.contentResolver.releasePersistableUriPermission(tree, RecordingDestinationStore.READ_WRITE)
+        var ran = false
+        val failure = assertThrows(Exception::class.java) { journal().publish(destination) { _, _ -> ran = true } }
+        // The phone route reserves its MediaStore namespace first, which Robolectric cannot answer: that is where it stops.
+        assertTrue(failure.stackTrace.toList().toString(), failure.stackTrace.any { it.methodName == "rows" })
+        assertFalse(ran)
+        assertTrue(entries().none { it[2] != null })
+        assertFalse(stills.exists())
+    }
+
     @Test fun groupsDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {
         assertEquals(StillRecoveryReport(), journal().recover())
         val lostVolume = "1234-ABCD"

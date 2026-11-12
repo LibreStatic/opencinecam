@@ -55,35 +55,43 @@ internal class StillCaptureRecovery(context: Context,
 
     /**
      * A group on [destination]. [block] gets the id and, on a drive, the store that writes the group's folder
-     * (null on the phone, where the caller builds its MediaStore store from [relativePath]).
+     * (null on the phone, where the caller builds its MediaStore store from [relativePath]). A drive folder whose grant
+     * is no longer held puts the group on the phone.
      */
     internal fun <T> publish(destination: RecordingDestination, block: (String, SafStillRows?) -> T): T = synchronized(processLock) {
         open().use { db ->
             recoverLocked(db)
             val id = UUID.randomUUID().toString()
-            val drive = when (destination) {
-                RecordingDestination.Phone -> {
-                    check(count(db, phone = true) < MAX_GROUPS) { "Interrupted still journal is full" }
-                    // Reserve an empty namespace before allocating even the first provider row.
-                    for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
-                        "Still capture namespace already exists"
+            // The group folder is created at the first file, so it is new: no namespace to check.
+            val drive = (destination as? RecordingDestination.UsbFolder)?.let { target ->
+                require(target.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
+                // A switch back to the phone ([RecordingDestinationStore.clear], same lock) between resolving this
+                // destination and here may have released the grant; once the entry is journalled, a later one keeps it.
+                // Lock order: processLock, then the store's; nothing under the store's lock takes processLock.
+                val grants = RecordingDestinationStore(context)
+                grants.withGrants {
+                    if (!grants.holdsGrant(target.treeUri)) {
+                        android.util.Log.w("StillRecovery", "The drive folder's permission is gone: the still goes to the phone")
+                        return@withGrants null
                     }
-                    db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
-                    null
-                }
-                // The group folder is created at the first file, so it is new: no namespace to check.
-                is RecordingDestination.UsbFolder -> {
-                    require(destination.treeUri.authority == EXTERNAL_STORAGE_AUTHORITY) { "Not a drive folder" }
                     if (count(db, phone = false) >= MAX_DRIVE_GROUPS) forgetOldestDeferred(db)
                     db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
-                        arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
-                    SafStillRows(context, destination.treeUri, null) { folder ->
+                        arrayOf(id, target.treeUri.toString(), target.volumeId.uppercase()))
+                    SafStillRows(context, target.treeUri, null) { folder ->
                         check(db.update("captures", ContentValues().apply { put("folder", folder.toString()) },
                             "id = ? AND committed = 0 AND tree IS NOT NULL AND folder IS NULL", arrayOf(id)) == 1) {
                             "Still group folder was not journalled"
                         }
                     }
                 }
+            }
+            if (drive == null) {
+                check(count(db, phone = true) < MAX_GROUPS) { "Interrupted still journal is full" }
+                // Reserve an empty namespace before allocating even the first provider row.
+                for (metadata in listOf(false, true)) check(rows(id, metadata, ownedOnly = false).isEmpty()) {
+                    "Still capture namespace already exists"
+                }
+                db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
             }
             val result: T
             try {

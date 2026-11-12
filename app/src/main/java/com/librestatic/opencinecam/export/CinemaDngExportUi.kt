@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,6 +70,7 @@ import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Where the operator chose to export to. */
@@ -196,6 +198,8 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     var compress by rememberSaveable { mutableStateOf(false) }
     var free by remember { mutableStateOf<Long?>(null) }
     var recording by remember { mutableStateOf(environment.recording()) }
+    var starting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val exports by environment.states.collectAsState()
     LaunchedEffect(take) { plan = environment.plan(take); loading = false }
     LaunchedEffect(choice) { free = null; free = environment.freeBytes(choice) }
@@ -211,7 +215,15 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
             onCompress = { compress = it },
             onStart = {
                 recording = environment.recording()
-                if (!recording && environment.start(state.request(take.primary.uri))) onDismiss()
+                if (!recording && !starting) {
+                    starting = true
+                    val request = state.request(take.primary.uri)
+                    // Off the main thread: the admission asks WorkManager about kept work and may wait up to two seconds.
+                    scope.launch {
+                        val started = try { withContext(Dispatchers.IO) { environment.start(request) } } finally { starting = false }
+                        if (started) onDismiss()
+                    }
+                }
             },
             onCancel = onDismiss)
     }

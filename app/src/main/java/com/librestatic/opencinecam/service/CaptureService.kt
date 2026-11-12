@@ -205,6 +205,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 import com.librestatic.opencinecam.batteryPercentOf
@@ -1016,6 +1017,7 @@ class CaptureService : Service() {
                 // Interrupted still groups on the drive are discarded, as at service start; a still being saved holds the journal lock.
                 runCatching { stillSaver.recoverInterrupted() }
                     .onFailure { android.util.Log.e("StillRecovery", "Interrupted still journal unavailable after $volumeId mounted", it) }
+                releaseDeferredGrants()
                 // A RAW qualification killed mid-run left scratch files in the drive's .occ-qualify folder; nothing else is touched.
                 runCatching {
                     val configured = RecordingDestinationStore(this).current(setOf(volumeId)).destination as? RecordingDestination.UsbFolder
@@ -1043,6 +1045,15 @@ class CaptureService : Service() {
     /** The take recording to a drive ended, and an interrupted RAW take's repair had waited for it: queue its pass now. */
     private val rawRepairDue: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a RAW repair waited for a take on a drive") }
 
+    /**
+     * Off the main thread, after a recovery pass: grants a switch back to the phone kept only for interrupted entries (or
+     * uploads) go once nothing needs them ([RecordingDestinationStore.releaseDeferred]).
+     */
+    private fun releaseDeferredGrants() {
+        runCatching { RecordingDestinationStore(this).releaseDeferred() }
+            .onFailure { android.util.Log.w("RecordingDestination", "Deferred folder permissions not released", it) }
+    }
+
     /** Queues a pass over the journal of interrupted takes; takes on a drive that is not mounted are kept for a later one. */
     private fun queueRecordingRecovery(cause: String) {
         try {
@@ -1053,6 +1064,7 @@ class CaptureService : Service() {
                     android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable after $cause", failure)
                     return@execute
                 }
+                releaseDeferredGrants()
                 val recovered = report.incompleteGroups + report.rawTakes.published
                 if (report.discardedGroups + report.unresolvedGroups + recovered + report.rawTakes.deleted == 0) return@execute
                 mainHandler.post {
@@ -1256,6 +1268,7 @@ class CaptureService : Service() {
                 android.util.Log.e("StillRecovery", "Interrupted capture journal unavailable", failure)
                 com.librestatic.opencinecam.storage.StillRecoveryReport(unresolvedGroups = 1)
             }
+            releaseDeferredGrants()
             mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(stillRecovery = report) } }
         }
         recoveryExecutor.execute {
@@ -1263,6 +1276,7 @@ class CaptureService : Service() {
                 android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable", failure)
                 com.librestatic.opencinecam.storage.RecordingRecoveryReport(unresolvedGroups = 1)
             }.let { it.copy(rawTakes = it.rawTakes + recoverRawTakes()) }
+            releaseDeferredGrants()
             // Merged: a drive mounted meanwhile may have reported its own pass already.
             mainHandler.post {
                 if (!serviceDestroyed) cameraState.update { it.copy(recordingRecovery = mergeRecordingRecovery(it.recordingRecovery, recordingReport)) }
@@ -1272,7 +1286,16 @@ class CaptureService : Service() {
             android.util.Log.e("RecordingDestination", "Removable volumes cannot be watched; takes go to the phone", failure)
             null
         }
-        recordingVolumeMonitor?.let { monitor -> settingsScope.launch { monitor.events.collect { onRecordingVolumeEvent(it) } } }
+        // The monitor's first read may report a drive mounted before this subscribes, and its events are not replayed, while
+        // the startup pass above may have deferred that drive's takes: each drive mounted at subscription goes through the
+        // mount path (recovery pass, still recovery, scratch purge), which is cheap when nothing waits on it. A drive
+        // mounting meanwhile may arrive twice; the passes are idempotent.
+        recordingVolumeMonitor?.let { monitor ->
+            settingsScope.launch {
+                monitor.events.onSubscription { monitor.mounted.value.forEach { emit(RecordingVolumeEvent.Mounted(it)) } }
+                    .collect { onRecordingVolumeEvent(it) }
+            }
+        }
         driveArrivalMonitor = try { com.librestatic.opencinecam.storage.UsbDriveArrivalMonitor(this) } catch (failure: Exception) {
             android.util.Log.e("RecordingDestination", "USB drives arriving cannot be watched; a starting drive reads as not connected", failure)
             null

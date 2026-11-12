@@ -246,13 +246,37 @@ internal class RecordingDestinationStore(
 
     /**
      * Releases [tree] for another owner of its grant (the CinemaDNG export leaving it) unless [needsTree]. The check and
-     * the release are one step against [adopt], which takes its grant and registers as pending under the same lock.
+     * the release are one step against [adopt], which takes its grant and registers as pending under the same lock. A
+     * grant kept only for recovery or the outbox is left to [releaseDeferred].
      */
     fun releaseUnlessNeeded(tree: Uri) = synchronized(ALIAS_LOCK) {
-        if (needsTree(tree)) return@synchronized
+        if (usesTree(tree) || tree.toString() in pendingAdoptions) return@synchronized
+        // Kept only for recovery or the outbox: [releaseDeferred] gives it back once they are done with it.
+        if (recoveryNeedsTree(tree)) return@synchronized deferRelease(tree)
         runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
             .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
     }
+
+    /**
+     * Releases the grants kept only because recovery or the WebDAV outbox still needed them when their owner let them go
+     * ([releaseUnlessShared], [releaseUnlessNeeded]), now that nothing does. Each goes by the same rules: a tree configured
+     * again, an alias, the CinemaDNG export's, one an adoption is probing, or one still needed by a journalled entry or an
+     * upload (or whose journals or outbox cannot be read) keeps its grant. A tree whose grant is gone, or that another
+     * owner holds now, leaves the list; one recovery still needs stays on it. Blocking (journal and outbox reads): call it
+     * off the main thread, after a recovery pass or an upload. Cheap when nothing is deferred.
+     */
+    fun releaseDeferred() = synchronized(ALIAS_LOCK) {
+        val deferred = deferredReleases()
+        if (deferred.isEmpty()) return@synchronized
+        val held = heldTrees()
+        val remaining = deferred.filterTo(LinkedHashSet()) { tree ->
+            tree.toUri() in held && releaseUnlessShared(tree.toUri()) == GrantRelease.KEPT_FOR_RECOVERY
+        }
+        if (remaining != deferred) preferences.edit { putDeferredReleases(remaining) }
+    }
+
+    /** Whether the app holds read and write on [tree], read from the persisted grants. */
+    fun holdsGrant(tree: Uri): Boolean = holdsReadWrite(tree)
 
     /**
      * Makes the USB attach alias match the configured destination: a candidate for USB drives only while one is the
@@ -275,14 +299,30 @@ internal class RecordingDestinationStore(
         if (aliases.isEmpty()) remove(KEY_ALIASES) else putStringSet(KEY_ALIASES, aliases)
     }
 
+    /** The trees whose release waits on recovery or the outbox, as stored (a copy). */
+    private fun deferredReleases(): Set<String> = preferences.getStringSet(KEY_DEFERRED_RELEASES, null)?.toSet().orEmpty()
+
+    private fun SharedPreferences.Editor.putDeferredReleases(trees: Set<String>) {
+        if (trees.isEmpty()) remove(KEY_DEFERRED_RELEASES) else putStringSet(KEY_DEFERRED_RELEASES, trees)
+    }
+
+    /** Under [ALIAS_LOCK]: remembers [tree] for [releaseDeferred]. */
+    private fun deferRelease(tree: Uri) {
+        val deferred = deferredReleases()
+        if (tree.toString() !in deferred) preferences.edit { putDeferredReleases(deferred + tree.toString()) }
+    }
+
+    private enum class GrantRelease { RELEASED, KEPT_SHARED, KEPT_FOR_RECOVERY }
+
     /**
      * Releases [tree] unless it is the configured recording tree, one of its aliases or the CinemaDNG export's, or recovery
      * still needs it: an interrupted take or still group journalled on it, or on the same folder of the same drive under
-     * its other volume name ([sameDrive]), is deferred until its drive returns and is resolved with this grant. Such a
-     * grant then stays held once the entry is resolved. A drive take still to upload from the WebDAV outbox keeps it too
-     * ([outboxDriveTrees]). A journal or outbox that cannot be read keeps the grant.
+     * its other volume name ([sameDrive]), is deferred until its drive returns and is resolved with this grant. A drive
+     * take still to upload from the WebDAV outbox keeps it too ([outboxDriveTrees]). A journal or outbox that cannot be
+     * read keeps the grant. A grant kept only for recovery or the outbox is remembered, and [releaseDeferred] releases it
+     * once they no longer need it. Under [ALIAS_LOCK].
      */
-    private fun releaseUnlessShared(tree: Uri) {
+    private fun releaseUnlessShared(tree: Uri): GrantRelease {
         val export = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
         // A folder the export left stays while an export may still write to it; the export releases it when it ends.
         val kept = setOfNotNull(preferences.getString(KEY_TREE, null), export.getString(CINEMADNG_EXPORT_TREE_KEY, null)) + aliases() +
@@ -290,9 +330,14 @@ internal class RecordingDestinationStore(
             // An export queued or running reads its take, or writes, through these; it releases them when it ends.
             export.getStringSet(CINEMADNG_EXPORT_ACTIVE_TREES_KEY, null).orEmpty()
         // Another adoption of this tree is still probing: the grant is the one it took, and it decides.
-        if (tree.toString() in kept || tree.toString() in pendingAdoptions || recoveryNeedsTree(tree)) return
+        if (tree.toString() in kept || tree.toString() in pendingAdoptions) return GrantRelease.KEPT_SHARED
+        if (recoveryNeedsTree(tree)) {
+            deferRelease(tree)
+            return GrantRelease.KEPT_FOR_RECOVERY
+        }
         runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
             .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
+        return GrantRelease.RELEASED
     }
 
     /**
@@ -346,6 +391,8 @@ internal class RecordingDestinationStore(
         const val KEY_SPEED_PREFIX = "drive_speed_"
         /** Other trees picked on the configured drive under another volume name (a string set; see [keptDriveAliases]). */
         const val KEY_ALIASES = "alias_trees"
+        /** Trees whose grant was kept only for recovery or the outbox, released later (a string set; see [releaseDeferred]). */
+        const val KEY_DEFERRED_RELEASES = "deferred_release_trees"
         const val READ_WRITE = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         private const val LOG_TAG = "RecordingDestination"
         /** Serialises changes to the tree and its aliases: [current] runs from several threads, each with its own store. */

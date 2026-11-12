@@ -51,6 +51,8 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     var beforeCreate: (() -> Unit)? = null
     /** Runs after a document is deleted. */
     var afterDelete: (() -> Unit)? = null
+    /** Runs at each document query, on the caller's thread, e.g. to stall it like a drive that stopped answering. */
+    @Volatile var onQuery: (() -> Unit)? = null
 
     override fun onCreate(): Boolean = true
 
@@ -68,6 +70,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     }
 
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
+        onQuery?.invoke()
         queryFailure?.let { throw it }
         queriesBeforeUnplug?.let { left -> if (left <= 0) mounted = false else queriesBeforeUnplug = left - 1 }
         if (documentId.substringAfterLast('/').substringAfterLast(':') in unanswered) throw FileNotFoundException("No answer for $documentId")
@@ -75,6 +78,7 @@ class FakeExternalStorageProvider : DocumentsProvider() {
     }
 
     override fun queryChildDocuments(parentDocumentId: String, projection: Array<out String>?, sortOrder: String?): Cursor {
+        onQuery?.invoke()
         queryFailure?.let { throw it }
         queriesBeforeUnplug?.let { left -> if (left <= 0) mounted = false else queriesBeforeUnplug = left - 1 }
         val parent = existing(parentDocumentId)

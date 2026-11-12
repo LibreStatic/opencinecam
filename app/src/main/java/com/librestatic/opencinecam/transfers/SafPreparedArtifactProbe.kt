@@ -80,7 +80,17 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
             try { closer.close() } catch (closing: Throwable) { reported.addSuppressed(closing) } finally { handle.unregister() }
             throw reported
         }
-        try { closer.close() } finally { handle.unregister() }
+        try {
+            closer.close()
+        } catch (closing: Throwable) {
+            // As above: a drive that stopped answering after the inspection waits for the drive, not for the operator.
+            if ((closing is ErrnoException || closing is IOException) && closing !is WebDavSourceDriveAbsent && !driveAnswers(resolver, uri)) {
+                throw WebDavSourceDriveAbsent(closing)
+            }
+            throw closing
+        } finally {
+            handle.unregister()
+        }
         return snapshot
     }
 

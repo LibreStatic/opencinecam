@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.util.Log
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.UUID
@@ -340,6 +342,10 @@ class WebDavTransferRuntime internal constructor(
         } catch (_: BatchStopped) { message = current.stopped ?: WebDavTransferMessage.CANCELLED }
         catch (_: Exception) { message = current.stopped ?: WebDavTransferMessage.ERROR }
         finally {
+            // PLAN-072: a drive folder the operator switched away from kept its grant while takes on it waited here; the
+            // ones this batch verified no longer need it. Off the main thread (this executor), outside the gate.
+            if (current.bundleId != null) runCatching { RecordingDestinationStore(context).releaseDeferred() }
+                .onFailure { Log.w("WebDavTransfer", "Deferred folder permissions not released", it) }
             synchronized(gate) {
                 current.finished.complete(Unit) // SQLite/FD/worker finally has actually returned.
                 if (work === current) work = null

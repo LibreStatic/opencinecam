@@ -156,6 +156,8 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             runCatching { endLease(app) }
             store.finish(request.takeUri, request.takeName,
                 CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
+            // endLease ran while the state was Running, which keeps the folders left meanwhile: no worker remains to release them.
+            runCatching { releaseLeftFolders(app) }
         }
         return true
     }
@@ -169,6 +171,8 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             // The lease goes first: once the state is no longer Running a new export may start and lease its own trees.
             appContext?.let { runCatching { endLease(it) } }
             store.finish(running.takeUri, running.takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
+            // As in start: no worker remains to release the folders left while the export was queued.
+            appContext?.let { runCatching { releaseLeftFolders(it) } }
         }
     }
 

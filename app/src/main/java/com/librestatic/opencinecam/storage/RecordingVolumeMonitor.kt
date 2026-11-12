@@ -70,6 +70,19 @@ internal class VolumeEventTracker(initiallyMounted: Set<String> = emptySet()) {
 }
 
 /**
+ * What a rescan applies, in order: the state read for each of [volumes] (UUID upper case, state), then leaving for each
+ * of [mounted] absent from the read. A volume the listener reported after the read started (its [lastReported] counter
+ * above [started], the counter when the read began) is left out: the read may be older than that report, which stands.
+ */
+internal fun rescanChanges(volumes: List<Pair<String, String?>>, mounted: Set<String>, lastReported: Map<String, Long>,
+    started: Long): List<Pair<String, VolumeStateKind>> {
+    val present = volumes.mapTo(HashSet()) { it.first }
+    val read = volumes.map { (id, state) -> id to volumeStateKind(state) } +
+        mounted.filterNot { it in present }.map { it to VolumeStateKind.LEAVING }
+    return read.filter { (id, _) -> (lastReported[id] ?: Long.MIN_VALUE) <= started }
+}
+
+/**
  * PLAN-072: watches removable volumes for the recording destination. [mounted] holds the UUIDs (upper
  * case) of removable volumes mounted now, seeded from `StorageManager.storageVolumes`; [events] says
  * when one leaves or mounts, once per change. API 30+ uses `registerStorageVolumeCallback`; API 29 a
@@ -84,8 +97,10 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     private val mountedState = MutableStateFlow(tracker.mountedVolumes)
     private val eventFlow = MutableSharedFlow<RecordingVolumeEvent>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val unregister: () -> Unit
-    /** Counts the states the listener reported, under [tracker]'s lock: a rescan one of them overlapped is read again. */
+    /** Counts the states the listener reported, under [tracker]'s lock. */
     private var reported = 0L
+    /** The value of [reported] at each volume's (upper case) last report, under [tracker]'s lock; see [rescanChanges]. */
+    private val lastReported = HashMap<String, Long>()
 
     val mounted: StateFlow<Set<String>> = mountedState.asStateFlow()
     val events: SharedFlow<RecordingVolumeEvent> = eventFlow.asSharedFlow()
@@ -103,7 +118,7 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         // descriptors close here, on the callback's thread, before the event waits behind the main queue.
         if (kind == VolumeStateKind.LEAVING) releaseDriveDescriptors(volumeId, "the drive is leaving")
         synchronized(tracker) {
-            reported++
+            lastReported[volumeId.uppercase()] = ++reported
             publish(volumeId, kind)
         }
     }
@@ -150,27 +165,20 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     }
 
     /**
-     * Re-reads every removable volume; one missing from the list has been removed. A failed read changes nothing. A read
-     * the listener overlapped (API 30+, where it runs on a binder thread) may be older than what it reported, so it is
-     * dropped and taken again; after [RESCAN_ATTEMPTS] the listener's reports stand.
+     * Re-reads every removable volume; one missing from the list has been removed. A failed read changes nothing. The
+     * listener may report a volume while the read runs (API 30+, where it runs on a binder thread), and the read may be
+     * older than that report: such a volume keeps the listener's state, and the read applies to every other one
+     * ([rescanChanges]), so one read always applies.
      */
     private fun rescan() {
-        repeat(RESCAN_ATTEMPTS) {
-            val started = synchronized(tracker) { reported }
-            val volumes = removableVolumes() ?: return
-            val applied = synchronized(tracker) {
-                if (reported != started) return@synchronized false
-                val states = volumes.map { (id, state) -> id to volumeStateKind(state) }
-                val present = volumes.mapTo(HashSet()) { it.first }
-                val changes = states + tracker.mountedVolumes.filterNot { it in present }.map { it to VolumeStateKind.LEAVING }
-                changes.forEach { (id, kind) ->
-                    // As in report(): the descriptors close before the event is emitted.
-                    if (kind == VolumeStateKind.LEAVING) releaseDriveDescriptors(id, "the drive is leaving")
-                    publish(id, kind)
-                }
-                true
+        val started = synchronized(tracker) { reported }
+        val volumes = removableVolumes() ?: return
+        synchronized(tracker) {
+            rescanChanges(volumes, tracker.mountedVolumes, lastReported, started).forEach { (id, kind) ->
+                // As in report(): the descriptors close before the event is emitted.
+                if (kind == VolumeStateKind.LEAVING) releaseDriveDescriptors(id, "the drive is leaving")
+                publish(id, kind)
             }
-            if (applied) return
         }
     }
 
@@ -185,7 +193,6 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
 
     private companion object {
         const val LOG_TAG = "RecordingVolumeMonitor"
-        const val RESCAN_ATTEMPTS = 3
         val DIRECT = Executor { it.run() }
     }
 }

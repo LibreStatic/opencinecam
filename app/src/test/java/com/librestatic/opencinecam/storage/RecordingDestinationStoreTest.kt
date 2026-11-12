@@ -289,6 +289,61 @@ class RecordingDestinationStoreTest {
     }
 
     @Test
+    fun aGrantKeptForAJournalledEntryIsReleasedOnceTheEntryIsResolved() {
+        store().adopt(DRIVE)
+        journalled(RECORDING_JOURNAL, DRIVE)
+        store().clear()
+        assertTrue(held(DRIVE))
+        assertEquals(setOf(DRIVE.toString()), deferred())
+        // Still journalled: a recovery pass that deferred the take again leaves the grant and the reminder.
+        store().releaseDeferred()
+        assertTrue(held(DRIVE))
+        assertEquals(setOf(DRIVE.toString()), deferred())
+        // The take was recovered: its entry is gone, so the grant goes at the next pass.
+        File(context.noBackupFilesDir, RECORDING_JOURNAL).delete()
+        store().releaseDeferred()
+        assertFalse(held(DRIVE))
+        assertTrue(deferred().isEmpty())
+    }
+
+    @Test
+    fun aGrantKeptForAnUploadIsReleasedOnceItIsVerified() {
+        store().adopt(DRIVE)
+        outboxed(DRIVE, "QUEUED")
+        store().clear()
+        assertTrue(held(DRIVE))
+        SQLiteDatabase.openDatabase(context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).path, null, SQLiteDatabase.OPEN_READWRITE)
+            .use { it.execSQL("UPDATE artifacts SET state = 'VERIFIED'") }
+        store().releaseDeferred()
+        assertFalse(held(DRIVE))
+    }
+
+    @Test
+    fun aDeferredTreeConfiguredAgainKeepsItsGrant() {
+        store().adopt(DRIVE)
+        journalled(STILL_JOURNAL, DRIVE)
+        store().clear()
+        store().adopt(DRIVE)
+        File(context.noBackupFilesDir, STILL_JOURNAL).delete()
+        store().releaseDeferred()
+        // The destination owns the grant again; the reminder goes, and a later clear releases it by itself.
+        assertTrue(held(DRIVE))
+        assertTrue(deferred().isEmpty())
+        store().clear()
+        assertFalse(held(DRIVE))
+    }
+
+    @Test
+    fun aDeferredTreeWhoseGrantWentLeavesTheList() {
+        store().adopt(DRIVE)
+        journalled(RECORDING_JOURNAL, DRIVE)
+        store().clear()
+        context.contentResolver.releasePersistableUriPermission(DRIVE, RecordingDestinationStore.READ_WRITE)
+        store().releaseDeferred()
+        assertTrue(deferred().isEmpty())
+    }
+
+    @Test
     fun clearGoesBackToPhoneAndReleases() {
         store().adopt(DRIVE)
         store().setPolicy(DriveDisconnectPolicy.CONTINUE_ON_PHONE)
@@ -550,6 +605,9 @@ class RecordingDestinationStoreTest {
 
     private fun aliases(): Set<String> =
         context.getSharedPreferences(RecordingDestinationStore.PREFS, Context.MODE_PRIVATE).getStringSet(RecordingDestinationStore.KEY_ALIASES, null).orEmpty()
+
+    private fun deferred(): Set<String> = context.getSharedPreferences(RecordingDestinationStore.PREFS, Context.MODE_PRIVATE)
+        .getStringSet(RecordingDestinationStore.KEY_DEFERRED_RELEASES, null).orEmpty()
 
     private companion object {
         const val RECORDING_JOURNAL = "recording-recovery.sqlite"

@@ -295,6 +295,8 @@ class RecordingSafRecoveryTest {
         // The marker goes, then the drive leaves before its folder can be listed: the commit may or may not have happened.
         drive.afterDelete = { drive.afterDelete = null; drive.queriesBeforeUnplug = 1 }
         assertThrows(RecordingCommitUnconfirmed::class.java) { video.published() }
+        // Recovery owns the take now: no salvage step may begin and rewrite a sidecar a pass may be reading.
+        assertThrows(RecordingCommitUnconfirmed::class.java) { video.beginSalvage() }
         // The recorder's compensation after the failed publication must not delete a take that may be committed.
         video.abort()
         assertEquals(setOf("A001.mp4"), takeDir().list()!!.toSet())
@@ -579,6 +581,32 @@ class RecordingSafRecoveryTest {
             assertEquals(RecordingRecoveryReport(), journal().recover())
             next.relinquish()
         } finally {
+            resume.countDown()
+            threads.shutdownNow()
+        }
+    }
+
+    @Test fun aDriveThatStallsDuringRecoveryHoldsUpNoTakeStart() {
+        val id = interrupted("A001.mp4" to ByteArray(100) { 2 })
+        val stalled = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        // The pass's first question to the drive hangs until the test lets it go.
+        drive.onQuery = { drive.onQuery = null; stalled.countDown(); check(resume.await(30, TimeUnit.SECONDS)) }
+        val threads = Executors.newFixedThreadPool(2)
+        try {
+            val pass = threads.submit<RecordingRecoveryReport> { journal().recover() }
+            assertTrue(stalled.await(30, TimeUnit.SECONDS))
+            // A take starting meanwhile runs its own pass under the journal lock: the stalled drive does not hold it.
+            val next = threads.submit<RecordingRecoveryGroup> { journal().start(destination) }.get(10, TimeUnit.SECONDS)
+            assertFalse(pass.isDone)
+            assertEquals(setOf(id, next.id), entries().map { it[0] }.toSet())
+
+            resume.countDown()
+            assertEquals(1, pass.get(30, TimeUnit.SECONDS).incompleteGroups)
+            assertEquals(listOf(next.id), entries().map { it[0] })
+            next.relinquish()
+        } finally {
+            drive.onQuery = null
             resume.countDown()
             threads.shutdownNow()
         }
