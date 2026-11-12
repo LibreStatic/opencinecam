@@ -253,7 +253,7 @@ private val RecordRed: Color @Composable @ReadOnlyComposable get() = LocalCineCo
 private val Muted: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
 private val OkGreen: Color @Composable @ReadOnlyComposable get() = LocalCineColors.current.ok
 
-private enum class ControlDial { RESOLUTION, FPS, INT, ISO, SHUTTER, FOCUS, WB, EV }
+private enum class ControlDial { RESOLUTION, FPS, INT, LENGTH, ISO, SHUTTER, FOCUS, WB, EV }
 
 @Composable
 fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), onReady: () -> Unit = {}) {
@@ -1404,11 +1404,12 @@ private sealed interface CapturePane {
 }
 
 /** A pane the capture chrome opens with. Only the headless renders set it; the app always starts closed. */
-internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION }
+internal enum class CaptureInitialPane { WHITE_BALANCE, FOCUS, TAKE_LENGTH, MONITOR, MODES, MODE_SHEET, DISPLAYS, RESOLUTION }
 
 private fun CaptureInitialPane.pane(): CapturePane? = when (this) {
     CaptureInitialPane.WHITE_BALANCE -> CapturePane.Control(ControlDial.WB)
     CaptureInitialPane.FOCUS -> CapturePane.Control(ControlDial.FOCUS)
+    CaptureInitialPane.TAKE_LENGTH -> CapturePane.Control(ControlDial.LENGTH)
     CaptureInitialPane.MONITOR -> CapturePane.Monitor
     CaptureInitialPane.MODES -> CapturePane.Modes
     CaptureInitialPane.MODE_SHEET -> null
@@ -2066,7 +2067,7 @@ internal fun AdaptiveCaptureChrome(
 
         val displayedMode = modeSelection.displayed
         val modeName = modeLabel(displayedMode)
-        val slots = captureSlotModels(state, displayedMode, settings.videoProjectRate)
+        val slots = captureSlotModels(state, displayedMode, settings.videoProjectRate, settings.slowMotionTakeLengthSeconds)
         val activeSlot = (pane as? CapturePane.Control)?.dial?.slot()
         val onSlot: (CaptureSlot) -> Unit = { slot -> togglePane(CapturePane.Control(slot.dial())) }
         val openModeSheet: () -> Unit = {
@@ -2486,6 +2487,7 @@ private fun CaptureSlot.dial(): ControlDial = when (this) {
     CaptureSlot.RESOLUTION -> ControlDial.RESOLUTION
     CaptureSlot.FPS -> ControlDial.FPS
     CaptureSlot.INTERVAL -> ControlDial.INT
+    CaptureSlot.LENGTH -> ControlDial.LENGTH
     CaptureSlot.SHUTTER -> ControlDial.SHUTTER
     CaptureSlot.ISO -> ControlDial.ISO
     CaptureSlot.EV -> ControlDial.EV
@@ -2497,6 +2499,7 @@ private fun ControlDial.slot(): CaptureSlot = when (this) {
     ControlDial.RESOLUTION -> CaptureSlot.RESOLUTION
     ControlDial.FPS -> CaptureSlot.FPS
     ControlDial.INT -> CaptureSlot.INTERVAL
+    ControlDial.LENGTH -> CaptureSlot.LENGTH
     ControlDial.SHUTTER -> CaptureSlot.SHUTTER
     ControlDial.ISO -> CaptureSlot.ISO
     ControlDial.EV -> CaptureSlot.EV
@@ -2528,26 +2531,30 @@ private fun rawOrResolutionChoiceCount(state: CameraUiState, mode: CaptureMode, 
     if (mode == CaptureMode.RAW_VIDEO) state.rawVideoOptions.size.let { if (it == 0) 0 else it + 1 }
     else state.resolutionChoices(mode, projectRate).size
 
-/** The six slots of [mode] with their current values, and why any of them cannot be driven now. */
+/**
+ * The six slots of [mode] with their current values, and why any of them cannot be driven now.
+ * [takeLengthSeconds] is the slow-motion take length the LENGTH slot shows.
+ */
 @Composable
-private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate): List<CaptureSlotModel> {
+private fun captureSlotModels(state: CameraUiState, mode: CaptureMode, projectRate: CaptureFrameRate, takeLengthSeconds: Int): List<CaptureSlotModel> {
     val highSpeed = state.activeVideoProfile?.constrainedHighSpeed == true || state.activeLogProfile?.constrainedHighSpeed == true
     val exposureCaps = state.descriptor?.exposureCapabilities
     val manualIso = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.ISO_PRIORITY) } == true
     val manualShutter = exposureCaps?.let { it.supports(ExposureMode.MANUAL) || it.supports(ExposureMode.SHUTTER_PRIORITY) } == true
     val auto = stringResource(R.string.auto_value)
-    return captureSlots(mode).map { slot ->
+    return captureSlots(mode, highSpeed).map { slot ->
         val reason = captureSlotUnavailableReason(slot, state.descriptor != null, highSpeed, manualIso, manualShutter,
             state.aeCompensationSupported, resolutionChoices = rawOrResolutionChoiceCount(state, mode, projectRate),
             nightPhoto = mode == CaptureMode.PHOTO && state.nightExtensionRunning)
         // A high-speed session runs exposure itself: the slot reads AUTO, with HS beside its label.
-        val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.EV)
+        val autoHighSpeed = highSpeed && slot !in setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.LENGTH, CaptureSlot.EV)
         val value = when {
             autoHighSpeed -> auto
             else -> when (slot) {
                 CaptureSlot.RESOLUTION -> state.resolutionName(mode)
                 CaptureSlot.FPS -> state.targetFps.toString()
                 CaptureSlot.INTERVAL -> formatIntervalShort(state.timelapseIntervalMs)
+                CaptureSlot.LENGTH -> takeLengthLabel(takeLengthSeconds)
                 CaptureSlot.SHUTTER -> state.effectiveSettings?.exposure?.takeIf {
                     it.shutterUnit == ShutterUnit.ANGLE && it.mode in setOf(ExposureMode.MANUAL, ExposureMode.SHUTTER_PRIORITY) &&
                         !state.exposureControlUnavailable
@@ -3684,7 +3691,8 @@ private fun RecordingOverlay(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(RecordRed))
-                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs),
+                Text((if (state.recordingPauseStatus?.paused == true) stringResource(R.string.recording_paused) else "REC") + " " + formatDuration(state.recordingElapsedMs) +
+                    state.takeLengthLimitMs?.let { " / " + formatDuration(it) }.orEmpty(),
                     color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 if (!compact && state.recordingWidth != null && state.recordingHeight != null) {
                     Text(formatFrameSize(state.recordingWidth, state.recordingHeight), color = Muted, fontSize = 12.sp, maxLines = 1)
@@ -3915,6 +3923,7 @@ private fun ManualControlDial(
             ControlDial.EV -> EvDial(state, binder, onClose)
             ControlDial.FOCUS -> FocusPullDial(state, binder, settings, onSettingsChanged, onClose)
             ControlDial.INT -> IntervalometerDial(state, settings, onSettingsChanged, onClose)
+            ControlDial.LENGTH -> TakeLengthDial(state, settings, onSettingsChanged, onClose)
             ControlDial.ISO -> ExposureDial(iso = true, state, binder, settings, onSettingsChanged, onClose)
             ControlDial.SHUTTER -> ExposureDial(iso = false, state, binder, settings, onSettingsChanged, onClose)
         }
@@ -4133,6 +4142,53 @@ private fun FpsDial(
             PanelNote(stringResource(R.string.fps_unavailable_at_size, formatFrameSize(state.targetVideoWidth, state.targetVideoHeight)),
                 Modifier.testTag("fps-unavailable-note"))
         }
+    }
+}
+
+/** "10 s", or the infinity sign for a take with no length bound: the slot has no room for words. */
+@Composable
+private fun takeLengthLabel(seconds: Int): String =
+    if (seconds > 0) stringResource(R.string.take_length_seconds, seconds) else "\u221E"
+
+/**
+ * LENGTH: how many seconds of capture a slow-motion take runs before it stops itself, on a slider
+ * with a stop every five seconds that starts at no limit. The readout adds how long the take plays
+ * at the project rate. A running take keeps the length it started with.
+ */
+@Composable
+private fun TakeLengthDial(
+    state: CameraUiState,
+    settings: CameraSettings,
+    onSettingsChanged: (CameraSettings) -> Unit,
+    onClose: () -> Unit,
+) {
+    val projectRate = settings.videoProjectRate
+    val seconds = settings.slowMotionTakeLengthSeconds
+    val longest = SLOW_MOTION_TAKE_LENGTHS.last()
+    val step = longest / (SLOW_MOTION_TAKE_LENGTHS.size - 1)
+    PanelColumn(Modifier.testTag("take-length-panel")) {
+        PanelHeader(stringResource(R.string.panel_title_take_length), onClose)
+        val playMs = seconds * 1_000L * state.targetFps * projectRate.denominator / projectRate.numerator
+        PanelReadout(
+            if (seconds > 0) {
+                stringResource(R.string.take_length_seconds, seconds) + " \u00B7 " +
+                    stringResource(R.string.take_length_plays, formatDuration(playMs))
+            } else stringResource(R.string.take_length_off),
+            color = if (seconds > 0) Amber else VerifiedCyan,
+        )
+        CineSlider(
+            value = seconds.toFloat(),
+            valueRange = 0f..longest.toFloat(),
+            steps = SLOW_MOTION_TAKE_LENGTHS.size - 2,
+            enabled = !state.structuralSettingsFrozen,
+            onValueChange = { value ->
+                val chosen = ((value / step).roundToInt() * step).coerceIn(0, longest)
+                if (chosen != seconds) onSettingsChanged(settings.copy(slowMotionTakeLengthSeconds = chosen))
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("take-length-slider"),
+        )
+        PanelRangeRow(stringResource(R.string.take_length_off), stringResource(R.string.take_length_seconds, longest))
+        PanelNote(stringResource(R.string.take_length_note), Modifier.testTag("take-length-note"))
     }
 }
 
@@ -5293,7 +5349,7 @@ private fun formatBytes(bytes: Long?): String = when {
 private fun CaptureSlotsPreview() {
     val state = CameraUiState(selectedMode = CaptureMode.VIDEO, phase = CameraUiPhase.PREVIEWING)
     Column(Modifier.background(Panel).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CaptureSlotStrip(captureSlotModels(state, CaptureMode.VIDEO, CameraSettings().videoProjectRate), CaptureSlot.ISO, {})
+        CaptureSlotStrip(captureSlotModels(state, CaptureMode.VIDEO, CameraSettings().videoProjectRate, 0), CaptureSlot.ISO, {})
         CaptureModeButton(modeLabel(CaptureMode.VIDEO), {})
     }
 }

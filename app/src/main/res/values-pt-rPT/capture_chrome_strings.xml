@@ -4,6 +4,7 @@
     <string name="capture_slot_wb">BB</string>
     <string name="capture_slot_focus">FOCO</string>
     <string name="capture_slot_interval">INTERV.</string>
+    <string name="capture_slot_length">DURAÇÃO</string>
     <string name="capture_slot_resolution_name">Resolução</string>
     <string name="capture_slot_fps_name">Cadência de fotogramas</string>
     <string name="capture_slot_shutter_name">Obturador</string>
@@ -12,6 +13,7 @@
     <string name="capture_slot_wb_name">Balanço de brancos</string>
     <string name="capture_slot_focus_name">Foco</string>
     <string name="capture_slot_interval_name">Intervalo</string>
+    <string name="capture_slot_length_name">Duração do take</string>
     <string name="capture_slot_reason_not_ready">A aguardar a câmara.</string>
     <string name="capture_slot_reason_single_resolution">Este modo tem uma única resolução.</string>
     <string name="capture_slot_reason_high_speed">As cadências de fotogramas altas ajustam isto automaticamente.</string>

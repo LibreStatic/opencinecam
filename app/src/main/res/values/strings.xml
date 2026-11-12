@@ -756,6 +756,11 @@
     <string name="panel_title_resolution">RESOLUTION</string>
     <string name="resolution_group_open">Open gate</string>
     <string name="panel_title_fixed_fps">FIXED FPS</string>
+    <string name="panel_title_take_length">TAKE LENGTH</string>
+    <string name="take_length_off">No limit</string>
+    <string name="take_length_seconds" translatable="false">%1$d s</string>
+    <string name="take_length_plays">plays %1$s</string>
+    <string name="take_length_note">The take stops by itself at this length of capture, and needs less free space to start.</string>
     <string name="panel_title_white_balance">WHITE BALANCE</string>
     <string name="panel_title_focus">FOCUS</string>
     <string name="panel_title_focus_pull">FOCUS PULL</string>

@@ -142,6 +142,8 @@ data class CameraUiState(
     val recordingAvTiming: com.librestatic.opencinecam.camera.CaptureEpochReport? = null,
     val foldClosureSensorAvailable: Boolean? = null,
     val recordingElapsedMs: Long = 0L,
+    /** The capture-time limit of the running take, in milliseconds; null when it is unbounded. */
+    val takeLengthLimitMs: Long? = null,
     val recordingProjectRate: com.librestatic.opencinecam.camera.CaptureFrameRate? = null,
     val recordingWidth: Int? = null,
     val recordingHeight: Int? = null,

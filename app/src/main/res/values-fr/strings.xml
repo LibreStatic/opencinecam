@@ -751,6 +751,10 @@
     <string name="panel_title_resolution">RÉSOLUTION</string>
     <string name="resolution_group_open">Open gate</string>
     <string name="panel_title_fixed_fps">FPS FIXES</string>
+    <string name="panel_title_take_length">DURÉE DE LA PRISE</string>
+    <string name="take_length_off">Sans limite</string>
+    <string name="take_length_plays">dure %1$s</string>
+    <string name="take_length_note">La prise s’arrête d’elle-même après cette durée de capture et demande moins d’espace libre pour démarrer.</string>
     <string name="panel_title_white_balance">BALANCE DES BLANCS</string>
     <string name="panel_title_focus">MISE AU POINT</string>
     <string name="panel_title_focus_pull">TIRAGE DE POINT</string>

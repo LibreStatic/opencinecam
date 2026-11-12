@@ -65,6 +65,16 @@ internal fun slowMotionRateAt(
     return atSize.firstOrNull { it.fps == currentFps }?.fps ?: atSize.maxOfOrNull { it.fps }
 }
 
+/**
+ * The capture-time limit of a slow-motion take, in milliseconds; null when the take is unbounded.
+ * Only a high-speed session bounds its takes: that is where the LENGTH slot shows, so a length set
+ * there never cuts a take short at a rate whose strip has no such slot.
+ */
+internal fun takeLengthLimitMs(mode: CaptureMode, settings: CameraSettings, highSpeed: Boolean): Long? =
+    if (mode == CaptureMode.VIDEO && settings.videoOffSpeed && highSpeed && settings.slowMotionTakeLengthSeconds > 0) {
+        settings.slowMotionTakeLengthSeconds * 1000L
+    } else null
+
 /** The mode shown as selected and the action that selects one, provided by the capture chrome. */
 internal class ModeSelection(val displayed: CaptureMode, val select: (CaptureMode) -> Unit)
 

@@ -751,6 +751,10 @@
     <string name="panel_title_resolution">AUFLÖSUNG</string>
     <string name="resolution_group_open">Open Gate</string>
     <string name="panel_title_fixed_fps">FESTE FPS</string>
+    <string name="panel_title_take_length">TAKE-LÄNGE</string>
+    <string name="take_length_off">Ohne Limit</string>
+    <string name="take_length_plays">ergibt %1$s</string>
+    <string name="take_length_note">Der Take endet nach dieser Aufnahmedauer von selbst und braucht zum Start weniger freien Speicher.</string>
     <string name="panel_title_white_balance">WEISSABGLEICH</string>
     <string name="panel_title_focus">FOKUS</string>
     <string name="panel_title_focus_pull">FOKUSZUG</string>

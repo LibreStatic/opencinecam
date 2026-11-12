@@ -54,15 +54,19 @@ import kotlinx.coroutines.launch
  * operator's thumb learns where shutter or focus is once: a slot the camera cannot drive stays in
  * place, greyed, and says why when tapped, instead of disappearing and shifting the rest.
  */
-internal enum class CaptureSlot { RESOLUTION, FPS, INTERVAL, SHUTTER, ISO, EV, WB, FOCUS }
+internal enum class CaptureSlot { RESOLUTION, FPS, INTERVAL, LENGTH, SHUTTER, ISO, EV, WB, FOCUS }
 
 /**
  * RES always leads. Video, LOG and RAW video: RES · FPS · SHUTTER · ISO · WB · FOCUS. Stills: RES · SHUTTER ·
- * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval.
+ * ISO · EV · WB · FOCUS. Time-lapse swaps FPS for the interval. Slow motion in a high-speed session
+ * ([highSpeed]), which holds focus itself, swaps FOCUS for the take length; at a rate a regular
+ * session records, focus stays drivable, so the row is the video one and takes are not bounded.
  */
-internal fun captureSlots(mode: CaptureMode): List<CaptureSlot> = when {
+internal fun captureSlots(mode: CaptureMode, highSpeed: Boolean = false): List<CaptureSlot> = when {
     mode == CaptureMode.TIME_LAPSE ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.INTERVAL, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
+    mode == CaptureMode.SLOW_MOTION && highSpeed ->
+        listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.LENGTH, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB)
     mode in CameraUiState.frameRateModes || mode == CaptureMode.SLOW_MOTION || mode == CaptureMode.RAW_VIDEO ->
         listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
     else -> listOf(CaptureSlot.RESOLUTION, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS)
@@ -73,7 +77,7 @@ internal enum class SlotUnavailableReason { NOT_READY, SINGLE_RESOLUTION, HIGH_S
 
 /**
  * Whether a slot can be driven now. A high-speed session runs exposure, white balance and focus
- * itself, so only its size and rate stay adjustable. With a single [resolutionChoices] the RES
+ * itself, so only its size, rate and take length stay adjustable. With a single [resolutionChoices] the RES
  * slot is a placeholder that names the size ("12 MP"). A night photo ([nightPhoto]) runs through the
  * OEM extension, which sets size, exposure, white balance and focus itself, so every slot is held.
  */
@@ -90,7 +94,7 @@ internal fun captureSlotUnavailableReason(
     !cameraReady -> SlotUnavailableReason.NOT_READY
     nightPhoto -> SlotUnavailableReason.NIGHT_PHOTO
     slot == CaptureSlot.RESOLUTION && resolutionChoices < 2 -> SlotUnavailableReason.SINGLE_RESOLUTION
-    highSpeed && slot != CaptureSlot.RESOLUTION && slot != CaptureSlot.FPS && slot != CaptureSlot.INTERVAL ->
+    highSpeed && slot !in highSpeedSlots ->
         SlotUnavailableReason.HIGH_SPEED
     slot == CaptureSlot.ISO && !manualIso -> SlotUnavailableReason.NO_MANUAL_EXPOSURE
     slot == CaptureSlot.SHUTTER && !manualShutter -> SlotUnavailableReason.NO_MANUAL_EXPOSURE
@@ -98,11 +102,14 @@ internal fun captureSlotUnavailableReason(
     else -> null
 }
 
+private val highSpeedSlots = setOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.INTERVAL, CaptureSlot.LENGTH)
+
 /** The short cell title. */
 internal fun CaptureSlot.labelRes(): Int = when (this) {
     CaptureSlot.RESOLUTION -> R.string.capture_slot_resolution
     CaptureSlot.FPS -> R.string.capture_slot_fps
     CaptureSlot.INTERVAL -> R.string.capture_slot_interval
+    CaptureSlot.LENGTH -> R.string.capture_slot_length
     CaptureSlot.SHUTTER -> R.string.capture_slot_shutter
     CaptureSlot.ISO -> R.string.capture_slot_iso
     CaptureSlot.EV -> R.string.capture_slot_ev
@@ -115,6 +122,7 @@ internal fun CaptureSlot.nameRes(): Int = when (this) {
     CaptureSlot.RESOLUTION -> R.string.capture_slot_resolution_name
     CaptureSlot.FPS -> R.string.capture_slot_fps_name
     CaptureSlot.INTERVAL -> R.string.capture_slot_interval_name
+    CaptureSlot.LENGTH -> R.string.capture_slot_length_name
     CaptureSlot.SHUTTER -> R.string.capture_slot_shutter_name
     CaptureSlot.ISO -> R.string.capture_slot_iso_name
     CaptureSlot.EV -> R.string.capture_slot_ev_name
