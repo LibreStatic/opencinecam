@@ -26,19 +26,22 @@ data class RawTakeFileRecovery(
  * failed) it falls back to truncating only, which still leaves a valid prefix. A file with at least
  * one complete frame is published; one without (no header, or a header and metadata only) is
  * deleted. If recovery cannot even read the file, [fallbackFrames] decides: frames the writer knows
- * it completed are never thrown away.
+ * it completed are never thrown away. Without that count (recovery after process death) the failure
+ * is thrown instead: an unreadable file is not an empty one, so the caller keeps the take pending.
  */
-fun recoverRawTakeFile(channel: FileChannel, fallbackFrames: Long = 0): RawTakeFileRecovery {
+fun recoverRawTakeFile(channel: FileChannel, fallbackFrames: Long? = null): RawTakeFileRecovery {
     val result = try {
         OcrawStreamReader.recover(channel, finalize = true)
     } catch (_: Exception) {
         try {
             OcrawStreamReader.recover(channel, finalize = false)
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            if (fallbackFrames == null) throw failure
             null
         }
     }
     if (result == null) {
+        checkNotNull(fallbackFrames)
         val frames = fallbackFrames.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
         return RawTakeFileRecovery(
             if (frames > 0) RawTakeFileDecision.PUBLISH else RawTakeFileDecision.DELETE, frames, null, 0,

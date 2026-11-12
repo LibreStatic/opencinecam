@@ -130,10 +130,56 @@ class RawVideoRecoveryTest {
     }
 
     @Test
+    fun unreadableFileIsKeptUnlessTheWriterKnowsItsFrames() {
+        val file = take("unreadable.ocraw", frames = 3, finish = false)
+        val published = mutableListOf<String>()
+        val deleted = mutableListOf<String>()
+
+        val report = recoverPendingRawTakes(
+            rows = listOf(file),
+            isLive = { false },
+            recoverRow = { row -> RandomAccessFile(row, "r").use { recoverRawTakeFile(UnreadableChannel(it.channel)).decision } },
+            publish = { published += it.name },
+            delete = { deleted += it.name },
+        )
+
+        assertEquals(RawVideoRecoveryReport(unresolved = 1), report)
+        assertTrue(published.isEmpty() && deleted.isEmpty())
+        RandomAccessFile(file, "r").use { raf ->
+            val known = recoverRawTakeFile(UnreadableChannel(raf.channel), fallbackFrames = 3)
+            assertEquals(RawTakeFileDecision.PUBLISH, known.decision)
+            assertEquals(3, known.frames)
+            assertEquals(RawTakeFileDecision.DELETE, recoverRawTakeFile(UnreadableChannel(raf.channel), fallbackFrames = 0).decision)
+        }
+    }
+
+    @Test
     fun liveRegistryTracksOwnedRows() {
         val uri = RawVideoRecovery.insertLive { Uri.parse("content://media/external/file/42") }
         assertTrue(RawVideoRecovery.isLive(uri))
         RawVideoRecovery.release(uri)
         assertTrue(!RawVideoRecovery.isLive(uri))
     }
+}
+
+/** A channel whose every read and write fails, as on a volume returning I/O errors. */
+private class UnreadableChannel(private val delegate: FileChannel) : FileChannel() {
+    private fun fail(): Nothing = throw java.io.IOException("I/O error")
+    override fun read(dst: ByteBuffer): Int = fail()
+    override fun read(dsts: Array<out ByteBuffer>, offset: Int, length: Int): Long = fail()
+    override fun read(dst: ByteBuffer, position: Long): Int = fail()
+    override fun write(src: ByteBuffer): Int = fail()
+    override fun write(srcs: Array<out ByteBuffer>, offset: Int, length: Int): Long = fail()
+    override fun write(src: ByteBuffer, position: Long): Int = fail()
+    override fun position(): Long = delegate.position()
+    override fun position(newPosition: Long): FileChannel = apply { delegate.position(newPosition) }
+    override fun size(): Long = delegate.size()
+    override fun truncate(size: Long): FileChannel = fail()
+    override fun force(metaData: Boolean) = fail()
+    override fun transferTo(position: Long, count: Long, target: java.nio.channels.WritableByteChannel): Long = fail()
+    override fun transferFrom(src: java.nio.channels.ReadableByteChannel, position: Long, count: Long): Long = fail()
+    override fun map(mode: MapMode, position: Long, size: Long): java.nio.MappedByteBuffer = fail()
+    override fun lock(position: Long, size: Long, shared: Boolean): java.nio.channels.FileLock = fail()
+    override fun tryLock(position: Long, size: Long, shared: Boolean): java.nio.channels.FileLock = fail()
+    override fun implCloseChannel() = Unit
 }
