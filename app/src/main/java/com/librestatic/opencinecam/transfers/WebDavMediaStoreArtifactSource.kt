@@ -48,6 +48,14 @@ internal class WebDavMediaStoreArtifactSource(
             throw absentOr(resolver, spec.sourceUri.toUri(), failure)
         }
 
+        /**
+         * Whether [failure] of a descriptor check is the drive leaving: [DriveDescriptors] closed the descriptor, or the
+         * drive stopped answering before it did (fstat then fails with an errno, which is no [IOException]). A failure
+         * while the drive still answers stays what it is.
+         */
+        private fun driveLeft(failure: Throwable?, descriptorReleased: Boolean): Boolean = onDrive && (descriptorReleased ||
+            (failure != null && failure !is WebDavSourceDriveAbsent && !driveAnswers(resolver, spec.sourceUri.toUri())))
+
         override fun snapshot(): WebDavClipSnapshot = probe.inspect(prepared, pending = false).also {
             requireHashSnapshot(spec, it)
         }
@@ -99,6 +107,7 @@ internal class WebDavMediaStoreArtifactSource(
                                 try { closer.close() } catch (problem: Throwable) {
                                     if (failure == null) failure = problem else failure.addSuppressed(problem)
                                 }
+                                failure = driveReleasedOr(failure, driveLeft(failure, descriptorReleased = false))
                             }
                             failure?.let { throw it }
                         } finally {
@@ -108,7 +117,7 @@ internal class WebDavMediaStoreArtifactSource(
                 }
             } catch (failure: Throwable) {
                 // Read before this close: already closed means the drive left during the checks.
-                val released = onDrive && closer.closed
+                val released = driveLeft(failure, closer.closed)
                 try {
                     try { closer.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
                 } finally {

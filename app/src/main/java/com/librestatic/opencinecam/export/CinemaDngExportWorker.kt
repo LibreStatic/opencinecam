@@ -136,11 +136,12 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     /**
      * An export WorkManager kept from an earlier process and has not run yet. The state restarted idle, yet the unique
      * work would keep that export and drop a new request, whose state and lease would then describe an export that never runs.
+     * A query that fails or times out reads as one kept: the start is refused rather than recorded and never run.
      */
     private fun keptWork(context: Context): Boolean = runCatching {
         WorkManager.getInstance(context).getWorkInfosForUniqueWork(UNIQUE_WORK).get(KEPT_WORK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
             .any { !it.state.isFinished }
-    }.getOrDefault(false)
+    }.getOrDefault(true)
 
     /** Starts [request]; false while another export runs or waits to. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {

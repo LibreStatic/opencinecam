@@ -498,7 +498,7 @@ class CaptureService : Service() {
                         return@execute
                     } finally {
                         // Published or not, nothing in this process touches the take again: recovery may resolve it.
-                        runCatching { output?.recoveryGroup?.relinquish() }
+                        relinquishTake(output?.recoveryGroup)
                     }
                     result.incompleteFailures.forEach {
                         android.util.Log.e("RecordingRecovery", "Incomplete publication step failed; rows stay pending for recovery", it)
@@ -507,7 +507,7 @@ class CaptureService : Service() {
                 }
             } catch (_: RejectedExecutionException) {
                 android.util.Log.w("RecordingRecovery", "Storage executor is closed; the interrupted take stays pending for recovery")
-                runCatching { output?.recoveryGroup?.relinquish() }
+                relinquishTake(output?.recoveryGroup)
             }
         }
     }
@@ -1028,12 +1028,26 @@ class CaptureService : Service() {
             android.util.Log.w("StillRecovery", "Still recovery after $volumeId mounted not queued; the service's next start retries it", failure)
         }
         // Queued on its own: a full storage queue must not cost the drive's takes their recovery pass.
+        queueRecordingRecovery("$volumeId mounted")
+    }
+
+    /**
+     * The take's owner is done with it. A drive's take left pending may have been skipped, while it was live, by the
+     * pass of a drive that mounted again meanwhile: queue one now instead of waiting for the next mount or service start.
+     */
+    private fun relinquishTake(group: com.librestatic.opencinecam.storage.RecordingRecoveryGroup?) {
+        val pending = runCatching { group?.relinquish() == true }.getOrDefault(false)
+        if (pending && !serviceDestroyed) queueRecordingRecovery("a drive take was left pending")
+    }
+
+    /** Queues a pass over the journal of interrupted takes; takes on a drive that is not mounted are kept for a later one. */
+    private fun queueRecordingRecovery(cause: String) {
         try {
             recoveryExecutor.execute {
                 // A take running now is in the live-group registry, so recovery leaves it alone. RAW takes (PLAN-072
                 // Delivery 3) are repaired in place, then published with their frames or discarded when they hold none.
                 val report = try { com.librestatic.opencinecam.storage.RecordingCaptureRecovery(this).recover() } catch (failure: Exception) {
-                    android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable after $volumeId mounted", failure)
+                    android.util.Log.e("RecordingRecovery", "Interrupted take journal unavailable after $cause", failure)
                     return@execute
                 }
                 val recovered = report.incompleteGroups + report.rawTakes.published
@@ -1049,7 +1063,7 @@ class CaptureService : Service() {
                 }
             }
         } catch (failure: java.util.concurrent.RejectedExecutionException) {
-            android.util.Log.w("RecordingRecovery", "Recovery after $volumeId mounted not queued; the drive's next mount or the service's next start retries it", failure)
+            android.util.Log.w("RecordingRecovery", "Recovery after $cause not queued; the drive's next mount or the service's next start retries it", failure)
         }
     }
 
@@ -3710,7 +3724,7 @@ class CaptureService : Service() {
                 } finally {
                     // A take left pending (a drive pulled mid-take) becomes recoverable now, not only in a new process;
                     // a deferred salvage relinquishes it itself once it has run.
-                    if (startDeferredSalvage == null) runCatching { output?.recoveryGroup?.relinquish() }
+                    if (startDeferredSalvage == null) relinquishTake(output?.recoveryGroup)
                     try { transferPublication?.close() } catch (problem: Exception) {
                         android.util.Log.e("CapturePublication", "Optional queue handle cleanup failed", problem)
                     }

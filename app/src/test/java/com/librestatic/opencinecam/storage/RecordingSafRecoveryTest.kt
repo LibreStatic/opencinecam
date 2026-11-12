@@ -267,8 +267,8 @@ class RecordingSafRecoveryTest {
         assertEquals(RecordingRecoveryReport(), journal().recover())
         assertTrue(File(takeDir(), SafRecordingRows.MARKER).isFile)
 
-        // The service is done with the take: the drive's next mount recovers it in this same process.
-        group.relinquish()
+        // The service is done with the take: it is left pending, so a pass queued now recovers it in this same process.
+        assertTrue(group.relinquish())
         assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
         assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
         assertTrue(entries().isEmpty())

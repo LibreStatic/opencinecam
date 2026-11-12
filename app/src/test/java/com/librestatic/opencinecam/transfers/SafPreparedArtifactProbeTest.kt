@@ -138,6 +138,33 @@ class SafPreparedArtifactProbeTest {
         assertEquals(0, DriveDescriptors.registered(volume))
     }
 
+    /** A stream of the drive's video, opened while fstat works; its close-time check then fails with an errno. */
+    private fun closeWithAFailingCheck(beforeClose: () -> Unit): Throwable? {
+        val spec = WebDavArtifactSpec("00000000-0000-0000-0000-000000000003", WebDavArtifactRole.VIDEO, video.uri, "A001.mp4", 11)
+        ShadowFstatProbe.passThrough = true
+        return try {
+            val stream = WebDavMediaStoreArtifactSource(context.contentResolver).source(spec).open()
+            ShadowFstatProbe.passThrough = false
+            beforeClose()
+            runCatching { stream.close() }.exceptionOrNull()
+        } finally { ShadowFstatProbe.passThrough = false }
+    }
+
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aCloseTimeCheckThatFailsOnADriveThatNoLongerAnswersIsAnAbsentDrive() {
+        // The drive left but its descriptors are not released yet: the errno is the drive, so the upload waits for it.
+        val failure = closeWithAFailingCheck { drive.mounted = false }
+        assertTrue(failure.toString(), failure is WebDavSourceDriveAbsent && failure.cause is ErrnoException)
+        assertEquals(0, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+    }
+
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aCloseTimeCheckThatFailsWhileTheDriveAnswersStaysAFailure() {
+        val failure = closeWithAFailingCheck { }
+        assertTrue(failure.toString(), failure is ErrnoException)
+        assertEquals(0, DriveDescriptors.registered(FakeExternalStorageProvider.VOLUME))
+    }
+
     @Test fun aCheckThatMeetsAReleasedDescriptorIsAnAbsentDrive() {
         val changed = WebDavArtifactContentChanged()
         assertNull(driveReleasedOr(null, released = false))
@@ -173,14 +200,17 @@ class SafPreparedArtifactProbeTest {
     }
 }
 
-/** Runs [onFstat] on each `Os.fstat` and then fails it, so a test sees the state while the probe holds its descriptor. */
+/** Runs [onFstat] on each `Os.fstat` and then fails it (while [passThrough] is set it answers as the test's video file instead), so a test sees the state while the probe holds its descriptor. */
 @Implements(Os::class)
 class ShadowFstatProbe {
     companion object {
         @Volatile var onFstat: (() -> Unit)? = null
+        @Volatile var passThrough = false
 
         @JvmStatic @Implementation
         fun fstat(@Suppress("UNUSED_PARAMETER") descriptor: FileDescriptor): StructStat {
+            // Robolectric's own fstat is not a regular file's: answer as the 11-byte video would.
+            if (passThrough) return StructStat(1, 1, OsConstants.S_IFREG or 0x1A4, 1, 0, 0, 0, 11, 0, 0, 0, 4096, 1)
             onFstat?.invoke()
             throw ErrnoException("fstat", OsConstants.EBADF)
         }

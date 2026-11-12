@@ -150,13 +150,14 @@ internal fun safPreparedObservation(resolver: ContentResolver, artifact: Prepare
 }
 
 /** [failure] when the drive answers (the document is truly gone, or the read truly failed), else [WebDavSourceDriveAbsent]. */
-internal fun absentOr(resolver: ContentResolver, document: Uri, failure: IOException): IOException {
-    val reachable = runCatching {
-        val docs = SafDocuments(resolver, DocumentsContract.buildTreeDocumentUri(document.authority, DocumentsContract.getTreeDocumentId(document)))
-        docs.describe(docs.root) != null
-    }.getOrDefault(false)
-    return if (reachable) failure else WebDavSourceDriveAbsent(failure)
-}
+internal fun absentOr(resolver: ContentResolver, document: Uri, failure: IOException): IOException =
+    if (driveAnswers(resolver, document)) failure else WebDavSourceDriveAbsent(failure)
+
+/** Whether the drive holding [document] answers for its picked folder. */
+internal fun driveAnswers(resolver: ContentResolver, document: Uri): Boolean = runCatching {
+    val docs = SafDocuments(resolver, DocumentsContract.buildTreeDocumentUri(document.authority, DocumentsContract.getTreeDocumentId(document)))
+    docs.describe(docs.root) != null
+}.getOrDefault(false)
 
 /**
  * The probe for any capture artifact: a drive document ([isDriveUri]) through [SafPreparedArtifactProbe], anything

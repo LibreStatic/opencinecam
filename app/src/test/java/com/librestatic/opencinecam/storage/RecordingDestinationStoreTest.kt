@@ -18,6 +18,7 @@ import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -181,6 +182,21 @@ class RecordingDestinationStoreTest {
         assertFalse(held(OTHER))
         assertTrue(held(DRIVE))
         assertEquals(RecordingDestination.UsbFolder(DRIVE, "FFF1-7571"), store().configured())
+    }
+
+    @Test
+    fun aProbeThatThrowsReleasesThePermissionAndKeepsThePreviousDestination() {
+        store().adopt(DRIVE)
+        duringProbe = { throw IllegalStateException("probe descriptor failed on close") }
+        assertThrows(IllegalStateException::class.java) { store().adopt(OTHER) }
+        assertFalse(held(OTHER))
+        assertTrue(held(DRIVE))
+        assertEquals(RecordingDestination.UsbFolder(DRIVE, "FFF1-7571"), store().configured())
+        // The configured tree keeps its grant when its own new probe throws, and a later adoption still works.
+        duringProbe = { throw IllegalStateException("probe descriptor failed on close") }
+        assertThrows(IllegalStateException::class.java) { store().adopt(DRIVE) }
+        assertTrue(held(DRIVE))
+        assertEquals(RecordingFolderAdoption.Adopted::class.java, store().adopt(OTHER).javaClass)
     }
 
     @Test

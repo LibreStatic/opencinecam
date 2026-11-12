@@ -867,10 +867,12 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
      * The take's owner is done with it: no in-process step will publish, salvage or discard it any more. A take still
      * pending (its publication failed, e.g. a drive pulled mid-take) leaves the live registry once no native writer
      * remains, so the next [RecordingCaptureRecovery.recover] (a drive's mount event) resolves it instead of only a new process.
+     * True when a drive's take is left pending: a mount pass may have skipped it while it was live, so the caller queues one.
      */
-    fun relinquish() = synchronized(recordingRecoveryLock) {
+    fun relinquish(): Boolean = synchronized(recordingRecoveryLock) {
         relinquished = true
         releaseIfRelinquished()
+        !committed && !discarded && store is SafRecordingRows
     }
 
     private fun releaseIfRelinquished() {

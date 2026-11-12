@@ -153,7 +153,15 @@ internal class RecordingDestinationStore(
             Log.w(LOG_TAG, "The folder permission could not be kept", failure)
             return RecordingFolderAdoption.Rejected(RecordingFolderRejection.PERMISSION_DENIED)
         }
-        probe(tree).rejection()?.let { reason ->
+        val probed = try { probe(tree) } catch (failure: Exception) {
+            // The probe itself failed (a descriptor that throws on close): the folder is not adopted, so its grant goes too.
+            synchronized(ALIAS_LOCK) {
+                settle()
+                if (!usesTree(tree)) releaseUnlessShared(tree)
+            }
+            throw failure
+        }
+        probed.rejection()?.let { reason ->
             synchronized(ALIAS_LOCK) {
                 settle()
                 if (generation != choice) {
