@@ -139,11 +139,15 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
 
     override fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder? = runCatching {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        context.contentResolver.takePersistableUriPermission(tree, flags)
-        val previous = preferences.getString(KEY_TREE, null)
-        // The recording destination may use the same tree (or it as an alias), or an interrupted take may wait on it; its permission then stays.
-        if (previous != null && previous != tree.toString()) RecordingDestinationStore(context).releaseUnlessNeeded(previous.toUri())
-        preferences.edit().putString(KEY_TREE, tree.toString()).apply()
+        val recording = RecordingDestinationStore(context)
+        // One step against the recording destination's own releases: it keeps a tree it finds remembered here.
+        recording.withGrants {
+            context.contentResolver.takePersistableUriPermission(tree, flags)
+            val previous = preferences.getString(KEY_TREE, null)
+            // The recording destination may use the same tree (or it as an alias), or an interrupted take may wait on it; its permission then stays.
+            if (previous != null && previous != tree.toString()) recording.releaseUnlessNeeded(previous.toUri())
+            preferences.edit().putString(KEY_TREE, tree.toString()).apply()
+        }
         folder(tree)
     }.onFailure { Log.w("CinemaDngExport", "The folder permission could not be kept", it) }.getOrNull()
 

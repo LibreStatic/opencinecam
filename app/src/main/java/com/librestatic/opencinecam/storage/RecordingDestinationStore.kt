@@ -222,6 +222,12 @@ internal class RecordingDestinationStore(
     }
 
     /**
+     * Runs [block] as one step against every grant this store takes or releases: for another owner of a tree's grant (the
+     * CinemaDNG export) taking it and remembering it, so a recording adoption that settles meanwhile sees it remembered.
+     */
+    fun <T> withGrants(block: () -> T): T = synchronized(ALIAS_LOCK, block)
+
+    /**
      * Releases [tree] for another owner of its grant (the CinemaDNG export leaving it) unless [needsTree]. The check and
      * the release are one step against [adopt], which takes its grant and registers as pending under the same lock.
      */
