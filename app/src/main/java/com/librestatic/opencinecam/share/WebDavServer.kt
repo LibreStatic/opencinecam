@@ -454,8 +454,18 @@ internal class WebDavServer(
                 return serverError(output, error)
             }
             val body = collectionHtml(if (take == null) "OpenCineCam" else take.stem, entries).toByteArray(Charsets.UTF_8)
-            respond(output, 200, listOf("Content-Type" to "text/html; charset=utf-8", "X-Content-Type-Options" to "nosniff",
-                "Content-Security-Policy" to "default-src 'none'"), body, keepAlive = keepAlive, head = head)
+            writeHead(output, 200, listOf("Content-Type" to "text/html; charset=utf-8", "X-Content-Type-Options" to "nosniff",
+                "Content-Security-Policy" to "default-src 'none'", "Content-Length" to body.size.toString()), keepAlive)
+            // A take of thousands of frames lists long enough to fill the socket buffer: the reaper watches it too.
+            streamBody(connection, output, activity = false) {
+                var offset = 0
+                while (!head && offset < body.size) {
+                    val count = minOf(BODY_CHUNK_BYTES, body.size - offset)
+                    output.write(body, offset, count)
+                    offset += count
+                    connection.lastProgressMs.set(clock.nowMs())
+                }
+            }
             if (!head) lastActivity.set(clock.nowMs())
             return keepAlive
         }
@@ -570,6 +580,8 @@ internal class WebDavServer(
         const val ALLOW = "OPTIONS, PROPFIND, GET, HEAD"
         const val XML_TYPE = "application/xml; charset=utf-8"
         private const val LINGER_MS = 1_000
+        /** How much of an in-memory body is written between progress marks for the stall reaper. */
+        private const val BODY_CHUNK_BYTES = 64 * 1024
         private const val LINGER_MAX_BYTES = 256 * 1024
         /** Bounds the trusted-address map; the server only listens on local networks. */
         private const val MAX_TRUSTED_CLIENTS = 64
