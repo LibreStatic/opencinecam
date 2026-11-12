@@ -93,6 +93,21 @@ internal class DriveDescriptorHandle internal constructor(private val entry: Any
 }
 
 /**
+ * Runs [block] over this stream or descriptor of [document], closing it afterwards. On a drive it is registered for the
+ * duration, so a drive that leaves mid-transfer has it closed (ADR-0037) and [block] fails with an I/O error instead of
+ * the process holding a descriptor on the volume. On the phone it is a plain `use`.
+ */
+internal inline fun <S : AutoCloseable, T> S.useOnDrive(document: Uri, block: (S) -> T): T {
+    val closer = CloseOnce(this)
+    val handle = DriveDescriptors.registerDocument(document, closer)
+    try {
+        return block(this)
+    } finally {
+        try { closer.close() } finally { handle.unregister() }
+    }
+}
+
+/**
  * Releases the descriptors on [volumeId] and logs how many were closed, with [cause]. Called on the earliest signal that
  * the drive is leaving or failing: the volume monitor's callback, a drive write failure.
  */

@@ -219,6 +219,27 @@ class StillSafRecoveryTest {
         assertEquals(emptyList<List<String?>>(), entries())
     }
 
+    @Test fun streamOnTheDriveIsRegisteredWhileItIsUsedAndClosedWhenTheDriveLeaves() {
+        val file = Uri.parse(SafStillRows(context, tree, null) {}.insert("C.dng", "image/x-adobe-dng", false))
+        fun open() = requireNotNull(context.contentResolver.openOutputStream(file, "wt"))
+
+        open().useOnDrive(file) {
+            assertEquals(1, DriveDescriptors.registered(drive.volume))
+            it.write(byteArrayOf(1, 2, 3))
+        }
+        assertEquals(0, DriveDescriptors.registered(drive.volume))
+        assertArrayEquals(byteArrayOf(1, 2, 3), File(stills, "C/C.dng").readBytes())
+
+        // ADR-0037: the drive leaves mid-write, so the stream closes under the writer and its write fails.
+        assertThrows(java.io.IOException::class.java) {
+            open().useOnDrive(file) {
+                assertEquals(1, DriveDescriptors.releaseVolume(drive.volume))
+                it.write(byteArrayOf(4))
+            }
+        }
+        assertEquals(0, DriveDescriptors.registered(drive.volume))
+    }
+
     @Test fun driveThatDoesNotAnswerIsNeverReadAsEmpty() {
         interrupted("C.jpg" to byteArrayOf(5))
         drive.mounted = false
