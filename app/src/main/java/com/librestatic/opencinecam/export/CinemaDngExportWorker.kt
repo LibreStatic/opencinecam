@@ -24,6 +24,8 @@ import androidx.work.workDataOf
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.RawVideoRecovery
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 import kotlinx.coroutines.CancellationException
@@ -139,6 +141,9 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
                 ?: return CinemaDngExportOutcome.Refused(CinemaDngRefusal.UNREADABLE)
             return descriptor.use {
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(it.fileDescriptor)).channel.use { channel ->
+                    // A take on the USB drive: both descriptors close with the drive (ADR-0037) and the export fails on its next read.
+                    val driveHandle = DriveDescriptors.registerDocument(takeUri.toUri(), CloseOnce(channel, it))
+                    try {
                     val exporter = CinemaDngExporter(channel, takeName, encoder?.let(CinemaDngWriter.Lj92Encoder::native), decoderThreads = 2)
                     var lastNotified = 0L
                     var lastPercent = -1
@@ -152,6 +157,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
                             notify(PROGRESS_NOTIFICATION_ID, progressNotification(takeName, progress))
                         }
                     }
+                    } finally { driveHandle.unregister() }
                 }
             }
         } catch (failure: Exception) {

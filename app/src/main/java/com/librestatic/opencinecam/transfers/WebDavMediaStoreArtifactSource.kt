@@ -8,6 +8,8 @@ import android.system.OsConstants
 import android.system.StructStat
 import androidx.core.net.toUri
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
 import com.librestatic.opencinecam.storage.isDriveUri
 import java.io.FileNotFoundException
@@ -18,7 +20,9 @@ import java.io.InputStream
  * Strict source for all published take roles, on the phone or (PLAN-072) on the USB drive: [CaptureArtifactProbe]
  * picks the probe by URI, and the descriptor checks below hold for either.
  * Each source owns only its independently opened
- * read-only descriptor; the provider's rows and the capture writer are never modified or closed.
+ * read-only descriptor; the provider's rows and the capture writer are never modified or closed. A descriptor on the
+ * drive is registered with [DriveDescriptors] while it is open, so a drive that leaves mid-upload has it closed (ADR-0037)
+ * even while the upload is blocked on the network, and the stream then fails as [WebDavSourceDriveAbsent].
  */
 internal class WebDavMediaStoreArtifactSource(
     private val resolver: ContentResolver,
@@ -52,6 +56,8 @@ internal class WebDavMediaStoreArtifactSource(
             val before = snapshot()
             val descriptor = reading { resolver.openFileDescriptor(spec.sourceUri.toUri(), "r") }
                 ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
+            val closer = CloseOnce(descriptor)
+            val driveHandle = DriveDescriptors.registerDocument(spec.sourceUri.toUri(), closer)
             try {
                 requireReadOnlyPreparedDescriptor(descriptor)
                 val first = Os.fstat(descriptor.fileDescriptor)
@@ -60,14 +66,21 @@ internal class WebDavMediaStoreArtifactSource(
                 val input = ParcelFileDescriptor.AutoCloseInputStream(descriptor)
                 return object : InputStream() {
                     private var closed = false
-                    override fun read(): Int { check(!closed); return reading { input.read() } }
+                    /** The drive left and [DriveDescriptors] closed the descriptor: nothing more can be read or checked. */
+                    private fun requireHeld() { if (closer.closed) throw WebDavSourceDriveAbsent() }
+                    override fun read(): Int { check(!closed); requireHeld(); return reading { input.read() } }
                     override fun read(bytes: ByteArray, offset: Int, length: Int): Int {
                         check(!closed)
-                        return reading { input.read(bytes, offset, length) }
+                        requireHeld()
+                        return try { reading { input.read(bytes, offset, length) } } catch (failure: IOException) {
+                            if (closer.closed && failure !is WebDavSourceDriveAbsent) throw WebDavSourceDriveAbsent(failure) else throw failure
+                        }
                     }
                     override fun close() {
                         if (closed) return
                         closed = true
+                        driveHandle.unregister()
+                        if (closer.closed) throw WebDavSourceDriveAbsent()
                         var failure: Throwable? = null
                         try {
                             requireReadOnlyPreparedDescriptor(descriptor)
@@ -76,14 +89,15 @@ internal class WebDavMediaStoreArtifactSource(
                             if (!sameFile(first, last) || snapshot() != before ||
                                 !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
                         } catch (problem: Throwable) { failure = problem }
-                        try { input.close() } catch (problem: Throwable) {
+                        try { closer.close() } catch (problem: Throwable) {
                             if (failure == null) failure = problem else failure.addSuppressed(problem)
                         }
                         failure?.let { throw it }
                     }
                 }
             } catch (failure: Throwable) {
-                try { descriptor.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+                driveHandle.unregister()
+                try { closer.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
                 throw failure
             }
         }

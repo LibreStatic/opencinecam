@@ -8,6 +8,8 @@ import android.content.ContentUris
 import android.content.Context
 import android.os.Bundle
 import android.provider.MediaStore
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.RAW_VIDEO_EXTENSION
 import com.librestatic.opencinecam.storage.RAW_VIDEO_PATH
 import com.librestatic.opencinecam.storage.isRawVideoRow
@@ -59,14 +61,21 @@ internal class MediaStoreShareTakes(context: Context) : ShareTakeSource {
     }
 }
 
-/** A read-only descriptor on [uri] (a MediaStore row or a drive document) as a [ShareOpenFile]. */
+/**
+ * A read-only descriptor on [uri] (a MediaStore row or a drive document) as a [ShareOpenFile]. On the drive it is
+ * registered with [DriveDescriptors] for as long as a client keeps the file open, so a drive that leaves has it closed
+ * (ADR-0037) and the client's next read fails.
+ */
 internal fun openShareFile(resolver: ContentResolver, uri: android.net.Uri): ShareOpenFile {
     val descriptor = resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("take unavailable")
     val stream = try { FileInputStream(descriptor.fileDescriptor) } catch (error: RuntimeException) { descriptor.close(); throw error }
+    val closer = CloseOnce(stream, descriptor)
+    val driveHandle = DriveDescriptors.registerDocument(uri, closer)
     return object : ShareOpenFile {
         override val channel: FileChannel = stream.channel
         override fun close() {
-            try { stream.close() } finally { runCatching { descriptor.close() } }
+            driveHandle.unregister()
+            runCatching { closer.close() }
         }
     }
 }

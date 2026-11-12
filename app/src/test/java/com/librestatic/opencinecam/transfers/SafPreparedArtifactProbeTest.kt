@@ -8,7 +8,9 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.librestatic.opencinecam.share.openShareFile
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.FakeExternalStorageProvider
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
 import com.librestatic.opencinecam.storage.SafRecordingRows
@@ -16,6 +18,7 @@ import com.librestatic.opencinecam.storage.ShadowDocumentsProviderQuery
 import java.io.File
 import java.io.FileNotFoundException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -82,6 +85,20 @@ class SafPreparedArtifactProbeTest {
         try {
             assertEquals(WebDavHashResult.Waiting, DefaultWebDavArtifactHasher(factory).hash(WebDavOutboxArtifact(spec, modifiedSeconds = 7), WebDavOperationScope(attempt)))
         } finally { control.leave(attempt) }
+    }
+
+    @Test fun aSharedFileIsRegisteredWhileOpenAndClosedWhenTheDriveLeaves() {
+        val volume = FakeExternalStorageProvider.VOLUME
+        val whole = openShareFile(context.contentResolver, Uri.parse(video.uri))
+        assertEquals(1, DriveDescriptors.registered(volume))
+        assertEquals(11, whole.channel.size())
+        whole.close()
+        assertEquals(0, DriveDescriptors.registered(volume))
+        val cut = openShareFile(context.contentResolver, Uri.parse(video.uri))
+        assertEquals(1, DriveDescriptors.releaseVolume(volume))
+        assertFalse(cut.channel.isOpen)
+        cut.close()
+        assertEquals(0, DriveDescriptors.registered(volume))
     }
 
     @Test fun onlyCanonicalDocumentsOfTheirOwnNameAndRoleAreObserved() {
