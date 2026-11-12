@@ -2533,8 +2533,7 @@ class CaptureService : Service() {
         val pass = com.librestatic.opencinecam.storage.RecordingRecoveryReport(rawTakes = recovered)
         if (pass != com.librestatic.opencinecam.storage.RecordingRecoveryReport()) mainHandler.post {
             if (!serviceDestroyed) cameraState.update { state ->
-                state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, pass)
-                    .copy(deferredGroups = state.recordingRecovery?.deferredGroups ?: 0))
+                state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, pass, journalPass = false))
             }
         }
         if (serviceDestroyed) { refuse(RawVideoServiceReasons.START_FAILED); return }

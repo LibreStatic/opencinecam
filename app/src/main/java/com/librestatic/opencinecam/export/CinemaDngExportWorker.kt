@@ -154,8 +154,9 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         appContext?.let { runCatching { WorkManager.getInstance(it).cancelUniqueWork(UNIQUE_WORK) } }
         // Work cancelled before it started never runs, so nothing else would end the state.
         if (!workerRunning) {
-            store.finish(running.takeUri, running.takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
+            // The lease goes first: once the state is no longer Running a new export may start and lease its own trees.
             appContext?.let { runCatching { endLease(it) } }
+            store.finish(running.takeUri, running.takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
         }
     }
 
@@ -176,6 +177,9 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
 
 /** Exports one RAW take; see [CinemaDngExporter] for what it writes and [CinemaDngExportRuntime] for the state. */
 class CinemaDngExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    /** The export's lease is still to be ended: [finish] ends it, and [doWork] when it leaves without one. */
+    @Volatile private var leased = true
+
     override suspend fun doWork(): Result {
         val runtime = CinemaDngExportRuntime
         val takeUri = inputData.getString(CinemaDngExportRuntime.KEY_TAKE_URI) ?: return Result.failure()
@@ -203,7 +207,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             return withContext(NonCancellable + Dispatchers.IO) { finish(takeUri, takeName, export(takeUri, takeName, tree, compress)) }
         } finally {
             runtime.workerRunning = false
-            runCatching { runtime.endLease(applicationContext) }
+            if (leased) runCatching { runtime.endLease(applicationContext) }
         }
     }
 
@@ -253,6 +257,9 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
     }
 
     private fun finish(takeUri: String, takeName: String, outcome: CinemaDngExportOutcome): Result {
+        // The lease goes before the state stops being Running: a new export may start then and lease its own trees.
+        leased = false
+        runCatching { CinemaDngExportRuntime.endLease(applicationContext) }
         CinemaDngExportRuntime.store.finish(takeUri, takeName, outcome)
         Log.i(LOG_TAG, "CinemaDNG export of $takeName ended: $outcome")
         val text = cinemaDngOutcomeText(applicationContext, outcome)

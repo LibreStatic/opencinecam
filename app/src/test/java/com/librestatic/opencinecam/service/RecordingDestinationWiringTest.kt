@@ -129,6 +129,16 @@ class RecordingDestinationWiringTest {
             mergeRecordingRecovery(startup, RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(2, 1, 0))).rawTakes)
     }
 
+    @Test fun aPendingTakeSeenByTwoPassesIsCountedOnce() {
+        val startup = RecordingRecoveryReport(unresolvedGroups = 1, deferredGroups = 2)
+        // The mount pass meets the same journal entry again.
+        val mounted = mergeRecordingRecovery(startup, RecordingRecoveryReport(unresolvedGroups = 1, incompleteGroups = 1))
+        assertEquals(RecordingRecoveryReport(unresolvedGroups = 1, incompleteGroups = 1), mounted)
+        // The RAW pass before a RAW take reads no journal: what is pending stays as the last journal pass left it.
+        val raw = RawVideoRecoveryReport(1, 0, 0)
+        assertEquals(startup.copy(rawTakes = raw), mergeRecordingRecovery(startup, RecordingRecoveryReport(rawTakes = raw), journalPass = false))
+    }
+
     @Test fun stopAndSaveNeverContinues() {
         for (mode in CaptureMode.entries) for (highSpeed in listOf(false, true)) {
             assertEquals(DriveLossAction.StopAndSave,

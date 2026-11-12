@@ -259,11 +259,16 @@ internal fun continuationDestination(resolved: ResolvedRecordingDestination): Re
     ResolvedRecordingDestination(RecordingDestination.Phone, resolved.configured, null)
 
 /**
- * A later recovery pass (a drive mounted) merged into the state's report: the counts add up, and the drive takes still
- * deferred are the newer pass's, since it saw the journal last.
+ * A later recovery pass (a drive mounted) merged into the state's report: what each pass recovered or discarded adds
+ * up, while the takes still pending (unresolved or deferred) are the newer pass's, since it saw the journal last and
+ * each pass counts the same pending entry again. A pass that did not read the journal ([journalPass] false, the RAW
+ * pass before a RAW take) leaves the pending counts as they were.
  */
-internal fun mergeRecordingRecovery(current: RecordingRecoveryReport?, later: RecordingRecoveryReport): RecordingRecoveryReport {
+internal fun mergeRecordingRecovery(current: RecordingRecoveryReport?, later: RecordingRecoveryReport,
+    journalPass: Boolean = true): RecordingRecoveryReport {
     val base = current ?: return later
-    return base.copy(discardedGroups = base.discardedGroups + later.discardedGroups, unresolvedGroups = base.unresolvedGroups + later.unresolvedGroups,
-        incompleteGroups = base.incompleteGroups + later.incompleteGroups, rawTakes = base.rawTakes + later.rawTakes, deferredGroups = later.deferredGroups)
+    return base.copy(discardedGroups = base.discardedGroups + later.discardedGroups,
+        unresolvedGroups = if (journalPass) later.unresolvedGroups else base.unresolvedGroups,
+        incompleteGroups = base.incompleteGroups + later.incompleteGroups, rawTakes = base.rawTakes + later.rawTakes,
+        deferredGroups = if (journalPass) later.deferredGroups else base.deferredGroups)
 }
