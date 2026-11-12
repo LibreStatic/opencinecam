@@ -52,6 +52,7 @@ internal class StillCaptureRecovery(context: Context,
      */
     fun recover(): StillRecoveryReport {
         val claims = mutableListOf<Receipt>()
+        val released = HashSet<String>()
         val locked = synchronized(processLock) { open().use { recoverLocked(it, claims) } }
         var discarded = locked.discardedGroups
         var unresolved = locked.unresolvedGroups
@@ -68,10 +69,13 @@ internal class StillCaptureRecovery(context: Context,
                 android.util.Log.e("StillRecovery", "Retained unresolved capture receipt ${receipt.id}", failure)
             } finally {
                 // Released as each is decided, so a full drive bound can forget the deferred ones meanwhile.
+                released += receipt.id
                 synchronized(processLock) { claimedDriveGroups.remove(receipt.id) }
             }
         } finally {
-            synchronized(processLock) { claimedDriveGroups.removeAll(claims.mapTo(HashSet()) { it.id }) }
+            // Only the claims this pass still holds: one released above may belong to another pass by now.
+            val held = claims.mapNotNullTo(HashSet()) { it.id.takeIf { id -> id !in released } }
+            if (held.isNotEmpty()) synchronized(processLock) { claimedDriveGroups.removeAll(held) }
         }
         return StillRecoveryReport(discarded, unresolved, deferred)
     }

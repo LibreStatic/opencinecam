@@ -249,6 +249,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /** [recover]; without [driveTakes] every drive entry is deferred unread, and no drive is asked anything. */
     private fun recover(driveTakes: Boolean): RecordingRecoveryReport {
         val claims = mutableListOf<JournalRow>()
+        val released = HashSet<String>()
         val repairs = mutableListOf<RawRepair>()
         try {
             val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, claims.takeIf { driveTakes }) } }
@@ -273,7 +274,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 } finally {
                     // Released once decided, so the drive bound can forget a deferred entry during the RAW scans below;
                     // only an entry with a repair still to run stays claimed.
-                    if (outcome != DriveRecovery.RAW_REPAIR) synchronized(recordingRecoveryLock) { repairingRecordingGroups.remove(key(record.id)) }
+                    if (outcome != DriveRecovery.RAW_REPAIR) {
+                        released += record.id
+                        synchronized(recordingRecoveryLock) { repairingRecordingGroups.remove(key(record.id)) }
+                    }
                 }
             }
             repairs.forEach { repair ->
@@ -312,7 +316,9 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
             }
             return report
         } finally {
-            if (claims.isNotEmpty()) synchronized(recordingRecoveryLock) { claims.forEach { repairingRecordingGroups.remove(key(it.id)) } }
+            // Only the claims this pass still holds: one released above may belong to another pass by now.
+            val held = claims.filter { it.id !in released }
+            if (held.isNotEmpty()) synchronized(recordingRecoveryLock) { held.forEach { repairingRecordingGroups.remove(key(it.id)) } }
         }
     }
 
