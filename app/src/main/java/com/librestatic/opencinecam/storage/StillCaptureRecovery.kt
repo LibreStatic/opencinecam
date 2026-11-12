@@ -326,7 +326,7 @@ internal class StillCaptureRecovery(context: Context,
  * unknown. Its files and journal entry stay: recovery prunes the entry when the marker is gone and discards the group
  * when it is still there.
  */
-internal class StillCommitUnconfirmed : IllegalStateException("Still group marker removal could not be confirmed")
+internal class StillCommitUnconfirmed(cause: Throwable? = null) : IllegalStateException("Still group marker removal could not be confirmed", cause)
 
 /**
  * PLAN-072: one still group on a drive, in its own folder `<tree>/OpenCineCam/Stills/<stem>/` (the provider may make it
@@ -397,8 +397,11 @@ internal class SafStillRows(
      */
     fun commit() {
         val group = folder ?: return
-        check(docs.delete(markerOf(group))) { "Still group marker could not be removed" }
-        if (!reachable()) throw StillCommitUnconfirmed()
+        // A drive that throws instead of answering leaves the marker's fate as unknown as one that is gone.
+        val removed = try { docs.delete(markerOf(group)) } catch (failure: Exception) { throw StillCommitUnconfirmed(failure) }
+        check(removed) { "Still group marker could not be removed" }
+        val answers = try { reachable() } catch (failure: Exception) { throw StillCommitUnconfirmed(failure) }
+        if (!answers) throw StillCommitUnconfirmed()
     }
 
     /** Deletes the files, then the marker, then the folder: an interruption leaves the group pending for recovery. */

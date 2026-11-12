@@ -183,6 +183,25 @@ class StillSafRecoveryTest {
         assertEquals(3, folder.list()!!.size)
     }
 
+    @Test fun aDriveThatThrowsWhileConfirmingTheCommitKeepsTheCompletedFiles() {
+        var stem = ""
+        val journal = StillCaptureRecovery(context, checkpoint = { stage, _ ->
+            // The marker's delete reaches the drive, whose provider then fails every query instead of answering.
+            if (stage == "BEFORE_COMMIT") drive.afterDelete = { drive.queryFailure = SecurityException("Permission revoked"); drive.afterDelete = null }
+        }, mounted = { it.equals(drive.volume, ignoreCase = true) && drive.mounted })
+        val failure = assertThrows(StillCommitUnconfirmed::class.java) {
+            journal.publish(destination) { id, rows -> publishStillCapture(still(4), requireNotNull(rows), id).also { stem = "OCC_${it.id}" } }
+        }
+        assertTrue(failure.cause is SecurityException)
+        drive.queryFailure = null
+        val folder = File(stills, stem)
+        assertEquals(setOf("$stem.jpg", "$stem.dng", "$stem.still.json"), folder.list()!!.toSet())
+        assertEquals(1, entries().size)
+        assertEquals(StillRecoveryReport(), journal().recover())
+        assertEquals(emptyList<List<String?>>(), entries())
+        assertEquals(3, folder.list()!!.size)
+    }
+
     @Test fun verificationRejectsAlteredBytes() {
         assertThrows(IllegalStateException::class.java) {
             journal().publish(destination) { id, rows ->

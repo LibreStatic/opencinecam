@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam.storage
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
@@ -237,6 +240,33 @@ class RecordingDestinationStoreTest {
         assertEquals(RecordingFolderAdoption.Superseded, store().adopt(DRIVE))
         assertEquals(RecordingDestination.UsbFolder(DRIVE, "FFF1-7571"), store().configured())
         assertTrue(held(DRIVE))
+    }
+
+    @Test
+    fun anOlderAdoptionOfTheSameTreeKeepsThePermissionTheNewerOneStillProbesWith() {
+        fun pausedStore(inProbe: CountDownLatch, resume: CountDownLatch) = RecordingDestinationStore(context,
+            probe = { inProbe.countDown(); check(resume.await(10, TimeUnit.SECONDS)); probeResult },
+            driveAttachHandler = { enabled -> attachHandler += enabled })
+        fun adoptOnThread(inProbe: CountDownLatch, resume: CountDownLatch): FutureTask<RecordingFolderAdoption> =
+            FutureTask { pausedStore(inProbe, resume).adopt(DRIVE) }.also { Thread(it).start() }
+        val olderInProbe = CountDownLatch(1); val olderResume = CountDownLatch(1)
+        val newerInProbe = CountDownLatch(1); val newerResume = CountDownLatch(1)
+        val older = adoptOnThread(olderInProbe, olderResume)
+        assertTrue(olderInProbe.await(10, TimeUnit.SECONDS))
+        val newer = adoptOnThread(newerInProbe, newerResume)
+        assertTrue(newerInProbe.await(10, TimeUnit.SECONDS))
+        // The older call finds itself superseded while the newer one has not stored the folder yet.
+        olderResume.countDown()
+        assertEquals(RecordingFolderAdoption.Superseded, older.get(10, TimeUnit.SECONDS))
+        assertTrue(held(DRIVE))
+        newerResume.countDown()
+        assertTrue(newer.get(10, TimeUnit.SECONDS) is RecordingFolderAdoption.Adopted)
+        assertEquals(RecordingDestination.UsbFolder(DRIVE, "FFF1-7571"), store().configured())
+        assertTrue(held(DRIVE))
+        // With no adoption left pending, a superseded one releases as before.
+        duringProbe = { store().clear() }
+        assertEquals(RecordingFolderAdoption.Superseded, store().adopt(OTHER))
+        assertFalse(held(OTHER))
     }
 
     @Test

@@ -115,14 +115,34 @@ internal class RecordingDestinationStore(
      * released unless the CinemaDNG export also uses it. A previous tree on the same drive under another volume name
      * ([sameDrive]) is kept as an alias instead; an alias under the new tree's volume name is replaced by it, and adopting
      * another drive releases every alias. When another [adopt] or a [clear] starts while this one probes, the later
-     * choice stands: this tree's permission is released unless shared and the result is [RecordingFolderAdoption.Superseded].
+     * choice stands: this tree's permission is released unless shared, or unless another adoption of the same tree is still
+     * probing, and the result is [RecordingFolderAdoption.Superseded].
      */
     fun adopt(tree: Uri): RecordingFolderAdoption {
         val volume = when (val validation = validateRecordingTree(tree.authority, treeDocumentIdOf(tree))) {
             is TreeValidation.Rejected -> return RecordingFolderAdoption.Rejected(validation.reason)
             is TreeValidation.Ok -> validation.volumeId
         }
-        val choice = synchronized(ALIAS_LOCK) { ++generation }
+        val key = tree.toString()
+        val choice = synchronized(ALIAS_LOCK) {
+            pendingAdoptions.merge(key, 1, Int::plus)
+            ++generation
+        }
+        var pending = true
+        // Under ALIAS_LOCK: this adoption no longer counts as one still deciding on the tree.
+        fun settle() {
+            if (!pending) return
+            pending = false
+            pendingAdoptions.computeIfPresent(key) { _, count -> if (count > 1) count - 1 else null }
+        }
+        try {
+            return adoptPending(tree, volume, choice, ::settle)
+        } finally {
+            synchronized(ALIAS_LOCK) { settle() }
+        }
+    }
+
+    private fun adoptPending(tree: Uri, volume: String, choice: Long, settle: () -> Unit): RecordingFolderAdoption {
         try {
             resolver.takePersistableUriPermission(tree, READ_WRITE)
         } catch (failure: SecurityException) {
@@ -130,11 +150,15 @@ internal class RecordingDestinationStore(
             return RecordingFolderAdoption.Rejected(RecordingFolderRejection.PERMISSION_DENIED)
         }
         probe(tree).rejection()?.let { reason ->
-            releaseUnlessShared(tree)
+            synchronized(ALIAS_LOCK) {
+                settle()
+                releaseUnlessShared(tree)
+            }
             return RecordingFolderAdoption.Rejected(reason)
         }
         val label = driveLabel(volume) ?: folderLabel(tree)
         synchronized(ALIAS_LOCK) {
+            settle()
             if (generation != choice) {
                 // The later choice may be this same folder, picked again: its permission then stays.
                 if (!usesTree(tree)) releaseUnlessShared(tree)
@@ -222,7 +246,8 @@ internal class RecordingDestinationStore(
     private fun releaseUnlessShared(tree: Uri) {
         val kept = setOfNotNull(preferences.getString(KEY_TREE, null),
             context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE).getString(CINEMADNG_EXPORT_TREE_KEY, null)) + aliases()
-        if (tree.toString() in kept || recoveryNeedsTree(tree)) return
+        // Another adoption of this tree is still probing: the grant is the one it took, and it decides.
+        if (tree.toString() in kept || tree.toString() in pendingAdoptions || recoveryNeedsTree(tree)) return
         runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
             .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
     }
@@ -275,6 +300,8 @@ internal class RecordingDestinationStore(
         private val ALIAS_LOCK = Any()
         /** Bumped by every [adopt] and [clear] under [ALIAS_LOCK], so an adoption whose probe outlived a later choice yields. */
         private var generation = 0L
+        /** How many [adopt] calls are still deciding on each tree, under [ALIAS_LOCK]: their grant is not released under them. */
+        private val pendingAdoptions = HashMap<String, Int>()
 
         /** Keyed by [driveIdentityOf]: a drive vold mounts under a suffixed name keeps its measurement. */
         fun speedKey(volume: String) = KEY_SPEED_PREFIX + driveIdentityOf(volume)
