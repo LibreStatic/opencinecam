@@ -869,11 +869,13 @@ internal class OcrawFileFrameProvider private constructor(
             try {
                 // The stream owns a duplicate, so the channel and the descriptor close independently.
                 val channel = ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel
+                // Registered before the index walk, which reads the whole take's chunk headers.
+                val files = CloseOnce(channel, descriptor)
+                val driveHandle = DriveDescriptors.registerDocument(uri, files)
                 try {
                     val index = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames()
-                    val files = CloseOnce(channel, descriptor)
-                    return OcrawFileFrameProvider(channel, OcrawFrameSource(channel, index), files, DriveDescriptors.registerDocument(uri, files))
-                } catch (failure: Throwable) { channel.close(); throw failure }
+                    return OcrawFileFrameProvider(channel, OcrawFrameSource(channel, index), files, driveHandle)
+                } catch (failure: Throwable) { driveHandle.unregister(); files.close(); throw failure }
             } catch (failure: Throwable) { descriptor.close(); throw failure }
         }
     }

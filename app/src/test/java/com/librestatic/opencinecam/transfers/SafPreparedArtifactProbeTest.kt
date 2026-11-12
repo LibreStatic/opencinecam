@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.librestatic.opencinecam.share.openShareFile
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
+import com.librestatic.opencinecam.storage.DriveDescriptorWatch
 import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.FakeExternalStorageProvider
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
@@ -91,6 +92,8 @@ class SafPreparedArtifactProbeTest {
         val volume = FakeExternalStorageProvider.VOLUME
         val whole = openShareFile(context.contentResolver, Uri.parse(video.uri))
         assertEquals(1, DriveDescriptors.registered(volume))
+        // The application installs the process's own volume watch, and the first descriptor on a drive starts it.
+        assertTrue(DriveDescriptorWatch.active)
         assertEquals(11, whole.channel.size())
         whole.close()
         assertEquals(0, DriveDescriptors.registered(volume))

@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam.storage
 
+import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
@@ -15,7 +16,9 @@ import android.util.Log
  * leaves or fails, before publication or any other cleanup. The bytes cannot be finalised on a vanished drive anyway;
  * recovery handles the take's folder when the drive returns. Each writer meets the closed descriptor as a write failure.
  *
- * Process-wide and thread-safe; [releaseVolume] is cheap when nothing is registered.
+ * Process-wide and thread-safe; [releaseVolume] is cheap when nothing is registered. The first registration starts
+ * [DriveDescriptorWatch], so a descriptor held by background work (an upload worker, an export, the network drive) is
+ * released with the drive even when neither the capture service nor the gallery is watching the volumes.
  */
 internal object DriveDescriptors {
     private const val LOG_TAG = "RecordingDestination"
@@ -28,6 +31,7 @@ internal object DriveDescriptors {
     /** Registers [closeable] as holding a descriptor on [volumeId] (matched ignoring case) until its handle unregisters it. */
     fun register(volumeId: String, closeable: AutoCloseable): DriveDescriptorHandle {
         val entry = Entry(volumeId.uppercase(), closeable)
+        DriveDescriptorWatch.ensure()
         synchronized(entries) {
             entries += entry
             size = entries.size
@@ -78,6 +82,44 @@ internal object DriveDescriptors {
             if (entries.removeAll { it === entry }) size = entries.size
         }
     }
+}
+
+/**
+ * The process's own volume watch for [DriveDescriptors]: a [RecordingVolumeMonitor] that lives as long as the process
+ * and closes a leaving drive's descriptors on its callback. [install] only remembers the application context (it runs
+ * at process start and costs nothing); the monitor is created by the first registration.
+ */
+internal object DriveDescriptorWatch {
+    private var context: Context? = null
+    private var monitor: RecordingVolumeMonitor? = null
+    @Volatile private var started = false
+
+    @Synchronized fun install(application: Context) {
+        val applicationContext = application.applicationContext ?: application
+        if (context === applicationContext) return
+        monitor?.close()
+        monitor = null
+        started = false
+        context = applicationContext
+    }
+
+    /** Starts the watch if it is installed and not running. A monitor that cannot start is logged and retried next time. */
+    fun ensure() {
+        if (started) return
+        synchronized(this) {
+            if (started) return
+            val context = context ?: return
+            try {
+                monitor = RecordingVolumeMonitor(context)
+                started = true
+            } catch (failure: Exception) {
+                Log.w("RecordingDestination", "The drive descriptor watch could not start", failure)
+            }
+        }
+    }
+
+    /** Whether the watch is running; for tests. */
+    internal val active: Boolean get() = started
 }
 
 /** Unregisters one closeable from [DriveDescriptors] on its normal close. [unregister] is idempotent. */
