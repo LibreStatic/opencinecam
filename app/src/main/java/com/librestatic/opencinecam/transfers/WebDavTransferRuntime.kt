@@ -342,10 +342,6 @@ class WebDavTransferRuntime internal constructor(
         } catch (_: BatchStopped) { message = current.stopped ?: WebDavTransferMessage.CANCELLED }
         catch (_: Exception) { message = current.stopped ?: WebDavTransferMessage.ERROR }
         finally {
-            // PLAN-072: a drive folder the operator switched away from kept its grant while takes on it waited here; the
-            // ones this batch verified no longer need it. Off the main thread (this executor), outside the gate.
-            if (current.bundleId != null) runCatching { RecordingDestinationStore(context).releaseDeferred() }
-                .onFailure { Log.w("WebDavTransfer", "Deferred folder permissions not released", it) }
             synchronized(gate) {
                 current.finished.complete(Unit) // SQLite/FD/worker finally has actually returned.
                 if (work === current) work = null
@@ -353,6 +349,11 @@ class WebDavTransferRuntime internal constructor(
                 notifyIdleLocked()
                 current.result.complete(current.stopped ?: message)
             }
+            // PLAN-072: a drive folder the operator switched away from kept its grant while takes on it waited here; the
+            // ones this batch verified no longer need it. Off the main thread (this executor), once the batch has
+            // finished, so its journal and outbox reads hold up no capture waiting on the batch.
+            if (current.bundleId != null) runCatching { RecordingDestinationStore(context).releaseDeferred() }
+                .onFailure { Log.w("WebDavTransfer", "Deferred folder permissions not released", it) }
         }
     }
 

@@ -213,8 +213,9 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     val dismiss = { if (!starting) onDismiss() }
     MediaDialogFrame("cinemadng-export-dialog", dismiss) {
         CinemaDngExportForm(take, state,
-            onChoice = { choice = it },
-            onChooseFolder = { runCatching { picker.launch(null) } },
+            onChoice = { if (!starting) choice = it },
+            // A folder chosen while the admission runs could release the one the request captured before it is leased.
+            onChooseFolder = { if (!starting) runCatching { picker.launch(null) } },
             onCompress = { compress = it },
             onStart = {
                 recording = environment.recording()

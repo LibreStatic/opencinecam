@@ -147,22 +147,30 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
         val app = context.applicationContext
         if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
-        if (!store.begin(request.takeUri, request.takeName)) return false
-        appContext = app
-        try {
-            lease(app, request)
-            WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
-        } catch (failure: Exception) {
-            runCatching { endLease(app) }
-            store.finish(request.takeUri, request.takeName,
-                CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
-            // endLease ran while the state was Running, which keeps the folders left meanwhile: no worker remains to release them.
-            runCatching { releaseLeftFolders(app) }
+        // With [cancel]: a cancellation between the state turning Running and the enqueue would cancel no work.
+        synchronized(admission) {
+            if (!store.begin(request.takeUri, request.takeName)) return false
+            appContext = app
+            try {
+                lease(app, request)
+                WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
+            } catch (failure: Exception) {
+                runCatching { endLease(app) }
+                store.finish(request.takeUri, request.takeName,
+                    CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
+                // endLease ran while the state was Running, which keeps the folders left meanwhile: no worker remains to release them.
+                runCatching { releaseLeftFolders(app) }
+            }
         }
         return true
     }
 
-    override fun cancel() {
+    /** Serialises an admission's begin, lease and enqueue with [cancel]. */
+    private val admission = Any()
+
+    override fun cancel() = synchronized(admission) { cancelAdmitted() }
+
+    private fun cancelAdmitted() {
         val running = store.states.value as? CinemaDngExportState.Running ?: return
         store.cancelling()
         appContext?.let { runCatching { WorkManager.getInstance(it).cancelUniqueWork(UNIQUE_WORK) } }

@@ -444,7 +444,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
         val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
-            readText = { uri -> runCatching { resolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull() })
+            readText = { uri -> runCatching { resolver.openInputStream(uri)?.use(::readBoundedSidecar) }.getOrNull() })
         if (published == 0) return 0
         store.commit(id)
         journal.step { db ->
@@ -822,6 +822,8 @@ internal class SafRecordingRows(
     private fun outputs(): List<SafDocument> {
         val take = folder ?: return emptyList()
         if (!folderExists()) {
+            // A folder query that gave no answer reads as missing too: only its parent's listing confirms it is gone.
+            check(docs.listsNo(take)) { "Recording folder state is unconfirmed" }
             check(reachable()) { "Recording drive unavailable" }
             return emptyList()
         }
@@ -1136,4 +1138,19 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
 
     /** This process gives the take up without finishing it: the next [RecordingCaptureRecovery.recover] repairs it. */
     fun relinquish() = synchronized(recordingRecoveryLock) { if (!done) journal.release(id) }
+}
+
+/**
+ * A recovered sidecar's text, or null when it is over [RECOVERED_SIDECAR_LIMIT] bytes, which recovery ignores anyway:
+ * a large file on a drive is not read whole first.
+ */
+private fun readBoundedSidecar(input: java.io.InputStream): String? {
+    val bytes = ByteArray(RECOVERED_SIDECAR_LIMIT + 1)
+    var read = 0
+    while (read < bytes.size) {
+        val count = input.read(bytes, read, bytes.size - read)
+        if (count < 0) break
+        read += count
+    }
+    return if (read > RECOVERED_SIDECAR_LIMIT) null else String(bytes, 0, read, Charsets.UTF_8)
 }

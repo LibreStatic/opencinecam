@@ -1013,7 +1013,8 @@ class CaptureService : Service() {
     /** Takes interrupted on a drive wait in the journal until it mounts again: recover them now, as at service start. */
     private fun recoverRecordingsOnMount(volumeId: String) {
         try {
-            storageExecutor.execute {
+            // Not [storageExecutor]: a drive that stalls here must not hold up the still saves queued there.
+            recoveryExecutor.execute {
                 // Interrupted still groups on the drive are discarded, as at service start; a still being saved holds the journal lock.
                 runCatching { stillSaver.recoverInterrupted() }
                     .onFailure { android.util.Log.e("StillRecovery", "Interrupted still journal unavailable after $volumeId mounted", it) }
@@ -1263,7 +1264,8 @@ class CaptureService : Service() {
         }, onDevices = { devices ->
             mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(audioListeningOutputs = devices) } }
         })
-        storageExecutor.execute {
+        // Not [storageExecutor]: still recovery asks drives, and one that stalls must not hold up the still saves queued there.
+        recoveryExecutor.execute {
             val report = try { stillSaver.recoverInterrupted() } catch (failure: Exception) {
                 android.util.Log.e("StillRecovery", "Interrupted capture journal unavailable", failure)
                 com.librestatic.opencinecam.storage.StillRecoveryReport(unresolvedGroups = 1)
