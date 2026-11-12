@@ -34,6 +34,7 @@ import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.RawVideoRecovery
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -132,9 +133,19 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         releaseLeftFolders(context)
     }
 
-    /** Starts [request]; false while another export runs. */
+    /**
+     * An export WorkManager kept from an earlier process and has not run yet. The state restarted idle, yet the unique
+     * work would keep that export and drop a new request, whose state and lease would then describe an export that never runs.
+     */
+    private fun keptWork(context: Context): Boolean = runCatching {
+        WorkManager.getInstance(context).getWorkInfosForUniqueWork(UNIQUE_WORK).get(KEPT_WORK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .any { !it.state.isFinished }
+    }.getOrDefault(false)
+
+    /** Starts [request]; false while another export runs or waits to. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
         val app = context.applicationContext
+        if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
         if (!store.begin(request.takeUri, request.takeName)) return false
         appContext = app
         try {
@@ -163,6 +174,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     override fun acknowledge() = store.acknowledge()
 
     const val UNIQUE_WORK = "cinemadng-export"
+    private const val KEPT_WORK_TIMEOUT_MS = 2_000L
     const val KEY_TAKE_URI = "takeUri"
     const val KEY_TAKE_NAME = "takeName"
     const val KEY_TREE_URI = "treeUri"
@@ -207,7 +219,8 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             return withContext(NonCancellable + Dispatchers.IO) { finish(takeUri, takeName, export(takeUri, takeName, tree, compress)) }
         } finally {
             runtime.workerRunning = false
-            if (leased) runCatching { runtime.endLease(applicationContext) }
+            // finish ended the lease while the worker still ran, which keeps the folders left meanwhile: they go now.
+            runCatching { if (leased) runtime.endLease(applicationContext) else runtime.releaseLeftFolders(applicationContext) }
         }
     }
 
