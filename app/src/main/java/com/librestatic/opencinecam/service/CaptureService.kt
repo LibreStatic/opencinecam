@@ -752,7 +752,16 @@ class CaptureService : Service() {
      * qualification, which keep theirs; their end refreshes the destination again.
      */
     private fun refreshRawGateForDestination() {
-        if (serviceDestroyed || rawTake != null || rawQualificationSession != null || nextRawDestinationId() == rawGateDestinationId) return
+        if (nextRawDestinationId() != rawGateDestinationId) refreshRawGate()
+    }
+
+    /**
+     * Main: recomputes the RAW gate and lets the mode, the session and the armed ring follow a selection that changed.
+     * Also when a continuation ended, was refused or was dropped: the gate held the drive take's configuration for it
+     * ([rawVideoGateKey]) and goes back to the operator's choice.
+     */
+    private fun refreshRawGate() {
+        if (serviceDestroyed || rawTake != null || rawQualificationSession != null) return
         val before = cameraState.value.rawVideoSelectedKey
         cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
         val current = cameraState.value
@@ -812,6 +821,10 @@ class CaptureService : Service() {
             is RecordingVolumeEvent.Leaving -> {
                 // ADR-0037: the monitor already closed the drive's descriptors on its own thread; this is a cheap backstop.
                 releaseDriveDescriptors(event.volumeId, "the drive left")
+                // A qualification of that drive has nothing left to measure; it ends as cancelled, so nothing is stored.
+                if (rawQualificationSession != null && rawGateDestinationId == RawVideoQualificationStore.destinationIdForDrive(event.volumeId)) {
+                    localBinder.cancelRawVideoQualification(RawQualificationStopReasons.DRIVE_LOST)
+                }
                 if (driveLeavingStopsTake(takeDestination?.destination, event.volumeId)) stopTakeForLostDrive(writeFailed = false)
             }
             is RecordingVolumeEvent.Mounted -> recoverRecordingsOnMount(event.volumeId)
@@ -837,6 +850,7 @@ class CaptureService : Service() {
         val dropped = driveContinuation.veto() ?: return false
         android.util.Log.i("RecordingDestination", "Continuation ${dropped.stem} cancelled")
         releaseContinuationForeground()
+        if (dropped.mode == CaptureMode.RAW_VIDEO) refreshRawGate()
         cameraState.update { it.copy(message = listOfNotNull(it.message, getString(R.string.recording_drive_continue_cancelled))
             .joinToString(" · "), messageTransient = false) }
         return true
@@ -883,7 +897,7 @@ class CaptureService : Service() {
      * the start path shows, plus a line saying the take could not continue. Never while another take or a qualification runs.
      */
     private fun startDriveContinuation() {
-        val request = driveContinuation.consume() ?: return releaseContinuationForeground()
+        val request = driveContinuation.consume() ?: run { refreshRawGate(); return releaseContinuationForeground() }
         if (serviceDestroyed) return
         val current = cameraState.value
         val busy = current.selectedMode != request.mode || current.phase !in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) ||
@@ -899,6 +913,7 @@ class CaptureService : Service() {
         if (!accepted) {
             cameraState.update { it.copy(message = listOfNotNull(it.message, getString(R.string.recording_drive_continue_failed))
                 .joinToString(" · "), messageTransient = false) }
+            if (request.mode == CaptureMode.RAW_VIDEO) refreshRawGate()
             releaseContinuationForeground()
         }
     }
@@ -2013,7 +2028,9 @@ class CaptureService : Service() {
         // A risky or reduced-rate configuration runs only when chosen by hand: Automatic never resolves
         // to one, so with only such ones and Automatic chosen nothing is selected and a take is refused.
         val manualOnly = risky + reduced.keys
-        val selected = selectRawVideoConfig(usable, settings.rawVideoConfig, manualOnly).takeIf { available }
+        // A drive take's continuation on the phone keeps that take's configuration, whatever Automatic would choose here.
+        val wantedKey = rawVideoGateKey(settings.rawVideoConfig, continuationStarting ?: rawTake?.continuation ?: driveContinuation.pendingRequest)
+        val selected = selectRawVideoConfig(usable, wantedKey, manualOnly).takeIf { available }
         val next = state.copy(
             modeGates = state.modeGates + (CaptureMode.RAW_VIDEO to gate),
             // The runtime risk only warns (option and capture notice); selection above ignores it.
@@ -2233,7 +2250,9 @@ class CaptureService : Service() {
         rawQualificationSession = null
         val kind = rawQualificationOutcome(outcome.status, usable.size, outcome.reasonCode)
         val reason = when (kind) {
-            RawQualificationOutcomeKind.CANCELLED -> session.stopReason ?: RawQualificationStopReasons.USER
+            // The drive's descriptors can be released (cancelling the run) before the volume event reaches main.
+            RawQualificationOutcomeKind.CANCELLED -> session.stopReason
+                ?: if (session.qualifier.driveLost) RawQualificationStopReasons.DRIVE_LOST else RawQualificationStopReasons.USER
             RawQualificationOutcomeKind.FAILED_TO_RUN -> outcome.reasonCode
             else -> null
         }
@@ -2344,16 +2363,18 @@ class CaptureService : Service() {
         val continuation = continuationStarting?.takeIf { it.mode == CaptureMode.RAW_VIDEO }
         val destination = resolveTakeDestination().let { if (continuation != null) continuationDestination(it) else it }
         destination.fallback?.let { android.util.Log.w("RecordingDestination", "RAW take falls back to the phone: $it") }
-        if (destination != nextTakeDestination) {
-            nextTakeDestination = destination
-            if (rawDestinationId(destination.destination) != rawGateDestinationId) {
-                cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
-                syncRawVideoArm()
-            }
+        val destinationChanged = destination != nextTakeDestination
+        if (destinationChanged) nextTakeDestination = destination
+        // A gate computed before the drive take armed its continuation may hold another selection: the same recompute.
+        val staleSelection = continuation != null && cameraState.value.rawVideoSelectedKey != continuation.rawConfigKey
+        if ((destinationChanged && rawDestinationId(destination.destination) != rawGateDestinationId) || staleSelection) {
+            cameraState.value = withRawVideoGate(cameraState.value, cameraState.value.selectedCameraId)
+            syncRawVideoArm()
         }
         val gated = cameraState.value
         val config = currentRawVideoConfig(gated)
-        // The continuation records the drive take's configuration or nothing: the phone's gate must have selected it.
+        // The continuation records the drive take's configuration or nothing. The gate keeps that configuration selected
+        // while the continuation is pending ([rawVideoGateKey]), so this only fails when the phone cannot use it.
         if (continuation != null && config?.let(RawVideoConfigKeys::key) != continuation.rawConfigKey) {
             android.util.Log.w("RecordingDestination", "RAW continuation refused: the phone selects ${config?.let(RawVideoConfigKeys::key)}, not ${continuation.rawConfigKey}")
             return false
@@ -2623,6 +2644,7 @@ class CaptureService : Service() {
         clearTakeDestination()
         // As for an encoded take, a pending continuation keeps the foreground service through the gap.
         if (!driveContinuation.isPending) foreground.stop()
+        if (session.continuation != null) refreshRawGate()
         syncRawVideoArm()
         leaveFailedRawVideo()
         mainHandler.post { if (!serviceDestroyed) localBinder.applySettings(SettingsRepositories.get(this).states.value) }
@@ -2650,6 +2672,7 @@ class CaptureService : Service() {
         if (cameraState.value.phase == CameraUiPhase.CAPTURING) refuseTakeStart(reason, text)
         else cameraState.update { it.copy(message = text, errorCode = reason) }
         clearTakeDestination()
+        if (session.continuation != null) refreshRawGate()
         syncRawVideoArm()
         leaveFailedRawVideo()
     }

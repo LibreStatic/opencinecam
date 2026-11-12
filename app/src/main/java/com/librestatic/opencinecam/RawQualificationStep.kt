@@ -391,6 +391,7 @@ private fun rawQualificationReasonText(reason: String?): String? = when (reason)
     RawQualificationStopReasons.BATTERY -> stringResource(R.string.raw_qualification_reason_battery, RAW_QUALIFICATION_ABORT_BATTERY_PERCENT)
     RawQualificationStopReasons.APP_LEFT, RawQualificationStopReasons.PREVIEW_LOST, RawQualificationStopReasons.SERVICE_CLOSED ->
         stringResource(R.string.raw_qualification_reason_app_left)
+    RawQualificationStopReasons.DRIVE_LOST -> stringResource(R.string.raw_qualification_reason_drive_lost)
     RawQualificationRefusals.BUSY, RawQualificationRefusals.RUNNING -> stringResource(R.string.raw_qualification_reason_busy)
     RawQualificationRefusals.NOT_READY -> stringResource(R.string.raw_qualification_reason_not_ready)
     RawQualificationRefusals.UNSUPPORTED -> stringResource(R.string.raw_qualification_reason_unsupported)

@@ -57,6 +57,7 @@
 
     <string name="raw_qualification_reason_battery">It stopped because the battery fell below %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">It stopped because the app went to the background.</string>
+    <string name="raw_qualification_reason_drive_lost">It stopped because the USB drive was disconnected.</string>
     <string name="raw_qualification_reason_busy">The camera was busy with a take.</string>
     <string name="raw_qualification_reason_not_ready">The battery or temperature check did not pass.</string>
     <string name="raw_qualification_reason_unsupported">This camera cannot record RAW video.</string>

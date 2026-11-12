@@ -116,6 +116,14 @@ internal data class ContinuationRequest(
 )
 
 /**
+ * The RAW configuration key the gate selects: the operator's [settingKey] (empty for Automatic), except through a drive
+ * take's continuation on the phone ([continuation]: pending, starting or recording), which records the drive take's
+ * configuration. The phone's own Automatic choice may differ, and switching to it would refuse the continuation.
+ */
+internal fun rawVideoGateKey(settingKey: String, continuation: ContinuationRequest?): String =
+    continuation?.takeIf { it.mode == CaptureMode.RAW_VIDEO }?.rawConfigKey ?: settingKey
+
+/**
  * PLAN-072 Delivery 4: the single "continuation pending" token. It is armed once per take, where the drive take's stop
  * converges ([arm]; a second trigger for the same take finds it armed, or the take vetoed, and is ignored), and consumed
  * once that stop has fully finished ([consume]). An operator stop or any other stop of the take ([veto]) drops it and
@@ -149,6 +157,9 @@ internal class DriveContinuation(private val clock: () -> Long, private val ttlM
     @Synchronized fun consume(): ContinuationRequest? = live().also { pending = null }
 
     @get:Synchronized val isPending: Boolean get() = live() != null
+
+    /** The pending continuation, left pending; null when none is or it expired. */
+    @get:Synchronized val pendingRequest: ContinuationRequest? get() = live()
 
     private fun live(): ContinuationRequest? = pending?.takeIf { clock() - armedAtMs <= ttlMs } ?: run { pending = null; null }
 

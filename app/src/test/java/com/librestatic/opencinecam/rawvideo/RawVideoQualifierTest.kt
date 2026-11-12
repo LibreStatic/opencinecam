@@ -4,10 +4,18 @@
 package com.librestatic.opencinecam.rawvideo
 
 import android.content.Context
+import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.librestatic.opencinecam.storage.DriveDescriptorHandle
+import com.librestatic.opencinecam.storage.DriveDescriptors
+import com.librestatic.opencinecam.storage.EXTERNAL_STORAGE_AUTHORITY
 import com.librestatic.opencinecam.storage.RawVideoQualificationStore
 import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,5 +77,47 @@ class RawVideoQualifierTest {
         val qualifier = RawVideoQualifier(context)
         qualifier.run()
         qualifier.run()
+    }
+
+    private fun scratch(): Pair<java.nio.channels.FileChannel, ParcelFileDescriptor> {
+        val file = File(context.cacheDir, "qualify-${UUID.randomUUID()}.bin").apply { writeBytes(ByteArray(16)) }
+        val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE)
+        return FileOutputStream(descriptor.fileDescriptor).channel to descriptor
+    }
+
+    @Test fun aScratchFileOnADriveIsReleasedWithItAndCancelsTheRun() {
+        val volume = "C3D4-" + UUID.randomUUID().toString().take(4).uppercase()
+        val uri = DocumentsContract.buildDocumentUriUsingTree(
+            DocumentsContract.buildTreeDocumentUri(EXTERNAL_STORAGE_AUTHORITY, "$volume:Rec"), "$volume:Rec/OpenCineCam/.qualify.part")
+        val qualifier = RawVideoQualifier(context)
+        val (channel, descriptor) = scratch()
+        qualifier.registerDriveRow(uri, channel, descriptor)
+        assertEquals(1, DriveDescriptors.registered(volume))
+        assertFalse(qualifier.isCancelled)
+
+        // ADR-0037: the drive left, so vold would kill a process still holding this descriptor.
+        assertEquals(1, DriveDescriptors.releaseVolume(volume))
+        assertFalse(channel.isOpen)
+        assertTrue(qualifier.driveLost)
+        assertTrue(qualifier.isCancelled)
+        assertEquals(0, DriveDescriptors.registered(volume))
+    }
+
+    @Test fun aFinishedDriveRowIsRetiredAndAPhoneRowIsNeverRegistered() {
+        val volume = "C3D4-" + UUID.randomUUID().toString().take(4).uppercase()
+        val uri = DocumentsContract.buildDocumentUriUsingTree(
+            DocumentsContract.buildTreeDocumentUri(EXTERNAL_STORAGE_AUTHORITY, "$volume:Rec"), "$volume:Rec/OpenCineCam/.qualify.part")
+        val qualifier = RawVideoQualifier(context)
+        val (channel, descriptor) = scratch()
+        qualifier.registerDriveRow(uri, channel, descriptor).unregister()
+        assertEquals(0, DriveDescriptors.registered(volume))
+        assertEquals(0, DriveDescriptors.releaseVolume(volume))
+        assertTrue(channel.isOpen)
+
+        val phone = qualifier.registerDriveRow(Uri.parse("content://media/external/file/42"), channel, descriptor)
+        assertEquals(DriveDescriptorHandle.NONE, phone)
+        assertFalse(qualifier.driveLost)
+        assertFalse(qualifier.isCancelled)
+        channel.close(); descriptor.close()
     }
 }

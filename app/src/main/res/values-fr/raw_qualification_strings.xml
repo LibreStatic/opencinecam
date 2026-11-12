@@ -58,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Elle s’est arrêtée car la batterie est passée sous %1$d %%.</string>
     <string name="raw_qualification_reason_app_left">Elle s’est arrêtée car l’app est passée en arrière-plan.</string>
+    <string name="raw_qualification_reason_drive_lost">Elle s’est arrêtée car le disque USB a été déconnecté.</string>
     <string name="raw_qualification_reason_busy">La caméra était occupée par une prise.</string>
     <string name="raw_qualification_reason_not_ready">La vérification de la batterie ou de la température a échoué.</string>
     <string name="raw_qualification_reason_unsupported">Cette caméra ne peut pas enregistrer de vidéo RAW.</string>

@@ -58,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Si è interrotta perché la batteria è scesa sotto il %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Si è interrotta perché l’app è passata in background.</string>
+    <string name="raw_qualification_reason_drive_lost">Si è interrotta perché l’unità USB è stata scollegata.</string>
     <string name="raw_qualification_reason_busy">La fotocamera era occupata con una ripresa.</string>
     <string name="raw_qualification_reason_not_ready">Il controllo di batteria o temperatura non è stato superato.</string>
     <string name="raw_qualification_reason_unsupported">Questa fotocamera non può registrare video RAW.</string>

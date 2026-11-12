@@ -58,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Parou porque a bateria ficou abaixo de %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Parou porque a app passou para segundo plano.</string>
+    <string name="raw_qualification_reason_drive_lost">Parou porque a unidade USB foi desligada.</string>
     <string name="raw_qualification_reason_busy">A câmara estava ocupada com um take.</string>
     <string name="raw_qualification_reason_not_ready">A verificação de bateria ou temperatura não passou.</string>
     <string name="raw_qualification_reason_unsupported">Esta câmara não pode gravar vídeo RAW.</string>

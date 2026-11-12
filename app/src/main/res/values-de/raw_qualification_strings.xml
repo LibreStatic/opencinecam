@@ -57,6 +57,7 @@
 
     <string name="raw_qualification_reason_battery">Sie wurde gestoppt, weil der Akku unter %1$d%% fiel.</string>
     <string name="raw_qualification_reason_app_left">Sie wurde gestoppt, weil die App in den Hintergrund gewechselt ist.</string>
+    <string name="raw_qualification_reason_drive_lost">Sie wurde gestoppt, weil das USB-Laufwerk getrennt wurde.</string>
     <string name="raw_qualification_reason_busy">Die Kamera war mit einer Aufnahme beschäftigt.</string>
     <string name="raw_qualification_reason_not_ready">Die Prüfung von Akku oder Temperatur war nicht erfolgreich.</string>
     <string name="raw_qualification_reason_unsupported">Diese Kamera kann kein RAW-Video aufnehmen.</string>

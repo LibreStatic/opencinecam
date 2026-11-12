@@ -58,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Se detuvo porque la batería bajó del %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Se detuvo porque la app pasó a segundo plano.</string>
+    <string name="raw_qualification_reason_drive_lost">Se detuvo porque la unidad USB se desconectó.</string>
     <string name="raw_qualification_reason_busy">La cámara estaba ocupada con una toma.</string>
     <string name="raw_qualification_reason_not_ready">No se superó la comprobación de batería o temperatura.</string>
     <string name="raw_qualification_reason_unsupported">Esta cámara no puede grabar video RAW.</string>

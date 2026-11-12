@@ -175,6 +175,28 @@ class RecordingDestinationWiringTest {
         assertFalse(token.isPending)
     }
 
+    @Test fun aPendingContinuationIsReadWithoutConsumingIt() {
+        var now = 0L
+        val token = DriveContinuation({ now }, ttlMs = 15_000L)
+        assertNull(token.pendingRequest)
+        assertTrue(token.arm(request()))
+        assertEquals(request(), token.pendingRequest)
+        assertEquals(request(), token.pendingRequest)
+        now += 15_001L
+        assertNull(token.pendingRequest)
+    }
+
+    @Test fun theRawGateKeepsTheDriveTakesConfigurationThroughItsContinuation() {
+        val raw = request().copy(mode = CaptureMode.RAW_VIDEO, rawConfigKey = "full@24")
+        // Automatic (an empty setting) would choose the phone's best; the continuation records what the drive take did.
+        assertEquals("full@24", rawVideoGateKey("", raw))
+        assertEquals("full@24", rawVideoGateKey("full@30", raw))
+        assertEquals("", rawVideoGateKey("", null))
+        assertEquals("full@30", rawVideoGateKey("full@30", null))
+        // An encoded take's continuation says nothing about RAW.
+        assertEquals("full@30", rawVideoGateKey("full@30", request()))
+    }
+
     @Test fun aUserStopVetoesTheTakeUntilTheNextStarts() {
         val token = DriveContinuation({ 0L })
         assertTrue(token.arm(request()))

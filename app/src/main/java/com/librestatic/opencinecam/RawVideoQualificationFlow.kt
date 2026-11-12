@@ -104,6 +104,9 @@ internal object RawQualificationStopReasons {
     const val APP_LEFT = "raw-qualification-app-left"
     const val PREVIEW_LOST = "raw-qualification-preview-lost"
     const val SERVICE_CLOSED = "raw-qualification-service-closed"
+
+    /** The USB drive under test was disconnected (PLAN-072). */
+    const val DRIVE_LOST = "raw-qualification-drive-lost"
 }
 
 /** The battery below [RAW_QUALIFICATION_ABORT_BATTERY_PERCENT] stops a run; null keeps it going. */

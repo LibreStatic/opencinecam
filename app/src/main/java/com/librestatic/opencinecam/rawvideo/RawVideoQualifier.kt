@@ -68,6 +68,9 @@ import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import com.librestatic.opencinecam.media.raw.RawVideoRing
 import com.librestatic.opencinecam.media.raw.SharedMemorySlots
 import com.librestatic.opencinecam.media.raw.copyRaw10Rows
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptorHandle
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.RawQualificationDriveScratch
 import com.librestatic.opencinecam.storage.RawVideoQualificationRows
 import com.librestatic.opencinecam.storage.volumeIdOfTree
@@ -276,6 +279,32 @@ class RawVideoQualifier(
 
     val isCancelled: Boolean get() = cancelled.get()
 
+    /** The drive under test left while a scratch file was open on it: the run was cancelled, and nothing is stored. */
+    @Volatile var driveLost = false
+        private set
+
+    private fun cancelledOutcome(report: JSONObject, results: JSONArray): RawVideoQualificationOutcome {
+        report.put("results", results)
+            .put("status", RawQualificationStatus.CANCELLED.name)
+            .put("reasonCode", REASON_CANCELLED)
+            .put("safeMessage", "RAW video qualification was cancelled; nothing was stored.")
+        return RawVideoQualificationOutcome(RawQualificationStatus.CANCELLED, REASON_CANCELLED, report, emptyList())
+    }
+
+    /**
+     * ADR-0037: a scratch file on a drive is closed the moment the drive leaves (vold kills a process that still holds a
+     * descriptor on it). The release cancels the run, so the write that then fails is not judged and nothing is stored.
+     * A row on the phone registers nothing. The caller unregisters once it has closed the file itself.
+     */
+    internal fun registerDriveRow(uri: Uri, channel: FileChannel, descriptor: ParcelFileDescriptor): DriveDescriptorHandle {
+        val closer = CloseOnce(channel, descriptor)
+        return DriveDescriptors.registerDocument(uri, AutoCloseable {
+            driveLost = true
+            cancel()
+            closer.close()
+        })
+    }
+
     /** Asks a running (or not yet started) qualification to stop; idempotent, any thread. */
     fun cancel() {
         cancelled.set(true)
@@ -305,12 +334,10 @@ class RawVideoQualifier(
         return try {
             qualify(report, results, records, store)
         } catch (_: QualificationCancelled) {
-            report.put("results", results)
-                .put("status", RawQualificationStatus.CANCELLED.name)
-                .put("reasonCode", REASON_CANCELLED)
-                .put("safeMessage", "RAW video qualification was cancelled; nothing was stored.")
-            RawVideoQualificationOutcome(RawQualificationStatus.CANCELLED, REASON_CANCELLED, report, emptyList())
+            cancelledOutcome(report, results)
         } catch (error: Throwable) {
+            // A write that failed because the drive's descriptors were released is the drive leaving, not a result.
+            if (driveLost) return cancelledOutcome(report, results)
             report.put("results", results)
                 .put("status", RawQualificationStatus.UNKNOWN.name)
                 .put("reasonCode", REASON_EXCEPTION)
@@ -1171,68 +1198,73 @@ class RawVideoQualifier(
         try {
             requireNotNull(context.contentResolver.openFileDescriptor(uri, "rw")) { "sweep row could not be opened" }.use { pfd ->
                 FileOutputStream(pfd.fileDescriptor).channel.use { channel ->
-                    val fileHeader = ByteBuffer.wrap(OcrawCodec.encodeHeader(OcrawHeader(randomUuid())))
-                    while (fileHeader.hasRemaining()) channel.write(fileHeader)
-                    var position = OcrawCodec.HEADER_BYTES.toLong()
-                    var sinceForce = position
-                    var windowBytes = 0L
-                    var windowStart = SystemClock.elapsedRealtimeNanos()
-                    while (stopReason == null) {
-                        checkCancelled()
-                        if (samples.size >= windows && !sustainedRoomLeft(wrapAt, position + chunkBytes, freeBytes)) {
-                            stopReason = RawStorageCliff.STOP_FREE_SPACE
-                            break
-                        }
-                        // The burst windows always complete; past them the sweep never writes more than the cap.
-                        if (samples.size >= windows && totalBytes + chunkBytes > RawStorageCliff.SUSTAINED_MAX_TOTAL_BYTES) {
-                            stopReason = RawStorageCliff.STOP_MAX_BYTES
-                            break
-                        }
-                        if (position + chunkBytes > wrapAt) {
-                            channel.position(OcrawCodec.HEADER_BYTES.toLong())
-                            position = OcrawCodec.HEADER_BYTES.toLong()
-                            wraps++
-                        }
-                        val start = SystemClock.elapsedRealtimeNanos()
-                        frameHeader.clear()
-                        header.copy(sensorTimestampNs = start, frameNumber = frames).writeTo(frameHeader)
-                        frameHeader.flip()
-                        frame.clear()
-                        crc.reset(); crc.update(frameHeader); crc.update(frame)
-                        chunkHeader.clear()
-                        chunkHeader.putShort(OcrawChunkId.RAW_FRAME.wireId.toShort()).putShort(0)
-                            .putLong(frames).putLong(start).putLong(1).putLong(NANOS)
-                            .putInt(payloadLength).putInt(crc.value())
-                        chunkHeader.flip()
-                        var remaining = chunkBytes
-                        while (remaining > 0) remaining -= channel.write(gather)
-                        val written = SystemClock.elapsedRealtimeNanos()
-                        writeMaxNs = maxOf(writeMaxNs, written - start)
-                        position += chunkBytes; sinceForce += chunkBytes; windowBytes += chunkBytes; totalBytes += chunkBytes
-                        frames++
-                        if (sinceForce >= FORCE_EVERY_BYTES) {
-                            channel.force(false)
-                            val forced = SystemClock.elapsedRealtimeNanos() - written
-                            forceMaxNs = maxOf(forceMaxNs, forced); forceTotalNs += forced; forceCount++
-                            sinceForce = 0
-                        }
-                        val now = SystemClock.elapsedRealtimeNanos()
-                        if (now - windowStart >= 1_000_000_000L) {
-                            samples += RawThroughputSample(((now - windowStart) / 1_000_000L).coerceAtLeast(1), windowBytes, 0)
-                            windowBytes = 0; windowStart = now
-                            if (samples.size == windows) {
-                                rest = RawStorageRest.judge(samples.toList(), restReference)
-                                if (rest?.rested == false && !restRuleIgnored) stopReason = RawStorageCliff.STOP_NOT_RESTED
+                    val driveHandle = registerDriveRow(uri, channel, pfd)
+                    try {
+                        val fileHeader = ByteBuffer.wrap(OcrawCodec.encodeHeader(OcrawHeader(randomUuid())))
+                        while (fileHeader.hasRemaining()) channel.write(fileHeader)
+                        var position = OcrawCodec.HEADER_BYTES.toLong()
+                        var sinceForce = position
+                        var windowBytes = 0L
+                        var windowStart = SystemClock.elapsedRealtimeNanos()
+                        while (stopReason == null) {
+                            checkCancelled()
+                            if (samples.size >= windows && !sustainedRoomLeft(wrapAt, position + chunkBytes, freeBytes)) {
+                                stopReason = RawStorageCliff.STOP_FREE_SPACE
+                                break
                             }
-                            if (stopReason == null) stopReason = RawStorageCliff.sweepStop(samples, windows, maxExtraSeconds)
+                            // The burst windows always complete; past them the sweep never writes more than the cap.
+                            if (samples.size >= windows && totalBytes + chunkBytes > RawStorageCliff.SUSTAINED_MAX_TOTAL_BYTES) {
+                                stopReason = RawStorageCliff.STOP_MAX_BYTES
+                                break
+                            }
+                            if (position + chunkBytes > wrapAt) {
+                                channel.position(OcrawCodec.HEADER_BYTES.toLong())
+                                position = OcrawCodec.HEADER_BYTES.toLong()
+                                wraps++
+                            }
+                            val start = SystemClock.elapsedRealtimeNanos()
+                            frameHeader.clear()
+                            header.copy(sensorTimestampNs = start, frameNumber = frames).writeTo(frameHeader)
+                            frameHeader.flip()
+                            frame.clear()
+                            crc.reset(); crc.update(frameHeader); crc.update(frame)
+                            chunkHeader.clear()
+                            chunkHeader.putShort(OcrawChunkId.RAW_FRAME.wireId.toShort()).putShort(0)
+                                .putLong(frames).putLong(start).putLong(1).putLong(NANOS)
+                                .putInt(payloadLength).putInt(crc.value())
+                            chunkHeader.flip()
+                            var remaining = chunkBytes
+                            while (remaining > 0) remaining -= channel.write(gather)
+                            val written = SystemClock.elapsedRealtimeNanos()
+                            writeMaxNs = maxOf(writeMaxNs, written - start)
+                            position += chunkBytes; sinceForce += chunkBytes; windowBytes += chunkBytes; totalBytes += chunkBytes
+                            frames++
+                            if (sinceForce >= FORCE_EVERY_BYTES) {
+                                channel.force(false)
+                                val forced = SystemClock.elapsedRealtimeNanos() - written
+                                forceMaxNs = maxOf(forceMaxNs, forced); forceTotalNs += forced; forceCount++
+                                sinceForce = 0
+                            }
+                            val now = SystemClock.elapsedRealtimeNanos()
+                            if (now - windowStart >= 1_000_000_000L) {
+                                samples += RawThroughputSample(((now - windowStart) / 1_000_000L).coerceAtLeast(1), windowBytes, 0)
+                                windowBytes = 0; windowStart = now
+                                if (samples.size == windows) {
+                                    rest = RawStorageRest.judge(samples.toList(), restReference)
+                                    if (rest?.rested == false && !restRuleIgnored) stopReason = RawStorageCliff.STOP_NOT_RESTED
+                                }
+                                if (stopReason == null) stopReason = RawStorageCliff.sweepStop(samples, windows, maxExtraSeconds)
+                            }
+                            val nowMs = now / 1_000_000L
+                            if (nowMs - lastProgress >= PROGRESS_INTERVAL_MS) {
+                                lastProgress = nowMs
+                                progress(RawQualificationPhase.SWEEP, index, runCount)
+                            }
                         }
-                        val nowMs = now / 1_000_000L
-                        if (nowMs - lastProgress >= PROGRESS_INTERVAL_MS) {
-                            lastProgress = nowMs
-                            progress(RawQualificationPhase.SWEEP, index, runCount)
-                        }
+                        channel.force(false)
+                    } finally {
+                        driveHandle.unregister()
                     }
-                    channel.force(false)
                 }
             }
         } finally {
@@ -1501,6 +1533,7 @@ class RawVideoQualifier(
         var session: CameraCaptureSession? = null
         var uri: Uri? = null
         var pfd: ParcelFileDescriptor? = null
+        var driveHandle = DriveDescriptorHandle.NONE
         var writerThread: Thread? = null
         val closed = CountDownLatch(1)
         try {
@@ -1582,6 +1615,7 @@ class RawVideoQualifier(
                 descriptor = opened
                 pfd = opened
                 val channel = FileOutputStream(opened.fileDescriptor).channel
+                driveHandle = registerDriveRow(rowUri, channel, opened)
                 // A compressed long run writes as a take does: each frame encoded on the writer thread, then written.
                 val metadata = staticMetadata(camera, run) + (RawFrameEncoders.KEY_ENCODING to config.encoding) + compressor?.metadata.orEmpty()
                 Thread({ writerLoop(channel, metadata, ring, state, compressor) }, "occ-raw-writer")
@@ -1679,8 +1713,10 @@ class RawVideoQualifier(
             // The descriptor and the row go only once the writer is done with them.
             val descriptor = pfd
             val row = uri
+            val handle = driveHandle
             afterWriter(writerThread) {
                 runCatching { descriptor?.close() }
+                handle.unregister()
                 row?.let(::deleteRow)
             }
         }
