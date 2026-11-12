@@ -201,7 +201,7 @@ internal fun rawTakeEndKind(reason: String): RawTakeEndKind = when {
     reason == RawTakeReasons.WRITER_STALLED -> RawTakeEndKind.STALLED
     reason == RawTakeReasons.FRAME_INVALID || reason == RawVideoReasons.FRAME_LOST ||
         reason == RawTakeReasons.STREAM_FAILED_PREFIX + RawVideoReasons.FRAME_LOST -> RawTakeEndKind.FRAME
-    reason.startsWith(RawTakeReasons.STREAM_FAILED_PREFIX) || reason in setOf(
+    reason.startsWith(RawTakeReasons.STREAM_FAILED_PREFIX) || reason == RawTakeReasons.STREAM_MISMATCH || reason in setOf(
         RawVideoReasons.CAMERA_DISCONNECTED, RawVideoReasons.CAMERA_ERROR, RawVideoReasons.SESSION_LOST, RawVideoReasons.SESSION_CLOSED,
     ) -> RawTakeEndKind.STREAM
     else -> RawTakeEndKind.OTHER

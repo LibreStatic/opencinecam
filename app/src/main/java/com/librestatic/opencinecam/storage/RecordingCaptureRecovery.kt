@@ -91,11 +91,11 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         }
 
     /**
-     * The recovery pass runs before the lock is taken for the new take, so a drive RAW repair it starts never holds up
-     * another take's start or stop ([recover]).
+     * The recovery pass runs before the lock is taken for the new take. A take starts on the main thread, so this pass
+     * leaves an interrupted drive RAW take, whose repair scans the whole file, to a pass off it ([recover]).
      */
     internal fun start(destination: RecordingDestination = RecordingDestination.Phone): RecordingRecoveryGroup {
-        recover()
+        recover(repairRawTakes = false)
         return synchronized(recordingRecoveryLock) {
             val id = UUID.randomUUID().toString()
             val store: RecordingRowStore = when (destination) {
@@ -184,10 +184,10 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * [RawVideoRecovery] does on the phone), and committed or discarded under the lock again. Meanwhile takes start and
      * stop, and a concurrent pass skips the entry. No caller holds [recordingRecoveryLock]: it would stay held through the scan.
      */
-    fun recover(): RecordingRecoveryReport {
+    fun recover(repairRawTakes: Boolean = true): RecordingRecoveryReport {
         val repairs = mutableListOf<RawRepair>()
         try {
-            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, repairs) } }
+            val decided = synchronized(recordingRecoveryLock) { open().use { db -> decide(db, repairs.takeIf { repairRawTakes }) } }
             var rawPublished = 0; var rawDeleted = 0; var unresolved = 0
             repairs.forEach { repair ->
                 try {
@@ -220,7 +220,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * The locked part of [recover]: every entry no live group owns and no pass is repairing. A drive RAW take is only
      * marked repairing and added to [repairs]; the caller scans it with the lock released.
      */
-    private fun decide(db: SQLiteDatabase, repairs: MutableList<RawRepair>): RecordingRecoveryReport {
+    private fun decide(db: SQLiteDatabase, repairs: MutableList<RawRepair>?): RecordingRecoveryReport {
         val records = db.rawQuery("SELECT id, committed, tree, volume, folder FROM captures ORDER BY id LIMIT ?",
             arrayOf((MAX_PHONE_TAKES + MAX_DRIVE_TAKES + 1).toString())).use { c ->
             buildList { while (c.moveToNext()) add(JournalRow(c.getString(0), c.getType(1), c.getLong(1), c.getString(2), c.getString(3), c.getString(4))) }
@@ -264,7 +264,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      * means nothing reached the drive. A folder holding an `.ocraw` is a RAW take, added to [repairs] ([finishDriveRawTake]).
      * Otherwise the take is recovered like a MediaStore one, and the marker goes once its outputs with bytes are kept.
      */
-    private fun recoverDriveTake(db: SQLiteDatabase, record: JournalRow, repairs: MutableList<RawRepair>): DriveRecovery {
+    private fun recoverDriveTake(db: SQLiteDatabase, record: JournalRow, repairs: MutableList<RawRepair>?): DriveRecovery {
         val tree = Uri.parse(record.tree)
         val volume = requireNotNull(record.volume) { "Drive take without a volume" }
         // The drive under vold's other name answers through the folder picked there (resolveDriveLocation).
@@ -284,7 +284,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                 check(db.delete("captures", "id = ? AND committed = 0", arrayOf(record.id)) == 1)
                 DriveRecovery.COMMITTED
             }
-            else -> store.rawOutput()?.let { raw -> repairs += RawRepair(record.id, store, raw); DriveRecovery.RAW_REPAIR }
+            // Without [repairs] the pass does not repair RAW takes: the entry waits for one that does.
+            else -> store.rawOutput()?.let { raw -> if (repairs == null) DriveRecovery.DEFERRED else { repairs += RawRepair(record.id, store, raw); DriveRecovery.RAW_REPAIR } }
                 ?: if (publishIncomplete(db, record.id, store) > 0) DriveRecovery.INCOMPLETE
                 else { discardRows(db, record.id, store); DriveRecovery.DISCARDED }
         }

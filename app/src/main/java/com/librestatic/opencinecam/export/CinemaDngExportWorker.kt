@@ -24,9 +24,12 @@ import androidx.work.workDataOf
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
 import com.librestatic.opencinecam.storage.CloseOnce
 import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.RawVideoRecovery
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.transfers.WebDavTransferRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +58,32 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
      * continues then, so it never competes with a take for storage bandwidth.
      */
     fun recording(context: Context): Boolean = RawVideoRecovery.anyLive() || WebDavTransferRuntime.get(context).captureActive
+
+    /**
+     * The export left the folder [tree] for another. An export queued or running may still write to it, so its grant goes
+     * only once none does ([releaseLeftFolders]).
+     */
+    fun leaveFolder(context: Context, tree: String) {
+        val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
+        RecordingDestinationStore(context).withGrants {
+            preferences.edit().putStringSet(KEY_LEFT_TREES, preferences.getStringSet(KEY_LEFT_TREES, null).orEmpty() + tree).apply()
+        }
+        releaseLeftFolders(context)
+    }
+
+    /** Releases the grants of the folders the export left, unless an export is queued or running; the worker calls it as it ends. */
+    fun releaseLeftFolders(context: Context) {
+        val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
+        val recording = RecordingDestinationStore(context)
+        recording.withGrants {
+            val left = preferences.getStringSet(KEY_LEFT_TREES, null).orEmpty()
+            if (left.isEmpty() || workerRunning || store.states.value is CinemaDngExportState.Running) return@withGrants
+            val current = preferences.getString(CINEMADNG_EXPORT_TREE_KEY, null)
+            // The recording destination may use the same tree, or an interrupted take may wait on it; its permission then stays.
+            left.filter { it != current }.forEach { recording.releaseUnlessNeeded(it.toUri()) }
+            preferences.edit().remove(KEY_LEFT_TREES).apply()
+        }
+    }
 
     /** Starts [request]; false while another export runs. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
@@ -87,6 +116,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     const val KEY_TAKE_NAME = "takeName"
     const val KEY_TREE_URI = "treeUri"
     const val KEY_COMPRESS = "compress"
+    private const val KEY_LEFT_TREES = "leftTrees"
 
     fun workRequest(request: CinemaDngExportRequest): OneTimeWorkRequest = OneTimeWorkRequestBuilder<CinemaDngExportWorker>()
         .setInputData(workDataOf(KEY_TAKE_URI to request.takeUri, KEY_TAKE_NAME to request.takeName,
@@ -124,6 +154,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             return withContext(NonCancellable + Dispatchers.IO) { finish(takeUri, takeName, export(takeUri, takeName, tree, compress)) }
         } finally {
             runtime.workerRunning = false
+            runCatching { runtime.releaseLeftFolders(applicationContext) }
         }
     }
 

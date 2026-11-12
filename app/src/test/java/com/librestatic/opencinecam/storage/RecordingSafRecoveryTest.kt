@@ -453,6 +453,16 @@ class RecordingSafRecoveryTest {
         assertEquals(RecordingRecoveryReport(), journal().recover())
     }
 
+    @Test fun aTakeStartLeavesAnInterruptedRawTakeToALaterPass() {
+        val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
+        // A take starts on the main thread: its pass does not scan the RAW file.
+        journal().start(destination).relinquish()
+        assertEquals(setOf("A001.ocraw", SafRecordingRows.MARKER), takeDir().list()!!.toSet())
+        assertTrue(entries().any { it[0] == id })
+        assertEquals(RawVideoRecoveryReport(published = 1), journal().recover().rawTakes)
+        assertEquals(setOf("A001.ocraw"), takeDir().list()!!.toSet())
+    }
+
     @Test fun interruptedRawTakeWithoutFramesIsDiscarded() {
         val id = interrupted("A001.ocraw" to killedOcraw(frames = 0))
         assertEquals(RecordingRecoveryReport(rawTakes = RawVideoRecoveryReport(deleted = 1)), journal().recover())

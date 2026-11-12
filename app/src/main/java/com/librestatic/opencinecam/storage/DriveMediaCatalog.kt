@@ -358,7 +358,7 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
     /** The cached listing of [stamp] unless [refresh]; a listing that failed ([list] null) is not kept. */
     fun folders(stamp: String, refresh: Boolean, list: () -> List<DriveFolder>?): List<DriveFolder> {
         val (started, listing) = synchronized(this) {
-            if (stamp != this.stamp) { this.stamp = stamp; folders = null; takes.clear() }
+            if (stamp != this.stamp) { this.stamp = stamp; folders = null; takes.clear(); generation++ }
             if (!refresh) folders?.let { return it }
             generation to ++listings
         }
