@@ -37,6 +37,12 @@ interface RawFrameEncoder : AutoCloseable {
     fun setIso(iso: Int) = Unit
 
     /**
+     * Forgets what the previous take left behind, before a new take's first frame. The near-lossless
+     * encoder forgets its ISO, so frames are lossless again until this take gives one.
+     */
+    fun startTake() = Unit
+
+    /**
      * Encodes the tight RAW10 frame `src[position, limit)` of [width] x [height] into
      * `dst[position, limit)`. Returns the encoded size, or 0 when it does not fit (the frame is then
      * stored uncompressed). Positions and limits are not changed.
@@ -144,6 +150,10 @@ class NearLosslessFrameEncoder(
         quantised.setQuantisation(RawQuantisation.build(profile.modelAt(iso), profile.blackLevel, k), iso)
         tablesIso = iso
         tableBuilds++
+    }
+
+    override fun startTake() {
+        tablesIso = null
     }
 
     override fun encode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Int =
@@ -288,8 +298,9 @@ class RawFrameCompressor(private val encoder: RawFrameEncoder, private val outpu
 
     val encodeMaxMs: Double get() = encodeMaxNs / 1e6
 
-    /** Resets the numbers for a new take. */
+    /** Resets the numbers and the encoder's per-take state for a new take. */
     fun reset() {
+        encoder.startTake()
         framesEncoded = 0; framesStoredUncompressed = 0; uncompressedBytes = 0; storedBytes = 0
         encodeTotalNs = 0; encodeMaxNs = 0; lastEncodeNs = 0
     }
