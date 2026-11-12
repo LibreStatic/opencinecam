@@ -16,7 +16,9 @@ class CaptureSlotsTest {
             val slots = captureSlots(mode)
             assertEquals("$mode", 6, slots.size)
             assertEquals("$mode", CaptureSlot.RESOLUTION, slots.first())
-            assertEquals("$mode", listOf(CaptureSlot.WB, CaptureSlot.FOCUS), slots.takeLast(2))
+            // Slow motion gives FOCUS, which a high-speed session holds, to the take length.
+            if (mode == CaptureMode.SLOW_MOTION) assertEquals("$mode", CaptureSlot.WB, slots.last())
+            else assertEquals("$mode", listOf(CaptureSlot.WB, CaptureSlot.FOCUS), slots.takeLast(2))
             assertEquals("$mode", slots.size, slots.toSet().size)
         }
     }
@@ -25,8 +27,18 @@ class CaptureSlotsTest {
         val video = listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB, CaptureSlot.FOCUS)
         assertEquals(video, captureSlots(CaptureMode.VIDEO))
         assertEquals(video, captureSlots(CaptureMode.LOG))
-        assertEquals(video, captureSlots(CaptureMode.SLOW_MOTION))
         assertEquals(video, captureSlots(CaptureMode.RAW_VIDEO))
+    }
+
+    @Test fun slowMotionSwapsFocusForTheTakeLength() {
+        assertEquals(
+            listOf(CaptureSlot.RESOLUTION, CaptureSlot.FPS, CaptureSlot.LENGTH, CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.WB),
+            captureSlots(CaptureMode.SLOW_MOTION),
+        )
+        assertFalse(CaptureSlot.FOCUS in captureSlots(CaptureMode.SLOW_MOTION))
+        CaptureMode.entries.filter { it != CaptureMode.SLOW_MOTION }.forEach {
+            assertFalse("$it", CaptureSlot.LENGTH in captureSlots(it))
+        }
     }
 
     @Test fun timeLapseSwapsTheFrameRateForTheInterval() {
@@ -61,6 +73,8 @@ class CaptureSlotsTest {
         assertNull(reason(CaptureSlot.RESOLUTION, highSpeed = true))
         assertNull(reason(CaptureSlot.FPS, highSpeed = true))
         assertNull(reason(CaptureSlot.INTERVAL, highSpeed = true))
+        assertNull(reason(CaptureSlot.LENGTH, highSpeed = true))
+        assertEquals(SlotUnavailableReason.NOT_READY, reason(CaptureSlot.LENGTH, ready = false))
         listOf(CaptureSlot.SHUTTER, CaptureSlot.ISO, CaptureSlot.EV, CaptureSlot.WB, CaptureSlot.FOCUS).forEach {
             assertEquals("$it", SlotUnavailableReason.HIGH_SPEED, reason(it, highSpeed = true))
         }

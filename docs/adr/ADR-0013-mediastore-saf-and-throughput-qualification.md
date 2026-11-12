@@ -15,7 +15,7 @@ The empty repository needs a portable public-API architecture that distinguishes
 
 ## Decision
 
-Use MediaStore pending and SAF descriptors, reserve max(1 GiB,two minutes), benchmark sequential one-second windows, and require RAW p01 ≥1.25× stream rate.
+Use MediaStore pending and SAF descriptors, reserve max(1 GiB, twice the stop headroom), where the stop headroom is one minute of projected data capped at 512 MiB, or, for a take bounded to a capture length, the stop headroom plus that take with a 25 % margin when that is less, benchmark sequential one-second windows, and require RAW p01 ≥1.25× stream rate.
 
 ## Alternatives considered
 

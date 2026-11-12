@@ -15,10 +15,31 @@ data class StorageReserve(
     }
 }
 
-fun calculateStorageReserve(projectedBytes: Long): StorageReserve {
-    require(projectedBytes >= 0) { "projected bytes must not be negative" }
-    val twoMinutes = projectedBytes * 2
-    return StorageReserve(projectedBytes, maxOf(1L shl 30, twoMinutes))
+/** The most free space a running take is stopped at, whatever its data rate. */
+const val STORAGE_STOP_HEADROOM_CAP_BYTES = 512L shl 20
+
+/**
+ * Free space below which a running take is stopped so its file can still be finalized: a minute
+ * of its projected data, capped at [STORAGE_STOP_HEADROOM_CAP_BYTES]. Without the cap a high-speed
+ * take (up to 200 Mbps) would stop with 1.5 GB still free and need 3 GB to start, though it lasts seconds.
+ */
+fun storageStopHeadroom(projectedBytesPerMinute: Long): Long {
+    require(projectedBytesPerMinute >= 0) { "projected bytes must not be negative" }
+    return minOf(projectedBytesPerMinute, STORAGE_STOP_HEADROOM_CAP_BYTES)
+}
+
+/**
+ * What a take needs free to start: 1 GiB, or twice its stop headroom if that is more, so it can
+ * record at least as much as the headroom. A take bounded to [boundedTakeBytes] (a capture-time
+ * limit) needs no more than the headroom plus that take with a quarter to spare, so a limit can only
+ * lower the requirement and the take ends above the stop headroom.
+ */
+fun calculateStorageReserve(projectedBytes: Long, boundedTakeBytes: Long? = null): StorageReserve {
+    val unbounded = maxOf(1L shl 30, storageStopHeadroom(projectedBytes) * 2)
+    if (boundedTakeBytes == null) return StorageReserve(projectedBytes, unbounded)
+    require(boundedTakeBytes >= 0) { "bounded take bytes must not be negative" }
+    val withMargin = if (boundedTakeBytes > Long.MAX_VALUE / 5) Long.MAX_VALUE / 4 else boundedTakeBytes * 5 / 4
+    return StorageReserve(projectedBytes, minOf(unbounded, storageStopHeadroom(projectedBytes) + withMargin))
 }
 
 sealed interface StorageSpaceCheck {

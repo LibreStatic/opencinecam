@@ -23,6 +23,14 @@ class ModeSelectionTest {
         assertEquals(CaptureMode.LOG, displayedCaptureMode(CaptureMode.LOG, videoOffSpeed = true))
     }
 
+    @Test fun onlyAnOffSpeedVideoTakeWithALengthIsBounded() {
+        val ten = CameraSettings(videoOffSpeed = true, slowMotionTakeLengthSeconds = 10)
+        assertEquals(10_000L, takeLengthLimitMs(CaptureMode.VIDEO, ten))
+        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(slowMotionTakeLengthSeconds = 0)))
+        assertNull(takeLengthLimitMs(CaptureMode.VIDEO, ten.copy(videoOffSpeed = false)))
+        for (mode in listOf(CaptureMode.LOG, CaptureMode.TIME_LAPSE, CaptureMode.PHOTO)) assertNull(takeLengthLimitMs(mode, ten))
+    }
+
     @Test fun slowMotionNeedsAHighSpeedProfile() {
         assertTrue(supportsSlowMotion(sampleDevice))
         assertFalse(supportsSlowMotion(listOf(profile(1920, 1080, 30), profile(1920, 1080, 60))))

@@ -64,6 +64,46 @@ class RuntimePolicyDecisionTest {
         }
     }
 
+    @Test fun aHighSpeedTakeStopsAtTheHeadroomCapNotAtAMinuteOfData() {
+        val highSpeed = 1_500_000_000L // 200 Mbps
+        val cap = 512L shl 20
+        for (policy in PolicyMode.entries) {
+            assertNull(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, cap, highSpeed).stop)
+            assertEquals(TakeStopReason.STORAGE,
+                takeStopReason(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, cap - 1, highSpeed).stop!!))
+        }
+    }
+
+    @Test fun aRawTakeStopsAtItsOwnHeadroomNotAtTheCap() {
+        val rawRoom = 8_000_000_000L // the room a RAW take was admitted with
+        for (policy in PolicyMode.entries) {
+            assertEquals(RuntimeVerdict(null, null),
+                evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, rawRoom * 3, rawRoom, stopHeadroomBytes = rawRoom))
+            assertEquals(RuntimeVerdict(null, RuntimeNotice.MONITORING_REDUCED),
+                evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, rawRoom * 3 - 1, rawRoom, stopHeadroomBytes = rawRoom))
+            assertNull(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, rawRoom, rawRoom, stopHeadroomBytes = rawRoom).stop)
+            assertEquals(TakeStopReason.STORAGE,
+                takeStopReason(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, rawRoom - 1, rawRoom, stopHeadroomBytes = rawRoom).stop!!))
+        }
+    }
+
+    @Test fun aBoundedTakeGetsNoLowSpaceNoticeDownToItsStopHeadroom() {
+        val slowMotion = 1_200_000_000L // 240 fps at 160 Mbps
+        val headroom = 512L shl 20
+        // 10 s is 200 MB: admitted with 512 MiB plus 250 MB free.
+        val free = headroom + 250_000_000L
+        for (policy in PolicyMode.entries) {
+            assertEquals(RuntimeVerdict(null, null), evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, free, slowMotion, takeLimitMs = 10_000L))
+            assertEquals(RuntimeVerdict(null, null),
+                evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, headroom + 1, slowMotion, takeLimitMs = 10_000L))
+            assertEquals(RuntimeVerdict(null, RuntimeNotice.MONITORING_REDUCED), evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, free, slowMotion))
+            // The stop threshold is still the headroom.
+            assertNull(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, headroom, slowMotion, takeLimitMs = 10_000L).stop)
+            assertEquals(TakeStopReason.STORAGE,
+                takeStopReason(evaluateRuntimePolicy(policy, PowerManager.THERMAL_STATUS_NONE, headroom - 1, slowMotion, takeLimitMs = 10_000L).stop!!))
+        }
+    }
+
     @Test fun stopReasonsMapFromTheirFailures() {
         assertEquals(TakeStopReason.AUDIO_INPUT_LOST, takeStopReason(audioInputLostFailure()))
         assertEquals(TakeStopReason.CADENCE, takeStopReason(cadenceStopFailure("window")))

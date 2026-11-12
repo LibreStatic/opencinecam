@@ -7,6 +7,7 @@ import com.librestatic.opencinecam.core.model.PolicyMode
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,19 +15,40 @@ class RecordingStoragePlanTest {
     private val gib = 1L shl 30
 
     @Test fun admissionMatrixForEveryPolicy() {
-        val perMinute = 10L * 1_000_000_000L // 20 GB reserve: far above the 1 GiB floor
+        val perMinute = 1_500_000_000L // 200 Mbps, the encoder clamp: the reserve stays at 1 GiB
         for (policy in PolicyMode.entries) {
-            assertEquals(StorageAdmission.Admit, admitRecordingStorage(policy, perMinute, 25_000_000_000L))
-            assertEquals(StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, 20_000_000_000L, 19_000_000_000L),
-                admitRecordingStorage(policy, perMinute, 19_000_000_000L))
+            assertEquals(StorageAdmission.Admit, admitRecordingStorage(policy, perMinute, gib))
+            assertEquals(StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, gib, gib - 1),
+                admitRecordingStorage(policy, perMinute, gib - 1))
         }
-        assertEquals(StorageAdmission.Refuse(STORAGE_UNKNOWN, 20_000_000_000L, null), admitRecordingStorage(PolicyMode.STRICT, perMinute, null))
+        assertEquals(StorageAdmission.Refuse(STORAGE_UNKNOWN, gib, null), admitRecordingStorage(PolicyMode.STRICT, perMinute, null))
         assertEquals(StorageAdmission.AdmitUnread, admitRecordingStorage(PolicyMode.ADAPTIVE, perMinute, null))
     }
 
     @Test fun theReserveNeverDropsBelowOneGibibyte() {
         assertEquals(StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, gib, gib - 1), admitRecordingStorage(PolicyMode.ADAPTIVE, 1L, gib - 1))
         assertEquals(StorageAdmission.Admit, admitRecordingStorage(PolicyMode.STRICT, 1L, gib))
+    }
+
+    @Test fun aBoundedSlowMotionTakeNeedsOnlyItsOwnLengthWithMargin() {
+        val perMinute = 1_200_000_000L // 240 fps slow motion at 160 Mbps
+        val free = 800_000_000L
+        // 10 s is 200 MB: 512 MiB of headroom plus 250 MB is 786.9 MB, under the 1 GiB of an unbounded take.
+        for (policy in PolicyMode.entries) {
+            assertEquals(StorageAdmission.Admit, admitRecordingStorage(policy, perMinute, free, takeLimitMs = 10_000L))
+            assertEquals(StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, gib, free), admitRecordingStorage(policy, perMinute, free))
+        }
+        assertEquals(StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, 786_870_912L, 786_870_911L),
+            admitRecordingStorage(PolicyMode.STRICT, perMinute, 786_870_911L, takeLimitMs = 10_000L))
+    }
+
+    @Test fun boundedTakeBytesRoundsUpAndIsNullWithoutALimit() {
+        assertNull(boundedTakeBytes(1_200_000_000L, null))
+        assertEquals(200_000_000L, boundedTakeBytes(1_200_000_000L, 10_000L))
+        assertEquals(1L, boundedTakeBytes(1L, 1L))
+        assertEquals(1_001L, boundedTakeBytes(60_001L, 1_000L))
+        assertEquals(0L, boundedTakeBytes(1_200_000_000L, 0L))
+        assertEquals(Long.MAX_VALUE, boundedTakeBytes(Long.MAX_VALUE, 10_000L))
     }
 
     @Test fun audioRateFollowsTheFormat() {
@@ -50,6 +72,8 @@ class RecordingStoragePlanTest {
         val settings = CameraSettings(videoBitrateMbps = 20, videoOffSpeed = true)
         val perMinute = projectedTakeBytesPerMinute(CaptureMode.VIDEO, settings, 240, constrainedHighSpeed = true, audioRequested = false)
         assertEquals(1_200_000_000.0, perMinute.toDouble(), 1_200_000_000.0 * 0.02) // 160 Mbps
+        // A short slow-motion take starts with 1 GiB free, not the 2.4 GB two minutes of it would take.
+        assertEquals(StorageAdmission.Admit, admitRecordingStorage(PolicyMode.STRICT, perMinute, gib))
     }
 
     @Test fun timelapseAndOffSpeedTakesCarryNoAudio() {

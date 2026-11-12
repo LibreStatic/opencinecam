@@ -9,6 +9,7 @@
     <string name="capture_slot_wb">WB</string>
     <string name="capture_slot_focus">FOCUS</string>
     <string name="capture_slot_interval">INTERVAL</string>
+    <string name="capture_slot_length">LENGTH</string>
     <!-- Full names, read by screen readers and shown in tooltips. -->
     <string name="capture_slot_resolution_name">Resolution</string>
     <string name="capture_slot_fps_name">Frame rate</string>
@@ -18,6 +19,7 @@
     <string name="capture_slot_wb_name">White balance</string>
     <string name="capture_slot_focus_name">Focus</string>
     <string name="capture_slot_interval_name">Interval</string>
+    <string name="capture_slot_length_name">Take length</string>
     <!-- Why a slot is greyed out; shown when it is tapped. -->
     <string name="capture_slot_reason_not_ready">Waiting for the camera.</string>
     <string name="capture_slot_reason_single_resolution">This mode has a single resolution.</string>

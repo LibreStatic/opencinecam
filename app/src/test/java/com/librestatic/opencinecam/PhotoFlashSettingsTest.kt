@@ -40,7 +40,7 @@ class PhotoFlashSettingsTest {
     @Test fun currentVersionExportsAndRestoresPhotoIntent() {
         val preset = CameraPreset(name = "Flash", settings = CameraSettings(photoFlash = PhotoFlashSelection(PhotoFlashMode.ON, 3)), mode = CaptureMode.PHOTO)
         val decoded = CameraPresetCodec.decode(CameraPresetCodec.encode(preset))
-        assertEquals(27, CameraPresetCodec.VERSION); assertEquals(preset.settings, decoded.settings)
+        assertEquals(28, CameraPresetCodec.VERSION); assertEquals(preset.settings, decoded.settings)
         assertEquals(CaptureMode.PHOTO, decoded.mode)
     }
     @Test fun versionFourPreservesTorchAndDefaultsPhotoFlashOff() {

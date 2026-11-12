@@ -43,7 +43,7 @@ Open the mode selector (**MODE**) to switch modes:
 | Bracket | Stills at several exposures. |
 | Light Painting | Accumulates frames into one image for light trails. |
 | Video | Regular video, AVC or HEVC. |
-| Slow motion | High frame rate takes (120 or 240 fps where the device offers them). Rates at or below the project rate record in real time. |
+| Slow motion | High frame rate takes (120 or 240 fps where the device offers them). Rates at or below the project rate record in real time. The **LENGTH** slot bounds the take on a slider from no limit (∞) to 60 s of capture in 5 s stops: the take stops by itself and needs less free space to start. |
 | Time lapse | Frames at an interval, set with the **INTERVAL** slot. |
 | Log | OCLog2 LOG video in HEVC Main10. **Experimental.** |
 | HLG | HDR video tagged as BT.2020 HLG. **Experimental.** |
@@ -65,7 +65,7 @@ Night photo uses the device's night extension, which merges several frames. Hold
 
 ## Exposure and FPS LOCK
 
-The slot strip along the viewfinder holds **RES**, **FPS**, **SHUTTER**, **ISO**, **EV**, **WB** and **FOCUS** (and **INTERVAL** in time lapse). Tap a slot to adjust it. The picture stays in view while you do. A greyed slot says why it cannot be used, for example "This camera does not offer manual exposure."
+The slot strip along the viewfinder holds **RES**, **FPS**, **SHUTTER**, **ISO**, **EV**, **WB** and **FOCUS** (**INTERVAL** in time lapse, and **LENGTH** instead of **FOCUS** in slow motion). Tap a slot to adjust it. The picture stays in view while you do. A greyed slot says why it cannot be used, for example "This camera does not offer manual exposure."
 
 - **Shutter** can be shown as a speed or as an angle (**Shutter unit** in **Capture and exposure**). The angle follows the capture frame rate.
 - **White balance** has presets (Daylight, Cloudy, Tungsten, Fluorescent) and a **TINT** control.

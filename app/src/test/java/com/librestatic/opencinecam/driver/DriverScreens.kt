@@ -222,6 +222,34 @@ fun CaptureFpsLock() = CaptureChrome(driverFpsLockState(holding = false))
 @Composable
 fun CaptureFpsLockHolding() = CaptureChrome(driverFpsLockState(holding = true))
 
+/** The fake camera with 1080p constrained high-speed profiles at 120 and 240 fps, so slow motion can run. */
+private fun driverSlowMotionState(phase: CameraUiPhase = CameraUiPhase.PREVIEWING): CameraUiState {
+    val camera = DriverCamera.copy(videoProfiles = DriverCamera.videoProfiles + listOf(120, 240).map {
+        com.librestatic.opencinecam.camera.Camera2VideoProfile(Size(1920, 1080), it, constrainedHighSpeed = true)
+    })
+    return driverCaptureState(CaptureMode.VIDEO, phase).copy(cameras = listOf(camera), targetFps = 240,
+        targetVideoWidth = 1920, targetVideoHeight = 1080, recordingWidth = 1920, recordingHeight = 1080)
+}
+
+/** Slow motion at 240 fps on a 30 fps project, bounded to 10 s of capture. */
+private val DriverSlowMotionSettings = CameraSettings(histogramEnabled = true, videoOffSpeed = true, videoWidth = 1920,
+    videoHeight = 1080, videoFps = 240, slowMotionTakeLengthSeconds = 10)
+
+/** Slow motion previewing: the strip reads RES · FPS · LENGTH (10 s) · SHUTTER · ISO · WB. */
+@Composable
+fun CaptureSlowMotion() = CaptureChrome(driverSlowMotionState(), DriverSlowMotionSettings)
+
+/** The take length panel (`take-length-panel`) open; the slider sets the screen's own settings. */
+@Composable
+fun CaptureSlowMotionLength() = CaptureChrome(driverSlowMotionState(), DriverSlowMotionSettings, CaptureInitialPane.TAKE_LENGTH)
+
+/** A bounded slow-motion take at 00:07 of 00:10. */
+@Composable
+fun CaptureSlowMotionRecording() = CaptureChrome(
+    driverSlowMotionState(CameraUiPhase.RECORDING).copy(recordingElapsedMs = 7_000L, takeLengthLimitMs = 10_000L),
+    DriverSlowMotionSettings,
+)
+
 /** The Razr Fold's three lenses as lock options: ultra-wide "3", wide "2" and tele "5" (anchors 0.55, 1 and 3). */
 private val DriverLensLockOptions = listOf(
     com.librestatic.opencinecam.LensLockOption("3", 0.55f, 2.2f),

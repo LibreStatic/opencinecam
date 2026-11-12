@@ -752,6 +752,10 @@
     <string name="resolution_group_open">Open gate</string>
     <string name="panel_title_fixed_fps">FPS FIXO</string>
     <string name="panel_title_white_balance">BALANÇO DE BRANCOS</string>
+    <string name="panel_title_take_length">DURAÇÃO DO TAKE</string>
+    <string name="take_length_off">Sem limite</string>
+    <string name="take_length_plays">dura %1$s</string>
+    <string name="take_length_note">O take para sozinho ao atingir esta duração de captura e precisa de menos espaço livre para começar.</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">PUXAR FOCO</string>
     <string name="focus_auto_fixed_lens">Esta lente tem foco fixo; não há nada para ajustar.</string>
