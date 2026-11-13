@@ -186,6 +186,8 @@ internal data class CinemaDngExportFormState(
     val busy: Boolean,
     /** A folder the picker returned is being adopted; Start waits for it. */
     val adopting: Boolean = false,
+    /** The last Start was refused; unlike [busy] it leaves Start enabled, so the operator can try again. */
+    val refused: Boolean = false,
 ) {
     private val compressing: Boolean get() = compress && lj92Available
     val fits: Boolean get() = plan?.fits(compressing, freeBytes) ?: false
@@ -206,10 +208,15 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     var free by remember { mutableStateOf<Long?>(null) }
     var recording by remember { mutableStateOf(environment.recording()) }
     var starting by remember { mutableStateOf(false) }
+    // The last Start was refused (earlier work still kept, or another export admitted first): say so rather than
+    // leave the tap without an answer while the state is not Running.
+    var refused by remember { mutableStateOf(false) }
     var adopting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val exports by environment.states.collectAsState()
     LaunchedEffect(take) { plan = environment.plan(take); loading = false }
+    // A refusal answers the export state it met: once that state moves on (the other export ended), it no longer holds.
+    LaunchedEffect(exports) { refused = false }
     LaunchedEffect(choice) { free = null; free = environment.freeBytes(choice) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if (tree != null) {
@@ -220,7 +227,7 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
         }
     }
     val state = CinemaDngExportFormState(CinemaDngExporter.takeName(take.primary.name), plan, loading, choice, folder,
-        environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running, adopting)
+        environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running, adopting, refused)
     // An admission under way cannot be taken back (it may already have queued the export), so the dialog stays until it
     // answers rather than closing on an export that then starts anyway.
     val dismiss = { if (!starting) onDismiss() }
@@ -235,11 +242,12 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
                 recording = environment.recording()
                 if (!recording && !starting && !adopting) {
                     starting = true
+                    refused = false
                     val request = state.request(take.primary.uri)
                     // Off the main thread: the admission asks WorkManager about kept work and may wait up to two seconds.
                     scope.launch {
                         val started = try { withContext(Dispatchers.IO) { environment.start(request) } } finally { starting = false }
-                        if (started) onDismiss()
+                        if (started) onDismiss() else refused = true
                     }
                 }
             },
@@ -285,7 +293,7 @@ internal fun ColumnScope.CinemaDngExportForm(take: LocalMediaTake, state: Cinema
         }
         if (state.recording) Text(stringResource(R.string.cinemadng_export_recording), Modifier.fillMaxWidth().testTag("cinemadng-export-recording"),
             color = MaterialTheme.colorScheme.error)
-        else if (state.busy) Text(stringResource(R.string.cinemadng_export_busy), Modifier.fillMaxWidth().testTag("cinemadng-export-busy"),
+        else if (state.busy || state.refused) Text(stringResource(R.string.cinemadng_export_busy), Modifier.fillMaxWidth().testTag("cinemadng-export-busy"),
             color = GalleryWarning)
 
         Text(stringResource(R.string.cinemadng_export_destination), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)

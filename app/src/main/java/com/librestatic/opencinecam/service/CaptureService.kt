@@ -1163,12 +1163,14 @@ class CaptureService : Service() {
         }.let { if (startup) it.copy(rawTakes = it.rawTakes + recoverRawTakes()) else it }
         releaseDeferredGrants()
         val recovered = report.incompleteGroups + report.rawTakes.published
-        if (!startup && report.discardedGroups + report.unresolvedGroups + recovered + report.rawTakes.deleted == 0) return
-        // Merged: a drive mounted meanwhile may have reported its own pass already. Only a pass a drive or a take asked
-        // for says what it recovered; the startup report is shown by the recovery card alone.
+        // Merged: a drive mounted meanwhile may have reported its own pass already. Every completed pass is merged, an
+        // empty one too, since its unresolved and deferred counts replace the earlier pass's. Only a pass a drive or a take
+        // asked for says what it recovered; the startup report is shown by the recovery card alone.
         val announce = causes.isNotEmpty()
+        val empty = report == com.librestatic.opencinecam.storage.RecordingRecoveryReport()
         mainHandler.post {
             if (!serviceDestroyed) cameraState.update { state ->
+                if (empty && state.recordingRecovery == null && !startup) return@update state
                 val idle = state.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED)
                 state.copy(recordingRecovery = mergeRecordingRecovery(state.recordingRecovery, report)).let {
                     if (announce && idle && recovered > 0) it.copy(message = getString(R.string.recording_drive_takes_recovered, recovered),
