@@ -939,8 +939,9 @@ class CaptureService : Service() {
         driveFreeSpace.invalidate(event.volumeId)
         when (event) {
             is RecordingVolumeEvent.Leaving -> {
-                // ADR-0037: the monitor already closed the drive's descriptors on its own thread; this is a cheap backstop.
-                releaseDriveDescriptors(event.volumeId, "the drive left")
+                // ADR-0037: the monitor already closed the drive's descriptors on its own thread; this is a cheap backstop,
+                // bounded to those registered before the event: the drive may have mounted again while it waited here.
+                releaseDriveDescriptors(event.volumeId, "the drive left", event.registeredBy)
                 // A qualification of that drive has nothing left to measure; it ends as cancelled, so nothing is stored.
                 if (rawQualificationSession != null && rawGateDestinationId == RawVideoQualificationStore.destinationIdForDrive(event.volumeId)) {
                     localBinder.cancelRawVideoQualification(RawQualificationStopReasons.DRIVE_LOST)

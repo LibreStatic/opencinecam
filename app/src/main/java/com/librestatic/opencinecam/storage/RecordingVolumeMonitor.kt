@@ -29,7 +29,11 @@ internal sealed interface RecordingVolumeEvent {
     val volumeId: String
 
     data class Mounted(override val volumeId: String) : RecordingVolumeEvent
-    data class Leaving(override val volumeId: String) : RecordingVolumeEvent
+    /**
+     * [registeredBy] is the [DriveDescriptors.registrationMark] when the event was emitted: a descriptor registered
+     * later may be on a newer mount of the volume, so a release for this event spares it.
+     */
+    data class Leaving(override val volumeId: String, val registeredBy: Long = Long.MAX_VALUE) : RecordingVolumeEvent
 }
 
 internal enum class VolumeStateKind { MOUNTED, LEAVING, IGNORE }
@@ -127,7 +131,8 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     private fun publish(volumeId: String, kind: VolumeStateKind) {
         tracker.apply(volumeId, kind)?.let { event ->
             mountedState.value = tracker.mountedVolumes
-            eventFlow.tryEmit(event)
+            // Taken under the lock that orders the reports: a remount is reported, and so emitted, only after this.
+            eventFlow.tryEmit(if (event is RecordingVolumeEvent.Leaving) event.copy(registeredBy = DriveDescriptors.registrationMark()) else event)
         }
     }
 
