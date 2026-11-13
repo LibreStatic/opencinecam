@@ -104,6 +104,21 @@ class DriveDescriptorsTest {
         assertEquals(1, fresh.closes)
     }
 
+    @Test fun aLateBackstopReleaseDoesNotRefuseAnOpenOnTheNewMount() {
+        val document = DocumentsContract.buildDocumentUriUsingTree(
+            DocumentsContract.buildTreeDocumentUri(EXTERNAL_STORAGE_AUTHORITY, "$volume:Rec"), "$volume:Rec/OpenCineCam/Stills/A/A.dng")
+        val boundary = DriveDescriptors.registrationMark()
+        DriveDescriptors.releaseVolume(volume) // the monitor's release as the drive left
+        // The drive mounted again and a still opened on it; then the service's backstop for the old Leaving runs.
+        val mark = DriveDescriptors.releaseMark(document)
+        assertEquals(0, DriveDescriptors.releaseVolume(volume, boundary, backstop = true))
+        val still = Counting()
+        DriveDescriptors.registerDocument(document, still, openedAfter = mark)
+        assertEquals(0, still.closes)
+        assertEquals(1, DriveDescriptors.registered(volume))
+        DriveDescriptors.releaseVolume(volume)
+    }
+
     @Test fun otherVolumesAreUntouched() {
         val leaving = Counting()
         val staying = Counting()

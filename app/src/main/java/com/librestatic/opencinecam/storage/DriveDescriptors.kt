@@ -94,11 +94,13 @@ internal object DriveDescriptors {
      * Closes every closeable registered for [volumeId] (matched ignoring case) and forgets them. A close that fails is
      * logged and does not stop the others. Returns how many were closed. Safe from any thread. With [registeredBy] (a
      * [registrationMark]), only those registered up to it: one registered later may hold a newer mount of the volume.
+     * A release advances the volume's [releaseMark] unless it is a [backstop] for one that already did: run late, after
+     * the drive mounted again, it would refuse a descriptor opened on the new mount.
      */
-    fun releaseVolume(volumeId: String, registeredBy: Long = Long.MAX_VALUE): Int {
+    fun releaseVolume(volumeId: String, registeredBy: Long = Long.MAX_VALUE, backstop: Boolean = false): Int {
         val volume = volumeId.uppercase()
         val released = synchronized(entries) {
-            releases[volume] = (releases[volume] ?: 0L) + 1
+            if (!backstop) releases[volume] = (releases[volume] ?: 0L) + 1
             val matching = entries.filter { it.volumeId == volume && it.sequence <= registeredBy }
             if (matching.isNotEmpty()) {
                 entries.removeAll { it.volumeId == volume && it.sequence <= registeredBy }
@@ -199,8 +201,8 @@ internal inline fun <S : AutoCloseable, T> S.useOnDrive(document: Uri, openedAft
  * Releases the descriptors on [volumeId] and logs how many were closed, with [cause]. Called on the earliest signal that
  * the drive is leaving or failing: the volume monitor's callback, a drive write failure.
  */
-internal fun releaseDriveDescriptors(volumeId: String, cause: String, registeredBy: Long = Long.MAX_VALUE): Int {
-    val closed = DriveDescriptors.releaseVolume(volumeId, registeredBy)
+internal fun releaseDriveDescriptors(volumeId: String, cause: String, registeredBy: Long = Long.MAX_VALUE, backstop: Boolean = false): Int {
+    val closed = DriveDescriptors.releaseVolume(volumeId, registeredBy, backstop)
     if (closed > 0) Log.w("RecordingDestination", "Closed $closed descriptor(s) on the drive $volumeId: $cause")
     return closed
 }
