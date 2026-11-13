@@ -334,6 +334,24 @@ class RecordingDestinationStoreTest {
     }
 
     @Test
+    @Config(sdk = [35], shadows = [FailingReleaseContentResolver::class])
+    fun aReleaseThatFailsIsRetriedUntilTheGrantGoes() {
+        store().adopt(DRIVE)
+        FailingReleaseContentResolver.failures = 1
+        try {
+            store().clear()
+            // The provider refused: the grant is still held, and it is remembered rather than forgotten.
+            assertTrue(held(DRIVE))
+            assertEquals(setOf(DRIVE.toString()), deferred())
+            store().releaseDeferred()
+            assertFalse(held(DRIVE))
+            assertTrue(deferred().isEmpty())
+        } finally {
+            FailingReleaseContentResolver.failures = 0
+        }
+    }
+
+    @Test
     fun aDeferredTreeWhoseGrantWentLeavesTheList() {
         store().adopt(DRIVE)
         journalled(RECORDING_JOURNAL, DRIVE)
@@ -608,6 +626,20 @@ class RecordingDestinationStoreTest {
 
     private fun deferred(): Set<String> = context.getSharedPreferences(RecordingDestinationStore.PREFS, Context.MODE_PRIVATE)
         .getStringSet(RecordingDestinationStore.KEY_DEFERRED_RELEASES, null).orEmpty()
+
+    /** A resolver whose next [failures] grant releases throw, as a provider that refuses one does. */
+    @org.robolectric.annotation.Implements(android.content.ContentResolver::class)
+    class FailingReleaseContentResolver : org.robolectric.shadows.ShadowContentResolver() {
+        @org.robolectric.annotation.Implementation
+        override fun releasePersistableUriPermission(uri: Uri, modeFlags: Int) {
+            if (failures > 0) { failures--; throw SecurityException("release refused") }
+            super.releasePersistableUriPermission(uri, modeFlags)
+        }
+
+        companion object {
+            @Volatile var failures = 0
+        }
+    }
 
     private companion object {
         const val RECORDING_JOURNAL = "recording-recovery.sqlite"

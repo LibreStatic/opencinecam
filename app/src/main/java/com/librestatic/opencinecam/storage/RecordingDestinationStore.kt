@@ -253,8 +253,7 @@ internal class RecordingDestinationStore(
         if (usesTree(tree) || tree.toString() in pendingAdoptions) return@synchronized
         // Kept only for recovery or the outbox: [releaseDeferred] gives it back once they are done with it.
         if (recoveryNeedsTree(tree)) return@synchronized deferRelease(tree)
-        runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
-            .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
+        release(tree)
     }
 
     /**
@@ -270,7 +269,7 @@ internal class RecordingDestinationStore(
         if (deferred.isEmpty()) return@synchronized
         val held = heldTrees()
         val remaining = deferred.filterTo(LinkedHashSet()) { tree ->
-            tree.toUri() in held && releaseUnlessShared(tree.toUri()) == GrantRelease.KEPT_FOR_RECOVERY
+            tree.toUri() in held && releaseUnlessShared(tree.toUri()).let { it == GrantRelease.KEPT_FOR_RECOVERY || it == GrantRelease.RELEASE_FAILED }
         }
         if (remaining != deferred) preferences.edit { putDeferredReleases(remaining) }
     }
@@ -312,7 +311,20 @@ internal class RecordingDestinationStore(
         if (tree.toString() !in deferred) preferences.edit { putDeferredReleases(deferred + tree.toString()) }
     }
 
-    private enum class GrantRelease { RELEASED, KEPT_SHARED, KEPT_FOR_RECOVERY }
+    private enum class GrantRelease { RELEASED, KEPT_SHARED, KEPT_FOR_RECOVERY, RELEASE_FAILED }
+
+    /**
+     * Under [ALIAS_LOCK]: gives [tree]'s grant back. A release that fails leaves the grant held, so it is remembered for
+     * [releaseDeferred] to try again until it goes or the grant is gone; an unused grant must not outlive a restart.
+     */
+    private fun release(tree: Uri): GrantRelease = try {
+        resolver.releasePersistableUriPermission(tree, READ_WRITE)
+        GrantRelease.RELEASED
+    } catch (failure: Exception) {
+        Log.w(LOG_TAG, "The folder permission could not be released; it is retried later", failure)
+        deferRelease(tree)
+        GrantRelease.RELEASE_FAILED
+    }
 
     /**
      * Releases [tree] unless it is the configured recording tree, one of its aliases or the CinemaDNG export's, or recovery
@@ -335,9 +347,7 @@ internal class RecordingDestinationStore(
             deferRelease(tree)
             return GrantRelease.KEPT_FOR_RECOVERY
         }
-        runCatching { resolver.releasePersistableUriPermission(tree, READ_WRITE) }
-            .onFailure { Log.w(LOG_TAG, "The folder permission could not be released", it) }
-        return GrantRelease.RELEASED
+        return release(tree)
     }
 
     /**

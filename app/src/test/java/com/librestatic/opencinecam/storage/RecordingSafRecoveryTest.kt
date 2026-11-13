@@ -771,7 +771,7 @@ class RecordingSafRecoveryTest {
             assertEquals(64L, raf.length())
         }
         assertTrue(scan.cancelled)
-        assertEquals(0.toByte(), file.readBytes()[0])
+        org.junit.Assert.assertArrayEquals(ByteArray(64) { it.toByte() }, file.readBytes())
     }
 
     @Test fun takesDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {

@@ -66,7 +66,34 @@ internal class DriveFreeSpaceCache(
         return value
     }
 
-    /** A sample of [drive] read directly now (take admission, the destination refresh). */
+    /**
+     * A sample of [drive] taken now on [executor] for a take's admission on main, waited for [timeoutMs] at most: a drive
+     * that stalls reads as unread (null) instead of holding main, and so does a busy executor (both threads stuck on a
+     * failing drive). A sample that comes in time is kept, as [store] keeps one; a late one is dropped.
+     */
+    fun readFresh(drive: RecordingDestination.UsbFolder, timeoutMs: Long): Long? {
+        val task = java.util.concurrent.FutureTask { sample(drive) }
+        try {
+            executor.execute(task)
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            return null
+        }
+        val sampled = try {
+            task.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: java.util.concurrent.TimeoutException) {
+            task.cancel(false)
+            return null
+        } catch (_: java.util.concurrent.ExecutionException) {
+            null
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        }
+        store(drive, sampled)
+        return sampled
+    }
+
+    /** A sample of [drive] read directly now (the destination refresh). */
     @Synchronized fun store(drive: RecordingDestination.UsbFolder, freeBytes: Long?) {
         forget(drive)
         bytes = freeBytes

@@ -690,10 +690,14 @@ class CaptureService : Service() {
         is RecordingDestination.UsbFolder -> driveFreeSpace.read(destination)
     }
 
-    /** Free bytes on [destination] read now; a drive's blocks on its provider (one IPC) and becomes its cached sample. */
+    /**
+     * Main, a take's admission: free bytes on [destination] read now. A drive's is sampled on its own thread and waited
+     * for [DRIVE_ADMISSION_WAIT_MS] at most, so a stalled drive never holds main (and its loss handling): it reads as
+     * unread, which the storage policy admits with a warning or refuses.
+     */
     private fun destinationFreeBytes(destination: RecordingDestination): Long? = when (destination) {
         RecordingDestination.Phone -> phoneVolumeFreeBytes()
-        is RecordingDestination.UsbFolder -> driveFreeBytes(contentResolver, destination.treeUri).also { driveFreeSpace.store(destination, it) }
+        is RecordingDestination.UsbFolder -> driveFreeSpace.readFresh(destination, DRIVE_ADMISSION_WAIT_MS)
     }
 
     /**
@@ -6785,6 +6789,8 @@ class CaptureService : Service() {
         private const val RAW_QUALIFICATION_CAMERA_KIND = "camera"
         private const val LOST_INPUT_STOP_ATTEMPTS = 20
         private const val LOST_INPUT_STOP_RETRY_MS = 250L
+        /** How long a take's admission waits on main for the drive's free space (one provider IPC when it answers). */
+        private const val DRIVE_ADMISSION_WAIT_MS = 500L
         private const val OWNER_ID = "capture-service"
         private const val RECORDING_TICK_MS = 500L
         private const val CAMERA_SWITCH_TIMEOUT_MS = 6_000L

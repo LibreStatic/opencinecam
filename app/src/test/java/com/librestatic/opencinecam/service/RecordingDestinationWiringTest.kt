@@ -319,6 +319,30 @@ class RecordingDestinationWiringTest {
         assertEquals(2, calls)
     }
 
+    @Test fun anAdmissionReadWaitsForAFreshSampleButNeverForAStalledDrive() {
+        val threads = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val release = java.util.concurrent.CountDownLatch(1)
+        var stall = false
+        try {
+            val cache = DriveFreeSpaceCache(threads) { if (stall) { release.await(); 1L } else 700L }
+            // A drive that answers: the fresh sample is returned and kept.
+            assertEquals(700L, cache.readFresh(drive, 5_000L))
+            assertEquals(700L, cache.read(drive))
+            // A drive that stalls reads as unread within the wait, and the late sample is dropped.
+            stall = true
+            val started = System.nanoTime()
+            assertNull(cache.readFresh(drive, 100L))
+            assertTrue(System.nanoTime() - started < java.util.concurrent.TimeUnit.SECONDS.toNanos(5))
+            release.countDown()
+            stall = false
+        } finally {
+            threads.shutdownNow()
+        }
+        // An executor that refuses the sample reads as unread at once.
+        val refusing = DriveFreeSpaceCache({ throw java.util.concurrent.RejectedExecutionException() }) { 700L }
+        assertNull(refusing.readFresh(drive, 5_000L))
+    }
+
     @Test fun aDriveFreeSpaceSampleBelongsToItsDriveAndIsForgottenWhenItsVolumeChanges() {
         val queued = ArrayDeque<Runnable>()
         val other = RecordingDestination.UsbFolder(Uri.parse("content://$EXTERNAL_STORAGE_AUTHORITY/tree/0A1B-2C3D%3ARAW"), "0A1B-2C3D")
