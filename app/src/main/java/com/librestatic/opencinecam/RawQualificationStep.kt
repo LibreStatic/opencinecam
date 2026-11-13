@@ -112,7 +112,7 @@ internal fun rememberRawQualificationConditions(): RawQualificationConditions {
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                conditions = conditions.copy(batteryPercent = batteryPercentOf(intent))
+                conditions = conditions.copy(batteryPercent = batteryPercentOf(intent), charging = batteryChargingOf(intent))
             }
         }
         runCatching {
@@ -129,12 +129,24 @@ internal fun rememberRawQualificationConditions(): RawQualificationConditions {
     return conditions
 }
 
-/** The duration, space and side effects of a qualification, as the prompt, the question and the step list them. */
+/** "Testing the USB drive WD Elements", or the phone standing in for a drive; null with no drive configured. */
+@Composable
+private fun rawQualificationTargetText(target: RawQualificationTarget?): String? = when {
+    target == null -> null
+    !target.drive -> stringResource(R.string.raw_qualification_target_phone)
+    // The drive's name wraps as one piece ("WD Elements" never splits over two lines).
+    target.driveLabel != null -> stringResource(R.string.raw_qualification_target_drive, target.driveLabel.replace(' ', '\u00A0'))
+    else -> stringResource(R.string.raw_qualification_target_drive_unnamed)
+}
+
+/** The storage, duration, space and side effects of a qualification, as the prompt, the question and the step list them. */
 @Composable
 private fun rawQualificationFacts(info: RawVideoQualificationInfo?): List<String> {
     val context = LocalContext.current
     val space = info?.space
+    val target = rawQualificationTargetText(info?.target)
     return buildList {
+        target?.let(::add)
         if (space != null && !space.enoughSpace) {
             add(stringResource(R.string.raw_qualification_no_space, Formatter.formatShortFileSize(context, space.minimumFreeBytes),
                 Formatter.formatShortFileSize(context, space.freeBytes)))
@@ -379,6 +391,7 @@ private fun rawQualificationReasonText(reason: String?): String? = when (reason)
     RawQualificationStopReasons.BATTERY -> stringResource(R.string.raw_qualification_reason_battery, RAW_QUALIFICATION_ABORT_BATTERY_PERCENT)
     RawQualificationStopReasons.APP_LEFT, RawQualificationStopReasons.PREVIEW_LOST, RawQualificationStopReasons.SERVICE_CLOSED ->
         stringResource(R.string.raw_qualification_reason_app_left)
+    RawQualificationStopReasons.DRIVE_LOST -> stringResource(R.string.raw_qualification_reason_drive_lost)
     RawQualificationRefusals.BUSY, RawQualificationRefusals.RUNNING -> stringResource(R.string.raw_qualification_reason_busy)
     RawQualificationRefusals.NOT_READY -> stringResource(R.string.raw_qualification_reason_not_ready)
     RawQualificationRefusals.UNSUPPORTED -> stringResource(R.string.raw_qualification_reason_unsupported)
@@ -527,6 +540,7 @@ private fun Checklist(conditions: RawQualificationConditions) {
                 RawQualificationBlocker.BATTERY_LOW in blockers ->
                     stringResource(R.string.raw_qualification_check_battery_fix, RAW_QUALIFICATION_MIN_BATTERY_PERCENT, battery ?: 0)
                 conditions.batteryWarning && battery != null -> stringResource(R.string.raw_qualification_check_battery_warn, battery)
+                battery != null && conditions.charging -> stringResource(R.string.raw_qualification_check_battery_charging, battery)
                 battery != null -> stringResource(R.string.raw_qualification_check_battery_ok, battery)
                 else -> null
             },
@@ -639,6 +653,17 @@ private fun ReadyStage(
         },
         body = {
             if (info?.previousFailure == true) NoticeCard(stringResource(R.string.raw_qualification_previous_failure))
+            // PLAN-072 Delivery 3: with a USB drive configured, say which storage the run measures.
+            rawQualificationTargetText(info?.target)?.let { target ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("raw-qualification-target"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    StepIcon(StepGlyph.STORAGE, OnbText, Modifier.size(18.dp))
+                    Text(target, color = OnbText, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.weight(1f))
+                }
+            }
             Checklist(conditions)
             when {
                 noSpace -> NoSpaceCard(space)
@@ -709,7 +734,8 @@ private fun ItemRow(item: RawQualificationItem) {
             RawQualificationItemStatus.TESTING -> StepIcon(StepGlyph.TESTING, OnbAmber, iconModifier)
             RawQualificationItemStatus.PENDING -> StepIcon(StepGlyph.CLOCK, OnbMuted, iconModifier)
             RawQualificationItemStatus.MEASURED -> StepIcon(StepGlyph.CHECK_CIRCLE, OnbMuted, iconModifier)
-            RawQualificationItemStatus.FAILED -> StepIcon(StepGlyph.ALERT_CIRCLE, colors.error, iconModifier, on = colors.onError)
+            RawQualificationItemStatus.FAILED, RawQualificationItemStatus.STORAGE_LIMIT ->
+                StepIcon(StepGlyph.ALERT_CIRCLE, colors.error, iconModifier, on = colors.onError)
             RawQualificationItemStatus.NOT_QUALIFIED, RawQualificationItemStatus.SKIPPED_SPACE -> StepIcon(StepGlyph.BLOCK, OnbMuted, iconModifier)
             RawQualificationItemStatus.SKIPPED_HEAT -> StepIcon(StepGlyph.THERMOMETER, OnbMuted, iconModifier)
             RawQualificationItemStatus.CAMERA_LIMIT -> StepIcon(StepGlyph.CAMERA_OFF, OnbMuted, iconModifier)
@@ -746,7 +772,8 @@ private fun ItemRow(item: RawQualificationItem) {
                 StatusPill(stringResource(R.string.raw_qualification_status_skipped), Color.Transparent, OnbMuted, outlined = true)
             RawQualificationItemStatus.SKIPPED_HEAT ->
                 StatusPill(stringResource(R.string.raw_qualification_status_too_hot), Color.Transparent, OnbMuted, outlined = true)
-            RawQualificationItemStatus.FAILED -> StatusPill(stringResource(R.string.raw_qualification_status_failed), colors.errorContainer, colors.onErrorContainer)
+            RawQualificationItemStatus.FAILED, RawQualificationItemStatus.STORAGE_LIMIT ->
+                StatusPill(stringResource(R.string.raw_qualification_status_failed), colors.errorContainer, colors.onErrorContainer)
             RawQualificationItemStatus.CAMERA_LIMIT ->
                 StatusPill(stringResource(R.string.raw_qualification_status_camera_limit), Color.Transparent, OnbMuted, outlined = true)
             RawQualificationItemStatus.NOT_QUALIFIED ->
@@ -895,6 +922,7 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
     val success = LocalCineColors.current.success
     val leftOut = rawQualificationItemsHeaviestFirst(state.items).filter {
         it.status == RawQualificationItemStatus.SKIPPED_SPACE || it.status == RawQualificationItemStatus.FAILED ||
+            it.status == RawQualificationItemStatus.STORAGE_LIMIT ||
             it.status == RawQualificationItemStatus.NOT_QUALIFIED || it.status == RawQualificationItemStatus.SKIPPED_HEAT ||
             it.status == RawQualificationItemStatus.CAMERA_LIMIT
     }
@@ -981,6 +1009,7 @@ private fun FinishedStage(state: RawVideoQualificationUi, onDone: () -> Unit) {
                                         RawQualificationItemStatus.SKIPPED_SPACE ->
                                             stringResource(R.string.raw_qualification_item_skipped, formatBytes(item.neededBytes))
                                         RawQualificationItemStatus.SKIPPED_HEAT -> stringResource(R.string.raw_qualification_item_too_hot)
+                                        RawQualificationItemStatus.STORAGE_LIMIT -> stringResource(R.string.raw_qualification_item_risky)
                                         RawQualificationItemStatus.CAMERA_LIMIT -> rawQualificationSpecFps(item.spec)
                                             ?.let { stringResource(R.string.raw_qualification_item_camera_limit, it) }
                                             ?: stringResource(R.string.raw_qualification_item_not_qualified)

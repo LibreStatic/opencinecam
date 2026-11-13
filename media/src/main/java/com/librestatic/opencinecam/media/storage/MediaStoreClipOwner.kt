@@ -85,7 +85,9 @@ class ContentResolverClipRows(private val resolver: ContentResolver) : ClipRows<
  * incomplete when the muxer did not finalize) and is never deleted because metadata failed; only an
  * empty clip is removed. [sidecarBytes] null means the sidecar was written earlier and is only published.
  * [attachments] are optional rows (such as a motion log) that travel with the clip: published with it,
- * deleted with an empty clip, and left alone when finalization fails.
+ * deleted with an empty clip, and left alone when finalization fails. [keepSidecarOnFailure]: the sidecar row existed
+ * before (recovery rewrites it), so a failure keeps it with the retained clip rather than deleting the only copy of the
+ * take's metadata.
  */
 fun <U> finalizeClip(
     rows: ClipRows<U>,
@@ -96,6 +98,7 @@ fun <U> finalizeClip(
     sidecarBytes: (() -> ByteArray)?,
     correlationId: String,
     attachments: List<U> = emptyList(),
+    keepSidecarOnFailure: Boolean = false,
 ): ClipFinalizationResult {
     val decision = decideClipRecovery(muxerFinalized, bytesWritten)
     return try {
@@ -121,7 +124,8 @@ fun <U> finalizeClip(
         // deleting it because metadata failed. Only an empty clip (DELETE) is removed.
         val retainClip = decision != ClipRecoveryDecision.DELETE
         if (!retainClip) runCatching { rows.delete(clipUri) }.exceptionOrNull()?.let(cause::addSuppressed)
-        sidecarUri?.let { uri -> runCatching { rows.delete(uri) }.exceptionOrNull()?.let(cause::addSuppressed) }
+        sidecarUri?.takeUnless { retainClip && keepSidecarOnFailure }
+            ?.let { uri -> runCatching { rows.delete(uri) }.exceptionOrNull()?.let(cause::addSuppressed) }
         ClipFinalizationResult.Failed(
             StableFailure(
                 component = "clip-storage",

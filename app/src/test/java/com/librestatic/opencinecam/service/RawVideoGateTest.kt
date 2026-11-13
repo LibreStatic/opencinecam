@@ -266,6 +266,36 @@ class RawVideoGateTest {
         assertFalse(RawVideoConfigOption.of(full60).isRisky)
     }
 
+    @Test fun aDriveIsGatedAndAdmittedOnItsOwnRecordsAndFreeSpace() {
+        // PLAN-072 Delivery 3: the phone qualified full@30; a ~100 MB/s HDD only the 1080p crop; a new drive nothing.
+        val dir = java.nio.file.Files.createTempDirectory("raw-gate").toFile()
+        try {
+            val store = com.librestatic.opencinecam.storage.RawVideoQualificationStore(
+                java.io.File(dir, com.librestatic.opencinecam.storage.RawVideoQualificationStore.FILE_NAME), "fp",
+                com.librestatic.opencinecam.camera.RawThroughputBenchmark.PROTOCOL_VERSION)
+            val phone = rawDestinationId(com.librestatic.opencinecam.storage.RecordingDestination.Phone)
+            val hdd = com.librestatic.opencinecam.storage.RawVideoQualificationStore.destinationIdForDrive("FFF1-7571")
+            store.upsertAll(listOf(record(full30, destination = phone), record(crop60, destination = hdd)))
+            fun usable(destination: String) = rawVideoUsableConfigs("0", sizes, store.qualifiedConfigs("0", destinationId = destination))
+            assertEquals(listOf(full30), usable(phone))
+            assertEquals(listOf(crop60), usable(hdd))
+            assertEquals(ModeGateState.CANDIDATE, rawVideoGate(sizes, usable(rawVideoQualificationTestDrive), failedThisSession = false))
+            assertEquals(crop60, selectRawVideoConfig(usable(hdd), ""))
+            // A key qualified only on the phone does not carry over to the drive.
+            assertEquals(crop60, selectRawVideoConfig(usable(hdd), RawVideoConfigKeys.key(full30)))
+            // Admission measures the drive: ten seconds of the crop's rate on it, whatever the phone holds.
+            val needed = rawTakeMinimumFreeBytes(crop60)
+            assertEquals(RawTakeAdmission.Admit, admitRawTake(ModeGateState.AVAILABLE, crop60, false, needed))
+            assertEquals(RawTakeAdmission.Refuse(RawVideoServiceReasons.STORAGE), admitRawTake(ModeGateState.AVAILABLE, crop60, false, needed - 1))
+            // A drive whose provider gives no figure refuses rather than borrowing the phone's.
+            assertEquals(RawTakeAdmission.Refuse(RawVideoServiceReasons.STORAGE), admitRawTake(ModeGateState.AVAILABLE, crop60, false, null))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    private val rawVideoQualificationTestDrive = com.librestatic.opencinecam.storage.RawVideoQualificationStore.destinationIdForDrive("AAAA-0001")
+
     // region runtime ring risk
 
     private val mb = 1_000_000L

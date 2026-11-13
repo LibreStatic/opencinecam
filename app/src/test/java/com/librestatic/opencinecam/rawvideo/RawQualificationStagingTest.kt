@@ -966,4 +966,122 @@ class RawQualificationStagingTest {
         assertTrue(RawStageResult.of("FAIL", listOf(RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED)).storageOnlyFailure)
         assertFalse(RawStageResult.of("FAIL", listOf(RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED, "fps-not-reached")).storageOnlyFailure)
     }
+
+    // endregion
+
+    // region configurations the sweep rules out
+
+    private val marginFail = RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL
+
+    private fun sweepAt(bytesPerSecond: Long, windows: Int = 60) =
+        RawStorageSweep(RawVideoQualifier.DESTINATION_ID, List(windows) { RawThroughputSample(1_000, bytesPerSecond, 0) })
+
+    /** The median rule v2 needs for [config] at its target rate, uncompressed. */
+    private fun requiredMedian(config: RawVideoConfig) = config.streamBytesPerSecond * RawThroughputBenchmark.MARGIN_BASIS_POINTS / 10_000L
+
+    @Test fun theSweepRulesOutAConfigurationWhoseMedianMissesTheMargin() {
+        val full60 = config("full@60")
+        assertEquals(listOf(marginFail), RawQualificationStaging.sweepRuledOut(full60, sweepAt(requiredMedian(full60) - 1)))
+        assertTrue(RawQualificationStaging.sweepRuledOut(full60, sweepAt(requiredMedian(full60))).isEmpty())
+        assertTrue(RawQualificationStaging.sweepRuledOut(full60, sweepAt(requiredMedian(full60) + 1)).isEmpty())
+        // A 91 MB/s drive rules out the heaviest configuration of the default plan, not 1920x1080 at 30 fps.
+        val drive = sweepAt(91_000_000)
+        val ruledOut = RawQualificationPlan.DEFAULT.specs.map(::config).filter { !it.isCompressed }
+            .filter { RawQualificationStaging.sweepRuledOut(it, drive).isNotEmpty() }
+        assertTrue(config("full@60") in ruledOut)
+        assertFalse(config("1920x1080@30") in ruledOut)
+        // A compressed configuration ruled out uncompressed is allowed at its ratio.
+        val twin = bp("full@60")
+        val mid = sweepAt(600_000_000)
+        assertEquals(listOf(marginFail), RawQualificationStaging.sweepRuledOut(twin, mid, 1.0))
+        assertTrue(RawQualificationStaging.sweepRuledOut(twin, mid, 2.0).isEmpty())
+    }
+
+    @Test fun aSweepWithTooFewWindowsRulesOutEverything() {
+        val short = sweepAt(1_400_000_000, windows = 59)
+        assertEquals(listOf(RawThroughputBenchmark.REASON_SWEEP_WINDOW_INVALID), RawQualificationStaging.sweepRuledOut(config("1920x1080@30"), short))
+        assertEquals(listOf(RawThroughputBenchmark.REASON_SWEEP_WINDOW_INVALID, marginFail),
+            RawQualificationStaging.sweepRuledOut(config("full@60"), sweepAt(300_000_000, windows = 10)))
+    }
+
+    @Test fun theSweepRulingAgreesWithRuleV2WithoutALiveRun() {
+        // The backlog depends on the ring, so it never rules out; the two sweep reasons match rule v2 whatever the ring.
+        val sweeps = listOf(sweepAt(91_000_000), sweepAt(300_000_000), sweepAt(600_000_000), sweepAt(1_051_064_100),
+            sweepAt(1_400_000_000), sweepAt(1_400_000_000, windows = 30))
+        val configs = RawQualificationPlan.DEFAULT.specs.map(::config) + listOf("full@60", "full@30", "3840x2160@60").map(::bp)
+        for (sweep in sweeps) for (config in configs) for (ratio in listOf(1.0, 1.6, 2.0)) for (ring in listOf(config.bytesPerFrame, 1_061_208_000L)) {
+            val v2 = RawThroughputBenchmark.qualifyWithBuffer(config, ring, sweep, null, ratio).reasonCodes
+                .filter { it == marginFail || it == RawThroughputBenchmark.REASON_SWEEP_WINDOW_INVALID }
+            assertEquals("$config at $ratio", v2, RawQualificationStaging.sweepRuledOut(config, sweep, ratio))
+        }
+        val slow = RawQualificationStaging.sweepRuledOut(config("full@60"), sweepAt(300_000_000))
+        assertFalse(RawThroughputBenchmark.REASON_BUFFER_BACKLOG_EXCEEDED in slow)
+    }
+
+    @Test fun aConfigurationTheSweepRuledOutIsRiskyWhenItsCameraCheckPasses() {
+        val full60 = config("full@60")
+        val reasons = listOf(marginFail)
+        val risky = RawQualificationStaging.uncompressedVerdict(full60, emptyMap(), RawStageResult.PASS, sweepReasons = reasons)
+        assertEquals(RawBenchmarkStatus.FAIL, risky.status)
+        assertEquals(reasons, risky.reasonCodes)
+        assertEquals(RawQualificationMethods.EXTRAPOLATED, risky.method)
+        assertNull(risky.coveredBy)
+        assertTrue(risky.risky)
+        // A failing camera check wins: the camera, not the storage, rules it out.
+        val camera = RawQualificationStaging.uncompressedVerdict(full60, emptyMap(), cameraFail, sweepReasons = reasons)
+        assertEquals(listOf("fps-not-reached"), camera.reasonCodes)
+        assertFalse(camera.risky)
+        // A missing check stays unknown.
+        val missing = RawQualificationStaging.uncompressedVerdict(full60, emptyMap(), null, sweepReasons = reasons)
+        assertEquals(RawBenchmarkStatus.UNKNOWN, missing.status)
+        assertEquals(listOf(RawQualificationStaging.REASON_CAMERA_CHECK_MISSING), missing.reasonCodes)
+        // Its own long run still wins.
+        val own = RawQualificationStaging.uncompressedVerdict(full60, mapOf(full60 to RawStageResult.PASS), RawStageResult.PASS, sweepReasons = reasons)
+        assertEquals(RawBenchmarkStatus.PASS, own.status)
+        assertEquals(RawQualificationMethods.LONG_RUN, own.method)
+
+        // Its stored qualification is the same shape as a risky long run's: a storage-only failure, so it gets burst seconds.
+        val ring = 1_061_208_000L
+        val sweep = sweepAt(91_000_000)
+        val stored = RawQualificationStaging.extrapolatedQualification(RawThroughputBenchmark.qualifyWithBuffer(full60, ring, sweep, null), risky)
+        assertEquals(RawBenchmarkStatus.FAIL, stored.status)
+        assertEquals(marginFail, stored.reasonCode)
+        assertFalse(RawThroughputBenchmark.REASON_LIVE_RUN_MISSING in stored.reasonCodes)
+        assertTrue(RawQualificationRisk.isRisky(stored))
+    }
+
+    @Test fun twinsTheSweepRulesOutGetNoLongRunAndTheCapCountsOnlyTheRest() {
+        val twins = listOf("full@60", "3840x2160@60", "full@30", "full@24", "1920x1080@30").map(::bp)
+        val fast = bench(1e10, 1.6, encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val heavy = setOf(bp("full@60"), bp("3840x2160@60"))
+        val order = RawQualificationStaging.compressedLongRunOrder(twins, { RawStageResult.PASS }, sweepAllows = { it !in heavy }) { fast }
+        assertEquals(listOf("full@30", "full@24", "1920x1080@30").map(::bp), order)
+        // By default the sweep allows everything.
+        assertEquals(listOf("full@60", "3840x2160@60", "full@30").map(::bp),
+            RawQualificationStaging.compressedLongRunOrder(twins, { RawStageResult.PASS }) { fast })
+    }
+
+    @Test fun anUncoveredTwinIsRiskyWhenTheSweepDecidedTheHeavierConfigurations() {
+        val fast = bench(1e10, 1.6, encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val sweepDecided = mapOf(config("full@60") to RawStageResult.fail(listOf(marginFail)),
+            config("3840x2160@60") to RawStageResult.fail(listOf(marginFail)))
+        // No long run at all: without the sweep's decisions the twin would be unknown.
+        val unknown = RawQualificationStaging.compressedVerdict(config("full@30"), RawStageResult.PASS, fast, emptyMap())
+        assertEquals(RawBenchmarkStatus.UNKNOWN, unknown.status)
+        val risky = RawQualificationStaging.compressedVerdict(config("full@30"), RawStageResult.PASS, fast, sweepDecided)
+        assertEquals(RawBenchmarkStatus.FAIL, risky.status)
+        assertEquals(listOf(marginFail), risky.reasonCodes)
+        assertTrue(risky.risky)
+        // A sweep-decided entry never covers, even far above the twin's rate.
+        assertNull(RawQualificationStaging.coveringRun(0L, sweepDecided))
+        val lightPass = mapOf(config("1920x1080@30") to RawStageResult.PASS) + sweepDecided
+        assertNull(RawQualificationStaging.compressedVerdict(config("full@30"), RawStageResult.PASS, fast, lightPass).coveredBy)
+        // The sweep ruling the twin itself out joins the reasons.
+        val own = RawQualificationStaging.compressedVerdict(config("full@30"), RawStageResult.PASS, fast, emptyMap(),
+            sweepReasons = listOf(marginFail))
+        assertTrue(own.risky)
+        assertEquals(listOf(marginFail), own.reasonCodes)
+        val viaFinal = RawQualificationStaging.compressedFinalVerdict(null, config("full@30"), RawStageResult.PASS, fast, emptyMap(), listOf(marginFail))
+        assertEquals(own, viaFinal)
+    }
 }

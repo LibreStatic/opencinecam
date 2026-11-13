@@ -12,6 +12,7 @@
     <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
     <string name="raw_video_saved">Ripresa RAW salvata: %1$d fotogrammi, %2$s s</string>
     <string name="raw_video_not_finalised">La ripresa RAW non è stata finalizzata; verrà recuperata al prossimo avvio.</string>
+    <string name="raw_video_not_finalised_drive">La ripresa RAW non è stata finalizzata; verrà recuperata quando ricollegherai l’unità USB.</string>
     <string name="raw_video_empty">La ripresa RAW non ha registrato alcun fotogramma.</string>
     <string name="raw_video_end_ring_full">la memoria di archiviazione non ha tenuto il passo del flusso RAW</string>
     <string name="raw_video_end_writer">non è stato possibile scrivere il file RAW</string>

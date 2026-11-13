@@ -95,6 +95,9 @@ object RawTakeReasons {
     /** The writer thread did not finish in time; the file stays pending for recovery. */
     const val WRITER_STALLED = "raw-writer-stalled"
 
+    /** The camera's RAW stream runs another sensor size or rate than the armed configuration, so no frame is taken. */
+    const val STREAM_MISMATCH = "raw-stream-mismatch"
+
     /** A compressed configuration cannot be armed: the native codec library is not available. */
     const val CODEC_UNAVAILABLE = "raw-codec-unavailable"
 }
@@ -581,7 +584,11 @@ class RawVideoRecorder(
 
     // endregion
 
-    /** [onRawTakeStarted] without `CameraCharacteristics`, for tests. */
+    /**
+     * [onRawTakeStarted] without `CameraCharacteristics`, for tests. A stream whose sensor size or rate is not the armed
+     * configuration's ends the take ([RawTakeReasons.STREAM_MISMATCH]): its frames were admitted, qualified and ring-sized
+     * for another configuration.
+     */
     internal fun onTakeStarted(
         cameraId: String,
         config: RawVideoSessionConfig,
@@ -593,6 +600,12 @@ class RawVideoRecorder(
         current.sessionConfig = config
         current.staticValues = staticValues
         current.orientationDegrees = orientationDegrees
+        val armed = current.armed.config
+        if (config.rawWidth != armed.sensorWidth || config.rawHeight != armed.sensorHeight || config.fps != armed.fps) {
+            android.util.Log.w(TAG, "RAW stream ${config.rawWidth}x${config.rawHeight}@${config.fps} is not the armed " +
+                "${armed.sensorWidth}x${armed.sensorHeight}@${armed.fps}; the take ends")
+            current.fail(RawTakeReasons.STREAM_MISMATCH)
+        }
     }
 
     /** [onRawFrame] over the plane of a RAW10 image. */

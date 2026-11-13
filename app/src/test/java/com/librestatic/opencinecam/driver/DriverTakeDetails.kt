@@ -15,6 +15,7 @@ import com.librestatic.opencinecam.parseClipSidecarFacts
 import com.librestatic.opencinecam.playback.ClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.drivePath
 import com.librestatic.opencinecam.storage.parseOcLogSidecar
 
 // What the inspector's readers would have found in each sample take's files, fed to the real buildTakeDetails.
@@ -38,6 +39,12 @@ internal fun logTakeInputs(take: LocalMediaTake) = TakeDetailInputs(LocalMediaKi
 internal fun probedTakeInputs(take: LocalMediaTake) = TakeDetailInputs(LocalMediaKind.VIDEO, files(take, "DCIM/OpenCineCam"),
     video = ClipMetadata(1920, 1080, 29.97, "H.264", 8, "SDR · BT.709", 42_000_000L), mediaStoreBitrate = 121_900_000L,
     audio = AudioMetadata("audio/mp4a-latm", 48_000, 2, null, bitRate = 192_000, durationUs = 42_000_000L))
+
+/** A take on the recording drive: paths are the drive's name and the document's path, the bit rate the container's. */
+internal fun driveTakeInputs(take: LocalMediaTake) = TakeDetailInputs(LocalMediaKind.VIDEO,
+    take.originals.map { DetailFile(it, drivePath("WD Elements", it.uri)) },
+    video = ClipMetadata(3840, 2160, 25.0, "HEVC 10-bit", 10, "SDR · BT.709", 96_000_000L), mediaStoreBitrate = 150_200_000L,
+    audio = AudioMetadata("audio/raw", 48_000, 2, 24, durationUs = 96_000_000L))
 
 /** A separate recorder track: [wav] is 24-bit PCM, otherwise AAC in MP4. */
 internal fun audioTakeInputs(take: LocalMediaTake, wav: Boolean) = TakeDetailInputs(LocalMediaKind.AUDIO, files(take, "Music/OpenCineCam"),

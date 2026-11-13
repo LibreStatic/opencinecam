@@ -55,7 +55,7 @@ class ClipSidecarBuilderTest {
 
     @Test fun completeTakeIsValidAndDescribesIntentAndGraph() {
         val document = assertValid(encoded(facts(), context()))
-        assertEquals("1.0.0", document.schemaVersion)
+        assertEquals("1.1.0", document.schemaVersion)
         assertEquals(id, document.recordingId)
         assertEquals("2026-10-22T10:15:30.250Z", document.createdAt)
         assertEquals("STRICT", document.intent.getValue("recordingPolicy").jsonObject.getValue("value").jsonPrimitive.content)
@@ -185,6 +185,30 @@ class ClipSidecarBuilderTest {
         is JsonObject -> element.entries.flatMap { (key, child) -> numbersOf(child, "$path.$key").entries }.associate { it.key to it.value }
         is JsonPrimitive -> mapOf(path to (if (element.isString) element.content else element.content.toDouble()))
         else -> emptyMap()
+    }
+
+    @Test fun aContinuationNamesTheTakeItContinues() {
+        // PLAN-072 Delivery 4: the phone part links to the drive part, whose sidecar is never rewritten.
+        val parent = "0f8fad5b-d9cb-469f-a165-70867728950e"
+        val link = ClipContinuation(parent, "OCC_$parent.mp4", 1, "drive-disconnected")
+        val json = encoded(facts().copy(continuation = link), context())
+        val continuation = assertValid(json).continuation!!
+        assertEquals(parent, continuation.getValue("of").jsonPrimitive.content)
+        assertEquals("OCC_$parent.mp4", continuation.getValue("previousName").jsonPrimitive.content)
+        assertEquals(1, continuation.getValue("index").jsonPrimitive.content.toInt())
+        assertEquals("drive-disconnected", continuation.getValue("reason").jsonPrimitive.content)
+        assertValid(encoded(facts().copy(continuation = link.copy(reason = "drive-write-failed")), context()))
+    }
+
+    @Test fun anOrdinaryTakeHasNoContinuationAndTheSchemaRejectsABadOne() {
+        val json = encoded(facts(), context())
+        assertFalse("continuation" in Json.parseToJsonElement(json).jsonObject)
+        assertNull(assertValid(json).continuation)
+        val bad = JsonObject(Json.parseToJsonElement(json).jsonObject + ("continuation" to JsonObject(mapOf(
+            "of" to JsonPrimitive("not-a-uuid"), "previousName" to JsonPrimitive("x.mp4"), "index" to JsonPrimitive(1),
+            "reason" to JsonPrimitive("operator")))))
+        assertEquals(2, JsonSchemaSubset.violations(schema, bad).size)
+        assertTrue(runCatching { ClipContinuation("a", "b", 0, "c") }.isFailure)
     }
 
     @Test fun nameOfTheSidecarFollowsTheVideoStem() {

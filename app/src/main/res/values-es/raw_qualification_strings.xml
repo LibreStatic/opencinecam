@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Batería al %1$d%% o más</string>
     <string name="raw_qualification_check_battery_fix">Cárgala primero al menos al %1$d%% (ahora %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · cargando</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. La calificación puede agotarla: conecta el cargador si puedes.</string>
     <string name="raw_qualification_check_cool">Temperatura normal</string>
     <string name="raw_qualification_check_cool_fix">Deja que el teléfono se enfríe primero.</string>
@@ -57,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Se detuvo porque la batería bajó del %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Se detuvo porque la app pasó a segundo plano.</string>
+    <string name="raw_qualification_reason_drive_lost">Se detuvo porque la unidad USB se desconectó.</string>
     <string name="raw_qualification_reason_busy">La cámara estaba ocupada con una toma.</string>
     <string name="raw_qualification_reason_not_ready">No se superó la comprobación de batería o temperatura.</string>
     <string name="raw_qualification_reason_unsupported">Esta cámara no puede grabar video RAW.</string>
@@ -76,8 +78,12 @@
     <string name="raw_qualification_chip_camera">Sin cámara</string>
     <string name="raw_qualification_chip_warm">Se calienta</string>
     <string name="raw_qualification_space_title">No se puede calificar todo con el espacio disponible</string>
-    <string name="raw_qualification_space_body">Se van a probar las configuraciones que entran en el almacenamiento libre de tu teléfono.</string>
+    <string name="raw_qualification_space_body">Se van a probar las configuraciones que entran en el espacio libre del almacenamiento que se prueba.</string>
     <string name="raw_qualification_space_free">%1$s libres</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">Se probará la unidad USB %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">Se probará la unidad USB</string>
+    <string name="raw_qualification_target_phone">Se probará el almacenamiento del teléfono</string>
     <string name="raw_qualification_space_tested">Se van a probar</string>
     <string name="raw_qualification_space_skipped">Se omiten por falta de espacio</string>
     <string name="raw_qualification_needs">necesita %1$s</string>

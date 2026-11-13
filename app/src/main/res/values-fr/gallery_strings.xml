@@ -41,6 +41,7 @@
     <string name="gallery_auto_thumbnails">Charger les miniatures automatiquement</string>
     <string name="gallery_thumbnail_tap">Touchez pour prévisualiser</string>
     <string name="gallery_good_take">Bonne prise</string>
+    <string name="gallery_location_drive_description">Sur le disque USB</string>
     <string name="gallery_take_number">Prise %1$d</string>
     <string name="gallery_slate_scene">Scène %1$s</string>
     <string name="gallery_slate_reel">Bobine %1$s</string>

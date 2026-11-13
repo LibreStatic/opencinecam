@@ -142,8 +142,21 @@ class RawVideoQualificationStore(
         /** The sweep's rest reference ([restReference]), beside the records. */
         const val REST_FILE_NAME = "raw-storage-rest.tsv"
 
-        /** `Documents/OpenCineCam/RAW` through `MediaStore.Files`, the only RAW video destination. */
+        /** `Documents/OpenCineCam/RAW` through `MediaStore.Files`: the phone. */
         const val DESTINATION_MEDIASTORE_DOCUMENTS = "mediastore-documents"
+
+        /** The prefix of a USB drive's destination id ([destinationIdForDrive]). */
+        const val DESTINATION_SAF_PREFIX = "saf:"
+
+        /**
+         * PLAN-072 Delivery 3: the destination id of the USB drive with volume UUID [volumeId], `saf:<VOLUME>`. Each drive is
+         * qualified on its own, beside the phone's [DESTINATION_MEDIASTORE_DOCUMENTS] records, which it never touches. Keyed
+         * by [driveIdentityOf], so a drive vold mounts under a suffixed name keeps its records.
+         */
+        fun destinationIdForDrive(volumeId: String): String {
+            require(volumeId.isNotBlank()) { "a drive needs its volume id" }
+            return DESTINATION_SAF_PREFIX + driveIdentityOf(volumeId)
+        }
 
         fun forContext(context: Context): RawVideoQualificationStore =
             RawVideoQualificationStore(File(context.applicationContext.filesDir, FILE_NAME), Build.FINGERPRINT)

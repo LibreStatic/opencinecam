@@ -113,6 +113,7 @@ internal fun MediaTakeDetails(take: LocalMediaTake, settings: GallerySettings, s
             badges.codec?.let { DetailChip(codecBadgeText(it), tag = "gallery-details-codec-${take.id}") }
             if (takeIsLog(take)) DetailChip("LOG", accent = true)
             if (facts?.hdr == true) DetailChip("HDR")
+            if (badges.onDrive) DetailChip(stringResource(R.string.gallery_location_drive_description), tag = "gallery-details-location-ssd-${take.id}")
             DetailChip(remember(take.originals) { Formatter.formatShortFileSize(context, take.originals.sumOf { it.sizeBytes }) })
             if (take.slate?.goodTake == true) DetailChip(stringResource(R.string.gallery_good_take), accent = true)
             badges.proxy.label()?.let { DetailChip(stringResource(it), color = badges.proxy.tint, tag = "gallery-details-proxy-${take.id}") }

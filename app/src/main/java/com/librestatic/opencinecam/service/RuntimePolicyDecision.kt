@@ -56,7 +56,7 @@ internal fun evaluateRuntimePolicy(policy: PolicyMode, platformThermal: Int?, fr
 }
 
 /** Why a take was stopped, for the localized sentence the final message carries. */
-internal enum class TakeStopReason { THERMAL, STORAGE, STATE_UNKNOWN, AV_DRIFT, CADENCE, AUDIO_INPUT_LOST, OTHER }
+internal enum class TakeStopReason { THERMAL, STORAGE, STATE_UNKNOWN, AV_DRIFT, CADENCE, AUDIO_INPUT_LOST, DRIVE_LOST, OTHER }
 
 internal const val AV_DIAGNOSTICS_COMPONENT = "av-diagnostics"
 internal const val AUDIO_INPUT_COMPONENT = "audio-input"
@@ -64,6 +64,7 @@ internal const val AUDIO_INPUT_COMPONENT = "audio-input"
 internal fun takeStopReason(failure: StableFailure): TakeStopReason = when {
     failure.component == AV_DIAGNOSTICS_COMPONENT -> TakeStopReason.AV_DRIFT
     failure.component == AUDIO_INPUT_COMPONENT -> TakeStopReason.AUDIO_INPUT_LOST
+    failure.component == RECORDING_DRIVE_COMPONENT -> TakeStopReason.DRIVE_LOST
     failure.code == FailureCode.THERMAL_CRITICAL -> TakeStopReason.THERMAL
     failure.code == FailureCode.STORAGE_WRITE_FAILED -> TakeStopReason.STORAGE
     failure.code == FailureCode.UNKNOWN_CAPABILITY -> TakeStopReason.STATE_UNKNOWN

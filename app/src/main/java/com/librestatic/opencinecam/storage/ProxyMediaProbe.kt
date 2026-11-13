@@ -102,7 +102,9 @@ internal fun verifyProxyVideoCorrespondence(before: ProxyMediaProbe, after: Prox
 internal fun ByteArray.proxyHex(): String = joinToString("") { "%02x".format(it) }
 internal suspend fun proxyHash(context: Context, uri: Uri): String {
     val digest = MessageDigest.getInstance("SHA-256")
-    requireNotNull(context.contentResolver.openInputStream(uri)).use { input ->
+    // A drive original is read whole: registered, so a drive that leaves ends the hash with an I/O error (ADR-0037).
+    val mark = DriveDescriptors.releaseMark(uri)
+    requireNotNull(context.contentResolver.openInputStream(uri)).useOnDrive(uri, mark) { input ->
         val bytes = ByteArray(128 * 1024)
         while (true) {
             currentCoroutineContext().ensureActive()

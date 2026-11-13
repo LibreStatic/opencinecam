@@ -135,14 +135,14 @@ class StillRecoveryDeviceTest {
     @Test fun unsupportedJournalSchemaIsPreservedAndDoesNotDeleteOrAllocateMedia() {
         StillImageSaver(context).recoverInterrupted()
         val id = UUID.randomUUID().toString(); seed(id); val row = insert(id)
-        SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = 2 }
+        SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = 3 }
         val original = database.readBytes()
         try {
             try { StillImageSaver(context).saveJpeg(jpeg); fail("Unknown schema accepted") }
             catch (failure: IllegalStateException) { assertTrue(failure.message.orEmpty().contains("version")) }
             assertTrue(exists(row)); assertTrue(receiptExists(id)); assertArrayEquals(original, database.readBytes())
         } finally {
-            SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = 1 }
+            SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = 2 }
             StillImageSaver(context).recoverInterrupted(); clean(listOf(row))
         }
     }

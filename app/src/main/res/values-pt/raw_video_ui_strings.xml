@@ -19,7 +19,7 @@
     <string name="raw_video_ring">BUFFER %1$d%%</string>
     <string name="raw_video_frames">%1$d qd.</string>
     <string name="raw_video_ring_description">Buffer RAW %1$d%% cheio, %2$d quadros gravados</string>
-    <string name="raw_video_config_help">O vídeo RAW grava cada quadro sem compressão em Documents/OpenCineCam/RAW. Só são oferecidos os tamanhos e as taxas de quadros que este telefone qualificou no seu armazenamento: cada um passou num teste longo de armazenamento e numa tomada real sem perder quadros. Automática escolhe a maior taxa qualificada. Um recorte lê o sensor inteiro, mas grava só o centro, então a imagem fica mais estreita. O tempo mostrado é quanto dura o espaço livre a essa taxa.</string>
+    <string name="raw_video_config_help">O vídeo RAW grava cada quadro sem compressão em Documents/OpenCineCam/RAW, ou na unidade USB quando ela é o destino da gravação. Só são oferecidos os tamanhos e as taxas de quadros qualificados nesse armazenamento: cada um passou num teste longo de armazenamento e numa tomada real sem perder quadros. Automática escolhe a maior taxa qualificada. Um recorte lê o sensor inteiro, mas grava só o centro, então a imagem fica mais estreita. O tempo mostrado é quanto dura o espaço livre a essa taxa.</string>
     <string name="gallery_raw_video">Vídeo RAW</string>
     <string name="media_integrity_raw">Uma tomada OpenCine RAW. O player mostra uma prévia revelada; para a qualidade completa, copie-a ou compartilhe-a com um computador e converta-a com o conversor DNG para desktop.</string>
     <string name="raw_video_audio_incomplete">O som tem falhas</string>

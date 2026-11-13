@@ -5,6 +5,7 @@ package com.librestatic.opencinecam.rawvideo
 
 import com.librestatic.opencinecam.camera.RawBenchmarkStatus
 import com.librestatic.opencinecam.camera.RawStorageCliff
+import com.librestatic.opencinecam.camera.RawStorageSweep
 import com.librestatic.opencinecam.camera.RawSustainedWrite
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawVideoConfig
@@ -19,7 +20,9 @@ import kotlin.math.floor
  *
  * 1. a storage sweep (rule v2 (a) and (b));
  * 2. long disk runs in descending stream rate, stopping at the first that passes: it covers every
- *    lighter configuration storage-wise; a storage-only failure above it is risky;
+ *    lighter configuration storage-wise; a storage-only failure above it is risky. A configuration
+ *    the sweep alone rules out ([RawQualificationStaging.sweepRuledOut]) gets no long run: the sweep
+ *    decides it;
  * 3. a short RAM-only camera check of every configuration no long run judged;
  * 4. encode benchmarks, one descent per codec (block-pack by default, LJ92 when a spec asks for
  *    it), from which every compressed twin is judged by pixel rate. The camera must hold its rate
@@ -344,12 +347,33 @@ object RawQualificationStaging {
 
     /**
      * The order of the long runs: uncompressed configurations only, heaviest stream first; equal
-     * rates run the higher frame rate first, then by spec so the order is stable.
+     * rates run the higher frame rate first, then by spec so the order is stable. The qualifier leaves
+     * out of it every configuration the sweep rules out ([sweepRuledOut]), so the descent starts at the
+     * heaviest one the sweep allows.
      */
     fun longRunOrder(runs: List<RawQualificationRun>): List<RawQualificationRun> = runs
         .filter { !it.config.isCompressed }
         .distinctBy { it.config }
         .sortedWith(compareByDescending<RawQualificationRun> { it.config.streamBytesPerSecond }.thenByDescending { it.config.fps }.thenBy { it.spec })
+
+    /** The reasons of rule v2 the sweep alone decides, whatever the ring: [sweepRuledOut] returns only these. */
+    val SWEEP_RULING_REASONS: Set<String> = setOf(
+        RawThroughputBenchmark.REASON_SWEEP_WINDOW_INVALID,
+        RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL,
+    )
+
+    /**
+     * Why the [sweep] alone rules [config] out, compressed at [compressionRatio]: the reasons of rule v2
+     * ([RawThroughputBenchmark.qualifyWithBuffer], with no live run) in [SWEEP_RULING_REASONS], at the
+     * configuration's target stream. A long run of it merges these into its own reasons, so it could
+     * never pass: it gets no long run, and these reasons decide its verdict. The ring's backlog
+     * (`buffer-backlog-exceeded`) depends on the ring size, so it rules nothing out. Empty when the
+     * sweep allows it.
+     */
+    fun sweepRuledOut(config: RawVideoConfig, sweep: RawStorageSweep, compressionRatio: Double = 1.0): List<String> =
+        // The ring size only affects the backlog check, filtered out here; any positive size will do.
+        RawThroughputBenchmark.qualifyWithBuffer(config, config.bytesPerFrame, sweep, null, compressionRatio)
+            .reasonCodes.filter { it in SWEEP_RULING_REASONS }
 
     /** The descent goes on after [result] until a long run passes. */
     fun continueDescent(result: RawStageResult): Boolean = !result.passed
@@ -367,16 +391,18 @@ object RawQualificationStaging {
      * a configuration with its own takes that run's verdict (a storage-only failure is risky), even
      * when a camera check of it ran too: the run already weighed that check
      * ([storageLoadResult]) where its shortfall could be the storage's.
-     * Otherwise its [cameraCheck] judges the camera: a failure fails it; a pass makes it ready only
-     * when a passing long run covers its rate ([coveringRun]). A skipped or missing check leaves it
-     * UNKNOWN, and so does no cover, with the reason its own long run was skipped for ([longRunSkip],
-     * e.g. `insufficient-space`) or [REASON_STORAGE_NOT_COVERED].
+     * Otherwise its [cameraCheck] judges the camera: a failure fails it; with a pass, the [sweepReasons]
+     * that ruled it out without a long run ([sweepRuledOut]) fail it (a storage-only failure is risky),
+     * and otherwise it is ready only when a passing long run covers its rate ([coveringRun]). A skipped
+     * or missing check leaves it UNKNOWN, and so does no cover, with the reason its own long run was
+     * skipped for ([longRunSkip], e.g. `insufficient-space`) or [REASON_STORAGE_NOT_COVERED].
      */
     fun uncompressedVerdict(
         config: RawVideoConfig,
         longRuns: Map<RawVideoConfig, RawStageResult>,
         cameraCheck: RawStageResult?,
         longRunSkip: RawStageResult? = null,
+        sweepReasons: List<String> = emptyList(),
     ): RawStagedVerdict {
         longRuns[config]?.takeIf { it.status != RawBenchmarkStatus.UNKNOWN }?.let { own ->
             return RawStagedVerdict(own.status, own.reasonCodes, RawQualificationMethods.LONG_RUN)
@@ -386,6 +412,7 @@ object RawQualificationStaging {
         return when {
             cameraCheck == null -> RawStagedVerdict(RawBenchmarkStatus.UNKNOWN, listOf(REASON_CAMERA_CHECK_MISSING), method, cover)
             cameraCheck.status != RawBenchmarkStatus.PASS -> RawStagedVerdict(cameraCheck.status, cameraCheck.reasonCodes, method, cover)
+            sweepReasons.isNotEmpty() -> RawStagedVerdict(RawBenchmarkStatus.FAIL, sweepReasons.distinct(), method)
             cover == null -> RawStagedVerdict(RawBenchmarkStatus.UNKNOWN, longRunSkip?.reasonCodes ?: listOf(REASON_STORAGE_NOT_COVERED), method)
             else -> RawStagedVerdict(RawBenchmarkStatus.PASS, emptyList(), method, cover)
         }
@@ -430,7 +457,10 @@ object RawQualificationStaging {
      * ([encodeSufficient]), the camera to have held the benchmark's rate when [twin]'s pixel rate is at
      * least the benchmarked one's ([REASON_COMPRESSED_CAMERA_STARVED]), and a passing long run covering
      * the compressed rate at the benchmark's conservative ratio. Without a cover, any storage-only
-     * long-run failure makes it risky; otherwise it stays UNKNOWN. A benchmark the heat spoiled fails
+     * long-run failure makes it risky, and so do the [sweepReasons] that rule the compressed
+     * configuration itself out at that ratio ([sweepRuledOut]), which join the reasons; otherwise it
+     * stays UNKNOWN. [longRuns] may hold the configurations the sweep decided without a long run: they
+     * failed, so they never cover, but their storage failure counts. A benchmark the heat spoiled fails
      * it with the benchmark's reasons. [bench] is the one of the twin's codec that judges it ([encodeJudges]).
      */
     fun compressedVerdict(
@@ -438,6 +468,7 @@ object RawQualificationStaging {
         twinCamera: RawStageResult?,
         bench: RawEncodeBenchFigures?,
         longRuns: Map<RawVideoConfig, RawStageResult>,
+        sweepReasons: List<String> = emptyList(),
     ): RawStagedVerdict {
         val method = RawQualificationMethods.COMPRESSED_EXTRAPOLATED
         val compressed = twin.copy(encoding = bench?.encoding ?: RawVideoConfig.ENCODING_BLOCK_PACK)
@@ -450,7 +481,7 @@ object RawQualificationStaging {
             encodeFailures(compressed, bench).isNotEmpty() -> RawStagedVerdict(RawBenchmarkStatus.FAIL, encodeFailures(compressed, bench), method)
             else -> {
                 val cover = coveringRun(compressedBytesPerSecond(compressed, bench.conservativeRatio), longRuns)
-                val storageFailure = longRuns.values.filter { it.storageOnlyFailure }.flatMap { it.reasonCodes }
+                val storageFailure = (longRuns.values.filter { it.storageOnlyFailure }.flatMap { it.reasonCodes } + sweepReasons)
                     .filter { it !in RawQualificationRisk.INFORMATIONAL_REASONS }.distinct()
                 when {
                     cover != null -> RawStagedVerdict(RawBenchmarkStatus.PASS, emptyList(), method, cover)
@@ -473,16 +504,19 @@ object RawQualificationStaging {
      * among [compressed] whose uncompressed twin's camera delivered ([twinCamera], called with the
      * twin; a reduced rate included, and a run only the heat and the storage failed,
      * [RawStageResult.cameraDelivered]) and whose benchmark ([judge], called with the compressed
-     * configuration) keeps up ([encodeKeepsUp]), heaviest stream first (then the higher frame rate),
-     * at most [MAX_COMPRESSED_LONG_RUNS].
+     * configuration) keeps up ([encodeKeepsUp]) and which the sweep allows ([sweepAllows], called with
+     * the compressed configuration: the qualifier asks [sweepRuledOut] at the benchmark's conservative
+     * ratio), heaviest stream first (then the higher frame rate), at most [MAX_COMPRESSED_LONG_RUNS].
      */
     fun compressedLongRunOrder(
         compressed: List<RawVideoConfig>,
         twinCamera: (RawVideoConfig) -> RawStageResult?,
+        sweepAllows: (RawVideoConfig) -> Boolean = { true },
         judge: (RawVideoConfig) -> RawEncodeBenchFigures?,
     ): List<RawVideoConfig> = compressed.filter { it.isCompressed }.distinct()
         .filter { config ->
-            twinCamera(config.copy(encoding = RawVideoConfig.ENCODING_RAW10))?.cameraDelivered == true && encodeKeepsUp(config, judge(config))
+            twinCamera(config.copy(encoding = RawVideoConfig.ENCODING_RAW10))?.cameraDelivered == true && encodeKeepsUp(config, judge(config)) &&
+                sweepAllows(config)
         }
         .sortedWith(compareByDescending<RawVideoConfig> { it.streamBytesPerSecond }.thenByDescending { it.fps }
             .thenBy { it.cropWidth.toLong() * it.cropHeight }.thenBy { it.encoding })
@@ -512,8 +546,8 @@ object RawQualificationStaging {
     /**
      * The verdict of a compressed configuration whose uncompressed twin is [twin] (camera evidence
      * [twinCamera]): its own long run's ([own], [compressedLongRunVerdict]) when that judged it, else the
-     * extrapolation from [bench] and [longRuns] ([compressedVerdict]): no run, a skipped one, or one the
-     * heat alone failed.
+     * extrapolation from [bench], [longRuns] and [sweepReasons] ([compressedVerdict]): no run, a skipped
+     * one, or one the heat alone failed.
      */
     fun compressedFinalVerdict(
         own: RawStageResult?,
@@ -521,7 +555,8 @@ object RawQualificationStaging {
         twinCamera: RawStageResult?,
         bench: RawEncodeBenchFigures?,
         longRuns: Map<RawVideoConfig, RawStageResult>,
-    ): RawStagedVerdict = compressedLongRunVerdict(own) ?: compressedVerdict(twin, twinCamera, bench, longRuns)
+        sweepReasons: List<String> = emptyList(),
+    ): RawStagedVerdict = compressedLongRunVerdict(own) ?: compressedVerdict(twin, twinCamera, bench, longRuns, sweepReasons)
 
     /**
      * What a compressed long run's shortfall under a ring overflow is weighed against

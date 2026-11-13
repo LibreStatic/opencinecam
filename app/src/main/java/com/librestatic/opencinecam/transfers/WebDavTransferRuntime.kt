@@ -5,6 +5,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.util.Log
+import com.librestatic.opencinecam.storage.RecordingCaptureRecovery
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.UUID
@@ -347,6 +350,11 @@ class WebDavTransferRuntime internal constructor(
                 notifyIdleLocked()
                 current.result.complete(current.stopped ?: message)
             }
+            // PLAN-072: a drive folder the operator switched away from kept its grant while takes on it waited here; the
+            // ones this batch verified no longer need it. Off the main thread (this executor), once the batch has
+            // finished, so its journal and outbox reads hold up no capture waiting on the batch.
+            if (current.bundleId != null) runCatching { RecordingDestinationStore(context).releaseDeferred() }
+                .onFailure { Log.w("WebDavTransfer", "Deferred folder permissions not released", it) }
         }
     }
 
@@ -368,7 +376,8 @@ class WebDavTransferRuntime internal constructor(
         val enrollment = CaptureTransferEnrollmentFile(context).load(id) ?: return WebDavTransferMessage.ERROR
         checkWork(current)
         if (enrollment.endpointId != bundle.endpointId || enrollment.endpointRevision != bundle.endpointRevision) return WebDavTransferMessage.ERROR
-        val source = WebDavMediaStoreArtifactSource(context.contentResolver)
+        // Phone and drive (PLAN-072) sources; a drive take is also read under the drive's other mounted volume name.
+        val source = WebDavMediaStoreArtifactSource(context.contentResolver) { RecordingCaptureRecovery.volumeMounted(context, it) }
         val factory: (URI) -> HttpURLConnection = { uri ->
             synchronized(gate) {
                 checkWork(current)
@@ -395,7 +404,11 @@ class WebDavTransferRuntime internal constructor(
             } else first
             checkWork(current)
             when (result) {
-                is WebDavWorkerResult.Held -> return if (result.reason == WebDavWorkerHold.AUTHENTICATION) WebDavTransferMessage.AUTHENTICATION else WebDavTransferMessage.ERROR
+                is WebDavWorkerResult.Held -> return when (result.reason) {
+                    WebDavWorkerHold.AUTHENTICATION -> WebDavTransferMessage.AUTHENTICATION
+                    WebDavWorkerHold.SOURCE_ABSENT -> WebDavTransferMessage.WAITING_DRIVE
+                    else -> WebDavTransferMessage.ERROR
+                }
                 is WebDavWorkerResult.Stopped -> return stopMessage(result.reason)
                 WebDavWorkerResult.Attention, WebDavWorkerResult.Stale -> return WebDavTransferMessage.ERROR
                 is WebDavWorkerResult.Applied -> Unit

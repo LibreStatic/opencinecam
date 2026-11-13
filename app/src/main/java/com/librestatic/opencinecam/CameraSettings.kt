@@ -167,6 +167,8 @@ data class CameraSettings(
     val translucentChrome: Boolean = false,
     /** Single-line texts that do not fit scroll as a marquee instead of ending in an ellipsis. */
     val scrollLongText: Boolean = true,
+    /** Local-only: the interface follows the sensor even with the system auto-rotate off (MainActivity's requestedOrientation). */
+    val rotateWhenLocked: Boolean = true,
     val viewfinderScale: ViewfinderScale = ViewfinderScale.FIT,
     val chromeOpacity: Float = DEFAULT_CHROME_OPACITY,
     val recordingGeometryMode: RecordingGeometryMode = RecordingGeometryMode.COMPATIBLE,
@@ -500,6 +502,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         modeSelectorStyle = migratedModeSelectorStyle(),
         translucentChrome = preferences.getBoolean(KEY_TRANSLUCENT_CHROME, false),
         scrollLongText = preferences.getBoolean(KEY_SCROLL_LONG_TEXT, true),
+        rotateWhenLocked = preferences.getBoolean(KEY_ROTATE_WHEN_LOCKED, true),
         viewfinderScale = enumPreference(KEY_VIEWFINDER_SCALE, ViewfinderScale.FIT),
         chromeOpacity = clampChromeOpacity(preferences.getFloat(KEY_CHROME_OPACITY, DEFAULT_CHROME_OPACITY)),
         recordingGeometryMode = enumPreference(KEY_RECORDING_GEOMETRY_MODE, RecordingGeometryMode.COMPATIBLE),
@@ -741,6 +744,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putString(KEY_MODE_SELECTOR_STYLE, settings.modeSelectorStyle.name)
             .putBoolean(KEY_TRANSLUCENT_CHROME, settings.translucentChrome)
             .putBoolean(KEY_SCROLL_LONG_TEXT, settings.scrollLongText)
+            .putBoolean(KEY_ROTATE_WHEN_LOCKED, settings.rotateWhenLocked)
             .putString(KEY_VIEWFINDER_SCALE, settings.viewfinderScale.name)
             .putFloat(KEY_CHROME_OPACITY, clampChromeOpacity(settings.chromeOpacity))
             .putString(KEY_RECORDING_GEOMETRY_MODE, settings.recordingGeometryMode.name)
@@ -998,6 +1002,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_MODE_SELECTOR_CAROUSEL_MIGRATED = "mode-selector-carousel-migrated-v1"
         const val KEY_TRANSLUCENT_CHROME = "translucent-chrome"
         const val KEY_SCROLL_LONG_TEXT = "scroll-long-text"
+        const val KEY_ROTATE_WHEN_LOCKED = "rotate-when-locked"
         const val KEY_HAPTIC_LEVEL = "haptic-level"
         const val KEY_HAPTIC_CAPTURE = "haptic-capture"
         const val KEY_HAPTIC_CONTROLS = "haptic-controls"

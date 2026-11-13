@@ -8,6 +8,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
+import com.librestatic.opencinecam.storage.safFreeBytes
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.channels.WritableByteChannel
@@ -91,20 +92,6 @@ internal class SafCinemaDngDestination(context: Context, private val tree: Uri) 
         const val LOG_TAG = "CinemaDngExport"
     }
 }
-
-/** The free bytes of the root holding [tree], when its provider reports them. */
-internal fun safFreeBytes(resolver: ContentResolver, tree: Uri): Long? = runCatching {
-    val authority = requireNotNull(tree.authority)
-    val rootId = DocumentsContract.getTreeDocumentId(tree).substringBefore(':')
-    resolver.query(DocumentsContract.buildRootsUri(authority),
-        arrayOf(DocumentsContract.Root.COLUMN_ROOT_ID, DocumentsContract.Root.COLUMN_AVAILABLE_BYTES), null, null, null)?.use { cursor ->
-        var free: Long? = null
-        while (cursor.moveToNext()) {
-            if (cursor.getString(0) == rootId && !cursor.isNull(1)) { free = cursor.getLong(1); break }
-        }
-        free
-    }
-}.getOrNull()
 
 /** The picked folder's name, for the dialog and the "Exported to" notice. */
 internal fun safFolderLabel(resolver: ContentResolver, tree: Uri): String? = runCatching {

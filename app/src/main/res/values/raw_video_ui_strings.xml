@@ -19,7 +19,7 @@
     <string name="raw_video_ring">RING %1$d%%</string>
     <string name="raw_video_frames">%1$d fr</string>
     <string name="raw_video_ring_description">RAW buffer %1$d%% full, %2$d frames written</string>
-    <string name="raw_video_config_help">RAW video writes every frame uncompressed to Documents/OpenCineCam/RAW. Only the sizes and frame rates this phone has qualified on its storage are offered: each one passed a long storage test and a live take without losing a frame. Automatic picks the highest qualified rate. A crop keeps the full sensor readout but writes only its centre, so the picture is narrower. The time shown is how long the free storage lasts at that rate.</string>
+    <string name="raw_video_config_help">RAW video writes every frame uncompressed to Documents/OpenCineCam/RAW, or to the USB drive when it is the recording destination. Only the sizes and frame rates qualified on that storage are offered: each one passed a long storage test and a live take without losing a frame. Automatic picks the highest qualified rate. A crop keeps the full sensor readout but writes only its centre, so the picture is narrower. The time shown is how long the free storage lasts at that rate.</string>
     <string name="gallery_raw_video">RAW video</string>
     <string name="media_integrity_raw">An OpenCine RAW take. The player shows a developed preview; for full quality, copy or share it to a computer and convert it with the desktop DNG converter.</string>
     <string name="raw_video_audio_incomplete">Sound has gaps</string>

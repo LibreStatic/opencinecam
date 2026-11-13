@@ -3,6 +3,7 @@ package com.librestatic.opencinecam.transfers
 
 import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
+import com.librestatic.opencinecam.storage.canonicalDriveDocumentUri
 import java.net.URI
 import java.util.Collections
 import java.util.UUID
@@ -132,6 +133,8 @@ private fun validatePublicationArtifacts(artifacts: List<PreparedCaptureArtifact
         require(name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 })
         require(Charsets.UTF_8.newEncoder().canEncode(name) && name.toByteArray(Charsets.UTF_8).size <= 255)
         require(artifact.uri.length <= 1024)
+        // A take recorded to the USB drive (PLAN-072) is published as canonical drive documents.
+        if (canonicalDriveDocumentUri(artifact.uri)) continue
         val uri = try { URI(artifact.uri) } catch (_: Exception) { throw IllegalArgumentException("Invalid publication item") }
         require(uri.scheme == "content" && uri.rawAuthority == "media" && uri.rawQuery == null && uri.rawFragment == null)
         val path = requireNotNull(uri.path)

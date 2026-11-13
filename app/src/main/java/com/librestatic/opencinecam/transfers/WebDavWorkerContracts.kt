@@ -16,6 +16,11 @@ internal sealed interface WebDavHashResult {
     }
     data class Unavailable(val failure: WebDavSourceFailure) : WebDavHashResult
     data class Stopped(val reason: WebDavStopReason) : WebDavHashResult
+    /**
+     * The source is on a USB drive that does not answer ([WebDavSourceDriveAbsent]). Transient: the artifact keeps
+     * its state, unlike [Unavailable], which persists SOURCE_UNAVAILABLE and waits for the user.
+     */
+    data object Waiting : WebDavHashResult
 }
 
 /** Explicit immutable destination binding; credentials stay only in the in-memory destination. */

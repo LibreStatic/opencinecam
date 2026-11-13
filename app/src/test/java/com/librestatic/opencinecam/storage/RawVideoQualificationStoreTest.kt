@@ -111,6 +111,27 @@ class RawVideoQualificationStoreTest {
     }
 
     @Test
+    fun aDrivesRecordsAreItsOwnAndThePhonesAreKept() {
+        // PLAN-072 Delivery 3: a drive is keyed "saf:<VOLUME>", whatever the case Android reports its volume id in.
+        val drive = RawVideoQualificationStore.destinationIdForDrive("fff1-7571")
+        assertEquals("saf:FFF1-7571", drive)
+        assertEquals(drive, RawVideoQualificationStore.destinationIdForDrive("FFF1-7571"))
+        // A drive vold mounts under its stable name (`-01`) keeps its records.
+        assertEquals(drive, RawVideoQualificationStore.destinationIdForDrive("FFF1-7571-01"))
+        val docs = RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS
+        store().upsert(record(UHD30))
+        // A slow drive qualifies only the small crop; the phone's records are untouched by the drive's run.
+        store().upsertAll(listOf(record(HD30, destination = drive), record(UHD30, status = RawBenchmarkStatus.FAIL, destination = drive, at = 2_000)))
+        assertEquals(listOf(UHD30), store().qualifiedConfigs("0", destinationId = docs))
+        assertEquals(listOf(HD30), store().qualifiedConfigs("0", destinationId = drive))
+        assertTrue(store().qualifiedConfigs("0", destinationId = RawVideoQualificationStore.destinationIdForDrive("AAAA-0001")).isEmpty())
+        // Requalifying the phone leaves the drive's records alone.
+        store().upsertAll(listOf(record(FULL60, destination = docs, at = 3_000)))
+        assertEquals(listOf(HD30), store().qualifiedConfigs("0", destinationId = drive))
+        assertEquals(setOf(UHD30, FULL60), store().qualifiedConfigs("0", destinationId = docs).toSet())
+    }
+
+    @Test
     fun staleRecordsAreIgnoredAndPruned() {
         // Written by an older build and protocol.
         store("old-fp").save(RawVideoQualificationSet(listOf(

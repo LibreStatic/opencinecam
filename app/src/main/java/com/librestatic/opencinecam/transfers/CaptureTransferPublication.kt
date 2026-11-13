@@ -59,7 +59,7 @@ class CaptureTransferPublication private constructor(
                 store = WebDavSqliteOutbox(context, databaseName)
                 val bridge = CapturePublicationOutboxBridge(bundleId, journal,
                     { CapturePublicationJournal.load(context, it) }, enrollments, store,
-                    MediaStorePreparedArtifactProbe(context.contentResolver),
+                    CaptureArtifactProbe(context.contentResolver),
                     if (preferences.autoUpload) { id -> scheduleAutoUpload(context, id) } else { _ -> })
                 CaptureTransferPublication(bundleId, bridge, bridge, store, null)
             } catch (failure: Exception) {

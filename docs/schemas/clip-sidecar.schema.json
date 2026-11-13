@@ -206,7 +206,10 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": "1.0.0"
+      "enum": [
+        "1.0.0",
+        "1.1.0"
+      ]
     },
     "recordingId": {
       "type": "string",
@@ -256,6 +259,40 @@
     },
     "media": {
       "type": "object"
+    },
+    "continuation": {
+      "description": "Optional; present only on a take that continues on the phone a take whose USB drive was lost mid-take (OCC-PLAN-072 Delivery 4). The continuation is its own take with its own recordingId; this links it to the part on the drive, whose sidecar is not rewritten.",
+      "type": "object",
+      "required": [
+        "of",
+        "previousName",
+        "index",
+        "reason"
+      ],
+      "properties": {
+        "of": {
+          "description": "The recordingId (bundle id) of the take on the drive this one continues.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "previousName": {
+          "description": "The file name of that take's video on the drive.",
+          "type": "string",
+          "minLength": 1
+        },
+        "index": {
+          "description": "1 for the first continuation of the original take.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "reason": {
+          "description": "Why the drive part stopped: the drive left (a volume event) or a write to it failed.",
+          "enum": [
+            "drive-disconnected",
+            "drive-write-failed"
+          ]
+        }
+      }
     }
   },
   "additionalProperties": true

@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,11 +59,18 @@ import com.librestatic.opencinecam.SettingsPillRow
 import com.librestatic.opencinecam.SettingsSwitchRow
 import com.librestatic.opencinecam.media.raw.NativeRawCodec
 import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PATH
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_PREFS
+import com.librestatic.opencinecam.storage.CINEMADNG_EXPORT_TREE_KEY
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
+import com.librestatic.opencinecam.storage.safFreeBytes
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Where the operator chose to export to. */
@@ -82,8 +90,16 @@ internal interface CinemaDngExportEnvironment {
     suspend fun freeBytes(choice: CinemaDngDestinationChoice): Long?
     /** The folder chosen last time, if the app still holds its permission. */
     fun savedFolder(): CinemaDngDestinationChoice.Folder?
-    /** Persists the permission for a folder the picker returned and remembers it. */
-    fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder?
+    /**
+     * Persists the permission for a folder the picker returned and remembers it. Off the main thread: it takes the
+     * folder-grant lock and may release the previous folder, which reads the recovery journals and the outbox.
+     */
+    suspend fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder?
+    /**
+     * [folder] with the label its provider gives. Apart from [adoptFolder], whose short label is the tree's own name: a
+     * provider that does not answer must not hold the dialog in its non-dismissible adoption.
+     */
+    suspend fun labelled(folder: CinemaDngDestinationChoice.Folder): CinemaDngDestinationChoice.Folder = folder
     fun start(request: CinemaDngExportRequest): Boolean
 }
 
@@ -94,16 +110,25 @@ internal fun rememberCinemaDngExportEnvironment(): CinemaDngExportEnvironment {
 }
 
 private class AndroidCinemaDngExportEnvironment(private val context: Context) : CinemaDngExportEnvironment {
-    private val preferences = context.getSharedPreferences("cinemadng_export", Context.MODE_PRIVATE)
+    private val preferences = context.getSharedPreferences(CINEMADNG_EXPORT_PREFS, Context.MODE_PRIVATE)
     override val lj92Available: Boolean get() = NativeRawCodec.available
     override val states get() = CinemaDngExportRuntime.states
     override fun recording() = CinemaDngExportRuntime.recording(context)
 
     override suspend fun plan(take: LocalMediaTake): CinemaDngExportPlan? = withContext(Dispatchers.IO) {
         try {
+            val mark = DriveDescriptors.releaseMark(take.primary.uri.toUri())
             context.contentResolver.openFileDescriptor(take.primary.uri.toUri(), "r")?.use { descriptor ->
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel.use { channel ->
-                    CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
+                    // Indexing walks every frame: a take on the USB drive has both descriptors close with the drive (ADR-0037).
+                    val closer = CloseOnce(channel, descriptor)
+                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), closer, openedAfter = mark)
+                    try {
+                        CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
+                    } finally {
+                        // Both close while still registered, so a drive that leaves meanwhile finds them.
+                        try { closer.close() } finally { driveHandle.unregister() }
+                    }
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -127,24 +152,35 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
         return if (held) folder(tree.toUri()) else null
     }
 
-    override fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder? = runCatching {
+    override suspend fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder? = withContext(Dispatchers.IO) { adopt(tree) }
+
+    override suspend fun labelled(adopted: CinemaDngDestinationChoice.Folder): CinemaDngDestinationChoice.Folder =
+        withContext(Dispatchers.IO) { folder(adopted.uri.toUri()) }
+
+    private fun adopt(tree: Uri): CinemaDngDestinationChoice.Folder? = runCatching {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        context.contentResolver.takePersistableUriPermission(tree, flags)
-        val previous = preferences.getString(KEY_TREE, null)
-        if (previous != null && previous != tree.toString()) {
-            runCatching { context.contentResolver.releasePersistableUriPermission(previous.toUri(), flags) }
+        val recording = RecordingDestinationStore(context)
+        // One step against the recording destination's own releases: it keeps a tree it finds remembered here.
+        recording.withGrants {
+            context.contentResolver.takePersistableUriPermission(tree, flags)
+            val previous = preferences.getString(KEY_TREE, null)
+            preferences.edit().putString(KEY_TREE, tree.toString()).apply()
+            // An export queued or running may still write to the previous folder: its permission goes once none does.
+            if (previous != null && previous != tree.toString()) CinemaDngExportRuntime.leaveFolder(context, previous)
         }
-        preferences.edit().putString(KEY_TREE, tree.toString()).apply()
-        folder(tree)
+        CinemaDngDestinationChoice.Folder(tree.toString(), treeLabel(tree))
     }.onFailure { Log.w("CinemaDngExport", "The folder permission could not be kept", it) }.getOrNull()
 
     override fun start(request: CinemaDngExportRequest) = CinemaDngExportRuntime.start(context, request)
 
     private fun folder(tree: Uri) = CinemaDngDestinationChoice.Folder(tree.toString(),
-        safFolderLabel(context.contentResolver, tree) ?: tree.lastPathSegment?.substringAfterLast(':').orEmpty())
+        safFolderLabel(context.contentResolver, tree) ?: treeLabel(tree))
+
+    /** The tree's own name, read from its URI without asking the provider. */
+    private fun treeLabel(tree: Uri) = tree.lastPathSegment?.substringAfterLast(':').orEmpty()
 
     private companion object {
-        const val KEY_TREE = "tree"
+        const val KEY_TREE = CINEMADNG_EXPORT_TREE_KEY
     }
 }
 
@@ -160,10 +196,14 @@ internal data class CinemaDngExportFormState(
     val freeBytes: Long?,
     val recording: Boolean,
     val busy: Boolean,
+    /** A folder the picker returned is being adopted; Start waits for it. */
+    val adopting: Boolean = false,
+    /** The last Start was refused; unlike [busy] it leaves Start enabled, so the operator can try again. */
+    val refused: Boolean = false,
 ) {
     private val compressing: Boolean get() = compress && lj92Available
     val fits: Boolean get() = plan?.fits(compressing, freeBytes) ?: false
-    val canStart: Boolean get() = !loading && plan != null && plan.convertible > 0 && fits && !recording && !busy
+    val canStart: Boolean get() = !loading && plan != null && plan.convertible > 0 && fits && !recording && !busy && !adopting
 
     fun request(takeUri: String) = CinemaDngExportRequest(takeUri, takeName,
         (choice as? CinemaDngDestinationChoice.Folder)?.uri, compressing)
@@ -179,24 +219,61 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     var compress by rememberSaveable { mutableStateOf(false) }
     var free by remember { mutableStateOf<Long?>(null) }
     var recording by remember { mutableStateOf(environment.recording()) }
+    var starting by remember { mutableStateOf(false) }
+    // The last Start was refused (earlier work still kept, or another export admitted first): say so rather than
+    // leave the tap without an answer while the state is not Running.
+    var refused by remember { mutableStateOf(false) }
+    var adopting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val exports by environment.states.collectAsState()
     LaunchedEffect(take) { plan = environment.plan(take); loading = false }
-    LaunchedEffect(choice) { free = null; free = environment.freeBytes(choice) }
+    // A refusal answers the export state it met: once that state moves on (the other export ended), it no longer holds.
+    LaunchedEffect(exports) { refused = false }
+    // Keyed by the folder, not its label: the label that arrives after an adoption reads no space again.
+    LaunchedEffect((choice as? CinemaDngDestinationChoice.Folder)?.uri ?: choice) { free = null; free = environment.freeBytes(choice) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        tree?.let(environment::adoptFolder)?.let { folder = it; choice = it }
+        if (tree != null) {
+            adopting = true
+            scope.launch {
+                val adopted = try { environment.adoptFolder(tree)?.also { folder = it; choice = it } } finally { adopting = false }
+                // The provider's label once the dialog can be dismissed again; only while that folder is still the one shown.
+                if (adopted != null) {
+                    val labelled = environment.labelled(adopted)
+                    if (labelled != adopted && folder == adopted) {
+                        folder = labelled
+                        if (choice == adopted) choice = labelled
+                    }
+                }
+            }
+        }
     }
     val state = CinemaDngExportFormState(CinemaDngExporter.takeName(take.primary.name), plan, loading, choice, folder,
-        environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running)
-    MediaDialogFrame("cinemadng-export-dialog", onDismiss) {
+        environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running, adopting, refused)
+    // An admission under way cannot be taken back (it may already have queued the export), so the dialog stays until it
+    // answers rather than closing on an export that then starts anyway. An adoption also runs to its end (it saves the
+    // new folder and may release the old one), so a dialog reopened meanwhile never offers the folder being released.
+    val dismiss = { if (!starting && !adopting) onDismiss() }
+    MediaDialogFrame("cinemadng-export-dialog", dismiss) {
         CinemaDngExportForm(take, state,
-            onChoice = { choice = it },
-            onChooseFolder = { runCatching { picker.launch(null) } },
+            // While a picked folder is adopted the choice stays put: the adoption selects that folder when it answers.
+            onChoice = { if (!starting && !adopting) choice = it },
+            // A folder chosen while the admission runs could release the one the request captured before it is leased.
+            onChooseFolder = { if (!starting && !adopting) runCatching { picker.launch(null) } },
             onCompress = { compress = it },
             onStart = {
                 recording = environment.recording()
-                if (!recording && environment.start(state.request(take.primary.uri))) onDismiss()
+                if (!recording && !starting && !adopting) {
+                    starting = true
+                    refused = false
+                    val request = state.request(take.primary.uri)
+                    // Off the main thread: the admission asks WorkManager about kept work and may wait up to two seconds.
+                    scope.launch {
+                        val started = try { withContext(Dispatchers.IO) { environment.start(request) } } finally { starting = false }
+                        if (started) onDismiss() else refused = true
+                    }
+                }
             },
-            onCancel = onDismiss)
+            onCancel = dismiss)
     }
 }
 
@@ -238,18 +315,19 @@ internal fun ColumnScope.CinemaDngExportForm(take: LocalMediaTake, state: Cinema
         }
         if (state.recording) Text(stringResource(R.string.cinemadng_export_recording), Modifier.fillMaxWidth().testTag("cinemadng-export-recording"),
             color = MaterialTheme.colorScheme.error)
-        else if (state.busy) Text(stringResource(R.string.cinemadng_export_busy), Modifier.fillMaxWidth().testTag("cinemadng-export-busy"),
+        else if (state.busy || state.refused) Text(stringResource(R.string.cinemadng_export_busy), Modifier.fillMaxWidth().testTag("cinemadng-export-busy"),
             color = GalleryWarning)
 
         Text(stringResource(R.string.cinemadng_export_destination), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         SettingsPillRow {
             SettingsPill(stringResource(R.string.cinemadng_export_documents), "cinemadng-export-documents",
-                selected = state.choice == CinemaDngDestinationChoice.Documents) { onChoice(CinemaDngDestinationChoice.Documents) }
+                selected = state.choice == CinemaDngDestinationChoice.Documents, enabled = !state.adopting) { onChoice(CinemaDngDestinationChoice.Documents) }
             state.folder?.let { folder ->
-                SettingsPill(shortLabel(folder.label), "cinemadng-export-folder", selected = state.choice == folder) { onChoice(folder) }
+                SettingsPill(shortLabel(folder.label), "cinemadng-export-folder", selected = state.choice == folder,
+                    enabled = !state.adopting) { onChoice(folder) }
             }
             SettingsPill(stringResource(R.string.cinemadng_export_choose_folder), "cinemadng-export-choose", selected = false,
-                role = androidx.compose.ui.semantics.Role.Button, onClick = onChooseFolder)
+                enabled = !state.adopting, role = androidx.compose.ui.semantics.Role.Button, onClick = onChooseFolder)
         }
         val where = when (val choice = state.choice) {
             CinemaDngDestinationChoice.Documents -> "$CINEMADNG_EXPORT_PATH${state.takeName}/"

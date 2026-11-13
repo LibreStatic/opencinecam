@@ -69,6 +69,21 @@ class MediaStoreClipOwnerTest {
     }
 
     @Test
+    fun anExistingSidecarIsKeptWhenItsRewriteFails() {
+        val rows = Rows(sidecarFailure = IllegalStateException("sidecar"))
+        val result = finalizeClip(rows, "clip", "sidecar", muxerFinalized = false, bytesWritten = 1,
+            sidecarBytes = { ByteArray(0) }, correlationId = "take-3", keepSidecarOnFailure = true) as ClipFinalizationResult.Failed
+        assertTrue(result.clipRetained)
+        assertFalse(rows.events.contains("delete:sidecar"))
+        assertFalse(rows.events.contains("delete:clip"))
+        // An empty clip still goes with its sidecar.
+        val empty = Rows()
+        finalizeClip(empty, "clip", "sidecar", muxerFinalized = false, bytesWritten = 0,
+            sidecarBytes = { ByteArray(0) }, correlationId = "take-4", keepSidecarOnFailure = true)
+        assertTrue(empty.events.contains("delete:sidecar"))
+    }
+
+    @Test
     fun successfulAndEmptyClipsKeepTheirPreviousOutcomes() {
         val rows = Rows()
         assertEquals(ClipFinalizationResult.Published(incomplete = false),

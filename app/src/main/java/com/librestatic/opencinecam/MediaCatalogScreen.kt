@@ -109,6 +109,12 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     var deletionRefresh by remember { mutableIntStateOf(0) }
     var deletedTakeIds by remember { mutableStateOf(emptySet<String>()) }
     val scope = rememberCoroutineScope()
+    // PLAN-072: a removable drive plugged in or pulled out reloads the catalog, so its takes come and go in place.
+    val volumes = remember(context.applicationContext) {
+        runCatching { RecordingVolumeMonitor(context.applicationContext) }.onFailure { android.util.Log.w("MediaCatalog", "No volume monitor", it) }.getOrNull()
+    }
+    DisposableEffect(volumes) { onDispose { volumes?.close() } }
+    LaunchedEffect(volumes) { volumes?.events?.collect { deletionRefresh++ } }
     val source = remember(context.applicationContext) {
         val app = context.applicationContext
         val repository = LocalMediaRepository(app)
@@ -171,9 +177,13 @@ private fun artifactGone(context: Context, uri: String): Boolean =
     runCatching { context.contentResolver.openFileDescriptor(uri.toUri(), "r")?.use { false } ?: true }
         .getOrElse { it is java.io.FileNotFoundException }
 
-/** Grid cards reach 260 dp, so the picture is asked for at twice the catalog's old 256 px. */
+/**
+ * Grid cards reach 260 dp, so the picture is asked for at twice the catalog's old 256 px. MediaStore has no
+ * thumbnail for a file on the recording drive: that one is decoded from the file and cached (PLAN-072).
+ */
 private fun galleryThumbnail(context: Context, artifact: LocalMediaArtifact): Bitmap? = runCatching {
-    context.contentResolver.loadThumbnail(artifact.uri.toUri(), Size(512, 512), null)
+    if (isDriveUri(artifact.uri)) driveThumbnail(context, artifact, 512)
+    else context.contentResolver.loadThumbnail(artifact.uri.toUri(), Size(512, 512), null)
 }.getOrNull()
 
 /** Serialises [rawGalleryThumbnail]: each holds a full-resolution frame buffer while it develops. */
@@ -195,6 +205,7 @@ private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): Galler
     if (artifact.name.endsWith(RAW_VIDEO_EXTENSION, ignoreCase = true)) return rawGalleryFacts(context, artifact)
     val video = artifact.mimeType.startsWith("video/")
     if (!video && !artifact.mimeType.startsWith("audio/")) return null
+    if (isDriveUri(artifact.uri)) return driveGalleryFacts(context, artifact, video)
     val transfer = video && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
     val columns = buildList {
         add(MediaStore.MediaColumns.DURATION)
@@ -212,6 +223,23 @@ private fun galleryFacts(context: Context, artifact: LocalMediaArtifact): Galler
         }
     }.getOrNull()
 }
+
+/** A drive file has no MediaStore row: its container is read instead, which opens the file but decodes nothing. */
+private fun driveGalleryFacts(context: Context, artifact: LocalMediaArtifact, video: Boolean): GalleryFacts? = runCatching {
+    val retriever = android.media.MediaMetadataRetriever()
+    try {
+        retriever.setDataSource(context, artifact.uri.toUri())
+        fun long(key: Int): Long? = retriever.extractMetadata(key)?.toLongOrNull()
+        val transfer = if (video && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            long(android.media.MediaMetadataRetriever.METADATA_KEY_COLOR_TRANSFER) else null
+        GalleryFacts(long(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION),
+            if (video) long(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toInt() else null,
+            if (video) long(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toInt() else null,
+            transfer == MediaFormat.COLOR_TRANSFER_ST2084.toLong() || transfer == MediaFormat.COLOR_TRANSFER_HLG.toLong())
+    } finally {
+        retriever.release()
+    }
+}.getOrNull()
 
 private fun rawGalleryFacts(context: Context, artifact: LocalMediaArtifact): GalleryFacts? = runCatching {
     context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
@@ -316,7 +344,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
         .collectAsState(emptyMap())
     fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE,
-        visible.encodings[take.id]?.incompleteReasons.orEmpty())
+        visible.encodings[take.id]?.incompleteReasons.orEmpty(), onDrive = take.onDrive)
     val thumbnails = remember(source) { GalleryThumbnailCache() }
     val groups = remember(visible.takes) { groupByTakeDay(visible.takes, ZoneId.systemDefault()) { it.primary.modifiedSeconds } }
     val gridState = rememberLazyGridState()
@@ -335,8 +363,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         play = if (take.kind.opensInApp()) { { before(); open(take.primary) } } else null,
         details = { selectedId = take.id; detailsOpen = true },
         share = onShare?.let { action -> { before(); action(take) } },
-        // Rename and delete re-observe a take through the media collections, which a RAW take is not in.
-        rename = onRename?.takeIf { take.kind.renamesAndDeletes() }?.let { action -> { before(); action(take) } },
+        // Rename and delete re-observe a take through the media collections, which a RAW take is not in. A drive take
+        // is never renamed here: a renamed document gets a new id, which would stale every URI its sidecars hold.
+        rename = onRename?.takeIf { take.kind.renamesAndDeletes() && !take.onDrive }?.let { action -> { before(); action(take) } },
         proxy = onProxy?.takeIf { take.kind == LocalMediaKind.VIDEO }?.let { action -> { before(); action(take) } },
         delete = onDelete?.takeIf { take.kind.renamesAndDeletes() }?.let { action -> { before(); action(take) } },
         export = onExport?.takeIf { take.kind == LocalMediaKind.RAW_VIDEO }?.let { action -> { before(); action(take) } },

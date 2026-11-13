@@ -253,18 +253,161 @@ class RawVideoQualificationPlanTest {
         assertEquals(2_000L + runs.size * timing.cameraCheckMs() + (runs.size - 1) * 3_000L, checks.durationMs)
     }
 
-    @Test fun theProgressMeterShrinksForStepsThatDoNotRunWithoutGoingBack() {
-        val meter = RawQualificationProgressMeter(10_000L)
-        meter.startStep(4_000L); meter.finishStep()
-        assertEquals(0.4, meter.fraction(), 1e-9)
-        meter.shrink(5_000L)
-        assertEquals(0.8, meter.fraction(), 1e-9)
-        // Never below the work done, and the fraction never goes back.
-        meter.shrink(100_000L)
-        assertEquals(4_000L, meter.totalMs)
-        assertEquals(1.0, meter.fraction(), 1e-9)
-        meter.extend(6_000L)
-        assertEquals(1.0, meter.fraction(), 1e-9)
+    /** A clock the tests move by hand. */
+    private class FakeClock(var now: Long = 5_000L)
+
+    private fun meter(clock: FakeClock, planned: Map<RawQualificationStepKind, Long>) = RawQualificationProgressMeter({ clock.now }, planned)
+
+    @Test fun theMeterCountsTheTimeLeftDownInsideAStep() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.LONG_RUN to 100_000L, RawQualificationStepKind.COOL_DOWN to 10_000L))
+        assertEquals(110_000L, meter.remainingMs())
+        assertEquals(0.0, meter.fraction(), 1e-9)
+        meter.startStep(RawQualificationStepKind.LONG_RUN, 50_000L, "full@30")
+        assertEquals(50_000L, meter.pendingMs(RawQualificationStepKind.LONG_RUN))
+        assertEquals(110_000L, meter.remainingMs())
+        clock.now += 20_000L
+        assertEquals(90_000L, meter.remainingMs())
+        // fraction = elapsed / (elapsed + remaining)
+        assertEquals(20_000.0 / 110_000.0, meter.fraction(), 1e-9)
+        assertEquals(20_000L, meter.elapsedMs())
+    }
+
+    @Test fun anOverrunningStepHoldsTheTimeLeftAndTheFractionNeverGoesBack() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.LONG_RUN to 100_000L, RawQualificationStepKind.COOL_DOWN to 10_000L))
+        meter.startStep(RawQualificationStepKind.LONG_RUN, 50_000L)
+        clock.now += 60_000L
+        // Past its plan the step's own remainder is 0, not negative: what is left is the pending work.
+        assertEquals(60_000L, meter.remainingMs())
+        assertEquals(0.5, meter.fraction(), 1e-9)
+        clock.now += 30_000L
+        assertEquals(60_000L, meter.remainingMs())
+        assertEquals(0.6, meter.fraction(), 1e-9)
+        // More work planned lowers elapsed / total, but the fraction holds.
+        meter.extend(RawQualificationStepKind.LONG_RUN, 1_000_000L)
+        assertEquals(1_060_000L, meter.remainingMs())
+        assertEquals(0.6, meter.fraction(), 1e-9)
+    }
+
+    @Test fun aLongRunThatTookTwiceItsPlanScalesThePendingLongRuns() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.LONG_RUN to 100_000L, RawQualificationStepKind.COOL_DOWN to 9_000L))
+        meter.startStep(RawQualificationStepKind.LONG_RUN, 25_000L, "full@60")
+        clock.now += 50_000L
+        val step = meter.finishStep()
+        assertEquals(RawQualificationStepTime(RawQualificationStepKind.LONG_RUN, "full@60", 25_000L, 50_000L, 0L), step)
+        assertEquals(2.0, meter.factor(RawQualificationStepKind.LONG_RUN), 1e-9)
+        assertEquals(75_000L, meter.pendingMs(RawQualificationStepKind.LONG_RUN))
+        assertEquals(2 * 75_000L + 9_000L, meter.remainingMs())
+        // A fixed wait is never scaled, however long it took.
+        meter.startStep(RawQualificationStepKind.COOL_DOWN, 3_000L)
+        clock.now += 9_000L
+        meter.finishStep()
+        assertEquals(1.0, meter.factor(RawQualificationStepKind.COOL_DOWN), 1e-9)
+        assertEquals(2 * 75_000L + 6_000L, meter.remainingMs())
+        // A step skipped before its work does not count, and the factor is clamped.
+        meter.startStep(RawQualificationStepKind.LONG_RUN, 25_000L)
+        clock.now += 10L
+        meter.finishStep(measured = false)
+        assertEquals(2.0, meter.factor(RawQualificationStepKind.LONG_RUN), 1e-9)
+        meter.startStep(RawQualificationStepKind.LONG_RUN, 1_000L)
+        clock.now += 1_000_000L
+        meter.finishStep()
+        assertEquals(RawQualificationProgressMeter.FACTOR_MAX, meter.factor(RawQualificationStepKind.LONG_RUN), 1e-9)
+        assertEquals(1.0, meter.factor(RawQualificationStepKind.CAMERA_CHECK), 1e-9)
+        assertEquals(4, meter.steps.size)
+    }
+
+    @Test fun theMeterExtendsShrinksAndReplansEachKindOnItsOwn() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.ENCODE_BENCH to 30_000L, RawQualificationStepKind.LONG_RUN to 40_000L))
+        meter.extend(RawQualificationStepKind.ENCODE_BENCH, 5_000L)
+        meter.shrink(RawQualificationStepKind.LONG_RUN, 15_000L)
+        assertEquals(35_000L, meter.pendingMs(RawQualificationStepKind.ENCODE_BENCH))
+        assertEquals(25_000L, meter.pendingMs(RawQualificationStepKind.LONG_RUN))
+        meter.shrink(RawQualificationStepKind.LONG_RUN, 1_000_000L)
+        assertEquals(0L, meter.pendingMs(RawQualificationStepKind.LONG_RUN))
+        assertEquals(35_000L, meter.pendingMs(RawQualificationStepKind.ENCODE_BENCH))
+        meter.replan(RawQualificationStepKind.LONG_RUN, 70_000L)
+        assertEquals(105_000L, meter.remainingMs())
+        // A step planned beyond its kind's pending time takes what is there.
+        meter.startStep(RawQualificationStepKind.ENCODE_BENCH, 50_000L)
+        assertEquals(0L, meter.pendingMs(RawQualificationStepKind.ENCODE_BENCH))
+        assertEquals(120_000L, meter.remainingMs())
+    }
+
+    @Test fun aHeldStepStopsItsClockButNotTheElapsedTime() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.CAMERA_CHECK to 10_000L))
+        meter.startStep(RawQualificationStepKind.CAMERA_CHECK, 10_000L)
+        clock.now += 2_000L
+        meter.holdStep()
+        clock.now += 60_000L
+        assertEquals(8_000L, meter.remainingMs())
+        meter.resumeStep()
+        clock.now += 1_000L
+        assertEquals(7_000L, meter.remainingMs())
+        assertEquals(63_000.0 / 70_000.0, meter.fraction(), 1e-9)
+        val step = requireNotNull(meter.finishStep())
+        assertEquals(3_000L, step.actualMs)
+        assertEquals(60_000L, step.heldMs)
+        // 3 s against 10 s planned: the factor stops at its floor.
+        assertEquals(RawQualificationProgressMeter.FACTOR_MIN, meter.factor(RawQualificationStepKind.CAMERA_CHECK), 1e-9)
+    }
+
+    @Test fun completeEndsAtOneWithNothingLeft() {
+        val clock = FakeClock()
+        val meter = meter(clock, mapOf(RawQualificationStepKind.SWEEP to 152_000L))
+        meter.startStep(RawQualificationStepKind.SWEEP, 152_000L)
+        clock.now += 1_000L
+        assertTrue(meter.fraction() < 0.01)
+        assertEquals(1.0, meter.complete(), 0.0)
+        assertEquals(1.0, meter.fraction(), 0.0)
+        assertEquals(0L, meter.remainingMs())
+    }
+
+    @Test fun aLongRunPlansItsDrainAndReadBackFromTheStorageModel() {
+        val timing = RawQualificationTiming()
+        val c = config("1920x1080@60")
+        val stream = c.streamBytesPerSecond
+        assertTrue(stream < timing.sustainedBytesPerSecond)
+        // No model: today's nominal run.
+        assertEquals((3 + 40) * 1_000L + 500L + 3_000L, timing.runMs(c))
+        assertEquals(timing.runMs(c), timing.runMs(c, null))
+        // A storage faster than the stream leaves no backlog: only the read-back, 43 s of data at twice the rate.
+        assertEquals(21_500L, timing.storageTailMs(c, RawQualificationStorageModel(stream * 2)))
+        assertEquals(timing.runMs(c) + 21_500L, timing.runMs(c, RawQualificationStorageModel(stream * 2)))
+        // Half the stream: 43 s of backlog drained in 43 s, then twice that read back.
+        val half = stream / 2
+        assertEquals(129_000.0, timing.storageTailMs(c, RawQualificationStorageModel(half)).toDouble(), 5.0)
+        // The ring caps the backlog: 10 s of writing.
+        assertEquals(63_000.0, timing.storageTailMs(c, RawQualificationStorageModel(half, ringBytes = half * 10)).toDouble(), 5.0)
+        // A tenth of the stream: the drain stops at the writer's join timeout, so the read-back covers 43 s + 120 s.
+        assertEquals(RawQualificationTiming.DRAIN_MAX_MS + 163_000.0, timing.storageTailMs(c, RawQualificationStorageModel(stream / 10)).toDouble(), 20.0)
+        assertNull(RawQualificationStorageModel.of(0L))
+        assertNull(RawQualificationStorageModel.of(null))
+        assertEquals(RawQualificationStorageModel(80_000_000L), RawQualificationStorageModel.of(80_000_000L, ringBytes = 0L))
+    }
+
+    @Test fun aSlowStorageLengthensTheEstimateAndNoModelKeepsItsNominalValue() {
+        val timing = RawQualificationTiming()
+        val runs = runs(RawQualificationPlan.DEFAULT.specs)
+        val free = 1L shl 50
+        val nominal = RawQualificationEstimates.forFreeSpace(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true, freeBytes = free)
+        val full = RawQualificationEstimates.of(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true)
+        assertEquals(full, nominal.estimate)
+        assertEquals(full.durationMs, full.plannedMsByKind.values.sum())
+        // A USB hard disk at 80 MB/s: every long run drains and reads back, so the run takes far longer.
+        val disk = RawQualificationStorageModel(80_000_000L)
+        val slow = RawQualificationEstimates.forFreeSpace(RawQualificationPlan.DEFAULT, "0", sensorW, sensorH, codecAvailable = true,
+            freeBytes = free, storage = disk)
+        assertEquals(nominal.estimate.durationMs + runs.sumOf { timing.storageTailMs(it.config, disk) }, slow.estimate.durationMs)
+        assertTrue(slow.estimate.durationMs > 2 * nominal.estimate.durationMs)
+        assertEquals(nominal.estimate.runCount, slow.estimate.runCount)
+        assertEquals(nominal.estimate.freeBytesNeeded, slow.estimate.freeBytesNeeded)
+        assertEquals(slow.estimate.durationMs, slow.estimate.plannedMsByKind.values.sum())
+        assertEquals(nominal.estimate.plannedMsByKind[RawQualificationStepKind.CAMERA_CHECK], slow.estimate.plannedMsByKind[RawQualificationStepKind.CAMERA_CHECK])
     }
 
     @Test fun freeSpaceEstimateKeepsEveryRunWhenThereIsRoom() {
@@ -320,23 +463,6 @@ class RawVideoQualificationPlanTest {
         assertTrue(!tiny.enoughSpace)
         assertTrue(tiny.minimumFreeBytes >= RawVideoQualifier.SWEEP_WRAP_BYTES)
         assertEquals(runs(RawQualificationPlan.DEFAULT.specs).size, tiny.skippedRuns)
-    }
-
-    @Test fun progressNeverGoesBackAndFollowsReplanning() {
-        val meter = RawQualificationProgressMeter(100)
-        meter.startStep(40)
-        assertEquals(0.2, meter.fraction(20), 1e-9)
-        assertEquals(0.4, meter.fraction(1_000), 1e-9) // capped at the step's plan
-        meter.finishStep()
-        assertEquals(0.4, meter.fraction(), 1e-9)
-        meter.replan(10) // the follow-ups turned out shorter: 40 done + 10 left
-        assertEquals(0.8, meter.fraction(), 1e-9)
-        meter.replan(1_000) // longer again: the fraction holds instead of going back
-        assertEquals(0.8, meter.fraction(), 1e-9)
-        meter.startStep(1_000)
-        meter.finishStep()
-        assertEquals(1.0, meter.fraction(), 1e-9)
-        assertEquals(1.0, meter.complete(), 0.0)
     }
 
     @Test fun previewSizeMirrorsTheEngineChoice() {

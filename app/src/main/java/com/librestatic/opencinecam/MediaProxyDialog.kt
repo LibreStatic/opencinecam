@@ -85,7 +85,9 @@ internal fun MediaProxyDialog(take: LocalMediaTake, settings: ProxySettings,
                     if (loading || busy) Text(stringResource(R.string.proxy_busy), Modifier.fillMaxWidth().testTag("media-proxy-busy"))
                     // Provider and codec messages are for a bug report, not for the set: plain words first.
                     val failure = renameFailure ?: error ?: state.error ?: request?.error
-                    if (failure != null) Text(stringResource(R.string.proxy_error), Modifier.fillMaxWidth().testTag("media-proxy-error"),
+                    // A drive take whose drive is unplugged (PLAN-072) says so: plugging it back in is all it takes.
+                    if (failure != null) Text(stringResource(if (failure == DriveNotConnectedException.MESSAGE) R.string.media_drive_not_connected
+                        else R.string.proxy_error), Modifier.fillMaxWidth().testTag("media-proxy-error"),
                         color = MaterialTheme.colorScheme.error)
                     result?.let { proxy ->
                         if (renameFailure == null && error == null) Text(stringResource(R.string.proxy_complete), Modifier.fillMaxWidth().testTag("media-proxy-result"))

@@ -13,6 +13,7 @@ import com.librestatic.opencinecam.camera.RawVideoQualificationRecord
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.roundToLong
 
 /*
  * OCC-PLAN-071: the pure half of [RawVideoQualifier]: configuration specs, the run plan, timing and
@@ -221,7 +222,8 @@ data class RawQualificationPlan(
  * v2's 20 s minimum ([RawThroughputBenchmark.LIVE_MIN_DURATION_MS]) so slow storage shows in the
  * ring. A camera check measures [cameraCheckSeconds] after [cameraCheckWarmupSeconds], from the RAM
  * ring alone; an encode benchmark session encodes for [encodeBenchSeconds] after the camera check's
- * warm-up. Estimates use the nominal timings plus fixed overheads; thermal waits are not predicted.
+ * warm-up. Estimates use the nominal timings plus fixed overheads, and with a [RawQualificationStorageModel] a long
+ * run's drain and read-back ([storageTailMs]); thermal waits are not predicted.
  */
 data class RawQualificationTiming(
     val liveSeconds: Int = DEFAULT_LIVE_SECONDS,
@@ -252,8 +254,31 @@ data class RawQualificationTiming(
     fun neededBytes(config: RawVideoConfig): Long =
         config.streamBytesPerSecond * (liveSeconds(config) + WARMUP_SECONDS + 2) + SPACE_RESERVE_BYTES
 
-    /** Planned milliseconds of one long run, from opening the camera to deleting its row. */
-    fun runMs(config: RawVideoConfig): Long = (WARMUP_SECONDS + liveSeconds(config)) * 1_000L + MEASURE_SLACK_MS + RUN_OVERHEAD_MS
+    /**
+     * Planned milliseconds of one long run, from opening the camera to deleting its row; with [storage], plus
+     * the drain and the read-back it predicts ([storageTailMs]).
+     */
+    fun runMs(config: RawVideoConfig, storage: RawQualificationStorageModel? = null): Long =
+        (WARMUP_SECONDS + liveSeconds(config)) * 1_000L + MEASURE_SLACK_MS + RUN_OVERHEAD_MS + (storage?.let { storageTailMs(config, it) } ?: 0L)
+
+    /**
+     * What a long run at [config] spends after the camera stops on [storage]: the writer drains the backlog left in
+     * the ring, then the qualifier reads the row back. The camera records for [WARMUP_SECONDS] plus [liveSeconds]; a
+     * stream above the write speed leaves `(stream - write) * seconds` behind, no more than the ring holds when
+     * [RawQualificationStorageModel.ringBytes] is known, drained at the write speed for at most [DRAIN_MAX_MS]. The
+     * row then holds `min(stream, write) * seconds` plus what was drained, read back at the write speed (the read
+     * speed is assumed equal). A compressed configuration counts its [RawVideoConfig.streamBytesPerSecond] as is.
+     */
+    fun storageTailMs(config: RawVideoConfig, storage: RawQualificationStorageModel): Long {
+        val write = storage.writeBytesPerSecond.toDouble()
+        val stream = config.streamBytesPerSecond.coerceAtLeast(0).toDouble()
+        val seconds = (WARMUP_SECONDS + liveSeconds(config)).toDouble()
+        val backlog = ((stream - write).coerceAtLeast(0.0) * seconds).let { b -> storage.ringBytes?.let { minOf(b, it.coerceAtLeast(0).toDouble()) } ?: b }
+        val drainMs = minOf(backlog * 1_000.0 / write, DRAIN_MAX_MS.toDouble())
+        val written = minOf(stream, write) * seconds + write * drainMs / 1_000.0
+        val scanMs = written * 1_000.0 / write
+        return (drainMs + scanMs).coerceIn(0.0, MAX_TAIL_MS.toDouble()).roundToLong()
+    }
 
     /** Planned milliseconds of one camera check. */
     fun cameraCheckMs(): Long = (cameraCheckWarmupSeconds + cameraCheckSeconds) * 1_000L + MEASURE_SLACK_MS + CHECK_OVERHEAD_MS
@@ -303,6 +328,29 @@ data class RawQualificationTiming(
 
         /** Allocating the ring. */
         const val RING_OVERHEAD_MS = 2_000L
+
+        /** The longest a long run waits for its writer to drain the ring after the camera stops. */
+        const val DRAIN_MAX_MS = 120_000L
+
+        /** [storageTailMs] never plans more than this (a few hours), whatever the speed. */
+        private const val MAX_TAIL_MS = 4L * 3_600_000L
+    }
+}
+
+/**
+ * What a qualification assumes about the storage it tests, to plan a long run's drain and read-back
+ * ([RawQualificationTiming.storageTailMs]): [writeBytesPerSecond], its sustained write speed (a drive's
+ * measured speed, a stored sweep median, then the run's own sweep), and [ringBytes], the RAM ring, when known.
+ */
+data class RawQualificationStorageModel(val writeBytesPerSecond: Long, val ringBytes: Long? = null) {
+    init {
+        require(writeBytesPerSecond > 0) { "the write speed must be positive" }
+    }
+
+    companion object {
+        /** A model from [writeBytesPerSecond], or null without a positive speed. */
+        fun of(writeBytesPerSecond: Long?, ringBytes: Long? = null): RawQualificationStorageModel? =
+            writeBytesPerSecond?.takeIf { it > 0 }?.let { RawQualificationStorageModel(it, ringBytes?.takeIf { r -> r > 0 }) }
     }
 }
 
@@ -326,7 +374,18 @@ data class RawQualificationEstimate(
      * and a long run per uncompressed configuration (the rest and the sweep are not steps).
      */
     val runCount: Int,
+    /** [durationMs] by kind of step, what [RawQualificationProgressMeter] starts from. */
+    val plannedMsByKind: Map<RawQualificationStepKind, Long> = emptyMap(),
 )
+
+/**
+ * The kinds of step a qualification plans time for. [corrected] kinds take longer or shorter with the device
+ * and the storage, so [RawQualificationProgressMeter] scales what is left of them by what the finished ones took;
+ * the others are fixed waits or single steps.
+ */
+enum class RawQualificationStepKind(val corrected: Boolean) {
+    RING(false), CAMERA_CHECK(true), ENCODE_BENCH(true), COOL_DOWN(false), STORAGE_REST(false), SWEEP(false), LONG_RUN(true),
+}
 
 object RawQualificationEstimates {
     /**
@@ -336,7 +395,8 @@ object RawQualificationEstimates {
      * rest ([RawQualificationTiming.STORAGE_REST_MS], only after camera sessions and before a sweep),
      * the sweep, then the long runs. The duration is an upper bound: every long run of the descent, as
      * if none passed. [longRuns] (default [runs]) are the long runs counted: [forFreeSpace] leaves out
-     * those the free space would skip.
+     * those the free space would skip. With [storage] each long run also counts its drain and read-back
+     * ([RawQualificationTiming.runMs]); null keeps the nominal timings.
      */
     fun of(
         runs: List<RawQualificationRun>,
@@ -344,23 +404,32 @@ object RawQualificationEstimates {
         timing: RawQualificationTiming,
         stages: Set<RawQualificationStage> = RawQualificationStage.ALL,
         longRuns: List<RawQualificationRun> = runs,
+        storage: RawQualificationStorageModel? = null,
     ): RawQualificationEstimate {
         val long = RawQualificationStage.LONG in stages
         val camera = RawQualificationStage.CAMERA in stages
         val sweep = long || RawQualificationStage.SWEEP in stages
-        val before = (if (camera) List(runs.size) { timing.cameraCheckMs() } else emptyList()) +
-            List(benchSessions) { timing.encodeBenchMs() }
-        val after = if (long) longRuns.map { timing.runMs(it.config) } else emptyList()
-        val stepMs = before + after
-        val stepsMs = stepMs.sum() + (stepMs.size - 1).coerceAtLeast(0) * RawQualificationTiming.COOL_DOWN_MS
-        val rest = if (sweep && before.isNotEmpty()) RawQualificationTiming.STORAGE_REST_MS else 0L
+        val checks = if (camera) runs.size else 0
+        val after = if (long) longRuns.map { timing.runMs(it.config, storage) } else emptyList()
+        val steps = checks + benchSessions + after.size
+        val rest = if (sweep && checks + benchSessions > 0) RawQualificationTiming.STORAGE_REST_MS else 0L
         val sweepBytes = if (sweep) RawVideoQualifier.SWEEP_WRAP_BYTES + (runs.maxOfOrNull { it.config.bytesPerFrame } ?: 0L) else 0L
         val longBytes = if (long) longRuns.maxOfOrNull { timing.neededBytes(it.config) } ?: 0L else 0L
+        val byKind = linkedMapOf(
+            RawQualificationStepKind.RING to RawQualificationTiming.RING_OVERHEAD_MS,
+            RawQualificationStepKind.CAMERA_CHECK to checks * timing.cameraCheckMs(),
+            RawQualificationStepKind.ENCODE_BENCH to benchSessions * timing.encodeBenchMs(),
+            RawQualificationStepKind.COOL_DOWN to (steps - 1).coerceAtLeast(0) * RawQualificationTiming.COOL_DOWN_MS,
+            RawQualificationStepKind.STORAGE_REST to rest,
+            RawQualificationStepKind.SWEEP to if (sweep) timing.sweepMs else 0L,
+            RawQualificationStepKind.LONG_RUN to after.sum(),
+        )
         return RawQualificationEstimate(
-            durationMs = RawQualificationTiming.RING_OVERHEAD_MS + rest + (if (sweep) timing.sweepMs else 0L) + stepsMs,
+            durationMs = byKind.values.sum(),
             freeBytesNeeded = maxOf(sweepBytes, longBytes),
             sweepFreeBytesNeeded = sweepBytes,
-            runCount = stepMs.size,
+            runCount = steps,
+            plannedMsByKind = byKind,
         )
     }
 
@@ -372,16 +441,18 @@ object RawQualificationEstimates {
         sensorHeight: Int,
         codecAvailable: Boolean,
         timing: RawQualificationTiming = RawQualificationTiming(),
+        storage: RawQualificationStorageModel? = null,
     ): RawQualificationEstimate {
         val runs = plan.specs.mapNotNull { RawQualificationSpecs.parse(it, cameraId, sensorWidth, sensorHeight) }
-        return of(plan.uncompressedRuns(runs), plan.benchSessions(runs, codecAvailable), timing, plan.effectiveStages)
+        val uncompressed = plan.uncompressedRuns(runs)
+        return of(uncompressed, plan.benchSessions(runs, codecAvailable), timing, plan.effectiveStages, uncompressed, storage)
     }
 
     /**
      * The estimate of [plan] given [freeBytes] free now: long runs that would be skipped for space
      * ([RawQualificationTiming.neededBytes] above [freeBytes]) are left out of the duration, as the
      * qualifier skips them; every configuration still gets its camera check. Compressed twins need no
-     * space of their own.
+     * space of their own. [storage] is what is known of the storage before the run ([of]).
      */
     fun forFreeSpace(
         plan: RawQualificationPlan,
@@ -391,6 +462,7 @@ object RawQualificationEstimates {
         codecAvailable: Boolean,
         freeBytes: Long,
         timing: RawQualificationTiming = RawQualificationTiming(),
+        storage: RawQualificationStorageModel? = null,
     ): RawQualificationSpaceEstimate {
         val parsed = plan.specs.mapNotNull { RawQualificationSpecs.parse(it, cameraId, sensorWidth, sensorHeight) }
         val runs = RawQualificationStaging.longRunOrder(plan.uncompressedRuns(parsed))
@@ -399,7 +471,7 @@ object RawQualificationEstimates {
         val sweepNeeded = of(runs, 0, timing).sweepFreeBytesNeeded
         val smallestRun = runs.minOfOrNull { timing.neededBytes(it.config) } ?: 0L
         return RawQualificationSpaceEstimate(
-            estimate = if (kept.isEmpty()) of(kept, 0, timing, plan.effectiveStages) else of(runs, bench, timing, plan.effectiveStages, kept),
+            estimate = if (kept.isEmpty()) of(kept, 0, timing, plan.effectiveStages) else of(runs, bench, timing, plan.effectiveStages, kept, storage),
             freeBytes = freeBytes,
             skippedRuns = runs.size - kept.size,
             minimumFreeBytes = maxOf(sweepNeeded, smallestRun),
@@ -447,7 +519,8 @@ enum class RawQualificationPhase { SWEEP, RING, THERMAL_WAIT, RUN, CAMERA_CHECK,
  * sessions carry the last session's, so the count does not drop back to a percentage.
  * [fraction] is 0..1 and never goes back. [liveFps] is the rate the camera delivers in a running
  * camera session, over the last [RawQualificationLiveRate.WINDOW_NS] ([RawQualificationLiveRate.fps]);
- * null outside one (the sweep, cool-downs) and until two measured frames arrived.
+ * null outside one (the sweep, cool-downs) and until two measured frames arrived. [remainingMs] is the
+ * time left as [RawQualificationProgressMeter.remainingMs] predicts it now.
  */
 data class RawQualificationProgress(
     val phase: RawQualificationPhase,
@@ -456,6 +529,7 @@ data class RawQualificationProgress(
     val runCount: Int = 0,
     val spec: String? = null,
     val liveFps: Double? = null,
+    val remainingMs: Long = 0L,
 )
 
 /**
@@ -502,38 +576,143 @@ object RawQualificationLiveRate {
     }
 }
 
+/** One finished step of a [RawQualificationProgressMeter]: what it planned and the working time it took ([heldMs] excluded). */
+data class RawQualificationStepTime(val kind: RawQualificationStepKind, val spec: String?, val plannedMs: Long, val actualMs: Long, val heldMs: Long)
+
 /**
- * The overall 0..1 fraction from planned durations: completed steps count their planned time, the
- * current step its elapsed time capped at its plan. Replanning (the descent stopping) changes the
- * total; the fraction never decreases. Not thread-safe: one qualification thread drives it.
+ * The time a qualification has left, from its plan corrected by what it has taken so far, and the 0..1 fraction
+ * derived from it. The plan is kept as pending milliseconds per [RawQualificationStepKind] ([plannedMs], then
+ * [extend], [shrink], [replan]); [startStep] moves a step's planned time from its kind's pending to the current
+ * step, [finishStep] records how long it really took. A [RawQualificationStepKind.corrected] kind scales what is
+ * left of it by [factor], the ratio of actual to planned time over its finished steps. [remainingMs] is the
+ * current step's planned time (scaled) less its working time, never below 0, plus every kind's pending time
+ * (scaled): a step that overruns its plan holds the figure instead of letting it go negative. Time nobody planned
+ * (a thermal wait between [holdStep] and [resumeStep], a slow flush) only adds to the elapsed time.
+ * [fraction] is elapsed / (elapsed + remaining) and never goes back. Not thread-safe: one qualification thread
+ * drives it.
  */
-class RawQualificationProgressMeter(totalMs: Long) {
-    var totalMs: Long = totalMs.coerceAtLeast(1)
-        private set
-    private var doneMs = 0L
-    private var stepMs = 0L
+class RawQualificationProgressMeter(
+    private val nowMs: () -> Long,
+    plannedMs: Map<RawQualificationStepKind, Long> = emptyMap(),
+) {
+    private val startMs = nowMs()
+    private val pending = LongArray(KINDS.size)
+    private val plannedDone = LongArray(KINDS.size)
+    private val actualDone = LongArray(KINDS.size)
+    private var current: RawQualificationStepKind? = null
+    private var currentSpec: String? = null
+    private var currentPlannedMs = 0L
+    private var stepStartMs = 0L
+    private var heldSinceMs: Long? = null
+    private var heldMs = 0L
     private var last = 0.0
+    private var completed = false
+    private val finished = mutableListOf<RawQualificationStepTime>()
 
-    fun startStep(plannedMs: Long) { stepMs = plannedMs.coerceAtLeast(0) }
+    init {
+        plannedMs.forEach { (kind, ms) -> extend(kind, ms) }
+    }
 
-    fun finishStep() { doneMs += stepMs; stepMs = 0 }
+    /** Every finished step, in order. */
+    val steps: List<RawQualificationStepTime> get() = finished.toList()
 
-    /** A step the plan did not count, of [ms], was added. */
-    fun extend(ms: Long) { totalMs += ms.coerceAtLeast(0) }
+    /** The milliseconds since the meter was made. */
+    fun elapsedMs(): Long = (nowMs() - startMs).coerceAtLeast(0)
 
-    /** A step the plan counted, of [ms], will not run; the total never drops below the work done. */
-    fun shrink(ms: Long) { totalMs = maxOf(doneMs + stepMs, totalMs - ms.coerceAtLeast(0)).coerceAtLeast(1) }
+    /** The planned milliseconds of [kind] not yet started, unscaled. */
+    fun pendingMs(kind: RawQualificationStepKind): Long = pending[kind.ordinal]
 
-    /** The work left changed to [remainingMs] after the steps done so far. */
-    fun replan(remainingMs: Long) { totalMs = (doneMs + stepMs + remainingMs.coerceAtLeast(0)).coerceAtLeast(1) }
+    /** Starts a step of [kind] planned at [plannedMs], taken from its kind's pending time; an unfinished step finishes first. */
+    fun startStep(kind: RawQualificationStepKind, plannedMs: Long, spec: String? = null) {
+        if (current != null) finishStep()
+        val planned = plannedMs.coerceAtLeast(0)
+        pending[kind.ordinal] = (pending[kind.ordinal] - planned).coerceAtLeast(0)
+        current = kind
+        currentSpec = spec
+        currentPlannedMs = planned
+        stepStartMs = nowMs()
+        heldSinceMs = null
+        heldMs = 0L
+    }
 
-    fun fraction(elapsedInStepMs: Long = 0): Double {
-        val value = ((doneMs + elapsedInStepMs.coerceIn(0, stepMs)).toDouble() / totalMs).coerceIn(0.0, 1.0)
+    /** The current step waits on something it did not plan (the heat): its working time stops until [resumeStep]. */
+    fun holdStep() {
+        if (current != null && heldSinceMs == null) heldSinceMs = nowMs()
+    }
+
+    fun resumeStep() {
+        heldSinceMs?.let { heldMs += (nowMs() - it).coerceAtLeast(0) }
+        heldSinceMs = null
+    }
+
+    /**
+     * Ends the current step, recording its working time against its plan; with [measured] false (a step that was
+     * skipped before doing its work) it does not count towards its kind's [factor]. Returns the step, null without one.
+     */
+    fun finishStep(measured: Boolean = true): RawQualificationStepTime? {
+        val kind = current ?: return null
+        resumeStep()
+        val actual = workingMs()
+        if (measured && currentPlannedMs > 0) {
+            plannedDone[kind.ordinal] += currentPlannedMs
+            actualDone[kind.ordinal] += actual
+        }
+        current = null
+        return RawQualificationStepTime(kind, currentSpec, currentPlannedMs, actual, heldMs).also { finished += it }
+    }
+
+    /** Steps of [kind] the plan did not count, of [ms] in all, will run. */
+    fun extend(kind: RawQualificationStepKind, ms: Long) { pending[kind.ordinal] += ms.coerceAtLeast(0) }
+
+    /** Steps of [kind] the plan counted, of [ms] in all, will not run; never below none left. */
+    fun shrink(kind: RawQualificationStepKind, ms: Long) { pending[kind.ordinal] = (pending[kind.ordinal] - ms.coerceAtLeast(0)).coerceAtLeast(0) }
+
+    /** What is left of [kind] is now [ms] (a better storage model). */
+    fun replan(kind: RawQualificationStepKind, ms: Long) { pending[kind.ordinal] = ms.coerceAtLeast(0) }
+
+    /** How much longer than planned [kind]'s finished steps took, in [FACTOR_MIN]..[FACTOR_MAX]; 1 with none, or for an uncorrected kind. */
+    fun factor(kind: RawQualificationStepKind): Double {
+        val planned = plannedDone[kind.ordinal]
+        if (!kind.corrected || planned <= 0) return 1.0
+        return (actualDone[kind.ordinal].toDouble() / planned).coerceIn(FACTOR_MIN, FACTOR_MAX)
+    }
+
+    /** The time left: the current step's scaled plan less its working time (never below 0), plus every kind's scaled pending time. */
+    fun remainingMs(): Long {
+        if (completed) return 0L
+        val step = current?.let { (currentPlannedMs * factor(it) - workingMs()).coerceAtLeast(0.0) } ?: 0.0
+        val rest = KINDS.sumOf { pending[it.ordinal] * factor(it) }
+        return (step + rest).roundToLong()
+    }
+
+    /** elapsed / (elapsed + [remainingMs]), never lower than the last value returned; 1 after [complete]. */
+    fun fraction(): Double {
+        if (completed) return 1.0
+        val elapsed = elapsedMs().toDouble()
+        val total = elapsed + remainingMs()
+        val value = if (total <= 0.0) 0.0 else (elapsed / total).coerceIn(0.0, 1.0)
         last = maxOf(last, value)
         return last
     }
 
-    fun complete(): Double { last = 1.0; return last }
+    /** The run ended: the fraction is 1 and nothing remains. */
+    fun complete(): Double {
+        completed = true
+        last = 1.0
+        return last
+    }
+
+    private fun workingMs(): Long {
+        val now = nowMs()
+        val held = heldMs + (heldSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0L)
+        return (now - stepStartMs - held).coerceAtLeast(0)
+    }
+
+    companion object {
+        const val FACTOR_MIN = 0.5
+        const val FACTOR_MAX = 8.0
+        private val KINDS = RawQualificationStepKind.entries
+    }
 }
 
 /** The overall verdict of a qualification. */

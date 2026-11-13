@@ -19,22 +19,27 @@ import java.nio.channels.WritableByteChannel
  * `.ocraw` recovery reads, truncates and appends through a single channel. Both halves share the
  * descriptor, so they share its file offset; reads go to [reader], everything else to [writer].
  * Closing this channel closes both halves (and so the descriptor's streams); the descriptor's owner
- * still closes the descriptor itself.
+ * still closes the descriptor itself. [beforeIo] runs before every read, write, size, truncate and force, and may
+ * throw to refuse it (a cancelled RAW repair scan).
  */
-internal class DuplexFileChannel(private val reader: FileChannel, private val writer: FileChannel) : FileChannel() {
-    override fun read(dst: ByteBuffer): Int = reader.read(dst)
-    override fun read(dsts: Array<out ByteBuffer>, offset: Int, length: Int): Long = reader.read(dsts, offset, length)
-    override fun read(dst: ByteBuffer, position: Long): Int = reader.read(dst, position)
-    override fun write(src: ByteBuffer): Int = writer.write(src)
-    override fun write(srcs: Array<out ByteBuffer>, offset: Int, length: Int): Long = writer.write(srcs, offset, length)
-    override fun write(src: ByteBuffer, position: Long): Int = writer.write(src, position)
+internal class DuplexFileChannel(
+    private val reader: FileChannel,
+    private val writer: FileChannel,
+    private val beforeIo: () -> Unit = {},
+) : FileChannel() {
+    override fun read(dst: ByteBuffer): Int { beforeIo(); return reader.read(dst) }
+    override fun read(dsts: Array<out ByteBuffer>, offset: Int, length: Int): Long { beforeIo(); return reader.read(dsts, offset, length) }
+    override fun read(dst: ByteBuffer, position: Long): Int { beforeIo(); return reader.read(dst, position) }
+    override fun write(src: ByteBuffer): Int { beforeIo(); return writer.write(src) }
+    override fun write(srcs: Array<out ByteBuffer>, offset: Int, length: Int): Long { beforeIo(); return writer.write(srcs, offset, length) }
+    override fun write(src: ByteBuffer, position: Long): Int { beforeIo(); return writer.write(src, position) }
     override fun position(): Long = writer.position()
     override fun position(newPosition: Long): FileChannel = apply { writer.position(newPosition) }
-    override fun size(): Long = writer.size()
-    override fun truncate(size: Long): FileChannel = apply { writer.truncate(size) }
-    override fun force(metaData: Boolean) = writer.force(metaData)
-    override fun transferTo(position: Long, count: Long, target: WritableByteChannel): Long = reader.transferTo(position, count, target)
-    override fun transferFrom(src: ReadableByteChannel, position: Long, count: Long): Long = writer.transferFrom(src, position, count)
+    override fun size(): Long { beforeIo(); return writer.size() }
+    override fun truncate(size: Long): FileChannel = apply { beforeIo(); writer.truncate(size) }
+    override fun force(metaData: Boolean) { beforeIo(); writer.force(metaData) }
+    override fun transferTo(position: Long, count: Long, target: WritableByteChannel): Long { beforeIo(); return reader.transferTo(position, count, target) }
+    override fun transferFrom(src: ReadableByteChannel, position: Long, count: Long): Long { beforeIo(); return writer.transferFrom(src, position, count) }
     override fun map(mode: MapMode, position: Long, size: Long): MappedByteBuffer = throw UnsupportedOperationException("map")
     override fun lock(position: Long, size: Long, shared: Boolean): FileLock = throw UnsupportedOperationException("lock")
     override fun tryLock(position: Long, size: Long, shared: Boolean): FileLock = throw UnsupportedOperationException("tryLock")
@@ -47,7 +52,7 @@ internal class DuplexFileChannel(private val reader: FileChannel, private val wr
     }
 
     companion object {
-        fun open(descriptor: FileDescriptor): DuplexFileChannel =
-            DuplexFileChannel(FileInputStream(descriptor).channel, FileOutputStream(descriptor).channel)
+        fun open(descriptor: FileDescriptor, beforeIo: () -> Unit = {}): DuplexFileChannel =
+            DuplexFileChannel(FileInputStream(descriptor).channel, FileOutputStream(descriptor).channel, beforeIo)
     }
 }

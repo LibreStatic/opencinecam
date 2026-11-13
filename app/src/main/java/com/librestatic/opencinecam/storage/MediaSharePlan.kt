@@ -39,7 +39,7 @@ internal fun mediaSharePlan(snapshot: MediaShareSnapshot, settings: MediaSharing
     val take = snapshot.take
     require(take.originals.size in 1..32 && take.metadata.size <= 4)
     require(take.primary in take.originals && take.originals.map { it.uri }.distinct().size == take.originals.size)
-    require(take.originals.all { mediaOriginalIdentity(it.uri) != null && it.sizeBytes >= 0 })
+    require(take.originals.all { takeOriginalKind(it.uri) != null && it.sizeBytes >= 0 })
     val originals = if (settings.content == MediaShareContent.METADATA_ONLY) emptyList() else take.originals
     val generated = mutableListOf<MediaShareText>()
     val hashes = linkedSetOf<String>()
@@ -51,12 +51,15 @@ internal fun mediaSharePlan(snapshot: MediaShareSnapshot, settings: MediaSharing
             require(text.toByteArray(Charsets.UTF_8).size <= 512 * 1024 && jsonNestingWithinBound(text) && jsonObjectKeysUnique(text))
             requireNotNull(Json.parseToJsonElement(text) as? JsonObject)
         }
-        val id = take.id.substringAfter(':')
-        require(canonicalMediaId(id) && take.id.substringBefore(':') in setOf("take", "still"))
-        val namespace = MediaNamespace(id, take.id.startsWith("take:"))
-        val rows = take.originals.map { artifact ->
-            val identity = requireNotNull(mediaOriginalIdentity(artifact.uri))
-            CatalogRow(artifact, identity.second, identity.first, namespace)
+        // A drive take (PLAN-072) is rebuilt as the drive catalog read it: its folder's namespace, files numbered by name.
+        val (namespace, rows) = if (take.onDrive) requireNotNull(driveTakeRows(take)) { "Untrusted drive take" } else {
+            val id = take.id.substringAfter(':')
+            require(canonicalMediaId(id) && take.id.substringBefore(':') in setOf("take", "still"))
+            val namespace = MediaNamespace(id, take.id.startsWith("take:"))
+            namespace to take.originals.map { artifact ->
+                val identity = requireNotNull(mediaOriginalIdentity(artifact.uri))
+                CatalogRow(artifact, identity.second, identity.first, namespace)
+            }
         }
         check(catalogTake(namespace, rows, snapshot.documents, attachments = take.attachments) == take) { "Share source declarations changed" }
         if (settings.metadata != MediaShareMetadata.TECHNICAL) {

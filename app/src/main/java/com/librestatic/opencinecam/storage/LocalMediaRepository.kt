@@ -23,57 +23,30 @@ class LocalMediaRepository(context: Context) {
     private val context = context.applicationContext
     private val resolver = this.context.contentResolver
 
+    /** PLAN-072: the takes on the configured recording drive, merged into every page while it is mounted. */
+    internal val drive = DriveMediaCatalog(resolver, { RecordingDestinationStore(this.context).configured() },
+        { tree -> resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission } }, ::readMetadata)
+
     /** One bounded scan, not necessarily one full page. Empty filtered pages can have continuation.
      * The UI must keep requesting next until enough matches or next == null, off the main thread.
-     * Provider/journal failures throw rather than masquerading as a successfully empty library. */
+     * Provider/journal failures throw rather than masquerading as a successfully empty library;
+     * the recording drive is the exception: a drive that fails or is gone only contributes nothing.
+     * A first page ([cursor] null) lists the drive again. */
     fun page(settings: GallerySettings, query: String = "", cursor: LocalMediaCursor? = null,
         limit: Int = 60): LocalMediaPage {
         require(limit in 1..60)
         require(query.length <= 512)
-        val filter = catalogFilter(settings, query)
-        require(cursor == null || cursor.filter == filter) { "Gallery cursor belongs to a different filter" }
-        val positions = cursor?.positions.orEmpty().toMutableMap()
-        val exhausted = cursor?.exhausted.orEmpty().toMutableSet()
-        // Collect provider candidates BEFORE observing committed journal state. No writer lock is
-        // held while doing provider/metadata IO; the durable SQLite receipt snapshot is sufficient.
-        val batches = LocalMediaKind.entries.filter { it !in exhausted }.associateWith { kind ->
-            candidates(kind, positions[kind], settings.newestFirst)
-        }
-        val blocked = uncommittedNamespaces()
-        val candidates = batches.values.flatten().sortedWith(catalogComparator(settings.newestFirst))
-        val consumed = mutableMapOf<LocalMediaKind, Int>()
-        val groups = mutableMapOf<MediaNamespace, LocalMediaTake?>()
-        val encodings = mutableMapOf<String, LocalMediaEncoding>()
-        val result = mutableListOf<LocalMediaTake>()
-        for (candidate in candidates.take(SCAN_BUDGET)) {
-            val kind = requireNotNull(candidate.kind)
-            positions[kind] = MediaPosition(candidate.artifact.modifiedSeconds, candidate.id)
-            consumed[kind] = (consumed[kind] ?: 0) + 1
-            if (!candidate.eligible || candidate.namespace?.key in blocked) continue
-            val take = candidate.namespace?.let { namespace ->
-                if (!groups.containsKey(namespace)) groups[namespace] = readTake(namespace, candidate) { encodings[namespace.key] = it }
-                groups[namespace]
-            } ?: if (kind == LocalMediaKind.RAW_VIDEO) rawVideoTake(candidate.artifact)
-            else if (candidate.namespace == null) LocalMediaTake(
-                "legacy:${candidate.artifact.uri}", candidate.artifact, listOf(candidate.artifact), emptyList(),
-                kind, null, LocalMediaRelationStatus.LEGACY,
-            ) else null
-            // Only the durable primary's candidate may emit the group. Secondary members are
-            // consumed without emitting, so keyset pages never need an ever-growing seen-ID set.
-            if (take != null && take.primary.uri == candidate.artifact.uri && catalogMatches(take, settings, query)) result += take
-            if (result.size == limit) break
-        }
-        batches.forEach { (kind, batch) ->
-            if (batch.size < CANDIDATE_BATCH && (consumed[kind] ?: 0) == batch.size) exhausted += kind
-        }
-        val next = if (exhausted.size == LocalMediaKind.entries.size) null
-            else LocalMediaCursor(filter, positions.toMap(), exhausted.toSet())
-        val ids = result.mapTo(HashSet()) { it.id }
-        return LocalMediaPage(result.toList(), next, encodings.filterKeys { it in ids })
+        return catalogPage(settings, query, cursor, limit,
+            candidates = { kind, position -> candidates(kind, position, settings.newestFirst) },
+            drive = { drive.entries(refresh = cursor == null) },
+            blocked = ::uncommittedNamespaces,
+            readTake = { namespace, candidate, onEncoding -> readTake(namespace, candidate, onEncoding = onEncoding) })
     }
 
+    /** A drive file has no MediaStore thumbnail: it is decoded from the file, through a disk cache. */
     fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = runCatching {
-        resolver.loadThumbnail(artifact.uri.toUri(), Size(256, 256), null)
+        if (isDriveUri(artifact.uri)) driveThumbnail(context, artifact, 256)
+        else resolver.loadThumbnail(artifact.uri.toUri(), Size(256, 256), null)
     }.getOrNull()
 
     fun recent(limit: Int = 60): List<LocalMediaItem> {
@@ -87,9 +60,13 @@ class LocalMediaRepository(context: Context) {
     }
 
 
-    /** Targeted re-observation for sharing. It never searches the library or repairs capture state. */
+    /**
+     * Targeted re-observation for sharing. It never searches the library or repairs capture state. A drive take
+     * (PLAN-072) is re-read from its folder through SAF instead; an unplugged drive is [DriveNotConnectedException].
+     */
     internal fun freshSnapshot(selected: LocalMediaTake): MediaShareSnapshot {
         checkShareRunning()
+        if (selected.onDrive) return drive.shareSnapshot(selected).also { checkShareRunning() }
         require(selected.originals.size in 1..32 && selected.metadata.size + selected.attachments.size <= 4)
         require(selected.originals.map { it.uri }.distinct().size == selected.originals.size)
         require(selected.primary in selected.originals)
@@ -204,7 +181,7 @@ class LocalMediaRepository(context: Context) {
             args += listOf(position.modified.toString(), position.modified.toString(), position.id.toString())
         }
         return rows(collection(kind), kind, selection, args.toTypedArray(),
-            "date_modified ${if (newestFirst) "DESC" else "ASC"}, _id ASC", CANDIDATE_BATCH)
+            "date_modified ${if (newestFirst) "DESC" else "ASC"}, _id ASC", CATALOG_CANDIDATE_BATCH)
     }
 
     private fun readTake(namespace: MediaNamespace, candidate: CatalogRow,
@@ -309,7 +286,8 @@ class LocalMediaRepository(context: Context) {
             try {
                 SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY,
                     { throw IllegalStateException("Gallery recovery journal is corrupt: $name") }).use { db ->
-                    check(db.version == 1) { "Unsupported gallery recovery journal version: $name" }
+                    // Version 2 (PLAN-072) adds the drive columns; the id and committed columns read here are unchanged.
+                    check(db.version in 1..2) { "Unsupported gallery recovery journal version: $name" }
                     db.rawQuery("SELECT id, committed FROM captures ORDER BY id LIMIT 129", null).use { cursor ->
                         var count = 0
                         val ids = mutableSetOf<String>()
@@ -337,8 +315,6 @@ class LocalMediaRepository(context: Context) {
     }
     private fun escapeLike(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     companion object {
-        private const val CANDIDATE_BATCH = 64
-        private const val SCAN_BUDGET = 120
         private const val MEMBER_BOUND = 16
         private const val METADATA_BOUND = 4
         private const val METADATA_BYTES = 512 * 1024

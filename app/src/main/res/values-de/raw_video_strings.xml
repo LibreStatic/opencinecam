@@ -12,6 +12,7 @@
     <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
     <string name="raw_video_saved">RAW-Aufnahme gespeichert: %1$d Bilder, %2$s s</string>
     <string name="raw_video_not_finalised">Die RAW-Aufnahme wurde nicht abgeschlossen; sie wird beim nächsten Start wiederhergestellt.</string>
+    <string name="raw_video_not_finalised_drive">Die RAW-Aufnahme wurde nicht abgeschlossen; sie wird wiederhergestellt, sobald das USB-Laufwerk wieder verbunden ist.</string>
     <string name="raw_video_empty">Die RAW-Aufnahme hat kein Bild aufgezeichnet.</string>
     <string name="raw_video_end_ring_full">der Speicher kam mit dem RAW-Stream nicht mit</string>
     <string name="raw_video_end_writer">die RAW-Datei konnte nicht geschrieben werden</string>

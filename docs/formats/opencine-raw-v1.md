@@ -316,3 +316,18 @@ This section extends the static metadata keys above.
   turned, at the swapped aspect for `90` and `270`; DNG converters map it to
   the TIFF `Orientation` tag (274): `0` is 1, `90` is 6, `180` is 3 and
   `270` is 8.
+
+## Continuation on the phone (added 2026-11-09)
+
+This section extends the static metadata keys above.
+
+- A take that continues on the phone a RAW take whose USB drive was lost
+  mid-take (OCC-PLAN-072 Delivery 4) is its own `.ocraw` file named
+  `<stem>_cont1.ocraw`, after the drive take's stem. It links to that take
+  with four keys, all present or all absent:
+  - `continuationOf`: the drive take's id (a UUID);
+  - `continuationPreviousName`: the drive take's file name;
+  - `continuationIndex`: `1` for the first continuation, integer;
+  - `continuationReason`: `drive-disconnected` or `drive-write-failed`.
+- The drive take is not changed. Readers that do not know the keys ignore
+  them, as with any unknown key.

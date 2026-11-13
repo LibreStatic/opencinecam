@@ -68,7 +68,9 @@ internal fun decideIncompleteVideo(muxerFinalized: Boolean, bytes: Long, encoded
 internal fun ContentResolver.ownedRowBytes(uri: Uri): Long = try {
     openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
 } catch (_: FileNotFoundException) {
-    0L
+    // MediaStore: the row's file is gone, so it holds nothing. A drive document that cannot be opened may be on a drive
+    // that stopped answering, so its size is unknown and never authorizes a deletion.
+    if (uri.authority == android.provider.MediaStore.AUTHORITY) 0L else -1L
 } catch (_: Exception) {
     -1L
 }

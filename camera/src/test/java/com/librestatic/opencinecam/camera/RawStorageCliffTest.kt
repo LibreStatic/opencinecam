@@ -248,6 +248,27 @@ class RawStorageCliffTest {
         assertEquals(capped, RawStorageCliff.withLongRunFallback(capped, evidence))
     }
 
+    @Test
+    fun storageSlowerThanTheStreamLastsOnlyAsLongAsTheRing() {
+        // A hard disk on USB: no cliff, 100 MB/s from the first window, against a 250 MB/s stream and a 600 MB ring.
+        val steady = RawStorageCliff.detect(rates(List(150) { 100_000_000L }))
+        assertFalse(steady.sustainedKnown)
+        assertEquals(4L, RawStorageCliff.burstSeconds(steady, 250_000_000L, 600_000_000L))
+        // Compressed 1.8x: the S24's take to the WD Elements, 450 MB/s raw, a 1061 MB ring, 79 MB/s. It lasted 3.9 s.
+        val wd = RawStorageCliff.detect(rates(List(150) { 79_000_000L }))
+        assertEquals(3L, RawStorageCliff.burstSeconds(wd, 450_000_000L, 1_061_208_000L, 1.8))
+        // The long runs' "cache" is what the sweep wrote, which never absorbed the stream: the ring still fills at once.
+        val derived = RawSustainedWrite(false, null, 12_000_000_000L, null, 100_000_000L, 60_000_000L, 150, 0, RawStorageCliff.SOURCE_LONG_RUNS)
+        assertEquals(4L, RawStorageCliff.burstSeconds(derived, 250_000_000L, 600_000_000L))
+        // A cache that ends first: 2 s at 100 MB/s fill 300 MB, the other 300 MB fill at 250 - 50 MB/s in 1.5 s.
+        val short = derived.copy(cacheBytes = 200_000_000L, sustainedBytesPerSecond = 50_000_000L)
+        assertEquals(3L, RawStorageCliff.burstSeconds(short, 250_000_000L, 600_000_000L))
+        // A cliff whose tail was not measured stays unknown, and storage that keeps up has no burst.
+        val unmeasured = RawSustainedWrite(true, 56, 5_600_000_000L, null, 100_000_000L, null, 65, 9)
+        assertNull(RawStorageCliff.burstSeconds(unmeasured, 250_000_000L, 600_000_000L))
+        assertNull(RawStorageCliff.burstSeconds(steady, 100_000_000L, 600_000_000L))
+    }
+
     private fun cliff(cacheBytes: Long, sustained: Long) =
         RawSustainedWrite(true, 56, cacheBytes, null, BURST, sustained, 76, 20)
 

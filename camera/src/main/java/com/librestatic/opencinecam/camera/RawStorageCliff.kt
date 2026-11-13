@@ -195,15 +195,28 @@ object RawStorageCliff {
      * `cacheBytes / S` seconds; past it the ring fills at `S - sustained`. With a [compressionRatio]
      * above 1 (a compressed twin) S is the compressed rate ([compressedBytesPerSecond]), and the ring, which holds
      * RAW10 frames, holds [ringBytes] / ratio of compressed output.
+     *
+     * Storage whose burst rate is already under S (a hard disk on USB) has no cache that absorbs the
+     * stream: the ring fills at `S - burst` from the first frame, for as long as the cache lasts at the
+     * burst rate, and only what is left of it fills at `S - sustained`. Such storage gives a figure
+     * even without a known sustained rate, when the sweep saw no cliff and so wrote at its burst rate throughout.
      */
     fun burstSeconds(sustained: RawSustainedWrite?, streamBytesPerSecond: Long, ringBytes: Long, compressionRatio: Double = 1.0): Long? {
         require(compressionRatio >= 1.0) { "compression ratio must be at least 1" }
-        if (sustained == null || !sustained.sustainedKnown) return null
+        if (sustained == null) return null
+        val s = compressedBytesPerSecond(streamBytesPerSecond, compressionRatio)
+        val ring = ringBytes / compressionRatio
+        val burst = sustained.burstBytesPerSecond?.takeIf { it in 1 until s }
+        if (!sustained.sustainedKnown) {
+            return if (burst != null && !sustained.cliffDetected) floor(ring / (s - burst)).toLong() else null
+        }
         val cache = sustained.cacheBytes ?: return null
         val rate = sustained.sustainedBytesPerSecond ?: return null
-        val s = compressedBytesPerSecond(streamBytesPerSecond, compressionRatio)
         if (s <= rate) return null
-        val seconds = cache.toDouble() / s + ringBytes / compressionRatio / (s - rate)
+        if (burst == null) return floor(cache.toDouble() / s + ring / (s - rate)).toLong()
+        val cacheSeconds = cache.toDouble() / burst
+        val filledInCache = (s - burst) * cacheSeconds
+        val seconds = if (filledInCache >= ring) ring / (s - burst) else cacheSeconds + (ring - filledInCache) / (s - rate)
         return floor(seconds).toLong()
     }
 

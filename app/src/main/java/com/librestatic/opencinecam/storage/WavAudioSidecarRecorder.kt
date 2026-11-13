@@ -7,8 +7,6 @@ import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.camera.offerListening
 
 import android.annotation.SuppressLint
-import android.content.ContentUris
-import android.content.ContentValues
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
@@ -66,9 +64,14 @@ class WavAudioSidecarRecorder private constructor(
     private val inputGuard: AudioInputRouteGuard?,
 ) : AudioSidecarRecorder {
     private val running = AtomicBoolean(false)
+    // ADR-0037: on a drive the descriptor is registered, so a leaving drive closes it at once (vold kills a holder);
+    // the writer thread then fails its next write and stops, as on ENODEV.
+    private val fileCloser = CloseOnce(output, descriptor)
+    private val driveHandle = DriveDescriptors.registerDocument(uri, fileCloser)
     private val capturedSampleRateHz = audioRecord.sampleRate
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
     override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
+    override val writerFailed: Boolean get() = writerFailure != null
     private var deferredFileCleanup = false
     @Volatile private var nativeRetired = false
     private val effects = mutableListOf<AudioEffect>()
@@ -91,12 +94,8 @@ class WavAudioSidecarRecorder private constructor(
     private var aborted = false
     private var explicitDiscardRequested = false
     private val ownedRows = OwnedOutputRows<Uri> { row ->
-        // A group sweep may already have removed the row. Collection+exact ID deletion remains
-        // idempotent without asking MediaStore to grant access to a now-nonexistent item URI.
-        val deleted = context.contentResolver.delete(ContentUris.removeId(row),
-            "${MediaStore.MediaColumns._ID} = ? AND ${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?",
-            arrayOf(ContentUris.parseId(row).toString(), context.packageName))
-        check(deleted in 0..1) { "Audio compensation affected an unexpected row count." }
+        // Idempotent on the take's backend: a group sweep may already have removed the row.
+        recoveryMember.deleteOwned(row, "Audio compensation affected an unexpected row count.")
     }.apply { add(uri) }
     private var softAgc: SoftAgc? = null
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
@@ -175,15 +174,8 @@ class WavAudioSidecarRecorder private constructor(
         finishedResult?.let { return it }
         val prepared = preparedOutput ?: return null
         return try {
-            val resolver = context.contentResolver
-            check(resolver.update(requireNotNull(preparedMetadataUri),
-                ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null) == 1) {
-                "Audio metadata publication failed."
-            }
-            check(resolver.update(uri,
-                ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null) == 1) {
-                "WAV MediaStore publication failed."
-            }
+            recoveryMember.publish(requireNotNull(preparedMetadataUri), "Audio metadata publication failed.")
+            recoveryMember.publish(uri, "WAV MediaStore publication failed.")
             recoveryMember.published()
             prepared.result.also { finishedResult = it }
         } catch (failure: Throwable) {
@@ -286,8 +278,7 @@ class WavAudioSidecarRecorder private constructor(
         val header = createWavHeader(dataBytes, settings.audioSampleRateHz, settings.audioBitDepth.bits, settings.audioChannels, settings.audioBitDepth == AudioBitDepth.PCM_FLOAT)
         while (header.hasRemaining()) output.channel.write(header)
         output.channel.force(true)
-        output.close()
-        descriptor.close()
+        closeOutput()
         val audioName = storedDisplayName(uri)
         val completedResult = capturedResult.copy(displayName = audioName)
         val metadataUri = writeMetadata(completedResult)
@@ -309,14 +300,9 @@ class WavAudioSidecarRecorder private constructor(
         requireNotNull(cursor.getString(0)).also { check(it.isNotBlank()) { "Prepared audio output name is missing." } }
     }
 
+    /** Closes the stream, then the descriptor, once; harmless after a [DriveDescriptors] release closed them. */
     private fun closeOutput() {
-        var failure: Throwable? = null
-        try { output.close() } catch (problem: Throwable) { failure = problem }
-        try { descriptor.close() } catch (problem: Throwable) {
-            val first = failure
-            if (first == null) failure = problem else if (first !== problem) first.addSuppressed(problem)
-        }
-        failure?.let { throw it }
+        try { fileCloser.close() } finally { driveHandle.unregister() }
     }
 
     override fun close() {
@@ -489,7 +475,6 @@ class WavAudioSidecarRecorder private constructor(
         ): WavAudioSidecarRecorder = create(context, videoDisplayName, settings,
             captureClock, onAudioLevel, recoveryGroup = null)
 
-        @SuppressLint("MissingPermission")
         fun create(
             context: Context,
             videoDisplayName: String,
@@ -499,12 +484,28 @@ class WavAudioSidecarRecorder private constructor(
             recoveryGroup: RecordingRecoveryGroup? = null,
             listeningSink: PcmListeningSink? = null,
             inputGuard: AudioInputRouteGuard? = null,
+        ): WavAudioSidecarRecorder = create(context, videoDisplayName, settings, captureClock, onAudioLevel, recoveryGroup, listeningSink, inputGuard,
+            destination = RecordingDestination.Phone)
+
+        /** PLAN-072: [destination] is where a take this recorder begins itself goes; a [recoveryGroup] already has one. */
+        @SuppressLint("MissingPermission")
+        internal fun create(
+            context: Context,
+            videoDisplayName: String,
+            settings: CameraSettings,
+            captureClock: com.librestatic.opencinecam.camera.CaptureEpochClock? = null,
+            onAudioLevel: ((AudioLevelSnapshot) -> Unit)? = null,
+            recoveryGroup: RecordingRecoveryGroup? = null,
+            listeningSink: PcmListeningSink? = null,
+            inputGuard: AudioInputRouteGuard? = null,
+            destination: RecordingDestination,
         ): WavAudioSidecarRecorder {
+            require(recoveryGroup == null || destination == RecordingDestination.Phone) { "A joined take already has its destination" }
             AudioRetirementGate.requireIdle()
             val appContext = context.applicationContext
             val displayName = videoDisplayName.removeSuffix(".mp4") + ".wav"
             val resolver = appContext.contentResolver
-            val recoveryMember = (recoveryGroup ?: RecordingCaptureRecovery.begin(appContext))
+            val recoveryMember = (recoveryGroup ?: RecordingCaptureRecovery.begin(appContext, destination))
                 .member(RecordingMemberKind.AUDIO)
             var record: AudioRecord? = null
             var descriptor: ParcelFileDescriptor? = null
@@ -576,6 +577,8 @@ interface AudioSidecarRecorder : AutoCloseable {
     val captureClock: com.librestatic.opencinecam.camera.CaptureEpochClock? get() = null
     /** A thread-safe look at the capture clocks while the take runs; null before any timestamp or when unsupported. */
     fun liveCaptureTiming(): com.librestatic.opencinecam.camera.PcmSourceTimingReport? = null
+    /** The writer thread stopped on a failure (e.g. ENODEV once a USB drive is pulled); the take goes on without audio. */
+    val writerFailed: Boolean get() = false
     fun start()
     /** Seal native output and metadata, returning stable identities that are still pending. */
     fun prepareCompletion(): PreparedAudioSidecar?

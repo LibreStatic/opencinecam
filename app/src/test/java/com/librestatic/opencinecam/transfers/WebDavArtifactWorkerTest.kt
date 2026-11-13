@@ -89,6 +89,31 @@ class WebDavArtifactWorkerTest {
         assertNull(f.artifact().attempt)
     }
 
+    @Test fun anUnpluggedSourceDriveHoldsTheArtifactWithoutTouchingIt() {
+        // PLAN-072: a queued drive artifact whose drive does not answer keeps its state and makes no request.
+        val f = Fixture()
+        val before = f.artifact()
+        f.snapshotForSource = { throw WebDavSourceDriveAbsent() }
+        assertEquals(held(WebDavWorkerHold.SOURCE_ABSENT), f.run())
+        assertEquals(before, f.artifact())
+        assertEquals(0, f.network.get()); assertEquals(0, f.opens.get())
+        // Back again: the same artifact uploads.
+        f.snapshotForSource = null
+        assertEquals(applied(WebDavWorkerTransition.PUT_ACKNOWLEDGED), f.run())
+    }
+
+    @Test fun aDriveUnpluggedBeforeTheFinalHashKeepsTheArtifactUncertain() {
+        val f = Fixture(); f.makeUncertain()
+        f.snapshotForSource = { index -> if (index == 1) f.snapshot else throw WebDavSourceDriveAbsent() }
+        f.connections = { MemoryConnection(status = 200, body = f.data) }
+        assertEquals(held(WebDavWorkerHold.SOURCE_ABSENT), f.run())
+        assertEquals(WebDavArtifactState.UNCERTAIN, f.artifact().state)
+        assertTrue(f.artifact().remoteMayExist)
+        assertNull(f.artifact().attempt)
+        assertNull(f.artifact().sourceFailure)
+        assertEquals(1, f.store.reconcileFinishes)
+    }
+
     @Test fun rejectedCredentialsSurfaceAsAuthenticationWithoutBlindRePut() {
         for (status in listOf(401, 403)) {
             val f = Fixture()

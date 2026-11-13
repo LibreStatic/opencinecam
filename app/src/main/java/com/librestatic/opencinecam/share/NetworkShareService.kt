@@ -75,7 +75,8 @@ class NetworkShareService : Service() {
         // Read on every request, so the page's switch applies without restarting the drive.
         val showOriginals = NetworkShare.showOriginals(this)
         val created = NetworkShareSession(
-            tree = ShareTree(MediaStoreShareTakes(this), includeOriginal = { showOriginals.value }),
+            // The phone's RAW takes and, while it is connected, the recording drive's (PLAN-072).
+            tree = ShareTree(CompositeShareTakes(listOf(MediaStoreShareTakes(this), SafShareTakes(this))), includeOriginal = { showOriginals.value }),
             credentials = credentials,
             addresses = networks::bindings,
             takeActive = { NetworkShare.takeActive.value },

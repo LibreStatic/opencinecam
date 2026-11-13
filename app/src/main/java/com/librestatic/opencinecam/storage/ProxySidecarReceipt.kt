@@ -36,18 +36,18 @@ internal fun validateProxySidecarReceipt(value: JsonObject) {
         require(text("normalization") == "MEDIA3_1_11_PCM16_TRUNCATE_CLAMP_V1")
         if (text("decodedPcmEncoding") == "S16_LE") require(text("decodedPcmSha256") == text("exportPcm16Sha256"))
     }
-    require(mediaOriginalIdentity(text("audioUri"))?.first == LocalMediaKind.AUDIO)
+    require(takeOriginalKind(text("audioUri")) == LocalMediaKind.AUDIO)
     require(number("sampleRateHz") in 8000..192000 && number("channels") in 1..2 && number("sourceFrames") > 0)
     require(number("audioStartUs") >= 0 && number("primingFrames") in 0..8192 && number("drainPaddingFrames") in setOf(4096L, 8192L, 16384L))
     require(digest.matches(text("decodedPcmSha256")) && digest.matches(text("codecDataSha256")))
     require(text("encoder").isNotBlank() && text("encoder").length <= 256)
     val hashes = value.getValue("sourceSha256").jsonObject
     require(hashes.size == 4 && text("audioUri") in hashes)
-    val collections = hashes.keys.map { requireNotNull(mediaDeleteIdentity(it)).collection }
+    val collections = hashes.keys.map { requireNotNull(takeMemberCollection(it)) }
     require(collections.count { it == MediaDeleteCollection.AUDIO } == 1 &&
         collections.count { it == MediaDeleteCollection.VIDEO } == 1 &&
         collections.count { it == MediaDeleteCollection.METADATA } == 2)
     for ((uri, hash) in hashes) {
-        require(mediaDeleteIdentity(uri) != null && hash.jsonPrimitive.isString && digest.matches(hash.jsonPrimitive.content))
+        require(takeMemberCollection(uri) != null && hash.jsonPrimitive.isString && digest.matches(hash.jsonPrimitive.content))
     }
 }

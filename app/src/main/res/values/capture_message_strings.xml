@@ -27,6 +27,7 @@
     <string name="capture_log_video_saved">%1$s Main10 saved · %2$s + provenance%3$s · %4$.1f s</string>
     <string name="capture_video_finalize_failed">Video could not be finalized with verified provenance.</string>
     <string name="capture_video_save_failed">Video could not be saved.</string>
+    <string name="capture_video_not_finalised_drive">The take was not finalised; it will be recovered when the USB drive is connected again.</string>
     <string name="capture_source_isp_derived">ISP-derived</string>
     <string name="capture_source_hfr_isp_derived">HFR ISP-derived</string>
     <string name="capture_source_hlg_derived">HLG-derived 10-bit</string>

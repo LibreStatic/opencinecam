@@ -4,7 +4,8 @@ package com.librestatic.opencinecam.transfers
 import java.util.UUID
 import java.io.InputStream
 
-internal enum class WebDavWorkerHold { POLICY_CHANGED, NOT_FOUND, NOT_READY, AUTHENTICATION, DESTINATION_CHANGED }
+/** [SOURCE_ABSENT]: the source's USB drive does not answer; the artifact is left as it was, to retry once it is back. */
+internal enum class WebDavWorkerHold { POLICY_CHANGED, NOT_FOUND, NOT_READY, AUTHENTICATION, DESTINATION_CHANGED, SOURCE_ABSENT }
 internal enum class WebDavWorkerTransition { PUT_ACKNOWLEDGED, PUT_UNCERTAIN, PUT_NOT_STARTED, RECONCILED, RECONCILE_INCONCLUSIVE, SOURCE_UNAVAILABLE }
 internal sealed interface WebDavWorkerResult {
     data class Held(val reason: WebDavWorkerHold) : WebDavWorkerResult
@@ -68,6 +69,7 @@ internal class WebDavArtifactWorker(
         when (initial) {
             is WebDavHashResult.Stopped -> return WebDavWorkerResult.Stopped(initial.reason)
             is WebDavHashResult.Unavailable -> return sourceUnavailable(bundleId, artifact, initial.failure)
+            WebDavHashResult.Waiting -> return WebDavWorkerResult.Held(WebDavWorkerHold.SOURCE_ABSENT)
             is WebDavHashResult.Hashed -> {
                 if (!matches(artifact, initial)) return sourceUnavailable(bundleId, artifact, changed(artifact))
                 if (artifact.state == WebDavArtifactState.SOURCE_UNAVAILABLE) {
@@ -142,6 +144,10 @@ internal class WebDavArtifactWorker(
             return when (finalHash) {
                 is WebDavHashResult.Stopped -> WebDavWorkerResult.Stopped(finalHash.reason)
                 is WebDavHashResult.Unavailable -> applied(WebDavWorkerTransition.SOURCE_UNAVAILABLE) { store.sourceUnavailable(lease, finalHash.failure) }
+                // The remote was seen but the local source cannot be read now: stay UNCERTAIN, verify on a later run.
+                WebDavHashResult.Waiting -> applied(WebDavWorkerTransition.RECONCILE_INCONCLUSIVE) { store.finishReconcile(lease) }.let { committed ->
+                    if (committed is WebDavWorkerResult.Applied) WebDavWorkerResult.Held(WebDavWorkerHold.SOURCE_ABSENT) else committed
+                }
                 is WebDavHashResult.Hashed -> if (!matches(artifact, finalHash)) {
                     applied(WebDavWorkerTransition.SOURCE_UNAVAILABLE) { store.sourceUnavailable(lease, changed(artifact)) }
                 } else applied(WebDavWorkerTransition.RECONCILED) {

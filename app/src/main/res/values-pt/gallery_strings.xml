@@ -41,6 +41,7 @@
     <string name="gallery_auto_thumbnails">Carregar miniaturas automaticamente</string>
     <string name="gallery_thumbnail_tap">Toque para visualizar</string>
     <string name="gallery_good_take">Boa tomada</string>
+    <string name="gallery_location_drive_description">Na unidade USB</string>
     <string name="gallery_take_number">Tomada %1$d</string>
     <string name="gallery_slate_scene">Cena %1$s</string>
     <string name="gallery_slate_reel">Rolo %1$s</string>

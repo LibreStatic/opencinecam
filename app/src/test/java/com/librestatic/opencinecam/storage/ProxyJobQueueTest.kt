@@ -50,6 +50,24 @@ class ProxyJobQueueTest {
             assertEquals(1, count.get()); assertEquals(done, ProxyJobStore(dir).read().single())
         } finally { second.shutdown() }
     }
+    @Test fun aDriveTakeWhoseDriveIsUnpluggedFailsSayingSo() = runBlocking<Unit> {
+        val folder = "FFF1-7571:Takes/OpenCineCam/A001"
+        val uri = "content://$EXTERNAL_STORAGE_AUTHORITY/tree/${safUriEncode("FFF1-7571:Takes")}/document/${safUriEncode("$folder/A001.mp4")}"
+        val video = LocalMediaArtifact(uri, "A001.mp4", "video/mp4", 999, 123)
+        val drive = LocalMediaTake("drive:$folder", video, listOf(video), emptyList(), LocalMediaKind.VIDEO, null, LocalMediaRelationStatus.MISSING_METADATA)
+        val reconciled = AtomicInteger()
+        val queue = ProxyJobQueue(ProxyJobStore(temporary.newFolder()), object : ProxyJobEngine {
+            override suspend fun reconcile(job: ProxyJob): MediaProxyResult? { reconciled.incrementAndGet(); return null }
+            override suspend fun create(job: ProxyJob): MediaProxyResult = throw DriveNotConnectedException()
+        })
+        try {
+            val done = terminal(queue, queue.enqueue(drive, ProxySettings(640, 1)))
+            assertEquals(ProxyJobStatus.FAILED, done.status)
+            assertEquals(DriveNotConnectedException.MESSAGE, done.error)
+            assertEquals(drive, done.take)
+            assertTrue(reconciled.get() >= 1) // Only the proxy's own rows are reconciled; the original is never touched.
+        } finally { queue.shutdown() }
+    }
     @Test fun cancellationWaitsForRetirementAndCommitWinsTheRace() = runBlocking<Unit> {
         val store = ProxyJobStore(temporary.newFolder()); val started = CompletableDeferred<Unit>()
         val retiring = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()

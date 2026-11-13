@@ -25,17 +25,18 @@ class ContentResolverBenchmarkDestination(
     /**
      * A `FileChannel` over the document's descriptor when the provider gives one, so the runner's
      * direct buffers reach the file without a copy and syncs force it to flash. Providers that only
-     * stream (no descriptor) fall back to the output stream.
+     * stream (no descriptor) fall back to the output stream. ADR-0037: a sink on a USB drive is closed the moment the
+     * drive leaves ([DriveDescriptors]), so the write in progress fails and the run ends as a failed measurement.
      */
     override fun openSink(): BenchmarkSink {
         runCatching { resolver.openFileDescriptor(uri, "w") }.getOrNull()?.let { descriptor ->
-            return runCatching { FileChannelBenchmarkSink(descriptor) }
+            return runCatching { FileChannelBenchmarkSink(uri, descriptor) }
                 .getOrElse { failure ->
                     runCatching { descriptor.close() }
                     throw failure
                 }
         }
-        return resolver.openOutputStream(uri)?.let(::OutputStreamBenchmarkSink)
+        return resolver.openOutputStream(uri)?.let { OutputStreamBenchmarkSink(uri, it) }
             ?: error("The selected storage destination could not be opened.")
     }
 
@@ -48,8 +49,10 @@ class ContentResolverBenchmarkDestination(
 }
 
 /** Unbuffered channel writes from the runner's direct buffer, with `force(false)` as the durable sync. */
-private class FileChannelBenchmarkSink(private val descriptor: ParcelFileDescriptor) : BenchmarkSink {
+private class FileChannelBenchmarkSink(uri: Uri, descriptor: ParcelFileDescriptor) : BenchmarkSink {
     private val channel = FileOutputStream(descriptor.fileDescriptor).channel
+    private val closer = CloseOnce(channel, descriptor)
+    private val driveHandle = DriveDescriptors.registerDocument(uri, closer)
     private var count = 0L
 
     override val supportsByteBuffer: Boolean
@@ -71,14 +74,16 @@ private class FileChannelBenchmarkSink(private val descriptor: ParcelFileDescrip
 
     override fun close() {
         try {
-            channel.close()
+            closer.close()
         } finally {
-            descriptor.close()
+            driveHandle.unregister()
         }
     }
 }
 
-private class OutputStreamBenchmarkSink(private val output: java.io.OutputStream) : BenchmarkSink {
+private class OutputStreamBenchmarkSink(uri: Uri, private val output: java.io.OutputStream) : BenchmarkSink {
+    private val closer = CloseOnce(output)
+    private val driveHandle = DriveDescriptors.registerDocument(uri, closer)
     private var count = 0L
 
     override fun write(bytes: ByteArray) {
@@ -92,7 +97,11 @@ private class OutputStreamBenchmarkSink(private val output: java.io.OutputStream
         get() = count
 
     override fun close() {
-        output.close()
+        try {
+            closer.close()
+        } finally {
+            driveHandle.unregister()
+        }
     }
 }
 

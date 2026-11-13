@@ -12,6 +12,7 @@
     <string name="raw_video_recording">REC RAW10 · %1$s · %2$d MB/s</string>
     <string name="raw_video_saved">Take RAW guardado: %1$d fotogramas, %2$s s</string>
     <string name="raw_video_not_finalised">O take RAW não foi finalizado; será recuperado no próximo arranque.</string>
+    <string name="raw_video_not_finalised_drive">O take RAW não foi finalizado; será recuperado quando a unidade USB voltar a ser ligada.</string>
     <string name="raw_video_empty">O take RAW não gravou nenhum fotograma.</string>
     <string name="raw_video_end_ring_full">o armazenamento não acompanhou o fluxo RAW</string>
     <string name="raw_video_end_writer">não foi possível gravar o ficheiro RAW</string>

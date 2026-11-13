@@ -12,7 +12,11 @@ import com.librestatic.opencinecam.rawvideo.RawTakeFileDecision
 import com.librestatic.opencinecam.rawvideo.recoverRawTakeFile
 
 /** RAW takes found pending after process death: [published] held frames, [deleted] held none. */
-data class RawVideoRecoveryReport(val published: Int = 0, val deleted: Int = 0, val unresolved: Int = 0)
+data class RawVideoRecoveryReport(val published: Int = 0, val deleted: Int = 0, val unresolved: Int = 0) {
+    /** Two passes' counts together (the phone's MediaStore pass and a drive's journal pass, PLAN-072). */
+    operator fun plus(other: RawVideoRecoveryReport) =
+        RawVideoRecoveryReport(published + other.published, deleted + other.deleted, unresolved + other.unresolved)
+}
 
 /**
  * Process-death recovery of RAW video takes (PLAN-071). A take's `.ocraw` row stays `IS_PENDING=1`
@@ -25,6 +29,10 @@ data class RawVideoRecoveryReport(val published: Int = 0, val deleted: Int = 0, 
  * orphaned ones and never repairs or publishes them.
  *
  * CaptureService runs it at service start and before every RAW take, off the main thread.
+ *
+ * A take on a USB drive (PLAN-072 Delivery 3, [SafRawVideoOutput]) is not a MediaStore row: it is journalled in
+ * `recording-recovery.sqlite` and [RecordingCaptureRecovery.recover] repairs it with the same [recoverRawTakeFile] when
+ * the drive is mounted, deferring it while the drive is absent or its grant lost. The live set below covers both.
  */
 class RawVideoRecovery(context: Context) {
     private val context = context.applicationContext

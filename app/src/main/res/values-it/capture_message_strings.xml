@@ -23,6 +23,7 @@
     <string name="capture_log_video_saved">Video %1$s Main10 salvato · %2$s + provenienza%3$s · %4$.1f s</string>
     <string name="capture_video_finalize_failed">Impossibile finalizzare il video con provenienza verificata.</string>
     <string name="capture_video_save_failed">Impossibile salvare il video.</string>
+    <string name="capture_video_not_finalised_drive">La ripresa non è stata finalizzata; verrà recuperata quando ricollegherai l\'unità USB.</string>
     <string name="capture_source_isp_derived">derivato dall\'ISP</string>
     <string name="capture_source_hfr_isp_derived">HFR derivato dall\'ISP</string>
     <string name="capture_source_hlg_derived">10 bit derivato da HLG</string>

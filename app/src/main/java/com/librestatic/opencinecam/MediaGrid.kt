@@ -412,6 +412,10 @@ internal fun GalleryThumbnailTile(take: LocalMediaTake, state: GalleryThumbnailS
             resolutionBadge(facts?.width, facts?.height)?.let { GalleryBadge(it) }
             if (takeIsLog(take)) GalleryBadge("LOG", accent = true)
             if (facts?.hdr == true) GalleryBadge("HDR")
+            if (badges?.onDrive == true) {
+                val location = stringResource(R.string.gallery_location_drive_description)
+                GalleryBadge("USB", Modifier.semantics { contentDescription = location }.testTag("$tag-location-ssd"))
+            }
         }
         // A card's codec and proxy: at most these two, the proxy only while it exists or is on its way.
         val proxy = badges?.proxy ?: TakeProxyState.NONE

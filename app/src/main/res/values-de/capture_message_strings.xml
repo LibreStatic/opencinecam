@@ -23,6 +23,7 @@
     <string name="capture_log_video_saved">%1$s Main10 gespeichert · %2$s + Herkunftsnachweis%3$s · %4$.1f s</string>
     <string name="capture_video_finalize_failed">Das Video konnte nicht mit verifiziertem Herkunftsnachweis abgeschlossen werden.</string>
     <string name="capture_video_save_failed">Das Video konnte nicht gespeichert werden.</string>
+    <string name="capture_video_not_finalised_drive">Die Aufnahme wurde nicht abgeschlossen; sie wird wiederhergestellt, sobald das USB-Laufwerk wieder verbunden ist.</string>
     <string name="capture_source_isp_derived">vom ISP abgeleitet</string>
     <string name="capture_source_hfr_isp_derived">HFR vom ISP abgeleitet</string>
     <string name="capture_source_hlg_derived">10 Bit aus HLG abgeleitet</string>

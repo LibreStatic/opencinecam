@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Batteria al %1$d%% o più</string>
     <string name="raw_qualification_check_battery_fix">Caricala prima almeno al %1$d%% (ora %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · in carica</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. La qualifica potrebbe esaurirla: collega il caricatore se puoi.</string>
     <string name="raw_qualification_check_cool">Temperatura normale</string>
     <string name="raw_qualification_check_cool_fix">Lascia prima raffreddare il telefono.</string>
@@ -57,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Si è interrotta perché la batteria è scesa sotto il %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Si è interrotta perché l’app è passata in background.</string>
+    <string name="raw_qualification_reason_drive_lost">Si è interrotta perché l’unità USB è stata scollegata.</string>
     <string name="raw_qualification_reason_busy">La fotocamera era occupata con una ripresa.</string>
     <string name="raw_qualification_reason_not_ready">Il controllo di batteria o temperatura non è stato superato.</string>
     <string name="raw_qualification_reason_unsupported">Questa fotocamera non può registrare video RAW.</string>
@@ -76,8 +78,12 @@
     <string name="raw_qualification_chip_camera">No fotocamera</string>
     <string name="raw_qualification_chip_warm">Si scalda</string>
     <string name="raw_qualification_space_title">Con lo spazio disponibile non si può qualificare tutto</string>
-    <string name="raw_qualification_space_body">Verranno provate le configurazioni che entrano nello spazio libero del tuo telefono.</string>
+    <string name="raw_qualification_space_body">Verranno provate le configurazioni che entrano nello spazio libero della memoria in prova.</string>
     <string name="raw_qualification_space_free">%1$s liberi</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">Verrà testata l’unità USB %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">Verrà testata l’unità USB</string>
+    <string name="raw_qualification_target_phone">Verrà testata la memoria del telefono</string>
     <string name="raw_qualification_space_tested">Verranno provate</string>
     <string name="raw_qualification_space_skipped">Saltate per mancanza di spazio</string>
     <string name="raw_qualification_needs">servono %1$s</string>

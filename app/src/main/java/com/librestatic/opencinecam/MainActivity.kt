@@ -5,6 +5,7 @@ package com.librestatic.opencinecam
 
 import android.Manifest
 import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -33,12 +34,15 @@ import androidx.core.splashscreen.SplashScreenViewProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import com.librestatic.opencinecam.service.CaptureStartup
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.ui.theme.AppTheme
 import com.librestatic.opencinecam.ui.theme.AppThemeStore
 import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import com.librestatic.opencinecam.ui.theme.SyncWindowBackground
 import com.librestatic.opencinecam.ui.theme.rememberAppTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val operatorKeyTimers = android.os.Handler(android.os.Looper.getMainLooper())
@@ -111,6 +115,7 @@ class MainActivity : ComponentActivity() {
         }
         applySplashTheme(this, theme)
         com.librestatic.opencinecam.storage.MediaProxyQueue.get(this).start()
+        syncDriveAttachHandlerOnce()
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // With the bars hidden, the default cutout mode letterboxes the window below the camera
         // cutout, so a full-screen viewfinder could never reach the top edge. Every screen already
@@ -127,6 +132,10 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         foldDisplays = FoldDisplayCoordinator(this)
+        // The manifest's fullSensor is the default; the stored choice applies before the first frame and follows every change.
+        val settings = SettingsRepositories.get(this).states
+        applyRotateWhenLocked(settings.value.rotateWhenLocked)
+        lifecycleScope.launch { settings.collect { applyRotateWhenLocked(it.rotateWhenLocked) } }
 
         // The logo intro plays once per process, on a start from scratch that lands on the wizard.
         val playIntro = savedInstanceState == null && !introPlayed && !onboardingDone
@@ -168,6 +177,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun applyRotateWhenLocked(rotateWhenLocked: Boolean) {
+        val orientation = requestedOrientationFor(rotateWhenLocked)
+        if (requestedOrientation != orientation) requestedOrientation = orientation
+    }
+
     /**
      * Lifts a held splash, showing the live viewfinder and handing over the controls. A very short
      * fade keeps a fast camera from snapping the logo away.
@@ -179,6 +193,18 @@ class MainActivity : ComponentActivity() {
         provider.view.animate().alpha(0f).setDuration(SplashReleaseFadeMillis).withEndAction(provider::remove).start()
     }
 
+    /**
+     * PLAN-072: once per process, matches the USB attach alias to the configured destination, for installs that had
+     * a drive configured before the alias existed and for restored settings. Off the main thread: it is a binder call.
+     */
+    private fun syncDriveAttachHandlerOnce() {
+        if (driveAttachSynced) return
+        driveAttachSynced = true
+        val context = applicationContext
+        Thread({ RecordingDestinationStore(context).syncDriveAttachHandler() }, "drive-attach-sync")
+            .apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
+    }
+
     override fun onDestroy() {
         CaptureLocations.get(this).setForeground(locationOwner, false)
         if (::foldDisplays.isInitialized) foldDisplays.close()
@@ -187,6 +213,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         var introPlayed = false
+        var driveAttachSynced = false
         const val SplashFadeMillis = 200L
         const val SplashFadeDelayMillis = 34L
         const val KeepSplashMaxMillis = 2_000L
@@ -202,6 +229,10 @@ private fun Activity.viewfinderWindowSize(): android.util.Size =
         @Suppress("DEPRECATION")
         android.graphics.Point().also { windowManager.defaultDisplay.getRealSize(it) }.let { android.util.Size(it.x, it.y) }
     }
+
+/** Full sensor follows the phone even with the system auto-rotate off; full user honours the system rotation lock. */
+internal fun requestedOrientationFor(rotateWhenLocked: Boolean): Int =
+    if (rotateWhenLocked) ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR else ActivityInfo.SCREEN_ORIENTATION_FULL_USER
 
 internal fun windowThemeFor(theme: AppTheme): Int =
     if (theme == AppTheme.YOU) R.style.Theme_OpenCineCam_You else R.style.Theme_OpenCineCam

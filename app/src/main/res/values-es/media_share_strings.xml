@@ -21,4 +21,5 @@
     <string name="media_share_launched">Selector de Android abierto — entrega no verificada.</string>
     <string name="media_share_prepared_files">Archivos preparados: %1$d</string>
     <string name="media_share_chooser">Enviar archivos seleccionados de captura</string>
+    <string name="media_drive_not_connected">La unidad USB con esta toma no está conectada. Conectala y volvé a intentar; no se cambió nada.</string>
 </resources>

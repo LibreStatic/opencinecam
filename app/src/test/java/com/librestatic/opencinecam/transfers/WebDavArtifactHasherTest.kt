@@ -115,6 +115,20 @@ class WebDavArtifactHasherTest {
         }
     }
 
+    @Test fun anUnpluggedDriveIsTransientNotAnUnavailableSource() = owner { _, scope ->
+        // PLAN-072: the drive not answering is never persisted as SOURCE_UNAVAILABLE, whichever step it surfaces in.
+        assertEquals(WebDavHashResult.Waiting, DefaultWebDavArtifactHasher { throw WebDavSourceDriveAbsent() }.hash(artifact(), scope))
+        val gone = object : WebDavClipSource {
+            override fun snapshot(): WebDavClipSnapshot = throw WebDavSourceDriveAbsent(FileNotFoundException("folder"))
+            override fun open(): InputStream = error("never opened")
+        }
+        assertEquals(WebDavHashResult.Waiting, hash(gone, scope))
+        assertEquals(WebDavHashResult.Waiting, hash(Source(openFailure = WebDavSourceDriveAbsent()), scope))
+        val source = Source(input = object : InputStream() { override fun read(): Int = throw WebDavSourceDriveAbsent() })
+        assertEquals(WebDavHashResult.Waiting, hash(source, scope))
+        assertTrue(source.closed)
+    }
+
     @Test fun closeFailurePreventsSuccessfulHashAndFinalObservation() = owner { _, scope ->
         val source = Source(closeFailure = IOException("close failed with private details"))
         assertFailure(WebDavSourceFailureReason.READ_FAILED, hash(source, scope))

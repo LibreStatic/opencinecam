@@ -59,6 +59,7 @@ internal class DefaultWebDavArtifactHasher(
             // Cancellation wins even if an in-flight read or its close also failed. It is not
             // evidence of damaged media and must never persist SOURCE_UNAVAILABLE.
             scope.stopReason?.let { return WebDavHashResult.Stopped(it) }
+            if (failure is WebDavSourceDriveAbsent) return WebDavHashResult.Waiting
             val reason = when (failure) {
                 is SecurityException -> WebDavSourceFailureReason.ACCESS_DENIED
                 is FileNotFoundException -> WebDavSourceFailureReason.MISSING

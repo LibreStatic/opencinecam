@@ -29,12 +29,25 @@ data class LocalMediaEncoding(val videoMime: String? = null, val videoProfile: S
 data class LocalMediaPage(val takes: List<LocalMediaTake>, val next: LocalMediaCursor?,
     val encodings: Map<String, LocalMediaEncoding> = emptyMap())
 
-/** Opaque, constant-size keyset state. No accumulated take IDs or offset-based pagination. */
+/**
+ * Opaque, constant-size keyset state. No accumulated take IDs or offset-based pagination. [drive] is the
+ * last drive take consumed (PLAN-072); [driveExhausted] says the drive has nothing left for this filter.
+ */
 class LocalMediaCursor internal constructor(internal val filter: String,
-    internal val positions: Map<LocalMediaKind, MediaPosition>, internal val exhausted: Set<LocalMediaKind>)
+    internal val positions: Map<LocalMediaKind, MediaPosition>, internal val exhausted: Set<LocalMediaKind>,
+    internal val drive: DrivePosition? = null, internal val driveExhausted: Boolean = false)
 internal data class MediaPosition(val modified: Long, val id: Long)
-internal data class MediaNamespace(val id: String, val recording: Boolean) {
-    val key: String get() = if (recording) "take:$id" else "still:$id"
+/**
+ * [driveFolder] is the document id of a drive take's folder (PLAN-072), null for MediaStore namespaces. A drive
+ * take is keyed by its sidecars' `bundleId` like a phone take; one whose sidecars declare none has an empty [id]
+ * and is keyed by its folder instead.
+ */
+internal data class MediaNamespace(val id: String, val recording: Boolean, val driveFolder: String? = null) {
+    val key: String get() = when {
+        driveFolder != null && id.isEmpty() -> "drive:$driveFolder"
+        recording -> "take:$id"
+        else -> "still:$id"
+    }
     fun path(root: String): String = "$root/OpenCineCam/${if (recording) "OCC_TAKE_" else "OCC_"}$id/"
 }
 internal data class CatalogRow(val artifact: LocalMediaArtifact, val id: Long,
@@ -112,6 +125,95 @@ internal fun catalogMatches(take: LocalMediaTake, settings: GallerySettings, que
     return fields.any { it.lowercase(Locale.ROOT).contains(needle) }
 }
 
+/** MediaStore rows read per kind and page; a shorter batch, wholly consumed, exhausts its kind. */
+internal const val CATALOG_CANDIDATE_BATCH = 64
+/** MediaStore candidates examined per page; drive takes, already listed, do not count against it. */
+internal const val CATALOG_SCAN_BUDGET = 120
+/**
+ * Drive takes loaded per page (PLAN-072): each load lists a take folder and reads its sidecars over USB, so a filter
+ * that matches nothing must not read the whole drive in one page. Spent, the page ends where the drive stopped.
+ */
+internal const val CATALOG_DRIVE_LOAD_BUDGET = 100
+
+/**
+ * One gallery page: the MediaStore candidates of every kind and the drive's takes (PLAN-072), merged by
+ * modified time. A drive take comes out just before the first MediaStore candidate it is newer than (older
+ * than, oldest first), so at an equal second the phone's comes first; drive takes past the last candidate
+ * read wait for the next page, unless MediaStore is exhausted. At most [CATALOG_DRIVE_LOAD_BUDGET] drive takes
+ * are loaded per page, so a page may end short, even empty, with a cursor. [candidates], [drive] and [readTake] do the
+ * IO; [blocked] reads the recovery journals and runs after the candidates are collected.
+ */
+internal fun catalogPage(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int,
+    candidates: (LocalMediaKind, MediaPosition?) -> List<CatalogRow>,
+    drive: () -> List<DriveCatalogEntry>,
+    blocked: () -> Set<String>,
+    readTake: (MediaNamespace, CatalogRow, (LocalMediaEncoding) -> Unit) -> LocalMediaTake?): LocalMediaPage {
+    val filter = catalogFilter(settings, query)
+    require(cursor == null || cursor.filter == filter) { "Gallery cursor belongs to a different filter" }
+    val positions = cursor?.positions.orEmpty().toMutableMap()
+    val exhausted = cursor?.exhausted.orEmpty().toMutableSet()
+    // Collect provider candidates BEFORE observing committed journal state. No writer lock is
+    // held while doing provider/metadata IO; the durable SQLite receipt snapshot is sufficient.
+    val batches = LocalMediaKind.entries.filter { it !in exhausted }.associateWith { kind -> candidates(kind, positions[kind]) }
+    var drivePosition = cursor?.drive
+    val pendingDrive = ArrayDeque(if (cursor?.driveExhausted == true) emptyList() else drive().after(drivePosition, settings.newestFirst))
+    val blockedKeys = blocked()
+    val ordered = batches.values.flatten().sortedWith(catalogComparator(settings.newestFirst))
+    val consumed = mutableMapOf<LocalMediaKind, Int>()
+    val groups = mutableMapOf<MediaNamespace, LocalMediaTake?>()
+    val encodings = mutableMapOf<String, LocalMediaEncoding>()
+    val result = mutableListOf<LocalMediaTake>()
+    var driveLoads = 0
+    /**
+     * Emits the drive takes ahead of a candidate modified at [seconds] (all of them when null); true once the page is
+     * full or the drive's load budget is spent with a take still due, which ends the page before that candidate.
+     */
+    fun drainDrive(seconds: Long?): Boolean {
+        while (result.size < limit && pendingDrive.isNotEmpty() &&
+            (seconds == null || pendingDrive.first().position.ahead(seconds, settings.newestFirst))) {
+            if (driveLoads == CATALOG_DRIVE_LOAD_BUDGET) return true
+            driveLoads++
+            val entry = pendingDrive.removeFirst()
+            drivePosition = entry.position
+            val found = entry.load() ?: continue
+            if (found.take.id in blockedKeys || !catalogMatches(found.take, settings, query)) continue
+            result += found.take
+            found.encoding?.let { encodings[found.take.id] = it }
+        }
+        return result.size == limit
+    }
+    var full = false
+    for (candidate in ordered.take(CATALOG_SCAN_BUDGET)) {
+        if (drainDrive(candidate.artifact.modifiedSeconds)) { full = true; break }
+        val kind = requireNotNull(candidate.kind)
+        positions[kind] = MediaPosition(candidate.artifact.modifiedSeconds, candidate.id)
+        consumed[kind] = (consumed[kind] ?: 0) + 1
+        if (!candidate.eligible || candidate.namespace?.key in blockedKeys) continue
+        val take = candidate.namespace?.let { namespace ->
+            if (!groups.containsKey(namespace)) groups[namespace] = readTake(namespace, candidate) { encodings[namespace.key] = it }
+            groups[namespace]
+        } ?: if (kind == LocalMediaKind.RAW_VIDEO) rawVideoTake(candidate.artifact)
+        else if (candidate.namespace == null) LocalMediaTake(
+            "legacy:${candidate.artifact.uri}", candidate.artifact, listOf(candidate.artifact), emptyList(),
+            kind, null, LocalMediaRelationStatus.LEGACY,
+        ) else null
+        // Only the durable primary's candidate may emit the group. Secondary members are
+        // consumed without emitting, so keyset pages never need an ever-growing seen-ID set.
+        if (take != null && take.primary.uri == candidate.artifact.uri && catalogMatches(take, settings, query)) result += take
+        if (result.size == limit) { full = true; break }
+    }
+    batches.forEach { (kind, batch) ->
+        if (batch.size < CATALOG_CANDIDATE_BATCH && (consumed[kind] ?: 0) == batch.size) exhausted += kind
+    }
+    val mediaStoreDone = exhausted.size == LocalMediaKind.entries.size
+    if (!full && mediaStoreDone) drainDrive(null)
+    val driveExhausted = pendingDrive.isEmpty()
+    val next = if (mediaStoreDone && driveExhausted) null
+        else LocalMediaCursor(filter, positions.toMap(), exhausted.toSet(), drivePosition, driveExhausted)
+    val ids = result.mapTo(HashSet()) { it.id }
+    return LocalMediaPage(result.toList(), next, encodings.filterKeys { it in ids })
+}
+
 /** Validates declarations against available owned namespace members, not filename similarity.
  * DECLARED means relationship identity was checked, never that content hashes were verified.
  * [onEncoding] receives the codec facts of a valid take, read from the same parse. */
@@ -121,7 +223,12 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
     onEncoding: ((LocalMediaEncoding) -> Unit)? = null): LocalMediaTake? {
     val originals = members.filter { it.kind != null }
     val primary = catalogPrimary(originals) ?: return null
-    val known = originals.associateBy { it.artifact.uri }
+    // A drive take's references are document URIs inside its own folder, compared by document id so a
+    // re-picked tree over the same folder still matches; a phone take's stay exact MediaStore URIs.
+    val drive = namespace.driveFolder
+    fun referenceKey(uri: String): String =
+        if (drive == null) uri else requireNotNull(driveMemberDocumentId(uri, drive)) { "Reference outside the take folder" }
+    val known = originals.associateBy { if (drive == null) it.artifact.uri else driveMemberDocumentId(it.artifact.uri, drive) ?: it.artifact.uri }
     var invalid = false
     var missing = incomplete
     val references = mutableSetOf<String>()
@@ -147,8 +254,8 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
             val declared = mutableListOf<Pair<String, JsonObject?>>()
             fun reference(value: JsonElement, details: JsonObject? = null) {
                 val uri = (value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: error("URI string required")
-                require(uri.matches(Regex("content://media/external_primary/(images/media|video/media|audio/media)/[1-9][0-9]*")))
-                declared += uri to details
+                if (drive == null) require(uri.matches(Regex("content://media/external_primary/(images/media|video/media|audio/media)/[1-9][0-9]*")))
+                declared += referenceKey(uri) to details
             }
             if (still) {
                 when {
@@ -172,13 +279,16 @@ internal fun catalogTake(namespace: MediaNamespace, members: List<CatalogRow>,
             require(declared.isNotEmpty() && declared.map { it.first }.distinct().size == declared.size)
             for ((uri, details) in declared) {
                 val expectedKind = if (still) LocalMediaKind.PHOTO else if (schema == "opencinecam-audio-sidecar-v1") LocalMediaKind.AUDIO else LocalMediaKind.VIDEO
-                val segment = when (expectedKind) { LocalMediaKind.PHOTO -> "/images/media/"; LocalMediaKind.VIDEO -> "/video/media/"; LocalMediaKind.AUDIO -> "/audio/media/"; LocalMediaKind.RAW_VIDEO -> error("RAW takes declare no sidecar") }
-                require(segment in uri)
+                if (drive == null) {
+                    val segment = when (expectedKind) { LocalMediaKind.PHOTO -> "/images/media/"; LocalMediaKind.VIDEO -> "/video/media/"; LocalMediaKind.AUDIO -> "/audio/media/"; LocalMediaKind.RAW_VIDEO -> error("RAW takes declare no sidecar") }
+                    require(segment in uri)
+                }
                 val existing = known[uri]
                 if (existing == null) missing = true else {
                     require(existing.namespace == namespace && existing.kind == expectedKind)
                     details?.get("displayName")?.let { require((it as? JsonPrimitive)?.let { v -> v.isString && v.content == existing.artifact.name } == true) }
-                    details?.get("mimeType")?.let { require((it as? JsonPrimitive)?.let { v -> v.isString && v.content == existing.artifact.mimeType } == true) }
+                    // A drive reports the MIME its provider derives from the name, which the name check already binds.
+                    if (drive == null) details?.get("mimeType")?.let { require((it as? JsonPrimitive)?.let { v -> v.isString && v.content == existing.artifact.mimeType } == true) }
                     details?.get("bytes")?.let { require((it as? JsonPrimitive)?.let { v -> !v.isString && v.longOrNull == existing.artifact.sizeBytes } == true) }
                 }
             }

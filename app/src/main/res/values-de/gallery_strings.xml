@@ -41,6 +41,7 @@
     <string name="gallery_auto_thumbnails">Vorschaubilder automatisch laden</string>
     <string name="gallery_thumbnail_tap">Zum Ansehen tippen</string>
     <string name="gallery_good_take">Guter Take</string>
+    <string name="gallery_location_drive_description">Auf dem USB-Laufwerk</string>
     <string name="gallery_take_number">Take %1$d</string>
     <string name="gallery_slate_scene">Szene %1$s</string>
     <string name="gallery_slate_reel">Reel %1$s</string>

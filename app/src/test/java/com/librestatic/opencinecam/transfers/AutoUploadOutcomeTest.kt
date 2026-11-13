@@ -61,7 +61,7 @@ class AutoUploadOutcomeTest {
     @Test fun transientMessagesRetryWhileArtifactsAreQueuedOrVerifiable() {
         val queued = listOf(AutoUploadArtifacts.verified(), AutoUploadArtifacts.queued())
         val verifiable = listOf(AutoUploadArtifacts.uncertainWithoutAttempt())
-        for (message in listOf(WAITING_RECORDING, WAITING_MEDIA, NETWORK_UNAVAILABLE, CELLULAR_CONSENT_REQUIRED, UNCERTAIN)) {
+        for (message in listOf(WAITING_RECORDING, WAITING_MEDIA, NETWORK_UNAVAILABLE, CELLULAR_CONSENT_REQUIRED, UNCERTAIN, WAITING_DRIVE)) {
             assertEquals(message.name, AutoUploadOutcome.RETRY, outcome(message, queued))
             assertEquals(message.name, AutoUploadOutcome.RETRY, outcome(message, verifiable))
         }

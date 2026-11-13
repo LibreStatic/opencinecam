@@ -3,6 +3,7 @@ package com.librestatic.opencinecam
 
 import android.content.ContentResolver
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
@@ -17,6 +18,11 @@ import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.DriveDescriptors
+import com.librestatic.opencinecam.storage.useOnDrive
+import com.librestatic.opencinecam.storage.RecordingDestinationStore
+import com.librestatic.opencinecam.storage.drivePath
+import com.librestatic.opencinecam.storage.isDriveUri
 import com.librestatic.opencinecam.storage.isClipSidecarAttachment
 import com.librestatic.opencinecam.storage.parseOcLogSidecar
 import java.text.DateFormat
@@ -47,7 +53,13 @@ internal suspend fun readTakeDetails(context: Context, take: LocalMediaTake): Ta
         return try { block() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
     }
     val root = read { primaryVolumeRoot(context) }
-    val files = take.originals.map { artifact -> DetailFile(artifact, read { artifactPath(root, relativePath(resolver, artifact), artifact.name) }) }
+    val driveLabel = if (take.originals.any { isDriveUri(it.uri) }) read { driveLabel(context) } else null
+    val files = take.originals.map { artifact ->
+        DetailFile(artifact, read {
+            if (isDriveUri(artifact.uri)) driveLabel?.let { drivePath(it, artifact.uri) }
+            else artifactPath(root, relativePath(resolver, artifact), artifact.name)
+        })
+    }
     var input = TakeDetailInputs(take.kind, files)
     when (take.kind) {
         LocalMediaKind.VIDEO -> {
@@ -56,7 +68,7 @@ internal suspend fun readTakeDetails(context: Context, take: LocalMediaTake): Ta
             val log = documents.firstNotNullOfOrNull { parseOcLogSidecar(it, take.primary.uri) }
             val hdr = documents.firstNotNullOfOrNull(::parseHdrVideoSidecar)
             val video = read { probeClipMetadata(context, take.primary.uri, log) }
-            val bitrate = read { mediaStoreBitrate(resolver, take.primary) }
+            val bitrate = read { if (isDriveUri(take.primary.uri)) containerBitrate(context, take.primary) else mediaStoreBitrate(resolver, take.primary) }
             // A separate WAV or FLAC is the take's sound; otherwise the track muxed into the video.
             val sound = take.originals.firstOrNull { it.mimeType.startsWith("audio/") } ?: take.primary
             val audio = read { probeAudioMetadata(context, sound.uri) }
@@ -86,6 +98,21 @@ private fun mediaStoreBitrate(resolver: ContentResolver, artifact: LocalMediaArt
     }
 }
 
+/** The recording drive's name as the system described it at adoption, else "USB drive" (PLAN-072). */
+private fun driveLabel(context: Context): String =
+    RecordingDestinationStore(context).label()?.takeIf { it.isNotBlank() } ?: context.getString(R.string.recording_destination_usb)
+
+/** A drive file has no MediaStore row; its container's declared bit rate stands in. */
+private fun containerBitrate(context: Context, artifact: LocalMediaArtifact): Long? {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, artifact.uri.toUri())
+        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()?.takeIf { it > 0 }
+    } finally {
+        retriever.release()
+    }
+}
+
 /** The document as UTF-8, or null past [DETAIL_JSON_BYTES] or when it is not valid UTF-8. */
 private fun boundedText(resolver: ContentResolver, artifact: LocalMediaArtifact): String? {
     if (artifact.sizeBytes !in 1..DETAIL_JSON_BYTES.toLong()) return null
@@ -110,15 +137,17 @@ private fun exifSnapshot(resolver: ContentResolver, artifact: LocalMediaArtifact
 
 /** One channel for the whole read: the leading metadata, then the frame index (chunk and frame headers only). */
 private fun ocrawSummary(resolver: ContentResolver, artifact: LocalMediaArtifact): OcrawSummary? =
-    resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.use { descriptor ->
-        java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
-            val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
-            val leading = reader.leadingMetadata().orEmpty()
-            val index = reader.indexFrames()
-            if (index.header == null) return@use null
-            // The leading chunk's encoding names the take's codec; later metadata cannot change that.
-            OcrawSummary.from(index.metadata, index, channel.size()).let { summary ->
-                summary.copy(leadingEncoding = leading["encoding"] ?: summary.leadingEncoding)
+    DriveDescriptors.releaseMark(artifact.uri.toUri()).let { mark ->
+        resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri(), mark) { descriptor ->
+            java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
+                val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
+                val leading = reader.leadingMetadata().orEmpty()
+                val index = reader.indexFrames()
+                if (index.header == null) return@use null
+                // The leading chunk's encoding names the take's codec; later metadata cannot change that.
+                OcrawSummary.from(index.metadata, index, channel.size()).let { summary ->
+                    summary.copy(leadingEncoding = leading["encoding"] ?: summary.leadingEncoding)
+                }
             }
         }
     }

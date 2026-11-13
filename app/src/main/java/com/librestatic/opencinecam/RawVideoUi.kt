@@ -92,6 +92,9 @@ internal fun rawVideoNearLosslessActive(state: CameraUiState, settings: CameraSe
 internal fun rawCompressionChoiceOffered(state: CameraUiState): Boolean =
     state.rawVideoNearLosslessAvailable && state.rawVideoOptions.any { it.isBlockPack }
 
+/** Settings draws the RAW video row once the camera has RAW10 output, qualified or not yet; search and the category counts follow it. */
+internal fun rawVideoSettingsShown(gate: ModeGateState?): Boolean = gate == ModeGateState.AVAILABLE || gate == ModeGateState.CANDIDATE
+
 /** The configuration can change only between takes, like every structural setting. */
 internal fun rawVideoConfigChangeAllowed(state: CameraUiState): Boolean =
     !state.structuralSettingsFrozen && state.phase != CameraUiPhase.CAPTURING
@@ -115,7 +118,7 @@ internal fun rawVideoStatusFacts(state: CameraUiState): RawStatusFacts? {
     if (state.selectedMode != CaptureMode.RAW_VIDEO) return null
     val option = rawVideoActiveOption(state) ?: return null
     return RawStatusFacts(option.label, option.isCrop, rawRateMegabytes(option),
-        rawRecordTimeLeftMs(state.availableStorageBytes, option.capacityBytesPerSecond), option.isBlockPack)
+        rawRecordTimeLeftMs(captureStatusFreeBytes(state), option.capacityBytesPerSecond), option.isBlockPack)
 }
 
 /**
@@ -214,7 +217,7 @@ internal fun RawVideoConfigDial(
     val options = state.rawVideoOptions
     val chosen = rawVideoChosenKey(settings.rawVideoConfig, options)
     val enabled = rawVideoConfigChangeAllowed(state)
-    val free = state.availableStorageBytes
+    val free = captureStatusFreeBytes(state)
     val nearLossless = rawVideoNearLosslessActive(state, settings)
     PanelColumn(Modifier.testTag("raw-video-config-panel")) {
         PanelHeader(stringResource(R.string.raw_video_config_title), onClose)
@@ -266,7 +269,7 @@ internal fun RawVideoSettings(
             val active = rawVideoActiveOption(state)
             val nearLossless = rawVideoNearLosslessActive(state, settings)
             val summary = active?.let { option ->
-                stringResource(R.string.raw_video_settings_active, rawOptionLabel(option, nearLossless), rawOptionDetail(option, state.availableStorageBytes))
+                stringResource(R.string.raw_video_settings_active, rawOptionLabel(option, nearLossless), rawOptionDetail(option, captureStatusFreeBytes(state)))
             }
             SettingsOptionRow(
                 title = title,

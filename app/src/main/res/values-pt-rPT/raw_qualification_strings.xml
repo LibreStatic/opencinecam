@@ -23,6 +23,7 @@
     <string name="raw_qualification_check_battery">Bateria em %1$d%% ou mais</string>
     <string name="raw_qualification_check_battery_fix">Carregue primeiro até pelo menos %1$d%% (agora %2$d%%).</string>
     <string name="raw_qualification_check_battery_ok">%1$d%%</string>
+    <string name="raw_qualification_check_battery_charging">%1$d%% · a carregar</string>
     <string name="raw_qualification_check_battery_warn">%1$d%%. A qualificação pode esgotá-la: ligue o carregador se puder.</string>
     <string name="raw_qualification_check_cool">Temperatura normal</string>
     <string name="raw_qualification_check_cool_fix">Deixe o telemóvel arrefecer primeiro.</string>
@@ -57,6 +58,7 @@
 
     <string name="raw_qualification_reason_battery">Parou porque a bateria ficou abaixo de %1$d%%.</string>
     <string name="raw_qualification_reason_app_left">Parou porque a app passou para segundo plano.</string>
+    <string name="raw_qualification_reason_drive_lost">Parou porque a unidade USB foi desligada.</string>
     <string name="raw_qualification_reason_busy">A câmara estava ocupada com um take.</string>
     <string name="raw_qualification_reason_not_ready">A verificação de bateria ou temperatura não passou.</string>
     <string name="raw_qualification_reason_unsupported">Esta câmara não pode gravar vídeo RAW.</string>
@@ -76,8 +78,12 @@
     <string name="raw_qualification_chip_camera">Sem câmara</string>
     <string name="raw_qualification_chip_warm">Aquece</string>
     <string name="raw_qualification_space_title">Não é possível qualificar tudo com o espaço disponível</string>
-    <string name="raw_qualification_space_body">Serão testadas as configurações que cabem no armazenamento livre do seu telemóvel.</string>
+    <string name="raw_qualification_space_body">Serão testadas as configurações que cabem no espaço livre do armazenamento testado.</string>
     <string name="raw_qualification_space_free">%1$s livres</string>
+    <!-- PLAN-072 Delivery 3: which storage a qualification measures, when a USB drive is configured. -->
+    <string name="raw_qualification_target_drive">A testar a unidade USB %1$s</string>
+    <string name="raw_qualification_target_drive_unnamed">A testar a unidade USB</string>
+    <string name="raw_qualification_target_phone">A testar o armazenamento do telemóvel</string>
     <string name="raw_qualification_space_tested">Serão testadas</string>
     <string name="raw_qualification_space_skipped">Ignoradas por falta de espaço</string>
     <string name="raw_qualification_needs">precisa de %1$s</string>

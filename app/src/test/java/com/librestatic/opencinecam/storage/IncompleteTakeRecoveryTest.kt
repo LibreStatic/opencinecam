@@ -15,12 +15,15 @@ import org.junit.Test
 class IncompleteTakeRecoveryTest {
     private val id = "11111111-2222-3333-4444-555555555555"
 
-    private class Rows : ClipRows<String> {
+    private class Rows(private val sidecarFailure: Throwable? = null, private val failing: String? = null) : ClipRows<String> {
         val events = mutableListOf<String>()
         val written = mutableMapOf<String, String>()
         override fun delete(uri: String) { events += "delete:$uri" }
         override fun publish(uri: String) { events += "publish:$uri" }
-        override fun writeSidecar(uri: String, bytes: ByteArray) { written[uri] = String(bytes); events += "sidecar:$uri" }
+        override fun writeSidecar(uri: String, bytes: ByteArray) {
+            sidecarFailure?.takeIf { failing == null || failing == uri }?.let { throw it }
+            written[uri] = String(bytes); events += "sidecar:$uri"
+        }
     }
 
     private class Arr(private val array: kotlinx.serialization.json.JsonArray) {
@@ -66,6 +69,134 @@ class IncompleteTakeRecoveryTest {
         assertEquals("opencinecam.av-timing.v1", json.getString("schema"))
         assertEquals("incomplete", json.getString("takeStatus"))
         assertEquals(listOf("sidecar:s", "publish:s", "publish:v"), rows.events)
+    }
+
+    @Test fun aSidecarReadThatFailsStopsTheTakeBeforeAnythingIsWritten() {
+        val fake = Rows()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        val failure = java.io.IOException("the drive stopped answering")
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { throw failure })
+        }
+        assertTrue(thrown === failure)
+        assertTrue(fake.events.isEmpty())
+    }
+
+    @Test fun aClipSidecarReadThatFailsStopsTheTakeTooRatherThanPublishingItUnmarked() {
+        val fake = Rows()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 90))
+        val timing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id"}"""
+        val failure = java.io.IOException("the drive stopped answering")
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { if (it == "s") timing else throw failure })
+        }
+        assertTrue(thrown === failure)
+        assertTrue(fake.events.isEmpty())
+    }
+
+    @Test fun aFailedRewriteOfTheTakesOwnSidecarKeepsIt() {
+        val failure = java.io.IOException("the drive was pulled")
+        val fake = Rows(sidecarFailure = failure)
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        val timing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id"}"""
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { timing })
+        }
+        assertTrue(thrown === failure)
+        assertFalse("delete:s" in fake.events)
+        assertFalse("delete:v" in fake.events)
+    }
+
+    private class Backups : RecoveredSidecarBackups {
+        val texts = mutableMapOf<String, String>()
+        override fun read(key: String) = texts[key]
+        override fun write(key: String, text: String) { texts[key] = text }
+        override fun delete(key: String) { texts -= key }
+    }
+
+    @Test fun aRetryAfterARewriteThatTruncatedTheSidecarRecoversFromItsBackup() {
+        val backups = Backups()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        val timing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id","lens":"tele"}"""
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, Rows(sidecarFailure = java.io.IOException("pulled")), { error("no sidecar is created") },
+                { timing }, backups)
+        }
+        assertEquals(mapOf("$id/take.timing.json" to timing), backups.texts)
+
+        // The failed rewrite left the sidecar empty: the retry builds on the backup, not on what the sidecar now holds.
+        val fake = Rows()
+        val published = recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { "" }, backups)
+        assertEquals(1, published)
+        assertEquals("tele", parse(fake.written.getValue("s")).getString("lens"))
+        assertTrue(backups.texts.isEmpty())
+    }
+
+    @Test fun aFailedClipSidecarRewriteStopsTheTakeAndARetryRestoresItFromItsBackup() {
+        val backups = Backups()
+        val clipText = """{"schemaVersion":"1.0.0","recordingId":"$id","lens":"tele","events":[]}"""
+        fun rows(clipBytes: Long) = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", clipBytes))
+        val failed = Rows(sidecarFailure = java.io.IOException("pulled"), failing = "c")
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows(60), failed, { "new:$it" }, { if (it == "c") clipText else null }, backups)
+        }
+        assertEquals(mapOf("$id/take$CLIP_SIDECAR_SUFFIX" to clipText), backups.texts)
+        assertTrue(failed.events.none { it.startsWith("publish:") || it.startsWith("delete:") })
+
+        // The failed rewrite left it empty: the retry marks the copy, and the empty row is published, not deleted.
+        val fake = Rows()
+        val published = recoverIncompleteTake(id, rows(0), fake, { "new:$it" }, { if (it == "c") "" else null }, backups)
+        assertEquals(1, published)
+        val json = parse(fake.written.getValue("c"))
+        assertEquals("incomplete", json.getString("takeStatus"))
+        assertEquals("tele", json.getString("lens"))
+        assertTrue("publish:c" in fake.events && "delete:c" !in fake.events)
+        assertTrue(backups.texts.isEmpty())
+    }
+
+    @Test fun anEmptyClipSidecarWithoutABackupIsStillDeleted() {
+        val fake = Rows()
+        val published = recoverIncompleteTake(id, listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 0)), fake, { "new:$it" }, { null }, Backups())
+        assertEquals(1, published)
+        assertTrue("delete:c" in fake.events && "publish:c" !in fake.events)
+    }
+
+    @Test fun fileBackupsKeepEachTextUntilDeletedOrItsTakeIsDiscarded() {
+        val folder = java.nio.file.Files.createTempDirectory("sidecar-backups").toFile()
+        try {
+            val backups = FileRecoveredSidecarBackups(folder)
+            backups.write("$id/take.timing.json", "{\"a\":1}")
+            backups.write("$id/take.audio.json", "{\"b\":2}")
+            assertEquals("{\"a\":1}", backups.read("$id/take.timing.json"))
+            assertEquals("{\"b\":2}", backups.read("$id/take.audio.json"))
+            assertTrue(folder.listFiles()!!.none { it.name.endsWith(".part") })
+            backups.delete("$id/take.timing.json")
+            assertEquals(null, backups.read("$id/take.timing.json"))
+
+            // Old copies of an unresolved take stay; only discarding the take drops them, and only its own.
+            folder.listFiles()!!.forEach { it.setLastModified(System.currentTimeMillis() - 400L * 24 * 60 * 60 * 1000) }
+            val other = "99999999-2222-3333-4444-555555555555"
+            backups.write("$other/take.timing.json", "{}")
+            assertEquals("{\"b\":2}", backups.read("$id/take.audio.json"))
+            backups.deleteTake(id)
+            assertEquals(null, backups.read("$id/take.audio.json"))
+            assertEquals("{}", backups.read("$other/take.timing.json"))
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test fun aSidecarThatIsNotADocumentIsNotBackedUp() {
+        val backups = Backups()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, Rows(sidecarFailure = java.io.IOException("pulled")), { error("no sidecar is created") },
+                { "{\"trunc" }, backups)
+        }
+        assertTrue(backups.texts.isEmpty())
     }
 
     @Test fun zeroByteMediaAndItsSidecarAreDeletedAndNothingIsPublished() {

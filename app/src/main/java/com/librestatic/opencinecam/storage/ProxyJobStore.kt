@@ -96,21 +96,21 @@ class ProxyJobStore(directory: File) {
             job.error?.let { require(it.length <= 4096 && Charsets.UTF_8.newEncoder().canEncode(it)) }
             ProxySettings(job.settings.maxLongEdge, job.settings.videoBitrateMbps)
             val take = job.take
-            require(take.id == "legacy:${take.primary.uri}" ||
-                (take.id.startsWith("take:") || take.id.startsWith("still:")) && canonicalMediaId(take.id.substringAfter(':')))
+            require(proxyTakeIdBinds(take.id, take.primary.uri) || take.id.startsWith("still:") && canonicalMediaId(take.id.substringAfter(':')))
             require(take.originals.size in 1..32 && take.metadata.size + take.attachments.size <= 4 && take.primary in take.originals)
             val members = take.originals + take.metadata + take.attachments
             require(members.map { it.uri }.distinct().size == members.size)
             for (artifact in members) {
-                require(mediaDeleteIdentity(artifact.uri) != null) { "Invalid persisted MediaStore URI" }
+                require(takeMemberCollection(artifact.uri) != null) { "Invalid persisted MediaStore or drive URI" }
                 require(artifact.sizeBytes >= 0 && artifact.modifiedSeconds >= 0)
                 require(artifact.name.length in 1..255 && artifact.name.none { it.isISOControl() || it == '/' || it == '\\' } &&
                     artifact.name !in setOf(".", "..") && Charsets.UTF_8.newEncoder().canEncode(artifact.name))
                 require(artifact.mimeType.length in 3..128 && artifact.mimeType.matches(Regex("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+")))
             }
-            require(mediaOriginalIdentity(take.primary.uri)?.first == take.kind)
-            require(take.originals.all { mediaOriginalIdentity(it.uri) != null })
-            require((take.metadata + take.attachments).all { mediaDeleteIdentity(it.uri)?.collection == MediaDeleteCollection.METADATA })
+            // A drive take (PLAN-072) holds drive documents throughout; the kinds come from their names.
+            require(takeOriginalKind(take.primary.uri) == take.kind)
+            require(take.originals.all { takeOriginalKind(it.uri) != null })
+            require((take.metadata + take.attachments).all { takeMemberCollection(it.uri) == MediaDeleteCollection.METADATA })
         }
     }
 

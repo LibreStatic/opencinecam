@@ -41,6 +41,7 @@
     <string name="gallery_auto_thumbnails">Load thumbnails automatically</string>
     <string name="gallery_thumbnail_tap">Tap to preview</string>
     <string name="gallery_good_take">Good take</string>
+    <string name="gallery_location_drive_description">On the USB drive</string>
     <string name="gallery_take_number">Take %1$d</string>
     <string name="gallery_slate_scene">Scene %1$s</string>
     <string name="gallery_slate_reel">Reel %1$s</string>

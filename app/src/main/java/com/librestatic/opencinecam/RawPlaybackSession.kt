@@ -23,6 +23,9 @@ import com.librestatic.opencinecam.playback.RawDevelopParams
 import com.librestatic.opencinecam.playback.RawDevelopQuality
 import com.librestatic.opencinecam.playback.RawPlaybackRenderer
 import com.librestatic.opencinecam.playback.RawStaticColour
+import com.librestatic.opencinecam.storage.CloseOnce
+import com.librestatic.opencinecam.storage.DriveDescriptorHandle
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.VideoFrameTimeline
 import java.io.Closeable
@@ -837,11 +840,16 @@ internal fun rawCodecLabel(index: OcrawFrameIndex): String? {
     }
 }
 
-/** [OcrawFrameSource] over a read-only descriptor; closing it closes the source, the channel, then the descriptor. */
+/**
+ * [OcrawFrameSource] over a read-only descriptor; closing it closes the source, the channel, then the descriptor. For a
+ * take on the USB drive both are registered with [DriveDescriptors], so a drive that leaves has them closed (ADR-0037)
+ * and the next read fails.
+ */
 internal class OcrawFileFrameProvider private constructor(
-    private val descriptor: ParcelFileDescriptor,
     private val channel: FileChannel,
     private val source: OcrawFrameSource,
+    private val files: CloseOnce,
+    private val driveHandle: DriveDescriptorHandle,
 ) : RawFrameProvider {
     // Its own reader: audio reads share the loop thread with frame reads, never a read position.
     private val audioReader by lazy { OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES) }
@@ -851,19 +859,25 @@ internal class OcrawFileFrameProvider private constructor(
     override fun release(slot: RawFrameSlot) = source.release(slot.handle as OcrawFrameSource.Slot)
     override fun read(frameIndex: Int, slot: RawFrameSlot): OcrawFrameRead = source.read(frameIndex, slot.handle as OcrawFrameSource.Slot)
     override fun close() {
-        try { source.close() } finally { try { channel.close() } finally { descriptor.close() } }
+        driveHandle.unregister()
+        try { source.close() } finally { files.close() }
     }
 
     companion object {
         fun open(resolver: ContentResolver, uri: Uri): OcrawFileFrameProvider {
+            val mark = DriveDescriptors.releaseMark(uri)
             val descriptor = requireNotNull(resolver.openFileDescriptor(uri, "r")) { "RAW take could not be opened" }
             try {
                 // The stream owns a duplicate, so the channel and the descriptor close independently.
                 val channel = ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel
+                // Registered before the index walk, which reads the whole take's chunk headers.
+                val files = CloseOnce(channel, descriptor)
+                // A drive released since the mark has it closed at once, so the index walk fails as after a pull.
+                val driveHandle = DriveDescriptors.registerDocument(uri, files, openedAfter = mark)
                 try {
                     val index = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames()
-                    return OcrawFileFrameProvider(descriptor, channel, OcrawFrameSource(channel, index))
-                } catch (failure: Throwable) { channel.close(); throw failure }
+                    return OcrawFileFrameProvider(channel, OcrawFrameSource(channel, index), files, driveHandle)
+                } catch (failure: Throwable) { driveHandle.unregister(); files.close(); throw failure }
             } catch (failure: Throwable) { descriptor.close(); throw failure }
         }
     }
