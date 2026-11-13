@@ -727,7 +727,8 @@ internal class SafRecordingRows(
         override fun delete(uri: Uri) = this@SafRecordingRows.delete(uri)
         override fun publish(uri: Uri) { check(docs.describe(uri) != null) { "Recording output disappeared before publication" } }
         override fun writeSidecar(uri: Uri, bytes: ByteArray) {
-            (resolver.openOutputStream(uri, "wt") ?: error("Clip sidecar could not be opened.")).use { it.write(bytes) }
+            // Held for the drive's volume monitor, as the reader is: a write blocked by a pull is closed, not waited on.
+            (resolver.openOutputStream(uri, "wt") ?: error("Clip sidecar could not be opened.")).useOnDrive(uri) { it.write(bytes) }
         }
     }
 

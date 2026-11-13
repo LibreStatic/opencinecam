@@ -343,6 +343,14 @@ class RecordingDestinationWiringTest {
         assertNull(refusing.readFresh(drive, 5_000L))
     }
 
+    @Test fun anAdmissionSampleTakenAcrossAVolumeChangeIsDropped() {
+        lateinit var cache: DriveFreeSpaceCache
+        // The volume leaves and mounts again while the admission's sample runs: that sample may be the drive before.
+        cache = DriveFreeSpaceCache({ it.run() }) { cache.invalidate(drive.volumeId); 700L }
+        assertNull(cache.readFresh(drive, 5_000L))
+        assertNull(cache.read(drive))
+    }
+
     @Test fun aDriveFreeSpaceSampleBelongsToItsDriveAndIsForgottenWhenItsVolumeChanges() {
         val queued = ArrayDeque<Runnable>()
         val other = RecordingDestination.UsbFolder(Uri.parse("content://$EXTERNAL_STORAGE_AUTHORITY/tree/0A1B-2C3D%3ARAW"), "0A1B-2C3D")

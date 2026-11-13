@@ -69,9 +69,14 @@ internal class DriveFreeSpaceCache(
     /**
      * A sample of [drive] taken now on [executor] for a take's admission on main, waited for [timeoutMs] at most: a drive
      * that stalls reads as unread (null) instead of holding main, and so does a busy executor (both threads stuck on a
-     * failing drive). A sample that comes in time is kept, as [store] keeps one; a late one is dropped.
+     * failing drive). A sample that comes in time is kept, as [store] keeps one; a late one is dropped, and so is one
+     * the volume left or mounted under (an [invalidate] or a newer sample meanwhile): it could be the drive before.
      */
     fun readFresh(drive: RecordingDestination.UsbFolder, timeoutMs: Long): Long? {
+        val started = synchronized(this) {
+            if (drive != this.drive) forget(drive)
+            generation
+        }
         val task = java.util.concurrent.FutureTask { sample(drive) }
         try {
             executor.execute(task)
@@ -89,7 +94,10 @@ internal class DriveFreeSpaceCache(
             Thread.currentThread().interrupt()
             return null
         }
-        store(drive, sampled)
+        synchronized(this) {
+            if (generation != started) return null
+            store(drive, sampled)
+        }
         return sampled
     }
 
