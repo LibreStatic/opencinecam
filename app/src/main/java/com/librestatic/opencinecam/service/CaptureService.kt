@@ -737,6 +737,12 @@ class CaptureService : Service() {
     @Volatile private var driveLostAtTakeStart = false
 
     /**
+     * Main: the volume events emitted before the running take's destination was resolved. A queued Leaving among them is
+     * about a mount the take did not see: the drive mounted again before the take resolved it, so it does not stop the take.
+     */
+    private var takeVolumeEvents = 0L
+
+    /**
      * Main, once an encoded take records: its drive left during the start window (or the event was missed), so it is
      * stopped now through the drive stop path. False when nothing was due.
      */
@@ -768,7 +774,10 @@ class CaptureService : Service() {
 
     /** Resolves the destination for a take or still starting now (one preferences read and one permission IPC); any thread. */
     private fun resolveTakeDestination(): ResolvedRecordingDestination =
-        runCatching { RecordingDestinationStore(this).current(mountedRecordingVolumes(), driveArriving()) }
+        runCatching {
+            val (events, mounted) = recordingVolumeMonitor?.snapshot() ?: (0L to emptySet())
+            RecordingDestinationStore(this).current(mounted, driveArriving()).copy(volumeEvents = events)
+        }
             .onFailure { android.util.Log.e("RecordingDestination", "Destination unreadable; the take goes to the phone", it) }
             .getOrDefault(ResolvedRecordingDestination(RecordingDestination.Phone, RecordingDestination.Phone, null))
 
@@ -835,6 +844,7 @@ class CaptureService : Service() {
     /** Main: the take starting now writes to [resolved] until it ends; the HUD describes it, and says when it is a [continuation]. */
     private fun holdTakeDestination(resolved: ResolvedRecordingDestination, continuation: ContinuationRequest? = null) {
         takeDestination = resolved
+        takeVolumeEvents = resolved.volumeEvents
         nextTakeDestination = resolved
         takeContinuation = continuation
         driveLostAtTakeStart = false
@@ -946,7 +956,7 @@ class CaptureService : Service() {
                 if (rawQualificationSession != null && rawGateDestinationId == RawVideoQualificationStore.destinationIdForDrive(event.volumeId)) {
                     localBinder.cancelRawVideoQualification(RawQualificationStopReasons.DRIVE_LOST)
                 }
-                if (driveLeavingStopsTake(takeDestination?.destination, event.volumeId)) {
+                if (driveLeavingStopsTake(takeDestination?.destination, event.volumeId, event.emission, takeVolumeEvents)) {
                     // An encoded take still starting cannot be stopped yet: it is stopped for its drive once it records.
                     if (rawTake == null && cameraState.value.phase == CameraUiPhase.CAPTURING) driveLostAtTakeStart = true
                     else stopTakeForLostDrive(writeFailed = false)
@@ -2595,7 +2605,8 @@ class CaptureService : Service() {
         val continuation = continuationStarting?.takeIf { it.mode == CaptureMode.RAW_VIDEO }
         val destination = resolveTakeDestination().let { if (continuation != null) continuationDestination(it) else it }
         destination.fallback?.let { android.util.Log.w("RecordingDestination", "RAW take falls back to the phone: $it") }
-        val destinationChanged = destination != nextTakeDestination
+        // The volume event count is not part of where the take goes.
+        val destinationChanged = destination.copy(volumeEvents = 0) != nextTakeDestination.copy(volumeEvents = 0)
         if (destinationChanged) nextTakeDestination = destination
         // A gate computed before the drive take armed its continuation may hold another selection: the same recompute.
         val staleSelection = continuation != null && cameraState.value.rawVideoSelectedKey != continuation.rawConfigKey

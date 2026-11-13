@@ -31,9 +31,11 @@ internal sealed interface RecordingVolumeEvent {
     data class Mounted(override val volumeId: String) : RecordingVolumeEvent
     /**
      * [registeredBy] is the [DriveDescriptors.registrationMark] when the event was emitted: a descriptor registered
-     * later may be on a newer mount of the volume, so a release for this event spares it.
+     * later may be on a newer mount of the volume, so a release for this event spares it. [emission] counts the monitor's
+     * events up to this one ([RecordingVolumeMonitor.snapshot]): a take whose destination was resolved from a later
+     * snapshot is on a newer mount, and this event is not about it.
      */
-    data class Leaving(override val volumeId: String, val registeredBy: Long = Long.MAX_VALUE) : RecordingVolumeEvent
+    data class Leaving(override val volumeId: String, val registeredBy: Long = Long.MAX_VALUE, val emission: Long = 0) : RecordingVolumeEvent
 }
 
 internal enum class VolumeStateKind { MOUNTED, LEAVING, IGNORE }
@@ -105,8 +107,13 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     private var reported = 0L
     /** The value of [reported] at each volume's (upper case) last report, under [tracker]'s lock; see [rescanChanges]. */
     private val lastReported = HashMap<String, Long>()
+    /** Counts the events emitted, under [tracker]'s lock; see [RecordingVolumeEvent.Leaving.emission]. */
+    private var emitted = 0L
 
     val mounted: StateFlow<Set<String>> = mountedState.asStateFlow()
+
+    /** The events emitted so far and the volumes mounted after them, read together. */
+    fun snapshot(): Pair<Long, Set<String>> = synchronized(tracker) { emitted to tracker.mountedVolumes }
     val events: SharedFlow<RecordingVolumeEvent> = eventFlow.asSharedFlow()
 
     init {
@@ -132,7 +139,9 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         tracker.apply(volumeId, kind)?.let { event ->
             mountedState.value = tracker.mountedVolumes
             // Taken under the lock that orders the reports: a remount is reported, and so emitted, only after this.
-            eventFlow.tryEmit(if (event is RecordingVolumeEvent.Leaving) event.copy(registeredBy = DriveDescriptors.registrationMark()) else event)
+            emitted++
+            eventFlow.tryEmit(if (event is RecordingVolumeEvent.Leaving) event.copy(registeredBy = DriveDescriptors.registrationMark(),
+                emission = emitted) else event)
         }
     }
 

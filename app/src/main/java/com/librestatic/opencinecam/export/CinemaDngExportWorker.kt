@@ -58,6 +58,16 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     @Volatile internal var workerRunning = false
 
     /**
+     * Under [admission]: a worker took the export over and has not finished its cleanup. WorkManager marks cancelled work
+     * finished while its code still runs, so [start] checks this too: a new worker admitted meanwhile would have its
+     * [workerRunning] cleared by the old one's cleanup.
+     */
+    private var workerAlive = false
+
+    /** The worker's last step, after its cleanup: a new export may be admitted again. */
+    internal fun workerExited() = synchronized(admission) { workerAlive = false }
+
+    /**
      * True while a take records: an encoded take holds the transfer runtime's capture reservation, and
      * a RAW take, which takes no reservation, keeps its `.ocraw` row live. An export never starts or
      * continues then, so it never competes with a take for storage bandwidth.
@@ -152,7 +162,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             // Under the lock, so a start racing this one sees its work queued: a worker that finished before WorkManager
             // marked it done would otherwise let a second start through, whose request KEEP then drops. The query may
             // take two seconds; start runs off main, and the worker's takeOver waits for it no longer than that.
-            if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
+            if (workerAlive || store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
             if (!store.begin(request.takeUri, request.takeName)) return false
             appContext = app
             val token = java.util.UUID.randomUUID().toString()
@@ -205,6 +215,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             if (token != current || running == null || running.cancelling) return@synchronized false
         }
         workerRunning = true
+        workerAlive = true
         true
     }
 
@@ -289,6 +300,7 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             runtime.workerRunning = false
             // finish ended the lease while the worker still ran, which keeps the folders left meanwhile: they go now.
             runCatching { if (leased) runtime.endLease(applicationContext) else runtime.releaseLeftFolders(applicationContext) }
+            runtime.workerExited()
         }
     }
 

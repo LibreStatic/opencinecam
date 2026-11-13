@@ -351,6 +351,9 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
     private var generation = 0L
     /** Counts the listings started: of two running at once, only the one started last is kept. */
     private var listings = 0L
+    /** Counts the take loads started, and the latest started for each take key: of two at once, the one started last is kept. */
+    private var loads = 0L
+    private val latestLoads = HashMap<String, Long>()
     private val takes = object : LinkedHashMap<String, DriveCatalogTake>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, DriveCatalogTake>?): Boolean = size > takeCapacity
     }
@@ -370,11 +373,18 @@ internal class DriveCatalogCache(private val takeCapacity: Int = 512) {
 
     fun take(stamp: String, folder: DriveFolder, load: () -> DriveCatalogTake?): DriveCatalogTake? {
         val key = "${folder.documentId}|${folder.position.modifiedMillis}"
-        val started = synchronized(this) {
+        val (started, loading) = synchronized(this) {
             if (stamp == this.stamp) takes[key]?.let { return it }
-            generation
+            generation to (++loads).also { latestLoads[key] = it }
         }
-        return load()?.also { found -> synchronized(this) { if (stamp == this.stamp && started == generation) takes[key] = found } }
+        val found = runCatching(load)
+        synchronized(this) {
+            val latest = latestLoads[key] == loading
+            if (latest) latestLoads.remove(key)
+            // An older load may have read the folder before a member was rewritten in place, and finished after a newer one.
+            found.getOrNull()?.let { if (latest && stamp == this.stamp && started == generation) takes[key] = it }
+        }
+        return found.getOrThrow()
     }
 
     @Synchronized fun invalidate() { stamp = null; folders = null; takes.clear(); generation++ }

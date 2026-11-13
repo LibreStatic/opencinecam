@@ -16,6 +16,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -199,6 +200,21 @@ class DriveMediaSafTest {
         assertEquals(2, loads)
         cache.take("drive", folder) { loads++; read }
         assertEquals(2, loads)
+    }
+
+    @Test fun anOlderTakeLoadDoesNotReplaceANewerOneThatFinishedFirst() {
+        recording("A001", 3_000_000)
+        val stale = requireNotNull(catalog().entries(refresh = true).single().load())
+        val fresh = requireNotNull(catalog().entries(refresh = true).single().load())
+        val cache = DriveCatalogCache()
+        cache.folders("drive", refresh = false) { emptyList() }
+        val folder = DriveFolder(Uri.parse("content://drive/a"), "A", recording = true, position = DrivePosition(1L, "A"))
+        // A second load of the same take starts and finishes while the first is still reading.
+        assertSame(stale, cache.take("drive", folder) {
+            assertSame(fresh, cache.take("drive", folder) { fresh })
+            stale
+        })
+        assertSame(fresh, cache.take("drive", folder) { error("The newer load is kept") })
     }
 
     @Test fun aListingStartedBeforeAnInvalidationDoesNotReplaceALaterOne() {

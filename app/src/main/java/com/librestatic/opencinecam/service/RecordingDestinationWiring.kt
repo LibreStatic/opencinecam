@@ -139,9 +139,15 @@ internal fun rawQualificationTarget(resolved: ResolvedRecordingDestination, driv
     else -> RawQualificationTarget(drive = false)
 }
 
-/** A volume leaving ends only a running take on that same drive; a phone take, or one on another drive, carries on. */
-internal fun driveLeavingStopsTake(takeDestination: RecordingDestination?, leavingVolumeId: String): Boolean =
-    takeDestination is RecordingDestination.UsbFolder && takeDestination.volumeId.equals(leavingVolumeId, ignoreCase = true)
+/**
+ * A volume leaving ends only a running take on that same drive; a phone take, or one on another drive, carries on. A
+ * Leaving emitted ([emission]) before the take's destination was resolved ([takeVolumeEvents] events emitted then) is
+ * about an older mount: the drive mounted again before the take saw it, so the take carries on too.
+ */
+internal fun driveLeavingStopsTake(takeDestination: RecordingDestination?, leavingVolumeId: String,
+    emission: Long = Long.MAX_VALUE, takeVolumeEvents: Long = 0): Boolean =
+    takeDestination is RecordingDestination.UsbFolder && takeDestination.volumeId.equals(leavingVolumeId, ignoreCase = true) &&
+        emission > takeVolumeEvents
 
 /**
  * PLAN-072: an encoded take that now records must be stopped for its lost drive: its drive left while it was still

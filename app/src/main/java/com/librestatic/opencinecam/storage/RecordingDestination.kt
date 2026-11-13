@@ -54,12 +54,14 @@ private val STABLE_NAME_SUFFIX = Regex("-[0-9]{2}$")
 
 /**
  * [destination] is what a take must use now ([RecordingDestination.Phone] when falling back),
- * [configured] what the operator chose, [fallback] why they differ (null when they do not).
+ * [configured] what the operator chose, [fallback] why they differ (null when they do not). [volumeEvents] is the count of
+ * volume events emitted when the mounted volumes it was resolved from were read ([RecordingVolumeMonitor.snapshot]).
  */
 internal data class ResolvedRecordingDestination(
     val destination: RecordingDestination,
     val configured: RecordingDestination,
     val fallback: DestinationFallback?,
+    val volumeEvents: Long = 0,
 )
 
 /**

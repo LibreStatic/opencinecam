@@ -15,12 +15,15 @@ import org.junit.Test
 class IncompleteTakeRecoveryTest {
     private val id = "11111111-2222-3333-4444-555555555555"
 
-    private class Rows : ClipRows<String> {
+    private class Rows(private val sidecarFailure: Throwable? = null) : ClipRows<String> {
         val events = mutableListOf<String>()
         val written = mutableMapOf<String, String>()
         override fun delete(uri: String) { events += "delete:$uri" }
         override fun publish(uri: String) { events += "publish:$uri" }
-        override fun writeSidecar(uri: String, bytes: ByteArray) { written[uri] = String(bytes); events += "sidecar:$uri" }
+        override fun writeSidecar(uri: String, bytes: ByteArray) {
+            sidecarFailure?.let { throw it }
+            written[uri] = String(bytes); events += "sidecar:$uri"
+        }
     }
 
     private class Arr(private val array: kotlinx.serialization.json.JsonArray) {
@@ -90,6 +93,19 @@ class IncompleteTakeRecoveryTest {
         }
         assertTrue(thrown === failure)
         assertTrue(fake.events.isEmpty())
+    }
+
+    @Test fun aFailedRewriteOfTheTakesOwnSidecarKeepsIt() {
+        val failure = java.io.IOException("the drive was pulled")
+        val fake = Rows(sidecarFailure = failure)
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90))
+        val timing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id"}"""
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { timing })
+        }
+        assertTrue(thrown === failure)
+        assertFalse("delete:s" in fake.events)
+        assertFalse("delete:v" in fake.events)
     }
 
     @Test fun zeroByteMediaAndItsSidecarAreDeletedAndNothingIsPublished() {

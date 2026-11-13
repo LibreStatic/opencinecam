@@ -70,6 +70,8 @@ internal fun <U> recoverIncompleteTake(
             clipRows, clip.handle, sidecar, muxerFinalized = false, bytesWritten = bytes,
             sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText).toByteArray() },
             correlationId = bundleId, attachments = if (keep) publishable else attachments.map { it.handle },
+            // The take's own sidecar is rewritten in place: a failed rewrite keeps it for the retry.
+            keepSidecarOnFailure = existing != null,
         )
         when (result) {
             is ClipFinalizationResult.Published -> published++

@@ -79,6 +79,10 @@ class RecordingDestinationWiringTest {
         assertFalse(driveLeavingStopsTake(drive, "AAAA-0001"))
         assertFalse(driveLeavingStopsTake(phone, "FFF1-7571"))
         assertFalse(driveLeavingStopsTake(null, "FFF1-7571"))
+        // A Leaving emitted before the take resolved its drive (5 events then) is about an older mount.
+        assertFalse(driveLeavingStopsTake(drive, "FFF1-7571", emission = 5, takeVolumeEvents = 5))
+        assertFalse(driveLeavingStopsTake(drive, "FFF1-7571", emission = 3, takeVolumeEvents = 5))
+        assertTrue(driveLeavingStopsTake(drive, "FFF1-7571", emission = 6, takeVolumeEvents = 5))
     }
 
     @Test fun aTakeWhoseDriveLeftWhileStartingIsStoppedOnceItRecords() {

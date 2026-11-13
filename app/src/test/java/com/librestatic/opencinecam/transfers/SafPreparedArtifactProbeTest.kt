@@ -116,7 +116,8 @@ class SafPreparedArtifactProbeTest {
         assertEquals(0, DriveDescriptors.registered(alias))
         // With the other name not mounted, the enrolled location is all there is: a drive that is not there.
         val unaliased = WebDavMediaStoreArtifactSource(context.contentResolver) { false }.source(spec)
-        assertTrue(runCatching { unaliased.snapshot() }.exceptionOrNull().let { it is WebDavSourceDriveAbsent || it is FileNotFoundException })
+        val gone = runCatching { unaliased.snapshot() }.exceptionOrNull()
+        assertTrue(gone.toString(), gone is WebDavSourceDriveAbsent)
     }
 
     @Test fun aSharedFileIsRegisteredWhileOpenAndClosedWhenTheDriveLeaves() {
