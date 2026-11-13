@@ -341,7 +341,8 @@ internal class StillCaptureRecovery(context: Context,
         if (receipt.folder != null && store.folderExists() && !store.markerExists()) {
             // The marker read as missing, which a drive that vanished meanwhile or a provider that gave no answer also
             // reads as: only the folder's own listing without it confirms the commit.
-            check(store.listsNoMarker()) { "Still group marker state is unconfirmed" }
+            // A drive that left during the listing can give an empty one: the folder must still answer after it.
+            check(store.listsNoMarker() && store.reachable() && store.folderExists()) { "Still group marker state is unconfirmed" }
             forgetClaimed(receipt.id)
             return DriveRecovery.COMMITTED
         }

@@ -95,6 +95,11 @@ internal interface CinemaDngExportEnvironment {
      * folder-grant lock and may release the previous folder, which reads the recovery journals and the outbox.
      */
     suspend fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder?
+    /**
+     * [folder] with the label its provider gives. Apart from [adoptFolder], whose short label is the tree's own name: a
+     * provider that does not answer must not hold the dialog in its non-dismissible adoption.
+     */
+    suspend fun labelled(folder: CinemaDngDestinationChoice.Folder): CinemaDngDestinationChoice.Folder = folder
     fun start(request: CinemaDngExportRequest): Boolean
 }
 
@@ -149,6 +154,9 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
 
     override suspend fun adoptFolder(tree: Uri): CinemaDngDestinationChoice.Folder? = withContext(Dispatchers.IO) { adopt(tree) }
 
+    override suspend fun labelled(adopted: CinemaDngDestinationChoice.Folder): CinemaDngDestinationChoice.Folder =
+        withContext(Dispatchers.IO) { folder(adopted.uri.toUri()) }
+
     private fun adopt(tree: Uri): CinemaDngDestinationChoice.Folder? = runCatching {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         val recording = RecordingDestinationStore(context)
@@ -160,13 +168,16 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
             // An export queued or running may still write to the previous folder: its permission goes once none does.
             if (previous != null && previous != tree.toString()) CinemaDngExportRuntime.leaveFolder(context, previous)
         }
-        folder(tree)
+        CinemaDngDestinationChoice.Folder(tree.toString(), treeLabel(tree))
     }.onFailure { Log.w("CinemaDngExport", "The folder permission could not be kept", it) }.getOrNull()
 
     override fun start(request: CinemaDngExportRequest) = CinemaDngExportRuntime.start(context, request)
 
     private fun folder(tree: Uri) = CinemaDngDestinationChoice.Folder(tree.toString(),
-        safFolderLabel(context.contentResolver, tree) ?: tree.lastPathSegment?.substringAfterLast(':').orEmpty())
+        safFolderLabel(context.contentResolver, tree) ?: treeLabel(tree))
+
+    /** The tree's own name, read from its URI without asking the provider. */
+    private fun treeLabel(tree: Uri) = tree.lastPathSegment?.substringAfterLast(':').orEmpty()
 
     private companion object {
         const val KEY_TREE = CINEMADNG_EXPORT_TREE_KEY
@@ -218,12 +229,21 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     LaunchedEffect(take) { plan = environment.plan(take); loading = false }
     // A refusal answers the export state it met: once that state moves on (the other export ended), it no longer holds.
     LaunchedEffect(exports) { refused = false }
-    LaunchedEffect(choice) { free = null; free = environment.freeBytes(choice) }
+    // Keyed by the folder, not its label: the label that arrives after an adoption reads no space again.
+    LaunchedEffect((choice as? CinemaDngDestinationChoice.Folder)?.uri ?: choice) { free = null; free = environment.freeBytes(choice) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if (tree != null) {
             adopting = true
             scope.launch {
-                try { environment.adoptFolder(tree)?.let { folder = it; choice = it } } finally { adopting = false }
+                val adopted = try { environment.adoptFolder(tree)?.also { folder = it; choice = it } } finally { adopting = false }
+                // The provider's label once the dialog can be dismissed again; only while that folder is still the one shown.
+                if (adopted != null) {
+                    val labelled = environment.labelled(adopted)
+                    if (labelled != adopted && folder == adopted) {
+                        folder = labelled
+                        if (choice == adopted) choice = labelled
+                    }
+                }
             }
         }
     }

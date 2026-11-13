@@ -108,8 +108,11 @@ internal class WebDavMediaStoreArtifactSource(
                     private fun <T> held(read: () -> T): T {
                         check(!closed)
                         requireHeld()
-                        return try { reading(uri, read) } catch (failure: IOException) {
-                            if (closer.closed && failure !is WebDavSourceDriveAbsent) throw WebDavSourceDriveAbsent(failure) else throw failure
+                        // A descriptor DriveDescriptors closed is the drive leaving already: the provider is asked only
+                        // when that is not known, so a drive that stalls cannot hold the hash on that question.
+                        return try { read() } catch (failure: IOException) {
+                            if (closer.closed && failure !is WebDavSourceDriveAbsent) throw WebDavSourceDriveAbsent(failure)
+                            reading(uri) { throw failure }
                         }
                     }
                     override fun read(): Int = held { input.read() }
