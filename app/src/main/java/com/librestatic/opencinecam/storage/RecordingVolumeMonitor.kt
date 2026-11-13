@@ -172,10 +172,14 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
      */
     private fun rescan() {
         val started = synchronized(tracker) { reported }
+        // Only descriptors registered before the read are on the mount it saw gone: the listener may report the volume
+        // mounted again meanwhile, and one opened on that mount must stay open.
+        val registeredBy = DriveDescriptors.registrationMark()
         val volumes = removableVolumes() ?: return
         val changes = synchronized(tracker) { rescanChanges(volumes, tracker.mountedVolumes, lastReported, started) }
         // As in report(): the descriptors close before the event is emitted, and outside the lock.
-        changes.filter { it.second == VolumeStateKind.LEAVING }.forEach { (id, _) -> releaseDriveDescriptors(id, "the drive is leaving") }
+        changes.filter { it.second == VolumeStateKind.LEAVING }
+            .forEach { (id, _) -> releaseDriveDescriptors(id, "the drive is leaving", registeredBy) }
         synchronized(tracker) {
             // A report that came in meanwhile is newer than this read, and stands.
             changes.filter { (id, _) -> (lastReported[id] ?: Long.MIN_VALUE) <= started }.forEach { (id, kind) -> publish(id, kind) }

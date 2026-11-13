@@ -62,6 +62,22 @@ class DriveDescriptorsTest {
         assertEquals(1, descriptor.closes)
     }
 
+    @Test fun aReleaseBoundedByAMarkSparesTheDescriptorsRegisteredAfterIt() {
+        val before = Counting()
+        DriveDescriptors.register(volume, before)
+        val mark = DriveDescriptors.registrationMark()
+        // Opened on a newer mount of the same volume while a rescan was reading the volumes.
+        val after = Counting()
+        DriveDescriptors.register(volume, after)
+
+        assertEquals(1, DriveDescriptors.releaseVolume(volume, registeredBy = mark))
+        assertEquals(1, before.closes)
+        assertEquals(0, after.closes)
+        assertEquals(1, DriveDescriptors.registered(volume))
+        assertEquals(1, DriveDescriptors.releaseVolume(volume))
+        assertEquals(1, after.closes)
+    }
+
     @Test fun otherVolumesAreUntouched() {
         val leaving = Counting()
         val staying = Counting()

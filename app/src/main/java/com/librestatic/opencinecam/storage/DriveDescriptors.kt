@@ -23,18 +23,24 @@ import android.util.Log
 internal object DriveDescriptors {
     private const val LOG_TAG = "RecordingDestination"
 
-    private class Entry(val volumeId: String, val closeable: AutoCloseable)
+    private class Entry(val volumeId: String, val closeable: AutoCloseable, val sequence: Long)
 
     private val entries = ArrayList<Entry>()
     @Volatile private var size = 0
+    /** Counts the registrations, under [entries]'s lock; an entry keeps its count as [Entry.sequence]. */
+    private var registrations = 0L
+
+    /** The count of registrations so far: a release bounded by it ([releaseVolume]) spares every later one. */
+    fun registrationMark(): Long = synchronized(entries) { registrations }
 
     /** Registers [closeable] as holding a descriptor on [volumeId] (matched ignoring case) until its handle unregisters it. */
     fun register(volumeId: String, closeable: AutoCloseable): DriveDescriptorHandle {
-        val entry = Entry(volumeId.uppercase(), closeable)
         DriveDescriptorWatch.ensure()
-        synchronized(entries) {
-            entries += entry
-            size = entries.size
+        val entry = synchronized(entries) {
+            Entry(volumeId.uppercase(), closeable, ++registrations).also {
+                entries += it
+                size = entries.size
+            }
         }
         return DriveDescriptorHandle(entry)
     }
@@ -48,15 +54,16 @@ internal object DriveDescriptors {
 
     /**
      * Closes every closeable registered for [volumeId] (matched ignoring case) and forgets them. A close that fails is
-     * logged and does not stop the others. Returns how many were closed. Safe from any thread.
+     * logged and does not stop the others. Returns how many were closed. Safe from any thread. With [registeredBy] (a
+     * [registrationMark]), only those registered up to it: one registered later may hold a newer mount of the volume.
      */
-    fun releaseVolume(volumeId: String): Int {
+    fun releaseVolume(volumeId: String, registeredBy: Long = Long.MAX_VALUE): Int {
         if (size == 0) return 0
         val volume = volumeId.uppercase()
         val released = synchronized(entries) {
-            val matching = entries.filter { it.volumeId == volume }
+            val matching = entries.filter { it.volumeId == volume && it.sequence <= registeredBy }
             if (matching.isNotEmpty()) {
-                entries.removeAll { it.volumeId == volume }
+                entries.removeAll { it.volumeId == volume && it.sequence <= registeredBy }
                 size = entries.size
             }
             matching
@@ -153,8 +160,8 @@ internal inline fun <S : AutoCloseable, T> S.useOnDrive(document: Uri, block: (S
  * Releases the descriptors on [volumeId] and logs how many were closed, with [cause]. Called on the earliest signal that
  * the drive is leaving or failing: the volume monitor's callback, a drive write failure.
  */
-internal fun releaseDriveDescriptors(volumeId: String, cause: String): Int {
-    val closed = DriveDescriptors.releaseVolume(volumeId)
+internal fun releaseDriveDescriptors(volumeId: String, cause: String, registeredBy: Long = Long.MAX_VALUE): Int {
+    val closed = DriveDescriptors.releaseVolume(volumeId, registeredBy)
     if (closed > 0) Log.w("RecordingDestination", "Closed $closed descriptor(s) on the drive $volumeId: $cause")
     return closed
 }

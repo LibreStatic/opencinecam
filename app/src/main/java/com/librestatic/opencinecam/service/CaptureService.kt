@@ -1139,7 +1139,17 @@ class CaptureService : Service() {
                 com.librestatic.opencinecam.storage.RawQualificationDriveScratch(contentResolver, configured.treeUri).purgeOrphans()
             }
         }.onFailure { android.util.Log.w("RawVideoQualifier", "Qualification scratch on $volumeId not purged", it) }
-        if (requests.any { it.publishReport }) mainHandler.post { if (!serviceDestroyed) cameraState.update { it.copy(stillRecovery = report) } }
+        // Every pass is published, so a mount pass that resolves a group the startup report left unresolved clears it: the
+        // startup pass replaces the report, a later one replaces its pending counts and adds its discards to those shown.
+        val startup = requests.any { it.publishReport }
+        mainHandler.post { if (!serviceDestroyed) cameraState.update { state ->
+            val shown = state.stillRecovery
+            when {
+                startup -> state.copy(stillRecovery = report)
+                shown == null && report == com.librestatic.opencinecam.storage.StillRecoveryReport() -> state
+                else -> state.copy(stillRecovery = report.copy(discardedGroups = (shown?.discardedGroups ?: 0) + report.discardedGroups))
+            }
+        } }
     }
 
     /**
