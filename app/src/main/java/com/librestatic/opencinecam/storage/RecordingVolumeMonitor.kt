@@ -134,14 +134,16 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
         }
     }
 
-    /** Under [tracker]'s lock. */
-    private fun publish(volumeId: String, kind: VolumeStateKind) {
+    /**
+     * Under [tracker]'s lock. A Leaving event carries [registeredBy]: the mark its own release used ([rescan]), or, from
+     * the listener, the registrations so far (its release closed everything registered before it).
+     */
+    private fun publish(volumeId: String, kind: VolumeStateKind, registeredBy: Long = DriveDescriptors.registrationMark()) {
         tracker.apply(volumeId, kind)?.let { event ->
             mountedState.value = tracker.mountedVolumes
             // Taken under the lock that orders the reports: a remount is reported, and so emitted, only after this.
             emitted++
-            eventFlow.tryEmit(if (event is RecordingVolumeEvent.Leaving) event.copy(registeredBy = DriveDescriptors.registrationMark(),
-                emission = emitted) else event)
+            eventFlow.tryEmit(if (event is RecordingVolumeEvent.Leaving) event.copy(registeredBy = registeredBy, emission = emitted) else event)
         }
     }
 
@@ -196,7 +198,7 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
             .forEach { (id, _) -> releaseDriveDescriptors(id, "the drive is leaving", registeredBy) }
         synchronized(tracker) {
             // A report that came in meanwhile is newer than this read, and stands.
-            changes.filter { (id, _) -> (lastReported[id] ?: Long.MIN_VALUE) <= started }.forEach { (id, kind) -> publish(id, kind) }
+            changes.filter { (id, _) -> (lastReported[id] ?: Long.MIN_VALUE) <= started }.forEach { (id, kind) -> publish(id, kind, registeredBy) }
         }
     }
 

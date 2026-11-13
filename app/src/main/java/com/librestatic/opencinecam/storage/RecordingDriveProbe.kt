@@ -108,8 +108,9 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
 
         override fun open(): DriveProbeFile {
             val uri = checkNotNull(document)
+            val mark = DriveDescriptors.releaseMark(uri)
             val descriptor = resolver.openFileDescriptor(uri, "rw") ?: throw IOException("the probe file could not be opened")
-            return DescriptorProbeFile(uri, descriptor)
+            return DescriptorProbeFile(uri, descriptor, mark)
         }
 
         override fun delete() {
@@ -118,9 +119,10 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
     }
 
     /** ADR-0037: registered with [DriveDescriptors] while open, so a drive pulled mid-probe has the descriptor closed. */
-    private class DescriptorProbeFile(uri: Uri, private val descriptor: ParcelFileDescriptor) : DriveProbeFile {
+    private class DescriptorProbeFile(uri: Uri, private val descriptor: ParcelFileDescriptor, releaseMark: Long) : DriveProbeFile {
         private val closer = CloseOnce(descriptor)
-        private val driveHandle = DriveDescriptors.registerDocument(uri, closer)
+        // Opened across a release of the drive: closed at once, so the probe's first write fails as on a pulled drive.
+        private val driveHandle = DriveDescriptors.registerDocument(uri, closer, openedAfter = releaseMark)
 
         override fun writeAndReadBack(bytes: ByteArray): ByteArray {
             val fd = descriptor.fileDescriptor
