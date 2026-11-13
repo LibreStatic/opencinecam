@@ -259,6 +259,34 @@ class DriveMediaSafTest {
         assertTrue(drive.file("Takes/OpenCineCam/A002/A002.mp4").exists())
     }
 
+    @Test fun aFileOutsideTheSelectionKeepsTheFolderAndIsNeverDeleted() {
+        val folder = recording("A001", 3_000_000)
+        File(folder, ".notes").writeText("lens 2, slate wrong")
+        val take = takes().first()
+        // A writer adds a file after the snapshot, while the take's files are being deleted.
+        drive.afterDelete = { File(folder, "A001.extra.txt").writeText("late") }
+        val (result, released) = delete(take)
+        drive.afterDelete = null
+        assertNull(result.error)
+        assertEquals(listOf(MediaDeleteStatus.ABSENT_VERIFIED, MediaDeleteStatus.ABSENT_VERIFIED), result.files.map { it.status })
+        assertTrue(released)
+        assertEquals(setOf(".notes", "A001.extra.txt"), folder.list()!!.toSet())
+    }
+
+    @Test fun aFailedDeletionStopsAtTheFirstFileAndKeepsTheMedia() {
+        val folder = recording("A001", 3_000_000)
+        val take = takes().first()
+        // The sidecar goes first; the drive then refuses the video.
+        drive.afterDelete = { folder.setWritable(false) }
+        val (result, released) = delete(take)
+        folder.setWritable(true)
+        drive.afterDelete = null
+        assertNotNull(result.error)
+        assertTrue(released)
+        assertTrue(File(folder, "A001.mp4").exists())
+        assertEquals(MediaDeleteStatus.RETAINED, result.files.first { it.artifact.name == "A001.mp4" }.status)
+    }
+
     @Test fun aQueuedProxyJobIsStoppedBeforeTheFolderGoes() {
         val folder = recording("A001", 3_000_000)
         val take = takes().first()
@@ -288,22 +316,22 @@ class DriveMediaSafTest {
         assertEquals(listOf(MediaDeleteStatus.UNKNOWN, MediaDeleteStatus.UNKNOWN), result.files.map { it.status })
         assertTrue(result.files.all { it.detail == "Permission revoked" })
         assertTrue(released)
-        assertFalse(folder.exists())
+        assertFalse(File(folder, "A001.mp4").exists())
     }
 
     @Test fun aFileTheDriveNoLongerDescribesIsUnknownWhenNoListingConfirmsIt() {
         val folder = recording("A001", 3_000_000)
         val take = takes().single()
-        // The delete goes through, then the folders above the take give no answer: the root still does, but no listing
-        // can confirm the files are gone.
-        drive.afterDelete = { drive.unanswered = setOf("OpenCineCam") }
+        // The deletes go through, then the take's folder and the one above give no answer: the root still does, but no
+        // listing can confirm the files are gone.
+        drive.afterDelete = { drive.unanswered = setOf("A001", "OpenCineCam") }
         val (result, released) = delete(take)
         drive.unanswered = emptySet()
         assertEquals(listOf(MediaDeleteStatus.UNKNOWN, MediaDeleteStatus.UNKNOWN), result.files.map { it.status })
         assertNotNull(result.error)
         assertFalse(result.complete)
         assertTrue(released)
-        assertFalse(folder.exists())
+        assertFalse(File(folder, "A001.mp4").exists())
     }
 
     @Test fun aChangedFolderIsNotDeleted() {

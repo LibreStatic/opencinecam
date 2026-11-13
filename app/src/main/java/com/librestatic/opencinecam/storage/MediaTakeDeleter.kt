@@ -22,9 +22,11 @@ class MediaTakeDeleter internal constructor(private val access: MediaDeleteAcces
 }
 
 /**
- * Deletes a drive take's folder in one provider call, after [DriveMediaCatalog.deletionSnapshot] re-read it and found
- * exactly the confirmed files in a take folder of the drive. Absence is then observed per file; a drive that stops
- * answering leaves every file UNKNOWN, never verified. The catalog's cache is dropped whatever the outcome.
+ * Deletes a drive take's confirmed files one by one, after [DriveMediaCatalog.deletionSnapshot] re-read its take folder
+ * and found exactly them there, sidecars first so a deletion cut short keeps the media; the first failure stops it.
+ * Absence is then observed per file; a drive that stops answering leaves every attempted file UNKNOWN, never verified.
+ * The folder goes only once nothing else is in it but a computer's litter: a file the operator kept there, or one
+ * written after the snapshot, is never deleted unseen. The catalog's cache is dropped whatever the outcome.
  */
 internal fun executeDriveDelete(
     selected: LocalMediaTake,
@@ -38,6 +40,8 @@ internal fun executeDriveDelete(
     var error: String? = null
     var reservation: AutoCloseable? = null
     var attempted = false
+    // Confirmed members before this index were never tried (the first failure stops the deletion).
+    var untried = confirmed.size
     try {
         reservation = reserve()
         val deletion = drive.deletionSnapshot(selected)
@@ -46,12 +50,22 @@ internal fun executeDriveDelete(
         beginDeletion()
         var problem: String? = null
         attempted = true
-        try {
-            if (!android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder)) problem = "The drive did not delete the take folder"
-        } catch (failure: Exception) { problem = failure.message ?: "The drive did not delete the take folder" }
+        var tried = 0
+        for (index in confirmed.indices.reversed()) {
+            tried++
+            val deleted = try {
+                android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.members[index])
+            } catch (failure: Exception) {
+                problem = failure.message ?: "The drive did not delete ${confirmed[index].name}"
+                false
+            }
+            if (!deleted) { problem = problem ?: "The drive did not delete ${confirmed[index].name}"; break }
+        }
+        untried = confirmed.size - tried
         val answers = { deletion.docs.describe(deletion.docs.root) != null }
-        val observed = if (!answers()) null else confirmed.map { artifact ->
-            val uri = artifact.uri.toUri()
+        val observed = if (!answers()) null else confirmed.mapIndexed { index, artifact ->
+            if (index < untried) return@mapIndexed MediaDeleteFileResult(artifact, MediaDeleteStatus.NOT_ATTEMPTED, problem)
+            val uri = deletion.members[index]
             if (deletion.docs.describe(uri) != null) MediaDeleteFileResult(artifact, MediaDeleteStatus.RETAINED, problem)
             // No answer for the file is not proof it went: a listing from the nearest folder that answers must agree.
             else if (runCatching { deletion.docs.listsNo(uri) }.getOrDefault(false)) MediaDeleteFileResult(artifact, MediaDeleteStatus.ABSENT_VERIFIED)
@@ -60,18 +74,27 @@ internal fun executeDriveDelete(
         // A drive that left while the files were read back makes each look absent: it must still answer afterwards.
         results = if (observed != null && answers()) observed else {
             problem = problem ?: "The USB drive stopped answering"
-            confirmed.map { MediaDeleteFileResult(it, MediaDeleteStatus.UNKNOWN, problem) }
+            confirmed.mapIndexed { index, artifact ->
+                MediaDeleteFileResult(artifact, if (index < untried) MediaDeleteStatus.NOT_ATTEMPTED else MediaDeleteStatus.UNKNOWN, problem)
+            }
         }
         if (problem == null) problem = results.firstOrNull { it.status == MediaDeleteStatus.UNKNOWN }?.detail
         if (problem == null && results.any { it.status != MediaDeleteStatus.ABSENT_VERIFIED }) problem = "Conditional deletion did not remove the selected identity"
-        if (problem == null && deletion.docs.describe(deletion.folder) != null) problem = "The take folder remains on the drive"
+        if (problem == null) {
+            // The take is gone; an emptied folder follows it. Left in place (no error) when it holds anything else.
+            runCatching {
+                val left = deletion.docs.children(deletion.folder)
+                val onlyLitter = left.all { it.mime != android.provider.DocumentsContract.Document.MIME_TYPE_DIR && driveFolderLitter(it.name) }
+                if (onlyLitter) android.provider.DocumentsContract.deleteDocument(deletion.docs.resolver, deletion.folder)
+            }
+        }
         error = problem
     } catch (failure: Exception) {
         if (attempted) {
-            // The folder may be gone already: what the drive did is unknown, not "nothing deleted".
+            // The files tried may be gone already: what the drive did to them is unknown, not "nothing deleted".
             error = failure.message ?: "Deletion absence could not be verified"
-            results = results.map {
-                if (it.status == MediaDeleteStatus.NOT_ATTEMPTED) MediaDeleteFileResult(it.artifact, MediaDeleteStatus.UNKNOWN, error) else it
+            results = results.mapIndexed { index, it ->
+                if (it.status == MediaDeleteStatus.NOT_ATTEMPTED && index >= untried) MediaDeleteFileResult(it.artifact, MediaDeleteStatus.UNKNOWN, error) else it
             }
         } else error = failure.message ?: "Deletion preflight failed; no further files were attempted"
     } finally {

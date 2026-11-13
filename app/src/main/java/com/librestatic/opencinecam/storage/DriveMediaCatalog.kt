@@ -446,7 +446,7 @@ internal class DriveMediaCatalog(
         val fresh = driveCatalogTake(folderId, recording, children, read)?.take
         if (fresh != selected) cache.forget(folderId)
         check(fresh == selected) { "Deletion selection changed; refresh gallery" }
-        return DriveDeletion(docs, folder, confirmed)
+        return DriveDeletion(docs, folder, confirmed, ids.map { DocumentsContract.buildDocumentUriUsingTree(tree, it) })
     }
 
     /**
@@ -522,5 +522,11 @@ internal class DriveMediaCatalog(
     }
 }
 
-/** A drive take checked for deletion: its [folder] goes as a whole, then [confirmed] must all be absent. */
-internal class DriveDeletion(val docs: SafDocuments, val folder: Uri, val confirmed: List<LocalMediaArtifact>)
+/**
+ * A drive take checked for deletion: each of [confirmed] goes on its own ([members], the same documents under the
+ * drive's tree), then [folder] if nothing but a computer's own litter ([driveFolderLitter]) is left in it.
+ */
+internal class DriveDeletion(val docs: SafDocuments, val folder: Uri, val confirmed: List<LocalMediaArtifact>, val members: List<Uri>)
+
+/** What macOS leaves in a folder it browsed (`.DS_Store`, `._<name>` AppleDouble files), which goes with the take's folder. */
+internal fun driveFolderLitter(name: String): Boolean = name == ".DS_Store" || name.startsWith("._")
