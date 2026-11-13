@@ -33,13 +33,23 @@ class SafStorageTest {
         val threads = Executors.newFixedThreadPool(2)
         try {
             val secondStarted = CountDownLatch(1)
+            var secondThread: Thread? = null
             var second: java.util.concurrent.Future<Long?>? = null
-            // The first caller is about to create the probe when the second one asks: it must not create one too.
+            // The first caller is about to create the probe when the second one asks: it must not create one too. The
+            // first holds on until the second is parked on the probe-creation lock, so the two always overlap there.
             drive.beforeCreate = {
                 if (second == null) {
-                    second = threads.submit<Long?> { secondStarted.countDown(); driveFreeBytes(context.contentResolver, tree) }
+                    second = threads.submit<Long?> {
+                        secondThread = Thread.currentThread()
+                        secondStarted.countDown()
+                        driveFreeBytes(context.contentResolver, tree)
+                    }
                     check(secondStarted.await(10, TimeUnit.SECONDS))
-                    Thread.sleep(200)
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                    while (requireNotNull(secondThread).state != Thread.State.WAITING) {
+                        check(System.nanoTime() < deadline) { "The second caller never waited for the probe" }
+                        Thread.sleep(1)
+                    }
                 }
             }
             val first = threads.submit<Long?> { driveFreeBytes(context.contentResolver, tree) }
