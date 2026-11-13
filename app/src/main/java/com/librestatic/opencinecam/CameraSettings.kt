@@ -54,6 +54,9 @@ const val MIN_CHROME_OPACITY = 0.30f
 const val MAX_CHROME_OPACITY = 0.85f
 const val DEFAULT_CHROME_OPACITY = 0.55f
 
+/** Capture-time lengths, in seconds, a slow-motion take can stop by itself after; 0 leaves it unbounded. */
+val SLOW_MOTION_TAKE_LENGTHS = (0..60 step 5).toList()
+
 /** Keeps the floating chrome legible and the image visible; non-finite values fall back to the default. */
 fun clampChromeOpacity(value: Float): Float =
     if (value.isFinite()) value.coerceIn(MIN_CHROME_OPACITY, MAX_CHROME_OPACITY) else DEFAULT_CHROME_OPACITY
@@ -191,6 +194,7 @@ data class CameraSettings(
     val videoOffSpeed: Boolean = false,
     val videoProjectNumerator: Int = 30,
     val videoProjectDenominator: Int = 1,
+    val slowMotionTakeLengthSeconds: Int = 0,
     val afLockBehavior: AfLockBehavior = AfLockBehavior.FREEZE_CURRENT,
     val timecodeEnabled: Boolean = false,
     val timecodeRememberPosition: Boolean = true,
@@ -219,6 +223,7 @@ data class CameraSettings(
         require(timelapseIntervalMs in 100L..3_600_000L)
         require(timelapseFrameCount in 2..100_000)
         require(timelapseDurationMs in 1_000L..86_400_000L)
+        require(slowMotionTakeLengthSeconds in SLOW_MOTION_TAKE_LENGTHS)
         require(timelapseWidth > 0 && timelapseHeight > 0)
         require(validProjectRate(timelapseFps, timelapseFpsDenominator))
         require(validProjectRate(videoProjectNumerator, videoProjectDenominator))
@@ -523,6 +528,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         videoOffSpeed = preferences.getBoolean("video-off-speed", false),
         videoProjectNumerator = projectRate("video-project-numerator", "video-project-denominator").first,
         videoProjectDenominator = projectRate("video-project-numerator", "video-project-denominator").second,
+        slowMotionTakeLengthSeconds = preferences.getInt(KEY_SLOW_MOTION_TAKE_LENGTH_S, 0).takeIf { it in SLOW_MOTION_TAKE_LENGTHS } ?: 0,
         afLockBehavior = enumPreference(KEY_AF_LOCK_BEHAVIOR, AfLockBehavior.FREEZE_CURRENT),
         timecodeEnabled = preferences.getBoolean("timecode-enabled", false),
         timecodeRememberPosition = preferences.getBoolean("timecode-remember-position", true),
@@ -764,6 +770,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean("video-off-speed", settings.videoOffSpeed)
             .putInt("video-project-numerator", settings.videoProjectNumerator)
             .putInt("video-project-denominator", settings.videoProjectDenominator)
+            .putInt(KEY_SLOW_MOTION_TAKE_LENGTH_S, settings.slowMotionTakeLengthSeconds)
             .putString(KEY_AF_LOCK_BEHAVIOR, settings.afLockBehavior.name)
             .putBoolean("timecode-enabled", settings.timecodeEnabled)
             .putBoolean("timecode-remember-position", settings.timecodeRememberPosition)
@@ -1020,6 +1027,7 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_TIMELAPSE_LIMIT_MODE = "timelapse-limit-mode"
         const val KEY_TIMELAPSE_FRAME_COUNT = "timelapse-frame-count"
         const val KEY_TIMELAPSE_DURATION_MS = "timelapse-duration-ms"
+        const val KEY_SLOW_MOTION_TAKE_LENGTH_S = "slow-motion-take-length-s"
         const val KEY_TIMELAPSE_WIDTH = "timelapse-geometry-width"
         const val KEY_TIMELAPSE_HEIGHT = "timelapse-geometry-height"
         const val KEY_TIMELAPSE_FPS = "timelapse-geometry-fps"

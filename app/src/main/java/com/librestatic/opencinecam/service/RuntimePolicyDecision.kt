@@ -14,6 +14,7 @@ import com.librestatic.opencinecam.core.model.StorageRuntimeObservation
 import com.librestatic.opencinecam.media.audio.AvDiagnosticAction
 import com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot
 import com.librestatic.opencinecam.media.storage.calculateStorageReserve
+import com.librestatic.opencinecam.media.storage.storageStopHeadroom
 
 /** What a recording-ticker pass decided: stop the take, and/or keep a persistent notice on screen. */
 internal data class RuntimeVerdict(val stop: StableFailure?, val notice: RuntimeNotice?)
@@ -23,13 +24,26 @@ internal enum class RuntimeNotice { MONITORING_REDUCED, STATE_UNKNOWN, AV_DRIFT,
 /**
  * One pass of the live thermal and storage policy (ADR-0016). [platformThermal] is
  * `PowerManager.currentThermalStatus` (null when it could not be read); [freeBytes] the free space
- * on the volume the take writes to. Strict stops on critical heat, on less than a minute of
- * space left, and on a state it cannot read; Adaptive keeps recording and warns. Both stop on less
- * than a minute of space and once the platform reports thermal emergency or shutdown.
+ * on the volume the take writes to. Strict stops on critical heat, on less free space than the stop
+ * headroom ([storageStopHeadroom]: a minute of data, at most 512 MiB), and on a state it cannot
+ * read; Adaptive keeps recording and warns. Both stop below the stop headroom and once the platform
+ * reports thermal emergency or shutdown. A take bounded to [takeLimitMs] of capture was admitted
+ * with room for all of it, so it gets no low-space notice: it only stops at the headroom. A RAW take
+ * passes its own [stopHeadroomBytes] (the room it was admitted with), which the 512 MiB cap, sized
+ * for encoded rates, must not shrink to a second of RAW data.
  */
-internal fun evaluateRuntimePolicy(policy: PolicyMode, platformThermal: Int?, freeBytes: Long?, projectedBytesPerMinute: Long): RuntimeVerdict {
+internal fun evaluateRuntimePolicy(policy: PolicyMode, platformThermal: Int?, freeBytes: Long?, projectedBytesPerMinute: Long,
+    takeLimitMs: Long? = null,
+    stopHeadroomBytes: Long? = null,
+): RuntimeVerdict {
     val projected = projectedBytesPerMinute.coerceAtLeast(1L)
-    val observation = StorageRuntimeObservation(freeBytes, projected, calculateStorageReserve(projected).requiredBytes)
+    val headroom = stopHeadroomBytes?.coerceAtLeast(1L) ?: storageStopHeadroom(projected)
+    val lowMargin = when {
+        takeLimitMs != null -> 1L
+        stopHeadroomBytes != null -> maxOf(1L shl 30, if (headroom > Long.MAX_VALUE / 2) Long.MAX_VALUE else headroom * 2)
+        else -> calculateStorageReserve(projected).requiredBytes
+    }
+    val observation = StorageRuntimeObservation(freeBytes, headroom, lowMargin)
     val thermal = thermalStatusFromPlatform(platformThermal ?: Int.MIN_VALUE)
     return when (val decision = RuntimeHardeningPolicy(policy, "recording-ticker").evaluate(thermal, observation.pressure)) {
         is RuntimeHardeningDecision.Stopped -> RuntimeVerdict(decision.failure, null)

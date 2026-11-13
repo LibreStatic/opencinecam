@@ -32,7 +32,7 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(183, CameraPresetCodec.portableKeys.size)
+        assertEquals(184, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
         assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "recording-policy-migrated-v1", "recording-policy", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "review-raw-playback", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo-mode", "video-low-light-fps", "video-fps-lock", "lens-correction-video", "lens-correction-photos", "lens-correction-alignment", "lens-lock", "smooth-lens-switch", "rotate-when-locked") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
@@ -133,7 +133,7 @@ class CameraPresetTest {
         val op = OperatorPreferences(volumeUpLong = OperatorAction.CAPTURE, volumeDownDouble = OperatorAction.TORCH, volumeBoth = OperatorAction.CONTROL_LOCK,
             volumePair = VolumeKeyPair.ZOOM, volumePairInverted = true)
         val text = CameraPresetCodec.encode(CameraPreset(name = "Keys", settings = CameraSettings(operation = op)))
-        assertTrue(text.contains("\"version\":27"))
+        assertTrue(text.contains("\"version\":${CameraPresetCodec.VERSION}"))
         assertEquals(op, CameraPresetCodec.decode(text).settings.operation)
         // A gesture can never carry the system volume, not even through a crafted preset.
         invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("operator-volume-both" to JsonPrimitive("SYSTEM_VOLUME"))) })
@@ -149,6 +149,25 @@ class CameraPresetTest {
         assertTrue(operation.volumeGestures.all { it == OperatorAction.NONE })
         // A V26 payload that already carries the V27 keys is not a V26 payload.
         invalid(document { it["version"] = JsonPrimitive(26) })
+    }
+    @Test fun slowMotionTakeLengthIsPortableFromV28AndRoundTrips() {
+        assertTrue("slow-motion-take-length-s" in CameraPresetCodec.portableKeys)
+        assertFalse("slow-motion-take-length-s" in CameraPresetCodec.portableKeysFor(27))
+        assertTrue("slow-motion-take-length-s" in CameraPresetCodec.portableKeysFor(28))
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Slow 10", settings = CameraSettings(videoOffSpeed = true, slowMotionTakeLengthSeconds = 10)))
+        assertTrue(text.contains("\"version\":28"))
+        assertEquals(10, CameraPresetCodec.decode(text).settings.slowMotionTakeLengthSeconds)
+        assertEquals(10, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, CameraSettings()).slowMotionTakeLengthSeconds)
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("slow-motion-take-length-s" to JsonPrimitive(7))) })
+    }
+    @Test fun v27PayloadWithoutTheSlowMotionTakeLengthDecodesToUnbounded() {
+        val v27 = document {
+            it["version"] = JsonPrimitive(27)
+            it["settings"] = JsonObject(it.getValue("settings").jsonObject.filterKeys { key -> key in CameraPresetCodec.portableKeysFor(27) })
+        }
+        assertEquals(0, CameraPresetCodec.decode(v27).settings.slowMotionTakeLengthSeconds)
+        // A V27 payload that already carries the V28 key is not a V27 payload.
+        invalid(document { it["version"] = JsonPrimitive(27) })
     }
     @Test fun malformedRawVideoConfigIsRejectedNotNormalised() {
         for (bad in listOf("full", "4080x3060", "full@0", "0x10@30", "full@30 ", "FULL@30", "1920x1080@60@60")) {
@@ -275,5 +294,5 @@ class CameraPresetTest {
     }
 }
 
-// Keys newer than preset V19 (V20 to V27), so the historical-document tests can strip them.
-internal val PRESET_V20_KEYS = setOf("operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")
+// Keys newer than preset V19 (V20 to V28), so the historical-document tests can strip them.
+internal val PRESET_V20_KEYS = setOf("slow-motion-take-length-s", "operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")

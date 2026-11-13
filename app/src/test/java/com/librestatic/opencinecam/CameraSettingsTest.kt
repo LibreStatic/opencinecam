@@ -185,6 +185,29 @@ class CameraSettingsTest {
         CameraSettings(timelapseDurationMs = 86_400_001L)
     }
 
+    @Test
+    fun slowMotionTakeLengthDefaultsToUnboundedAndAcceptsEveryListedLength() {
+        assertEquals(0, CameraSettings().slowMotionTakeLengthSeconds)
+        for (seconds in SLOW_MOTION_TAKE_LENGTHS) assertEquals(seconds, CameraSettings(slowMotionTakeLengthSeconds = seconds).slowMotionTakeLengthSeconds)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun slowMotionTakeLengthRejectsAnUnlistedLength() {
+        CameraSettings(slowMotionTakeLengthSeconds = 7)
+    }
+
+    @Test
+    fun slowMotionTakeLengthPersistsAndAStoredUnlistedLengthFallsBackToUnbounded() {
+        val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings(slowMotionTakeLengthSeconds = 20))
+        assertEquals(20, CameraSettingsStore(memory).load().slowMotionTakeLengthSeconds)
+        assertEquals(0, CameraSettingsStore(PresetPreferences(mapOf("slow-motion-take-length-s" to 7))).load().slowMotionTakeLengthSeconds)
+    }
+
+    @Test
+    fun slowMotionTakeLengthIsNotALivePreference() {
+        assertEquals(0, CameraSettings().withLivePreferencesFrom(CameraSettings(slowMotionTakeLengthSeconds = 10)).slowMotionTakeLengthSeconds)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun timelapseGeometryRejectsNonPositiveDimensions() {
         CameraSettings(timelapseWidth = 0, timelapseHeight = 1080, timelapseFps = 30)

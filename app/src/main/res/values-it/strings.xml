@@ -754,6 +754,10 @@
     <string name="panel_title_resolution">RISOLUZIONE</string>
     <string name="resolution_group_open">Open gate</string>
     <string name="panel_title_fixed_fps">FPS FISSI</string>
+    <string name="panel_title_take_length">DURATA DELLA RIPRESA</string>
+    <string name="take_length_off">Senza limite</string>
+    <string name="take_length_plays">dura %1$s</string>
+    <string name="take_length_note">La ripresa si ferma da sola dopo questa durata di acquisizione e richiede meno spazio libero per iniziare.</string>
     <string name="panel_title_white_balance">BILANCIAMENTO DEL BIANCO</string>
     <string name="panel_title_focus">FUOCO</string>
     <string name="panel_title_focus_pull">SPOSTAMENTO FUOCO</string>

@@ -63,12 +63,24 @@ internal sealed interface StorageAdmission {
 internal const val STORAGE_RESERVE_INSUFFICIENT = "storage-reserve-insufficient"
 internal const val STORAGE_UNKNOWN = "storage-unknown"
 
+/** Bytes a take bounded to [takeLimitMs] of capture writes at [projectedBytesPerMinute], rounded up; null when the take is unbounded. */
+internal fun boundedTakeBytes(projectedBytesPerMinute: Long, takeLimitMs: Long?): Long? {
+    if (takeLimitMs == null) return null
+    val perMinute = projectedBytesPerMinute.coerceAtLeast(0L)
+    val ms = takeLimitMs.coerceAtLeast(0L)
+    if (perMinute != 0L && ms > (Long.MAX_VALUE - 59_999L) / perMinute) return Long.MAX_VALUE
+    return (perMinute * ms + 59_999L) / 60_000L
+}
+
 /**
- * Below max(1 GiB, two minutes of the projected data) no take starts, in either policy. Unreadable
- * free space refuses in Strict and starts with a warning in Adaptive.
+ * Below the reserve ([calculateStorageReserve]: 1 GiB at every data rate the encoders are given) no
+ * take starts, in either policy. A take bounded to [takeLimitMs] of capture (slow motion with a take
+ * length) needs only its stop headroom plus that take with a quarter to spare, when that is less.
+ * Unreadable free space refuses in Strict and starts with a warning in Adaptive.
  */
-internal fun admitRecordingStorage(policy: PolicyMode, projectedBytesPerMinute: Long, freeBytes: Long?): StorageAdmission {
-    val reserve = calculateStorageReserve(projectedBytesPerMinute.coerceAtLeast(0L))
+internal fun admitRecordingStorage(policy: PolicyMode, projectedBytesPerMinute: Long, freeBytes: Long?, takeLimitMs: Long? = null): StorageAdmission {
+    val projected = projectedBytesPerMinute.coerceAtLeast(0L)
+    val reserve = calculateStorageReserve(projected, boundedTakeBytes(projected, takeLimitMs))
     return when (checkStorageSpace(if (freeBytes == null) Knowledge.Unknown else Knowledge.Known(freeBytes), reserve)) {
         is StorageSpaceCheck.Sufficient -> StorageAdmission.Admit
         is StorageSpaceCheck.Insufficient -> StorageAdmission.Refuse(STORAGE_RESERVE_INSUFFICIENT, reserve.requiredBytes, freeBytes)

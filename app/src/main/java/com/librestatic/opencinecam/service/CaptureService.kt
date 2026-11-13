@@ -606,6 +606,7 @@ class CaptureService : Service() {
     /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
     private val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
     private var timelapseAutoStopRunnable: Runnable? = null
+    private var takeLengthAutoStopRunnable: Runnable? = null
     private var attachedPreviewSurface: Surface? = null
     /**
      * The RAW qualification step covers the viewfinder, so the camera rests while it is up: the surface waits in
@@ -1217,6 +1218,10 @@ class CaptureService : Service() {
     @Volatile private var pendingStartRefusal: String? = null
     /** Bytes per minute the admitted take was projected to write; the live storage policy measures against it. */
     @Volatile private var takeProjectedBytesPerMinute = 0L
+    /** The free space a RAW take stops below: the room it was admitted with. Null for encoded takes, which use the capped headroom. */
+    @Volatile private var takeStopHeadroomBytes: Long? = null
+    /** Capture-time limit of the admitted take (slow motion with a take length); null when unbounded. Frozen at admission. */
+    @Volatile private var takeLengthLimitMs: Long? = null
     /** The policy the running take started under; a setting changed mid-take stays pending. */
     @Volatile private var activeRecordingPolicy = PolicyMode.STRICT
     @Volatile private var lastKnownFreeBytes: Long? = null
@@ -1264,7 +1269,7 @@ class CaptureService : Service() {
         if (pendingStopReason != null) return
         if (free != null) lastKnownFreeBytes = free
         val thermal = runCatching { getSystemService(android.os.PowerManager::class.java).currentThermalStatus }.getOrNull()
-        val verdict = evaluateRuntimePolicy(activeRecordingPolicy, thermal, free ?: lastKnownFreeBytes, takeProjectedBytesPerMinute)
+        val verdict = evaluateRuntimePolicy(activeRecordingPolicy, thermal, free ?: lastKnownFreeBytes, takeProjectedBytesPerMinute, takeLengthLimitMs, takeStopHeadroomBytes)
         verdict.stop?.let { localBinder.stopRecording(it); return }
         val drift = avDiagnostics?.let { diagnostics ->
             val sidecar = audioSidecarRecorder ?: return@let null
@@ -2747,9 +2752,11 @@ class CaptureService : Service() {
         val config = session.config
         recordingStartedAtMs = android.os.SystemClock.elapsedRealtime()
         activeRecordingPolicy = settings.recordingPolicy
-        // The live storage policy stops a take when less than its projected figure is left. A RAW
-        // take is admitted with RAW_TAKE_MIN_SECONDS of room, so that is its horizon, not a minute.
+        // The live storage policy stops a take below its stop headroom. A RAW take is admitted with
+        // RAW_TAKE_MIN_SECONDS of room, so that is its headroom, not the encoded takes' capped minute.
         takeProjectedBytesPerMinute = rawTakeMinimumFreeBytes(config)
+        takeStopHeadroomBytes = takeProjectedBytesPerMinute
+        takeLengthLimitMs = null
         admissionWarning = null
         takeSoftwareEncoder = null
         takeCodecFallback = false
@@ -3431,6 +3438,8 @@ class CaptureService : Service() {
                 cameraState.value = current.copy(recordingPauseStatus = status, recordingPausePending = false,
                     recordingElapsedMs = status.activeElapsedAt(android.os.SystemClock.elapsedRealtime()))
                 scheduleTimelapseAutoStop()
+                // A bounded take counts active time: no stop while paused, the rest of its length on resume.
+                scheduleTakeLengthAutoStop()
             }
         }
 
@@ -3492,6 +3501,7 @@ class CaptureService : Service() {
                         cameraState.value.recordingProjectRate?.let { " · " + getString(R.string.project_active_rate, it.projectLabel()) }.orEmpty()
                 },
                 recordingElapsedMs = 0L,
+                takeLengthLimitMs = takeLengthLimitMs,
                 recordingPauseStatus = null,
                 recordingAvTiming = null,
                 recordingPausePending = false,
@@ -3511,6 +3521,7 @@ class CaptureService : Service() {
             avDiagnostics = if (audioSidecarRecorder != null) AvClockDiagnostics(activeRecordingPolicy, correlationId = "recording-av-drift") else null
             pendingStopReason = null
             scheduleTimelapseAutoStop()
+            scheduleTakeLengthAutoStop()
             mainHandler.post(recordingTicker)
             // PLAN-072: a drive that left while this take was starting ends it now, through the drive stop path. This
             // callback runs on the camera thread; the stop path is main's.
@@ -3561,9 +3572,11 @@ class CaptureService : Service() {
             submitCaptureState(stateCommands.takeEnded())
             val frozenLut = recordingLutIntent.get()?.takeIf { it.owner === transferReservation }?.lut
             previewEngine.releaseRecordingWhiteBalance()
-            cameraState.value = cameraState.value.copy(recordingFinalizing = true)
+            cameraState.value = cameraState.value.copy(recordingFinalizing = true, takeLengthLimitMs = null)
             mainHandler.removeCallbacks(recordingTicker)
             cancelTimelapseAutoStop()
+            cancelTakeLengthAutoStop()
+            takeLengthLimitMs = null
             val take = detachTake()
             val output = take.video
             // A failed content callback alone never proves native retirement. The exact file
@@ -4134,6 +4147,9 @@ class CaptureService : Service() {
                 stopPreviewAudioMonitor(clearLevels = false)
                 mainHandler.removeCallbacks(recordingTicker)
                 cancelTimelapseAutoStop()
+                cancelTakeLengthAutoStop()
+                takeLengthLimitMs = null
+                cameraState.update { it.copy(takeLengthLimitMs = null) }
                 val take = detachTake()
                 val encodedFrames = previewEngine.encodedRecordingProgress()?.frameCount
                 abortTransferPublication(take.publication)
@@ -5537,7 +5553,7 @@ class CaptureService : Service() {
                 mainHandler.post {
                     if (cameraState.value.recordingPauseStatus?.takeId == status.takeId) {
                         cameraState.update { it.copy(recordingPausePending = false) }
-                        if (!changed) scheduleTimelapseAutoStop()
+                        if (!changed) { scheduleTimelapseAutoStop(); scheduleTakeLengthAutoStop() }
                     }
                 }
             }
@@ -5659,6 +5675,8 @@ class CaptureService : Service() {
             val admissionAudio = current.selectedMode != CaptureMode.TIME_LAPSE && (audioForThisTake ?: settings.audioEnabled)
             val projectedBytesPerMinute = projectedTakeBytesPerMinute(current.selectedMode, settings, current.targetFps,
                 current.activeVideoProfile?.constrainedHighSpeed == true, admissionAudio)
+            val takeLimitMs = com.librestatic.opencinecam.takeLengthLimitMs(current.selectedMode, settings,
+                current.activeVideoProfile?.constrainedHighSpeed == true)
             admissionWarning = null
             takeSoftwareEncoder = null
             takeCodecFallback = false
@@ -5668,7 +5686,9 @@ class CaptureService : Service() {
             val continuation = continuationStarting?.takeIf { it.mode == current.selectedMode }
             val admittedDestination = if (continuation != null) RecordingDestination.Phone else resolveTakeDestination().destination
             val admissionFree = if (continuation != null) phoneVolumeFreeBytes() else destinationFreeBytes(admittedDestination)
-            when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, admissionFree)) {
+            takeStopHeadroomBytes = null
+            takeLengthLimitMs = takeLimitMs
+            when (val admission = admitRecordingStorage(settings.recordingPolicy, projectedBytesPerMinute, admissionFree, takeLimitMs)) {
                 StorageAdmission.Admit -> Unit
                 StorageAdmission.AdmitUnread -> admissionWarning = getString(R.string.storage_unknown_warning)
                 is StorageAdmission.Refuse -> {
@@ -6703,6 +6723,23 @@ class CaptureService : Service() {
     private fun cancelTimelapseAutoStop() {
         timelapseAutoStopRunnable?.let { mainHandler.removeCallbacks(it) }
         timelapseAutoStopRunnable = null
+    }
+
+    /** Stops a take bounded to a capture length when it reaches it, with no reason, so it ends as an ordinary save. */
+    private fun scheduleTakeLengthAutoStop() {
+        cancelTakeLengthAutoStop()
+        val limitMs = takeLengthLimitMs ?: return
+        if (cameraState.value.recordingPauseStatus?.paused == true) return
+        val runnable = Runnable {
+            if (cameraState.value.phase == CameraUiPhase.RECORDING && takeLengthLimitMs == limitMs) localBinder.stopRecording()
+        }
+        takeLengthAutoStopRunnable = runnable
+        mainHandler.postDelayed(runnable, (limitMs - activeRecordingElapsedMs()).coerceAtLeast(1L))
+    }
+
+    private fun cancelTakeLengthAutoStop() {
+        takeLengthAutoStopRunnable?.let { mainHandler.removeCallbacks(it) }
+        takeLengthAutoStopRunnable = null
     }
 
     private fun formatTimelapseInterval(intervalMs: Long): String {

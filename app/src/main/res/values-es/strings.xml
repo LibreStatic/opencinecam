@@ -754,6 +754,10 @@
     <string name="panel_title_resolution">RESOLUCIÓN</string>
     <string name="resolution_group_open">Abierto</string>
     <string name="panel_title_fixed_fps">FPS FIJO</string>
+    <string name="panel_title_take_length">DURACIÓN DE LA TOMA</string>
+    <string name="take_length_off">Sin límite</string>
+    <string name="take_length_plays">dura %1$s</string>
+    <string name="take_length_note">La toma se detiene sola al llegar a esta duración de captura y necesita menos espacio libre para empezar.</string>
     <string name="panel_title_white_balance">BALANCE DE BLANCOS</string>
     <string name="panel_title_focus">FOCO</string>
     <string name="panel_title_focus_pull">CAMBIO DE FOCO</string>
