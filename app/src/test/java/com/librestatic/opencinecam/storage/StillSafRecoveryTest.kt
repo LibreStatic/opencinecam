@@ -301,6 +301,16 @@ class StillSafRecoveryTest {
         assertArrayEquals(byteArrayOf(1, 2, 3), File(stills, "D/D.jpg").readBytes())
     }
 
+    @Test fun aCommittedGroupIsNeverDiscardedEvenWhenItsFolderWasFirstReadAsMissing() {
+        interrupted("E.jpg" to byteArrayOf(4, 5))
+        assertTrue(File(stills, "E/${SafRecordingRows.MARKER}").delete())
+        // A caller that read the folder as missing (the drive gave no answer) discards; the folder now answers.
+        val folder = Uri.parse(requireNotNull(entries().single()[4]))
+        val rows = SafStillRows(context, tree, folder) { error("never creates") }
+        assertThrows(IllegalStateException::class.java) { rows.discard() }
+        assertArrayEquals(byteArrayOf(4, 5), File(stills, "E/E.jpg").readBytes())
+    }
+
     @Test fun groupWithNoFolderJournalledLeavesOnlyItsEntry() {
         assertEquals(StillRecoveryReport(), journal().recover())
         database { it.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)", arrayOf(UUID.randomUUID().toString(), tree.toString(), drive.volume)) }

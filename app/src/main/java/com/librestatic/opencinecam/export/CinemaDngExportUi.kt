@@ -226,7 +226,8 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     val dismiss = { if (!starting) onDismiss() }
     MediaDialogFrame("cinemadng-export-dialog", dismiss) {
         CinemaDngExportForm(take, state,
-            onChoice = { if (!starting) choice = it },
+            // While a picked folder is adopted the choice stays put: the adoption selects that folder when it answers.
+            onChoice = { if (!starting && !adopting) choice = it },
             // A folder chosen while the admission runs could release the one the request captured before it is leased.
             onChooseFolder = { if (!starting && !adopting) runCatching { picker.launch(null) } },
             onCompress = { compress = it },
@@ -290,9 +291,10 @@ internal fun ColumnScope.CinemaDngExportForm(take: LocalMediaTake, state: Cinema
         Text(stringResource(R.string.cinemadng_export_destination), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         SettingsPillRow {
             SettingsPill(stringResource(R.string.cinemadng_export_documents), "cinemadng-export-documents",
-                selected = state.choice == CinemaDngDestinationChoice.Documents) { onChoice(CinemaDngDestinationChoice.Documents) }
+                selected = state.choice == CinemaDngDestinationChoice.Documents, enabled = !state.adopting) { onChoice(CinemaDngDestinationChoice.Documents) }
             state.folder?.let { folder ->
-                SettingsPill(shortLabel(folder.label), "cinemadng-export-folder", selected = state.choice == folder) { onChoice(folder) }
+                SettingsPill(shortLabel(folder.label), "cinemadng-export-folder", selected = state.choice == folder,
+                    enabled = !state.adopting) { onChoice(folder) }
             }
             SettingsPill(stringResource(R.string.cinemadng_export_choose_folder), "cinemadng-export-choose", selected = false,
                 enabled = !state.adopting, role = androidx.compose.ui.semantics.Role.Button, onClick = onChooseFolder)

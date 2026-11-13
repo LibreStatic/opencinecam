@@ -152,9 +152,11 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         synchronized(admission) {
             if (!store.begin(request.takeUri, request.takeName)) return false
             appContext = app
+            val token = java.util.UUID.randomUUID().toString()
+            admissionToken = token
             val operation = try {
                 lease(app, request)
-                WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
+                WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request, token))
             } catch (failure: Exception) {
                 enqueueFailed(app, request, failure)
                 return false
@@ -163,9 +165,10 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             operation.result.addListener({
                 val failure = runCatching { operation.result.get() }.exceptionOrNull() ?: return@addListener
                 synchronized(admission) {
-                    // Only this export, and only while no worker took it: one that ended or was replaced is left alone.
-                    val running = store.states.value as? CinemaDngExportState.Running
-                    if (running?.takeUri == request.takeUri && !workerRunning) enqueueFailed(app, request, failure)
+                    // Only this admission, and only while no worker took it: one that ended or was replaced is left alone.
+                    if (admissionToken == token && store.states.value is CinemaDngExportState.Running && !workerRunning) {
+                        enqueueFailed(app, request, failure)
+                    }
                 }
             }, { background(it) })
         }
@@ -181,8 +184,26 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         runCatching { releaseLeftFolders(app) }
     }
 
-    /** Serialises an admission's begin, lease and enqueue with [cancel]. */
+    /** Serialises an admission's begin, lease and enqueue with [cancel], and a worker taking the export over. */
     private val admission = Any()
+
+    /** The latest admission in this process, carried by its work ([KEY_ADMISSION]); null until one, e.g. after a restart. */
+    private var admissionToken: String? = null
+
+    /**
+     * The worker's takeover, under [admission] so it cannot interleave with [cancelAdmitted]: true when the export is its
+     * to run. Work from an admission this process replaced, or one [cancel] already ended (its lease gone), is not. Work
+     * kept from an earlier process runs as before: this process admitted nothing, so it has no token to compare.
+     */
+    internal fun takeOver(token: String?): Boolean = synchronized(admission) {
+        val current = admissionToken
+        if (current != null) {
+            val running = store.states.value as? CinemaDngExportState.Running
+            if (token != current || running == null || running.cancelling) return@synchronized false
+        }
+        workerRunning = true
+        true
+    }
 
     /**
      * Where [cancel] ends the export: it waits for an admission under way and may end the lease, which takes the
@@ -220,11 +241,12 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     const val KEY_TAKE_URI = "takeUri"
     const val KEY_TAKE_NAME = "takeName"
     const val KEY_TREE_URI = "treeUri"
+    const val KEY_ADMISSION = "admission"
     const val KEY_COMPRESS = "compress"
 
-    fun workRequest(request: CinemaDngExportRequest): OneTimeWorkRequest = OneTimeWorkRequestBuilder<CinemaDngExportWorker>()
+    fun workRequest(request: CinemaDngExportRequest, admission: String? = null): OneTimeWorkRequest = OneTimeWorkRequestBuilder<CinemaDngExportWorker>()
         .setInputData(workDataOf(KEY_TAKE_URI to request.takeUri, KEY_TAKE_NAME to request.takeName,
-            KEY_TREE_URI to request.treeUri, KEY_COMPRESS to request.compress))
+            KEY_TREE_URI to request.treeUri, KEY_COMPRESS to request.compress, KEY_ADMISSION to admission))
         .addTag(UNIQUE_WORK)
         .build()
 }
@@ -241,7 +263,8 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
         val tree = inputData.getString(CinemaDngExportRuntime.KEY_TREE_URI)
         val compress = inputData.getBoolean(CinemaDngExportRuntime.KEY_COMPRESS, false)
         runtime.appContext = applicationContext
-        runtime.workerRunning = true
+        // A cancellation that ended the export before this worker started also ended its lease and state: nothing to do.
+        if (!runtime.takeOver(inputData.getString(CinemaDngExportRuntime.KEY_ADMISSION))) return Result.success()
         try {
             if (isStopped) return finish(takeUri, takeName, CinemaDngExportOutcome.Stopped(CinemaDngStopReason.CANCELLED, cleaned = true))
             runtime.store.progress(takeUri, takeName, CinemaDngExportProgress(0, 0, 0, 0))

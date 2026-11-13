@@ -517,6 +517,12 @@ internal class SafStillRows(
             check(reachable()) { "Still drive unavailable" }
             return
         }
+        // Files without the marker are a committed group (the marker goes just before the journal update), which a caller
+        // that read the folder as missing while the drive gave no answer would discard: only the listing decides here.
+        val listed = docs.children(group)
+        check(listed.none { it.name != SafRecordingRows.MARKER } || listed.any { it.name == SafRecordingRows.MARKER }) {
+            "Still group folder holds files without its marker: it was committed"
+        }
         var failure: Throwable? = null
         for (doc in files(group)) {
             try { check(docs.delete(doc.uri)) { "Interrupted still file could not be deleted" } } catch (problem: Throwable) {
