@@ -112,11 +112,12 @@ private class AndroidCinemaDngExportEnvironment(private val context: Context) : 
 
     override suspend fun plan(take: LocalMediaTake): CinemaDngExportPlan? = withContext(Dispatchers.IO) {
         try {
+            val mark = DriveDescriptors.releaseMark(take.primary.uri.toUri())
             context.contentResolver.openFileDescriptor(take.primary.uri.toUri(), "r")?.use { descriptor ->
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel.use { channel ->
                     // Indexing walks every frame: a take on the USB drive has both descriptors close with the drive (ADR-0037).
                     val closer = CloseOnce(channel, descriptor)
-                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), closer)
+                    val driveHandle = DriveDescriptors.registerDocument(take.primary.uri.toUri(), closer, openedAfter = mark)
                     try {
                         CinemaDngExporter(channel, CinemaDngExporter.takeName(take.primary.name)).plan()
                     } finally {

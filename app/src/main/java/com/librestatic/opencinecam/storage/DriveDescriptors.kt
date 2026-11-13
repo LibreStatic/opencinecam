@@ -37,8 +37,12 @@ internal object DriveDescriptors {
      * The release count of [document]'s drive, taken before opening it and passed to [registerDocument]: a release that
      * ran while the open was in flight cannot have closed the descriptor, so the registration closes it instead. 0 off a drive.
      */
-    fun releaseMark(document: Uri): Long =
-        driveVolumeOfDocument(document)?.let { volume -> synchronized(entries) { releases[volume.uppercase()] ?: 0L } } ?: 0L
+    fun releaseMark(document: Uri): Long {
+        val volume = driveVolumeOfDocument(document)?.uppercase() ?: return 0L
+        // The watch runs before the mark is read: a drive leaving after it is seen and counted, not missed while it starts.
+        DriveDescriptorWatch.ensure()
+        return synchronized(entries) { releases[volume] ?: 0L }
+    }
 
     /** The count of registrations so far: a release bounded by it ([releaseVolume]) spares every later one. */
     fun registrationMark(): Long = synchronized(entries) { registrations }

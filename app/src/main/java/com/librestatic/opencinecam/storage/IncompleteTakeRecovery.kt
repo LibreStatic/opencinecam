@@ -140,13 +140,15 @@ private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>
 }
 
 /**
- * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name: written
- * before the rewrite, read in place of the sidecar while present, deleted once the take is published.
+ * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name (the key is
+ * `<bundleId>/<name>`): written before the rewrite, read in place of the sidecar while present, deleted once the take
+ * is published, and every copy of a take ([deleteTake]) once its journal entry is discarded.
  */
 internal interface RecoveredSidecarBackups {
     fun read(key: String): String?
     fun write(key: String, text: String)
     fun delete(key: String)
+    fun deleteTake(bundleId: String) = Unit
 
     companion object {
         /** No copies: the tests' rows and any caller that cannot lose a sidecar this way. */
@@ -160,16 +162,16 @@ internal interface RecoveredSidecarBackups {
 
 /** [RecoveredSidecarBackups] as files in [folder], each written to a `.part`, synced and renamed into place. */
 internal class FileRecoveredSidecarBackups(private val folder: java.io.File) : RecoveredSidecarBackups {
-    private fun file(key: String) = java.io.File(folder, java.security.MessageDigest.getInstance("SHA-256")
-        .digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(40) + ".json")
+    /** Named `<bundleId>-<hash>.json`, so a take's copies are found by its id ([deleteTake]). */
+    private fun file(key: String) = java.io.File(folder, prefix(key.substringBefore('/')) + java.security.MessageDigest
+        .getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(40) + ".json")
+
+    private fun prefix(bundleId: String) = bundleId.filter { it.isLetterOrDigit() || it == '-' } + "-"
 
     override fun read(key: String): String? = file(key).takeIf { it.isFile }?.readText()
 
     override fun write(key: String, text: String) {
         check(folder.isDirectory || folder.mkdirs()) { "Sidecar backup folder unavailable" }
-        // A take discarded or forgotten never deletes its copy: those untouched for long go with the next write.
-        val stale = System.currentTimeMillis() - BACKUP_LIFETIME_MILLIS
-        folder.listFiles()?.filter { it.lastModified() < stale }?.forEach { it.delete() }
         val target = file(key)
         val partial = java.io.File(folder, target.name + ".part")
         java.io.FileOutputStream(partial).use { it.write(text.toByteArray()); it.fd.sync() }
@@ -179,7 +181,9 @@ internal class FileRecoveredSidecarBackups(private val folder: java.io.File) : R
     override fun delete(key: String) {
         file(key).delete()
     }
-}
 
-/** How long an orphaned sidecar backup is kept: far longer than a drive is likely to stay away. */
-private const val BACKUP_LIFETIME_MILLIS = 90L * 24 * 60 * 60 * 1000
+    override fun deleteTake(bundleId: String) {
+        val prefix = prefix(bundleId)
+        folder.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
+    }
+}

@@ -302,6 +302,21 @@ class RecordingSafRecoveryTest {
         assertTrue(entries().isEmpty())
     }
 
+    @Test fun aRetriedAbortAfterAFailedCleanupLeavesTheTakeToRecovery() {
+        val group = journal().start(destination)
+        val member = group.member(RecordingMemberKind.VIDEO)
+        write(member.insert("A001.mp4", "video/mp4", metadata = false), ByteArray(10) { 1 })
+        drive.mounted = false
+        assertThrows(IllegalStateException::class.java) { member.abort() }
+        drive.mounted = true
+        // The failed cleanup released the take, so a recovery pass may hold it: the retry deletes nothing.
+        member.abort()
+        assertTrue("A001.mp4" in takeDir().list()!!)
+        assertEquals("0", entries().single()[1])
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+        assertEquals(setOf("A001.mp4", "A001.incomplete.json"), takeDir().list()!!.toSet())
+    }
+
     @Test fun keptTakeIsLeftAloneUntilItsOwnerRelinquishesIt() {
         val group = journal().start(destination)
         val member = group.member(RecordingMemberKind.VIDEO)
@@ -387,6 +402,22 @@ class RecordingSafRecoveryTest {
         assertEquals(RecordingRecoveryReport(), journal().recover())
         assertTrue(entries().isEmpty())
         assertEquals(setOf(name), folder.list()!!.toSet())
+    }
+
+    @Test fun aRawTakeWhoseDiscardFailedIsLeftToRecoveryByItsOutput() {
+        val output = SafRawVideoOutput.create(context, destination, recovery = journal())
+        val name = output.displayName
+        val folder = takeDir(name.removeSuffix(".ocraw"))
+        writeOcraw(output.channel, frames = 2, finish = true)
+        drive.mounted = false
+        assertThrows(IllegalStateException::class.java) { output.discard() }
+        drive.mounted = true
+        // Released to recovery: neither a retried discard nor a publish touches the marker or the file.
+        output.discard()
+        assertThrows(Throwable::class.java) { output.publish() }
+        assertTrue(name in folder.list()!!)
+        assertTrue(folder.list()!!.size > 1)
+        assertEquals("0", entries().single()[1])
     }
 
     @Test fun takeWhoseMarkerIsGoneWasCommittedAndIsOnlyPruned() {

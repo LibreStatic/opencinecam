@@ -505,6 +505,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         }
         store.discard(id)
         journal.step { db -> check(db.delete("captures", "id = ? AND committed = 0", arrayOf(id)) == 1) }
+        // The take is gone, so nothing will read the sidecar copies kept for its recovery.
+        sidecarBackups.deleteTake(id)
     }
 
     /** The MediaStore rows of take [id] (device tests and diagnostics). */
@@ -907,6 +909,8 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     private var relinquished = false
     /** The relinquished take left the live registry; it does once. */
     private var released = false
+    /** A cleanup failed and released the take: a recovery pass may claim it now, so this handle deletes nothing more. */
+    private var handedOff = false
 
     /**
      * ADR-0011 incomplete publication: from here a member's abort withdraws only that member (its rows
@@ -1047,7 +1051,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
 
     /** True when the take left the live registry now, pending (neither committed nor discarded). */
     private fun releaseIfRelinquished(): Boolean {
-        if (released || !relinquished || committed || discarded || nativeWriters != 0) return false
+        if (released || handedOff || !relinquished || committed || discarded || nativeWriters != 0) return false
         journal.release(id)
         released = true
         return true
@@ -1056,7 +1060,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     internal fun abort(member: RecordingRecoveryMember) = synchronized(lock) {
         member.retired = true
         // A commit whose marker may be gone leaves the take to recovery, which reads the drive: nothing is deleted here.
-        if (committed || discarded || commitUnknown) return@synchronized
+        if (committed || discarded || commitUnknown || handedOff) return@synchronized
         if (member.keepBytes) {
             android.util.Log.w("RecordingRecovery", "Take $id keeps ${member.kind} bytes for incomplete publication or recovery")
             return@synchronized
@@ -1079,7 +1083,7 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     }
 
     private fun finishIfReady() {
-        if (committed || discarded || commitUnknown || nativeWriters != 0 || members.values.any { !it.retired }) return
+        if (committed || discarded || commitUnknown || handedOff || nativeWriters != 0 || members.values.any { !it.retired }) return
         if (aborted || members.isNotEmpty() && members.values.all { it.withdrawn }) {
             // Aborted, or every output was empty and has been removed: nothing is left to publish. No native owner
             // remains; the take leaves the live registry after its cleanup, and a failed cleanup is eligible for the next
@@ -1088,6 +1092,9 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
                 journal.discard(id, store)
                 discarded = true
             } finally {
+                // Released either way: a failed cleanup is the next recovery pass's, never this handle's retry, which
+                // could delete files a pass that claimed the entry is repairing.
+                if (!discarded) handedOff = true
                 journal.release(id)
             }
         } else if (members.isNotEmpty() && members.values.filter { !it.withdrawn }.all { it.prepared && it.published }) {
@@ -1154,9 +1161,12 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
     private var done = false
     /** [commit] ran but could not confirm its marker went ([RecordingCommitUnconfirmed]): recovery owns the take. */
     private var unconfirmed = false
+    /** [discard] failed and released the take: recovery owns it, so a retry deletes nothing a pass may be repairing. */
+    private var handedOff = false
 
     /** The take's `.ocraw` document, named exactly [name]. */
     fun create(name: String): Uri = synchronized(lock) {
+        check(!handedOff) { "RAW take was left to recovery" }
         check(!done) { "RAW take has already terminated" }
         store.insert(id, "Download", name, SafDocuments.OCTET_STREAM)
     }
@@ -1166,6 +1176,8 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
         if (done) return@synchronized
         // A retry never reports as committed a take left to recovery.
         if (unconfirmed) throw RecordingCommitUnconfirmed()
+        // Nor commits one handed to recovery by a failed discard: a pass may hold it, and recovery publishes it.
+        if (handedOff) throw IllegalStateException("RAW take was left to recovery")
         try { store.commit(id) } catch (failure: RecordingCommitUnconfirmed) {
             // The take may be committed: a later discard must not delete it. The next recovery pass reads the drive.
             unconfirmed = true
@@ -1184,12 +1196,13 @@ internal class SafRawTakeJournal internal constructor(private val journal: Recor
 
     /** The take holds no frame: its file, marker and folder go, then the entry. A drive that does not answer keeps them. */
     fun discard() = synchronized(lock) {
-        if (done || unconfirmed) return@synchronized
+        if (done || unconfirmed || handedOff) return@synchronized
         // Live until its files are gone, so no recovery pass reads them meanwhile; a failure leaves them to the next pass.
         try {
             journal.discard(id, store)
             done = true
         } finally {
+            if (!done) handedOff = true
             journal.release(id)
         }
     }

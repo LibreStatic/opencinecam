@@ -133,7 +133,7 @@ class IncompleteTakeRecoveryTest {
         assertTrue(backups.texts.isEmpty())
     }
 
-    @Test fun fileBackupsKeepEachTextUntilDeletedAndDropStaleOnes() {
+    @Test fun fileBackupsKeepEachTextUntilDeletedOrItsTakeIsDiscarded() {
         val folder = java.nio.file.Files.createTempDirectory("sidecar-backups").toFile()
         try {
             val backups = FileRecoveredSidecarBackups(folder)
@@ -145,10 +145,14 @@ class IncompleteTakeRecoveryTest {
             backups.delete("$id/take.timing.json")
             assertEquals(null, backups.read("$id/take.timing.json"))
 
-            folder.listFiles()!!.forEach { it.setLastModified(System.currentTimeMillis() - 100L * 24 * 60 * 60 * 1000) }
-            backups.write("other/take.timing.json", "{}")
+            // Old copies of an unresolved take stay; only discarding the take drops them, and only its own.
+            folder.listFiles()!!.forEach { it.setLastModified(System.currentTimeMillis() - 400L * 24 * 60 * 60 * 1000) }
+            val other = "99999999-2222-3333-4444-555555555555"
+            backups.write("$other/take.timing.json", "{}")
+            assertEquals("{\"b\":2}", backups.read("$id/take.audio.json"))
+            backups.deleteTake(id)
             assertEquals(null, backups.read("$id/take.audio.json"))
-            assertEquals("{}", backups.read("other/take.timing.json"))
+            assertEquals("{}", backups.read("$other/take.timing.json"))
         } finally {
             folder.deleteRecursively()
         }
