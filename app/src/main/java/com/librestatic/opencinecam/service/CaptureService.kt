@@ -1090,6 +1090,9 @@ class CaptureService : Service() {
     /** The take recording to a drive ended, and an interrupted RAW take's repair had waited for it: queue its pass now. */
     private val rawRepairDue: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a RAW repair waited for a take on a drive") }
 
+    /** A drive take left pending was released only when its last native writer closed: queue the pass [relinquishTake] could not. */
+    private val driveTakeReleased: () -> Unit = { if (!serviceDestroyed) queueRecordingRecovery("a drive take was left pending") }
+
     /**
      * Off the main thread, after a recovery pass: grants a switch back to the phone kept only for interrupted entries (or
      * uploads) go once nothing needs them ([RecordingDestinationStore.releaseDeferred]).
@@ -1348,6 +1351,7 @@ class CaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onRawRepairDue = rawRepairDue
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.onDriveTakeReleased = driveTakeReleased
         audioInputMonitor = AudioInputMonitor(this, ::onAudioInputsChanged).also { it.register() }
         mainHandler.postDelayed(previewStartWatchdog, PREVIEW_WATCHDOG_INTERVAL_MS)
         audioListeningController = AudioListeningController(this, onStatus = { status ->
@@ -6210,7 +6214,10 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
-        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.run { if (onRawRepairDue === rawRepairDue) onRawRepairDue = null }
+        com.librestatic.opencinecam.storage.RecordingCaptureRecovery.run {
+            if (onRawRepairDue === rawRepairDue) onRawRepairDue = null
+            if (onDriveTakeReleased === driveTakeReleased) onDriveTakeReleased = null
+        }
         // A drive take's continuation never outlives the service (PLAN-072 Delivery 4).
         driveContinuation.veto()
         recordingVolumeMonitor?.close()

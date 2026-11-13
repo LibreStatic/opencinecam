@@ -327,9 +327,20 @@ class RecordingSafRecoveryTest {
         write(member.insert("A001.mp4", "video/mp4", metadata = false), ByteArray(10) { 1 })
         val writer = group.retainNativeWriter()
         member.keepBytes()
-        group.relinquish()
-        assertEquals(RecordingRecoveryReport(), journal().recover())
-        writer.close()
+        val released = java.util.concurrent.atomic.AtomicInteger()
+        RecordingCaptureRecovery.onDriveTakeReleased = { released.incrementAndGet() }
+        try {
+            // Still held: no pass is asked for now, since one would skip the take as live.
+            assertFalse(group.relinquish())
+            assertEquals(RecordingRecoveryReport(), journal().recover())
+            assertEquals(0, released.get())
+            // The writer closing releases the take and asks for the pass, once.
+            writer.close()
+            writer.close()
+            assertEquals(1, released.get())
+        } finally {
+            RecordingCaptureRecovery.onDriveTakeReleased = null
+        }
         assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
     }
 

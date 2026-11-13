@@ -517,6 +517,12 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
          * service sets it while it lives.
          */
         @Volatile internal var onRawRepairDue: (() -> Unit)? = null
+        /**
+         * Called when a relinquished drive take left pending leaves the live registry after its last native writer
+         * closed ([RecordingRecoveryGroup.relinquish]): the owner queues a [recover] pass. Runs under the take's and the
+         * journal's locks, so it must only hand the pass to another thread. The capture service sets it while it lives.
+         */
+        @Volatile internal var onDriveTakeReleased: (() -> Unit)? = null
         /** Phone takes (NULL `tree`) journalled at once; a phone take beyond it is refused. */
         internal const val MAX_PHONE_TAKES = 128
         /** Drive takes journalled at once; a drive take beyond it forgets the oldest deferred one ([journal]). */
@@ -898,6 +904,8 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
     private var nativeWriters = 0
     private var salvaging = false
     private var relinquished = false
+    /** The relinquished take left the live registry; it does once. */
+    private var released = false
 
     /**
      * ADR-0011 incomplete publication: from here a member's abort withdraws only that member (its rows
@@ -925,7 +933,12 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
         nativeWriters++
         val retired = AtomicBoolean(false)
         AutoCloseable { synchronized(lock) {
-            if (retired.compareAndSet(false, true)) { nativeWriters--; finishIfReady(); releaseIfRelinquished() }
+            if (retired.compareAndSet(false, true)) {
+                nativeWriters--
+                finishIfReady()
+                // The owner let go while this writer held the take: a pass queued then skipped it as live, so ask again.
+                if (releaseIfRelinquished() && store is SafRecordingRows) RecordingCaptureRecovery.onDriveTakeReleased?.invoke()
+            }
         } }
     }
 
@@ -1022,16 +1035,21 @@ class RecordingRecoveryGroup internal constructor(private val journal: Recording
      * The take's owner is done with it: no in-process step will publish, salvage or discard it any more. A take still
      * pending (its publication failed, e.g. a drive pulled mid-take) leaves the live registry once no native writer
      * remains, so the next [RecordingCaptureRecovery.recover] (a drive's mount event) resolves it instead of only a new process.
-     * True when a drive's take is left pending: a mount pass may have skipped it while it was live, so the caller queues one.
+     * True when a drive's take is left pending and leaves the registry now: a mount pass may have skipped it while it was
+     * live, so the caller queues one. A take a native writer still holds leaves when that writer closes, which then calls
+     * [RecordingCaptureRecovery.onDriveTakeReleased] instead.
      */
     fun relinquish(): Boolean = synchronized(lock) {
         relinquished = true
-        releaseIfRelinquished()
-        !committed && !discarded && store is SafRecordingRows
+        releaseIfRelinquished() && store is SafRecordingRows
     }
 
-    private fun releaseIfRelinquished() {
-        if (relinquished && !committed && !discarded && nativeWriters == 0) journal.release(id)
+    /** True when the take left the live registry now, pending (neither committed nor discarded). */
+    private fun releaseIfRelinquished(): Boolean {
+        if (released || !relinquished || committed || discarded || nativeWriters != 0) return false
+        journal.release(id)
+        released = true
+        return true
     }
 
     internal fun abort(member: RecordingRecoveryMember) = synchronized(lock) {

@@ -58,7 +58,10 @@ internal fun <U> recoverIncompleteTake(
         // Read before anything is written: a read that fails throws here, so the take's sidecar is never replaced (or,
         // through finalizeClip's own failure path, deleted) on a read that did not answer, and the entry stays for a retry.
         val existingText = if (keep) existing?.handle?.let(readText) else null
-        if (keep && clipSidecar != null && clipSidecar.bytes != 0L) markRecoveredClipSidecar(bundleId, clipSidecar, clipRows, readText)
+        // The clip sidecar too: a drive read that fails stops here, rather than publishing it without the marker.
+        val markable = clipSidecar?.takeIf { keep && it.bytes != 0L }
+        val clipText = markable?.handle?.let(readText)
+        if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows)
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
         val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
         // A motion log without bytes is deleted below like any other empty row, not published with the clip.
@@ -105,13 +108,13 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
 
 /**
  * ADR-0011 for the clip sidecar of an interrupted take: it was written pending as if the take would
- * complete, so it gets the same incomplete marker as the timing sidecar. Best effort: a sidecar that is
- * unreadable, not a JSON object or too large is published as it is, and a failed rewrite never stops
- * the take from being kept.
+ * complete, so it gets the same incomplete marker as the timing sidecar. [text] is the sidecar as read (the caller
+ * reads it first, so a drive read that fails stops the recovery). Best effort past that: a sidecar that is not a JSON
+ * object or too large is published as it is, and a failed rewrite never stops the take from being kept.
  */
-private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, clipRows: ClipRows<U>, readText: (U) -> String?) {
+private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>) {
     try {
-        val text = readText(clip.handle)?.takeIf { it.length <= RECOVERED_SIDECAR_LIMIT } ?: return
+        if (text.length > RECOVERED_SIDECAR_LIMIT) return
         if (runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false).not()) return
         if (IncompleteTake.reasonsOf(text) != null) return // already says why (the take was kept after a failure)
         val marked = IncompleteTake.mark(

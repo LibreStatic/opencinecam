@@ -79,6 +79,19 @@ class IncompleteTakeRecoveryTest {
         assertTrue(fake.events.isEmpty())
     }
 
+    @Test fun aClipSidecarReadThatFailsStopsTheTakeTooRatherThanPublishingItUnmarked() {
+        val fake = Rows()
+        val rows = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10), row("Download", "s", "take.timing.json", "application/json", 90),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 90))
+        val timing = """{"schema":"opencinecam.av-timing.v1","videoUri":"content://media/external_primary/v","bundleId":"$id"}"""
+        val failure = java.io.IOException("the drive stopped answering")
+        val thrown = org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows, fake, { error("no sidecar is created") }, { if (it == "s") timing else throw failure })
+        }
+        assertTrue(thrown === failure)
+        assertTrue(fake.events.isEmpty())
+    }
+
     @Test fun zeroByteMediaAndItsSidecarAreDeletedAndNothingIsPublished() {
         val (published, rows, inserted) = recover(listOf(
             row("DCIM", "v", "take.mp4", "video/mp4", 0), row("Download", "s", "take.timing.json", "application/json", 12)))
