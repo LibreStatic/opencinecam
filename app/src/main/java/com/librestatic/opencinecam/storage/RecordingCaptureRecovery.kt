@@ -186,9 +186,16 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
                     db.execSQL("INSERT INTO captures(id, committed) VALUES(?, 0)", arrayOf(id))
                 }
                 is RecordingDestination.UsbFolder -> {
-                    if (count(db, phone = false) >= MAX_DRIVE_TAKES) forgetOldestDeferred(db)
-                    db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
-                        arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
+                    // A switch back to the phone ([RecordingDestinationStore.clear], same lock) between resolving this
+                    // destination and here may have released the grant; once the entry is journalled, a later one keeps it.
+                    // Lock order: recordingRecoveryLock, then the store's; nothing under the store's lock takes this one.
+                    val grants = RecordingDestinationStore(context)
+                    grants.withGrants {
+                        if (!grants.holdsGrant(destination.treeUri)) throw DriveGrantGone()
+                        if (count(db, phone = false) >= MAX_DRIVE_TAKES) forgetOldestDeferred(db)
+                        db.execSQL("INSERT INTO captures(id, committed, tree, volume) VALUES(?, 0, ?, ?)",
+                            arrayOf(id, destination.treeUri.toString(), destination.volumeId.uppercase()))
+                    }
                 }
             }
         }
@@ -692,6 +699,9 @@ internal class MediaStoreRecordingRows(private val context: Context) : Recording
         }
     }
 }
+
+/** The drive folder's permission went before a take on it was journalled: nothing was written, so the take may go to the phone. */
+internal class DriveGrantGone : IllegalStateException("The drive folder's permission is gone")
 
 /**
  * The drive stopped answering right after a drive take's marker was deleted, so whether the take is committed is

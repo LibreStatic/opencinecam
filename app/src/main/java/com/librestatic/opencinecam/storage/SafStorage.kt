@@ -43,7 +43,7 @@ internal fun driveFreeBytes(resolver: ContentResolver, tree: Uri): Long? {
     if (!driveVolumeProbes.containsKey(key)) safFreeBytes(resolver, tree)?.let { return it }
     var probe: Uri? = null
     return runCatching {
-        val found = driveVolumeProbes[key] ?: driveVolumeProbeCreation.withLock {
+        val found = driveVolumeProbes[key] ?: driveVolumeProbeCreation.computeIfAbsent(key) { java.util.concurrent.locks.ReentrantLock() }.withLock {
             // Two first callers would both create it, and the provider would name the second `.occ-volume (1)`.
             driveVolumeProbes[key] ?: SafDocuments(resolver, tree).let { docs ->
                 val base = docs.directory(docs.root, SafRecordingRows.BASE_FOLDER)
@@ -66,8 +66,11 @@ internal const val DRIVE_VOLUME_PROBE = ".occ-volume"
 
 private val driveVolumeProbes = java.util.concurrent.ConcurrentHashMap<String, Uri>()
 
-/** Serializes finding or creating a probe; the reads of a cached probe never take it. Creation is rare (once per drive). */
-private val driveVolumeProbeCreation = java.util.concurrent.locks.ReentrantLock()
+/**
+ * Serializes finding or creating a tree's probe, one lock per tree so a slow drive never holds up another's; the reads
+ * of a cached probe never take it. Creation is rare (once per drive), so the few locks are kept.
+ */
+private val driveVolumeProbeCreation = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.locks.ReentrantLock>()
 
 /** The tree's document id (`FFF1-7571:RAW`), or null when [tree] is not a tree URI. */
 internal fun treeDocumentIdOf(tree: Uri): String? = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull()

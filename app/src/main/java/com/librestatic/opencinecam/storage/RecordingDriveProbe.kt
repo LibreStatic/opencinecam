@@ -87,7 +87,9 @@ private const val LOG_TAG = "RecordingDriveProbe"
  * `application/octet-stream` so the provider adds no extension. Blocking, call it off the main thread.
  */
 internal class RecordingDriveProbe(private val resolver: ContentResolver) {
-    fun run(tree: Uri): DriveProbeResult = runDriveProbe(SafProbeTarget(tree))
+    /** Probes of one tree run one at a time: they share the probe's name, so one would delete the other's file. */
+    fun run(tree: Uri): DriveProbeResult =
+        synchronized(treeLocks.computeIfAbsent(tree.toString()) { Any() }) { runDriveProbe(SafProbeTarget(tree)) }
 
     private inner class SafProbeTarget(private val tree: Uri) : DriveProbeTarget {
         private var document: Uri? = null
@@ -146,6 +148,8 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
     }
 
     private companion object {
+        /** One per tree probed in this process; picked folders are few, so they are kept. */
+        val treeLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
         const val PROBE_NAME = ".occ-probe"
         const val PROBE_MIME_TYPE = "application/octet-stream"
     }

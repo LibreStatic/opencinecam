@@ -61,19 +61,23 @@ private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int
 private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bitmap? =
     // Held for the drive's volume monitor: an EXIF read or a decode can outlast the drive (ADR-0037).
     context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
-        val exif = runCatching { ExifInterface(descriptor.fileDescriptor) }.getOrNull()
+        // Read through streams on this descriptor, never a dup of it: the volume monitor's close must reach every read.
+        // The streams do not own the descriptor, which useOnDrive closes. ExifInterface is given the bare FileInputStream,
+        // which it seeks through this descriptor instead of buffering a large DNG.
+        fun stream() = java.io.BufferedInputStream(java.io.FileInputStream(descriptor.fileDescriptor))
+        fun rewind() = android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
+        val exif = runCatching { ExifInterface(java.io.FileInputStream(descriptor.fileDescriptor)) }.getOrNull()
         // A DNG's full decode is a sensor-sized develop; its embedded preview is what a gallery wants.
         val preview = if (artifact.name.endsWith(".dng", ignoreCase = true)) exif?.thumbnailBitmap else null
         val decoded = preview ?: run {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            // ExifInterface read through a dup sharing this offset and left it past the header.
-            android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
-            BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, bounds)
+            rewind()
+            BitmapFactory.decodeStream(stream(), null, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@run null
             var sample = 1
             while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
-            android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
-            BitmapFactory.decodeFileDescriptor(descriptor.fileDescriptor, null, BitmapFactory.Options().apply { inSampleSize = sample })
+            rewind()
+            BitmapFactory.decodeStream(stream(), null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: exif?.thumbnailBitmap ?: return@useOnDrive null
         val degrees = exif?.rotationDegrees ?: 0
         if (degrees == 0) decoded

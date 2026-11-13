@@ -780,7 +780,16 @@ class CaptureService : Service() {
         val continuation = recordingLutIntent.get()?.takeIf { it.owner === transferCapture.get() }?.continuation
         val resolved = resolveTakeDestination().let { if (continuation != null) continuationDestination(it) else it }
         resolved.fallback?.let { android.util.Log.w("RecordingDestination", "Take falls back to the phone: $it") }
-        val output = VideoOutput.create(this, slate, captureNames, resolved.destination, stem = continuation?.stem)
+        val output = try {
+            VideoOutput.create(this, slate, captureNames, resolved.destination, stem = continuation?.stem)
+        } catch (gone: com.librestatic.opencinecam.storage.DriveGrantGone) {
+            // The destination went back to the phone since it was resolved, releasing the drive's grant before the take
+            // was journalled: nothing was written, so the take goes where the destination is now, admitted for it again.
+            val now = resolveTakeDestination()
+            if (continuation != null || now.destination !is RecordingDestination.Phone || !admitChangedTakeDestination()) throw gone
+            android.util.Log.w("RecordingDestination", "The drive's permission went at take start: the take goes to the phone")
+            return VideoOutput.create(this, slate, captureNames, now.destination).also { holdTakeDestination(now) }
+        }
         holdTakeDestination(resolved, continuation)
         return output
     }
@@ -2806,6 +2815,11 @@ class CaptureService : Service() {
         submitCaptureState(stateCommands.takeEnded())
         val reason = rawTakeEndReason(result?.reason, engineReason, null)
         val onDrive = session.destination.destination is RecordingDestination.UsbFolder
+        // A drive take its output relinquished stays journalled; a pass of a drive that mounted again meanwhile skipped
+        // it while it was live, so queue one now instead of waiting for the next mount, as relinquishTake does.
+        if (onDrive && result != null && result.uri == null && result.outputError != null) {
+            queueRecordingRecovery("a RAW take on a drive was left pending")
+        }
         // PLAN-072 Delivery 4: the volume event and a writer's ENODEV both end here with the drive's reason, once per take.
         val continuationNote = decideDriveContinuation(policy, onDrive, CaptureMode.RAW_VIDEO, highSpeed = false,
             rawQualifiedOnPhone = rawQualifiedOnPhone(session.config),

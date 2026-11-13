@@ -92,6 +92,14 @@ class RecordingSafRecoveryTest {
         return id
     }
 
+    @Test fun aTakeWhoseDriveGrantWentBeforeItWasJournalledIsRefusedAndLeavesNoEntry() {
+        context.contentResolver.releasePersistableUriPermission(tree, FakeExternalStorageProvider.READ_WRITE)
+        assertThrows(DriveGrantGone::class.java) { journal().start(destination) }
+        assertThrows(DriveGrantGone::class.java) { journal().startRaw(destination) }
+        assertEquals(emptyList<List<String?>>(), entries())
+        assertTrue(takeDir().let { !it.exists() })
+    }
+
     @Test fun versionOneJournalMigratesWithItsRowsStayingOnMediaStore() {
         val id = UUID.randomUUID().toString()
         val committed = UUID.randomUUID().toString()

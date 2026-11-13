@@ -144,7 +144,7 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
             .any { !it.state.isFinished }
     }.getOrDefault(true)
 
-    /** Starts [request]; false while another export runs or waits to. */
+    /** Starts [request]; false while another export runs or waits to, or when its work could not be queued. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
         val app = context.applicationContext
         if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
@@ -152,18 +152,33 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
         synchronized(admission) {
             if (!store.begin(request.takeUri, request.takeName)) return false
             appContext = app
-            try {
+            val operation = try {
                 lease(app, request)
                 WorkManager.getInstance(app).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.KEEP, workRequest(request))
             } catch (failure: Exception) {
-                runCatching { endLease(app) }
-                store.finish(request.takeUri, request.takeName,
-                    CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
-                // endLease ran while the state was Running, which keeps the folders left meanwhile: no worker remains to release them.
-                runCatching { releaseLeftFolders(app) }
+                enqueueFailed(app, request, failure)
+                return false
             }
+            // The enqueue itself completes later: one that fails there leaves no work to end the state or the lease.
+            operation.result.addListener({
+                val failure = runCatching { operation.result.get() }.exceptionOrNull() ?: return@addListener
+                synchronized(admission) {
+                    // Only this export, and only while no worker took it: one that ended or was replaced is left alone.
+                    val running = store.states.value as? CinemaDngExportState.Running
+                    if (running?.takeUri == request.takeUri && !workerRunning) enqueueFailed(app, request, failure)
+                }
+            }, { background(it) })
         }
         return true
+    }
+
+    /** Under [admission]: the export was admitted but its work was never queued, so nothing else ends it. */
+    private fun enqueueFailed(app: Context, request: CinemaDngExportRequest, failure: Throwable) {
+        runCatching { endLease(app) }
+        store.finish(request.takeUri, request.takeName,
+            CinemaDngExportOutcome.Stopped(CinemaDngStopReason.FAILED, cleaned = true, failure.message))
+        // endLease ran while the state was Running, which keeps the folders left meanwhile: no worker remains to release them.
+        runCatching { releaseLeftFolders(app) }
     }
 
     /** Serialises an admission's begin, lease and enqueue with [cancel]. */
