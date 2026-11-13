@@ -3,6 +3,7 @@ package com.librestatic.opencinecam.transfers
 
 import android.content.ContentResolver
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.system.Os
 import android.system.OsConstants
 import android.system.StructStat
@@ -11,7 +12,10 @@ import com.librestatic.opencinecam.storage.CaptureArtifactRole
 import com.librestatic.opencinecam.storage.CloseOnce
 import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
+import com.librestatic.opencinecam.storage.heldReadWriteTrees
 import com.librestatic.opencinecam.storage.isDriveUri
+import com.librestatic.opencinecam.storage.resolveDriveLocation
+import com.librestatic.opencinecam.storage.volumeIdOfTree
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
@@ -23,29 +27,43 @@ import java.io.InputStream
  * read-only descriptor; the provider's rows and the capture writer are never modified or closed. A descriptor on the
  * drive is registered with [DriveDescriptors] while it is open, so a drive that leaves mid-upload has it closed (ADR-0037)
  * even while the upload is blocked on the network, and the stream then fails as [WebDavSourceDriveAbsent].
+ *
+ * A drive artifact keeps the URI it was enrolled under, and is read under the same folder of the same drive mounted
+ * under its other volume name (vold's `-01` rename, [resolveDriveLocation]) when the recorded volume is not [mounted]
+ * and that tree's grant is held. The snapshot still names the enrolled URI, so the bound row's checks are unchanged.
  */
 internal class WebDavMediaStoreArtifactSource(
     private val resolver: ContentResolver,
+    private val mounted: (String) -> Boolean = { true },
 ) : WebDavArtifactSourceFactory {
     override fun source(spec: WebDavArtifactSpec): WebDavClipSource = Source(spec)
 
     private inner class Source(private val spec: WebDavArtifactSpec) : WebDavClipSource {
-        private val prepared = PreparedCaptureArtifact(
-            when (spec.role) {
-                WebDavArtifactRole.VIDEO -> CaptureArtifactRole.VIDEO
-                WebDavArtifactRole.VIDEO_METADATA -> CaptureArtifactRole.VIDEO_METADATA
-                WebDavArtifactRole.AUDIO -> CaptureArtifactRole.AUDIO
-                WebDavArtifactRole.AUDIO_METADATA -> CaptureArtifactRole.AUDIO_METADATA
+        private val role = when (spec.role) {
+            WebDavArtifactRole.VIDEO -> CaptureArtifactRole.VIDEO
+            WebDavArtifactRole.VIDEO_METADATA -> CaptureArtifactRole.VIDEO_METADATA
+            WebDavArtifactRole.AUDIO -> CaptureArtifactRole.AUDIO
+            WebDavArtifactRole.AUDIO_METADATA -> CaptureArtifactRole.AUDIO_METADATA
                 WebDavArtifactRole.CLIP_METADATA -> CaptureArtifactRole.CLIP_METADATA
-            }, spec.sourceUri, spec.sourceName,
-        )
+            }
         private val probe = CaptureArtifactProbe(resolver)
         private val onDrive = isDriveUri(spec.sourceUri)
 
+        /** Where the artifact is read now: as enrolled, or under the drive's mounted alias tree (see the class). */
+        private fun readUri(): String {
+            if (!onDrive) return spec.sourceUri
+            val document = spec.sourceUri.toUri()
+            val tree = runCatching {
+                DocumentsContract.buildTreeDocumentUri(document.authority, DocumentsContract.getTreeDocumentId(document))
+            }.getOrNull() ?: return spec.sourceUri
+            val volume = volumeIdOfTree(tree) ?: return spec.sourceUri
+            return resolveDriveLocation(tree, volume, document, heldReadWriteTrees(resolver), mounted)?.folder?.toString() ?: spec.sourceUri
+        }
+
         /** A drive pulled out mid-read fails with a plain I/O error: report it as the transient [WebDavSourceDriveAbsent]. */
-        private fun <T> reading(block: () -> T): T = try { block() } catch (failure: IOException) {
+        private fun <T> reading(uri: String, block: () -> T): T = try { block() } catch (failure: IOException) {
             if (!onDrive || failure is WebDavSourceDriveAbsent || failure is WebDavArtifactContentChanged) throw failure
-            throw absentOr(resolver, spec.sourceUri.toUri(), failure)
+            throw absentOr(resolver, uri.toUri(), failure)
         }
 
         /**
@@ -53,25 +71,31 @@ internal class WebDavMediaStoreArtifactSource(
          * drive stopped answering before it did (fstat then fails with an errno, which is no [IOException]). A failure
          * while the drive still answers stays what it is.
          */
-        private fun driveLeft(failure: Throwable?, descriptorReleased: Boolean): Boolean = onDrive && (descriptorReleased ||
-            (failure != null && failure !is WebDavSourceDriveAbsent && !driveAnswers(resolver, spec.sourceUri.toUri())))
+        private fun driveLeft(uri: String, failure: Throwable?, descriptorReleased: Boolean): Boolean = onDrive && (descriptorReleased ||
+            (failure != null && failure !is WebDavSourceDriveAbsent && !driveAnswers(resolver, uri.toUri())))
 
-        override fun snapshot(): WebDavClipSnapshot = probe.inspect(prepared, pending = false).also {
-            requireHashSnapshot(spec, it)
-        }
+        override fun snapshot(): WebDavClipSnapshot = snapshot(readUri())
+
+        /** The artifact inspected at [uri], named by its enrolled URI for the bound row's checks. */
+        private fun snapshot(uri: String): WebDavClipSnapshot =
+            probe.inspect(PreparedCaptureArtifact(role, uri, spec.sourceName), pending = false)
+                .let { if (uri == spec.sourceUri) it else it.copy(identity = spec.sourceUri) }
+                .also { requireHashSnapshot(spec, it) }
 
         override fun open(): InputStream {
-            val before = snapshot()
-            val descriptor = reading {
-                resolver.openFileDescriptor(spec.sourceUri.toUri(), "r") ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
+            // One location for the whole read: a remount meanwhile fails the checks rather than mixing two trees.
+            val uri = readUri()
+            val before = snapshot(uri)
+            val descriptor = reading(uri) {
+                resolver.openFileDescriptor(uri.toUri(), "r") ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
             }
             val closer = CloseOnce(descriptor)
-            val driveHandle = DriveDescriptors.registerDocument(spec.sourceUri.toUri(), closer)
+            val driveHandle = DriveDescriptors.registerDocument(uri.toUri(), closer)
             try {
                 requireReadOnlyPreparedDescriptor(descriptor)
                 val first = Os.fstat(descriptor.fileDescriptor)
                 requireStat(descriptor, first, before.sizeBytes)
-                if (snapshot() != before || !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
+                if (snapshot(uri) != before || !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
                 val input = ParcelFileDescriptor.AutoCloseInputStream(descriptor)
                 return object : InputStream() {
                     private var closed = false
@@ -81,7 +105,7 @@ internal class WebDavMediaStoreArtifactSource(
                     private fun <T> held(read: () -> T): T {
                         check(!closed)
                         requireHeld()
-                        return try { reading(read) } catch (failure: IOException) {
+                        return try { reading(uri, read) } catch (failure: IOException) {
                             if (closer.closed && failure !is WebDavSourceDriveAbsent) throw WebDavSourceDriveAbsent(failure) else throw failure
                         }
                     }
@@ -98,7 +122,7 @@ internal class WebDavMediaStoreArtifactSource(
                                 requireReadOnlyPreparedDescriptor(descriptor)
                                 val last = Os.fstat(descriptor.fileDescriptor)
                                 requireStat(descriptor, last, before.sizeBytes)
-                                if (!sameFile(first, last) || snapshot() != before ||
+                                if (!sameFile(first, last) || snapshot(uri) != before ||
                                     !sameFile(first, Os.fstat(descriptor.fileDescriptor))) throw WebDavArtifactContentChanged()
                             } catch (problem: Throwable) { failure = problem }
                             if (closer.closed) {
@@ -107,7 +131,7 @@ internal class WebDavMediaStoreArtifactSource(
                                 try { closer.close() } catch (problem: Throwable) {
                                     if (failure == null) failure = problem else failure.addSuppressed(problem)
                                 }
-                                failure = driveReleasedOr(failure, driveLeft(failure, descriptorReleased = false))
+                                failure = driveReleasedOr(failure, driveLeft(uri, failure, descriptorReleased = false))
                             }
                             failure?.let { throw it }
                         } finally {
@@ -117,7 +141,7 @@ internal class WebDavMediaStoreArtifactSource(
                 }
             } catch (failure: Throwable) {
                 // Read before this close: already closed means the drive left during the checks.
-                val released = driveLeft(failure, closer.closed)
+                val released = driveLeft(uri, failure, closer.closed)
                 try {
                     try { closer.close() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
                 } finally {

@@ -97,6 +97,28 @@ class SafPreparedArtifactProbeTest {
         } finally { control.leave(attempt) }
     }
 
+    @Test @Config(shadows = [ShadowDocumentsProviderQuery::class, ShadowFstatProbe::class])
+    fun aTakeEnrolledUnderOneVolumeNameIsReadUnderTheDrivesOtherMountedName() {
+        ShadowFstatProbe.passThrough = true
+        try { readUnderTheOtherName() } finally { ShadowFstatProbe.passThrough = false }
+    }
+
+    private fun readUnderTheOtherName() {
+        val spec = WebDavArtifactSpec("00000000-0000-0000-0000-000000000004", WebDavArtifactRole.VIDEO, video.uri, "A001.mp4", 11)
+        // vold mounts the same drive as FFF1-7571-01; the operator picked the folder again there, keeping the old grant.
+        val alias = "${FakeExternalStorageProvider.VOLUME}-01"
+        drive.volume = alias
+        FakeExternalStorageProvider.grant(context, drive.tree("Takes"))
+        val source = WebDavMediaStoreArtifactSource(context.contentResolver) { it.equals(alias, ignoreCase = true) }.source(spec)
+        // The snapshot keeps the enrolled URI, so the bound row's identity check holds.
+        assertEquals(video.uri, source.snapshot().identity)
+        assertEquals("video bytes", source.open().use { it.readBytes().decodeToString() })
+        assertEquals(0, DriveDescriptors.registered(alias))
+        // With the other name not mounted, the enrolled location is all there is: a drive that is not there.
+        val unaliased = WebDavMediaStoreArtifactSource(context.contentResolver) { false }.source(spec)
+        assertTrue(runCatching { unaliased.snapshot() }.exceptionOrNull().let { it is WebDavSourceDriveAbsent || it is FileNotFoundException })
+    }
+
     @Test fun aSharedFileIsRegisteredWhileOpenAndClosedWhenTheDriveLeaves() {
         val volume = FakeExternalStorageProvider.VOLUME
         val whole = openShareFile(context.contentResolver, Uri.parse(video.uri))

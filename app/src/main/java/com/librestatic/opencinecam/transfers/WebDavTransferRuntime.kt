@@ -6,6 +6,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.util.Log
+import com.librestatic.opencinecam.storage.RecordingCaptureRecovery
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import java.net.HttpURLConnection
 import java.net.URI
@@ -375,7 +376,8 @@ class WebDavTransferRuntime internal constructor(
         val enrollment = CaptureTransferEnrollmentFile(context).load(id) ?: return WebDavTransferMessage.ERROR
         checkWork(current)
         if (enrollment.endpointId != bundle.endpointId || enrollment.endpointRevision != bundle.endpointRevision) return WebDavTransferMessage.ERROR
-        val source = WebDavMediaStoreArtifactSource(context.contentResolver) // Phone and drive (PLAN-072) sources.
+        // Phone and drive (PLAN-072) sources; a drive take is also read under the drive's other mounted volume name.
+        val source = WebDavMediaStoreArtifactSource(context.contentResolver) { RecordingCaptureRecovery.volumeMounted(context, it) }
         val factory: (URI) -> HttpURLConnection = { uri ->
             synchronized(gate) {
                 checkWork(current)

@@ -50,7 +50,9 @@ private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int
         // Opened here and held for the drive's volume monitor, not inside the retriever: a frame decode can outlast
         // the drive, and only a registered descriptor is closed on a pull (ADR-0037).
         context.contentResolver.openFileDescriptor(uri, "r")?.useOnDrive(uri) { descriptor ->
-            retriever.setDataSource(descriptor.fileDescriptor)
+            // Read through this descriptor, never a dup of it: setDataSource(FileDescriptor) dups it into the media
+            // server, where the volume monitor's close cannot reach, and vold kills holders of a dup on a pull.
+            retriever.setDataSource(DescriptorDataSource(descriptor))
             retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size, size)
         }
     } finally {
@@ -83,6 +85,26 @@ private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bi
         if (degrees == 0) decoded
         else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(degrees.toFloat()) }, true)
     }
+
+/** Positional reads on a held drive descriptor; a failed read (the descriptor closed by a pull) reads as the end. */
+private class DescriptorDataSource(private val descriptor: android.os.ParcelFileDescriptor) : android.media.MediaDataSource() {
+    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+        if (size == 0) return 0
+        return try {
+            val read = android.system.Os.pread(descriptor.fileDescriptor, buffer, offset, size, position)
+            if (read <= 0) -1 else read
+        } catch (_: android.system.ErrnoException) {
+            -1
+        } catch (_: java.io.InterruptedIOException) {
+            -1
+        }
+    }
+
+    override fun getSize(): Long = descriptor.statSize
+
+    /** The descriptor belongs to useOnDrive, which closes it. */
+    override fun close() = Unit
+}
 
 /** Keeps the cache to [THUMBNAIL_LIMIT] files, dropping the least recently written. */
 private fun prune(folder: File) {
