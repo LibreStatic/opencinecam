@@ -49,7 +49,8 @@ private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int
     return try {
         // Opened here and held for the drive's volume monitor, not inside the retriever: a frame decode can outlast
         // the drive, and only a registered descriptor is closed on a pull (ADR-0037).
-        context.contentResolver.openFileDescriptor(uri, "r")?.useOnDrive(uri) { descriptor ->
+        val mark = DriveDescriptors.releaseMark(uri)
+        context.contentResolver.openFileDescriptor(uri, "r")?.useOnDrive(uri, mark) { descriptor ->
             // Read through this descriptor, never a dup of it: setDataSource(FileDescriptor) dups it into the media
             // server, where the volume monitor's close cannot reach, and vold kills holders of a dup on a pull.
             retriever.setDataSource(DescriptorDataSource(descriptor))
@@ -60,9 +61,11 @@ private fun videoFrame(context: Context, artifact: LocalMediaArtifact, size: Int
     }
 }
 
-private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bitmap? =
+private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bitmap? {
+    val uri = artifact.uri.toUri()
+    val mark = DriveDescriptors.releaseMark(uri)
     // Held for the drive's volume monitor: an EXIF read or a decode can outlast the drive (ADR-0037).
-    context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
+    return context.contentResolver.openFileDescriptor(uri, "r")?.useOnDrive(uri, mark) { descriptor ->
         // Read through streams on this descriptor, never a dup of it: the volume monitor's close must reach every read.
         // The streams do not own the descriptor, which useOnDrive closes. ExifInterface is never given a bare
         // FileInputStream: on a seekable one it dups the descriptor to read the thumbnail. A wrapped stream is read in
@@ -86,6 +89,7 @@ private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bi
         if (degrees == 0) decoded
         else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(degrees.toFloat()) }, true)
     }
+}
 
 /** Positional reads on a held drive descriptor; a failed read (the descriptor closed by a pull) reads as the end. */
 private class DescriptorDataSource(private val descriptor: android.os.ParcelFileDescriptor) : android.media.MediaDataSource() {

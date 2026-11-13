@@ -264,7 +264,7 @@ class StillSafRecoveryTest {
         val file = Uri.parse(SafStillRows(context, tree, null) {}.insert("C.dng", "image/x-adobe-dng", false))
         fun open() = requireNotNull(context.contentResolver.openOutputStream(file, "wt"))
 
-        open().useOnDrive(file) {
+        open().useOnDrive(file, DriveDescriptors.releaseMark(file)) {
             assertEquals(1, DriveDescriptors.registered(drive.volume))
             it.write(byteArrayOf(1, 2, 3))
         }
@@ -273,7 +273,7 @@ class StillSafRecoveryTest {
 
         // ADR-0037: the drive leaves mid-write, so the stream closes under the writer and its write fails.
         assertThrows(java.io.IOException::class.java) {
-            open().useOnDrive(file) {
+            open().useOnDrive(file, DriveDescriptors.releaseMark(file)) {
                 assertEquals(1, DriveDescriptors.releaseVolume(drive.volume))
                 it.write(byteArrayOf(4))
             }

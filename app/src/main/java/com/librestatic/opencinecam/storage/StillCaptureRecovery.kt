@@ -482,7 +482,8 @@ internal class SafStillRows(
     override fun writeClosed(uri: String, bytes: ByteArray) {
         // A large DNG to a slow drive can block here, so the drive leaving must be able to close the stream.
         val document = uri.toUri()
-        requireNotNull(resolver.openOutputStream(document, "wt")) { "Still artifact writer unavailable" }.useOnDrive(document) { it.write(bytes) }
+        val mark = DriveDescriptors.releaseMark(document)
+        requireNotNull(resolver.openOutputStream(document, "wt")) { "Still artifact writer unavailable" }.useOnDrive(document, mark) { it.write(bytes) }
     }
 
     /** Name, place in the group folder, size and read-back SHA-256, with the group still in progress before and after. */

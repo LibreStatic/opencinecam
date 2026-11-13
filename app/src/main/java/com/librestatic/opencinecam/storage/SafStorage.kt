@@ -51,7 +51,8 @@ internal fun driveFreeBytes(resolver: ContentResolver, tree: Uri): Long? {
             }
         }
         probe = found
-        requireNotNull(resolver.openFileDescriptor(found, "r")).useOnDrive(found) { descriptor ->
+        val mark = DriveDescriptors.releaseMark(found)
+        requireNotNull(resolver.openFileDescriptor(found, "r")).useOnDrive(found, mark) { descriptor ->
             val stat = android.system.Os.fstatvfs(descriptor.fileDescriptor)
             stat.f_bavail * stat.f_frsize
         }

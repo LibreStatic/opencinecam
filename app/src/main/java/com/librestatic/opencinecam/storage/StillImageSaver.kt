@@ -132,7 +132,8 @@ internal fun ContentResolver.verifyStillBytes(row: Uri, size: Long, sha256: Stri
     requireNotNull(openFileDescriptor(row, "r")).use { check(it.statSize == size) { "Still artifact descriptor size mismatch" } }
     val digest = MessageDigest.getInstance("SHA-256")
     var total = 0L
-    requireNotNull(openInputStream(row)) { "Still artifact reader unavailable" }.useOnDrive(row) { input ->
+    val mark = DriveDescriptors.releaseMark(row)
+    requireNotNull(openInputStream(row)) { "Still artifact reader unavailable" }.useOnDrive(row, mark) { input ->
         val buffer = ByteArray(64 * 1024)
         while (true) {
             val count = input.read(buffer)

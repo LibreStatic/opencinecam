@@ -15,13 +15,13 @@ import org.junit.Test
 class IncompleteTakeRecoveryTest {
     private val id = "11111111-2222-3333-4444-555555555555"
 
-    private class Rows(private val sidecarFailure: Throwable? = null) : ClipRows<String> {
+    private class Rows(private val sidecarFailure: Throwable? = null, private val failing: String? = null) : ClipRows<String> {
         val events = mutableListOf<String>()
         val written = mutableMapOf<String, String>()
         override fun delete(uri: String) { events += "delete:$uri" }
         override fun publish(uri: String) { events += "publish:$uri" }
         override fun writeSidecar(uri: String, bytes: ByteArray) {
-            sidecarFailure?.let { throw it }
+            sidecarFailure?.takeIf { failing == null || failing == uri }?.let { throw it }
             written[uri] = String(bytes); events += "sidecar:$uri"
         }
     }
@@ -131,6 +131,37 @@ class IncompleteTakeRecoveryTest {
         assertEquals(1, published)
         assertEquals("tele", parse(fake.written.getValue("s")).getString("lens"))
         assertTrue(backups.texts.isEmpty())
+    }
+
+    @Test fun aFailedClipSidecarRewriteStopsTheTakeAndARetryRestoresItFromItsBackup() {
+        val backups = Backups()
+        val clipText = """{"schemaVersion":"1.0.0","recordingId":"$id","lens":"tele","events":[]}"""
+        fun rows(clipBytes: Long) = listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", clipBytes))
+        val failed = Rows(sidecarFailure = java.io.IOException("pulled"), failing = "c")
+        org.junit.Assert.assertThrows(java.io.IOException::class.java) {
+            recoverIncompleteTake(id, rows(60), failed, { "new:$it" }, { if (it == "c") clipText else null }, backups)
+        }
+        assertEquals(mapOf("$id/take$CLIP_SIDECAR_SUFFIX" to clipText), backups.texts)
+        assertTrue(failed.events.none { it.startsWith("publish:") || it.startsWith("delete:") })
+
+        // The failed rewrite left it empty: the retry marks the copy, and the empty row is published, not deleted.
+        val fake = Rows()
+        val published = recoverIncompleteTake(id, rows(0), fake, { "new:$it" }, { if (it == "c") "" else null }, backups)
+        assertEquals(1, published)
+        val json = parse(fake.written.getValue("c"))
+        assertEquals("incomplete", json.getString("takeStatus"))
+        assertEquals("tele", json.getString("lens"))
+        assertTrue("publish:c" in fake.events && "delete:c" !in fake.events)
+        assertTrue(backups.texts.isEmpty())
+    }
+
+    @Test fun anEmptyClipSidecarWithoutABackupIsStillDeleted() {
+        val fake = Rows()
+        val published = recoverIncompleteTake(id, listOf(row("DCIM", "v", "take.mp4", "video/mp4", 10),
+            row("Download", "c", "take$CLIP_SIDECAR_SUFFIX", "application/json", 0)), fake, { "new:$it" }, { null }, Backups())
+        assertEquals(1, published)
+        assertTrue("delete:c" in fake.events && "publish:c" !in fake.events)
     }
 
     @Test fun fileBackupsKeepEachTextUntilDeletedOrItsTakeIsDiscarded() {

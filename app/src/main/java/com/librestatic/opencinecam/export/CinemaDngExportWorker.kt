@@ -314,13 +314,14 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
             NativeRawCodec.newEncoder(NativeRawCodec.Codec.LJ92, threads = encoderThreads())
         } else null
         try {
+            val openedAfter = DriveDescriptors.releaseMark(takeUri.toUri())
             val descriptor = context.contentResolver.openFileDescriptor(takeUri.toUri(), "r")
                 ?: return CinemaDngExportOutcome.Refused(CinemaDngRefusal.UNREADABLE)
             return descriptor.use {
                 ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(it.fileDescriptor)).channel.use { channel ->
                     // A take on the USB drive: both descriptors close with the drive (ADR-0037) and the export fails on its next read.
                     val closer = CloseOnce(channel, it)
-                    val driveHandle = DriveDescriptors.registerDocument(takeUri.toUri(), closer)
+                    val driveHandle = DriveDescriptors.registerDocument(takeUri.toUri(), closer, openedAfter)
                     try {
                     val exporter = CinemaDngExporter(channel, takeName, encoder?.let(CinemaDngWriter.Lj92Encoder::native), decoderThreads = 2)
                     var lastNotified = 0L

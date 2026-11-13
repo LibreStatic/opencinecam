@@ -865,13 +865,15 @@ internal class OcrawFileFrameProvider private constructor(
 
     companion object {
         fun open(resolver: ContentResolver, uri: Uri): OcrawFileFrameProvider {
+            val mark = DriveDescriptors.releaseMark(uri)
             val descriptor = requireNotNull(resolver.openFileDescriptor(uri, "r")) { "RAW take could not be opened" }
             try {
                 // The stream owns a duplicate, so the channel and the descriptor close independently.
                 val channel = ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.fileDescriptor)).channel
                 // Registered before the index walk, which reads the whole take's chunk headers.
                 val files = CloseOnce(channel, descriptor)
-                val driveHandle = DriveDescriptors.registerDocument(uri, files)
+                // A drive released since the mark has it closed at once, so the index walk fails as after a pull.
+                val driveHandle = DriveDescriptors.registerDocument(uri, files, openedAfter = mark)
                 try {
                     val index = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames()
                     return OcrawFileFrameProvider(channel, OcrawFrameSource(channel, index), files, driveHandle)

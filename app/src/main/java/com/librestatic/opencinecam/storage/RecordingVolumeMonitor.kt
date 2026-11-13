@@ -116,6 +116,9 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
     fun snapshot(): Pair<Long, Set<String>> = synchronized(tracker) { emitted to tracker.mountedVolumes }
     val events: SharedFlow<RecordingVolumeEvent> = eventFlow.asSharedFlow()
 
+    /** Serializes [rescan]s; the listener's reports take only [tracker]'s lock. */
+    private val rescanLock = Any()
+
     init {
         unregister = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) registerCallback() else registerReceiver()
         // The listener reports changes only: a volume the seed read missed, or one that changed before it registered, is read here.
@@ -186,12 +189,14 @@ internal class RecordingVolumeMonitor(context: Context) : AutoCloseable {
      * older than that report: such a volume keeps the listener's state, and the read applies to every other one
      * ([rescanChanges]), so one read always applies.
      */
-    private fun rescan() {
+    private fun rescan() = synchronized(rescanLock) {
+        // One at a time: two reads that overlap (the startup one and a broadcast's, on API 29) would both predate the
+        // other's publication, and the older could restore a state the newer had already replaced.
         val started = synchronized(tracker) { reported }
         // Only descriptors registered before the read are on the mount it saw gone: the listener may report the volume
         // mounted again meanwhile, and one opened on that mount must stay open.
         val registeredBy = DriveDescriptors.registrationMark()
-        val volumes = removableVolumes() ?: return
+        val volumes = removableVolumes() ?: return@synchronized
         val changes = synchronized(tracker) { rescanChanges(volumes, tracker.mountedVolumes, lastReported, started) }
         // As in report(): the descriptors close before the event is emitted, and outside the lock.
         changes.filter { it.second == VolumeStateKind.LEAVING }

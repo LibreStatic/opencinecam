@@ -98,7 +98,8 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
         // the entry stays for the next pass (ADR-0037). Each read and write checks the scan, so a take starting on a
         // drive ends it the same way, on this thread.
-        requireNotNull(resolver.openFileDescriptor(uri, "rw")) { "RAW take could not be opened" }.useOnDrive(uri) { descriptor ->
+        val mark = DriveDescriptors.releaseMark(uri)
+        requireNotNull(resolver.openFileDescriptor(uri, "rw")) { "RAW take could not be opened" }.useOnDrive(uri, mark) { descriptor ->
             scan.check()
             DuplexFileChannel.open(descriptor.fileDescriptor, scan::check).use { channel -> recoverRawTakeFile(channel).decision }
         }
@@ -469,7 +470,9 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
      */
     private fun readRecoveredSidecar(uri: Uri): String? =
         if (uri.authority == MediaStore.AUTHORITY) runCatching { resolver.openInputStream(uri)?.use(::readBoundedSidecar) }.getOrNull()
-        else requireNotNull(resolver.openInputStream(uri)) { "Recording sidecar could not be read" }.useOnDrive(uri, ::readBoundedSidecar)
+        else DriveDescriptors.releaseMark(uri).let { mark ->
+            requireNotNull(resolver.openInputStream(uri)) { "Recording sidecar could not be read" }.useOnDrive(uri, mark, ::readBoundedSidecar)
+        }
 
     /** Records take [id] committed; a short step under [recordingRecoveryLock]. */
     internal fun commit(id: String) = synchronized(recordingRecoveryLock) { open().use { db ->
@@ -737,7 +740,8 @@ internal class SafRecordingRows(
         override fun publish(uri: Uri) { check(docs.describe(uri) != null) { "Recording output disappeared before publication" } }
         override fun writeSidecar(uri: Uri, bytes: ByteArray) {
             // Held for the drive's volume monitor, as the reader is: a write blocked by a pull is closed, not waited on.
-            (resolver.openOutputStream(uri, "wt") ?: error("Clip sidecar could not be opened.")).useOnDrive(uri) { it.write(bytes) }
+            val mark = DriveDescriptors.releaseMark(uri)
+            (resolver.openOutputStream(uri, "wt") ?: error("Clip sidecar could not be opened.")).useOnDrive(uri, mark) { it.write(bytes) }
         }
     }
 

@@ -18,6 +18,7 @@ import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaTake
+import com.librestatic.opencinecam.storage.DriveDescriptors
 import com.librestatic.opencinecam.storage.useOnDrive
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.storage.drivePath
@@ -136,15 +137,17 @@ private fun exifSnapshot(resolver: ContentResolver, artifact: LocalMediaArtifact
 
 /** One channel for the whole read: the leading metadata, then the frame index (chunk and frame headers only). */
 private fun ocrawSummary(resolver: ContentResolver, artifact: LocalMediaArtifact): OcrawSummary? =
-    resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
-        java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
-            val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
-            val leading = reader.leadingMetadata().orEmpty()
-            val index = reader.indexFrames()
-            if (index.header == null) return@use null
-            // The leading chunk's encoding names the take's codec; later metadata cannot change that.
-            OcrawSummary.from(index.metadata, index, channel.size()).let { summary ->
-                summary.copy(leadingEncoding = leading["encoding"] ?: summary.leadingEncoding)
+    DriveDescriptors.releaseMark(artifact.uri.toUri()).let { mark ->
+        resolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri(), mark) { descriptor ->
+            java.io.FileInputStream(descriptor.fileDescriptor).channel.use { channel ->
+                val reader = OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES)
+                val leading = reader.leadingMetadata().orEmpty()
+                val index = reader.indexFrames()
+                if (index.header == null) return@use null
+                // The leading chunk's encoding names the take's codec; later metadata cannot change that.
+                OcrawSummary.from(index.metadata, index, channel.size()).let { summary ->
+                    summary.copy(leadingEncoding = leading["encoding"] ?: summary.leadingEncoding)
+                }
             }
         }
     }

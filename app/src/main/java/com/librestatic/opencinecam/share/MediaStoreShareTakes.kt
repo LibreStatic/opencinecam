@@ -67,10 +67,11 @@ internal class MediaStoreShareTakes(context: Context) : ShareTakeSource {
  * (ADR-0037) and the client's next read fails.
  */
 internal fun openShareFile(resolver: ContentResolver, uri: android.net.Uri): ShareOpenFile {
+    val mark = DriveDescriptors.releaseMark(uri)
     val descriptor = resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("take unavailable")
     val stream = try { FileInputStream(descriptor.fileDescriptor) } catch (error: RuntimeException) { descriptor.close(); throw error }
     val closer = CloseOnce(stream, descriptor)
-    val driveHandle = DriveDescriptors.registerDocument(uri, closer)
+    val driveHandle = DriveDescriptors.registerDocument(uri, closer, openedAfter = mark)
     return object : ShareOpenFile {
         override val channel: FileChannel = stream.channel
         override fun close() {

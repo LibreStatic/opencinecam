@@ -65,14 +65,20 @@ internal fun <U> recoverIncompleteTake(
         val existingText = saved ?: if (keep) existing?.handle?.let(readText) else null
         // Only a document worth keeping: anything else is replaced by a minimal one whatever happens.
         if (saved == null && backupKey != null && existingText != null && isSidecarDocument(existingText)) backups.write(backupKey, existingText)
-        // The clip sidecar too: a drive read that fails stops here, rather than publishing it without the marker.
-        val markable = clipSidecar?.takeIf { keep && it.bytes != 0L }
-        val clipText = markable?.handle?.let(readText)
+        // The clip sidecar too: a drive read that fails stops here, rather than publishing it without the marker. Its
+        // marking rewrites it truncated as well, so it has its copy; a copy restores it even when the failed rewrite
+        // left it empty, and such a row is then neither left out of the take nor deleted with the empty ones.
+        val clipKey = clipSidecar?.takeIf { keep }?.let { "$bundleId/${it.name}" }
+        val clipSaved = clipKey?.let(backups::read)
+        val markable = clipSidecar?.takeIf { keep && (clipSaved != null || it.bytes != 0L) }
+        val clipText = clipSaved ?: markable?.handle?.let(readText)
+        if (clipSaved == null && clipKey != null && clipText != null && clipSidecarToMark(clipText)) backups.write(clipKey, clipText)
         if (markable != null && clipText != null) markRecoveredClipSidecar(bundleId, markable, clipText, clipRows)
+        val restored = markable?.handle?.takeIf { clipSaved != null }
         val sidecar = existing?.handle ?: if (keep) insertSidecar(if (video) "$stem.incomplete.json" else "$stem.audio.incomplete.json") else null
         val attachments = if (video) (others.filter { it.handle !in consumed } + listOfNotNull(clipSidecar)).also { list -> list.forEach { consumed += it.handle } } else emptyList()
         // A motion log without bytes is deleted below like any other empty row, not published with the clip.
-        val publishable = attachments.filter { it.bytes != 0L }.map { it.handle }
+        val publishable = attachments.filter { it.bytes != 0L || it.handle == restored }.map { it.handle }
         val result = finalizeClip(
             clipRows, clip.handle, sidecar, muxerFinalized = false, bytesWritten = bytes,
             sidecarBytes = { recoveredSidecar(bundleId, clip, video, existingText).toByteArray() },
@@ -81,11 +87,11 @@ internal fun <U> recoverIncompleteTake(
             keepSidecarOnFailure = existing != null,
         )
         when (result) {
-            is ClipFinalizationResult.Published -> { published++; backupKey?.let(backups::delete) }
+            is ClipFinalizationResult.Published -> { published++; backupKey?.let(backups::delete); clipKey?.let(backups::delete) }
             ClipFinalizationResult.Deleted -> Unit
             is ClipFinalizationResult.Failed -> throw (result.cause ?: IllegalStateException(result.failure.userMessage))
         }
-        if (keep) attachments.filter { it.bytes == 0L }.forEach { clipRows.delete(it.handle) }
+        if (keep) attachments.filter { it.bytes == 0L && it.handle != restored }.forEach { clipRows.delete(it.handle) }
     }
     // Rows no media row claimed: keep what has bytes, drop what is empty.
     for (row in rows.filter { it.handle !in consumed }) {
@@ -121,23 +127,26 @@ internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video
 /**
  * ADR-0011 for the clip sidecar of an interrupted take: it was written pending as if the take would
  * complete, so it gets the same incomplete marker as the timing sidecar. [text] is the sidecar as read (the caller
- * reads it first, so a drive read that fails stops the recovery). Best effort past that: a sidecar that is not a JSON
- * object or too large is published as it is, and a failed rewrite never stops the take from being kept.
+ * reads it first, so a drive read that fails stops the recovery). A sidecar that is not a JSON object or too large is
+ * published as it is. A rewrite that fails throws: it may have left the sidecar truncated, so the take stays journalled
+ * and the retry restores the sidecar from the copy [recoverIncompleteTake] kept.
  */
 private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>, text: String, clipRows: ClipRows<U>) {
-    try {
-        if (text.length > RECOVERED_SIDECAR_LIMIT) return
-        if (runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false).not()) return
-        if (IncompleteTake.reasonsOf(text) != null) return // already says why (the take was kept after a failure)
-        val marked = IncompleteTake.mark(
+    if (!clipSidecarToMark(text)) return
+    val marked = try {
+        IncompleteTake.mark(
             text, listOf(IncompleteTake.PROCESS_DEATH),
             note = "Recording was interrupted before the file was finalized; the container may need repair.",
         )
-        clipRows.writeSidecar(clip.handle, marked.toByteArray())
     } catch (failure: Exception) {
         runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
+        return
     }
+    clipRows.writeSidecar(clip.handle, marked.toByteArray())
 }
+
+/** Whether recovery rewrites this clip sidecar: a document ([isSidecarDocument]) that does not already say why it is incomplete. */
+private fun clipSidecarToMark(text: String): Boolean = isSidecarDocument(text) && IncompleteTake.reasonsOf(text) == null
 
 /**
  * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name (the key is
