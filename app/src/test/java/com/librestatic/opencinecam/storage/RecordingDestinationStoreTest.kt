@@ -270,6 +270,20 @@ class RecordingDestinationStoreTest {
     }
 
     @Test
+    fun aConflictedUploadNoLongerKeepsItsTreeButAnUnavailableSourceDoes() {
+        store().adopt(DRIVE)
+        // A conflict is never sent again; a source that was unavailable can still be.
+        outboxed(DRIVE, "CONFLICT")
+        store().clear()
+        assertFalse(held(DRIVE))
+        context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).delete()
+        store().adopt(DRIVE)
+        outboxed(DRIVE, "SOURCE_UNAVAILABLE")
+        store().clear()
+        assertTrue(held(DRIVE))
+    }
+
+    @Test
     fun anOutboxThatCannotBeReadKeepsTheTree() {
         store().adopt(DRIVE)
         context.getDatabasePath(WEBDAV_OUTBOX_DATABASE).also { it.parentFile!!.mkdirs() }.writeText("not a database")

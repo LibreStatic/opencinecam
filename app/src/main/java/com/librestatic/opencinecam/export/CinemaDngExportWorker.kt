@@ -147,9 +147,12 @@ internal object CinemaDngExportRuntime : CinemaDngExportControl {
     /** Starts [request]; false while another export runs or waits to, or when its work could not be queued. */
     fun start(context: Context, request: CinemaDngExportRequest): Boolean {
         val app = context.applicationContext
-        if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
         // With [cancel]: a cancellation between the state turning Running and the enqueue would cancel no work.
         synchronized(admission) {
+            // Under the lock, so a start racing this one sees its work queued: a worker that finished before WorkManager
+            // marked it done would otherwise let a second start through, whose request KEEP then drops. The query may
+            // take two seconds; start runs off main, and the worker's takeOver waits for it no longer than that.
+            if (store.states.value !is CinemaDngExportState.Running && keptWork(app)) return false
             if (!store.begin(request.takeUri, request.takeName)) return false
             appContext = app
             val token = java.util.UUID.randomUUID().toString()

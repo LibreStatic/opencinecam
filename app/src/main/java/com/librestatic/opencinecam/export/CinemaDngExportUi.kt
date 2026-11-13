@@ -229,8 +229,9 @@ internal fun CinemaDngExportDialog(take: LocalMediaTake, environment: CinemaDngE
     val state = CinemaDngExportFormState(CinemaDngExporter.takeName(take.primary.name), plan, loading, choice, folder,
         environment.lj92Available, compress, free, recording, exports is CinemaDngExportState.Running, adopting, refused)
     // An admission under way cannot be taken back (it may already have queued the export), so the dialog stays until it
-    // answers rather than closing on an export that then starts anyway.
-    val dismiss = { if (!starting) onDismiss() }
+    // answers rather than closing on an export that then starts anyway. An adoption also runs to its end (it saves the
+    // new folder and may release the old one), so a dialog reopened meanwhile never offers the folder being released.
+    val dismiss = { if (!starting && !adopting) onDismiss() }
     MediaDialogFrame("cinemadng-export-dialog", dismiss) {
         CinemaDngExportForm(take, state,
             // While a picked folder is adopted the choice stays put: the adoption selects that folder when it answers.

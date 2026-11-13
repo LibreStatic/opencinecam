@@ -126,3 +126,4 @@ Status (2026-11-09): implemented on `feat/external-ssd-recording`, with host tes
 - NTFS and other filesystems that some OEMs mount: they may work, but there is no promise.
 - More than one recording drive at a time.
 - Writing proxies or CinemaDNG exports to the recording drive automatically.
+- Telling apart a take folder duplicated on the drive outside the app (e.g. copied on a computer): both copies carry the same bundle id, which is the take's key (`take:<bundleId>`, also used by the recovery journal, proxies and the network drive), so the gallery lists one of them. Nothing is lost; the copy stays on the drive. Decided 2026-11-13 to keep the key as it is.

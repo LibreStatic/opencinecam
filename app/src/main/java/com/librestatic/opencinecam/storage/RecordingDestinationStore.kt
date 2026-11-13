@@ -422,7 +422,7 @@ internal const val WEBDAV_OUTBOX_DATABASE = "webdav-outbox.db"
 
 /**
  * The picked folders (trees) that the WebDAV outbox [file] still reads drive takes through: the source of every artifact
- * not yet VERIFIED, named as [CinemaDngExportRuntime.sourceTree] names a drive take's folder. Phone sources (MediaStore)
+ * not yet VERIFIED nor in CONFLICT, named as [CinemaDngExportRuntime.sourceTree] names a drive take's folder. Phone sources (MediaStore)
  * give none. Takes no lock and never creates the outbox, as [journalledDriveTrees]: none reads as empty, and an outbox
  * that cannot be read fails, so the caller keeps every grant.
  */
@@ -431,7 +431,9 @@ internal fun outboxDriveTrees(file: File): Set<String> {
     // Read-write only so SQLite can roll back a writer's hot journal; no collator table is created.
     return SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
         { throw IllegalStateException("WebDAV outbox is corrupt") }).use { db ->
-        db.rawQuery("SELECT DISTINCT source_uri FROM artifacts WHERE state <> ?", arrayOf(WebDavArtifactState.VERIFIED.name)).use { c ->
+        // A CONFLICT is never sent again, so it holds no grant; SOURCE_UNAVAILABLE and UNCERTAIN can still upload.
+        db.rawQuery("SELECT DISTINCT source_uri FROM artifacts WHERE state NOT IN (?, ?)",
+            arrayOf(WebDavArtifactState.VERIFIED.name, WebDavArtifactState.CONFLICT.name)).use { c ->
             buildSet { while (c.moveToNext()) CinemaDngExportRuntime.sourceTree(c.getString(0))?.let(::add) }
         }
     }
