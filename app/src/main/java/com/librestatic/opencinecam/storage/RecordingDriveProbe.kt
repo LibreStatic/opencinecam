@@ -95,10 +95,12 @@ internal class RecordingDriveProbe(private val resolver: ContentResolver) {
         private var document: Uri? = null
 
         override fun create(): Boolean {
-            // A probe file an earlier probe could not delete would make the provider name this one `.occ-probe (1)`.
+            // A probe file an earlier probe could not delete would make the provider name this one `.occ-probe (1)`. Only
+            // a file is ours: a folder of that name is the operator's and is never deleted.
             runCatching {
                 val documents = SafDocuments(resolver, tree)
-                documents.child(documents.root, PROBE_NAME)?.let { leftover -> documents.delete(leftover.uri) }
+                documents.child(documents.root, PROBE_NAME)?.takeIf { it.mime != DocumentsContract.Document.MIME_TYPE_DIR }
+                    ?.let { leftover -> documents.delete(leftover.uri) }
             }.onFailure { Log.w(LOG_TAG, "A leftover probe file could not be removed", it) }
             document = DocumentsContract.createDocument(resolver, treeDocumentUri(tree), PROBE_MIME_TYPE, PROBE_NAME)
             return document != null

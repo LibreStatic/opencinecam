@@ -64,11 +64,12 @@ private fun photo(context: Context, artifact: LocalMediaArtifact, size: Int): Bi
     // Held for the drive's volume monitor: an EXIF read or a decode can outlast the drive (ADR-0037).
     context.contentResolver.openFileDescriptor(artifact.uri.toUri(), "r")?.useOnDrive(artifact.uri.toUri()) { descriptor ->
         // Read through streams on this descriptor, never a dup of it: the volume monitor's close must reach every read.
-        // The streams do not own the descriptor, which useOnDrive closes. ExifInterface is given the bare FileInputStream,
-        // which it seeks through this descriptor instead of buffering a large DNG.
+        // The streams do not own the descriptor, which useOnDrive closes. ExifInterface is never given a bare
+        // FileInputStream: on a seekable one it dups the descriptor to read the thumbnail. A wrapped stream is read in
+        // order and buffered as far as the metadata reaches, which in a JPEG or a DNG is the head of the file.
         fun stream() = java.io.BufferedInputStream(java.io.FileInputStream(descriptor.fileDescriptor))
         fun rewind() = android.system.Os.lseek(descriptor.fileDescriptor, 0L, android.system.OsConstants.SEEK_SET)
-        val exif = runCatching { ExifInterface(java.io.FileInputStream(descriptor.fileDescriptor)) }.getOrNull()
+        val exif = runCatching { ExifInterface(stream()) }.getOrNull()
         // A DNG's full decode is a sensor-sized develop; its embedded preview is what a gallery wants.
         val preview = if (artifact.name.endsWith(".dng", ignoreCase = true)) exif?.thumbnailBitmap else null
         val decoded = preview ?: run {

@@ -46,28 +46,23 @@ private fun releaseLive(key: String) {
 }
 
 /**
- * The scan of one drive RAW take, run with the journal unlocked. [cancel] (a take starting on a drive) closes what the
- * scan reads through, so it fails with an I/O error and its entry waits for the pass after that take. A scan that had
- * already read all it needed returns its decision, and that is committed: the work is done, and the commit is brief.
+ * The scan of one drive RAW take, run with the journal unlocked. [cancel] (a take starting on a drive) makes the scan's
+ * next read or write fail with an I/O error ([check]), and its entry waits for the pass after that take. The scan's
+ * descriptor is never closed from here: the number of a descriptor closed under a read could go to the new take's file
+ * before that read reached the kernel. A scan that had already read all it needed returns its decision, and that is
+ * committed: the work is done, and the commit is brief.
  */
 internal class RawRepairScan {
-    private var held: AutoCloseable? = null
-    @get:Synchronized var cancelled = false
+    @Volatile var cancelled = false
         private set
 
-    /** The scan reads through [closeable] from here on; fails, closing it, when the scan was cancelled before. */
-    @Synchronized fun hold(closeable: AutoCloseable) {
-        if (cancelled) {
-            runCatching { closeable.close() }
-            throw java.io.IOException("RAW repair cancelled: a take is recording to a drive")
-        }
-        held = closeable
+    /** Before each read or write of the scan: fails once the scan is cancelled. */
+    fun check() {
+        if (cancelled) throw java.io.IOException("RAW repair cancelled: a take is recording to a drive")
     }
 
-    @Synchronized fun cancel() {
+    fun cancel() {
         cancelled = true
-        held?.let { runCatching { it.close() } }
-        held = null
     }
 }
 internal enum class RecordingMemberKind { VIDEO, AUDIO }
@@ -100,10 +95,11 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     /** Repairs a drive RAW take's `.ocraw` in place and says whether to keep it ([finishDriveRawTake]); tests replace it. */
     internal var repairRaw: (Uri, RawRepairScan) -> RawTakeFileDecision = { uri, scan ->
         // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
-        // the entry stays for the next pass (ADR-0037). Held by the scan, so a take starting on a drive ends it the same way.
+        // the entry stays for the next pass (ADR-0037). Each read and write checks the scan, so a take starting on a
+        // drive ends it the same way, on this thread.
         requireNotNull(resolver.openFileDescriptor(uri, "rw")) { "RAW take could not be opened" }.useOnDrive(uri) { descriptor ->
-            scan.hold(descriptor)
-            DuplexFileChannel.open(descriptor.fileDescriptor).use { channel -> recoverRawTakeFile(channel).decision }
+            scan.check()
+            DuplexFileChannel.open(descriptor.fileDescriptor, scan::check).use { channel -> recoverRawTakeFile(channel).decision }
         }
     }
     internal fun key(id: String) = "${database.absolutePath}:$id"

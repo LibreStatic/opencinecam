@@ -786,13 +786,18 @@ class CaptureService : Service() {
             // The destination went back to the phone since it was resolved, releasing the drive's grant before the take
             // was journalled: nothing was written, so the take goes where the destination is now, admitted for it again.
             val now = resolveTakeDestination()
-            if (continuation != null || now.destination !is RecordingDestination.Phone || !admitChangedTakeDestination()) throw gone
+            if (continuation != null || now.destination !is RecordingDestination.Phone) throw gone
+            // Refused for the phone's free space: the refusal is already shown, and the take start is not a failure.
+            if (!admitChangedTakeDestination()) throw TakeStartRefused(gone)
             android.util.Log.w("RecordingDestination", "The drive's permission went at take start: the take goes to the phone")
             return VideoOutput.create(this, slate, captureNames, now.destination).also { holdTakeDestination(now) }
         }
         holdTakeDestination(resolved, continuation)
         return output
     }
+
+    /** A take start refused with its reason shown (ADR-0016): its output's cleanup runs, but it is not reported as a failure. */
+    private class TakeStartRefused(cause: Throwable) : java.io.IOException(cause)
 
     /** The take-start message for a storage refusal (ADR-0013): free space unreadable, or under the reserve. */
     private fun storageRefusalText(admission: StorageAdmission.Refuse): String =
@@ -3479,8 +3484,9 @@ class CaptureService : Service() {
             pendingStopReason = null
             scheduleTimelapseAutoStop()
             mainHandler.post(recordingTicker)
-            // PLAN-072: a drive that left while this take was starting ends it now, through the drive stop path.
-            stopTakeLostAtStart()
+            // PLAN-072: a drive that left while this take was starting ends it now, through the drive stop path. This
+            // callback runs on the camera thread; the stop path is main's.
+            mainHandler.post { if (!serviceDestroyed && rawTake == null) stopTakeLostAtStart() }
         }
 
         override fun onRecordingStopped(success: Boolean) {
@@ -5956,7 +5962,7 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("video-output-failed", failureText(R.string.capture_video_output_failed, failure))
+                        if (failure !is TakeStartRefused) fail("video-output-failed", failureText(R.string.capture_video_output_failed, failure))
                         false
                     }
                 }
@@ -6089,7 +6095,7 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("log-output-failed", failureText(R.string.capture_log_output_failed, failure))
+                        if (failure !is TakeStartRefused) fail("log-output-failed", failureText(R.string.capture_log_output_failed, failure))
                         false
                     }
                 }
@@ -6160,7 +6166,7 @@ class CaptureService : Service() {
                         abortTransferPublication()
                         foreground.stop()
                         retireRecordingRecoveryGuards(previewEngine.recordingOutputRetirement())
-                        fail("timelapse-output-failed", failureText(R.string.capture_timelapse_output_failed, failure))
+                        if (failure !is TakeStartRefused) fail("timelapse-output-failed", failureText(R.string.capture_timelapse_output_failed, failure))
                         false
                     }
                 }

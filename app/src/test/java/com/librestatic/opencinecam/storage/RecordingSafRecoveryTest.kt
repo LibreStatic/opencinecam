@@ -727,16 +727,15 @@ class RecordingSafRecoveryTest {
     @Test fun aTakeStartingOnADriveCancelsARawRepairInFlight() {
         val id = interrupted("A001.ocraw" to killedOcraw(frames = 2))
         val scanning = CountDownLatch(1)
-        val closed = CountDownLatch(1)
         val due = java.util.concurrent.atomic.AtomicInteger()
         RecordingCaptureRecovery.onRawRepairDue = { due.incrementAndGet() }
-        // A scan reading through a descriptor the pass holds: it ends when that is closed under it.
+        // A scan reading chunk after chunk: the read after the cancel fails, and the scan ends on its own thread.
         val repairing = journal().apply {
             repairRaw = { _, scan ->
-                scan.hold(AutoCloseable { closed.countDown() })
                 scanning.countDown()
-                check(closed.await(30, TimeUnit.SECONDS))
-                throw java.io.IOException("descriptor closed mid-scan")
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
+                while (System.nanoTime() < deadline) { scan.check(); Thread.sleep(5) }
+                error("the scan was never cancelled")
             }
         }
         val threads = Executors.newSingleThreadExecutor()
@@ -758,12 +757,21 @@ class RecordingSafRecoveryTest {
         }
     }
 
-    @Test fun aRawRepairScanCancelledBeforeItOpensClosesWhatItIsGiven() {
-        val scan = RawRepairScan().apply { cancel() }
-        var closes = 0
-        assertThrows(java.io.IOException::class.java) { scan.hold(AutoCloseable { closes++ }) }
-        assertEquals(1, closes)
+    @Test fun aCancelledRawRepairScanFailsItsNextReadAndLeavesTheDescriptorOpen() {
+        val file = File(context.cacheDir, "scan.ocraw").apply { writeBytes(ByteArray(64) { it.toByte() }) }
+        val scan = RawRepairScan()
+        java.io.RandomAccessFile(file, "rw").use { raf ->
+            val channel = DuplexFileChannel.open(raf.fd, scan::check)
+            assertEquals(16, channel.read(java.nio.ByteBuffer.allocate(16), 0L))
+            scan.cancel()
+            assertThrows(java.io.IOException::class.java) { channel.read(java.nio.ByteBuffer.allocate(16), 16L) }
+            assertThrows(java.io.IOException::class.java) { channel.write(java.nio.ByteBuffer.allocate(4), 0L) }
+            // The descriptor is the scan's to close: it is still open, and the file is untouched.
+            assertTrue(raf.fd.valid())
+            assertEquals(64L, raf.length())
+        }
         assertTrue(scan.cancelled)
+        assertEquals(0.toByte(), file.readBytes()[0])
     }
 
     @Test fun takesDeferredOnALostDriveNeitherBlockTheJournalNorFillIt() {
