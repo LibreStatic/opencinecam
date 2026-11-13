@@ -1143,12 +1143,7 @@ class CaptureService : Service() {
         // startup pass replaces the report, a later one replaces its pending counts and adds its discards to those shown.
         val startup = requests.any { it.publishReport }
         mainHandler.post { if (!serviceDestroyed) cameraState.update { state ->
-            val shown = state.stillRecovery
-            when {
-                startup -> state.copy(stillRecovery = report)
-                shown == null && report == com.librestatic.opencinecam.storage.StillRecoveryReport() -> state
-                else -> state.copy(stillRecovery = report.copy(discardedGroups = (shown?.discardedGroups ?: 0) + report.discardedGroups))
-            }
+            state.copy(stillRecovery = com.librestatic.opencinecam.storage.mergedStillRecoveryReport(state.stillRecovery, report, startup))
         } }
     }
 

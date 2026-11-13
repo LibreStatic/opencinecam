@@ -20,6 +20,17 @@ import java.util.UUID
  * folder permission is gone; a later pass with the drive back resolves them. */
 data class StillRecoveryReport(val discardedGroups: Int = 0, val unresolvedGroups: Int = 0, val deferredGroups: Int = 0)
 
+/**
+ * The report to show after a recovery pass, given the one [shown]. The startup pass ([startup]) replaces it; a later
+ * pass (a drive mounted) replaces the pending counts, so a group it resolved stops showing as unresolved, and adds its
+ * discards to those shown. An empty later pass with nothing shown leaves nothing shown.
+ */
+internal fun mergedStillRecoveryReport(shown: StillRecoveryReport?, pass: StillRecoveryReport, startup: Boolean): StillRecoveryReport? = when {
+    startup -> pass
+    shown == null && pass == StillRecoveryReport() -> null
+    else -> pass.copy(discardedGroups = (shown?.discardedGroups ?: 0) + pass.discardedGroups)
+}
+
 /** Private, pre-insert ownership journal. Each group reserves its own UUID subdirectory in both
  * collections, so a provider-renamed item is still attributable in the insert/receipt crash gap.
  * No prefix scans, timestamp heuristics, transfer receipts, or inference from IS_PENDING=0.
