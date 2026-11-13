@@ -38,6 +38,7 @@ internal fun <U> recoverIncompleteTake(
     clipRows: ClipRows<U>,
     insertSidecar: (name: String) -> U,
     readText: (U) -> String?,
+    backups: RecoveredSidecarBackups = RecoveredSidecarBackups.NONE,
 ): Int {
     val media = rows.filter { it.root != "Download" }
     val json = rows.filter { it.root == "Download" && it.mime == "application/json" }
@@ -57,7 +58,13 @@ internal fun <U> recoverIncompleteTake(
         val keep = decideClipRecovery(muxerFinalized = false, bytesWritten = bytes) != ClipRecoveryDecision.DELETE
         // Read before anything is written: a read that fails throws here, so the take's sidecar is never replaced (or,
         // through finalizeClip's own failure path, deleted) on a read that did not answer, and the entry stays for a retry.
-        val existingText = if (keep) existing?.handle?.let(readText) else null
+        // A rewrite opens the take's sidecar truncated, so its text is kept aside first and preferred on a retry: a rewrite
+        // that failed or a process that died part way leaves the sidecar empty or partial, never the source of the next.
+        val backupKey = existing?.takeIf { keep }?.let { "$bundleId/${it.name}" }
+        val saved = backupKey?.let(backups::read)
+        val existingText = saved ?: if (keep) existing?.handle?.let(readText) else null
+        // Only a document worth keeping: anything else is replaced by a minimal one whatever happens.
+        if (saved == null && backupKey != null && existingText != null && isSidecarDocument(existingText)) backups.write(backupKey, existingText)
         // The clip sidecar too: a drive read that fails stops here, rather than publishing it without the marker.
         val markable = clipSidecar?.takeIf { keep && it.bytes != 0L }
         val clipText = markable?.handle?.let(readText)
@@ -74,7 +81,7 @@ internal fun <U> recoverIncompleteTake(
             keepSidecarOnFailure = existing != null,
         )
         when (result) {
-            is ClipFinalizationResult.Published -> published++
+            is ClipFinalizationResult.Published -> { published++; backupKey?.let(backups::delete) }
             ClipFinalizationResult.Deleted -> Unit
             is ClipFinalizationResult.Failed -> throw (result.cause ?: IllegalStateException(result.failure.userMessage))
         }
@@ -93,10 +100,13 @@ private fun ownsSidecar(name: String, stem: String, video: Boolean): Boolean {
     return audioSidecar != video
 }
 
+/** Whether [text] is a sidecar recovery builds on: a JSON object within [RECOVERED_SIDECAR_LIMIT]. */
+private fun isSidecarDocument(text: String): Boolean = text.length <= RECOVERED_SIDECAR_LIMIT &&
+    runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false)
+
 /** The pending sidecar of the take with the marker, or a minimal document the catalog accepts. */
 internal fun <U> recoveredSidecar(bundleId: String, clip: RecoveredRow<U>, video: Boolean, existing: String?): String {
-    val base = existing?.takeIf { it.length <= RECOVERED_SIDECAR_LIMIT }
-        ?.takeIf { text -> runCatching { Json.parseToJsonElement(text) is JsonObject }.getOrDefault(false) }
+    val base = existing?.takeIf(::isSidecarDocument)
         ?: buildJsonObject {
             put("schema", if (video) "opencinecam.recording.v1" else "opencinecam-audio-sidecar-v1")
             put(if (video) "videoUri" else "audioUri", clip.uri)
@@ -128,3 +138,48 @@ private fun <U> markRecoveredClipSidecar(bundleId: String, clip: RecoveredRow<U>
         runCatching { android.util.Log.w("IncompleteTakeRecovery", "Clip sidecar of take $bundleId could not be marked incomplete; it is published as it is", failure) }
     }
 }
+
+/**
+ * Durable copies of the sidecar texts [recoverIncompleteTake] is about to rewrite, by take and sidecar name: written
+ * before the rewrite, read in place of the sidecar while present, deleted once the take is published.
+ */
+internal interface RecoveredSidecarBackups {
+    fun read(key: String): String?
+    fun write(key: String, text: String)
+    fun delete(key: String)
+
+    companion object {
+        /** No copies: the tests' rows and any caller that cannot lose a sidecar this way. */
+        val NONE = object : RecoveredSidecarBackups {
+            override fun read(key: String): String? = null
+            override fun write(key: String, text: String) = Unit
+            override fun delete(key: String) = Unit
+        }
+    }
+}
+
+/** [RecoveredSidecarBackups] as files in [folder], each written to a `.part`, synced and renamed into place. */
+internal class FileRecoveredSidecarBackups(private val folder: java.io.File) : RecoveredSidecarBackups {
+    private fun file(key: String) = java.io.File(folder, java.security.MessageDigest.getInstance("SHA-256")
+        .digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(40) + ".json")
+
+    override fun read(key: String): String? = file(key).takeIf { it.isFile }?.readText()
+
+    override fun write(key: String, text: String) {
+        check(folder.isDirectory || folder.mkdirs()) { "Sidecar backup folder unavailable" }
+        // A take discarded or forgotten never deletes its copy: those untouched for long go with the next write.
+        val stale = System.currentTimeMillis() - BACKUP_LIFETIME_MILLIS
+        folder.listFiles()?.filter { it.lastModified() < stale }?.forEach { it.delete() }
+        val target = file(key)
+        val partial = java.io.File(folder, target.name + ".part")
+        java.io.FileOutputStream(partial).use { it.write(text.toByteArray()); it.fd.sync() }
+        check(partial.renameTo(target)) { "Sidecar backup could not be kept" }
+    }
+
+    override fun delete(key: String) {
+        file(key).delete()
+    }
+}
+
+/** How long an orphaned sidecar backup is kept: far longer than a drive is likely to stay away. */
+private const val BACKUP_LIFETIME_MILLIS = 90L * 24 * 60 * 60 * 1000

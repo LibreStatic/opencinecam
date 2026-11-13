@@ -86,12 +86,15 @@ internal class WebDavMediaStoreArtifactSource(
             // One location for the whole read: a remount meanwhile fails the checks rather than mixing two trees.
             val uri = readUri()
             val before = snapshot(uri)
+            val mark = DriveDescriptors.releaseMark(uri.toUri())
             val descriptor = reading(uri) {
                 resolver.openFileDescriptor(uri.toUri(), "r") ?: throw FileNotFoundException("Published artifact descriptor is unavailable")
             }
             val closer = CloseOnce(descriptor)
-            val driveHandle = DriveDescriptors.registerDocument(uri.toUri(), closer)
+            val driveHandle = DriveDescriptors.registerDocument(uri.toUri(), closer, openedAfter = mark)
             try {
+                // Opened across a release of the drive: closed already, which is the drive leaving.
+                if (closer.closed) throw WebDavSourceDriveAbsent()
                 requireReadOnlyPreparedDescriptor(descriptor)
                 val first = Os.fstat(descriptor.fileDescriptor)
                 requireStat(descriptor, first, before.sizeBytes)

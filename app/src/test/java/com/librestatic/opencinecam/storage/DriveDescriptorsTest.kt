@@ -78,6 +78,32 @@ class DriveDescriptorsTest {
         assertEquals(1, after.closes)
     }
 
+    @Test fun aDescriptorOpenedAcrossAReleaseIsClosedInsteadOfRegistered() {
+        val document = DocumentsContract.buildDocumentUriUsingTree(
+            DocumentsContract.buildTreeDocumentUri(EXTERNAL_STORAGE_AUTHORITY, "$volume:Rec"), "$volume:Rec/OpenCineCam/A001/A001.mp4")
+        val mark = DriveDescriptors.releaseMark(document)
+        // The drive left while the open was in flight: nothing was registered yet, so the release closed nothing.
+        assertEquals(0, DriveDescriptors.releaseVolume(volume))
+        val late = Counting()
+        assertSame(DriveDescriptorHandle.NONE, DriveDescriptors.registerDocument(document, late, openedAfter = mark))
+        assertEquals(1, late.closes)
+        assertEquals(0, DriveDescriptors.registered(volume))
+
+        // Opened after that release (a newer mount): registered, and closed by the next release.
+        val fresh = Counting()
+        DriveDescriptors.registerDocument(document, fresh, openedAfter = DriveDescriptors.releaseMark(document))
+        assertEquals(0, fresh.closes)
+        assertEquals(1, DriveDescriptors.registered(volume))
+        // Another volume's release does not reject a descriptor on this one.
+        val otherMark = DriveDescriptors.releaseMark(document)
+        DriveDescriptors.releaseVolume(other)
+        val unaffected = Counting()
+        DriveDescriptors.registerDocument(document, unaffected, openedAfter = otherMark)
+        assertEquals(0, unaffected.closes)
+        assertEquals(2, DriveDescriptors.releaseVolume(volume))
+        assertEquals(1, fresh.closes)
+    }
+
     @Test fun otherVolumesAreUntouched() {
         val leaving = Counting()
         val staying = Counting()

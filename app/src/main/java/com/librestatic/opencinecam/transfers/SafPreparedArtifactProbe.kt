@@ -58,6 +58,7 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
     override fun inspect(artifact: PreparedCaptureArtifact, pending: Boolean): WebDavClipSnapshot {
         val before = safPreparedObservation(resolver, artifact, pending)
         val uri = artifact.uri.toUri()
+        val mark = DriveDescriptors.releaseMark(uri)
         val descriptor = try {
             // Null is a provider that died: missing only when the drive still answers, like a refused open.
             resolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException("Prepared artifact descriptor is unavailable")
@@ -66,8 +67,10 @@ internal class SafPreparedArtifactProbe(private val resolver: ContentResolver) :
         }
         // Held like useOnDrive, but a failure met on a descriptor DriveDescriptors released is the drive leaving.
         val closer = CloseOnce(descriptor)
-        val handle = DriveDescriptors.registerDocument(uri, closer)
+        val handle = DriveDescriptors.registerDocument(uri, closer, openedAfter = mark)
         val snapshot = try {
+            // Opened across a release of the drive: closed already, which is the drive leaving.
+            if (closer.closed) throw WebDavSourceDriveAbsent()
             inspectOpened(descriptor, artifact, pending, before)
         } catch (failure: Throwable) {
             // A drive that stopped answering before DriveDescriptors released the descriptor fails the same way.

@@ -92,6 +92,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
     private val database = File(this.context.noBackupFilesDir, DATABASE)
     private val mounted: (String) -> Boolean = mounted ?: { volume -> volumeMounted(this.context, volume) }
     private val mediaStore = MediaStoreRecordingRows(this.context)
+    private val sidecarBackups = FileRecoveredSidecarBackups(File(this.context.noBackupFilesDir, "recovered-sidecars"))
     /** Repairs a drive RAW take's `.ocraw` in place and says whether to keep it ([finishDriveRawTake]); tests replace it. */
     internal var repairRaw: (Uri, RawRepairScan) -> RawTakeFileDecision = { uri, scan ->
         // The repair scans and checks the whole take: registered, so a drive that leaves ends it with an I/O error and
@@ -451,7 +452,7 @@ internal class RecordingCaptureRecovery(context: Context, mounted: ((String) -> 
         check(journal.step { state(it, id) } == 0L) { "Only an uncommitted take can be recovered" }
         val published = recoverIncompleteTake(id, store.recovered(id), store.clipRows,
             insertSidecar = { name -> store.insert(id, "Download", name, "application/json") },
-            readText = ::readRecoveredSidecar)
+            readText = ::readRecoveredSidecar, backups = sidecarBackups)
         if (published == 0) return 0
         store.commit(id)
         journal.step { db ->

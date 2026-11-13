@@ -30,6 +30,16 @@ internal object DriveDescriptors {
     /** Counts the registrations, under [entries]'s lock; an entry keeps its count as [Entry.sequence]. */
     private var registrations = 0L
 
+    /** How many releases each volume (upper case) has had, under [entries]'s lock; see [releaseMark]. */
+    private val releases = HashMap<String, Long>()
+
+    /**
+     * The release count of [document]'s drive, taken before opening it and passed to [registerDocument]: a release that
+     * ran while the open was in flight cannot have closed the descriptor, so the registration closes it instead. 0 off a drive.
+     */
+    fun releaseMark(document: Uri): Long =
+        driveVolumeOfDocument(document)?.let { volume -> synchronized(entries) { releases[volume.uppercase()] ?: 0L } } ?: 0L
+
     /** The count of registrations so far: a release bounded by it ([releaseVolume]) spares every later one. */
     fun registrationMark(): Long = synchronized(entries) { registrations }
 
@@ -53,14 +63,38 @@ internal object DriveDescriptors {
         driveVolumeOfDocument(document)?.let { register(it, closeable) } ?: DriveDescriptorHandle.NONE
 
     /**
+     * [registerDocument] for a descriptor opened after [releaseMark] gave [openedAfter]: when the drive has been released
+     * since, [closeable] is closed at once (the open may have reached the leaving mount after the release closed the
+     * rest) and nothing is registered, so its owner meets a closed descriptor, as after any release.
+     */
+    fun registerDocument(document: Uri, closeable: AutoCloseable, openedAfter: Long): DriveDescriptorHandle {
+        val volume = driveVolumeOfDocument(document)?.uppercase() ?: return DriveDescriptorHandle.NONE
+        DriveDescriptorWatch.ensure()
+        val entry = synchronized(entries) {
+            if ((releases[volume] ?: 0L) > openedAfter) null
+            else Entry(volume, closeable, ++registrations).also {
+                entries += it
+                size = entries.size
+            }
+        }
+        if (entry != null) return DriveDescriptorHandle(entry)
+        try {
+            closeable.close()
+        } catch (failure: Throwable) {
+            Log.w(LOG_TAG, "A descriptor opened across a release of the drive $volume could not be closed", failure)
+        }
+        return DriveDescriptorHandle.NONE
+    }
+
+    /**
      * Closes every closeable registered for [volumeId] (matched ignoring case) and forgets them. A close that fails is
      * logged and does not stop the others. Returns how many were closed. Safe from any thread. With [registeredBy] (a
      * [registrationMark]), only those registered up to it: one registered later may hold a newer mount of the volume.
      */
     fun releaseVolume(volumeId: String, registeredBy: Long = Long.MAX_VALUE): Int {
-        if (size == 0) return 0
         val volume = volumeId.uppercase()
         val released = synchronized(entries) {
+            releases[volume] = (releases[volume] ?: 0L) + 1
             val matching = entries.filter { it.volumeId == volume && it.sequence <= registeredBy }
             if (matching.isNotEmpty()) {
                 entries.removeAll { it.volumeId == volume && it.sequence <= registeredBy }
