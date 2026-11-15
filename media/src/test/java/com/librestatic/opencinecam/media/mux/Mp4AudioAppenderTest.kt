@@ -506,6 +506,44 @@ class Mp4AudioAppenderTest {
         assertVideoKept(file, original, videoMdat, "unrestored retype")
     }
 
+    @Test
+    fun aRestoreThatFailsAfterCompletingTheTypeLeavesTheOldMoov() {
+        val template = newFile()
+        val original = template.readBytes()
+        val originalBoxes = boxes(template)
+        val oldMoov = originalBoxes.single { it.type == "moov" }
+        val videoMdat = originalBoxes.single { it.type == "mdat" }
+        val track = aacTrack(validFrames = 24_000, startOffsetUs = 0)
+        val written = units(unitCountFor(track))
+
+        val counting = temp.newFile().apply { writeBytes(original) }
+        val totalWrites = withMp4(counting, write = true) { bytes ->
+            val failing = FailingMp4Bytes(bytes, Int.MAX_VALUE)
+            Mp4AudioAppender.begin(failing).use { appender ->
+                written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
+                appender.finish(track)
+            }
+            failing.writes
+        }
+
+        val file = temp.newFile().apply { writeBytes(original) }
+        withMp4(file, write = true) { bytes ->
+            // The retype stops after one byte ("foov"); the restore fails too, but its one byte already made it "moov" again.
+            val failing = FailingMp4Bytes(bytes, mapOf(totalWrites to 1, totalWrites + 1 to 1))
+            val appender = Mp4AudioAppender.begin(failing)
+            assertThrows(IOException::class.java) {
+                written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
+                appender.finish(track)
+            }
+            appender.close()
+            assertEquals("close swallows the new moov", totalWrites + 2, failing.writes)
+        }
+
+        val moov = withMp4(file) { findSingleMoov(scanTopLevelBoxes(it)) }
+        assertEquals(oldMoov.offset, moov.offset)
+        assertVideoKept(file, original, videoMdat, "restored by a failed write")
+    }
+
     /** The file ends on a box boundary and its movie plays the original video from the original samples. */
     private fun assertVideoKept(file: File, original: ByteArray, videoMdat: Mp4Box, label: String) {
         assertEquals(label, file.length(), boxes(file).last().end)

@@ -3860,9 +3860,9 @@ class CaptureService : Service() {
                                 (placement?.audioSyncOffsetUs?.takeIf { it != 0L }?.let { " (manual sync offset $it us)" } ?: "") +
                                 ", ${avTiming?.policy}, ${appended.encoderName}, first read " +
                                 "${result.readEstimatedFrameZeroNs?.let { (it - result.startedAtElapsedNs) / 1_000L }} us after the input started")
-                            audioWithdrawn = true
-                            // False: the WAV could not be removed, so it is published beside the video as well.
-                            audioWithdrawn = takeWav.withdrawPrepared()
+                            // An overrun WAV stays beside the video: its record is the only one that says the audio has gaps.
+                            // Otherwise false means the WAV could not be removed, so it is published beside the video as well.
+                            audioWithdrawn = result.inputOverruns == 0 && takeWav.withdrawPrepared()
                         }
                     } catch (failure: Throwable) {
                         android.util.Log.e("CaptureService", "Take audio not appended; the WAV stays beside the video", failure)

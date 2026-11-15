@@ -168,7 +168,8 @@ class Mp4AudioAppender private constructor(
 
     /**
      * The retype write failed and may have changed part of the type. Writes `moov` back so [close] can swallow the new `moov`; when
-     * that fails too, the old type is unknown, so the new `moov` stays reachable as the file's movie instead.
+     * that fails too, the type is read back: a partial restore may have completed `moov`, and two movies would make the file
+     * unreadable. Only when the old type is not `moov`, or cannot be read, does the new `moov` stay reachable as the file's movie.
      */
     private fun restoreMoovType(cause: Throwable) {
         try {
@@ -177,6 +178,13 @@ class Mp4AudioAppender private constructor(
             file.sync()
         } catch (e: Throwable) {
             cause.addSuppressed(e)
+            if (retyping) try {
+                val type = ByteBuffer.allocate(MOOV.size)
+                file.readFully(movie.box.offset + 4, type)
+                if (type.array().contentEquals(MOOV)) retyping = false
+            } catch (unreadable: Throwable) {
+                cause.addSuppressed(unreadable)
+            }
         }
     }
 

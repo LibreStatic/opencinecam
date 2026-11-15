@@ -578,10 +578,13 @@ private class EqProfileWrites(
 ) {
     private var pending: com.librestatic.opencinecam.camera.EqProfile? = null
     private var job: Job? = null
+    /** Counts the edits queued, so a failed write knows whether a newer one was queued or written meanwhile. */
+    private var revision = 0
 
     /** Called on the main thread for each edit; the write lands [PROFILE_SAVE_DELAY_MS] after the last one. */
     fun queue(profile: com.librestatic.opencinecam.camera.EqProfile) {
         pending = profile
+        revision++
         job?.cancel()
         job = scope.launch { delay(PROFILE_SAVE_DELAY_MS); flush() }
     }
@@ -595,11 +598,12 @@ private class EqProfileWrites(
         job = null
         val profile = pending ?: return
         pending = null
+        val written = revision
         eqStoreDispatcher.executor.execute {
             val failure = runCatching { store.saveCurve(profile.id, profile.curve) }.exceptionOrNull()
             failure?.let { Log.w(TAG, "equaliser profile ${profile.id} could not be saved", it) }
             scope.launch {
-                if (failure != null && pending == null) pending = profile
+                if (failure != null && revision == written) pending = profile
                 onSaved(failure != null)
             }
         }

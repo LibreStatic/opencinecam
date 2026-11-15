@@ -478,6 +478,7 @@ class WavAudioSidecarRecorder private constructor(
         audioEffects = lastEffects,
         audioEffectsObservedAtElapsedRealtimeMs = effectsObservedAtMs,
         inputEvidence = inputEvidence,
+        inputOverruns = inputOverruns,
     )
 
     private fun writeMetadata(result: AudioSidecarRecordingResult): Uri {
@@ -684,6 +685,8 @@ data class AudioSidecarRecordingResult(
     val audioEffectsObservedAtElapsedRealtimeMs: Long? = null,
     /** PLAN-074 decision 11: the microphone path that delivered the PCM; null when not recorded. */
     val inputEvidence: PcmInputEvidence? = null,
+    /** Times the input overran during the take: the audio has gaps. */
+    val inputOverruns: Int = 0,
 )
 
 internal fun createWavHeader(

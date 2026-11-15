@@ -549,6 +549,7 @@ class FlacAudioSidecarRecorder private constructor(
         audioEffects = lastEffects,
         audioEffectsObservedAtElapsedRealtimeMs = effectsObservedAtMs,
         inputEvidence = inputEvidence,
+        inputOverruns = inputOverruns,
     )
 
     private fun writeMetadata(result: AudioSidecarRecordingResult): Uri {
