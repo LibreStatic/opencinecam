@@ -14,8 +14,8 @@ import org.w3c.dom.Element
 class SecurityAuditManifestTest {
     private val androidNs = "http://schemas.android.com/apk/res/android"
 
-    /** The opt-in features the app declares: WebDAV (OCC-PLAN-067) and geotagging (OCC-PLAN-066). */
-    private val appOptInFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING)
+    /** The opt-in features the app declares: WebDAV (OCC-PLAN-067), geotagging (OCC-PLAN-066) and recording to a USB drive (OCC-PLAN-072). */
+    private val appOptInFeatures = setOf(OptInFeature.WEBDAV_TRANSFER, OptInFeature.GEOTAGGING, OptInFeature.USB_DRIVE_RECORDING)
 
     private fun manifestFile(): File {
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
@@ -66,6 +66,17 @@ class SecurityAuditManifestTest {
         assertTrue(input.exportedComponents.isNotEmpty())
         val report = SecurityPrivacyAccessibilityAuditor.audit(input)
         assertTrue(report.findings.filterNot { it.passed }.toString(), report.passed)
+    }
+
+    @Test
+    fun realManifestFailsIfTheUsbAttachHandlerIsExportedWithoutTheDriveOptIn() {
+        val input = manifestInput()
+        assertTrue(input.exportedComponents[".UsbDriveAttachAlias"] == true)
+        val report = SecurityPrivacyAccessibilityAuditor.audit(
+            input.copy(declaredOptInFeatures = appOptInFeatures - OptInFeature.USB_DRIVE_RECORDING),
+        )
+        assertFalse(report.passed)
+        assertFalse(report.findings.first { it.findingId == "SEC-COMPONENTS" }.passed)
     }
 
     @Test
