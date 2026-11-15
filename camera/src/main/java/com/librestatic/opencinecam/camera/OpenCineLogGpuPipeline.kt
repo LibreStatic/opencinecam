@@ -289,6 +289,23 @@ internal fun analyzeRgbaFrame(
     )
 }
 
+/**
+ * Undoes the selfie mirror Camera2 asks for on a front camera's stream, in place. The framework
+ * sets FLIP_H with the sensor rotation on that stream (OutputConfiguration's MIRROR_MODE_AUTO), so
+ * SurfaceTexture hands over the frame upright and mirrored. The preview, recording and readback
+ * geometry below expect it upright and unmirrored, and mirror the viewfinder themselves; sampling
+ * the mirrored frame turned a landscape front viewfinder upside down and left the portrait one
+ * unmirrored. SurfaceTexture always appends a vertical flip, so an unmirrored frame has a negative
+ * 2×2 determinant; a positive one carries the producer's flip, removed here by sampling u as 1 − u.
+ */
+internal fun unmirrorSurfaceTextureMatrix(matrix: FloatArray) {
+    if (matrix[0] * matrix[5] - matrix[4] * matrix[1] <= 0f) return
+    for (row in 0 until 4) {
+        matrix[12 + row] += matrix[row]
+        matrix[row] = -matrix[row]
+    }
+}
+
 /** Pure preview geometry shared by the GL renderer and local unit tests. */
 internal object OpenCineLogPreviewGeometryCalculator {
     fun calculate(
@@ -1323,6 +1340,7 @@ class OpenCineLogGpuPipeline(
             frameDiag?.mark(OpenCineLogFrameDiagnostics.Phase.LATCH)
             val sourceReceivedAtMs = android.os.SystemClock.elapsedRealtime()
             texture.getTransformMatrix(textureMatrix)
+            if (frontFacing) unmirrorSurfaceTextureMatrix(textureMatrix)
             val frameDataSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) texture.dataSpace else null
             lastSourceDataSpace = frameDataSpace
             if (shaderYcbcr && (ycbcrConversion == null || ycbcrDataSpace != frameDataSpace)) {
