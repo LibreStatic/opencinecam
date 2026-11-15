@@ -221,6 +221,7 @@ internal fun RawVideoConfigDial(
     val nearLossless = rawVideoNearLosslessActive(state, settings)
     PanelColumn(Modifier.testTag("raw-video-config-panel")) {
         PanelHeader(stringResource(R.string.raw_video_config_title), onClose)
+        state.rawVideoProfile?.let { PanelNote(rawVideoProfileText(it), Modifier.testTag("raw-video-config-profile")) }
         val auto = options.firstOrNull { it.key == state.rawVideoAutoKey }
         ChoiceGrid(listOf(""), minTileWidth = 150.dp, maxColumns = 1) { _, modifier ->
             // Automatic never resolves to a risky or reduced-rate configuration; with only such ones it resolves to none.
@@ -244,6 +245,7 @@ internal fun RawVideoConfigDial(
             PanelNote(stringResource(R.string.raw_video_config_risk_hint), Modifier.testTag("raw-video-config-risk-hint"))
         }
         if (crops.isNotEmpty()) PanelNote(stringResource(R.string.raw_video_crop_note), Modifier.testTag("raw-video-crop-note"))
+        RawVideoLeftOutSection(state.rawVideoLeftOut, nearLossless, "raw-video-left-out")
         if (!enabled) PanelNote(stringResource(R.string.raw_video_config_frozen), Modifier.testTag("raw-video-config-frozen"))
     }
 }
@@ -282,10 +284,12 @@ internal fun RawVideoSettings(
                 enabled = onSelect != null && rawVideoConfigChangeAllowed(state),
                 choiceWarning = { key -> options.firstOrNull { it.key == key }?.let { rawOptionWarning(it, nearLossless) } },
             )
+            SettingsRawVideoProfile(state.rawVideoProfile)
             if (options.any { it.isRisky }) {
                 Text(stringResource(R.string.raw_video_config_risk_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
                     modifier = Modifier.testTag("settings-raw-video-risk-hint"))
             }
+            RawVideoLeftOutSection(state.rawVideoLeftOut, nearLossless, "settings-raw-video-left-out", Modifier.padding(top = 4.dp))
             if (rawCompressionChoiceOffered(state)) RawCompressionSetting(state, settings, onNearLosslessChange)
         } else {
             val reason = when (gate) {
@@ -297,6 +301,10 @@ internal fun RawVideoSettings(
             if (gate == ModeGateState.CANDIDATE) {
                 Text(stringResource(R.string.raw_video_qualify_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
                     modifier = Modifier.testTag("settings-raw-video-hint"))
+                // The profile only says something once there is a verdict to explain.
+                if (state.rawVideoLeftOut.isNotEmpty()) SettingsRawVideoProfile(state.rawVideoProfile)
+                RawVideoLeftOutSection(state.rawVideoLeftOut, rawVideoNearLosslessActive(state, settings), "settings-raw-video-left-out",
+                    Modifier.padding(top = 4.dp))
             }
         }
         if (onRequalify != null && rawVideoRequalifyOffered(gate)) {
@@ -308,6 +316,57 @@ internal fun RawVideoSettings(
                 modifier = Modifier.testTag("settings-raw-video-requalify-note"))
         }
         SettingsHelp(stringResource(R.string.raw_video_config_help_summary), stringResource(R.string.raw_video_config_help), tag = "raw-video-help")
+    }
+}
+
+/** "Qualified on the phone’s storage", or on the USB drive (named when known): whose records the RAW chooser shows. */
+@Composable
+internal fun rawVideoProfileText(profile: RawQualificationTarget): String = when {
+    !profile.drive -> stringResource(R.string.raw_video_profile_phone)
+    profile.driveLabel != null -> stringResource(R.string.raw_video_profile_drive, profile.driveLabel)
+    else -> stringResource(R.string.raw_video_profile_drive_unnamed)
+}
+
+/** Why [item] is not offered, in the qualification result's words. */
+@Composable
+private fun rawLeftOutReasonText(item: RawVideoLeftOutOption): String = when (item.reason) {
+    RawVideoLeftOutReason.HEAT -> stringResource(R.string.raw_qualification_item_too_hot)
+    RawVideoLeftOutReason.CAMERA_LIMIT -> stringResource(R.string.raw_qualification_item_camera_limit, item.fps)
+    RawVideoLeftOutReason.STORAGE -> stringResource(R.string.raw_qualification_item_risky)
+    RawVideoLeftOutReason.NOT_QUALIFIED -> stringResource(R.string.raw_qualification_item_not_qualified)
+}
+
+/** Settings' profile line under the RAW video row ([rawVideoProfileText]); nothing with no drive configured. */
+@Composable
+private fun SettingsRawVideoProfile(profile: RawQualificationTarget?) {
+    if (profile == null) return
+    Text(rawVideoProfileText(profile), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+        modifier = Modifier.testTag("settings-raw-video-profile"))
+}
+
+/**
+ * The judged configurations the chooser does not offer ([CameraUiState.rawVideoLeftOut]), shared by the capture panel
+ * and Settings: a "Not available" label, then one quiet, non-clickable row per configuration (its label, crop marker
+ * included, over why it is out), tagged [tag] and `[tag]-<key>`; with any of them out for heat, the cool-down hint
+ * (`[tag]-heat-hint`). Nothing when [items] is empty.
+ */
+@Composable
+private fun RawVideoLeftOutSection(items: List<RawVideoLeftOutOption>, nearLossless: Boolean, tag: String, modifier: Modifier = Modifier) {
+    if (items.isEmpty()) return
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        PanelSectionLabel(stringResource(R.string.raw_video_left_out_title))
+        Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items.forEach { item ->
+                Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}.testTag("$tag-${item.option.key}")) {
+                    Text(rawOptionLabel(item.option, nearLossless), color = muted, fontSize = 13.sp, lineHeight = 17.sp)
+                    Text(rawLeftOutReasonText(item), color = muted.copy(alpha = 0.75f), fontSize = 12.sp, lineHeight = 16.sp)
+                }
+            }
+        }
+        if (items.any { it.reason == RawVideoLeftOutReason.HEAT }) {
+            PanelNote(stringResource(R.string.raw_qualification_heat_hint), Modifier.testTag("$tag-heat-hint"))
+        }
     }
 }
 

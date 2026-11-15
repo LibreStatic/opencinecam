@@ -2,8 +2,15 @@
 package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.RAW_QUALIFICATION_SPACE_SKIP
+import com.librestatic.opencinecam.RAW_QUALIFICATION_THERMAL_SKIP
+import com.librestatic.opencinecam.RawQualificationItemStatus
 import com.librestatic.opencinecam.RawVideoConfigKeys
 import com.librestatic.opencinecam.RawVideoConfigOption
+import com.librestatic.opencinecam.RawVideoLeftOutReason
+import com.librestatic.opencinecam.camera.RawThroughputBenchmark
+import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
+import com.librestatic.opencinecam.rawvideo.RawQualificationStaging
 import com.librestatic.opencinecam.camera.BacklogSimulation
 import com.librestatic.opencinecam.camera.RawBenchmarkStatus
 import com.librestatic.opencinecam.camera.RawLiveRun
@@ -385,6 +392,90 @@ class RawVideoGateTest {
         assertNull(RawVideoConfigOption.of(full60, achievedFps = 59.9).achievedFps)
         assertNull(RawVideoConfigOption.of(full60, achievedFps = 57.0).achievedFps)
         assertFalse(RawVideoConfigOption.of(full60).isReducedRate)
+    }
+
+    // endregion
+
+    // region left-out configurations
+
+    private fun verdict(config: RawVideoConfig, status: RawBenchmarkStatus, vararg reasons: String, at: Long = 1_000, destination: String = "dest") =
+        record(config, at = at, destination = destination).let { r ->
+            val codes = reasons.toList()
+            r.copy(qualification = r.qualification.copy(status = status, reasonCode = codes.firstOrNull() ?: "pass", reasonCodes = codes))
+        }
+
+    private val fullAt60 = config(fps = 60)
+    private val uhdAt60 = config(cropWidth = 3840, cropHeight = 2160, fps = 60)
+    private val cropAt120 = config(cropWidth = 1920, cropHeight = 1080, fps = 120)
+    private val heat = RawQualificationStaging.REASON_THERMAL_LIMIT
+    private val sweepFail = RawThroughputBenchmark.REASON_SWEEP_MEDIAN_MARGIN_FAIL
+
+    @Test fun leftOutConfigsSayWhyEachJudgedConfigurationIsMissing() {
+        val records = listOf(
+            verdict(full30, RawBenchmarkStatus.PASS),
+            verdict(fullAt60, RawBenchmarkStatus.FAIL, heat),
+            // Hot, but the sweep alone had already ruled it out: the storage, not the heat.
+            verdict(uhdAt60, RawBenchmarkStatus.FAIL, heat, sweepFail),
+            verdict(cropAt120, RawBenchmarkStatus.FAIL, RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT),
+            verdict(crop60, RawBenchmarkStatus.FAIL, "live-run-exception"),
+            verdict(full24, RawBenchmarkStatus.UNKNOWN, RAW_QUALIFICATION_THERMAL_SKIP),
+        )
+        val usable = listOf(full30)
+        val leftOut = rawVideoLeftOutConfigs("0", sizes, records, "dest", usable)
+        // Highest data rate first, as the chooser lists them; the usable full@30 is never left out.
+        assertEquals(listOf(fullAt60, uhdAt60, full24, cropAt120, crop60), leftOut.map { it.config })
+        assertEquals(listOf(RawQualificationItemStatus.SKIPPED_HEAT, RawQualificationItemStatus.STORAGE_LIMIT, RawQualificationItemStatus.SKIPPED_HEAT,
+            RawQualificationItemStatus.CAMERA_LIMIT, RawQualificationItemStatus.FAILED), leftOut.map { it.status })
+        assertEquals(listOf(RawVideoLeftOutReason.HEAT, RawVideoLeftOutReason.STORAGE, RawVideoLeftOutReason.HEAT,
+            RawVideoLeftOutReason.CAMERA_LIMIT, RawVideoLeftOutReason.NOT_QUALIFIED), rawVideoLeftOutOptions(leftOut).map { it.reason })
+        val option = rawVideoLeftOutOptions(leftOut).first()
+        assertEquals("full@60", option.option.key)
+        assertEquals(60, option.fps)
+    }
+
+    @Test fun aSpaceSkipReadsNotQualified() {
+        val leftOut = rawVideoLeftOutConfigs("0", sizes, listOf(verdict(fullAt60, RawBenchmarkStatus.UNKNOWN, RAW_QUALIFICATION_SPACE_SKIP)), "dest", emptyList())
+        assertEquals(listOf(RawQualificationItemStatus.SKIPPED_SPACE), leftOut.map { it.status })
+        assertEquals(RawVideoLeftOutReason.NOT_QUALIFIED, rawVideoLeftOutOptions(leftOut).single().reason)
+    }
+
+    @Test fun onlyTheNewestRecordOfAConfigurationCounts() {
+        // A later pass revokes the earlier failure: usable, so not left out.
+        val records = listOf(verdict(fullAt60, RawBenchmarkStatus.FAIL, heat, at = 1), verdict(fullAt60, RawBenchmarkStatus.PASS, at = 2))
+        assertTrue(rawVideoLeftOutConfigs("0", sizes, records, "dest", listOf(fullAt60)).isEmpty())
+        // And a later failure of a passed configuration explains it.
+        val revoked = listOf(verdict(fullAt60, RawBenchmarkStatus.PASS, at = 1), verdict(fullAt60, RawBenchmarkStatus.FAIL, heat, at = 2))
+        assertEquals(RawQualificationItemStatus.SKIPPED_HEAT, rawVideoLeftOutConfigs("0", sizes, revoked, "dest", emptyList()).single().status)
+    }
+
+    @Test fun aCompressedTwinOfACameraFailedConfigurationTakesTheTwinsReason() {
+        val fullAt60Bp = fullAt60.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val full30Bp = full30.copy(encoding = RawVideoConfig.ENCODING_BLOCK_PACK)
+        val records = listOf(
+            verdict(fullAt60, RawBenchmarkStatus.FAIL, heat), verdict(fullAt60Bp, RawBenchmarkStatus.PASS),
+            // The twin passed: a passed compressed record not usable (no codec here) says nothing it could explain.
+            verdict(full30, RawBenchmarkStatus.PASS), verdict(full30Bp, RawBenchmarkStatus.PASS),
+        )
+        val leftOut = rawVideoLeftOutConfigs("0", sizes, records, "dest", listOf(full30))
+        assertEquals(listOf(fullAt60, fullAt60Bp), leftOut.map { it.config })
+        assertEquals(listOf(RawQualificationItemStatus.SKIPPED_HEAT, RawQualificationItemStatus.SKIPPED_HEAT), leftOut.map { it.status })
+        // A compressed configuration that failed on its own record keeps its own reason.
+        val ownFail = rawVideoLeftOutConfigs("0", sizes, listOf(verdict(full30Bp, RawBenchmarkStatus.FAIL, sweepFail, heat)), "dest", emptyList())
+        assertEquals(RawQualificationItemStatus.STORAGE_LIMIT, ownFail.single().status)
+    }
+
+    @Test fun leftOutConfigsIgnoreOtherDestinationsCamerasStaleSizesAndLj92() {
+        val stale = config(sensorWidth = 4000, sensorHeight = 3000, fps = 60)
+        val records = listOf(
+            verdict(fullAt60, RawBenchmarkStatus.FAIL, heat, destination = "saf:OTHER"),
+            verdict(config(cameraId = "2", fps = 60), RawBenchmarkStatus.FAIL, heat),
+            verdict(stale, RawBenchmarkStatus.FAIL, heat),
+            verdict(fullAt60.copy(encoding = RawVideoConfig.ENCODING_LJ92), RawBenchmarkStatus.FAIL, heat),
+            verdict(fullAt60.copy(encoding = "something-new"), RawBenchmarkStatus.FAIL, heat),
+        )
+        assertTrue(rawVideoLeftOutConfigs("0", sizes, records, "dest", emptyList()).isEmpty())
+        // A risky (storage-only) record is usable and listed as such, never left out.
+        assertTrue(rawVideoLeftOutConfigs("0", sizes, listOf(verdict(fullAt60, RawBenchmarkStatus.FAIL, sweepFail)), "dest", listOf(fullAt60)).isEmpty())
     }
 
     // endregion

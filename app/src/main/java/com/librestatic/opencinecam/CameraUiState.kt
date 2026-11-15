@@ -246,6 +246,18 @@ data class CameraUiState(
      * applies only then; otherwise block-pack records lossless.
      */
     val rawVideoNearLosslessAvailable: Boolean = false,
+    /**
+     * The current camera's configurations the qualification of the shown storage judged but [rawVideoOptions] lacks, each
+     * with why (heat, the camera's rate, the storage), in the same order; also while the gate is CANDIDATE, so Settings can
+     * say why nothing qualified. Empty without RAW10 output or once the camera refused the graph. Display only.
+     */
+    val rawVideoLeftOut: List<RawVideoLeftOutOption> = emptyList(),
+    /**
+     * PLAN-072: the storage [rawVideoOptions] were qualified on, the one the RAW gate reads: null with no drive
+     * configured (one storage, nothing to tell apart), the drive (named when known) when the gate reads its records, the
+     * phone when a drive is configured but the gate reads the phone's.
+     */
+    val rawVideoProfile: RawQualificationTarget? = null,
     /** Ring occupancy (0..100) of the running RAW take; null outside one. A take stops at 90 (ADR-0019). */
     val rawVideoRingPercent: Int? = null,
     /** Frames the running RAW take has written to its file; null outside one. */

@@ -121,6 +121,7 @@ import com.librestatic.opencinecam.RawVideoConfigKeys
 import com.librestatic.opencinecam.captureFileStem
 import com.librestatic.opencinecam.continuationFileStem
 import com.librestatic.opencinecam.RawVideoConfigOption
+import com.librestatic.opencinecam.RawVideoLeftOutOption
 import com.librestatic.opencinecam.rawConfigLabelLocalized
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationSet
@@ -939,6 +940,9 @@ class CaptureService : Service() {
                 it.copy(recordingDestination = status, availableStorageBytes = if (phoneNext) phoneFree else it.availableStorageBytes)
             }
             else cameraState.update { it.copy(recordingDestination = it.recordingDestination.copy(driveLabel = status.driveLabel)) }
+            // A drive configured or cleared, or its label read, can leave the gate's destination id as it was: the profile
+            // line follows here, still from that id; a changed id recomputes the whole gate below.
+            cameraState.update { it.copy(rawVideoProfile = rawVideoProfile(rawGateDestinationId, nextTakeDestination, status.driveLabel)) }
             refreshRawGateForDestination()
         }
     }
@@ -2255,6 +2259,15 @@ class CaptureService : Service() {
         return rawVideoReducedRates(usable, current, rawLookupDestinationId())
     }
 
+    /** The configurations of [cameraId] the gate's destination judged that are not [usable], with why ([rawVideoLeftOutConfigs]). */
+    private fun rawLeftOutOptions(cameraId: String, sizes: List<Pair<Int, Int>>, usable: List<RawVideoConfig>): List<RawVideoLeftOutOption> {
+        val current = runCatching {
+            (rawQualifications ?: rawQualificationStore.load().also { rawQualifications = it })
+                .current(rawQualificationStore.fingerprint, rawQualificationStore.protocolVersion)
+        }.getOrElse { return emptyList() }
+        return rawVideoLeftOutOptions(rawVideoLeftOutConfigs(cameraId, sizes, current, rawGateDestinationId, usable))
+    }
+
     /**
      * [state] with the RAW_VIDEO gate, the qualified configurations and the selected one for
      * [cameraId]. In RAW_VIDEO the take geometry and rate follow the selected configuration.
@@ -2284,6 +2297,10 @@ class CaptureService : Service() {
             rawVideoSelectedKey = selected?.let(RawVideoConfigKeys::key),
             rawVideoAutoKey = selectRawVideoConfig(usable, "", manualOnly).takeIf { available }?.let(RawVideoConfigKeys::key),
             rawVideoNearLosslessAvailable = available && usable.any { rawNearLosslessProfile(it, ignoreSetting = true) != null },
+            // Display only: why judged configurations are missing, and whose records these are (the gate's own destination id).
+            rawVideoLeftOut = if (cameraId == null || (gate != ModeGateState.AVAILABLE && gate != ModeGateState.CANDIDATE)) emptyList()
+                else rawLeftOutOptions(cameraId, sizes, usable),
+            rawVideoProfile = rawVideoProfile(rawGateDestinationId, nextTakeDestination, state.recordingDestination.driveLabel),
         )
         return if (next.selectedMode == CaptureMode.RAW_VIDEO && selected != null) {
             // The status line shows the RAW time left before a take too, so the free space is read here, not only by the REC ticker.

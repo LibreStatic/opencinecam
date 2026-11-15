@@ -73,6 +73,24 @@ class RecordingDestinationWiringTest {
         assertEquals(RawQualificationTarget(drive = false), rawQualificationTarget(resolveRecordingDestination(drive, emptySet(), true), "Elements"))
     }
 
+    @Test fun theRawProfileFollowsTheGatesDestinationId() {
+        val phoneId = RawVideoQualificationStore.DESTINATION_MEDIASTORE_DOCUMENTS
+        val onDrive = resolveRecordingDestination(drive, setOf("FFF1-7571"), true)
+        val absent = resolveRecordingDestination(drive, emptySet(), true)
+        val phoneOnly = resolveRecordingDestination(phone, setOf("FFF1-7571"), true)
+        // No drive configured: one storage, nothing to say.
+        assertNull(rawVideoProfile(phoneId, phoneOnly, "Elements"))
+        assertEquals(RawQualificationTarget(drive = true, driveLabel = "Elements"), rawVideoProfile("saf:FFF1-7571", onDrive, "Elements"))
+        assertEquals(RawQualificationTarget(drive = true), rawVideoProfile("saf:FFF1-7571", onDrive, " "))
+        assertEquals(RawQualificationTarget(drive = false), rawVideoProfile(phoneId, absent, "Elements"))
+        // The gate id wins over the destination: a gate still on the drive's records (a take or a qualification on it) says the drive.
+        assertEquals(RawQualificationTarget(drive = true, driveLabel = "Elements"), rawVideoProfile("saf:FFF1-7571", absent, "Elements"))
+        assertEquals(RawQualificationTarget(drive = false), rawVideoProfile(phoneId, onDrive, "Elements"))
+        // Another drive's records: the drive, unnamed, since the label is the configured one's.
+        assertEquals(RawQualificationTarget(drive = true), rawVideoProfile("saf:0A1B-2C3D", onDrive, "Elements"))
+        assertEquals(RawQualificationTarget(drive = true), rawVideoProfile("saf:0A1B-2C3D", phoneOnly, "Elements"))
+    }
+
     @Test fun leavingStopsOnlyADriveTakeOnThatVolume() {
         assertTrue(driveLeavingStopsTake(drive, "FFF1-7571"))
         assertTrue(driveLeavingStopsTake(drive, "fff1-7571"))

@@ -38,4 +38,8 @@
     <string name="raw_compression_lossless">Senza perdita</string>
     <string name="raw_video_label_near_lossless">Quasi senza perdita</string>
     <string name="raw_compression_help">Si applica alle configurazioni compresse. Senza perdita conserva ogni valore fornito dal sensore. Quasi senza perdita unisce i valori che differiscono meno di circa metà del rumore del sensore all’ISO del fotogramma: la differenza resta nascosta nel rumore e i file diventano ancora più piccoli, soprattutto con poca luce. Entrambi si aprono nella galleria, nell’esportazione CinemaDNG e negli strumenti desktop. Il tempo rimanente usa lo stesso rapporto prudente per entrambi.</string>
+    <string name="raw_video_profile_phone">Qualificate sulla memoria del telefono</string>
+    <string name="raw_video_profile_drive">Qualificate sull’unità USB %1$s</string>
+    <string name="raw_video_profile_drive_unnamed">Qualificate sull’unità USB</string>
+    <string name="raw_video_left_out_title">NON DISPONIBILI</string>
 </resources>
