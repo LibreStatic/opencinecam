@@ -143,14 +143,16 @@ internal class WebDavServer(
 
     fun lastActivityMs(): Long = if (streaming.get() > 0) clock.nowMs() else lastActivity.get()
 
-    /** Closes every listener and connection; idempotent. */
+    /** Closes every listener and connection; idempotent. Once it returns, no listener accepts a connection. */
     fun close() {
-        synchronized(lock) {
+        val accepting = synchronized(lock) {
             if (closed) return
             closed = true
             listeners.values.forEach { runCatching { it.socket.close() } }
-            listeners.clear()
+            listeners.values.map { it.thread }.also { listeners.clear() }
         }
+        // A socket closed while a thread is blocked in accept() keeps listening until that thread wakes up.
+        accepting.forEach { if (it !== Thread.currentThread()) runCatching { it.join(ACCEPT_EXIT_MS) } }
         connections.forEach { runCatching { it.socket.close() } }
         workers.shutdownNow()
         reaper.shutdownNow()
@@ -580,6 +582,9 @@ internal class WebDavServer(
         const val ALLOW = "OPTIONS, PROPFIND, GET, HEAD"
         const val XML_TYPE = "application/xml; charset=utf-8"
         private const val LINGER_MS = 1_000
+
+        /** How long [close] waits for an accept thread to leave accept(); it is signalled, so normally microseconds. */
+        private const val ACCEPT_EXIT_MS = 500L
         /** How much of an in-memory body is written between progress marks for the stall reaper. */
         private const val BODY_CHUNK_BYTES = 64 * 1024
         private const val LINGER_MAX_BYTES = 256 * 1024

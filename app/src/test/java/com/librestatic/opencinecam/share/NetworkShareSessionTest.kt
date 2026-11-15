@@ -169,6 +169,19 @@ class NetworkShareSessionTest {
     }
 
     @Test
+    fun nothingListensOnceStopReturns() {
+        // A listener closed while its thread sits in accept() kept listening until that thread woke (about 1 in 100 here).
+        repeat(200) {
+            val port = freePort()
+            val session = session(port..port)
+            session.start()
+            assertTrue(connects(port))  // the accept thread is running, back in accept() or about to be
+            session.stop(NetworkShareStopReason.OPERATOR)
+            assertFalse("attempt $it", connects(port))
+        }
+    }
+
+    @Test
     fun anAddressMovingToAnotherInterfaceStopsTheShare() {
         val session = session()
         session.start()
