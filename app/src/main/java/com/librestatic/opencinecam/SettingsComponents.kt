@@ -42,6 +42,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -284,8 +286,9 @@ internal fun SettingsPill(label: String, tag: String, selected: Boolean = false,
         val content = when { !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f); selected -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (icon != null) CineGlyph(icon, if (enabled) iconTint ?: content else content, Modifier.size(18.dp))
-            Text(label, color = content, maxLines = 1,
-                fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            // One line whenever it fits; a label wider than the row (a long configuration name in a narrow window) wraps instead of clipping.
+            Text(label, color = content, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                fontSize = 14.sp, lineHeight = 18.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier.width(IntrinsicSize.Max).testTag("$tag-label"))
         }
     }
