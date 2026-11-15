@@ -203,10 +203,11 @@ def decode_lj92(header: dict, data: bytes, use_numpy: bool) -> "bytes | Encoded"
         raise ValueError("LJ92 frame width must be a multiple of 4 to decode")
     # As the reference decoder: the last strip may also declare a full tile of lines.
     padded = (tile_length + 15) & ~15
-    samples: list[int] = []
+    packed: list[bytes] = []
     for index, (rows, stream) in enumerate(strips):
-        samples.extend(_lj92_strip(stream, width, rows, padded if index == len(strips) - 1 else rows, index))
-    return struct.pack(f"<{len(samples)}H", *samples)
+        samples = _lj92_strip(stream, width, rows, padded if index == len(strips) - 1 else rows, index)
+        packed.append(struct.pack(f"<{len(samples)}H", *samples))
+    return b"".join(packed)
 
 
 def _huffman_lookup(counts: bytes, values: bytes, index: int) -> list[tuple[int, int] | None]:

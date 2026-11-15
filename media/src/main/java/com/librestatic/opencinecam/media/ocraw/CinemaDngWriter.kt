@@ -696,6 +696,9 @@ class CinemaDngWriter(
                 OcrawFrameHeader.ENCODING_LJ92 -> codec.decodeLj92(data, header.width, header.height, dst)
                 else -> codec.decode(data, header.width, header.height, dst)
             }
+        } catch (_: UnsupportedOperationException) {
+            // An injected decoder without LJ92: the frame is skipped like one without the library.
+            throw OcrawDngException("frame $frame: the decoder does not decode LJ92", OcrawMissingReason.CODEC_UNAVAILABLE)
         } catch (_: IllegalArgumentException) {
             false
         }

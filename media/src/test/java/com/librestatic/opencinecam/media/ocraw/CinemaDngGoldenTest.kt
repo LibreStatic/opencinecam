@@ -100,6 +100,15 @@ class CinemaDngGoldenTest {
     }
 
     @Test
+    fun aDecoderWithoutLj92LeavesLegacyLj92FramesOut() = withTake { channel, index ->
+        CinemaDngWriter(channel, index, TAKE, blockPackDecoderFactory = { FakeBlockPackDecoder() }).use { writer ->
+            for (frame in listOf(1, 4)) {
+                assertReason(OcrawMissingReason.CODEC_UNAVAILABLE) { writer.write(frame, ByteArrayOutputStream()) }
+            }
+        }
+    }
+
+    @Test
     fun rangesMatchSlicesOfTheConverterFiles() = withTake { channel, index ->
         val writer = CinemaDngWriter(channel, index, TAKE, blockPackDecoderFactory = { FixtureDecoder() })
         val random = Random(71)
