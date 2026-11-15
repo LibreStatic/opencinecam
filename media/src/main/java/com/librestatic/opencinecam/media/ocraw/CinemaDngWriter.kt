@@ -50,20 +50,29 @@ class CinemaDngLayout internal constructor(
  * Builds the CinemaDNG frames of an indexed `.ocraw` take (OCC-PLAN-071 §8), byte for
  * byte as `desktop-tools/ocraw_to_dng.py` writes them; the golden test
  * `CinemaDngGoldenTest` holds the two together. Pure JVM: only [NativeRawCodec]
- * (block-pack frames) needs the native library.
+ * (block-pack frames, and LJ92 frames that are not full tiles) needs the native library.
+ *
+ * Lossless JPEG tiles (`Compression` 7) follow the full-tile rule, since TIFF wants
+ * every tile TileLength tall (DaVinci Resolve shows a clip with a short edge tile as
+ * offline): TileLength T is a multiple of 16, every strip's SOF3 declares T lines, every
+ * strip but the last holds T rows of the image and the last 1..T, its SOF3 padded to T.
  *
  * - RAW10 frames become uncompressed 16-bit strips (`Compression` 1). Their size
  *   follows from the dimensions; [writeRange] unpacks only the bytes asked for.
- * - LJ92 frames pass through as lossless JPEG tiles (`Compression` 7). Their size
+ * - LJ92 frames whose strips are already full tiles (every strip the same rows, a
+ *   multiple of 16; see [isPassThrough]) pass through as lossless JPEG tiles. Their size
  *   follows from `dataLength` and the container's strip count, so [layout] reads
  *   the container's strip table (4 + 8 x strips bytes, at most 516), never the
  *   strips; [writeRange] copies the tile bytes straight from the file.
- * - Block-pack frames, plain or quantised (encoding 3, decoded to the reconstructed DN), are
- *   decoded through [NativeRawCodec] (or [blockPackDecoderFactory]) to uncompressed
- *   16-bit; without the library they are not convertible.
- * - With [lj92Encoder], RAW10 frames, and block-pack frames once decoded, are
- *   re-encoded to LJ92 tiles for export (a frame that does not fit falls back to
- *   uncompressed); their size is known only once encoded, see [isSizeKnown].
+ * - Other LJ92 frames (a short last strip, or one strip whose rows are not a multiple of
+ *   16, as recorded before the rule) and block-pack frames, plain or quantised (encoding
+ *   3, decoded to the reconstructed DN), are decoded through [NativeRawCodec] (or
+ *   [blockPackDecoderFactory]) to uncompressed 16-bit; without the library they are not
+ *   convertible.
+ * - With [lj92Encoder], RAW10 frames, and decoded frames, are re-encoded to LJ92 tiles
+ *   for export (a frame that does not fit falls back to uncompressed); their size is
+ *   known only once encoded, see [isSizeKnown]. The encoder must pad its last strip to a
+ *   full tile ([Lj92Encoder.native] takes only such an encoder); other output is rejected.
  *
  * Every DNG carries the CinemaDNG tags: FrameRate from `fps`, TimeCodes from the
  * frame's sensor timestamp relative to the take's first readable frame, and
@@ -86,10 +95,10 @@ class CinemaDngWriter(
     val takeName: String,
     private val lj92Encoder: Lj92Encoder? = null,
     private val decoderThreads: Int = 1,
-    /** The block-pack decoder; null for [NativeRawCodec] with [decoderThreads], which needs the library. */
+    /** The block-pack and LJ92 decoder; null for [NativeRawCodec] with [decoderThreads], which needs the library. */
     private val blockPackDecoderFactory: (() -> BlockPackDecoder)? = null,
 ) : Closeable {
-    /** Decodes a block-pack frame to tight RAW10 rows; [NativeRawCodec.Decoder] through [native]. */
+    /** Decodes a block-pack or LJ92 frame to tight RAW10 rows; [NativeRawCodec.Decoder] through [native]. */
     interface BlockPackDecoder : Closeable {
         /** Decodes `src[position, limit)` into tight RAW10 at `dst[position, ...)`; false when it is malformed. */
         fun decode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean
@@ -102,6 +111,10 @@ class CinemaDngWriter(
         fun decodeQuantised(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean =
             RawQuantisation.decodeWith(src, width, height, dst) { container, out -> decode(container, width, height, out) }
 
+        /** Decodes an LJ92 frame container (encoding 1) into tight RAW10; false when it is malformed. */
+        fun decodeLj92(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean =
+            throw UnsupportedOperationException("this decoder does not decode LJ92")
+
         companion object {
             fun native(threads: Int): BlockPackDecoder {
                 val decoder = NativeRawCodec.newDecoder(threads)
@@ -112,13 +125,19 @@ class CinemaDngWriter(
                     override fun decodeQuantised(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer) =
                         decoder.decode(NativeRawCodec.Codec.BLOCK_PACK_QUANTISED, src, width, height, dst)
 
+                    override fun decodeLj92(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer) =
+                        decoder.decode(NativeRawCodec.Codec.LJ92, src, width, height, dst)
+
                     override fun close() = decoder.close()
                 }
             }
         }
     }
 
-    /** Re-encodes RAW10 to the LJ92 frame container; [NativeRawCodec.Encoder] through [native]. */
+    /**
+     * Re-encodes RAW10 to the LJ92 frame container in full tiles (every strip's SOF3 declares
+     * the tile length, the last strip padded); [NativeRawCodec.Encoder] through [native].
+     */
     interface Lj92Encoder {
         /** Worst-case container size for a frame. */
         fun maxEncodedSize(width: Int, height: Int): Long
@@ -129,6 +148,7 @@ class CinemaDngWriter(
         companion object {
             fun native(encoder: NativeRawCodec.Encoder): Lj92Encoder {
                 require(encoder.codec == NativeRawCodec.Codec.LJ92) { "the encoder must be LJ92" }
+                require(encoder.lj92FullTiles) { "the encoder must write full tiles (lj92FullTiles)" }
                 return object : Lj92Encoder {
                     override fun maxEncodedSize(width: Int, height: Int) = encoder.maxEncodedSize(width, height)
                     override fun encode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer) =
@@ -149,6 +169,8 @@ class CinemaDngWriter(
     private var encoded: ByteBuffer? = null
     private var decoder: BlockPackDecoder? = null
     private val table = ByteBuffer.allocate(4 + 8 * MAX_STRIPS).order(ByteOrder.LITTLE_ENDIAN)
+    /** Per frame, once its strip table was read: whether an LJ92 frame passes through. */
+    private val passThrough = arrayOfNulls<Boolean>(index.frames.size)
     private val unpacked = ByteBuffer.allocate(UNPACK_CHUNK_BYTES).order(ByteOrder.LITTLE_ENDIAN)
     private val packed = ByteBuffer.allocate(UNPACK_CHUNK_BYTES / 8 * 5).order(ByteOrder.LITTLE_ENDIAN)
 
@@ -169,39 +191,43 @@ class CinemaDngWriter(
         val header = frameAt(frame).header ?: return false
         return when (header.encoding) {
             OcrawFrameHeader.ENCODING_RAW10 -> true
-            OcrawFrameHeader.ENCODING_LJ92 -> header.width % 2 == 0
+            OcrawFrameHeader.ENCODING_LJ92 ->
+                header.width % 2 == 0 && (lj92PassesThrough(frame) || header.width % 4 == 0 && hasDecoder)
             OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK, OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED ->
-                header.width % 4 == 0 && (blockPackDecoderFactory != null || NativeRawCodec.available)
+                header.width % 4 == 0 && hasDecoder
             else -> false
         }
     }
 
-    /** False only for a RAW10 or block-pack frame re-encoded to LJ92, whose size is known once encoded. */
+    /**
+     * True for an LJ92 frame whose strips already are full tiles (every strip the same rows, a
+     * multiple of 16), copied to the DNG unchanged. Reads the frame's strip table once.
+     */
+    fun isPassThrough(frame: Int): Boolean =
+        frameAt(frame).header?.encoding == OcrawFrameHeader.ENCODING_LJ92 && lj92PassesThrough(frame)
+
+    /** False only for a frame re-encoded to LJ92 (RAW10, block-pack, LJ92 not in full tiles), whose size is known once encoded. */
     fun isSizeKnown(frame: Int): Boolean =
-        !(lj92Encoder != null && frameAt(frame).header?.encoding in REENCODED_ENCODINGS)
+        !(lj92Encoder != null && frameAt(frame).header?.encoding in REENCODED_ENCODINGS && !isPassThrough(frame))
 
     /** The exact DNG size; see [layout]. */
     fun sizeOf(frame: Int): Long = layout(frame).size
 
     /**
-     * The frame's DNG layout without reading pixel data: none for RAW10 and block-pack,
-     * the strip table for LJ92. Throws [IllegalStateException] when ![isSizeKnown],
+     * The frame's DNG layout without reading pixel data: none for RAW10, block-pack and
+     * decoded LJ92, the strip table for LJ92 (once). Throws [IllegalStateException] when ![isSizeKnown],
      * [OcrawDngException] when the frame is not convertible or its strip table is invalid.
      */
     fun layout(frame: Int): CinemaDngLayout {
         check(isSizeKnown(frame)) { "frame $frame is re-encoded; its size is known once written" }
         val stored = frameAt(frame)
         val header = convertibleHeader(frame)
-        return when (header.encoding) {
-            OcrawFrameHeader.ENCODING_LJ92 -> {
-                table.clear()
-                val tableBytes = minOf(table.capacity(), header.dataLength)
-                table.limit(tableBytes)
-                readFully(table, dataOffset(stored))
-                table.flip()
-                lj92Layout(frame, stored, header, parseStrips(table, header, frame), dataOffset(stored))
-            }
-            else -> uncompressedLayout(frame, stored, header)
+        return if (isPassThrough(frame)) {
+            val strips = parseStrips(readTable(stored, header), header, frame)
+            checkTiles(strips, strips.rows[0], frame)
+            lj92Layout(frame, stored, header, strips, strips.rows[0], dataOffset(stored))
+        } else {
+            uncompressedLayout(frame, stored, header)
         }
     }
 
@@ -210,38 +236,19 @@ class CinemaDngWriter(
         val stored = frameAt(frame)
         val header = convertibleHeader(frame)
         val data = readPayload(frame, stored, header)
-        return when (header.encoding) {
-            OcrawFrameHeader.ENCODING_RAW10 -> {
-                val reencoded = lj92Encoder?.let { encodeLj92(frame, stored, header, data) }
-                if (reencoded != null) {
-                    val (layout, container) = reencoded
-                    emit(out, layout.headerBuffer())
-                    emit(out, container)
-                    layout.size
-                } else {
-                    writeUncompressed(uncompressedLayout(frame, stored, header), data, out)
-                }
-            }
-            OcrawFrameHeader.ENCODING_LJ92 -> {
+        return when {
+            header.encoding == OcrawFrameHeader.ENCODING_RAW10 -> writeRaw10(frame, stored, header, data, out)
+            isPassThrough(frame) -> {
                 val strips = parseStrips(data.duplicate().order(ByteOrder.LITTLE_ENDIAN), header, frame)
-                checkSof3(data, strips, header.width, frame)
-                val layout = lj92Layout(frame, stored, header, strips, -1)
+                val tileLength = strips.rows[0]
+                checkTiles(strips, tileLength, frame)
+                checkSof3(data, strips, header.width, tileLength, frame)
+                val layout = lj92Layout(frame, stored, header, strips, tileLength, -1)
                 emit(out, layout.headerBuffer())
                 emit(out, data.duplicate().apply { position(strips.streamsStart) })
                 layout.size
             }
-            else -> {
-                val raw10 = decodeBlockPack(frame, header, data)
-                val reencoded = lj92Encoder?.let { encodeLj92(frame, stored, header, raw10) }
-                if (reencoded != null) {
-                    val (layout, container) = reencoded
-                    emit(out, layout.headerBuffer())
-                    emit(out, container)
-                    layout.size
-                } else {
-                    writeUncompressed(uncompressedLayout(frame, stored, header), raw10, out)
-                }
-            }
+            else -> writeRaw10(frame, stored, header, decode(frame, header, data), out)
         }
     }
 
@@ -251,13 +258,13 @@ class CinemaDngWriter(
      * Writes bytes `[offset, offset + length)` of the frame's DNG to [out] and returns
      * [length]. The whole file goes through [write]; a part of a RAW10 or LJ92
      * pass-through frame reads only the frame bytes it covers, unchecked. Other frames
-     * (block-pack, re-encoded) are generated whole and cut.
+     * (decoded, re-encoded) are generated whole and cut.
      */
     fun writeRange(frame: Int, offset: Long, length: Long, out: WritableByteChannel): Long {
         require(offset >= 0 && length >= 0) { "negative range" }
         if (length == 0L) return 0
         val header = convertibleHeader(frame)
-        val direct = isSizeKnown(frame) && header.encoding !in BLOCK_PACK_ENCODINGS
+        val direct = isSizeKnown(frame) && (header.encoding == OcrawFrameHeader.ENCODING_RAW10 || isPassThrough(frame))
         if (!direct) {
             val window = WindowChannel(out, offset, length)
             write(frame, window)
@@ -321,11 +328,12 @@ class CinemaDngWriter(
         stored: OcrawStreamFrame,
         header: OcrawFrameHeader,
         strips: Strips,
+        tileLength: Int,
         containerOffset: Long,
     ): CinemaDngLayout {
         val parts = LongArray(strips.lengths.size) { strips.lengths[it].toLong() }
         val bytes = buildDng(stored, header, compression = 7, bitsPerSample = LJ92_PRECISION,
-            rowsPerPart = strips.rows[0], tiled = true, parts = parts)
+            rowsPerPart = tileLength, tiled = true, parts = parts)
         val source = if (containerOffset < 0) -1 else containerOffset + strips.streamsStart
         return CinemaDngLayout(frame, bytes, parts.sum(), 7, source)
     }
@@ -334,9 +342,9 @@ class CinemaDngWriter(
     private class Strips(val rows: IntArray, val lengths: IntArray, val streamsStart: Int)
 
     /**
-     * Parses the container table at [src]'s position (`parse_strips` and the uniform-height
-     * check of `decode_lj92`); [src] holds at least the table. Lengths are checked against
-     * the header's `dataLength`, so the strips themselves need not be in [src].
+     * Parses the container table at [src]'s position (`parse_strips`); [src] holds at least
+     * the table. Lengths are checked against the header's `dataLength`, so the strips
+     * themselves need not be in [src].
      */
     private fun parseStrips(src: ByteBuffer, header: OcrawFrameHeader, frame: Int): Strips {
         val base = src.position()
@@ -364,50 +372,66 @@ class CinemaDngWriter(
         if (total != header.height.toLong() || offset != dataLength) {
             malformed("encoded frame strips disagree with the frame height or data length")
         }
-        val first = rows[0]
-        if ((0 until count - 1).any { rows[it] != first } || rows[count - 1] > first) {
-            malformed("LJ92 strips do not have a uniform height")
-        }
         return Strips(rows, lengths, 4 + 8 * count)
     }
 
-    /** `_check_sof3`: each strip is a JPEG stream whose SOF3 frame matches the strip geometry. */
-    private fun checkSof3(data: ByteBuffer, strips: Strips, width: Int, frame: Int) {
+    /**
+     * The full-tile rule on the strip table (`lj92_tiles`): [tileLength] a multiple of 16,
+     * every strip but the last [tileLength] rows, the last 1..[tileLength]. With the rows
+     * adding up to the height ([parseStrips]), the strips are the ceil(height / T) tiles.
+     */
+    private fun checkTiles(strips: Strips, tileLength: Int, frame: Int) {
+        val last = strips.rows.size - 1
+        if (tileLength <= 0 || tileLength % 16 != 0 || (0 until last).any { strips.rows[it] != tileLength } ||
+            strips.rows[last] > tileLength
+        ) {
+            throw OcrawDngException("frame $frame: LJ92 strips are not full tiles of $tileLength rows",
+                OcrawMissingReason.DECODE_FAILED)
+        }
+    }
+
+    /** `_check_sof3`: each strip is a JPEG stream whose SOF3 frame is a full tile of [tileLength] lines. */
+    private fun checkSof3(data: ByteBuffer, strips: Strips, width: Int, tileLength: Int, frame: Int) {
         var start = data.position() + strips.streamsStart
         for (i in strips.rows.indices) {
-            val length = strips.lengths[i]
-            val rows = strips.rows[i]
-            fun byte(at: Int) = data.get(start + at).toInt() and 0xff
-            fun be16(at: Int) = byte(at) shl 8 or byte(at + 1)
-            fun malformed(message: String): Nothing =
-                throw OcrawDngException("frame $frame: LJ92 strip $i $message", OcrawMissingReason.DECODE_FAILED)
-            if (length < 2 || byte(0) != 0xff || byte(1) != 0xd8 || byte(length - 2) != 0xff || byte(length - 1) != 0xd9) {
-                malformed("is not a JPEG stream")
+            val lines = sof3Lines(data, start, strips.lengths[i], width, i, frame)
+            if (lines != tileLength) {
+                throw OcrawDngException("frame $frame: LJ92 strip $i declares $lines lines, not the tile length $tileLength",
+                    OcrawMissingReason.DECODE_FAILED)
             }
-            var at = 2
-            var found = false
-            while (at + 4 <= length) {
-                if (byte(at) != 0xff) break
-                val marker = byte(at + 1)
-                val segment = be16(at + 2)
-                if (marker == 0xc3) {
-                    if (at + 10 > length) break
-                    val precision = byte(at + 4)
-                    val lines = be16(at + 5)
-                    val columns = be16(at + 7)
-                    val components = byte(at + 9)
-                    if (precision != LJ92_PRECISION || lines != rows || columns * components != width || components != 2) {
-                        malformed("frame is ${columns}x${lines}x$components P=$precision")
-                    }
-                    found = true
-                    break
-                }
-                if (marker == 0xda) break
-                at += 2 + segment
-            }
-            if (!found) malformed("has no SOF3 frame header")
-            start += length
+            start += strips.lengths[i]
         }
+    }
+
+    /** The lines the SOF3 frame of the strip at `data[start, start + length)` declares, its other fields checked. */
+    private fun sof3Lines(data: ByteBuffer, start: Int, length: Int, width: Int, strip: Int, frame: Int): Int {
+        fun byte(at: Int) = data.get(start + at).toInt() and 0xff
+        fun be16(at: Int) = byte(at) shl 8 or byte(at + 1)
+        fun malformed(message: String): Nothing =
+            throw OcrawDngException("frame $frame: LJ92 strip $strip $message", OcrawMissingReason.DECODE_FAILED)
+        if (length < 2 || byte(0) != 0xff || byte(1) != 0xd8 || byte(length - 2) != 0xff || byte(length - 1) != 0xd9) {
+            malformed("is not a JPEG stream")
+        }
+        var at = 2
+        while (at + 4 <= length) {
+            if (byte(at) != 0xff) break
+            val marker = byte(at + 1)
+            val segment = be16(at + 2)
+            if (marker == 0xc3) {
+                if (at + 10 > length) break
+                val precision = byte(at + 4)
+                val lines = be16(at + 5)
+                val columns = be16(at + 7)
+                val components = byte(at + 9)
+                if (precision != LJ92_PRECISION || columns * components != width || components != 2) {
+                    malformed("frame is ${columns}x${lines}x$components P=$precision")
+                }
+                return lines
+            }
+            if (marker == 0xda) break
+            at += 2 + segment
+        }
+        malformed("has no SOF3 frame header")
     }
 
     // ------------------------------------------------------------------------------------------
@@ -538,11 +562,15 @@ class CinemaDngWriter(
         return index.frames[frame]
     }
 
+    private val hasDecoder: Boolean get() = blockPackDecoderFactory != null || NativeRawCodec.available
+
     private fun convertibleHeader(frame: Int): OcrawFrameHeader {
         val header = frameAt(frame).header
             ?: throw OcrawDngException("frame $frame has an unreadable header", OcrawMissingReason.UNREADABLE_HEADER)
         if (!isConvertible(frame)) {
-            val reason = if (header.encoding in BLOCK_PACK_ENCODINGS && header.width % 4 == 0) {
+            val decoded = header.encoding in BLOCK_PACK_ENCODINGS ||
+                header.encoding == OcrawFrameHeader.ENCODING_LJ92 && !lj92PassesThrough(frame)
+            val reason = if (decoded && header.width % 4 == 0) {
                 OcrawMissingReason.CODEC_UNAVAILABLE
             } else if (header.encoding in KNOWN_ENCODINGS) {
                 OcrawMissingReason.UNREADABLE_HEADER
@@ -556,6 +584,41 @@ class CinemaDngWriter(
 
     private fun dataOffset(stored: OcrawStreamFrame): Long =
         stored.fileOffset + OcrawCodec.CHUNK_HEADER_BYTES + OcrawFrameHeader.BYTES
+
+    /** The start of the frame data, up to the largest strip table, in [table] (unchecked). */
+    private fun readTable(stored: OcrawStreamFrame, header: OcrawFrameHeader): ByteBuffer {
+        table.clear()
+        table.limit(minOf(table.capacity(), header.dataLength))
+        readFully(table, dataOffset(stored))
+        table.flip()
+        return table
+    }
+
+    /**
+     * [isPassThrough] for an LJ92 frame, cached. A table too broken to tell passes through,
+     * so [parseStrips] reports it as it always did.
+     */
+    private fun lj92PassesThrough(frame: Int): Boolean {
+        passThrough[frame]?.let { return it }
+        val stored = frameAt(frame)
+        val header = stored.header ?: return false
+        val tiles = try {
+            val table = readTable(stored, header)
+            val count = if (table.remaining() >= 4) table.getInt(0) else 0
+            if (count !in 1..MAX_STRIPS || table.remaining() < 4 + 8 * count) {
+                true
+            } else {
+                val rows = table.getInt(4)
+                rows > 0 && rows % 16 == 0 && (1 until count).all { table.getInt(4 + 8 * it) == rows }
+            }
+        } catch (error: ClosedChannelException) {
+            throw error
+        } catch (_: IOException) {
+            true
+        }
+        passThrough[frame] = tiles
+        return tiles
+    }
 
     /** The frame data, CRC-checked, in a reused direct buffer: position 0, limit `dataLength`. */
     private fun readPayload(frame: Int, stored: OcrawStreamFrame, header: OcrawFrameHeader): ByteBuffer {
@@ -578,6 +641,22 @@ class CinemaDngWriter(
 
     private fun maxDataLength(): Int = index.frames.maxOfOrNull { it.header?.dataLength ?: 0 } ?: 0
 
+    /** A RAW10 frame, or one decoded to RAW10: re-encoded to LJ92 tiles with [lj92Encoder], else uncompressed. */
+    private fun writeRaw10(
+        frame: Int,
+        stored: OcrawStreamFrame,
+        header: OcrawFrameHeader,
+        raw10: ByteBuffer,
+        out: WritableByteChannel,
+    ): Long {
+        val reencoded = lj92Encoder?.let { encodeLj92(frame, stored, header, raw10) }
+            ?: return writeUncompressed(uncompressedLayout(frame, stored, header), raw10, out)
+        val (layout, container) = reencoded
+        emit(out, layout.headerBuffer())
+        emit(out, container)
+        return layout.size
+    }
+
     private fun encodeLj92(
         frame: Int,
         stored: OcrawStreamFrame,
@@ -596,27 +675,34 @@ class CinemaDngWriter(
         dst.limit(size)
         val lj92Header = header.copy(encoding = OcrawFrameHeader.ENCODING_LJ92, dataLength = size)
         val strips = parseStrips(dst.duplicate().order(ByteOrder.LITTLE_ENDIAN), lj92Header, frame)
-        checkSof3(dst, strips, header.width, frame)
-        val layout = lj92Layout(frame, stored, lj92Header, strips, -1)
+        // The tile length is what strip 0 declares: its rows, or more for a single padded strip.
+        val tileLength = sof3Lines(dst, strips.streamsStart, strips.lengths[0], header.width, 0, frame)
+        checkTiles(strips, tileLength, frame)
+        checkSof3(dst, strips, header.width, tileLength, frame)
+        val layout = lj92Layout(frame, stored, lj92Header, strips, tileLength, -1)
         return layout to dst.duplicate().apply { position(strips.streamsStart) }
     }
 
-    private fun decodeBlockPack(frame: Int, header: OcrawFrameHeader, data: ByteBuffer): ByteBuffer {
+    /** A block-pack frame, or an LJ92 frame that does not pass through, decoded to tight RAW10. */
+    private fun decode(frame: Int, header: OcrawFrameHeader, data: ByteBuffer): ByteBuffer {
         val codec = decoder ?: (blockPackDecoderFactory?.invoke() ?: BlockPackDecoder.native(decoderThreads)).also { decoder = it }
         val bytes = header.width / 4 * 5 * header.height
         val dst = decoded?.takeIf { it.capacity() >= bytes }
             ?: ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN).also { decoded = it }
         dst.clear()
         val ok = try {
-            if (header.encoding == OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED) {
-                codec.decodeQuantised(data, header.width, header.height, dst)
-            } else {
-                codec.decode(data, header.width, header.height, dst)
+            when (header.encoding) {
+                OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED -> codec.decodeQuantised(data, header.width, header.height, dst)
+                OcrawFrameHeader.ENCODING_LJ92 -> codec.decodeLj92(data, header.width, header.height, dst)
+                else -> codec.decode(data, header.width, header.height, dst)
             }
         } catch (_: IllegalArgumentException) {
             false
         }
-        if (!ok) throw OcrawDngException("frame $frame: malformed block-pack data", OcrawMissingReason.DECODE_FAILED)
+        if (!ok) {
+            val kind = if (header.encoding == OcrawFrameHeader.ENCODING_LJ92) "LJ92" else "block-pack"
+            throw OcrawDngException("frame $frame: malformed $kind data", OcrawMissingReason.DECODE_FAILED)
+        }
         dst.limit(bytes)
         return dst
     }
@@ -727,8 +813,8 @@ class CinemaDngWriter(
         /** The encodings decoded through a [BlockPackDecoder]: block-pack, plain or quantised. */
         private val BLOCK_PACK_ENCODINGS =
             setOf(OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK, OcrawFrameHeader.ENCODING_BLOCK_PACK_QUANTISED)
-        /** The encodings an [Lj92Encoder] re-encodes: RAW10 and block-pack. */
-        private val REENCODED_ENCODINGS = setOf(OcrawFrameHeader.ENCODING_RAW10) + BLOCK_PACK_ENCODINGS
+        /** The encodings an [Lj92Encoder] re-encodes: RAW10, block-pack, and LJ92 that does not pass through. */
+        private val REENCODED_ENCODINGS = setOf(OcrawFrameHeader.ENCODING_RAW10, OcrawFrameHeader.ENCODING_LJ92) + BLOCK_PACK_ENCODINGS
         private val NANOS = BigInteger.valueOf(1_000_000_000)
         internal val UINT32_MAX: BigInteger = BigInteger.valueOf(0xffffffffL)
 

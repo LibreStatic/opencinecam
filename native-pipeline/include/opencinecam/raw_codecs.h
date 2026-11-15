@@ -35,6 +35,17 @@
 // TileWidth = width and TileLength = the first strip's rows (LibRaw, for one,
 // reads multi-part lossless JPEG only from tiles; the last tile is short).
 //
+// EncodeOptions.lj92_full_tiles (LJ92 only) makes every tile TileLength tall, as
+// TIFF requires of edge tiles (DaVinci Resolve rejects short ones). The tile
+// length T is the rows per strip above, rounded up to a multiple of 16 and not
+// clamped to the height (a single strip of 3000 rows gives T = 3008). The strip
+// table is unchanged: its rows are real image rows and still add up to the
+// height. Every strip's SOF3 declares T lines; the last strip, the only one that
+// can be short, encodes its real rows and then T - rows padding rows, each
+// repeating per component (even and odd columns) the first sample of that
+// component in the strip's last real row, so predictor 1 codes them as zero
+// differences. A decoder drops the padding rows.
+//
 // Strip stream, encoding 1 (LJ92): one complete ITU-T T.81 lossless JPEG
 // (SOF3) stream, SOI to EOI, laid out as DNG stores CFA data: a frame of
 // width / 2 columns x rows lines with two components (component 0 holds the
@@ -95,7 +106,9 @@
 // 11; an unused last high nibble that is not 0; a decoded sample outside
 // 0..1023; a strip stream not consumed exactly to its last byte. LJ92: a stream
 // that is not SOF3 P = 10 with width / 2 columns, the strip's rows and two
-// components; a predictor outside 1..7, a point transform other than 0 or a
+// components (the last strip alone may instead declare the tile length T, when
+// that is more than its rows: the first strip's rows, or for a single strip its
+// rows rounded up to 16); a predictor outside 1..7, a point transform other than 0 or a
 // restart interval; an invalid Huffman table or code; a sample outside 0..1023;
 // entropy data that runs past its end or leaves more than 7 padding bits.
 //
@@ -127,6 +140,10 @@ struct EncodeOptions {
   int strips = 8;                    // requested strip count, 1..kMaxStrips
   int lj92_predictor = 1;            // T.81 predictor selection value, 1..7
   bool lj92_optimal_huffman = true;  // false: the T.81 K.3 luminance DC table
+  // Codec::kLj92 only. Pad the last strip to the tile length T (see the header
+  // comment) so every strip's SOF3 declares T lines. false: byte-identical to a
+  // build without this field.
+  bool lj92_full_tiles = false;
   Kernel kernel = Kernel::kAuto;     // kNeon falls back to scalar without NEON
 
   // Block-pack forward table, kQuantLutSize entries of 0..1023: each sample x is

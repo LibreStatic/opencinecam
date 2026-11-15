@@ -76,7 +76,7 @@ internal fun interface ShareContent {
  *
  * - `/` lists one folder per RAW take, named by the `.ocraw` stem;
  * - `/<take>/` holds `<take>_000000.dng …` (convertible frames only, generated on the fly by
- *   [CinemaDngWriter]; RAW10 becomes uncompressed and LJ92 passes through), `<take>.wav`
+ *   [CinemaDngWriter]; RAW10 becomes uncompressed and LJ92 in full tiles passes through), `<take>.wav`
  *   when the take has sound ([OcrawWavWriter], a corrupt chunk as silence so the size holds),
  *   and the original `<take>.ocraw` only while [includeOriginal] says so.
  *

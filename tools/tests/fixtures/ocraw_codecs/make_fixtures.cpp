@@ -89,6 +89,7 @@ struct Fixture {
   uint32_t seed;
   int strips;
   bool optimal_huffman;
+  bool lj92_full_tiles = false;
 };
 
 // Encoding 3 fixtures: the Razr's ISO 25600 noise model, black 64, k = 0.5.
@@ -110,6 +111,11 @@ int main(int argc, char** argv) {
       {"blockpack_72x26_s1_seed3.bin", rc::Codec::kBlockPack, 72, 26, 3, 1, true},
       {"blockpackq_64x34_s8_seed1.bin", rc::Codec::kBlockPackQuantised, 64, 34, 1, 8, true},
       {"blockpackq_72x26_s1_seed3.bin", rc::Codec::kBlockPackQuantised, 72, 26, 3, 1, true},
+      // Two strips of 16 rows: every tile full, as a DNG writer may pass through.
+      {"lj92_64x32_s2_seed4.bin", rc::Codec::kLj92, 64, 32, 4, 2, true},
+      // lj92_full_tiles, as the CinemaDNG export encodes: the last strip padded to the tile length.
+      {"lj92tiles_64x34_s8_seed1.bin", rc::Codec::kLj92, 64, 34, 1, 8, true, true},
+      {"lj92tiles_72x26_s1_seed3.bin", rc::Codec::kLj92, 72, 26, 3, 1, true, true},
   };
   const QuantTables quant = quant_tables(kQuantA, kQuantB, kQuantBlack, kQuantK);
   for (const Fixture& f : fixtures) {
@@ -117,6 +123,7 @@ int main(int argc, char** argv) {
     rc::EncodeOptions options;
     options.strips = f.strips;
     options.lj92_optimal_huffman = f.optimal_huffman;
+    options.lj92_full_tiles = f.lj92_full_tiles;
     options.kernel = rc::Kernel::kScalar;
     std::vector<uint8_t> expected = raw;
     if (f.codec == rc::Codec::kBlockPackQuantised) {

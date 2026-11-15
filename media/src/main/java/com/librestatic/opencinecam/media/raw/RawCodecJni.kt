@@ -38,6 +38,7 @@ internal object RawCodecJni {
         strips: Int,
         predictor: Int,
         optimal: Boolean,
+        fullTiles: Boolean,
     ): Long
 
     @JvmStatic external fun nativeEncode(
@@ -54,6 +55,7 @@ internal object RawCodecJni {
         strips: Int,
         predictor: Int,
         optimal: Boolean,
+        fullTiles: Boolean,
         kernel: Int,
         /** Encoding 3 only: forward table then payload prefix, see `occ_rawcodec_jni.cpp`. */
         quant: ByteBuffer?,

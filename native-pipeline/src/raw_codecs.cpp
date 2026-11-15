@@ -594,8 +594,11 @@ bool put_bytes(uint8_t*& p, const uint8_t* end, const uint8_t* bytes, size_t n) 
   return true;
 }
 
-size_t lj92_encode_strip(const uint8_t* raw, int width, int rows, int row_bytes, uint8_t* dst,
-                         size_t capacity, int predictor, bool optimal, bool neon) {
+// lines is what the SOF3 declares: rows, or more when the strip is padded to a full
+// tile (lj92_full_tiles). Each padding row repeats, per component, the first sample
+// of the last real row, so predictor 1 sees a zero difference everywhere in it.
+size_t lj92_encode_strip(const uint8_t* raw, int width, int rows, int lines, int row_bytes,
+                         uint8_t* dst, size_t capacity, int predictor, bool optimal, bool neon) {
   const size_t padded = static_cast<size_t>(width) + 2;
   std::vector<uint16_t> rows_buf(padded * 2);
   std::vector<int16_t> diff(static_cast<size_t>(width));
@@ -603,12 +606,25 @@ size_t lj92_encode_strip(const uint8_t* raw, int width, int rows, int row_bytes,
   std::vector<uint8_t> row_out(row_worst + kSlack + 16);
 
   auto row_ptr = [&](int y) { return rows_buf.data() + (y & 1) * padded + 2; };
+  int pad_sample[2] = {0, 0};
+  auto load_row = [&](int y) {
+    if (y < rows) {
+      unpack_row(raw + static_cast<size_t>(y) * row_bytes, width, row_ptr(y), neon);
+      return;
+    }
+    if (y == rows) {  // row_ptr(rows - 1) is still intact here
+      pad_sample[0] = row_ptr(rows - 1)[0];
+      pad_sample[1] = row_ptr(rows - 1)[1];
+    }
+    uint16_t* cur = row_ptr(y);
+    for (int i = 0; i < width; ++i) cur[i] = static_cast<uint16_t>(pad_sample[i & 1]);
+  };
 
   HuffSpec spec;
   if (optimal) {
     std::vector<uint32_t> by_diff(2 * kLj92MaxDiff + 1);
-    for (int y = 0; y < rows; ++y) {
-      unpack_row(raw + static_cast<size_t>(y) * row_bytes, width, row_ptr(y), neon);
+    for (int y = 0; y < lines; ++y) {
+      load_row(y);
       lj92_row_diffs(row_ptr(y), row_ptr(y + 1), y == 0, width, predictor, diff.data(), neon);
       for (int i = 0; i < width; ++i) ++by_diff[diff[i] + kLj92MaxDiff];
     }
@@ -655,7 +671,7 @@ size_t lj92_encode_strip(const uint8_t* raw, int width, int rows, int row_bytes,
   u16(0xFFC3);  // SOF3
   u16(8 + 3 * 2);
   u8(10);  // P
-  u16(rows);
+  u16(lines);
   u16(width / 2);
   u8(2);
   for (int c = 0; c < 2; ++c) {
@@ -677,8 +693,8 @@ size_t lj92_encode_strip(const uint8_t* raw, int width, int rows, int row_bytes,
 
   RowSink sink{dst, capacity, static_cast<size_t>(p - dst), row_out.data(), row_worst};
   MsbWriter writer;
-  for (int y = 0; y < rows; ++y) {
-    unpack_row(raw + static_cast<size_t>(y) * row_bytes, width, row_ptr(y), neon);
+  for (int y = 0; y < lines; ++y) {
+    load_row(y);
     lj92_row_diffs(row_ptr(y), row_ptr(y + 1), y == 0, width, predictor, diff.data(), neon);
     writer.p = sink.begin_row();
     for (int i = 0; i < width; ++i) {
@@ -799,8 +815,10 @@ int decode_symbol(MsbReader& r, const HuffDecoder& d) {
   return -1;
 }
 
-bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, uint8_t* dst,
-                       int dst_row_bytes) {
+// padded_lines > rows: the SOF3 may also declare that many lines (a last strip
+// padded to the tile length); the extra rows are decoded and dropped.
+bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, int padded_lines,
+                       uint8_t* dst, int dst_row_bytes) {
   const uint8_t* p = src;
   const uint8_t* end = src + length;
   if (length < 4 || p[0] != 0xFF || p[1] != 0xD8) return false;
@@ -809,6 +827,7 @@ bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, u
   bool have_spec[4] = {};
   bool have_frame = false;
   int predictor = 0;
+  int lines = rows;
   int table_of[2] = {0, 0};
   for (;;) {
     if (end - p < 4 || p[0] != 0xFF) return false;
@@ -845,7 +864,10 @@ bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, u
       if (seg != 8 + 6 || s[0] != 10) return false;
       const int y = s[1] << 8 | s[2];
       const int x = s[3] << 8 | s[4];
-      if (y != rows || x != width / 2 || s[5] != 2) return false;
+      if ((y != rows && !(padded_lines > rows && y == padded_lines)) || x != width / 2 || s[5] != 2) {
+        return false;
+      }
+      lines = y;
       have_frame = true;
     } else if (marker == 0xDA) {
       if (!have_frame || seg != 6 + 4 || s[0] != 2) return false;
@@ -871,7 +893,7 @@ bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, u
   const size_t padded = static_cast<size_t>(width) + 2;
   std::vector<uint16_t> rows_buf(padded * 2);
   MsbReader reader{p, end};
-  for (int y = 0; y < rows; ++y) {
+  for (int y = 0; y < lines; ++y) {
     uint16_t* cur = rows_buf.data() + (y & 1) * padded + 2;
     const uint16_t* prev = rows_buf.data() + ((y + 1) & 1) * padded + 2;
     for (int i = 0; i < width; ++i) {
@@ -896,7 +918,7 @@ bool lj92_decode_strip(const uint8_t* src, size_t length, int width, int rows, u
       if (v > kSampleMax) return false;
       cur[i] = static_cast<uint16_t>(v);
     }
-    pack_row(cur, width, dst + static_cast<size_t>(y) * dst_row_bytes);
+    if (y < rows) pack_row(cur, width, dst + static_cast<size_t>(y) * dst_row_bytes);
   }
   // No fake bits may have been consumed, and at most 7 real (padding) bits may be left.
   if (reader.n < reader.fake || reader.n - reader.fake > 7) return false;
@@ -956,6 +978,7 @@ struct EncodeJob {
   bool neon;
   int rows[kMaxStrips];
   int first_row[kMaxStrips];
+  int tile_rows;  // lines each LJ92 strip declares: 0 = its rows, else the full tile
   uint8_t* out[kMaxStrips];
   size_t capacity[kMaxStrips];
   size_t size[kMaxStrips];
@@ -967,7 +990,8 @@ size_t encode_one(const EncodeJob& job, int s, uint8_t* out, size_t capacity) {
     return block_pack_encode_strip(raw, job.width, job.rows[s], job.row_bytes, out, capacity, job.neon,
                                    job.options->lut);
   }
-  return lj92_encode_strip(raw, job.width, job.rows[s], job.row_bytes, out, capacity,
+  return lj92_encode_strip(raw, job.width, job.rows[s], job.tile_rows > 0 ? job.tile_rows : job.rows[s],
+                           job.row_bytes, out, capacity,
                            job.options->lj92_predictor, job.options->lj92_optimal_huffman, job.neon);
 }
 
@@ -986,6 +1010,8 @@ struct DecodeJob {
   int first_row[kMaxStrips];
   size_t offset[kMaxStrips];
   size_t length[kMaxStrips];
+  int last = 0;
+  int padded_lines = 0;  // LJ92: lines the last strip may declare beyond its rows
   const uint16_t* inverse = nullptr;  // encoding 3: points into inverse_table
   int sample_limit = kSampleMax + 1;
   uint16_t inverse_table[kQuantLutSize];
@@ -999,7 +1025,8 @@ void decode_task(void* context, int s) {
   const bool ok = job->codec == Codec::kBlockPack
                       ? block_pack_decode_strip(src, job->length[s], job->width, job->rows[s], dst,
                                                 job->dst_row_bytes, job->inverse, job->sample_limit)
-                      : lj92_decode_strip(src, job->length[s], job->width, job->rows[s], dst,
+                      : lj92_decode_strip(src, job->length[s], job->width, job->rows[s],
+                                          s == job->last ? job->padded_lines : 0, dst,
                                           job->dst_row_bytes);
   if (!ok) job->ok.store(false);
 }
@@ -1110,12 +1137,25 @@ int strip_layout(int height, int requested_strips, int rows[kMaxStrips]) {
   return count;
 }
 
+// The tile length of lj92_full_tiles: the per-strip row count, a multiple of 16,
+// not clamped to the height. 0 when the option does not apply (or cannot be
+// declared in a SOF3).
+static int full_tile_rows(Codec codec, int height, const EncodeOptions& options) {
+  if (codec != Codec::kLj92 || !options.lj92_full_tiles) return 0;
+  const int requested =
+      options.strips < 1 ? 1 : options.strips > kMaxStrips ? kMaxStrips : options.strips;
+  const int tile = (((height + requested - 1) / requested) + 15) & ~15;
+  return tile > 65535 ? -1 : tile;
+}
+
 size_t max_encoded_size(Codec codec, int width, int height, const EncodeOptions& options) {
   if (!valid_frame(width, height, width / 4 * 5)) return 0;
+  const int tile = full_tile_rows(codec, height, options);
+  if (tile < 0) return 0;
   int rows[kMaxStrips];
   const int strips = strip_layout(height, options.strips, rows);
   size_t total = 4 + 8 * static_cast<size_t>(strips);
-  for (int s = 0; s < strips; ++s) total += strip_bound(codec, width, rows[s]);
+  for (int s = 0; s < strips; ++s) total += strip_bound(codec, width, tile > 0 ? tile : rows[s]);
   if (codec == Codec::kBlockPackQuantised) total += quant_prefix_bytes(kQuantLutSize);
   return total;
 }
@@ -1149,6 +1189,9 @@ size_t encode(Codec codec, const uint8_t* raw10, int width, int height, int row_
   job->row_bytes = row_bytes;
   job->options = &options;
   job->neon = use_neon(options.kernel);
+  const int tile = full_tile_rows(codec, height, options);
+  if (tile < 0) return 0;
+  job->tile_rows = tile;
   const int strips = strip_layout(height, options.strips, job->rows);
   const size_t header = 4 + 8 * static_cast<size_t>(strips);
   if (dst_capacity <= header) return 0;
@@ -1159,7 +1202,7 @@ size_t encode(Codec codec, const uint8_t* raw10, int width, int height, int row_
   size_t bound_total = 0;
   for (int s = 0, y = 0; s < strips; y += job->rows[s], ++s) {
     job->first_row[s] = y;
-    bounds[s] = strip_bound(codec, width, job->rows[s]);
+    bounds[s] = strip_bound(codec, width, tile > 0 ? tile : job->rows[s]);
     bound_total += bounds[s];
   }
   size_t offset = header;
@@ -1241,6 +1284,12 @@ bool decode(Codec codec, const uint8_t* src, size_t src_length, int width, int h
     if (total_rows > static_cast<uint64_t>(height)) return false;
   }
   if (total_rows != static_cast<uint64_t>(height) || offset != src_length) return false;
+  // A padded last strip declares the tile length: the first strip's rows, or for a
+  // single strip its rows rounded up to 16.
+  job->last = static_cast<int>(strips) - 1;
+  if (codec == Codec::kLj92) {
+    job->padded_lines = strips > 1 ? job->rows[0] : (job->rows[0] + 15) & ~15;
+  }
   run_tasks(pool, static_cast<int>(strips), decode_task, job.get());
   return job->ok.load();
 }

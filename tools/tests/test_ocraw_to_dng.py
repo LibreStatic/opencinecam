@@ -170,6 +170,8 @@ CODEC_FIXTURES = {
     "lj92_64x34_s8_seed1": (1, 64, 34, 1, [16, 16, 2]),
     "lj92_128x50_s4_seed2": (1, 128, 50, 2, [16, 16, 16, 2]),
     "lj92_72x26_s1_seed3": (1, 72, 26, 3, [26]),
+    # Two full 16-row strips: the only LJ92 fixture whose strips pass through as DNG tiles.
+    "lj92_64x32_s2_seed4": (1, 64, 32, 4, [16, 16]),
     "blockpack_64x34_s8_seed1": (2, 64, 34, 1, [16, 16, 2]),
     "blockpack_128x50_s4_seed2": (2, 128, 50, 2, [16, 16, 16, 2]),
     "blockpack_72x26_s1_seed3": (2, 72, 26, 3, [26]),
@@ -182,6 +184,13 @@ QUANT_FIXTURES = {
     "blockpackq_72x26_s1_seed3": (3, 72, 26, 3, [26]),
 }
 QUANT_MODEL = (0.6, 6.8974, 64, 0.5)
+
+# LJ92 with lj92_full_tiles, as the CinemaDNG export encodes: the last strip's SOF3
+# declares the full tile length (16 and 32 lines), its rows padded.
+TILE_FIXTURES = {
+    "lj92tiles_64x34_s8_seed1": (1, 64, 34, 1, [16, 16, 2]),
+    "lj92tiles_72x26_s1_seed3": (1, 72, 26, 3, [26]),
+}
 
 
 def quant_tables(a: float, b: float, black: int, k: float) -> tuple[list[int], list[int]]:
@@ -213,7 +222,7 @@ def fixture_samples(width: int, height: int, seed: int) -> list[int]:
 
 
 def fixture(name: str) -> tuple[bytes, int, int, int, list[int], list[int]]:
-    encoding, width, height, seed, rows = CODEC_FIXTURES.get(name) or QUANT_FIXTURES[name]
+    encoding, width, height, seed, rows = CODEC_FIXTURES.get(name) or QUANT_FIXTURES.get(name) or TILE_FIXTURES[name]
     return (FIXTURES / f"{name}.bin").read_bytes(), encoding, width, height, rows, fixture_samples(width, height, seed)
 
 
@@ -611,8 +620,53 @@ class EncodedFramesTest(unittest.TestCase):
         _, _, pure_out = self.convert(name, "--pure")
         self.assertEqual((pure_out / "f_000000.dng").read_bytes(), (numpy_out / "f_000000.dng").read_bytes())
 
+    def test_lj92_decodes_to_the_source_samples(self):
+        for name in (n for n in [*CODEC_FIXTURES, *TILE_FIXTURES] if n.startswith("lj92")):
+            data, _, width, height, rows, source = fixture(name)
+            header = {"width": width, "height": height}
+            result = to_dng.decode_lj92(header, data, use_numpy=False)
+            if to_dng.lj92_strips_are_tiles(rows):
+                self.assertIsInstance(result, to_dng.Encoded, name)
+                strips = to_dng.parse_strips(data, height)
+                samples = [v for i, (r, stream) in enumerate(strips) for v in to_dng._lj92_strip(stream, width, r, r, i)]
+                self.assertEqual(source, samples, name)
+            else:
+                self.assertEqual(struct.pack(f"<{len(source)}H", *source), result, name)
+
+    def test_lj92_tile_rule(self):
+        self.assertTrue(to_dng.lj92_strips_are_tiles([16, 16]))
+        self.assertTrue(to_dng.lj92_strips_are_tiles([384] * 8))
+        self.assertTrue(to_dng.lj92_strips_are_tiles([3008]))
+        self.assertFalse(to_dng.lj92_strips_are_tiles([384] * 7 + [312]))  # 4000x3000, 8 strips
+        self.assertFalse(to_dng.lj92_strips_are_tiles([3000]))  # one strip, not a multiple of 16
+        self.assertFalse(to_dng.lj92_strips_are_tiles([16, 16, 2]))
+        self.assertFalse(to_dng.lj92_strips_are_tiles([26]))
+        self.assertFalse(to_dng.lj92_strips_are_tiles([16, 32]))
+        # A frame to decode must have a width the RAW10 rows can hold, as on the device.
+        data, _, _, height, _, _ = fixture("lj92_64x34_s8_seed1")
+        with self.assertRaises(ValueError):
+            to_dng.decode_lj92({"width": 62, "height": height}, data, use_numpy=False)
+
+    def test_lj92_not_in_full_tiles_is_stored_uncompressed(self):
+        for name in (n for n in [*CODEC_FIXTURES, *TILE_FIXTURES] if n.startswith("lj92")):
+            _, _, width, height, rows, source = fixture(name)
+            if to_dng.lj92_strips_are_tiles(rows):
+                continue
+            for args in ((), ("--pure",)):
+                code, summary, out = self.convert(name, *args)
+                self.assertEqual(0, code, summary)
+                self.assertIn("frames written: 1 of 1", summary)
+                path = out / "f_000000.dng"
+                ifd0, _, samples = read_dng(path)
+                self.assertEqual(source, samples, (name, args))
+                self.assertEqual(([16], [1], [width], [height]), (ifd0[258], ifd0[259], ifd0[256], ifd0[257]))
+                self.assertNotIn(322, ifd0)
+                report = validate_dng.read_dng(path)
+                self.assertEqual("PASS", report["status"], report)
+                self.assertEqual(width * height * 2, report["payloadBytes"])
+
     def test_lj92_strips_are_stored_unchanged_as_tiles(self):
-        for name in (n for n in CODEC_FIXTURES if n.startswith("lj92")):
+        for name in (n for n in CODEC_FIXTURES if n.startswith("lj92") and to_dng.lj92_strips_are_tiles(CODEC_FIXTURES[n][4])):
             data, _, width, height, rows, _ = fixture(name)
             for args in ((), ("--pure",)):
                 code, summary, out = self.convert(name, *args)
@@ -750,6 +804,14 @@ class EncodedFramesTest(unittest.TestCase):
         wide_nibble[first_stream] = (wide_nibble[first_stream] & 0xF0) | 12
         corrupt_sof = bytearray(lj92)
         corrupt_sof[first_stream:first_stream + 2] = b"\0\0"
+        # A pass-through layout whose second strip's SOF3 declares 14 lines, not the tile's 16.
+        tiles = fixture("lj92_64x32_s2_seed4")[0]
+        second = 4 + 8 * 2 + struct.unpack_from("<I", tiles, 8)[0]
+        short_tile = bytearray(tiles)
+        struct.pack_into(">H", short_tile, tiles.index(b"\xff\xc3", second) + 5, 14)
+        # A frame to decode whose last strip (2 rows) declares 4 lines: neither its rows nor a full tile.
+        wrong_lines = bytearray(lj92)
+        struct.pack_into(">H", wrong_lines, lj92.rindex(b"\xff\xc3") + 5, 4)
         cases = {
             "truncated": ("blockpack_64x34_s8_seed1", block[:-1]),
             "empty": ("lj92_64x34_s8_seed1", b""),
@@ -759,6 +821,8 @@ class EncodedFramesTest(unittest.TestCase):
             "non-uniform lj92": ("lj92_64x34_s8_seed1", with_rows(lj92, [16, 14, 4])),
             "block width 12": ("blockpack_64x34_s8_seed1", bytes(wide_nibble)),
             "lj92 without SOI": ("lj92_64x34_s8_seed1", bytes(corrupt_sof)),
+            "lj92 tile short of its length": ("lj92_64x32_s2_seed4", bytes(short_tile)),
+            "lj92 to decode, last strip of 4 lines": ("lj92_64x34_s8_seed1", bytes(wrong_lines)),
             "block rows disagree": ("blockpack_64x34_s8_seed1", with_rows(block, [14, 18, 2])),
         }
         for label, (name, data) in cases.items():

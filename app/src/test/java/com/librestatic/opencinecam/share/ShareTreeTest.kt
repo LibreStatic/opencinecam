@@ -50,9 +50,10 @@ class ShareTreeTest {
         val names = tree.files(take).map { it.name }
         val golden = ShareFixture.golden.list()!!.toSet()
         val dngs = names.filter { it.endsWith(".dng") }
-        // RAW10 and LJ92 frames (0, 1, 2, 4, 6) always convert; frame 5 (unknown encoding) never
-        // does; frame 3 (block-pack) needs the native codec, so it is offered only where that loads.
-        assertTrue(dngs.toString(), dngs.containsAll(listOf(0, 1, 2, 4, 6).map { "A001_C001_00000$it.dng" }))
+        // RAW10 frames and LJ92 in full tiles (0, 2, 6, 7) always convert; frame 5 (unknown encoding)
+        // never does; frame 3 (block-pack) and LJ92 not in full tiles (1, 4) need the native codec,
+        // so they are offered only where that loads.
+        assertTrue(dngs.toString(), dngs.containsAll(listOf(0, 2, 6, 7).map { "A001_C001_00000$it.dng" }))
         assertTrue("A001_C001_000005.dng" !in dngs)
         assertTrue(golden.containsAll(dngs))
         assertEquals(dngs.sorted(), dngs)

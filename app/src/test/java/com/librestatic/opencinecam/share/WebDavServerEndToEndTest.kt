@@ -125,7 +125,7 @@ class WebDavServerEndToEndTest {
             val entries = responses(folder.text)
             assertEquals("/$take/", entries.first().first)
             val files = entries.drop(1)
-            assertTrue(files.size >= 7) // frames 0-4, the WAV and the .ocraw
+            assertTrue(files.size >= 6) // frames 0, 2, 6 and 7 (more where the native codec loads), the WAV and the .ocraw
             for ((href, length) in files) {
                 val get = c.send("GET", href)
                 assertEquals(href, 200, get.status)

@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam.export
 
+import com.librestatic.opencinecam.media.ocraw.CinemaDngWriter
 import com.librestatic.opencinecam.media.ocraw.OcrawCodec
 import com.librestatic.opencinecam.media.ocraw.OcrawFrameHeader
 import com.librestatic.opencinecam.media.ocraw.OcrawStreamReader
@@ -11,9 +12,12 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.channels.WritableByteChannel
+import kotlin.math.ceil
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,8 +41,11 @@ class CinemaDngExporterTest {
     private val take = File(goldenDir, "$TAKE.ocraw")
     private val expected = File(goldenDir, TAKE)
 
-    /** The frames the JVM converts: 3 is block-pack (native codec only), 5 an unknown encoding. */
-    private val convertedFrames = if (NativeRawCodec.available) listOf(0, 1, 2, 3, 4, 6) else listOf(0, 1, 2, 4, 6)
+    /**
+     * The frames the JVM converts: 3 is block-pack and 1 and 4 are LJ92 not in full tiles (native codec
+     * only), 5 an unknown encoding.
+     */
+    private val convertedFrames = if (NativeRawCodec.available) listOf(0, 1, 2, 3, 4, 6, 7) else listOf(0, 2, 6, 7)
 
     @Test
     fun exportWritesTheGoldenFolder() = withTake { channel ->
@@ -63,24 +70,24 @@ class CinemaDngExporterTest {
         assertEquals(CinemaDngExporter.WAV_MIME_TYPE, target.mimeTypes.getValue("$TAKE.wav"))
 
         assertEquals(convertedFrames.size, outcome.frames)
-        assertEquals(7 - convertedFrames.size, outcome.skipped)
+        assertEquals(FRAMES - convertedFrames.size, outcome.skipped)
         assertTrue(outcome.audio)
         assertFalse(outcome.audioOmitted)
         assertEquals(target.files.values.sumOf { it.size.toLong() }, outcome.bytes)
         assertEquals("CinemaDNG/$TAKE", outcome.location)
 
-        assertEquals(CinemaDngExportProgress(0, 7, 0, 0), progress.first())
-        assertEquals(7, progress.last().done)
-        assertEquals(7 - convertedFrames.size, progress.last().skipped)
+        assertEquals(CinemaDngExportProgress(0, FRAMES, 0, 0), progress.first())
+        assertEquals(FRAMES, progress.last().done)
+        assertEquals(FRAMES - convertedFrames.size, progress.last().skipped)
         assertEquals(1f, progress.last().fraction)
     }
 
     @Test
     fun planMatchesWhatTheExportWrites() = withTake { channel ->
         val plan = requireNotNull(CinemaDngExporter(channel, TAKE).plan())
-        assertEquals(7, plan.frames)
+        assertEquals(FRAMES, plan.frames)
         assertEquals(convertedFrames.size, plan.convertible)
-        assertEquals(7 - convertedFrames.size, plan.skipped)
+        assertEquals(FRAMES - convertedFrames.size, plan.skipped)
         assertTrue(plan.hasAudio)
         assertEquals(File(expected, "$TAKE.wav").length(), plan.wavBytes)
         val written = convertedFrames.sumOf { File(expected, "${TAKE}_%06d.dng".format(it)).length() } +
@@ -90,6 +97,29 @@ class CinemaDngExporterTest {
         assertTrue(plan.reencodedFrames > 0)
         assertTrue(plan.isEstimate(compress = true))
         assertTrue(plan.bytes(compress = true) < plan.bytes(compress = false))
+    }
+
+    @Test
+    fun lj92NotInFullTilesIsPlannedAndWrittenAsReencoded() = withTake { channel ->
+        fun size(frame: Int) = File(expected, "${TAKE}_%06d.dng".format(frame)).length()
+        val plan = requireNotNull(CinemaDngExporter(channel, TAKE, decoderFactory = { GoldenDecoder() }).plan())
+        assertEquals(FRAMES - 1, plan.convertible)
+        // Only frame 7's LJ92 strips are full tiles and pass through; 1 and 4 count with the frames to re-encode.
+        assertEquals(size(7), plan.fixedBytes)
+        assertEquals(listOf(0, 1, 2, 3, 4, 6).sumOf(::size), plan.reencodedBytes)
+        assertEquals(6, plan.reencodedFrames)
+        val wav = File(expected, "$TAKE.wav").length()
+        assertEquals(size(7) + ceil(plan.reencodedBytes * CinemaDngExportPlan.LJ92_ESTIMATE).toLong() + wav, plan.bytes(compress = true))
+
+        val destination = FakeDestination()
+        val outcome = CinemaDngExporter(channel, TAKE, decoderFactory = { GoldenDecoder() }).run(destination)
+        outcome as CinemaDngExportOutcome.Exported
+        assertEquals(plan.bytes(compress = false), outcome.bytes)
+        val files = destination.targets.single().files
+        for (frame in listOf(0, 1, 2, 3, 4, 6, 7)) {
+            val name = "${TAKE}_%06d.dng".format(frame)
+            assertArrayEquals(name, File(expected, name).readBytes(), files.getValue(name))
+        }
     }
 
     @Test
@@ -108,8 +138,8 @@ class CinemaDngExporterTest {
             val target = destination.targets.single()
             assertFalse("the damaged frame leaves no file", "${TAKE}_000000.dng" in target.files)
             assertEquals(convertedFrames.size - 1, outcome.frames)
-            assertEquals(7 - convertedFrames.size + 1, outcome.skipped)
-            assertArrayEquals(File(expected, "${TAKE}_000001.dng").readBytes(), target.files.getValue("${TAKE}_000001.dng"))
+            assertEquals(FRAMES - convertedFrames.size + 1, outcome.skipped)
+            assertArrayEquals(File(expected, "${TAKE}_000002.dng").readBytes(), target.files.getValue("${TAKE}_000002.dng"))
         }
     }
 
@@ -257,6 +287,37 @@ class CinemaDngExporterTest {
 
     private fun withTake(block: (FileChannel) -> Unit) = RandomAccessFile(take, "r").use { block(it.channel) }
 
+    /**
+     * Decodes the fixture take's block-pack and LJ92 frames without the native codec: their rows are
+     * the samples of the converter's uncompressed DNG of the frame with the same dimensions and source.
+     */
+    private inner class GoldenDecoder : CinemaDngWriter.BlockPackDecoder {
+        override fun decode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean {
+            val frame = when (width to height) {
+                64 to 34 -> 1
+                72 to 26 -> 4
+                else -> return false
+            }
+            val dng = File(expected, "${TAKE}_%06d.dng".format(frame)).readBytes()
+            val samples = ByteBuffer.wrap(dng, dng.size - width * height * 2, width * height * 2).order(ByteOrder.LITTLE_ENDIAN)
+            val out = dst.duplicate()
+            repeat(width * height / 4) {
+                var low = 0
+                for (k in 0 until 4) {
+                    val sample = samples.short.toInt()
+                    out.put((sample shr 2).toByte())
+                    low = low or ((sample and 3) shl (2 * k))
+                }
+                out.put(low.toByte())
+            }
+            return true
+        }
+
+        override fun decodeLj92(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer) = decode(src, width, height, dst)
+
+        override fun close() = Unit
+    }
+
     private class FakeDestination(
         private val free: Long? = Long.MAX_VALUE,
         private val failOn: String? = null,
@@ -313,5 +374,6 @@ class CinemaDngExporterTest {
 
     private companion object {
         const val TAKE = "A001_C001"
+        const val FRAMES = 8
     }
 }

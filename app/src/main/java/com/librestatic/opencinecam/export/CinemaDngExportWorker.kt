@@ -311,7 +311,8 @@ class CinemaDngExportWorker(context: Context, params: WorkerParameters) : Corout
         val destination = if (tree == null) MediaStoreCinemaDngDestination(context).also { it.deleteLeftovers() }
             else SafCinemaDngDestination(context, tree.toUri())
         val encoder = if (compress && NativeRawCodec.available) {
-            NativeRawCodec.newEncoder(NativeRawCodec.Codec.LJ92, threads = encoderThreads())
+            // Full tiles: TIFF (and DaVinci Resolve) want the last tile as tall as the others.
+            NativeRawCodec.newEncoder(NativeRawCodec.Codec.LJ92, threads = encoderThreads(), lj92FullTiles = true)
         } else null
         try {
             val openedAfter = DriveDescriptors.releaseMark(takeUri.toUri())

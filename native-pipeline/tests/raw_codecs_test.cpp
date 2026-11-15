@@ -439,6 +439,167 @@ void test_lj92_layout() {
   CHECK(flat_encoded.size() < 12 + 2 + 2 + 2 + 17 + 1 + 16 + 14 + 2 + width * height / 8 + 4);
 }
 
+uint32_t le32(const uint8_t* p) { return p[0] | p[1] << 8 | p[2] << 16 | uint32_t{p[3]} << 24; }
+
+// Where strip s of an LJ92 container starts, and the offset of its SOF3 line count.
+struct StripInfo {
+  size_t offset, length, sof_lines;
+  int rows;
+};
+
+StripInfo strip_info(const std::vector<uint8_t>& c, int s) {
+  const uint32_t count = le32(c.data());
+  size_t offset = 4 + 8 * static_cast<size_t>(count);
+  for (int k = 0; k < s; ++k) offset += le32(c.data() + 8 + 8 * k);
+  StripInfo info;
+  info.rows = static_cast<int>(le32(c.data() + 4 + 8 * s));
+  info.length = le32(c.data() + 8 + 8 * s);
+  info.offset = offset;
+  const uint8_t* stream = c.data() + offset;
+  info.sof_lines = offset + 4 + (stream[4] << 8 | stream[5]) + 5;  // DHT, then SOF3 marker, length, P
+  return info;
+}
+
+int sof_lines(const std::vector<uint8_t>& c, const StripInfo& info) {
+  return c[info.sof_lines] << 8 | c[info.sof_lines + 1];
+}
+
+int raw10_sample(const std::vector<uint8_t>& frame, int row_bytes, int x, int y) {
+  const uint8_t* p = frame.data() + static_cast<size_t>(y) * row_bytes + x / 4 * 5;
+  return (p[x % 4] << 2) | ((p[4] >> (2 * (x % 4))) & 3);
+}
+
+void set_raw10_sample(std::vector<uint8_t>* frame, int row_bytes, int x, int y, int v) {
+  uint8_t* p = frame->data() + static_cast<size_t>(y) * row_bytes + x / 4 * 5;
+  p[x % 4] = static_cast<uint8_t>(v >> 2);
+  p[4] = static_cast<uint8_t>((p[4] & ~(3 << (2 * (x % 4)))) | (v & 3) << (2 * (x % 4)));
+}
+
+void check_full_tiles(Pattern pattern, int width, int height, int strips, int predictor,
+                      ThreadPool* pool) {
+  const int row_bytes = width / 4 * 5;
+  EncodeOptions plain;
+  plain.strips = strips;
+  plain.lj92_predictor = predictor;
+  EncodeOptions full = plain;
+  full.lj92_full_tiles = true;
+  const auto frame = rawtest::make_frame(pattern, width, height, row_bytes, width + height * 7);
+  const auto old_encoded = encode_frame(Codec::kLj92, frame, width, height, row_bytes, plain, pool);
+  const auto encoded = encode_frame(Codec::kLj92, frame, width, height, row_bytes, full, pool);
+  CHECK(encoded.size() <= max_encoded_size(Codec::kLj92, width, height, full));
+
+  int rows[kMaxStrips];
+  const int count = strip_layout(height, strips, rows);
+  CHECK(static_cast<int>(le32(encoded.data())) == count);
+  const int tile = ((height + strips - 1) / strips + 15) & ~15;  // not clamped to the height
+  CHECK(tile % 16 == 0);
+  int sum = 0;
+  for (int s = 0; s < count; ++s) {
+    const StripInfo info = strip_info(encoded, s);
+    CHECK(info.rows == rows[s]);
+    CHECK(sof_lines(encoded, info) == tile);
+    sum += info.rows;
+    const StripInfo old_info = strip_info(old_encoded, s);
+    CHECK(sof_lines(old_encoded, old_info) == rows[s]);  // without the option: today's layout
+    if (s + 1 < count) {
+      // Full strips are untouched by the option.
+      CHECK(info.length == old_info.length);
+      CHECK(std::memcmp(encoded.data() + info.offset, old_encoded.data() + old_info.offset,
+                        info.length) == 0);
+    }
+  }
+  CHECK(sum == height);
+
+  // Decodes to exactly the source frame.
+  std::vector<uint8_t> decoded(frame.size(), 0x5A);
+  CHECK(decode(Codec::kLj92, encoded.data(), encoded.size(), width, height, decoded.data(), row_bytes, pool));
+  CHECK(decoded == frame);
+
+  // The last strip equals a plain one-strip encode of its rows followed by the
+  // padding rows: the first sample of each component in the last real row, repeated.
+  const int first = height - rows[count - 1];
+  std::vector<uint8_t> padded_rows(static_cast<size_t>(row_bytes) * tile);
+  std::memcpy(padded_rows.data(), frame.data() + static_cast<size_t>(first) * row_bytes,
+              static_cast<size_t>(row_bytes) * rows[count - 1]);
+  for (int y = rows[count - 1]; y < tile; ++y) {
+    for (int x = 0; x < width; ++x) {
+      set_raw10_sample(&padded_rows, row_bytes, x, y, raw10_sample(frame, row_bytes, x & 1, height - 1));
+    }
+  }
+  EncodeOptions one = plain;
+  one.strips = 1;
+  const auto reference = encode_frame(Codec::kLj92, padded_rows, width, tile, row_bytes, one, nullptr);
+  const StripInfo last = strip_info(encoded, count - 1);
+  const StripInfo ref = strip_info(reference, 0);
+  CHECK(last.length == ref.length);
+  CHECK(last.length == ref.length &&
+        std::memcmp(encoded.data() + last.offset, reference.data() + ref.offset, last.length) == 0);
+}
+
+void test_lj92_full_tiles() {
+  ThreadPool pool(3);
+  // 4000x3000-like: 8 strips of 384 and a last of 312, scaled down (8 strips of
+  // 128 and a last of 104); a short frame with two strips; single strips whose
+  // height is not a multiple of 16; an exact fit.
+  const int cases[][3] = {{64, 1000, 8}, {64, 20, 8}, {64, 50, 1}, {64, 50, 4}, {20, 6, 1},
+                          {64, 256, 8}, {64, 3000, 8}};
+  for (const auto& c : cases) {
+    for (Pattern pattern : {Pattern::kNoisyBayer, Pattern::kRandom, Pattern::kMax}) {
+      check_full_tiles(pattern, c[0], c[1], c[2], 1, &pool);
+    }
+    for (int predictor = 2; predictor <= 7; ++predictor) {
+      check_full_tiles(Pattern::kNoisyBayer, c[0], c[1], c[2], predictor, nullptr);
+    }
+  }
+  // A single 3000-row strip pads to 3008 lines; the table stays 3000 rows.
+  EncodeOptions full;
+  full.strips = 1;
+  full.lj92_full_tiles = true;
+  const int row_bytes = 64 / 4 * 5;
+  const auto frame = rawtest::make_frame(Pattern::kCleanBayer, 64, 3000, row_bytes, 3);
+  const auto encoded = encode_frame(Codec::kLj92, frame, 64, 3000, row_bytes, full, nullptr);
+  const StripInfo info = strip_info(encoded, 0);
+  CHECK(info.rows == 3000 && sof_lines(encoded, info) == 3008);
+  // Other codecs ignore the option.
+  EncodeOptions plain;
+  plain.strips = 3;
+  full.strips = 3;
+  const auto f2 = rawtest::make_frame(Pattern::kNoisyBayer, 64, 100, row_bytes, 4);
+  CHECK(encode_frame(Codec::kBlockPack, f2, 64, 100, row_bytes, plain, nullptr) ==
+        encode_frame(Codec::kBlockPack, f2, 64, 100, row_bytes, full, nullptr));
+  CHECK(max_encoded_size(Codec::kBlockPack, 64, 100, plain) == max_encoded_size(Codec::kBlockPack, 64, 100, full));
+
+  // The decoder takes a padded last strip only at the tile length.
+  for (int strips : {3, 1}) {
+    EncodeOptions options;
+    options.strips = strips;
+    options.lj92_full_tiles = true;
+    const int height = strips == 1 ? 50 : 100;
+    const auto src = rawtest::make_frame(Pattern::kNoisyBayer, 64, height, row_bytes, 5);
+    const auto good = encode_frame(Codec::kLj92, src, 64, height, row_bytes, options, nullptr);
+    std::vector<uint8_t> dst(src.size());
+    CHECK(decode(Codec::kLj92, good.data(), good.size(), 64, height, dst.data(), row_bytes));
+    const StripInfo last = strip_info(good, static_cast<int>(le32(good.data())) - 1);
+    const int tile = sof_lines(good, last);
+    CHECK(tile > last.rows);
+    for (int lines : {tile + 16, tile - 2, last.rows + 2, last.rows == tile ? 0 : tile + 2}) {
+      if (lines == 0) continue;
+      auto bad = good;
+      bad[last.sof_lines] = static_cast<uint8_t>(lines >> 8);
+      bad[last.sof_lines + 1] = static_cast<uint8_t>(lines);
+      CHECK(!decode(Codec::kLj92, bad.data(), bad.size(), 64, height, dst.data(), row_bytes));
+    }
+    // A padded declaration on a strip that is not the last one is refused.
+    if (strips > 1) {
+      auto bad = good;
+      const StripInfo first = strip_info(good, 0);
+      bad[first.sof_lines] = static_cast<uint8_t>((first.rows + 16) >> 8);
+      bad[first.sof_lines + 1] = static_cast<uint8_t>(first.rows + 16);
+      CHECK(!decode(Codec::kLj92, bad.data(), bad.size(), 64, height, dst.data(), row_bytes));
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -448,6 +609,7 @@ int main() {
   test_overflow();
   test_corrupt_input();
   test_lj92_layout();
+  test_lj92_full_tiles();
   test_quant_tables();
   test_lut_block_pack();
   test_quant_invalid();
