@@ -8,6 +8,7 @@
     <string name="media_playback_previous_take">Take anterior</string>
     <string name="media_playback_next_take">Take seguinte</string>
     <string name="media_playback_loading">A ler o ficheiro…</string>
+    <string name="media_playback_starting">A iniciar a reprodução…</string>
     <string name="media_playback_page_error">Não foi possível ler a página seguinte. Tente Take seguinte novamente.</string>
     <string name="media_playback_paused">Em pausa</string>
     <string name="media_playback_playing">A reproduzir · o tempo do leitor é aproximado</string>

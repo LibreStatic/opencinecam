@@ -89,6 +89,26 @@ internal data class MediaReviewSelection(val takes: List<LocalMediaTake>, val ar
 internal fun playbackToggleAction(pauseIntent: Boolean, play: () -> Unit, pause: () -> Unit): () -> Unit =
     if (pauseIntent) pause else play
 
+/** What a Play the operator already pressed does next; see [pendingPlayStep]. */
+internal enum class PendingPlay { IDLE, WAIT, ISSUE, DONE }
+
+/**
+ * Play never waits for the reader: a press while it is still opening is kept and goes through as soon as
+ * [canPlay] allows it. Once issued, it is over when playback starts or fails, or when a later observation
+ * ([newer]) rests again (the session paused it, say on losing audio focus). The RAW frame viewer has no Play.
+ */
+internal fun pendingPlayStep(starting: Boolean, issued: Boolean, newer: Boolean, phase: PlaybackPhase, canPlay: Boolean,
+    rawFrames: Boolean): PendingPlay = when {
+    !starting -> PendingPlay.IDLE
+    phase == PlaybackPhase.PLAYING || phase == PlaybackPhase.ERROR || phase == PlaybackPhase.CLOSED || rawFrames -> PendingPlay.DONE
+    !issued -> if (canPlay && phase in PLAY_FROM) PendingPlay.ISSUE else PendingPlay.WAIT
+    newer && (phase == PlaybackPhase.PAUSED || phase == PlaybackPhase.ENDED) -> PendingPlay.DONE
+    else -> PendingPlay.WAIT
+}
+
+// SEEKING: the CPU-frames session lets Play through a slow exact decode, and says so through canPlay.
+private val PLAY_FROM = setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED, PlaybackPhase.SEEKING)
+
 /** "HH:MM:SS:FF" on the nominal (rounded) frame rate; without one, whole seconds of [positionUs] with FF 00. */
 internal fun playbackTimecode(positionUs: Long, frame: Long?, fps: Double?): String {
     val base = fps?.takeIf { it.isFinite() && it > 0 }?.roundToInt()?.coerceAtLeast(1)
@@ -465,8 +485,9 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val maximum = (state.timeline?.timestampsUs?.lastOrNull() ?: state.durationUs).coerceAtLeast(1)
     val durationUs = metadata?.durationUs ?: state.durationUs
     // Thumbnails wait for the reader's first answer so they never compete with opening the clip.
+    // The player is ready before the exact first frame, so that frame (or playback) is the answer.
     var started by remember(artifact) { mutableStateOf(false) }
-    LaunchedEffect(ready) { if (ready) started = true }
+    LaunchedEffect(ready, firstFrame) { if (ready && firstFrame) started = true }
     var filmstrip by remember(artifact) { mutableStateOf(emptyList<Bitmap>()) }
     val stripHeight = with(LocalDensity.current) { SEEK_HEIGHT.roundToPx() }
     LaunchedEffect(artifact, started, logClip, settings.logView, durationUs > 0) {
@@ -518,10 +539,30 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val stepping = video && paused && exact != null && timestamps != null
     val canStepBack = stepping && exact!! > 0
     val canStepForward = stepping && exact!! < timestamps!!.lastIndex
-    val seekable = ready && (video || state.canPlay)
-    val canTogglePlay = !photo && ready && (pauseIntent || state.canPlay)
+    // A video seeks through its exact index, which may still be building after the player is ready.
+    val seekable = ready && (if (video) timestamps != null else state.canPlay)
+    // Play is never held back while the reader opens: the press is kept, the key turns to Pause with a busy ring,
+    // and pressing again cancels it. Opening (sidecar, player preparation) and the seek to start take a moment.
+    var starting by remember(artifact) { mutableStateOf(false) }
+    var issuedFrom by remember(session) { mutableStateOf<PlaybackObservation?>(null) }
+    LaunchedEffect(session, starting, state, rawFrames) {
+        val controller = session ?: return@LaunchedEffect
+        val current = state
+        when (pendingPlayStep(starting, issuedFrom != null, current !== issuedFrom, current.phase, current.canPlay, rawFrames)) {
+            PendingPlay.IDLE -> issuedFrom = null
+            PendingPlay.ISSUE -> { issuedFrom = current; controller.play() }
+            PendingPlay.DONE -> { starting = false; issuedFrom = null }
+            PendingPlay.WAIT -> Unit
+        }
+    }
+    val canTogglePlay = !photo && state.phase != PlaybackPhase.ERROR && state.phase != PlaybackPhase.CLOSED
     val toggleSession = session
-    val togglePlay = playbackToggleAction(pauseIntent, { toggleSession?.play() }, { toggleSession?.pause() })
+    val togglePlay = playbackToggleAction(pauseIntent || starting, { starting = true }, {
+        // Cancelling a Play still waiting for the reader needs nothing from it; one already issued is paused.
+        val issued = issuedFrom != null
+        if (starting) { starting = false; issuedFrom = null }
+        if (pauseIntent || issued) toggleSession?.pause()
+    })
     val logAvailable = logClip != null
     fun toggleLogView() = onSettings(settings.copy(logView =
         if (settings.logView == PreciseLogView.FLAT_LOG) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG))
@@ -570,13 +611,14 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     /** The reader's own words; a photo only says something while it loads or when it fails. */
     @Composable fun Status(modifier: Modifier = Modifier) {
         if (photo && state.phase != PlaybackPhase.LOADING && state.phase != PlaybackPhase.ERROR) return
-        FitText(stringResource(when (state.phase) {
-            PlaybackPhase.LOADING, PlaybackPhase.SEEKING -> R.string.media_playback_loading
-            PlaybackPhase.PAUSED -> R.string.media_playback_paused
-            PlaybackPhase.PLAYING -> R.string.media_playback_playing
-            PlaybackPhase.ENDED -> R.string.media_playback_ended
-            PlaybackPhase.ERROR -> R.string.media_playback_error
-            PlaybackPhase.CLOSED -> R.string.media_playback_closed
+        FitText(stringResource(when {
+            starting -> R.string.media_playback_starting
+            state.phase == PlaybackPhase.LOADING || state.phase == PlaybackPhase.SEEKING -> R.string.media_playback_loading
+            state.phase == PlaybackPhase.PAUSED -> R.string.media_playback_paused
+            state.phase == PlaybackPhase.PLAYING -> R.string.media_playback_playing
+            state.phase == PlaybackPhase.ENDED -> R.string.media_playback_ended
+            state.phase == PlaybackPhase.ERROR -> R.string.media_playback_error
+            else -> R.string.media_playback_closed
         }), modifier.testTag("media-playback-status"), color = SettingsMuted, fontSize = 12.sp, maxLines = 1)
     }
     @Composable fun TimecodeRow() {
@@ -605,9 +647,9 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
             // The RAW frame viewer has no real-time play; it offers to try real time instead.
             if (rawFrames) SettingsPill(stringResource(R.string.raw_playback_try_realtime), "media-playback-try-realtime", role = Role.Button) {
                 (session as? RawPlaybackSession)?.tryRealtime()
-            } else PlaybackKey("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
-                stringResource(if (pauseIntent) R.string.media_playback_pause else R.string.media_playback_play),
-                ShortcutAction.PLAY_PAUSE, keyboard, canTogglePlay, primary, togglePlay)
+            } else PlaybackKey("media-playback-play-pause", if (pauseIntent || starting) CineIcon.PAUSE else CineIcon.PLAY,
+                stringResource(if (pauseIntent || starting) R.string.media_playback_pause else R.string.media_playback_play),
+                ShortcutAction.PLAY_PAUSE, keyboard, canTogglePlay, primary, busy = starting, onClick = togglePlay)
             if (video) PlaybackKey("media-playback-next-frame", CineIcon.FRAME_FORWARD, stringResource(R.string.media_playback_next_frame),
                 ShortcutAction.FRAME_FORWARD, keyboard, canStepForward) { session?.step(1) }
             PlaybackKey("media-playback-end", CineIcon.SKIP_END, stringResource(R.string.media_playback_end), null, keyboard, seekable) {
@@ -875,10 +917,10 @@ private fun DetailsHeader(title: String, icon: CineIcon, onClose: () -> Unit) {
 /** A transport key whose name carries its keyboard shortcut, shown as a tooltip, while a keyboard is attached. */
 @Composable
 private fun PlaybackKey(tag: String, icon: CineIcon, label: String, shortcut: ShortcutAction?, keyboard: Boolean, enabled: Boolean,
-    primary: Dp? = null, onClick: () -> Unit) {
+    primary: Dp? = null, busy: Boolean = false, onClick: () -> Unit) {
     val spoken = if (keyboard && shortcut != null) withShortcut(label, shortcut) else label
     ShortcutTooltip(spoken.takeIf { keyboard && shortcut != null }) {
-        TransportButton(tag, icon, spoken, enabled, primary = primary != null, primarySize = primary ?: 64.dp, onClick = onClick)
+        TransportButton(tag, icon, spoken, enabled, primary = primary != null, primarySize = primary ?: 64.dp, busy = busy, onClick = onClick)
     }
 }
 

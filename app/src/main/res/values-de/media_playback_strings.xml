@@ -8,6 +8,7 @@
     <string name="media_playback_previous_take">Vorheriger Take</string>
     <string name="media_playback_next_take">Nächster Take</string>
     <string name="media_playback_loading">Medien werden gelesen…</string>
+    <string name="media_playback_starting">Wiedergabe startet…</string>
     <string name="media_playback_page_error">Die nächste Seite konnte nicht gelesen werden. Versuche „Nächster Take“ erneut.</string>
     <string name="media_playback_paused">Pausiert</string>
     <string name="media_playback_playing">Wiedergabe · Player-Zeit ist ungefähr</string>

@@ -38,7 +38,10 @@ class MediaPlaybackDeviceTest {
         var session: MediaPlaybackSession? = null
         try {
             main { session = MediaPlaybackSession(context,artifact(file),PlaybackSettings(muted=true)) { state.set(it) }; session!!.setSurface(sink.surface) }
-            val first = waitFor(state) { it.phase == PlaybackPhase.PAUSED && it.durationUs > 0 }
+            // The player is ready before the exact still; Play does not wait for it.
+            val prepared = waitFor(state) { it.phase == PlaybackPhase.PAUSED && it.durationUs > 0 }
+            assertTrue(prepared.canPlay)
+            val first = waitFor(state) { it.phase == PlaybackPhase.PAUSED && it.frameIndex != null }
             assertEquals(0,first.frameIndex); assertEquals(0L,first.positionUs)
             main { session!!.seek(1_099_999) }
             val floor = waitFor(state) { it.phase == PlaybackPhase.PAUSED && it.frameIndex == 1 }
@@ -56,7 +59,7 @@ class MediaPlaybackDeviceTest {
             main { session!!.seek(Long.MAX_VALUE) }
             assertEquals(1_700_000L, waitFor(state) { it.phase == PlaybackPhase.PAUSED && it.frameIndex == 3 }.positionUs)
             main { session!!.play() }
-            val ended = waitFor(state) { it.phase == PlaybackPhase.ENDED }
+            val ended = waitFor(state) { it.phase == PlaybackPhase.ENDED && it.frameIndex != null }
             assertEquals(3,ended.frameIndex); assertEquals(1_700_000L,ended.positionUs)
             assertArrayEquals(hash,MessageDigest.getInstance("SHA-256").digest(file.readBytes()))
         } finally { main { session?.close() }; sink.close(); assertTrue(file.delete()) }
@@ -92,7 +95,7 @@ class MediaPlaybackDeviceTest {
         var session: MediaPlaybackSession? = null
         try {
             main { session=MediaPlaybackSession(context,artifact(file),PlaybackSettings(muted=true,loop=true)) { state.set(it) };session!!.setSurface(sink.surface) }
-            val first=waitFor(state) { it.phase==PlaybackPhase.PAUSED && it.videoWidth>0 && it.durationUs>0 }
+            val first=waitFor(state) { it.phase==PlaybackPhase.PAUSED && it.bitmap!=null && it.durationUs>0 }
             assertEquals(128,first.bitmap!!.width);assertEquals(192,first.bitmap.height)
             assertEquals(first.bitmap.width,first.videoWidth);assertEquals(first.bitmap.height,first.videoHeight)
             main { session!!.play() }

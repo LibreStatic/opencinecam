@@ -67,6 +67,7 @@ internal class MediaPlaybackSession(
     private val worker = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "media-review-reader") }
     override val retirement = java.util.concurrent.CompletableFuture<Unit>()
     private var task: Future<*>? = null
+    private var indexing: Future<*>? = null
     private var frames: PreciseVideoFrames? = null // worker-thread only
     @Volatile private var closed = false
     private var generation = 0L
@@ -111,22 +112,53 @@ internal class MediaPlaybackSession(
         } else {
             try {
                 if (!video || !nativeSurfaceFrames) preparePlayer()
-                if (video) read {
-                    val reader = PreciseVideoFrames(this.context, artifact.uri, colorPolicy, requireCpuPreview = !nativeSurfaceFrames, log = log)
+                if (video && nativeSurfaceFrames) read {
+                    val reader = PreciseVideoFrames(this.context, artifact.uri, colorPolicy, requireCpuPreview = false, log = log)
                     reader.logView = logView
-                    frames = reader
-                    if (nativeSurfaceFrames) {
-                        { publish(state.copy(timeline = reader.timeline, durationUs = reader.timeline.timestampsUs.last(),
-                            videoWidth = reader.displayWidth, videoHeight = reader.displayHeight, nativeHdrTransfer = reader.hdrTransfer))
-                          if (hasSurface && !suspended) decode(0) }
-                    } else {
-                        val frame = reader.frame(0);
-                        { publish(state.copy(phase = if (prepared) PlaybackPhase.PAUSED else PlaybackPhase.LOADING, timeline = reader.timeline,
-                            videoWidth = frame.displayWidth, videoHeight = frame.displayHeight,
-                            frameIndex = frame.index, positionUs = frame.presentationTimeUs, bitmap = frame.bitmap, frameColor = frame.color, hdrPreview = frame.hdrPreview)) }
+                    frames = reader;
+                    { publish(state.copy(timeline = reader.timeline, durationUs = reader.timeline.timestampsUs.last(),
+                        videoWidth = reader.displayWidth, videoHeight = reader.displayHeight, nativeHdrTransfer = reader.hdrTransfer))
+                      if (hasSurface && !suspended) decode(0) }
+                } else if (video) index()
+            } catch (failure: Exception) { fail(failure.message) }
+        }
+    }
+
+    /**
+     * CPU frames: the exact index is built beside the player rather than in front of it. A 4K 10-bit
+     * first frame takes seconds to convert, so Play waits only for the player; the index is never
+     * cancelled by Play, and the still arrives through [exactStill].
+     */
+    private fun index() {
+        indexing = worker.submit {
+            try {
+                if (closed) return@submit
+                val reader = PreciseVideoFrames(this.context, artifact.uri, colorPolicy, requireCpuPreview = true, log = log)
+                reader.logView = logView
+                frames = reader
+                main.post {
+                    if (!closed && state.phase != PlaybackPhase.ERROR) {
+                        publish(state.copy(timeline = reader.timeline,
+                            videoWidth = state.videoWidth.takeIf { it > 0 } ?: reader.displayWidth,
+                            videoHeight = state.videoHeight.takeIf { it > 0 } ?: reader.displayHeight))
+                        exactStill()
                     }
                 }
-            } catch (failure: Exception) { fail(failure.message) }
+            } catch (failure: Exception) {
+                main.post { if (!closed) fail(failure.message, (failure as? PreciseVideoColorException)?.trackSdrAvailable == true) }
+            }
+        }
+    }
+
+    /** CPU frames: decodes the exact frame under a resting position without leaving it, so Play stays available meanwhile. */
+    private fun exactStill() {
+        val timeline = state.timeline ?: return
+        if (nativeSurfaceFrames || state.frameIndex != null || state.phase !in RESTING) return
+        val index = timeline.indexAt(state.positionUs)
+        read {
+            val frame = checkNotNull(frames).also { it.logView = logView }.frame(index);
+            { if (state.phase in RESTING) publish(state.copy(videoWidth = frame.displayWidth, videoHeight = frame.displayHeight,
+                frameIndex = frame.index, positionUs = frame.presentationTimeUs, bitmap = frame.bitmap, frameColor = frame.color, hdrPreview = frame.hdrPreview)) }
         }
     }
 
@@ -148,8 +180,9 @@ internal class MediaPlaybackSession(
                 if (!closed && player === media && state.phase != PlaybackPhase.ERROR) {
                     prepared = true
                     val duration = media.duration.toLong().coerceAtLeast(0) * 1000
-                    publish(state.copy(durationUs = duration,
-                        phase = if (!video || state.timeline != null && state.phase == PlaybackPhase.LOADING) PlaybackPhase.PAUSED else state.phase))
+                    // Native frames wait for their index; CPU frames rest on the poster until the exact still arrives.
+                    publish(state.copy(durationUs = duration, phase = if (!video ||
+                        state.phase == PlaybackPhase.LOADING && (!nativeSurfaceFrames || state.timeline != null)) PlaybackPhase.PAUSED else state.phase))
                     if (startAt != null) {
                         try { seekToPlay = true; seekNative(startAt) }
                         catch (failure: Exception) { fail(failure.message) }
@@ -180,8 +213,11 @@ internal class MediaPlaybackSession(
                         if (nativeSurfaceFrames) {
                             try { seekToPlay = true; seekNative(0) } catch (failure: Exception) { fail(failure.message) }
                         } else play()
-                    } else if (video) decode(state.timeline?.timestampsUs?.lastIndex ?: 0, ended = true)
-                    else publish(state.copy(phase = PlaybackPhase.ENDED, positionUs = state.durationUs))
+                    } else if (video && nativeSurfaceFrames) decode(state.timeline?.timestampsUs?.lastIndex ?: 0, ended = true)
+                    else {
+                        publish(state.copy(phase = PlaybackPhase.ENDED, positionUs = state.timeline?.timestampsUs?.last() ?: state.durationUs))
+                        exactStill()
+                    }
                 }
             }
             media.setDataSource(this.context, artifact.uri.toUri())
@@ -201,7 +237,7 @@ internal class MediaPlaybackSession(
         if (!closed) {
             state = value.copy(canPlay = !nativeSeeking && value.phase != PlaybackPhase.ERROR &&
                 if (video && nativeSurfaceFrames) !suspended && hasSurface && value.timeline != null && value.phase in setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED, PlaybackPhase.PLAYING)
-                else prepared && (!video || hasSurface && value.timeline != null))
+                else prepared && (!video || hasSurface))
             observe(state)
         }
     }
@@ -217,7 +253,7 @@ internal class MediaPlaybackSession(
     private fun fail(detail: String?, trackColorAvailable: Boolean = false) {
         if (closed) return
         seekToPlay = false; pendingAudioSeek = false
-        ++generation; task?.cancel(true)
+        ++generation; task?.cancel(true); indexing?.cancel(true)
         player?.release(); player = null; prepared = false; nativeSeeking = false; ++seekTicket
         releaseFocus()
         publish(state.copy(phase = PlaybackPhase.ERROR, frameIndex = null, detail = detail, trackColorAvailable = trackColorAvailable))
@@ -255,7 +291,8 @@ internal class MediaPlaybackSession(
             }
             return
         }
-        publish(state.copy(phase = PlaybackPhase.SEEKING))
+        // The target position is known now, so Play during a slow exact decode starts there.
+        publish(state.copy(phase = PlaybackPhase.SEEKING, positionUs = state.timeline?.timestampsUs?.getOrNull(index) ?: state.positionUs))
         read {
             val frame = checkNotNull(frames).also { it.logView = logView }.frame(index);
             { publish(state.copy(phase = if (ended) PlaybackPhase.ENDED else PlaybackPhase.PAUSED,
@@ -332,7 +369,7 @@ internal class MediaPlaybackSession(
             } } }
             return
         }
-        if (closed || photo || !prepared || nativeSeeking || video && (!hasSurface || state.timeline == null) || state.phase == PlaybackPhase.ERROR) return
+        if (closed || photo || !prepared || nativeSeeking || video && !hasSurface || state.phase == PlaybackPhase.ERROR) return
         if (!requestFocus()) { fail("Audio focus not granted"); return }
         ++generation; task?.cancel(true)
         try {
@@ -348,14 +385,20 @@ internal class MediaPlaybackSession(
             return
         }
         if (closed || photo || !prepared || state.phase !in setOf(PlaybackPhase.PLAYING, PlaybackPhase.SEEKING)) return
+        // An exact seek already ends paused at its target; the idle player's position would undo it.
+        if (video && !nativeSurfaceFrames && state.phase == PlaybackPhase.SEEKING && !nativeSeeking) return
         seekToPlay = false
         try {
             pendingAudioSeek = false
             pauseNative()
             val time = player?.currentPosition?.toLong()?.times(1000) ?: state.positionUs
             releaseFocus()
-            if (video && state.timeline != null) decode(state.timeline!!.indexAt(time))
-            else publish(state.copy(phase = PlaybackPhase.PAUSED, positionUs = time))
+            if (video && nativeSurfaceFrames && state.timeline != null) decode(state.timeline!!.indexAt(time))
+            else {
+                // The player's own paused frame stays on the Surface until the exact still replaces it.
+                publish(state.copy(phase = PlaybackPhase.PAUSED, positionUs = time, frameIndex = null))
+                exactStill()
+            }
         } catch (failure: Exception) { fail(failure.message) }
     }
     override fun seek(timeUs: Long) {
@@ -382,7 +425,7 @@ internal class MediaPlaybackSession(
     override fun close() {
         if (closed) return
         check(Looper.myLooper() == Looper.getMainLooper())
-        closed = true; ++generation; task?.cancel(true)
+        closed = true; ++generation; task?.cancel(true); indexing?.cancel(true)
         openSessions--; lastRetirement = retirement
         main.removeCallbacksAndMessages(null)
         player?.release(); player = null; releaseFocus()
@@ -394,6 +437,7 @@ internal class MediaPlaybackSession(
     }
 
     internal companion object {
+        private val RESTING = setOf(PlaybackPhase.LOADING, PlaybackPhase.PAUSED, PlaybackPhase.ENDED)
         // Main thread only. OCC-PLAN-068 U4: lets the cover review wait for the inner viewer to release its decoder.
         private var openSessions = 0
         private var lastRetirement: java.util.concurrent.CompletableFuture<Unit> = java.util.concurrent.CompletableFuture.completedFuture(Unit)

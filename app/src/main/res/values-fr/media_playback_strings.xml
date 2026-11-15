@@ -8,6 +8,7 @@
     <string name="media_playback_previous_take">Prise précédente</string>
     <string name="media_playback_next_take">Prise suivante</string>
     <string name="media_playback_loading">Lecture du média…</string>
+    <string name="media_playback_starting">Démarrage de la lecture…</string>
     <string name="media_playback_page_error">Impossible de lire la page suivante. Réessayez Prise suivante.</string>
     <string name="media_playback_paused">En pause</string>
     <string name="media_playback_playing">Lecture · le temps du lecteur est approximatif</string>
