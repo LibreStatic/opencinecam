@@ -175,6 +175,7 @@ class WideningPcmInput(val wrapped: PcmInput, override val encoding: Int) : PcmI
     override val audioSessionId: Int? get() = wrapped.audioSessionId
     override val routedDeviceId: Int? get() = wrapped.routedDeviceId
     override val path: PcmInputPath get() = wrapped.path
+    override val overrunCount: Int get() = wrapped.overrunCount
 
     override fun start() = wrapped.start()
 
@@ -185,23 +186,38 @@ class WideningPcmInput(val wrapped: PcmInput, override val encoding: Int) : PcmI
         if (pcm16.capacity() < inputBytes) pcm16 = ByteBuffer.allocateDirect(inputBytes).order(ByteOrder.LITTLE_ENDIAN)
         val read = wrapped.read(pcm16, inputBytes)
         if (read <= 0) return read
+        val out = outputView(buffer)
         val samples = read / inputFrameBytes * wrapped.channels
         for (index in 0 until samples) {
             val sample = pcm16.getShort(index * 2).toInt()
             val offset = index * outputBytesPerSample
             if (encoding == AudioFormat.ENCODING_PCM_24BIT_PACKED) {
-                buffer.put(offset, 0)
-                buffer.put(offset + 1, sample.toByte())
-                buffer.put(offset + 2, (sample shr 8).toByte())
+                out.put(offset, 0)
+                out.put(offset + 1, sample.toByte())
+                out.put(offset + 2, (sample shr 8).toByte())
             } else {
                 val bits = java.lang.Float.floatToRawIntBits(sample / 32768f)
-                buffer.put(offset, bits.toByte())
-                buffer.put(offset + 1, (bits shr 8).toByte())
-                buffer.put(offset + 2, (bits shr 16).toByte())
-                buffer.put(offset + 3, (bits shr 24).toByte())
+                out.put(offset, bits.toByte())
+                out.put(offset + 1, (bits shr 8).toByte())
+                out.put(offset + 2, (bits shr 16).toByte())
+                out.put(offset + 3, (bits shr 24).toByte())
             }
         }
         return samples * outputBytesPerSample
+    }
+
+    // Absolute puts stop at the limit, but a read fills up to the capacity; the view spans it without touching the caller's.
+    private var viewSource: ByteBuffer? = null
+    private var view: ByteBuffer? = null
+
+    private fun outputView(buffer: ByteBuffer): ByteBuffer {
+        val cached = view
+        val out = if (cached != null && viewSource === buffer) cached else buffer.duplicate().also {
+            view = it
+            viewSource = buffer
+        }
+        out.clear()
+        return out
     }
 
     override fun timestamp(out: PcmInputTimestamp): Boolean = wrapped.timestamp(out)

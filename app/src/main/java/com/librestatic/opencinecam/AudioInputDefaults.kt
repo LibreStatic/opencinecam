@@ -105,7 +105,9 @@ fun remappedAudioSource(source: AudioSourceSelection, unprocessedClips: Boolean,
 /**
  * The curve the read loops apply. A bundled profile corrects the raw microphones the low-latency input delivers, so
  * with any other source, which the vendor already equalises, it is left out and comes back with the low-latency
- * input. A curve of the user's own applies with every source.
+ * input. A curve of the user's own applies with every source. Once an input is open, the read loops narrow it to
+ * the path that opened ([com.librestatic.opencinecam.camera.appliedEqCurve]): the low-latency input's `AudioRecord`
+ * fallback, and an external input, leave a bundled profile out too.
  */
 val CameraSettings.appliedAudioEqCurve: EqCurve
     get() = if (isBundledEqProfileId(audioEqProfileId) && audioSource != AudioSourceSelection.LOW_LATENCY) EqCurve() else audioEqCurve

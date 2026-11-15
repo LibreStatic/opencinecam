@@ -12,7 +12,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -45,9 +44,10 @@ fun decodeEqCurve(json: String): EqCurve? = runCatching {
 }.getOrNull()
 
 fun decodeEqCurve(json: JsonObject): EqCurve? = runCatching {
-    val points = (json["points"] as? JsonArray).orEmpty().mapNotNull { element ->
+    // Lazily, so points past the kept ones are never read.
+    val points = (json["points"] as? JsonArray).orEmpty().asSequence().mapNotNull { element ->
         val point = element as? JsonObject ?: return@mapNotNull null
-        val type = point["type"]?.jsonPrimitive?.contentOrNull
+        val type = (point["type"] as? JsonPrimitive)?.contentOrNull
             ?.let { name -> EqFilterType.entries.firstOrNull { it.name == name } } ?: return@mapNotNull null
         EqPoint.coerced(
             type,
@@ -56,7 +56,7 @@ fun decodeEqCurve(json: JsonObject): EqCurve? = runCatching {
             point.number("q") ?: DEFAULT_Q,
             point.flag("enabled") ?: true,
         )
-    }.take(EqCurve.MAX_POINTS)
+    }.take(EqCurve.MAX_POINTS).toList()
     val trim = json.number("trimDb") ?: 0.0
     EqCurve(
         points = points,

@@ -2195,10 +2195,12 @@ class OpenCineLogGpuPipeline(
                         check(read % (PCM_BYTES_PER_SAMPLE * channels) == 0) { "PCM input returned a partial PCM frame" }
                         inFlightReadFrames = read / frameBytes
                         readFrames += inFlightReadFrames
-                        readEpoch.observeRead(readFrames, android.os.SystemClock.elapsedRealtimeNanos())
+                        val returnedAtNs = android.os.SystemClock.elapsedRealtimeNanos()
+                        readEpoch.observeRead(readFrames, returnedAtNs)
                         if (input.timestamp(timestamp)) {
                             captureEpoch.audioInput(pcmEpoch.observe(timestamp.framePosition, timestamp.nanoTime))
-                        } else if (pcmEpoch.current() == null && android.os.SystemClock.elapsedRealtimeNanos() - startedAtNs >= ESTIMATED_AUDIO_ANCHOR_DELAY_NS) {
+                        } else if (pcmEpoch.current() == null && readEpoch.settled(returnedAtNs)) {
+                            // Frozen only once the read estimate has seen its whole window, which opens at the first read.
                             captureEpoch.audioInput(pcmEpoch.estimate(readEpoch.frameZeroNs() ?: startedAtNs))
                         }
                         val platformAgc = hardwareAgcReader.read()
@@ -2384,7 +2386,9 @@ class OpenCineLogGpuPipeline(
                 val initialAgc = agc.second.read()
                 val softwareAgc = if (!config.recordingGain.enabled && config.enableAutomaticGainControl &&
                     (hardwareAgc == null || initialAgc.state == AudioEffectState.DISABLED)) SoftAgc(config.sampleRateHz, config.channels) else null
-                val equalizer = inputEqualizerFor(config.eqCurve, config.sampleRateHz, config.channels)
+                // The evidence carries the curve applied on the path that opened, so the take record and the PCM agree.
+                val evidence = pcmInputEvidence(config.sourceSelection?.name ?: "SOURCE_${config.source}", opened, config.eqCurve, config.eqProfileId)
+                val equalizer = evidence.inputEqualizer(config.sampleRateHz, config.channels)
                     val codec = MediaCodec.createByCodecName(calibration.config.codecName)
                     try {
                         codec.configure(
@@ -2397,7 +2401,7 @@ class OpenCineLogGpuPipeline(
                             effects, listOf(ns.second, agc.second, aec.second), agc.second, softwareAgc, config.onAudioLevel, config.recordingGain, config.listeningSink, captureEpoch, calibration, config.inputGuard)
                         config.onInputOpened?.let { report ->
                             runCatching {
-                                report(pcmInputEvidence(config.sourceSelection?.name ?: "SOURCE_${config.source}", opened, config.eqCurve, config.eqProfileId))
+                                report(evidence)
                             }.onFailure { android.util.Log.w(LOG_TAG, "Embedded audio input evidence was not recorded.", it) }
                         }
                         return aac
@@ -2523,21 +2527,26 @@ class OpenCineLogGpuPipeline(
         private const val CODEC_TIMEOUT_US = 20_000L
         private const val CODEC_STOP_TIMEOUT_NS = 5_000_000_000L
         private const val LOG_TAG = "OpenCineLogGpuPipeline"
-        /** Without an AudioTimestamp the PCM origin is estimated on the first read completing after this delay. */
+        /**
+         * Without an AudioTimestamp the PCM origin is estimated from the reads returning in this window after the
+         * first one ([PcmReadEpochEstimate]), and frozen on the first read completing after it.
+         */
         internal const val ESTIMATED_AUDIO_ANCHOR_DELAY_NS = 500_000_000L
         internal const val MIN_PENDING_MUX_SAMPLES = 64
 
         /**
          * Pre-start mux queue bound. Samples queue until both formats and both capture anchors exist; with no
-         * AudioTimestamp the audio anchor arrives on the first PCM read completing after the estimate delay, i.e.
-         * up to delay + one read period after the feeder starts. Allow that window plus 0.5 s of drain/encoder
-         * latency at the video rate and the AAC packet rate (1024 PCM frames per packet). Examples: 60 fps,
-         * 48 kHz, 80 ms reads -> 1.08 s -> 65 + 51 = 116; 30 fps -> 84; video-only keeps the historical 64.
+         * AudioTimestamp the audio anchor arrives on the first PCM read completing after the estimate window, which
+         * opens at the first read: up to one read period (plus the input's start-up latency) for the first read,
+         * then the delay and one more read period after the feeder starts. Allow that window plus 0.5 s of
+         * drain/encoder latency, which also absorbs the start-up latency, at the video rate and the AAC packet rate
+         * (1024 PCM frames per packet). Examples: 60 fps, 48 kHz, 80 ms reads -> 1.16 s -> 70 + 55 = 125;
+         * 30 fps -> 90; video-only keeps the historical 64.
          */
         internal fun maxPendingMuxSamples(videoFps: Int, audioRateHz: Int?, audioReadFrames: Int?): Int {
             // Non-throwing: evaluated before drain()'s cleanup scope.
             if (audioRateHz == null || audioReadFrames == null || audioRateHz <= 0 || audioReadFrames <= 0) return MIN_PENDING_MUX_SAMPLES
-            val windowNs = ESTIMATED_AUDIO_ANCHOR_DELAY_NS + pcmFrameDurationNs(audioReadFrames.toLong(), audioRateHz) + 500_000_000L
+            val windowNs = ESTIMATED_AUDIO_ANCHOR_DELAY_NS + 2 * pcmFrameDurationNs(audioReadFrames.toLong(), audioRateHz) + 500_000_000L
             fun perWindow(ratePerSecond: Double) = kotlin.math.ceil(ratePerSecond * windowNs / 1_000_000_000.0).toInt()
             return maxOf(MIN_PENDING_MUX_SAMPLES, perWindow(videoFps.coerceAtLeast(1).toDouble()) + perWindow(audioRateHz / 1024.0))
         }

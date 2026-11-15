@@ -17,7 +17,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import com.librestatic.opencinecam.camera.PcmInputEvidence
-import com.librestatic.opencinecam.camera.inputEqualizerFor
+import com.librestatic.opencinecam.camera.inputEqualizer
 import com.librestatic.opencinecam.camera.pcmInputEvidence
 import com.librestatic.opencinecam.media.audio.PcmFormatCheck
 import com.librestatic.opencinecam.media.audio.PcmInput
@@ -116,11 +116,14 @@ class FlacAudioSidecarRecorder private constructor(
         recoveryMember.deleteOwned(row, "Audio compensation affected an unexpected row count.")
     }.apply { add(uri) }
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
-    // Only the writer thread runs it; null when the curve is flat, so the bytes stay untouched.
-    private val equalizer = inputEqualizerFor(settings.appliedAudioEqCurve, capturedSampleRateHz, settings.audioChannels)
+    // Only the writer thread runs it; null when the curve applied on the opened path is flat, so the bytes stay untouched.
+    private val equalizer = inputEvidence.inputEqualizer(capturedSampleRateHz, settings.audioChannels)
 
     private var salvaging = false
     private var incompleteReasons: List<String>? = null
+    // An encoder that blocks past the input's short buffer makes it overrun; later reads succeed, so only the count shows the gap.
+    private var overrunBaseline = 0
+    @Volatile private var inputOverruns = 0
 
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
@@ -131,6 +134,7 @@ class FlacAudioSidecarRecorder private constructor(
         attachEffects()
         startedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
         input.start()
+        overrunBaseline = input.overrunCount
         routedInputDeviceId = input.routedDeviceId
         inputGuard?.attach(input.audioRouting(context), AudioCapturePath.AUDIO_RECORD)
         running.set(true)
@@ -166,7 +170,7 @@ class FlacAudioSidecarRecorder private constructor(
         val alreadyPrepared = preparedOutput != null
         return prepareCompletion()?.also {
             recoveryMember.keepBytes()
-            if (alreadyPrepared) markPreparedMetadataIncomplete(reasons)
+            if (alreadyPrepared) markPreparedMetadataIncomplete(IncompleteTake.withInputOverruns(reasons, inputOverruns) ?: reasons)
         }
     }
 
@@ -350,6 +354,7 @@ class FlacAudioSidecarRecorder private constructor(
                 levelMeter.analyze(buffer, read, observedAtMs)?.let {
                     onAudioLevel?.invoke(it.copy(appliedRecordingGain = settings.audioRecordingGain, effects = observedEffects))
                 }
+                inputOverruns = (input.overrunCount - overrunBaseline).coerceAtLeast(0)
                 val retained = captureTiming.captured(input, buffer, read)
                 buffer.position(0); buffer.limit(retained)
                 while (buffer.hasRemaining()) {
@@ -576,7 +581,8 @@ class FlacAudioSidecarRecorder private constructor(
             .put("acousticEchoCancelerEnabled", result.acousticEchoCancelerEnabled)
             .putPcmInputEvidence(result.inputEvidence)
             .put("disclosure", "FLAC encoded with Android MediaCodec; OEM processing outside public APIs may still exist.")
-        incompleteReasons?.let { json.putIncompleteMarker(it) }
+            .put("inputOverruns", inputOverruns)
+        IncompleteTake.withInputOverruns(incompleteReasons, inputOverruns)?.let { json.putIncompleteMarker(it) }
         val metadataName = displayName.removeSuffix(".flac") + ".audio.json"
         val resolver = context.contentResolver
         val metadataUri = recoveryMember.insert(metadataName, "application/json", metadata = true)

@@ -570,7 +570,12 @@ private val eqStoreDispatcher by lazy {
 }
 
 /** The store as the page uses it: reads and actions in order, and a user profile's edits coalesced into one write. */
-private class EqProfileWrites(private val store: EqProfileStore, private val scope: CoroutineScope) {
+private class EqProfileWrites(
+    private val store: EqProfileStore,
+    private val scope: CoroutineScope,
+    /** On the main thread after each edit's write: whether it failed. */
+    private val onSaved: (failed: Boolean) -> Unit,
+) {
     private var pending: com.librestatic.opencinecam.camera.EqProfile? = null
     private var job: Job? = null
 
@@ -581,14 +586,22 @@ private class EqProfileWrites(private val store: EqProfileStore, private val sco
         job = scope.launch { delay(PROFILE_SAVE_DELAY_MS); flush() }
     }
 
-    /** Writes the pending profile now; on leaving the page and before any other store call. */
+    /**
+     * Writes the pending profile's curve now; on leaving the page and before any other store call. Only the curve: a
+     * rename or delete running meanwhile wins. A failed write is kept for the next flush unless a newer edit came.
+     */
     fun flush() {
         job?.cancel()
         job = null
         val profile = pending ?: return
         pending = null
         eqStoreDispatcher.executor.execute {
-            runCatching { store.save(profile) }.onFailure { Log.w(TAG, "equaliser profile ${profile.id} could not be saved", it) }
+            val failure = runCatching { store.saveCurve(profile.id, profile.curve) }.exceptionOrNull()
+            failure?.let { Log.w(TAG, "equaliser profile ${profile.id} could not be saved", it) }
+            scope.launch {
+                if (failure != null && pending == null) pending = profile
+                onSaved(failure != null)
+            }
         }
     }
 
@@ -612,10 +625,12 @@ internal fun InputEqualizerScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val writes = remember(context) { EqProfileWrites(EqProfileStore.forContext(context.applicationContext), scope) }
+    var profileError by remember { mutableStateOf(false) }
+    val writes = remember(context) {
+        EqProfileWrites(EqProfileStore.forContext(context.applicationContext), scope) { failed -> profileError = failed }
+    }
     val latest by rememberUpdatedState(settings)
     var profiles by remember { mutableStateOf<List<com.librestatic.opencinecam.camera.EqProfile>?>(null) }
-    var profileError by remember { mutableStateOf(false) }
     val reference by produceState<com.librestatic.opencinecam.camera.EqProfile?>(null, context) {
         value = withContext(Dispatchers.IO) { AudioInputPolicies.get(context).bundledProfile }
     }
@@ -704,8 +719,10 @@ internal fun InputEqualizerScreen(
         onPickProfile = { picked -> writes.flush(); onSettingsChange(latest.withEqProfile(picked)) },
         onSaveAs = { name ->
             storeAction {
-                val created = writes.run { it.create(name, latest.audioEqCurve.forProfile()) }
-                onSettingsChange(latest.withSavedEqProfile(created))
+                val from = latest.audioEqProfileId
+                val curve = latest.audioEqCurve.forProfile()
+                val created = writes.run { it.create(name, curve) }
+                onSettingsChange(latest.withSavedEqProfile(created, from))
             }
         },
         onRename = { name -> latest.audioEqProfileId?.let { id -> storeAction { writes.run { it.rename(id, name) } } } },

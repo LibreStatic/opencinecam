@@ -46,6 +46,9 @@ class Mp4AudioAppender private constructor(
     private var started = false
     private var failed = false
     private var retyped = false
+
+    /** The retype write was started and the old type is not known to be intact. */
+    private var retyping = false
     private var closed = false
 
     companion object {
@@ -59,6 +62,7 @@ class Mp4AudioAppender private constructor(
         private const val MAX_CHANNELS = 8
         private val MDAT = "mdat".toByteArray(StandardCharsets.ISO_8859_1)
         private val FREE = "free".toByteArray(StandardCharsets.ISO_8859_1)
+        private val MOOV = "moov".toByteArray(StandardCharsets.ISO_8859_1)
 
         /** Reads the file's structure and starts a new `mdat` at its end. Throws [Mp4FormatException] and changes nothing when the file cannot take a track. */
         fun begin(file: Mp4Bytes): Mp4AudioAppender {
@@ -149,12 +153,30 @@ class Mp4AudioAppender private constructor(
             file.writeFully(mdatOffset + 8, largeSize)
             file.writeFully(mdatOffset + mdatSize, ByteBuffer.wrap(moov))
             file.sync()
+            retyping = true
             file.writeFully(movie.box.offset + 4, ByteBuffer.wrap(FREE))
             retyped = true
             file.sync()
         } catch (e: Throwable) {
-            if (!retyped) failed = true
+            if (!retyped) {
+                failed = true
+                if (retyping) restoreMoovType(e)
+            }
             throw e
+        }
+    }
+
+    /**
+     * The retype write failed and may have changed part of the type. Writes `moov` back so [close] can swallow the new `moov`; when
+     * that fails too, the old type is unknown, so the new `moov` stays reachable as the file's movie instead.
+     */
+    private fun restoreMoovType(cause: Throwable) {
+        try {
+            file.writeFully(movie.box.offset + 4, ByteBuffer.wrap(MOOV))
+            retyping = false
+            file.sync()
+        } catch (e: Throwable) {
+            cause.addSuppressed(e)
         }
     }
 
@@ -162,13 +184,14 @@ class Mp4AudioAppender private constructor(
      * Before [finish]: leaves the file as it was read (the old moov is still the file's moov). Idempotent; a no-op after finish.
      *
      * Bytes already appended stay, since [Mp4Bytes] cannot truncate: the new `mdat` header is rewritten to run to the end of the
-     * file, so it also swallows a new `moov` written before a failed retype, and the file ends on a box boundary. Best effort:
+     * file, so it also swallows a new `moov` written before a failed (and undone) retype, and the file ends on a box boundary. Best effort:
      * I/O failures here are swallowed.
      */
     override fun close() {
         if (closed) return
         closed = true
-        if (retyped) return
+        // A retype that failed and could not be undone may have left the old moov unreadable: the new one must survive.
+        if (retyped || retyping) return
         try {
             val end = file.size()
             if (end > mdatOffset) {

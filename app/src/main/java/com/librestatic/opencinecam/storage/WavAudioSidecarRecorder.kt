@@ -15,7 +15,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import com.librestatic.opencinecam.camera.PcmInputEvidence
-import com.librestatic.opencinecam.camera.inputEqualizerFor
+import com.librestatic.opencinecam.camera.inputEqualizer
 import com.librestatic.opencinecam.camera.pcmInputEvidence
 import com.librestatic.opencinecam.media.audio.PcmFormatCheck
 import com.librestatic.opencinecam.media.audio.PcmInput
@@ -111,11 +111,14 @@ class WavAudioSidecarRecorder private constructor(
     }.apply { add(uri) }
     private var softAgc: SoftAgc? = null
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
-    // Only the writer thread runs it; null when the curve is flat, so the bytes stay untouched.
-    private val equalizer = inputEqualizerFor(settings.appliedAudioEqCurve, capturedSampleRateHz, settings.audioChannels)
+    // Only the writer thread runs it; null when the curve applied on the opened path is flat, so the bytes stay untouched.
+    private val equalizer = inputEvidence.inputEqualizer(capturedSampleRateHz, settings.audioChannels)
 
     private var salvaging = false
     private var incompleteReasons: List<String>? = null
+    // A write that blocks past the input's short buffer makes it overrun; later reads succeed, so only the count shows the gap.
+    private var overrunBaseline = 0
+    @Volatile private var inputOverruns = 0
 
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
@@ -126,6 +129,7 @@ class WavAudioSidecarRecorder private constructor(
         attachEffects()
         startedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
         input.start()
+        overrunBaseline = input.overrunCount
         routedInputDeviceId = input.routedDeviceId
         inputGuard?.attach(input.audioRouting(context), AudioCapturePath.AUDIO_RECORD)
         running.set(true)
@@ -163,7 +167,7 @@ class WavAudioSidecarRecorder private constructor(
         val alreadyPrepared = preparedOutput != null
         return prepareCompletion()?.also {
             recoveryMember.keepBytes()
-            if (alreadyPrepared) markPreparedMetadataIncomplete(reasons)
+            if (alreadyPrepared) markPreparedMetadataIncomplete(IncompleteTake.withInputOverruns(reasons, inputOverruns) ?: reasons)
         }
     }
 
@@ -370,6 +374,7 @@ class WavAudioSidecarRecorder private constructor(
                 }
                 if (read <= 0) continue
                 captureTiming.readReturned(read, SystemClock.elapsedRealtimeNanos())
+                inputOverruns = (input.overrunCount - overrunBaseline).coerceAtLeast(0)
                 val observedAtMs = SystemClock.elapsedRealtime()
                 val observedEffects = observeEffects(observedAtMs)
                 inputGuard?.silenceIfMuted(buffer, read)
@@ -505,7 +510,8 @@ class WavAudioSidecarRecorder private constructor(
             .put("acousticEchoCancelerEnabled", result.acousticEchoCancelerEnabled)
             .putPcmInputEvidence(result.inputEvidence)
             .put("disclosure", audioInputDisclosure(result.inputEvidence))
-        incompleteReasons?.let { json.putIncompleteMarker(it) }
+            .put("inputOverruns", inputOverruns)
+        IncompleteTake.withInputOverruns(incompleteReasons, inputOverruns)?.let { json.putIncompleteMarker(it) }
         val metadataName = displayName.removeSuffix(".wav") + ".audio.json"
         val resolver = context.contentResolver
         val metadataUri = recoveryMember.insert(metadataName, "application/json", metadata = true)

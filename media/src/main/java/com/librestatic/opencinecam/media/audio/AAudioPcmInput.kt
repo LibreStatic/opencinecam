@@ -91,7 +91,7 @@ class PcmInputUnavailableException(
     /**
      * Machine-readable cause: [REASON_NATIVE_LIBRARY], `open-failed:<aaudio_result_t>`,
      * [REASON_SAMPLE_RATE_MISMATCH], [REASON_CHANNEL_MISMATCH], [REASON_FORMAT_MISMATCH],
-     * [REASON_NOT_LOW_LATENCY] or [REASON_DESCRIBE_FAILED].
+     * [REASON_NOT_LOW_LATENCY], [REASON_DEVICE_MISMATCH] or [REASON_DESCRIBE_FAILED].
      */
     val reason: String,
     message: String,
@@ -104,6 +104,7 @@ class PcmInputUnavailableException(
         const val REASON_CHANNEL_MISMATCH = "channel-mismatch"
         const val REASON_FORMAT_MISMATCH = "format-mismatch"
         const val REASON_NOT_LOW_LATENCY = "not-low-latency"
+        const val REASON_DEVICE_MISMATCH = "device-mismatch"
     }
 }
 
@@ -127,13 +128,25 @@ internal data class AAudioStreamInfo(
  * A stream that lost the low-latency mode is refused too. On the Razr the audio server then reopens
  * it on the ordinary input, where `UNPROCESSED` is one microphone on both channels with 18 dB of
  * codec gain: the path that clips, not the one the bundled equaliser was measured on.
+ *
+ * So is a stream routed to another device than [requestedDeviceId]: nothing would move the read to
+ * the requested one, and the route guard would only flag the take while it records the wrong input.
+ * `AAudioStream_getDeviceId` gives the routed device once the stream is open; a stream that reports
+ * none (0, unspecified) is accepted, as the guard leaves such a route unconfirmed.
  */
-internal fun aaudioStreamRefusal(requestedRateHz: Int, requestedChannels: Int, stream: AAudioStreamInfo): String? = when {
+internal fun aaudioStreamRefusal(
+    requestedRateHz: Int,
+    requestedChannels: Int,
+    stream: AAudioStreamInfo,
+    requestedDeviceId: Int? = null,
+): String? = when {
     stream.sampleRateHz != requestedRateHz -> PcmInputUnavailableException.REASON_SAMPLE_RATE_MISMATCH
     stream.channels != requestedChannels -> PcmInputUnavailableException.REASON_CHANNEL_MISMATCH
     stream.format != AAudioNative.AAUDIO_FORMAT_PCM_I16 -> PcmInputUnavailableException.REASON_FORMAT_MISMATCH
     stream.performanceMode != AAudioNative.AAUDIO_PERFORMANCE_MODE_LOW_LATENCY ->
         PcmInputUnavailableException.REASON_NOT_LOW_LATENCY
+    requestedDeviceId != null && stream.deviceId > 0 && stream.deviceId != requestedDeviceId ->
+        PcmInputUnavailableException.REASON_DEVICE_MISMATCH
     else -> null
 }
 
@@ -190,6 +203,9 @@ class AAudioPcmInput private constructor(
 
     /** Overruns and underruns so far; 0 once closed. */
     val xRunCount: Int get() = lock.read { handle.let { if (it == 0L) 0 else AAudioNative.nativeXRunCount(it) } }
+
+    /** An input stream's xruns are its overruns. */
+    override val overrunCount: Int get() = xRunCount
 
     private val frameBytes = info.channels * BYTES_PER_SAMPLE
 
@@ -300,7 +316,7 @@ class AAudioPcmInput private constructor(
                     sessionId = values[AAudioNative.INFO_SESSION_ID],
                     bufferCapacityFrames = values[AAudioNative.INFO_BUFFER_CAPACITY],
                 )
-                aaudioStreamRefusal(sampleRateHz, channels, info)?.let { reason ->
+                aaudioStreamRefusal(sampleRateHz, channels, info, deviceId?.takeIf { it > 0 })?.let { reason ->
                     throw PcmInputUnavailableException(reason, "AAudio input refused ($reason): $info.")
                 }
                 return AAudioPcmInput(handle, info, inputPreset)

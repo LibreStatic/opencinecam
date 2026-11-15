@@ -63,6 +63,16 @@ class EqProfileStoreTest {
         assertFalse(File(dir, "user-abcdef01.json.tmp").exists())
     }
 
+    @Test fun aFailedReplaceThrowsAndRemovesNothing() {
+        val store = store()
+        // A path the move cannot replace: a non-empty directory under the profile's file name.
+        val blocker = File(dir, "user-abcdef01.json").apply { mkdirs() }
+        File(blocker, "keep").writeText("kept")
+        assertThrows(java.io.IOException::class.java) { store.save(EqProfile("user-abcdef01", "Shotgun", curve)) }
+        assertEquals("kept", File(blocker, "keep").readText())
+        assertFalse(File(dir, "user-abcdef01.json.tmp").exists())
+    }
+
     @Test fun bundledProfilesAreRefusedAndIgnored() {
         val store = store()
         assertThrows(IllegalArgumentException::class.java) {
@@ -113,6 +123,18 @@ class EqProfileStoreTest {
         assertNull(store.rename("user-missing1", "Anything"))
         assertThrows(IllegalArgumentException::class.java) { store.rename(created.id, "   ") }
         assertEquals("New name", store.load(created.id)!!.name)
+    }
+
+    @Test fun saveCurveKeepsTheStoredNameAndNeverRecreates() {
+        val store = store()
+        val created = store.create("Old", EqCurve())
+        store.rename(created.id, "New")
+        // An edit made against the old name only carries its curve.
+        assertEquals(EqProfile(created.id, "New", curve), store.saveCurve(created.id, curve))
+        assertEquals(EqProfile(created.id, "New", curve), store.load(created.id))
+        store.delete(created.id)
+        assertNull(store.saveCurve(created.id, EqCurve()))
+        assertTrue(store.all().isEmpty())
     }
 
     @Test fun deleteRemovesOnlyWhatExists() {

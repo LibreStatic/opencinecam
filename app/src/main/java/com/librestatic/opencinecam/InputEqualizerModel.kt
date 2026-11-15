@@ -141,8 +141,13 @@ internal fun CameraSettings.withEqProfile(profile: EqProfile?): CameraSettings =
     if (profile == null) copy(audioEqCurve = EqCurve(), audioEqProfileId = null)
     else copy(audioEqCurve = profile.curve.copy(enabled = true), audioEqProfileId = profile.id)
 
-/** Save as made [created] from the current curve: it becomes the active profile; the curve, bypass included, stays. */
-internal fun CameraSettings.withSavedEqProfile(created: EqProfile): CameraSettings = copy(audioEqProfileId = created.id)
+/**
+ * Save as made [created] from the curve shown while [requestedProfileId] was active: it becomes the active profile;
+ * the curve, bypass included, stays. A profile picked or a curve edited while it was being stored wins: the new
+ * profile is only listed.
+ */
+internal fun CameraSettings.withSavedEqProfile(created: EqProfile, requestedProfileId: String?): CameraSettings =
+    if (audioEqProfileId == requestedProfileId && audioEqCurve.forProfile() == created.curve) copy(audioEqProfileId = created.id) else this
 
 /** Deleting the active profile keeps its curve in use as a custom one; deleting another changes nothing. */
 internal fun CameraSettings.withDeletedEqProfile(id: String): CameraSettings =

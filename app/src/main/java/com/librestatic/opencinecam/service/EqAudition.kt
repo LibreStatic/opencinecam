@@ -37,7 +37,7 @@ internal class EqAudition(
 
     private var recorder: EqSnippetRecorder? = null
     private var recordingSource: EqSnippetSource? = null
-    /** Asked to record while no monitor ran yet (one was starting, or the playback had just stopped). */
+    /** Asked to record while no monitor ran yet (one was starting, the playback had just stopped, or the last one failed). */
     private var recordingPending = false
     private var snippet: EqSnippet? = null
     private var player: EqSnippetPlayback? = null
@@ -46,6 +46,7 @@ internal class EqAudition(
     val playing: Boolean get() = player != null
 
     fun startRecording() {
+        val restarting = player != null
         stopPlayback(restartMonitor = true)
         finishRecording(keep = false)
         recordingPending = false
@@ -57,6 +58,9 @@ internal class EqAudition(
                 snippet = null
                 recordingPending = true
                 publish(EqAuditionPhase.RECORDING)
+                // A monitor that failed before has nothing on its way: ask for one, so the wait ends in
+                // onMonitorStarted or onMonitorUnavailable. The playback stopped above already asked.
+                if (!restarting) hooks.restartMonitor()
             }
             else -> fail()
         }

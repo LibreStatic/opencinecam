@@ -66,6 +66,19 @@ class EqCurveJsonTest {
     }
 
     @Test
+    fun aPointWithAMalformedTypeIsSkippedNotTheCurve() {
+        val kept = (1..EqCurve.MAX_POINTS).joinToString(",") { """{"type": "BELL", "frequencyHz": ${it * 100}, "gainDb": 1}""" }
+        // Past the kept points: never read.
+        val after = requireNotNull(decodeEqCurve("""{"points": [$kept, {"type": {}}]}"""))
+        assertEquals(EqCurve.MAX_POINTS, after.points.size)
+        // Among them: skipped like an unknown type.
+        val among = requireNotNull(decodeEqCurve(
+            """{"points": [{"type": ["BELL"], "frequencyHz": 100}, {"type": "NOTCH", "frequencyHz": 60}]}""",
+        ))
+        assertEquals(EqFilterType.NOTCH, among.points.single().type)
+    }
+
+    @Test
     fun refusesWhatIsNotACurveAndStringNumbers() {
         assertNull(decodeEqCurve("not json"))
         assertNull(decodeEqCurve("[1, 2]"))
@@ -121,5 +134,26 @@ class EqCurveJsonTest {
         assertNull(bypassed.equaliser)
         assertNull(bypassed.equaliserProfileId)
         assertNull(pcmInputEvidence("LOW_LATENCY", opened, EqCurve(), "user-0123abcd").equaliserProfileId)
+    }
+
+    @Test
+    fun aBundledCurveAppliesOnlyOnTheLowLatencyPath() {
+        val native = OpenedPcmInput(SilentInput(PcmInputPath.AAUDIO_LOW_LATENCY), null, 16)
+        val fallback = OpenedPcmInput(SilentInput(PcmInputPath.AUDIO_RECORD), "aaudio-open-failed", 16)
+        val external = OpenedPcmInput(SilentInput(PcmInputPath.AUDIO_RECORD), "external-input", 16)
+        assertEquals(curve, pcmInputEvidence("LOW_LATENCY", native, curve, "bundled-blanc").equaliser)
+        assertEquals(curve, requireNotNull(pcmInputEvidence("LOW_LATENCY", native, curve, "bundled-blanc").inputEqualizer(48_000, 2)).curve)
+        for (opened in listOf(fallback, external)) {
+            val evidence = pcmInputEvidence("LOW_LATENCY", opened, curve, "bundled-blanc")
+            assertNull(evidence.equaliser)
+            assertNull(evidence.equaliserProfileId)
+            assertNull(evidence.inputEqualizer(48_000, 2))
+        }
+        // A curve of the user's own, saved or not, applies on any path.
+        assertEquals(curve, pcmInputEvidence("LOW_LATENCY", fallback, curve, "user-0123abcd").equaliser)
+        assertEquals("user-0123abcd", pcmInputEvidence("LOW_LATENCY", fallback, curve, "user-0123abcd").equaliserProfileId)
+        assertEquals(curve, pcmInputEvidence("LOW_LATENCY", external, curve).equaliser)
+        assertEquals(curve, appliedEqCurve(curve, null, PcmInputPath.AUDIO_RECORD))
+        assertEquals(EqCurve(), appliedEqCurve(curve, "bundled-blanc", PcmInputPath.AUDIO_RECORD))
     }
 }

@@ -1265,6 +1265,11 @@ class CaptureService : Service() {
     @Volatile private var takeAppendedAudioBitrateBps: Int? = null
     /** The manual sync offset of that appended audio (PLAN-074 decision 12), read at take start; nanoseconds. */
     @Volatile private var takeAppendedAudioSyncOffsetNs: Long = 0
+    /** A take that never started appends nothing; its values must not reach the next take's stop. */
+    private fun clearTakeAppendedAudio() {
+        takeAppendedAudioBitrateBps = null
+        takeAppendedAudioSyncOffsetNs = 0
+    }
     /** Samples the running take's camera settings from [cameraState] for the clip sidecar; null outside a take. */
     @Volatile private var takeCameraTracker: ClipCameraTracker? = null
     /** Stable code of a Strict encoder refusal reported by the engine, consumed by the failed-start branch. */
@@ -2810,6 +2815,10 @@ class CaptureService : Service() {
                 return false
             }
         }
+        // A new take starts with no clip latched and no overload held, as a video take does.
+        resetAudioOverload()
+        cameraState.update { it.copy(audioClipLatched = false, audioInputClipLatched = false, audioRecordedClipLatched = false,
+            audioInputOverloaded = false) }
         val audio: RawAudioSource? = if (audioRequested) {
             val takeInput = takeAudioInput(cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings, true) ?: return false
             stopPreviewAudioMonitor(clearLevels = false)
@@ -5554,7 +5563,9 @@ class CaptureService : Service() {
                 // While the snippet plays no monitor may run; a curve dragged meanwhile must not clear the levels.
                 if ((monitor == null && !eqSnippetAudition.playing) || audioUpdate == PreviewAudioUpdate.RESTART) startPreviewAudioMonitorIfEligible()
                 else if (audioUpdate == PreviewAudioUpdate.EQ_CURVE)
-                    monitor?.setEqCurve((cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings).appliedAudioEqCurve)
+                    (cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings).let { applied ->
+                        monitor?.setEqCurve(applied.appliedAudioEqCurve, applied.audioEqProfileId)
+                    }
                 // The snippet plays through the curve being edited, live, with the gain the monitor would apply.
                 (cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings).let { applied ->
                     eqSnippetAudition.updatePlayback(applied.appliedAudioEqCurve, applied.audioRecordingGain)
@@ -6201,6 +6212,7 @@ class CaptureService : Service() {
                         } else null
                         when (val start = foreground.start(audioRequested)) {
                             is ForegroundRecordingStart.Rejected -> {
+                                clearTakeAppendedAudio()
                                 fail("recording-foreground-failed", start.failure.userMessage)
                                 return false
                             }
@@ -6276,6 +6288,7 @@ class CaptureService : Service() {
                                 abortTransferPublication()
                                 audioSidecarRecorder?.finish(false)
                                 audioSidecarRecorder = null
+                                clearTakeAppendedAudio()
                                 output.discardNeverRecorded()
                                 foreground.stop()
                                 val refusal = pendingStartRefusal
@@ -6288,6 +6301,7 @@ class CaptureService : Service() {
                     } catch (failure: Throwable) {
                         runCatching { audioSidecarRecorder?.finish(false) }
                         audioSidecarRecorder = null
+                        clearTakeAppendedAudio()
                         runCatching { videoOutput?.discardNeverRecorded() }
                         videoOutput = null
                         clearTakeDestination()

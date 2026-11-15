@@ -328,6 +328,21 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
         animate = !listenExitPrompt(section, AppSection.CAPTURE, state.audioListeningStatus)) {
         navigate(AppSection.CAPTURE)
     }
+    // Lens calibration runs on the viewfinder, so its Start leaves Settings too: it starts only once the operator has
+    // chosen, and not at all when the question is dismissed.
+    val startLensCalibration = rememberListenExitGuard(section, state, settings, settingsRepository::set) {
+        binder?.startLensCalibration()
+        settingsPage = SettingsPage.MAIN
+        section = it
+    }
+    // The replayed tour leaves Settings for the viewfinder as well.
+    val replayTour = rememberListenExitGuard(section, state, settings, settingsRepository::set) {
+        onboardingStore.reset()
+        settingsPage = SettingsPage.MAIN
+        section = it
+        tourReplay = true
+        onboardingDone = false
+    }
 
     val pageBack = rememberPredictiveBack(enabled = section == AppSection.SETTINGS && settingsPage != SettingsPage.MAIN) {
         settingsPage = SettingsPage.MAIN
@@ -424,14 +439,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                         Box(Modifier.fillMaxSize().predictiveBackPreview(pageBack).background(MaterialTheme.colorScheme.surface)) {
                         AboutScreen(
                             onBack = { settingsPage = SettingsPage.MAIN },
-                            onReplayTour = {
-                                onboardingStore.reset()
-                                settingsPage = SettingsPage.MAIN
-                                // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
-                                section = AppSection.CAPTURE
-                                tourReplay = true
-                                onboardingDone = false
-                            },
+                            // Like the first run, the replayed tour ends (Skip or Done) on the viewfinder.
+                            onReplayTour = { replayTour(AppSection.CAPTURE) },
                         )
                         }
                     } else if (settingsPage == SettingsPage.CAPABILITIES) {
@@ -458,12 +467,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
                             settings = settings,
                             onSettingsChange = settingsRepository::set,
                             onBack = { settingsPage = SettingsPage.MAIN },
-                            onStart = {
-                                // The run happens on the viewfinder: start it, then show the capture screen.
-                                binder?.startLensCalibration()
-                                settingsPage = SettingsPage.MAIN
-                                section = AppSection.CAPTURE
-                            },
+                            // The run happens on the viewfinder: start it, then show the capture screen.
+                            onStart = { startLensCalibration(AppSection.CAPTURE) },
                             onDelete = { binder?.deleteLensCalibration() },
                         )
                         }

@@ -32,6 +32,12 @@ interface PcmInput : AutoCloseable {
     val routedDeviceId: Int?
     val path: PcmInputPath
 
+    /**
+     * Times the input discarded captured audio because the reads fell behind, so far; 0 when the
+     * input cannot tell. A read after an overrun succeeds, so this is the only sign of the gap.
+     */
+    val overrunCount: Int get() = 0
+
     /** Starts capturing; throws [IllegalStateException] when the input does not start. */
     fun start()
 

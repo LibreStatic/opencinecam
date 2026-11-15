@@ -12,6 +12,8 @@ import com.librestatic.opencinecam.camera.isValidEqProfileId
 import com.librestatic.opencinecam.camera.toJson
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
 
 /**
@@ -44,6 +46,17 @@ class EqProfileStore(private val dir: File) {
         val target = requireNotNull(fileFor(profile.id))
         check(target.isFile || all().size < MAX_PROFILES) { "At most $MAX_PROFILES equaliser profiles can be stored." }
         write(target, profile.copy(device = null))
+    }
+
+    /**
+     * Gives the stored profile [id] the [curve], keeping everything else as stored; null when there is none. An edit
+     * written late thus neither undoes a rename nor brings a deleted profile back.
+     */
+    @Synchronized
+    fun saveCurve(id: String, curve: EqCurve): EqProfile? {
+        val updated = load(id)?.copy(curve = curve) ?: return null
+        save(updated)
+        return updated
     }
 
     /** Removes the profile; false when there was none to remove. */
@@ -89,10 +102,8 @@ class EqProfileStore(private val dir: File) {
         val temp = File(dir, "${target.name}.tmp")
         try {
             temp.writeText(profile.toJson(), Charsets.UTF_8)
-            if (!temp.renameTo(target)) {
-                target.delete()
-                if (!temp.renameTo(target)) throw IOException("Cannot replace $target")
-            }
+            // One atomic replace: a failure leaves the stored profile as it was, never deleted ahead of its successor.
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } finally {
             temp.delete()
         }

@@ -27,6 +27,7 @@ class PcmInputsTest {
         override val audioSessionId: Int? = null
         override val routedDeviceId: Int? = 7
         override val path = PcmInputPath.AAUDIO_LOW_LATENCY
+        override var overrunCount = 0
         var started = false
         var stopped = false
         var closed = false
@@ -87,6 +88,27 @@ class PcmInputsTest {
     }
 
     @Test
+    fun widensUpToTheCapacityAndLeavesPositionAndLimitAlone() {
+        val fake = FakePcm16Input(extremes)
+        val input = WideningPcmInput(fake, AudioFormat.ENCODING_PCM_FLOAT)
+        val buffer = ByteBuffer.allocateDirect(24).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.position(4).limit(8)
+        assertEquals(24, input.read(buffer, 24))
+        assertEquals(4, buffer.position())
+        assertEquals(8, buffer.limit())
+        val whole = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        whole.limit(whole.capacity())
+        assertEquals(extremes.map { it / 32768f }, (0 until 6).map { whole.getFloat(it * 4) })
+
+        // Another buffer next is written, not the one before.
+        val other = ByteBuffer.allocateDirect(24).order(ByteOrder.LITTLE_ENDIAN)
+        val again = WideningPcmInput(FakePcm16Input(extremes), AudioFormat.ENCODING_PCM_FLOAT)
+        again.read(ByteBuffer.allocateDirect(8), 8)
+        assertEquals(8, again.read(other, 8))
+        assertEquals(extremes[2] / 32768f, other.getFloat(0))
+    }
+
+    @Test
     fun convertsWholeFramesOnlyAndPassesShortReads() {
         val fake = FakePcm16Input(extremes, channels = 2, maxFrames = 1)
         val input = WideningPcmInput(fake, AudioFormat.ENCODING_PCM_24BIT_PACKED)
@@ -112,6 +134,9 @@ class PcmInputsTest {
         assertEquals(7, input.routedDeviceId)
         assertNull(input.audioSessionId)
         assertEquals(PcmInputPath.AAUDIO_LOW_LATENCY, input.path)
+        assertEquals(0, input.overrunCount)
+        fake.overrunCount = 3
+        assertEquals(3, input.overrunCount)
         val stamp = PcmInputTimestamp()
         assertTrue(input.timestamp(stamp))
         assertEquals(480L, stamp.framePosition)

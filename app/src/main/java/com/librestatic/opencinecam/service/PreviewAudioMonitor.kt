@@ -17,6 +17,7 @@ import com.librestatic.opencinecam.camera.AudioSpectrum
 import com.librestatic.opencinecam.camera.EqCurve
 import com.librestatic.opencinecam.camera.InputEqualizer
 import com.librestatic.opencinecam.camera.SpectrumAnalyzer
+import com.librestatic.opencinecam.camera.appliedEqCurve
 import com.librestatic.opencinecam.media.audio.PcmFormatCheck
 import com.librestatic.opencinecam.media.audio.PcmInput
 import com.librestatic.opencinecam.media.audio.PcmInputRequest
@@ -141,8 +142,11 @@ internal class PreviewAudioMonitor private constructor(
         }
     }
 
-    /** Adopted at the next buffer without reopening the microphone; takes read their curve at their start. */
-    fun setEqCurve(curve: EqCurve) = equalizer.setCurve(curve)
+    /**
+     * Adopted at the next buffer without reopening the microphone; takes read their curve at their start. [profileId]
+     * names the profile [curve] came from, so a bundled one is left out on an `AudioRecord` path, as a take leaves it out.
+     */
+    fun setEqCurve(curve: EqCurve, profileId: String?) = equalizer.setCurve(appliedEqCurve(curve, profileId, input.path))
 
     fun closeAsync(): CompletableFuture<Unit> = lifecycle.closeAsync()
 
@@ -234,7 +238,8 @@ internal class PreviewAudioMonitor private constructor(
                 return PreviewAudioMonitor(
                     appContext,
                     record,
-                    InputEqualizer(record.sampleRateHz, settings.audioChannels).apply { setCurve(settings.appliedAudioEqCurve) },
+                    InputEqualizer(record.sampleRateHz, settings.audioChannels)
+                        .apply { setCurve(appliedEqCurve(settings.appliedAudioEqCurve, settings.audioEqProfileId, record.path)) },
                     AudioLevelMeter(depth.toMeterEncoding(), settings.audioChannels, sampleRateHz = record.sampleRateHz),
                     softwareAgc,
                     depth,

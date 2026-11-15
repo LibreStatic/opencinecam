@@ -148,7 +148,16 @@ internal fun InputEqualizerGraph(
                     }
                 }
 
-                suspend fun AwaitPointerEventScope.drag(index: Int, pointer: PointerId) {
+                fun moveTo(index: Int, position: Offset): Boolean {
+                    val point = currentCurve.points.getOrNull(index) ?: return false
+                    val geometry = geometry(size)
+                    move(index, geometry.moved(point, position.x.coerceIn(geometry.left, geometry.right), position.y))
+                    return true
+                }
+
+                // Starts at [start], the movement that made the press a drag, so a single move then release still lands.
+                suspend fun AwaitPointerEventScope.drag(index: Int, pointer: PointerId, start: Offset) {
+                    if (!moveTo(index, start)) return
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
@@ -156,9 +165,7 @@ internal fun InputEqualizerGraph(
                         if (pressed.isEmpty()) return
                         if (pressed.size >= 2) return pinch(index)
                         val change = pressed.firstOrNull { it.id == pointer } ?: pressed.first()
-                        val point = currentCurve.points.getOrNull(index) ?: return
-                        val geometry = geometry(size)
-                        move(index, geometry.moved(point, change.position.x.coerceIn(geometry.left, geometry.right), change.position.y))
+                        if (!moveTo(index, change.position)) return
                     }
                 }
 
@@ -191,6 +198,7 @@ internal fun InputEqualizerGraph(
                     select(node)
                     if (!editable) return@awaitEachGesture
                     down.consume()
+                    var movedTo = down.position
                     val outcome = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                         var result: NodeGesture? = null
                         while (result == null) {
@@ -199,7 +207,10 @@ internal fun InputEqualizerGraph(
                             result = when {
                                 event.changes.count { it.pressed } >= 2 -> NodeGesture.PINCH
                                 change == null || !change.pressed -> NodeGesture.UP
-                                (change.position - down.position).getDistance() > slop -> NodeGesture.MOVE
+                                (change.position - down.position).getDistance() > slop -> {
+                                    movedTo = change.position
+                                    NodeGesture.MOVE
+                                }
                                 else -> null
                             }
                             event.changes.forEach { it.consume() }
@@ -213,7 +224,7 @@ internal fun InputEqualizerGraph(
                             do { val event = awaitPointerEvent(); event.changes.forEach { it.consume() } } while (event.changes.any { it.pressed })
                         }
                         NodeGesture.UP -> Unit
-                        NodeGesture.MOVE -> drag(node, down.id)
+                        NodeGesture.MOVE -> drag(node, down.id, movedTo)
                         NodeGesture.PINCH -> pinch(node)
                     }
                 }

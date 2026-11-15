@@ -61,6 +61,8 @@ class PcmReadEpochEstimate(private val rate: Int, private val windowNs: Long = 1
     }
     /** The estimate, or null before the first read. */
     fun frameZeroNs(): Long? = zeroNs
+    /** True at [nowNs] once the window after the first read has passed, so [frameZeroNs] no longer changes. */
+    fun settled(nowNs: Long): Boolean = firstReturnNs?.let { nowNs - it > windowNs } == true
 }
 
 data class CaptureEpochReport(

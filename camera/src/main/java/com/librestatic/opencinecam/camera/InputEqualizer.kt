@@ -150,6 +150,10 @@ class InputEqualizer(private val sampleRateHz: Int, private val channels: Int) {
     /** state[(point * channels + channel) * 2 + 0/1]: the two TDF-II delay values. */
     private val state = DoubleArray(EqCurve.MAX_POINTS * channels * 2)
 
+    /** The audio thread's little-endian view of the last buffer [process] filtered, and that buffer. */
+    private var source: ByteBuffer? = null
+    private var view: ByteBuffer? = null
+
     /** The last curve passed to [setCurve]. */
     val curve: EqCurve get() = published.curve
 
@@ -171,7 +175,13 @@ class InputEqualizer(private val sampleRateHz: Int, private val channels: Int) {
         val compiled = adopted
         if (compiled.flat || byteCount == 0) return
         require(!buffer.isReadOnly) { "The equaliser requires a writable PCM buffer." }
-        val pcm = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).apply { clear(); limit(byteCount) }
+        // A read loop passes the same buffer every time, so its view is made once.
+        val pcm = view.takeIf { source === buffer } ?: buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN).also {
+            source = buffer
+            view = it
+        }
+        pcm.clear()
+        pcm.limit(byteCount)
         val bytesPerSample = encoding.bytesPerSample
         var channel = 0
         var offset = 0

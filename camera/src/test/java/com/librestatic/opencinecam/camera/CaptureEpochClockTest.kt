@@ -105,10 +105,10 @@ class CaptureEpochClockTest {
     }
     @Test fun preStartMuxQueueCoversTheEstimatedAnchorWindowAtSixtyFps() {
         assertEquals(OpenCineLogGpuPipeline.MIN_PENDING_MUX_SAMPLES,OpenCineLogGpuPipeline.maxPendingMuxSamples(60,null,null))
-        // 0.5 s estimate delay + 80 ms read + 0.5 s latency: ceil(60 * 1.08) + ceil(46.875 * 1.08).
-        assertEquals(65+51,OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840))
-        assertEquals(33+51,OpenCineLogGpuPipeline.maxPendingMuxSamples(30,48000,3840))
-        val worstCaseQueued=kotlin.math.ceil(60*0.58).toInt()+kotlin.math.ceil(48000/1024.0*0.58).toInt()
+        // First 80 ms read + 0.5 s estimate window + 80 ms read + 0.5 s latency: ceil(60 * 1.16) + ceil(46.875 * 1.16).
+        assertEquals(70+55,OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840))
+        assertEquals(35+55,OpenCineLogGpuPipeline.maxPendingMuxSamples(30,48000,3840))
+        val worstCaseQueued=kotlin.math.ceil(60*0.66).toInt()+kotlin.math.ceil(48000/1024.0*0.66).toInt()
         assertTrue(worstCaseQueued>=OpenCineLogGpuPipeline.MIN_PENDING_MUX_SAMPLES-2)
         assertTrue(OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840)>worstCaseQueued)
     }
@@ -129,6 +129,23 @@ class CaptureEpochClockTest {
         // After the window a fast audio clock no longer pulls the estimate earlier.
         estimate.observeRead(96_000, 7_000_000_000L)
         assertEquals(5_070_000_000L, estimate.frameZeroNs())
+    }
+
+    @Test
+    fun readEstimateSettlesOnlyOnceItsWindowAfterTheFirstReadHasPassed() {
+        val estimate = PcmReadEpochEstimate(48_000, 500_000_000L)
+        assertFalse(estimate.settled(9_000_000_000L))
+        // The first read returns well after the input started; the window opens there, not at the start.
+        estimate.observeRead(4_800, 5_180_000_000L)
+        assertEquals(5_080_000_000L, estimate.frameZeroNs())
+        assertFalse(estimate.settled(5_600_000_000L))
+        // Half a second after the start but inside the window, a read still moves the estimate earlier.
+        estimate.observeRead(28_800, 5_600_000_000L)
+        assertEquals(5_000_000_000L, estimate.frameZeroNs())
+        assertFalse(estimate.settled(5_680_000_000L))
+        assertTrue(estimate.settled(5_680_000_001L))
+        estimate.observeRead(33_600, 5_680_000_001L)
+        assertEquals(5_000_000_000L, estimate.frameZeroNs())
     }
 
     @Test fun theManualSyncOffsetMovesTheAudioPlacementButNotTheMeasuredAnchor() {

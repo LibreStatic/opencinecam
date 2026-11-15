@@ -104,8 +104,8 @@ internal class AudioListeningController(
                 phase = if (!options.enabled) AudioListeningPhase.DISABLED else if (!sameRoute) AudioListeningPhase.NEEDS_CONNECT else old.phase)
             intent.set(next)
             if (!sameRoute) { queue.clear(); emit(next.phase, expectedGeneration = next.generation) }
-            // The requested device keeps its entry in the list (inUseIds), so a new request republishes it.
-            if (old.deviceId != id) devicesDirty.set(true)
+            // The requested and bound devices keep their entry in the list (inUseIds), so a change republishes it.
+            if (old.deviceId != id || old.boundDeviceId != next.boundDeviceId) devicesDirty.set(true)
         }
         signal()
     }
@@ -119,6 +119,7 @@ internal class AudioListeningController(
             val next = old.copy(armed = true, boundDeviceId = null, generation = old.generation + 1,
                 phase = AudioListeningPhase.WAITING_PCM)
             intent.set(next)
+            if (old.boundDeviceId != null) devicesDirty.set(true)
             queue.clear()
             emit(AudioListeningPhase.WAITING_PCM, expectedGeneration = next.generation)
         }
@@ -288,7 +289,7 @@ internal class AudioListeningController(
             val latest = intent.get()
             if (closed.get() || !latest.armed || latest.generation != current.generation) null
             else if (latest.boundDeviceId != null) latest
-            else latest.copy(boundDeviceId = device.id).also { intent.set(it) }
+            else latest.copy(boundDeviceId = device.id).also { intent.set(it); devicesDirty.set(true) }
         }
     }
 

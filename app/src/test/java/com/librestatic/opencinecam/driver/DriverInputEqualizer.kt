@@ -150,9 +150,11 @@ internal fun InputEqualizerDriverPage(
         },
         onPickProfile = { settings = settings.withEqProfile(it) },
         onSaveAs = { name ->
-            val created = EqProfile("u-${userProfiles.size + 1}", name, settings.audioEqCurve.copy(enabled = true))
+            // The first unused id: a count alone repeats one after a delete.
+            val id = generateSequence(1) { it + 1 }.map { "u-$it" }.first { id -> userProfiles.none { it.id == id } }
+            val created = EqProfile(id, name, settings.audioEqCurve.copy(enabled = true))
             userProfiles = (userProfiles + created).sortedBy { it.name.lowercase() }
-            settings = settings.withSavedEqProfile(created)
+            settings = settings.withSavedEqProfile(created, settings.audioEqProfileId)
         },
         onRename = { name -> userProfiles = userProfiles.map { if (it.id == settings.audioEqProfileId) it.copy(name = name) else it } },
         onDelete = {

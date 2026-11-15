@@ -406,31 +406,117 @@ class Mp4AudioAppenderTest {
         }
         assertTrue("flushes plus size, moov and retype: $totalWrites", totalWrites >= 6)
 
-        for (failOn in 1..totalWrites) {
+        // Nothing written, or only the first bytes of the write (one or two bytes of the retype turn moov into foov or frov).
+        for (partialBytes in listOf(0, 1, 2)) {
+            for (failOn in 1..totalWrites) {
+                val label = "write $failOn after $partialBytes bytes"
+                val file = temp.newFile().apply { writeBytes(original) }
+                withMp4(file, write = true) { bytes ->
+                    val appender = Mp4AudioAppender.begin(FailingMp4Bytes(bytes, failOn, partialBytes))
+                    assertThrows(label, IOException::class.java) {
+                        written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
+                        appender.finish(track)
+                    }
+                    appender.close()
+                }
+
+                val moov = withMp4(file) { findSingleMoov(scanTopLevelBoxes(it)) }
+                assertEquals(label, oldMoov.offset, moov.offset)
+                assertEquals(label, oldMoov.size, moov.size)
+                assertTrue(label, movie(file).tracks.none { it.handlerType == "soun" })
+                assertVideoKept(file, original, videoMdat, label)
+            }
+        }
+    }
+
+    @Test
+    fun aFailedSyncLeavesAVideoMovie() {
+        val template = newFile()
+        val original = template.readBytes()
+        val originalBoxes = boxes(template)
+        val oldMoov = originalBoxes.single { it.type == "moov" }
+        val videoMdat = originalBoxes.single { it.type == "mdat" }
+        val track = aacTrack(validFrames = 24_000, startOffsetUs = 0)
+        val written = units(unitCountFor(track))
+
+        // One sync after the new moov, one after the retype.
+        for (failOn in 1..2) {
+            val label = "sync $failOn"
             val file = temp.newFile().apply { writeBytes(original) }
             withMp4(file, write = true) { bytes ->
-                val appender = Mp4AudioAppender.begin(FailingMp4Bytes(bytes, failOn))
-                assertThrows("write $failOn", IOException::class.java) {
+                val appender = Mp4AudioAppender.begin(FailingMp4Bytes(bytes, emptyMap(), failOnSync = failOn))
+                assertThrows(label, IOException::class.java) {
                     written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
                     appender.finish(track)
                 }
                 appender.close()
             }
 
-            val after = boxes(file)
             val moov = withMp4(file) { findSingleMoov(scanTopLevelBoxes(it)) }
-            assertEquals("write $failOn", oldMoov.offset, moov.offset)
-            assertEquals("write $failOn", oldMoov.size, moov.size)
-            assertEquals("write $failOn", file.length(), after.last().end)
-            assertTrue("write $failOn", movie(file).tracks.none { it.handlerType == "soun" })
-            val bytes = file.readBytes()
-            assertEquals(
-                "write $failOn",
-                sha256(original, videoMdat.offset.toInt(), videoMdat.end.toInt()),
-                sha256(bytes, videoMdat.offset.toInt(), videoMdat.end.toInt()),
-            )
-            assertEquals("write $failOn", 1_160_000L, withMp4(file) { readMp4VideoTiming(it) }.lastSampleTimeUs)
+            if (failOn == 1) {
+                assertEquals(label, oldMoov.offset, moov.offset)
+                assertTrue(label, movie(file).tracks.none { it.handlerType == "soun" })
+            } else {
+                // The retype was written before the sync failed: the new movie, with its audio, is the file's movie.
+                assertEquals(label, "free", boxes(file).single { it.offset == oldMoov.offset }.type)
+                assertUnitsEqual(written, readUnits(audioView(movie(file)), fileReader(file)))
+            }
+            assertVideoKept(file, original, videoMdat, label)
         }
+    }
+
+    @Test
+    fun aRetypeThatCannotBeUndoneKeepsTheNewMoovReachable() {
+        val template = newFile()
+        val original = template.readBytes()
+        val originalBoxes = boxes(template)
+        val oldMoov = originalBoxes.single { it.type == "moov" }
+        val videoMdat = originalBoxes.single { it.type == "mdat" }
+        val track = aacTrack(validFrames = 24_000, startOffsetUs = 0)
+        val written = units(unitCountFor(track))
+
+        val counting = temp.newFile().apply { writeBytes(original) }
+        val totalWrites = withMp4(counting, write = true) { bytes ->
+            val failing = FailingMp4Bytes(bytes, Int.MAX_VALUE)
+            Mp4AudioAppender.begin(failing).use { appender ->
+                written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
+                appender.finish(track)
+            }
+            failing.writes
+        }
+
+        val file = temp.newFile().apply { writeBytes(original) }
+        withMp4(file, write = true) { bytes ->
+            // The retype (the last write) stops after one byte, and the write that would restore the type writes nothing.
+            val failing = FailingMp4Bytes(bytes, mapOf(totalWrites to 1, totalWrites + 1 to 0))
+            val appender = Mp4AudioAppender.begin(failing)
+            assertThrows(IOException::class.java) {
+                written.forEach { appender.writeAccessUnit(ByteBuffer.wrap(it)) }
+                appender.finish(track)
+            }
+            assertEquals("the restore was tried", totalWrites + 1, failing.writes)
+            appender.close()
+            assertEquals("close leaves the new moov alone", totalWrites + 1, failing.writes)
+        }
+
+        assertEquals("foov", boxes(file).single { it.offset == oldMoov.offset }.type)
+        val moov = withMp4(file) { findSingleMoov(scanTopLevelBoxes(it)) }
+        assertTrue(moov.offset > oldMoov.offset)
+        assertUnitsEqual(written, readUnits(audioView(movie(file)), fileReader(file)))
+        assertVideoKept(file, original, videoMdat, "unrestored retype")
+    }
+
+    /** The file ends on a box boundary and its movie plays the original video from the original samples. */
+    private fun assertVideoKept(file: File, original: ByteArray, videoMdat: Mp4Box, label: String) {
+        assertEquals(label, file.length(), boxes(file).last().end)
+        assertTrue(label, movie(file).tracks.any { it.handlerType == "vide" })
+        val bytes = file.readBytes()
+        assertEquals(
+            label,
+            sha256(original, videoMdat.offset.toInt(), videoMdat.end.toInt()),
+            sha256(bytes, videoMdat.offset.toInt(), videoMdat.end.toInt()),
+        )
+        assertEquals(label, 1_160_000L, withMp4(file) { readMp4VideoTiming(it) }.lastSampleTimeUs)
     }
 
     @Test

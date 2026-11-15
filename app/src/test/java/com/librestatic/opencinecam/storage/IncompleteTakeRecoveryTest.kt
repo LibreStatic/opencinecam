@@ -44,6 +44,13 @@ class IncompleteTakeRecoveryTest {
         return Triple(published, fake, inserted)
     }
 
+    @Test fun anInputOverrunMarksTheAudioIncomplete() {
+        assertEquals(null, IncompleteTake.withInputOverruns(null, 0))
+        assertEquals(listOf("audio-input-overrun"), IncompleteTake.withInputOverruns(null, 2))
+        assertEquals(listOf("process-death"), IncompleteTake.withInputOverruns(listOf("process-death"), 0))
+        assertEquals(listOf("process-death", "audio-input-overrun"), IncompleteTake.withInputOverruns(listOf("process-death"), 1))
+    }
+
     @Test fun videoWithBytesIsPublishedWithANewIncompleteSidecar() {
         val (published, rows, inserted) = recover(listOf(row("DCIM", "v", "take.mp4", "video/mp4", 4096)))
         assertEquals(1, published)

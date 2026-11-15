@@ -310,9 +310,20 @@ internal class SparseMp4Bytes : Mp4Bytes {
     }
 }
 
-/** Passes through to [inner], but throws on the [failOnWrite]th write (1-based) without writing anything. */
-internal class FailingMp4Bytes(private val inner: Mp4Bytes, private val failOnWrite: Int) : Mp4Bytes {
+/**
+ * Passes through to [inner], but throws on the writes keyed in [failedWrites] (1-based) after writing only as many of their first
+ * bytes as the value says, and on the [failOnSync]th sync (1-based, 0 for none).
+ */
+internal class FailingMp4Bytes(
+    private val inner: Mp4Bytes,
+    private val failedWrites: Map<Int, Int>,
+    private val failOnSync: Int = 0,
+) : Mp4Bytes {
+    constructor(inner: Mp4Bytes, failOnWrite: Int, partialBytes: Int = 0) : this(inner, mapOf(failOnWrite to partialBytes))
+
     var writes = 0
+        private set
+    var syncs = 0
         private set
 
     override fun size(): Long = inner.size()
@@ -321,9 +332,18 @@ internal class FailingMp4Bytes(private val inner: Mp4Bytes, private val failOnWr
 
     override fun writeFully(position: Long, buffer: ByteBuffer) {
         writes++
-        if (writes == failOnWrite) throw IOException("Injected failure on write $writes")
+        val partialBytes = failedWrites[writes]
+        if (partialBytes != null) {
+            val count = minOf(partialBytes, buffer.remaining())
+            if (count > 0) inner.writeFully(position, buffer.duplicate().apply { limit(position() + count) })
+            throw IOException("Injected failure on write $writes after $count bytes")
+        }
         inner.writeFully(position, buffer)
     }
 
-    override fun sync() = inner.sync()
+    override fun sync() {
+        syncs++
+        if (syncs == failOnSync) throw IOException("Injected failure on sync $syncs")
+        inner.sync()
+    }
 }

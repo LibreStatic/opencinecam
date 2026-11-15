@@ -34,6 +34,13 @@ internal object IncompleteTake {
     const val PROCESS_DEATH = "process-death"
     const val RECORDING_INTERRUPTED = "recording-interrupted"
 
+    /** The microphone input overran while the take was written: the audio has gaps the reads never saw. */
+    const val AUDIO_INPUT_OVERRUN = "audio-input-overrun"
+
+    /** [reasons] plus [AUDIO_INPUT_OVERRUN] when the input overran during the take; null when nothing marks it. */
+    fun withInputOverruns(reasons: List<String>?, overruns: Int): List<String>? =
+        if (overruns > 0) reasons.orEmpty() + AUDIO_INPUT_OVERRUN else reasons
+
     /** Adds the incomplete marker to [json] (or to a minimal recording document when there is none). */
     fun mark(json: String?, reasons: List<String>, note: String? = null): String {
         val original = json?.let { Json.parseToJsonElement(it) as? JsonObject }

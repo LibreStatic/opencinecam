@@ -15,7 +15,7 @@ import com.librestatic.opencinecam.camera.AudioLevelMeter
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.PcmCaptureEpoch
 import com.librestatic.opencinecam.camera.InputEqualizer
-import com.librestatic.opencinecam.camera.inputEqualizerFor
+import com.librestatic.opencinecam.camera.inputEqualizer
 import com.librestatic.opencinecam.camera.pcmInputEvidence
 import com.librestatic.opencinecam.camera.toJson
 import com.librestatic.opencinecam.camera.PcmListeningSink
@@ -308,12 +308,13 @@ class AudioRecordRawAudioSource(
         this.sink = sink
         runCatching { inputGuard?.attach(built.audioRouting(appContext), AudioCapturePath.AUDIO_RECORD) }
         running = true
-        val equalizer = inputEqualizerFor(settings.appliedAudioEqCurve, built.sampleRateHz, channels)
+        // The evidence carries the curve applied on the path that opened, so the take record and the PCM agree.
+        val evidence = pcmInputEvidence(settings.audioSource.name, opened, settings.appliedAudioEqCurve, settings.appliedAudioEqProfileId)
+        val equalizer = evidence.inputEqualizer(built.sampleRateHz, channels)
         thread = Thread({ captureLoop(built, chunkBytes, equalizer) }, "occ-raw-audio").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }
-        val evidence = pcmInputEvidence(settings.audioSource.name, opened, settings.appliedAudioEqCurve, settings.appliedAudioEqProfileId)
         return linkedMapOf(
             RawAudioKeys.SAMPLE_RATE to built.sampleRateHz.toString(),
             RawAudioKeys.CHANNELS to built.channels.toString(),

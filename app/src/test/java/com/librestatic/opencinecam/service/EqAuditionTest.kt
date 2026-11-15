@@ -173,6 +173,8 @@ class EqAuditionTest {
         harness.audition.startRecording()
         assertTrue(harness.players.single().closed)
         assertEquals(EqAuditionState(phase = EqAuditionPhase.RECORDING), harness.state.value)
+        // The stopped playback asked for the monitor once; recording does not ask again.
+        assertEquals(1, harness.monitorRestarts)
         val restarted = FakeMonitor()
         harness.audition.onMonitorStarted(restarted)
         assertNotNull(restarted.snippetTap)
@@ -187,6 +189,20 @@ class EqAuditionTest {
         assertEquals(EqAuditionPhase.RECORDING, harness.state.value.phase)
         harness.audition.onMonitorUnavailable()
         assertEquals(EqAuditionState(failed = true), harness.state.value)
+    }
+
+    @Test fun recordingAfterAFailedMonitorAsksForOne() {
+        // The last monitor failed and nothing restarted it: the recording must not wait for nothing.
+        val harness = Harness().apply { monitor = null }
+        harness.audition.startRecording()
+        assertEquals(1, harness.monitorRestarts)
+        assertEquals(EqAuditionPhase.RECORDING, harness.state.value.phase)
+        val started = FakeMonitor()
+        harness.audition.onMonitorStarted(started)
+        assertNotNull(started.snippetTap)
+        started.feed(700)
+        harness.audition.stopRecording()
+        assertEquals(EqAuditionState(snippetMs = 700), harness.state.value)
     }
 
     @Test fun endingDropsTheSnippetOnlyWhenAsked() {

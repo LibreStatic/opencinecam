@@ -35,6 +35,16 @@ class PcmInputTest {
     }
 
     @Test
+    fun refusesAStreamRoutedAwayFromTheRequestedDevice() {
+        assertNull(aaudioStreamRefusal(48_000, 2, razrStereo, requestedDeviceId = 23))
+        assertNull(aaudioStreamRefusal(48_000, 2, razrStereo, requestedDeviceId = null))
+        assertEquals(PcmInputUnavailableException.REASON_DEVICE_MISMATCH,
+            aaudioStreamRefusal(48_000, 2, razrStereo, requestedDeviceId = 31))
+        // An unspecified routed device is not known to be wrong.
+        assertNull(aaudioStreamRefusal(48_000, 2, razrStereo.copy(deviceId = 0), requestedDeviceId = 31))
+    }
+
+    @Test
     fun mapsAAudioReadResultsToPcmInputCodes() {
         assertEquals(960, aaudioReadResult(240, 4))
         assertEquals(0, aaudioReadResult(0, 4))
@@ -60,6 +70,7 @@ class PcmInputTest {
         assertEquals("native-library", PcmInputUnavailableException.REASON_NATIVE_LIBRARY)
         assertEquals("not-low-latency", PcmInputUnavailableException.REASON_NOT_LOW_LATENCY)
         assertEquals("format-mismatch", PcmInputUnavailableException.REASON_FORMAT_MISMATCH)
+        assertEquals("device-mismatch", PcmInputUnavailableException.REASON_DEVICE_MISMATCH)
         assertEquals("open-failed:-889", PcmInputUnavailableException.REASON_OPEN_FAILED_PREFIX + -889)
     }
 }

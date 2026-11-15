@@ -237,6 +237,11 @@ internal fun rememberListenStarter(
     val change by rememberUpdatedState(onSettingsChange)
     val arm by rememberUpdatedState(reconnect)
     var pending by remember { mutableStateOf<Int?>(null) }
+    // Listening switched off elsewhere (the Settings switch) drops a waiting start, as Stop does: switching it back on
+    // must not arm the old request. A start switches it on itself, so this never drops a live one.
+    LaunchedEffect(settings.audioListening.enabled) {
+        if (!settings.audioListening.enabled) pending = null
+    }
     LaunchedEffect(pending, status) {
         val id = pending ?: return@LaunchedEffect
         if (listenReadyToArm(status, id)) {
