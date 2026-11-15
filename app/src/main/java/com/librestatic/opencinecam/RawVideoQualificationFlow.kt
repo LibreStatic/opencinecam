@@ -535,9 +535,10 @@ internal data class RawVideoQualificationInfo(
 
 /**
  * PLAN-072 Delivery 3: the storage a qualification measures when a USB drive is configured: the drive ([drive] true,
- * named [driveLabel] when known), or the phone standing in for a drive that is not usable now.
+ * named [driveLabel] when known), or the phone standing in for a drive that is not usable now. Public because
+ * [CameraUiState.rawVideoProfile] names the storage the RAW chooser's records come from with it.
  */
-internal data class RawQualificationTarget(val drive: Boolean, val driveLabel: String? = null)
+data class RawQualificationTarget(val drive: Boolean, val driveLabel: String? = null)
 
 /** Where the qualification step was opened from. */
 internal enum class RawQualificationEntry { ONBOARDING, SELECTOR, SETTINGS }

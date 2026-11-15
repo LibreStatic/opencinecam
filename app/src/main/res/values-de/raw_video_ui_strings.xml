@@ -38,4 +38,8 @@
     <string name="raw_compression_lossless">Verlustfrei</string>
     <string name="raw_video_label_near_lossless">Nahezu verlustfrei</string>
     <string name="raw_compression_help">Gilt für komprimierte Konfigurationen. Verlustfrei behält jeden Wert, den der Sensor liefert. Nahezu verlustfrei fasst Werte zusammen, die sich um weniger als etwa das halbe Sensorrauschen bei der ISO des Bildes unterscheiden. Der Unterschied bleibt im Rauschen verborgen, und die Dateien werden noch kleiner, vor allem bei wenig Licht. Beides öffnet sich in der Galerie, im CinemaDNG-Export und in den Desktop-Werkzeugen. Die Restzeit rechnet für beide mit demselben vorsichtigen Verhältnis.</string>
+    <string name="raw_video_profile_phone">Qualifiziert auf dem Telefonspeicher</string>
+    <string name="raw_video_profile_drive">Qualifiziert auf dem USB-Laufwerk %1$s</string>
+    <string name="raw_video_profile_drive_unnamed">Qualifiziert auf dem USB-Laufwerk</string>
+    <string name="raw_video_left_out_title">NICHT VERFÜGBAR</string>
 </resources>

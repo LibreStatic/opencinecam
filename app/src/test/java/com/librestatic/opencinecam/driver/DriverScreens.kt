@@ -484,6 +484,37 @@ fun CaptureRawVideoReducedRate() = CaptureChrome(
     CaptureInitialPane.RESOLUTION,
 )
 
+/** A judged configuration the chooser leaves out, on the S24-like main camera's 4080×3060 sensor. */
+private fun driverLeftOut(width: Int, height: Int, fps: Int, reason: com.librestatic.opencinecam.RawVideoLeftOutReason) =
+    com.librestatic.opencinecam.RawVideoLeftOutOption(
+        com.librestatic.opencinecam.RawVideoConfigOption.of(com.librestatic.opencinecam.camera.RawVideoConfig("0", 4080, 3060, width, height, fps)),
+        fps, reason)
+
+/**
+ * The RAW chooser on a USB drive's profile: "Qualified on the USB drive WD Elements" (`raw-video-config-profile`) under
+ * the header, the drive's qualified options without 3840×2160 · 60 fps, and under "Not available" (`raw-video-left-out`)
+ * 4080×3060 and 3840×2160 at 60 fps out for heat, 1920×1080 · 120 fps for the storage and 1280×720 · 240 fps for the
+ * camera's rate, with the cool-down hint (`raw-video-left-out-heat-hint`).
+ */
+@Composable
+fun CaptureRawVideoLeftOut() = CaptureChrome(
+    driverRawVideoState().let { state ->
+        state.copy(rawVideoOptions = state.rawVideoOptions.filterNot { it.key == "3840x2160@60" },
+            availableStorageBytes = 41_000_000_000L,
+            recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true, onDrive = true,
+                driveLabel = "WD Elements", driveFreeBytes = 1_734_000_000_000L),
+            rawVideoProfile = com.librestatic.opencinecam.RawQualificationTarget(drive = true, driveLabel = "WD Elements"),
+            rawVideoLeftOut = listOf(
+                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(1920, 1080, 120, com.librestatic.opencinecam.RawVideoLeftOutReason.STORAGE),
+                driverLeftOut(1280, 720, 240, com.librestatic.opencinecam.RawVideoLeftOutReason.CAMERA_LIMIT),
+            ))
+    },
+    DriverRawVideoSettings,
+    CaptureInitialPane.RESOLUTION,
+)
+
 /** A RAW take at 00:42: the ring meter beside the REC timer, 37 % full and 1260 frames written. */
 @Composable
 fun CaptureRawVideoRecording() = CaptureChrome(
@@ -879,6 +910,30 @@ fun RawQualificationNone() = RawQualificationDriver(DriverRawReady, RawVideoQual
 fun SettingsRawVideo() = DriverTheme {
     var settings by remember { mutableStateOf(DriverRawVideoSettings) }
     SettingsScreen(driverRawVideoState(compressed = true), settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
+        onSettingsChange = { settings = it }, onSelectRawVideoConfig = { key -> settings = settings.copy(rawVideoConfig = key) },
+        onRequalifyRawVideo = {})
+}
+
+/**
+ * Settings with RAW video qualified on the phone while a drive is configured but not connected: the row's profile line
+ * "Qualified on the phone’s storage" (`settings-raw-video-profile`), and under "Not available"
+ * (`settings-raw-video-left-out`) 4080×3060 and 3840×2160 at 60 fps out for heat, with the cool-down hint
+ * (`settings-raw-video-left-out-heat-hint`).
+ */
+@Composable
+fun SettingsRawVideoLeftOut() = DriverTheme {
+    var settings by remember { mutableStateOf(DriverRawVideoSettings) }
+    val state = driverRawVideoState(compressed = true).let { state ->
+        state.copy(rawVideoOptions = state.rawVideoOptions.filterNot { it.key == "3840x2160@60" },
+            recordingDestination = com.librestatic.opencinecam.RecordingDestinationStatus(configuredDrive = true,
+                fallback = com.librestatic.opencinecam.storage.DestinationFallback.DRIVE_NOT_CONNECTED, driveLabel = "WD Elements"),
+            rawVideoProfile = com.librestatic.opencinecam.RawQualificationTarget(drive = false),
+            rawVideoLeftOut = listOf(
+                driverLeftOut(4080, 3060, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
+                driverLeftOut(3840, 2160, 60, com.librestatic.opencinecam.RawVideoLeftOutReason.HEAT),
+            ))
+    }
+    SettingsScreen(state, settings, audioPermissionGranted = true, onRequestAudioPermission = {}, onOpenAbout = {},
         onSettingsChange = { settings = it }, onSelectRawVideoConfig = { key -> settings = settings.copy(rawVideoConfig = key) },
         onRequalifyRawVideo = {})
 }

@@ -79,6 +79,24 @@ data class RawVideoConfigOption(
     }
 }
 
+/** Why a judged RAW video configuration is not offered ([RawVideoLeftOutOption]), as the chooser and Settings say it. */
+enum class RawVideoLeftOutReason {
+    /** The run failed or was skipped because the phone was too hot: cooling down and qualifying again may pass it. */
+    HEAT,
+    /** The camera does not deliver RAW at this frame rate. */
+    CAMERA_LIMIT,
+    /** The storage could not keep up, as its sweep alone showed. */
+    STORAGE,
+    /** Any other failure or skip. */
+    NOT_QUALIFIED,
+}
+
+/**
+ * A RAW video configuration the qualification of the shown storage judged but the chooser does not offer: [option]
+ * carries its key, label, crop and block-pack facts (never chosen), [fps] its target rate and [reason] why it is out.
+ */
+data class RawVideoLeftOutOption(val option: RawVideoConfigOption, val fps: Int, val reason: RawVideoLeftOutReason)
+
 /**
  * The stable key of a RAW video configuration on one camera: `full@30` for the whole sensor, or
  * `1920x1080@60` for a centre crop, with [BLOCK_PACK_SUFFIX] (`full@30+bp`) for the block-pack

@@ -140,6 +140,21 @@ internal fun rawQualificationTarget(resolved: ResolvedRecordingDestination, driv
 }
 
 /**
+ * Which storage's qualification the RAW chooser shows ([com.librestatic.opencinecam.CameraUiState.rawVideoProfile]),
+ * read from [gateDestinationId], the destination id the gate was just computed for, so the two never disagree: a drive
+ * when it is a drive's (named [driveLabel] when it is the drive [next] configures or resolves to), the phone when a
+ * drive is configured but the gate reads the phone's records, and null with no drive configured.
+ */
+internal fun rawVideoProfile(gateDestinationId: String, next: ResolvedRecordingDestination, driveLabel: String?): RawQualificationTarget? = when {
+    gateDestinationId.startsWith(RawVideoQualificationStore.DESTINATION_SAF_PREFIX) -> {
+        val sameDrive = listOf(next.configured, next.destination).any { rawDestinationId(it).equals(gateDestinationId, ignoreCase = true) }
+        RawQualificationTarget(drive = true, driveLabel = driveLabel?.takeIf { sameDrive && it.isNotBlank() })
+    }
+    next.configured is RecordingDestination.UsbFolder -> RawQualificationTarget(drive = false)
+    else -> null
+}
+
+/**
  * A volume leaving ends only a running take on that same drive; a phone take, or one on another drive, carries on. A
  * Leaving emitted ([emission]) before the take's destination was resolved ([takeVolumeEvents] events emitted then) is
  * about an older mount: the drive mounted again before the take saw it, so the take carries on too.

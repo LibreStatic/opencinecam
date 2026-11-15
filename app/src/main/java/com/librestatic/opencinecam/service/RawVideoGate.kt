@@ -4,7 +4,12 @@
 package com.librestatic.opencinecam.service
 
 import com.librestatic.opencinecam.ModeGateState
+import com.librestatic.opencinecam.RawQualificationItemStatus
 import com.librestatic.opencinecam.RawVideoConfigKeys
+import com.librestatic.opencinecam.RawVideoConfigOption
+import com.librestatic.opencinecam.RawVideoLeftOutOption
+import com.librestatic.opencinecam.RawVideoLeftOutReason
+import com.librestatic.opencinecam.rawQualificationRunStatus
 import com.librestatic.opencinecam.camera.RawThroughputBenchmark
 import com.librestatic.opencinecam.camera.RawVideoConfig
 import com.librestatic.opencinecam.camera.RawVideoQualificationRecord
@@ -71,9 +76,67 @@ internal fun rawVideoUsableConfigs(
                 .mapTo(mutableSetOf()) { it.copy(encoding = RawVideoConfig.ENCODING_RAW10) }
             usable.filterNot { it.encoding == RawVideoConfig.ENCODING_LJ92 && it.copy(encoding = RawVideoConfig.ENCODING_RAW10) in blockPack }
         }
-        .sortedWith(compareByDescending<RawVideoConfig> { it.streamBytesPerSecond }.thenByDescending { it.fps }.thenBy { it.isCompressed }
-            .thenBy { RawVideoConfig.COMPRESSED_ENCODINGS.indexOf(it.encoding) })
+        .sortedWith(RAW_VIDEO_CONFIG_ORDER)
 }
+
+/** The order the RAW chooser lists configurations in: highest data rate, then frame rate, uncompressed before compressed. */
+private val RAW_VIDEO_CONFIG_ORDER: Comparator<RawVideoConfig> =
+    compareByDescending<RawVideoConfig> { it.streamBytesPerSecond }.thenByDescending { it.fps }.thenBy { it.isCompressed }
+        .thenBy { RawVideoConfig.COMPRESSED_ENCODINGS.indexOf(it.encoding) }
+
+/** A configuration the qualification judged but the chooser cannot offer, with the result-row [status] that explains why. */
+internal data class RawVideoLeftOutConfig(val config: RawVideoConfig, val status: RawQualificationItemStatus)
+
+/**
+ * The configurations of [cameraId] the qualification on [destinationId] judged that are not [usable], each with
+ * why ([rawQualificationRunStatus] of its newest record among [current], already limited to this build and protocol),
+ * in the chooser's order ([rawVideoUsableConfigs]). Only records at a RAW10 size the camera still advertises
+ * ([raw10Sizes]) and of RAW10 or block-pack count (LJ92 and unknown encodings are ignored), and a usable key is never
+ * left out. A record that reads PASSED or RISKY but is not usable is a compressed configuration whose uncompressed twin
+ * failed for the camera, or whose codec is missing: it takes the twin's newest status when that one is a failure, and
+ * is omitted otherwise. Skips are stored as UNKNOWN verdicts whose reason is the skip's (`thermal-skip`,
+ * `insufficient-space`), so they classify the same way. Display only: the gate and selection never read it.
+ */
+internal fun rawVideoLeftOutConfigs(
+    cameraId: String,
+    raw10Sizes: List<Pair<Int, Int>>,
+    current: List<RawVideoQualificationRecord>,
+    destinationId: String,
+    usable: List<RawVideoConfig>,
+): List<RawVideoLeftOutConfig> {
+    val usableKeys = usable.mapTo(mutableSetOf(), RawVideoConfigKeys::key)
+    val newest = current
+        .filter { it.destinationId == destinationId && it.config.cameraId == cameraId && (it.config.sensorWidth to it.config.sensorHeight) in raw10Sizes }
+        .groupBy { it.config }
+        .mapValues { (_, records) -> records.maxBy(RawVideoQualificationRecord::measuredAtEpochMs) }
+    fun statusOf(record: RawVideoQualificationRecord): RawQualificationItemStatus =
+        rawQualificationRunStatus(record.qualification.status.name, record.qualification.reasonCode, record.qualification.reasonCodes)
+    fun usableStatus(status: RawQualificationItemStatus) = status == RawQualificationItemStatus.PASSED || status == RawQualificationItemStatus.RISKY
+    return newest.values
+        .filter { it.config.encoding == RawVideoConfig.ENCODING_RAW10 || it.config.encoding == RawVideoConfig.ENCODING_BLOCK_PACK }
+        .filter { RawVideoConfigKeys.key(it.config) !in usableKeys }
+        .mapNotNull { record ->
+            val own = statusOf(record)
+            val status = if (!usableStatus(own)) own
+                else if (record.config.isCompressed) newest[record.config.copy(encoding = RawVideoConfig.ENCODING_RAW10)]?.let(::statusOf)?.takeUnless(::usableStatus)
+                else null
+            status?.let { RawVideoLeftOutConfig(record.config, it) }
+        }
+        .sortedWith(compareBy(RAW_VIDEO_CONFIG_ORDER) { it.config })
+        .distinctBy { RawVideoConfigKeys.key(it.config) }
+}
+
+/** What the chooser says about a left-out configuration's [status]: heat, the camera's rate, the storage, or not qualified. */
+internal fun rawVideoLeftOutReason(status: RawQualificationItemStatus): RawVideoLeftOutReason = when (status) {
+    RawQualificationItemStatus.SKIPPED_HEAT -> RawVideoLeftOutReason.HEAT
+    RawQualificationItemStatus.CAMERA_LIMIT -> RawVideoLeftOutReason.CAMERA_LIMIT
+    RawQualificationItemStatus.STORAGE_LIMIT -> RawVideoLeftOutReason.STORAGE
+    else -> RawVideoLeftOutReason.NOT_QUALIFIED
+}
+
+/** [leftOut] as [com.librestatic.opencinecam.CameraUiState.rawVideoLeftOut] lists it. */
+internal fun rawVideoLeftOutOptions(leftOut: List<RawVideoLeftOutConfig>): List<RawVideoLeftOutOption> =
+    leftOut.map { RawVideoLeftOutOption(RawVideoConfigOption.of(it.config), it.config.fps, rawVideoLeftOutReason(it.status)) }
 
 /**
  * PLAN-071 decision 10, the RAW_VIDEO gate of one camera: UNSUPPORTED without a RAW10 output,

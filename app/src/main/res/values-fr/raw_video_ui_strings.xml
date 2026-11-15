@@ -38,4 +38,8 @@
     <string name="raw_compression_lossless">Sans perte</string>
     <string name="raw_video_label_near_lossless">Quasi sans perte</string>
     <string name="raw_compression_help">S’applique aux configurations compressées. Sans perte conserve chaque valeur fournie par le capteur. Quasi sans perte regroupe les valeurs qui diffèrent de moins d’environ la moitié du bruit du capteur à l’ISO de l’image : l’écart reste caché dans le bruit et les fichiers sont encore plus petits, surtout en basse lumière. Les deux s’ouvrent dans la galerie, l’export CinemaDNG et les outils de bureau. Le temps restant suppose le même rapport prudent pour les deux.</string>
+    <string name="raw_video_profile_phone">Qualifiées sur le stockage du téléphone</string>
+    <string name="raw_video_profile_drive">Qualifiées sur le disque USB %1$s</string>
+    <string name="raw_video_profile_drive_unnamed">Qualifiées sur le disque USB</string>
+    <string name="raw_video_left_out_title">NON DISPONIBLES</string>
 </resources>

@@ -38,4 +38,8 @@
     <string name="raw_compression_lossless">Sin pérdida</string>
     <string name="raw_video_label_near_lossless">Casi sin pérdida</string>
     <string name="raw_compression_help">Se aplica a las configuraciones comprimidas. Sin pérdida conserva cada valor que entrega el sensor. Casi sin pérdida une valores que difieren menos que aproximadamente la mitad del ruido del sensor en el ISO del fotograma, así que la diferencia queda oculta en el ruido y los archivos ocupan todavía menos, sobre todo con poca luz. Ambos se abren en la galería, en la exportación CinemaDNG y en las herramientas de escritorio. El tiempo restante supone la misma relación prudente para los dos.</string>
+    <string name="raw_video_profile_phone">Calificadas en el almacenamiento del teléfono</string>
+    <string name="raw_video_profile_drive">Calificadas en la unidad USB %1$s</string>
+    <string name="raw_video_profile_drive_unnamed">Calificadas en la unidad USB</string>
+    <string name="raw_video_left_out_title">NO DISPONIBLES</string>
 </resources>
