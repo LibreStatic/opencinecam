@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.core.net.toUri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Size
@@ -47,6 +48,17 @@ class LocalMediaRepository(context: Context) {
             readTake = { namespace, candidate, onEncoding ->
                 readTake(namespace, candidate, onEncoding = onEncoding, rowsOf = batch::rows) })
     }
+
+    /**
+     * Changes whenever MediaStore changes on any volume, a volume comes or goes, or another recording drive is chosen:
+     * a gallery list read under the same token is still current. Null below Android 11, where MediaStore has no
+     * generation, and on any failure: the list is then read again.
+     */
+    fun freshness(): Any? = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) null else runCatching {
+        MediaStore.getExternalVolumeNames(context).sorted().map { volume ->
+            Triple(volume, MediaStore.getVersion(context, volume), MediaStore.getGeneration(context, volume))
+        } to RecordingDestinationStore(context).configured()
+    }.getOrNull()
 
     /** A drive file has no MediaStore thumbnail: it is decoded from the file, through a disk cache. */
     fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = runCatching {

@@ -133,7 +133,8 @@ class GalleryNavigationDeviceTest {
             for (uri in related.map(Uri::parse)+original) context.contentResolver.query(uri,arrayOf("_id"),null,null,null)!!.use { assertFalse(it.moveToFirst()) }
             compose.onNodeWithTag("media-delete-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-delete-dialog",useUnmergedTree = true).assertDoesNotExist()
-            compose.waitUntil(15_000) { compose.onAllNodesWithTag("gallery-loading").fetchSemanticsNodes().isEmpty() }
+            // The list read before the delete stays up, under the refresh spinner, until the catalog is read again.
+            compose.waitUntil(15_000) { listOf("gallery-loading", "gallery-refreshing").all { compose.onAllNodesWithTag(it).fetchSemanticsNodes().isEmpty() } }
             compose.onNodeWithTag("gallery-take-${take.id}").assertDoesNotExist()
             assertTrue(LocalMediaRepository(context).page(GallerySettings(),token).takes.isEmpty())
             compose.runOnIdle {

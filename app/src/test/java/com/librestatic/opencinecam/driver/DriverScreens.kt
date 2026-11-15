@@ -121,6 +121,7 @@ import com.librestatic.opencinecam.TakeTechnicalDetails
 import com.librestatic.opencinecam.buildTakeDetails
 import com.librestatic.opencinecam.detailText
 import org.robolectric.RuntimeEnvironment
+import com.librestatic.opencinecam.GalleryCatalogCache
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
@@ -1401,6 +1402,27 @@ fun GalleryLoading() = GalleryWith(object : MediaCatalogSource {
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = null
 })
 
+/**
+ * The gallery reopened after something changed: the list read on the last visit stays while the catalog is read again,
+ * and the refresh key is the spinner (`gallery-refreshing`).
+ */
+@Composable
+fun GalleryRefreshing() {
+    val catalog = remember { FakeCatalog(SampleTakes) }
+    val cache = remember {
+        GalleryCatalogCache().apply {
+            val settings = GallerySettings()
+            this[GalleryCatalogCache.Key(settings.kind, settings.newestFirst, settings.goodTakesOnly, "")] = GalleryCatalogCache.Entry(
+                SampleTakes.map { it.take }, null, SampleTakes.mapNotNull { sample -> sample.encoding?.let { sample.take.id to it } }.toMap(),
+                token = null, generation = -1)
+        }
+    }
+    GalleryWith(object : MediaCatalogSource by catalog {
+        override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage =
+            awaitCancellation()
+    }, cache = cache)
+}
+
 /** The media catalog after MediaStore failed to answer. */
 @Composable
 fun GalleryError() = GalleryWith(object : MediaCatalogSource {
@@ -1500,10 +1522,10 @@ private fun CaptureChrome(
 
 @Composable
 internal fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null,
-    exports: CinemaDngExportControl? = null) = DriverTheme {
+    exports: CinemaDngExportControl? = null, cache: GalleryCatalogCache? = null) = DriverTheme {
     MediaCatalogContent(GallerySettings(), onSettings = {}, source = source, onShare = {}, onDelete = {},
         onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection,
-        exports = exports, onExport = {}, onOpen = {})
+        exports = exports, onExport = {}, cache = cache ?: remember(source) { GalleryCatalogCache() }, onOpen = {})
 }
 
 internal class FakeCatalog(private val takes: List<SampleTake>,
