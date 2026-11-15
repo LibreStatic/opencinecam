@@ -94,9 +94,12 @@ Encodings:
   columns, component 1 the odd ones), precision `P = 10`, point transform 0, no
   restart interval and one Huffman table shared by both components. Any T.81
   predictor 1..7 is allowed; OpenCineCam writes predictor 1 with a per-strip
-  optimal Huffman table. Each strip can be stored unchanged as a DNG tile with
-  `Compression = 7`, `TileWidth = width` and `TileLength` = the first strip's
-  rows.
+  optimal Huffman table. A frame whose strips all have the same row count, a
+  multiple of 16, can be stored unchanged as DNG tiles with `Compression = 7`,
+  `TileWidth = width` and `TileLength` = that row count. Any other LJ92 frame
+  (a shorter last strip, as recorded takes have) is decoded first: DaVinci
+  Resolve shows a DNG with a short edge tile, or a `TileLength` that is not a
+  multiple of 16, as "Media Offline".
 - `2` Bayer block-pack: the same container, each strip a same-colour delta,
   16-sample block stream. Its exact layout is specified in
   `native-pipeline/include/opencinecam/raw_codecs.h`. OpenCineCam records it
@@ -114,7 +117,9 @@ concatenated in that order. Strips are horizontal bands of whole rows, top to
 bottom, and their rows add up to the height. Every strip but the last has the
 same row count, `ceil(height / strips)` rounded up to a multiple of 16 (or the
 whole height when that is taller), so it maps to DNG tiles; the last strip
-holds the remaining rows; every strip has an even row count. The byte lengths
+holds the remaining rows; every strip has an even row count. (The CinemaDNG
+export's own LJ92 encoder pads the last strip instead: see
+`CinemaDngWriter`.) The byte lengths
 consume the frame data exactly. `raw_codecs.h` lists the checks a decoder
 applies (an unused high nibble is 0, each stream is consumed exactly, samples
 are 0..1023, and so on); a frame that fails them is malformed, but the chunk

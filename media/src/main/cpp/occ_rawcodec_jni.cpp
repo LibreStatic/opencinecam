@@ -74,11 +74,13 @@ bool read_quant(JNIEnv* env, jobject buffer, QuantTables* tables, EncodeOptions*
   return true;
 }
 
-EncodeOptions options_of(jint strips, jint predictor, jboolean optimal, jint kernel) {
+EncodeOptions options_of(jint strips, jint predictor, jboolean optimal, jboolean full_tiles,
+                         jint kernel) {
   EncodeOptions options;
   options.strips = strips;
   options.lj92_predictor = predictor;
   options.lj92_optimal_huffman = optimal == JNI_TRUE;
+  options.lj92_full_tiles = full_tiles == JNI_TRUE;
   options.kernel = kernel == 1 ? Kernel::kScalar : kernel == 2 ? Kernel::kNeon : Kernel::kAuto;
   return options;
 }
@@ -110,10 +112,10 @@ Java_com_librestatic_opencinecam_media_raw_RawCodecJni_nativeDestroyPool(JNIEnv*
 JNIEXPORT jlong JNICALL
 Java_com_librestatic_opencinecam_media_raw_RawCodecJni_nativeMaxEncodedSize(
     JNIEnv*, jclass, jint codec, jint width, jint height, jint strips, jint predictor,
-    jboolean optimal) {
+    jboolean optimal, jboolean full_tiles) {
   if (!valid_codec(codec)) return 0;
   return static_cast<jlong>(opencinecam::rawcodec::max_encoded_size(
-      static_cast<Codec>(codec), width, height, options_of(strips, predictor, optimal, 0)));
+      static_cast<Codec>(codec), width, height, options_of(strips, predictor, optimal, full_tiles, 0)));
 }
 
 // Returns the encoded size, 0 when it did not fit, or -1 for invalid arguments.
@@ -123,13 +125,13 @@ JNIEXPORT jint JNICALL
 Java_com_librestatic_opencinecam_media_raw_RawCodecJni_nativeEncode(
     JNIEnv* env, jclass, jlong pool, jint codec, jobject src, jint src_offset, jint width,
     jint height, jint row_bytes, jobject dst, jint dst_offset, jint dst_capacity, jint strips,
-    jint predictor, jboolean optimal, jint kernel, jobject quant) {
+    jint predictor, jboolean optimal, jboolean full_tiles, jint kernel, jobject quant) {
   if (!valid_codec(codec) || width <= 0 || height <= 0 || row_bytes <= 0) return -1;
   const uint8_t* in =
       direct_range(env, src, src_offset, static_cast<jlong>(row_bytes) * height);
   uint8_t* out = direct_range(env, dst, dst_offset, dst_capacity);
   if (in == nullptr || out == nullptr) return -1;
-  EncodeOptions options = options_of(strips, predictor, optimal, kernel);
+  EncodeOptions options = options_of(strips, predictor, optimal, full_tiles, kernel);
   QuantTables tables;
   if (codec == static_cast<jint>(Codec::kBlockPackQuantised) &&
       !read_quant(env, quant, &tables, &options)) {

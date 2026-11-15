@@ -51,7 +51,7 @@ class CinemaDngGoldenTest {
     @Test
     fun goldenFolderHoldsTheExpectedFiles() {
         // Frame 5 has an unknown encoding, so the converter leaves a gap in the numbering.
-        val names = (listOf(0, 1, 2, 3, 4, 6).map { CinemaDngWriter.fileName(TAKE, it) } + "$TAKE.wav").sorted()
+        val names = (listOf(0, 1, 2, 3, 4, 6, 7).map { CinemaDngWriter.fileName(TAKE, it) } + "$TAKE.wav").sorted()
         assertEquals(names, expected.list()!!.sorted())
         assertEquals("A001_C001_000005.dng", CinemaDngWriter.fileName(TAKE, 5))
         assertEquals("A001_C001_1234567.dng", CinemaDngWriter.fileName(TAKE, 1_234_567))
@@ -59,8 +59,9 @@ class CinemaDngGoldenTest {
 
     @Test
     fun dngsMatchTheConverterByteForByte() = withTake { channel, index ->
-        val writer = CinemaDngWriter(channel, index, TAKE)
-        assertEquals(7, writer.frameCount)
+        // The fixture decoder stands in for the native codec on the host: it knows each fixture's source.
+        val writer = CinemaDngWriter(channel, index, TAKE, blockPackDecoderFactory = { FixtureDecoder() })
+        assertEquals(8, writer.frameCount)
         assertTrue(writer.hasFrameRate)
         for (frame in 0 until writer.frameCount) {
             val golden = File(expected, writer.fileName(frame))
@@ -71,12 +72,6 @@ class CinemaDngGoldenTest {
                 assertReason(OcrawMissingReason.UNSUPPORTED_ENCODING) { writer.sizeOf(frame) }
                 continue
             }
-            if (encoding == OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK && !NativeRawCodec.available) {
-                assertTrue(golden.exists())
-                assertFalse(writer.isConvertible(frame))
-                assertReason(OcrawMissingReason.CODEC_UNAVAILABLE) { writer.write(frame, ByteArrayOutputStream()) }
-                continue
-            }
             val bytes = golden.readBytes()
             assertTrue(writer.isConvertible(frame))
             assertTrue(writer.isSizeKnown(frame))
@@ -84,7 +79,9 @@ class CinemaDngGoldenTest {
             assertEquals("frame $frame size", bytes.size.toLong(), writer.sizeOf(frame))
             assertEquals(bytes.size.toLong(), layout.size)
             assertArrayEquals("frame $frame header", bytes.copyOf(layout.headerSize), layout.header())
-            assertEquals(if (encoding == OcrawFrameHeader.ENCODING_LJ92) 7 else 1, layout.compression)
+            // Only frame 7's LJ92 strips are full tiles; frames 1 and 4 (a short last strip, one 26-row strip) are decoded.
+            assertEquals(frame == 7, writer.isPassThrough(frame))
+            assertEquals(if (frame == 7) 7 else 1, layout.compression)
             val out = ByteArrayOutputStream()
             assertEquals(bytes.size.toLong(), writer.write(frame, out))
             assertArrayEquals("frame $frame bytes", bytes, out.toByteArray())
@@ -92,10 +89,30 @@ class CinemaDngGoldenTest {
     }
 
     @Test
-    fun rangesMatchSlicesOfTheConverterFiles() = withTake { channel, index ->
+    fun withoutTheCodecDecodedFramesAreNotConvertible() = withTake { channel, index ->
+        if (NativeRawCodec.available) return@withTake
         val writer = CinemaDngWriter(channel, index, TAKE)
+        for (frame in listOf(1, 3, 4)) {
+            assertFalse(writer.isConvertible(frame))
+            assertReason(OcrawMissingReason.CODEC_UNAVAILABLE) { writer.write(frame, ByteArrayOutputStream()) }
+        }
+        for (frame in listOf(0, 2, 6, 7)) assertTrue(writer.isConvertible(frame))
+    }
+
+    @Test
+    fun aDecoderWithoutLj92LeavesLegacyLj92FramesOut() = withTake { channel, index ->
+        CinemaDngWriter(channel, index, TAKE, blockPackDecoderFactory = { FakeBlockPackDecoder() }).use { writer ->
+            for (frame in listOf(1, 4)) {
+                assertReason(OcrawMissingReason.CODEC_UNAVAILABLE) { writer.write(frame, ByteArrayOutputStream()) }
+            }
+        }
+    }
+
+    @Test
+    fun rangesMatchSlicesOfTheConverterFiles() = withTake { channel, index ->
+        val writer = CinemaDngWriter(channel, index, TAKE, blockPackDecoderFactory = { FixtureDecoder() })
         val random = Random(71)
-        for (frame in listOf(0, 1, 2, 4, 6)) {
+        for (frame in listOf(0, 1, 2, 4, 6, 7)) {
             val bytes = File(expected, writer.fileName(frame)).readBytes()
             val size = bytes.size.toLong()
             val header = writer.layout(frame).headerSize.toLong()
@@ -231,7 +248,7 @@ class CinemaDngGoldenTest {
 
     @Test
     fun reencodedFramesHaveNoSizeUntilWritten() = withTake { channel, index ->
-        val container = File(CODEC_FIXTURES, "lj92_64x34_s8_seed1.bin").readBytes()
+        val container = File(CODEC_FIXTURES, "lj92tiles_64x34_s8_seed1.bin").readBytes()
         val encoder = object : CinemaDngWriter.Lj92Encoder {
             var fits = true
             override fun maxEncodedSize(width: Int, height: Int) = 64L * 1024
@@ -244,7 +261,7 @@ class CinemaDngGoldenTest {
         }
         val writer = CinemaDngWriter(channel, index, TAKE, lj92Encoder = encoder)
         assertFalse(writer.isSizeKnown(0))
-        assertTrue(writer.isSizeKnown(1))
+        assertTrue(writer.isSizeKnown(7))
         try {
             writer.sizeOf(0)
             fail("a re-encoded frame has no size up front")
@@ -254,10 +271,7 @@ class CinemaDngGoldenTest {
         val size = writer.write(0, out)
         val bytes = out.toByteArray()
         assertEquals(size, bytes.size.toLong())
-        // Same container as frame 1, so the same tiles; only the per-frame tags differ.
-        val passThrough = File(expected, writer.fileName(1)).readBytes()
-        val tiles = container.size - (4 + 8 * 3)
-        assertArrayEquals(passThrough.copyOfRange(passThrough.size - tiles, passThrough.size), bytes.copyOfRange(bytes.size - tiles, bytes.size))
+        assertFullTiles(bytes, container, tileLength = 16)
         val tags = readIfd0(bytes)
         assertEquals(7, tags.getValue(259))
         assertEquals(10, tags.getValue(258))
@@ -270,6 +284,131 @@ class CinemaDngGoldenTest {
         val fallback = ByteArrayOutputStream()
         writer.write(0, fallback)
         assertArrayEquals(File(expected, writer.fileName(0)).readBytes(), fallback.toByteArray())
+    }
+
+    @Test
+    fun singleStripIsPaddedToAFullTile() = withTake { channel, index ->
+        // Frame 4 is a recorded 72x26 LJ92 frame in one strip: decoded, then re-encoded as one 32-line tile.
+        val container = File(CODEC_FIXTURES, "lj92tiles_72x26_s1_seed3.bin").readBytes()
+        var input: ByteArray? = null
+        val encoder = fixedEncoder(container) { input = it }
+        CinemaDngWriter(channel, index, TAKE, lj92Encoder = encoder, blockPackDecoderFactory = { FixtureDecoder() }).use { writer ->
+            assertFalse(writer.isPassThrough(4))
+            assertFalse(writer.isSizeKnown(4))
+            val out = ByteArrayOutputStream()
+            writer.write(4, out)
+            assertArrayEquals(fixtureRaw10(72, 26, 3), input)
+            assertFullTiles(out.toByteArray(), container, tileLength = 32)
+        }
+    }
+
+    @Test
+    fun legacyLj92FramesAreDecodedThenReencoded() = withTake { channel, index ->
+        // Frame 1 was recorded in strips of 16, 16 and 2 rows: its last tile would be short.
+        val container = File(CODEC_FIXTURES, "lj92tiles_64x34_s8_seed1.bin").readBytes()
+        var input: ByteArray? = null
+        val encoder = fixedEncoder(container) { input = it }
+        val decoder = FixtureDecoder()
+        CinemaDngWriter(channel, index, TAKE, lj92Encoder = encoder, blockPackDecoderFactory = { decoder }).use { writer ->
+            assertTrue(writer.isConvertible(1))
+            assertFalse(writer.isPassThrough(1))
+            assertFalse(writer.isSizeKnown(1))
+            val out = ByteArrayOutputStream()
+            writer.write(1, out)
+            assertEquals(1, decoder.lj92Decoded)
+            assertArrayEquals(fixtureRaw10(WIDTH, HEIGHT, 1), input)
+            assertFullTiles(out.toByteArray(), container, tileLength = 16)
+            // Frame 7's strips are full tiles: copied as recorded, the encoder never sees it.
+            input = null
+            assertTrue(writer.isPassThrough(7))
+            assertTrue(writer.isSizeKnown(7))
+            val passed = ByteArrayOutputStream()
+            writer.write(7, passed)
+            assertEquals(null, input)
+            assertArrayEquals(File(expected, writer.fileName(7)).readBytes(), passed.toByteArray())
+            assertFullTiles(passed.toByteArray(), File(CODEC_FIXTURES, "lj92_64x32_s2_seed4.bin").readBytes(), tileLength = 16)
+        }
+    }
+
+    @Test
+    fun encoderOutputThatIsNotFullTilesIsRejected() = withTake { channel, index ->
+        val padded = File(CODEC_FIXTURES, "lj92tiles_64x34_s8_seed1.bin").readBytes()
+        val shortStrip = padded.copyOf().also { bytes ->
+            // Strips of 14, 18 and 2 rows: strip 0 declares 16 lines but holds 14 rows of the image.
+            ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 14).putInt(12, 18)
+        }
+        val cases = mapOf(
+            // The recorder's layout: the last strip's SOF3 declares its 2 rows, not the tile's 16.
+            "short last tile" to (0 to File(CODEC_FIXTURES, "lj92_64x34_s8_seed1.bin").readBytes()),
+            "short non-last strip" to (0 to shortStrip),
+            // One strip of 26 lines: a tile length that is not a multiple of 16.
+            "tile length 26" to (4 to File(CODEC_FIXTURES, "lj92_72x26_s1_seed3.bin").readBytes()),
+        )
+        for ((label, case) in cases) {
+            val (frame, container) = case
+            CinemaDngWriter(channel, index, TAKE, lj92Encoder = fixedEncoder(container), blockPackDecoderFactory = { FixtureDecoder() }).use { writer ->
+                try {
+                    writer.write(frame, ByteArrayOutputStream())
+                    fail("$label must be rejected")
+                } catch (error: OcrawDngException) {
+                    assertEquals(label, OcrawMissingReason.DECODE_FAILED, error.reason)
+                }
+            }
+        }
+    }
+
+    /** An encoder that always answers [container], handing what it was given to [onInput]. */
+    private fun fixedEncoder(container: ByteArray, onInput: (ByteArray) -> Unit = {}) = object : CinemaDngWriter.Lj92Encoder {
+        override fun maxEncodedSize(width: Int, height: Int) = 64L * 1024
+        override fun encode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Int {
+            onInput(ByteArray(src.remaining()).also { src.duplicate().get(it) })
+            dst.put(container)
+            return container.size
+        }
+    }
+
+    /**
+     * A DNG of LJ92 tiles holds [container]'s strips unchanged as tiles of [tileLength] rows, one per
+     * strip, every tile's SOF3 declaring [tileLength] lines.
+     */
+    private fun assertFullTiles(dng: ByteArray, container: ByteArray, tileLength: Int) {
+        val tags = readIfd0Values(dng)
+        assertEquals(listOf(7L), tags[259])
+        assertEquals(listOf(tileLength.toLong()), tags[323])
+        val height = tags.getValue(257).single()
+        val source = ByteBuffer.wrap(container).order(ByteOrder.LITTLE_ENDIAN)
+        val count = source.getInt(0)
+        assertEquals("TIFF tile count", (height + tileLength - 1) / tileLength, count.toLong())
+        val offsets = tags.getValue(324)
+        val lengths = tags.getValue(325)
+        assertEquals(count, offsets.size)
+        var at = 4 + 8 * count
+        for (i in 0 until count) {
+            val length = source.getInt(8 + 8 * i)
+            assertEquals(length.toLong(), lengths[i])
+            val tile = dng.copyOfRange(offsets[i].toInt(), (offsets[i] + lengths[i]).toInt())
+            assertArrayEquals("tile $i", container.copyOfRange(at, at + length), tile)
+            val sof3 = (0 until tile.size - 1).first { tile[it] == 0xff.toByte() && tile[it + 1] == 0xc3.toByte() }
+            assertEquals("tile $i lines", tileLength, (tile[sof3 + 5].toInt() and 0xff) shl 8 or (tile[sof3 + 6].toInt() and 0xff))
+            at += length
+        }
+    }
+
+    /** Decodes the codec fixtures in the take to their source rows, as the native codec would; no library needed. */
+    private class FixtureDecoder : CinemaDngWriter.BlockPackDecoder {
+        var lj92Decoded = 0
+
+        override fun decode(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean {
+            dst.duplicate().put(fixtureRaw10(width, height, fixtureSeed(width, height)))
+            return true
+        }
+
+        override fun decodeLj92(src: ByteBuffer, width: Int, height: Int, dst: ByteBuffer): Boolean {
+            lj92Decoded++
+            return decode(src, width, height, dst)
+        }
+
+        override fun close() = Unit
     }
 
     /** A block-pack decoder that writes a known RAW10 pattern, so host tests need no native library. */
@@ -292,7 +431,7 @@ class CinemaDngGoldenTest {
     fun blockPackFramesAreDecodedThenReencodedToLj92() = withTake { channel, index ->
         val frame = 3
         assertEquals(OcrawFrameHeader.ENCODING_BAYER_BLOCK_PACK, index.frames[frame].header?.encoding)
-        val container = File(CODEC_FIXTURES, "lj92_64x34_s8_seed1.bin").readBytes()
+        val container = File(CODEC_FIXTURES, "lj92tiles_64x34_s8_seed1.bin").readBytes()
         val decoder = FakeBlockPackDecoder()
         val encoder = object : CinemaDngWriter.Lj92Encoder {
             var fits = true
@@ -309,7 +448,7 @@ class CinemaDngGoldenTest {
         assertTrue(writer.isConvertible(frame))
         // Re-encoded like a RAW10 frame: no size until written, LJ92 pass-through frames keep theirs.
         assertFalse(writer.isSizeKnown(frame))
-        assertTrue(writer.isSizeKnown(1))
+        assertTrue(writer.isSizeKnown(7))
         try {
             writer.layout(frame)
             fail("a re-encoded block-pack frame has no size up front")
@@ -324,9 +463,7 @@ class CinemaDngGoldenTest {
         val tags = readIfd0(bytes)
         assertEquals(7, tags.getValue(259))
         assertEquals(10, tags.getValue(258))
-        val passThrough = File(expected, writer.fileName(1)).readBytes()
-        val tiles = container.size - (4 + 8 * 3)
-        assertArrayEquals(passThrough.copyOfRange(passThrough.size - tiles, passThrough.size), bytes.copyOfRange(bytes.size - tiles, bytes.size))
+        assertFullTiles(bytes, container, tileLength = 16)
         // A range is cut from the generated file.
         val part = ByteArrayOutputStream()
         writer.writeRange(frame, 10, 20, part)
@@ -422,6 +559,26 @@ class CinemaDngGoldenTest {
         }
     }
 
+    /** IFD 0 SHORT and LONG tags with all their values. */
+    private fun readIfd0Values(bytes: ByteArray): Map<Int, List<Long>> {
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val offset = buffer.getInt(4)
+        val count = buffer.getShort(offset).toInt()
+        val tags = HashMap<Int, List<Long>>()
+        for (i in 0 until count) {
+            val at = offset + 2 + 12 * i
+            val type = buffer.getShort(at + 2).toInt()
+            if (type != 3 && type != 4) continue
+            val n = buffer.getInt(at + 4)
+            val size = if (type == 3) 2 else 4
+            val start = if (n * size <= 4) at + 8 else buffer.getInt(at + 8)
+            tags[buffer.getShort(at).toInt() and 0xffff] = (0 until n).map {
+                if (type == 3) (buffer.getShort(start + 2 * it).toLong() and 0xffff) else (buffer.getInt(start + 4 * it).toLong() and 0xffffffffL)
+            }
+        }
+        return tags
+    }
+
     /** IFD 0 tags with a single SHORT or LONG value. */
     private fun readIfd0(bytes: ByteArray): Map<Int, Int> {
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -487,6 +644,45 @@ class CinemaDngGoldenTest {
             return writer.writeRawFrame(header, ByteBuffer.wrap(data), frameTs(index))
         }
 
+        /** The seed of the codec fixture of these dimensions (make_fixtures.cpp). */
+        private fun fixtureSeed(width: Int, height: Int): Int = when (width to height) {
+            64 to 34 -> 1
+            128 to 50 -> 2
+            72 to 26 -> 3
+            64 to 32 -> 4
+            else -> throw IllegalArgumentException("no fixture is ${width}x$height")
+        }
+
+        /** The source rows of a codec fixture, as fixture_samples() and pack_raw10() in make_fixtures.cpp. */
+        fun fixtureRaw10(width: Int, height: Int, seed: Int): ByteArray {
+            val samples = IntArray(width * height)
+            var state = seed
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    state = state xor (state shl 13)
+                    state = state xor (state ushr 17)
+                    state = state xor (state shl 5)
+                    val v = 64 + x * 600 / width + y * 200 / height + (state.toUInt() % 33u).toInt() - 16
+                    samples[y * width + x] = v.coerceIn(0, 1023)
+                }
+            }
+            intArrayOf(0, 1023, 512, 3).copyInto(samples)
+            samples[(height - 1) * width + width - 1] = 1023
+            samples[(height - 1) * width + width - 2] = 0
+            samples[height / 2 * width + width / 2] = 1023
+            val out = ByteArray(samples.size / 4 * 5)
+            for (g in 0 until samples.size / 4) {
+                var low = 0
+                for (k in 0 until 4) {
+                    val s = samples[4 * g + k]
+                    out[5 * g + k] = (s shr 2).toByte()
+                    low = low or ((s and 3) shl (2 * k))
+                }
+                out[5 * g + 4] = low.toByte()
+            }
+            return out
+        }
+
         private fun writeAudio(writer: OcrawStreamWriter, ticks: Long, samples: Int, first: Int, oddByte: Boolean = false) {
             val buffer = ByteBuffer.allocate(samples * 2 + if (oddByte) 1 else 0).order(ByteOrder.LITTLE_ENDIAN)
             repeat(samples) { buffer.putShort(((first + it) * 37 % 60_000 - 30_000).toShort()) }
@@ -495,8 +691,9 @@ class CinemaDngGoldenTest {
         }
 
         /**
-         * The golden take: 64x34 frames (RAW10, LJ92 with three strips, block-pack, a 72x26
-         * LJ92 frame with one strip, an unknown encoding), late frame metadata, and 8 kHz mono
+         * The golden take: 64x34 frames (RAW10, LJ92 with three strips, the last short, so
+         * decoded; block-pack; a 72x26 LJ92 frame with one 26-row strip, decoded too; an unknown
+         * encoding; a 64x32 LJ92 frame of two full 16-row tiles, passed through), late frame metadata, and 8 kHz mono
          * audio that starts before the first frame, overlaps, has a gap, a partial sample frame
          * and arrives out of time order.
          */
@@ -522,6 +719,7 @@ class CinemaDngGoldenTest {
                 writeEncoded(writer, 5, 9, null, WIDTH, HEIGHT)
                 val f6 = writeRaw10(writer, 6)
                 writer.writeFrameMetadata(f4, mapOf("neutral" to "1/2 1/1 3/4"))
+                writeEncoded(writer, 7, OcrawFrameHeader.ENCODING_LJ92, "lj92_64x32_s2_seed4", WIDTH, 32)
                 writer.writeFrameMetadata(f6, mapOf("blackLevel" to "60 62 63 66", "exposureNs" to "41666667"))
                 writer.writeMetadata(mapOf("audioDroppedSamples" to "0", "audioTimestampBacked" to "true"))
                 writer.finish()

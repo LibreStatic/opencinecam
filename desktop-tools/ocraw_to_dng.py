@@ -10,7 +10,8 @@ Each DNG is a little-endian TIFF with a single image IFD holding the CFA
 mosaic, plus an EXIF IFD for exposure time and ISO. RAW10 (encoding 0),
 block-pack (encoding 2) and quantised block-pack (encoding 3, decoded to its
 reconstructed DN) frames are decoded and stored as uncompressed 16-bit strips; LJ92 (encoding 1) strips are stored unchanged as lossless JPEG tiles
-(Compression 7).
+(Compression 7) when they already are full tiles (every strip the same rows, a
+multiple of 16); other LJ92 frames are decoded and stored uncompressed too.
 Colour data come from the take's static METADATA chunks and, per frame, from
 the FRAME_METADATA chunk whose `sequence` names the RAW_FRAME's chunk sequence.
 The wire contract is docs/formats/opencine-raw-v1.md.
@@ -161,31 +162,200 @@ def parse_strips(data: bytes, height: int) -> list[tuple[int, bytes]]:
     return strips
 
 
-def decode_lj92(header: dict, data: bytes, use_numpy: bool) -> Encoded:
-    """Passes the LJ92 strips through unchanged as DNG Compression 7 tiles.
+def lj92_strips_are_tiles(rows: list[int]) -> bool:
+    """True when LJ92 strips of these rows can be stored as DNG tiles unchanged.
+
+    TIFF wants every tile TileLength tall, edge tiles included, and TileLength a
+    multiple of 16; DaVinci Resolve shows a clip whose last tile is short as
+    offline. A recorded strip's JPEG declares only its own rows, so its strips
+    pass through only when they all have the same rows, a multiple of 16.
+    """
+    return rows[0] % 16 == 0 and all(r == rows[0] for r in rows)
+
+
+def decode_lj92(header: dict, data: bytes, use_numpy: bool) -> "bytes | Encoded":
+    """Passes LJ92 strips that are full tiles through as DNG Compression 7 tiles.
 
     Each strip is a complete SOF3 stream in DNG CFA layout (width / 2 columns,
     two components), which is how DNG stores lossless JPEG, so no pixel is
     decoded here. Each strip becomes one full-width tile: LibRaw reads
     multi-part lossless JPEG DNGs only from tiles (with strips it decodes the
-    first one alone). TileLength is the first strip's rows; the last tile's
-    JPEG holds only the rows left in the image, the rest of the tile being
-    outside it. BitsPerSample is the JPEG precision, 10.
+    first one alone). TileLength is the strips' rows. BitsPerSample is the JPEG
+    precision, 10.
+
+    Other layouts (a short last strip, or one strip whose rows are not a
+    multiple of 16; see lj92_strips_are_tiles) are decoded to samples, which the
+    DNG stores uncompressed. That decoder is pure Python and slow on full-size
+    frames; such frames come only from takes recorded before the rule.
     """
-    if header["width"] % 2:
+    width = int(header["width"])
+    if width % 2:
         raise ValueError("LJ92 frame width must be even")
     strips = parse_strips(data, int(header["height"]))
-    rows_per_strip = strips[0][0]
-    if any(rows != rows_per_strip for rows, _ in strips[:-1]) or strips[-1][0] > rows_per_strip:
-        raise ValueError("LJ92 strips do not have a uniform height")
+    tile_length = strips[0][0]
+    if lj92_strips_are_tiles([rows for rows, _ in strips]):
+        for index, (_, stream) in enumerate(strips):
+            _check_sof3(stream, tile_length, width, index)
+        return Encoded(compression=7, bits_per_sample=LJ92_PRECISION, rows_per_part=tile_length,
+                       parts=[stream for _, stream in strips], tiled=True)
+    if width % 4:
+        # As the RAW10 rows the device decodes into.
+        raise ValueError("LJ92 frame width must be a multiple of 4 to decode")
+    # As the reference decoder: the last strip may also declare a full tile of lines.
+    padded = (tile_length + 15) & ~15
+    packed: list[bytes] = []
     for index, (rows, stream) in enumerate(strips):
-        _check_sof3(stream, rows, int(header["width"]), index)
-    return Encoded(compression=7, bits_per_sample=LJ92_PRECISION, rows_per_part=rows_per_strip,
-                   parts=[stream for _, stream in strips], tiled=True)
+        samples = _lj92_strip(stream, width, rows, padded if index == len(strips) - 1 else rows, index)
+        packed.append(struct.pack(f"<{len(samples)}H", *samples))
+    return b"".join(packed)
+
+
+def _huffman_lookup(counts: bytes, values: bytes, index: int) -> list[tuple[int, int] | None]:
+    """A 16-bit peek -> (code length, value) table for a T.81 Huffman table."""
+    table: list[tuple[int, int] | None] = [None] * (1 << 16)
+    code, k = 0, 0
+    for length in range(1, 17):
+        for _ in range(counts[length - 1]):
+            if code >= 1 << length:
+                raise ValueError(f"LJ92 strip {index} has an invalid Huffman table")
+            first = code << (16 - length)
+            table[first:first + (1 << (16 - length))] = [(length, values[k])] * (1 << (16 - length))
+            code += 1
+            k += 1
+        code <<= 1
+    return table
+
+
+def _lj92_predict(predictor: int, ra: int, rb: int, rc: int) -> int:
+    if predictor == 1:
+        return ra
+    if predictor == 2:
+        return rb
+    if predictor == 3:
+        return rc
+    if predictor == 4:
+        return ra + rb - rc
+    if predictor == 5:
+        return ra + ((rb - rc) >> 1)
+    if predictor == 6:
+        return rb + ((ra - rc) >> 1)
+    return (ra + rb) >> 1
+
+
+def _lj92_strip(stream: bytes, width: int, rows: int, padded_lines: int, index: int) -> list[int]:
+    """Decodes one LJ92 strip as lj92_decode_strip in raw_codecs.cpp: rows x width samples.
+
+    The SOF3 declares rows lines, or padded_lines when that is more (a strip
+    padded to a full tile; the padding rows are dropped).
+    """
+    def fail(message: str):
+        raise ValueError(f"LJ92 strip {index} {message}")
+
+    if stream[:2] != b"\xff\xd8":
+        fail("is not a JPEG stream")
+    tables: dict[int, list] = {}
+    lines = predictor = None
+    table_of = (0, 0)
+    at = 2
+    while True:
+        if len(stream) - at < 4 or stream[at] != 0xFF:
+            fail("has a malformed header")
+        marker = stream[at + 1]
+        segment = struct.unpack_from(">H", stream, at + 2)[0]
+        if segment < 2 or len(stream) - at < 2 + segment:
+            fail("has a truncated segment")
+        body = stream[at + 4:at + 2 + segment]
+        if marker == 0xC4:
+            p = 0
+            while p < len(body):
+                if len(body) - p < 17 or body[p] >> 4 or body[p] & 0x0F > 3:
+                    fail("has an invalid Huffman table")
+                counts = body[p + 1:p + 17]
+                values = body[p + 17:p + 17 + sum(counts)]
+                if sum(counts) > 17 or len(values) != sum(counts) or max(values, default=0) > 16 \
+                        or len(set(values)) != len(values):
+                    fail("has an invalid Huffman table")
+                tables[body[p] & 0x0F] = _huffman_lookup(counts, values, index)
+                p += 17 + len(values)
+        elif marker == 0xC3:
+            if segment != 14 or body[0] != LJ92_PRECISION:
+                fail("has an unsupported SOF3 frame")
+            lines, columns, components = struct.unpack_from(">HHB", body, 1)
+            if (lines != rows and not (padded_lines > rows and lines == padded_lines)) \
+                    or columns != width // 2 or components != 2:
+                fail(f"frame is {columns}x{lines}x{components}, expected {width // 2}x{rows}x2")
+        elif marker == 0xDA:
+            if lines is None or segment != 10 or body[0] != 2:
+                fail("has an unsupported scan")
+            table_of = (body[2] >> 4, body[4] >> 4)
+            predictor = body[5]
+            if any(t not in tables for t in table_of) or not 1 <= predictor <= 7 or body[7] != 0:
+                fail("has an unsupported scan")
+            at += 2 + segment
+            break
+        elif marker == 0xDD:
+            if segment != 4 or body[0] | body[1]:
+                fail("uses restart intervals")
+        elif marker in (0xD8, 0xD9) or 0xC0 <= marker <= 0xCF:
+            fail(f"has an unexpected marker {marker:#04x}")
+        at += 2 + segment
+
+    # The entropy-coded data runs to the first marker, the EOI; FF 00 is a stuffed FF.
+    end = at
+    while True:
+        end = stream.find(b"\xff", end)
+        if end < 0 or end + 1 >= len(stream):
+            fail("has no EOI")
+        if stream[end + 1] != 0:
+            break
+        end += 2
+    if stream[end:] != b"\xff\xd9":
+        fail("does not end at its EOI")
+    entropy = stream[at:end].replace(b"\xff\x00", b"\xff")
+    bits = "".join(f"{b:08b}" for b in entropy)
+    available = len(bits)
+    bits += "0" * 48
+    decoders = [tables[t] for t in table_of]
+    pos = 0
+    out: list[int] = []
+    prev: list[int] = []
+    for y in range(lines):
+        row = [0] * width
+        for i in range(width):
+            entry = decoders[i & 1][int(bits[pos:pos + 16], 2)]
+            if entry is None:
+                fail("has an invalid Huffman code")
+            length, ssss = entry
+            pos += length
+            if ssss == 16:
+                diff = 32768
+            elif ssss:
+                value = int(bits[pos:pos + ssss], 2)
+                pos += ssss
+                diff = value - (1 << ssss) + 1 if value < 1 << (ssss - 1) else value
+            else:
+                diff = 0
+            if y == 0:
+                prediction = 512 if i < 2 else row[i - 2]
+            elif i < 2:
+                prediction = prev[i]
+            else:
+                prediction = _lj92_predict(predictor, row[i - 2], prev[i], prev[i - 2])
+            sample = (prediction + diff) & 0xFFFF
+            if sample > SAMPLE_MAX:
+                fail("has a sample out of range")
+            row[i] = sample
+        if y < rows:
+            out.extend(row)
+        prev = row
+    # No bit past the data may be read, and at most 7 padding bits may be left.
+    if pos > available or available - pos > 7:
+        fail("entropy data disagrees with its lines")
+    return out
 
 
 def _check_sof3(stream: bytes, rows: int, width: int, index: int) -> None:
-    """Checks that a strip is a lossless JPEG whose frame matches the strip geometry."""
+    """Checks that a strip is a lossless JPEG whose frame is a full tile of rows lines."""
     if stream[:2] != b"\xff\xd8" or stream[-2:] != b"\xff\xd9":
         raise ValueError(f"LJ92 strip {index} is not a JPEG stream")
     at = 2
@@ -342,7 +512,8 @@ def decode_block_pack_quantised(header: dict, data: bytes, use_numpy: bool) -> b
 
 DECODERS: dict[int, Callable[[dict, bytes, bool], "bytes | Encoded"]] = {
     0: decode_raw10,
-    # LJ92 strips are already DNG lossless JPEG: stored as Compression 7 as is.
+    # LJ92 strips are already DNG lossless JPEG: stored as Compression 7 as is
+    # when they are full tiles, else decoded for the uncompressed path.
     1: decode_lj92,
     # Block-pack is decoded to 16-bit samples for the uncompressed path.
     2: decode_block_pack,

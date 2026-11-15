@@ -47,18 +47,19 @@ internal interface CinemaDngDestination {
 
 /**
  * What exporting a take would write, from the index alone: frames, how many convert, and the
- * bytes. Sizes are exact except for RAW10 and block-pack frames re-encoded to LJ92, whose size is
- * known only once encoded; those count at [LJ92_ESTIMATE] of their uncompressed DNG (LJ92 on 10-bit
- * sensor data roughly halves it; 0.6 leaves headroom). The export fails cleanly if the estimate falls short.
+ * bytes. Sizes are exact except for frames re-encoded to LJ92 (RAW10, block-pack, and LJ92 whose
+ * strips are not full tiles, see [CinemaDngWriter.isPassThrough]), whose size is known only once
+ * encoded; those count at [LJ92_ESTIMATE] of their uncompressed DNG (LJ92 on 10-bit sensor data
+ * roughly halves it; 0.6 leaves headroom). The export fails cleanly if the estimate falls short.
  */
 internal data class CinemaDngExportPlan(
     val takeName: String,
     val frames: Int,
     /** Frames that will become a DNG; the others are skipped as damaged. */
     val convertible: Int,
-    /** Exact DNG bytes of the convertible frames the LJ92 option leaves as they are (LJ92 tiles). */
+    /** Exact DNG bytes of the convertible frames the LJ92 option leaves as they are (LJ92 in full tiles). */
     val fixedBytes: Long,
-    /** Uncompressed DNG bytes of the RAW10 and block-pack frames, the ones the LJ92 option re-encodes. */
+    /** Uncompressed DNG bytes of the other frames (RAW10, block-pack, LJ92 not in full tiles), the ones the LJ92 option re-encodes. */
     val reencodedBytes: Long,
     val reencodedFrames: Int,
     /** The WAV's exact size, or null when the take has no sound. */
@@ -79,7 +80,7 @@ internal data class CinemaDngExportPlan(
     fun fits(compress: Boolean, freeBytes: Long?): Boolean = freeBytes == null || freeBytes >= bytes(compress) + SPACE_RESERVE_BYTES
 
     companion object {
-        /** Share of the uncompressed DNG size a re-encoded RAW10 or block-pack frame is assumed to take. */
+        /** Share of the uncompressed DNG size a re-encoded frame is assumed to take. */
         const val LJ92_ESTIMATE = 0.6
 
         /** Left free on the destination after the export, so the phone and the next take still have room. */
@@ -143,13 +144,16 @@ internal sealed interface CinemaDngExportOutcome {
  *   the partial folder.
  * - A corrupt audio chunk becomes silence of the same length, so the sound stays in sync.
  *
- * [lj92] re-encodes RAW10 and block-pack frames to lossless JPEG tiles. The caller owns [channel].
+ * [lj92] re-encodes RAW10, block-pack, and LJ92 frames whose strips are not full tiles, to lossless
+ * JPEG tiles. The caller owns [channel].
  */
 internal class CinemaDngExporter(
     private val channel: FileChannel,
     private val takeName: String,
     private val lj92: CinemaDngWriter.Lj92Encoder? = null,
     private val decoderThreads: Int = 1,
+    /** The writer's frame decoder; null for the native codec (see [CinemaDngWriter]). */
+    private val decoderFactory: (() -> CinemaDngWriter.BlockPackDecoder)? = null,
 ) {
     private val index: OcrawFrameIndex by lazy { OcrawStreamReader(channel, scratchBytes = OcrawFrameHeader.BYTES).indexFrames() }
 
@@ -157,7 +161,7 @@ internal class CinemaDngExporter(
     fun plan(): CinemaDngExportPlan? {
         if (index.header == null) return null
         val writer = try {
-            CinemaDngWriter(channel, index, takeName)
+            CinemaDngWriter(channel, index, takeName, blockPackDecoderFactory = decoderFactory)
         } catch (_: IllegalArgumentException) {
             return null
         }
@@ -174,12 +178,12 @@ internal class CinemaDngExporter(
                     continue
                 }
                 convertible++
-                // Without an encoder a block-pack frame is sized as its decoded, uncompressed DNG.
-                if (index.frames[frame].header?.encoding != OcrawFrameHeader.ENCODING_LJ92) {
+                // Without an encoder a frame to re-encode is sized as its decoded, uncompressed DNG.
+                if (writer.isPassThrough(frame)) {
+                    fixed += size
+                } else {
                     reencoded += size
                     reencodedFrames++
-                } else {
-                    fixed += size
                 }
             }
             val wav = if (OcrawWavWriter.hasAudio(index)) {
@@ -226,7 +230,7 @@ internal class CinemaDngExporter(
             var written = 0
             var skipped = 0
             var bytes = 0L
-            CinemaDngWriter(channel, index, takeName, lj92, decoderThreads).use { writer ->
+            CinemaDngWriter(channel, index, takeName, lj92, decoderThreads, decoderFactory).use { writer ->
                 val total = writer.frameCount
                 onProgress(CinemaDngExportProgress(0, total, 0, 0))
                 for (frame in 0 until total) {

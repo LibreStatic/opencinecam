@@ -53,12 +53,13 @@ object NativeRawCodec {
         lj92Predictor: Int = 1,
         lj92OptimalHuffman: Boolean = true,
         kernel: Kernel = Kernel.AUTO,
+        lj92FullTiles: Boolean = false,
     ): Encoder {
         check(available) { "libocc_rawcodec is not available" }
         require(threads in 1..64) { "threads must be 1..64" }
         require(strips in 1..64) { "strips must be 1..64" }
         require(lj92Predictor in 1..7) { "LJ92 predictor must be 1..7" }
-        return Encoder(codec, threads, strips, lj92Predictor, lj92OptimalHuffman, kernel)
+        return Encoder(codec, threads, strips, lj92Predictor, lj92OptimalHuffman, kernel, lj92FullTiles)
     }
 
     /**
@@ -120,6 +121,12 @@ object NativeRawCodec {
         val lj92Predictor: Int,
         val lj92OptimalHuffman: Boolean,
         val kernel: Kernel,
+        /**
+         * LJ92 only: every strip declares the full tile length, the last one padded (see
+         * `raw_codecs.h`). For a DNG writer that stores the strips as tiles; the OCRAW
+         * recorder leaves it off.
+         */
+        val lj92FullTiles: Boolean = false,
     ) : AutoCloseable {
         private var pool: Long = RawCodecJni.nativeCreatePool(threads)
 
@@ -163,7 +170,7 @@ object NativeRawCodec {
 
         /** Worst-case encoded size of a [width] x [height] frame. */
         fun maxEncodedSize(width: Int, height: Int): Long =
-            RawCodecJni.nativeMaxEncodedSize(codec.encoding, width, height, strips, lj92Predictor, lj92OptimalHuffman)
+            RawCodecJni.nativeMaxEncodedSize(codec.encoding, width, height, strips, lj92Predictor, lj92OptimalHuffman, lj92FullTiles)
 
         /**
          * Encodes the RAW10 frame at `src[position, ...)` (rows of [rowBytes], tight
@@ -180,7 +187,7 @@ object NativeRawCodec {
             check(codec != Codec.BLOCK_PACK_QUANTISED || quant != null) { "setQuantisation first" }
             val size = RawCodecJni.nativeEncode(
                 handle, codec.encoding, src, src.position(), width, height, rowBytes,
-                dst, dst.position(), dst.remaining(), strips, lj92Predictor, lj92OptimalHuffman, kernel.id, quant,
+                dst, dst.position(), dst.remaining(), strips, lj92Predictor, lj92OptimalHuffman, lj92FullTiles, kernel.id, quant,
             )
             check(size >= 0) { "native encode rejected its arguments" }
             return size
