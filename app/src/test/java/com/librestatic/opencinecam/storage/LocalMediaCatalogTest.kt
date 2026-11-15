@@ -4,6 +4,7 @@ package com.librestatic.opencinecam.storage
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.GalleryMediaKind
 import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.HARDWARE_TRUTH_SCHEMA
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.productionSlateJson
 import kotlinx.serialization.json.*
@@ -129,6 +130,13 @@ class LocalMediaCatalogTest {
         assertEquals(video.artifact, take.primary)
         assertEquals(slate, take.slate)
         assertEquals(LocalMediaKind.VIDEO, take.kind)
+    }
+    @Test fun hlgAndHardwareTruthSidecarsDeclareTheirVideo() {
+        val video = row(9, LocalMediaKind.VIDEO, recording)
+        listOf("opencinecam.hdr-video.v1", HARDWARE_TRUTH_SCHEMA).forEach { schema ->
+            val text = buildJsonObject { put("schema", schema); put("bundleId", id); put("videoUri", video.artifact.uri) }.toString()
+            assertEquals(schema, LocalMediaRelationStatus.DECLARED, catalogTake(recording, listOf(video), listOf(document(text)))?.relationStatus)
+        }
     }
     @Test fun encodingComesFromTheOcLogAndAudioSidecarsOfAValidTake() {
         val video = row(9, LocalMediaKind.VIDEO, recording)
