@@ -92,6 +92,31 @@ class MediaCatalogUiTest {
         compose.runOnIdle { assertEquals(3, calls) }
     }
 
+    @Test fun failedRefreshKeepsTheListAndRetryReplacesIt() {
+        var calls = 0
+        read = { _, _, previous ->
+            calls++
+            when (calls) {
+                1 -> LocalMediaPage(listOf(take("one")), null)
+                2 -> throw java.io.IOException("Fixture provider failed")
+                else -> { assertNull(previous); LocalMediaPage(listOf(take("two")), null) }
+            }
+        }
+        show()
+        reveal("name-one").assertTextEquals(title("one"))
+        reveal("refresh").performClick()
+        // The read again failed before its first page: the last list stays up under the error, not an empty one.
+        reveal("error").assertTextEquals(text(R.string.gallery_load_failed))
+        reveal("name-one").assertTextEquals(title("one"))
+        node("empty").assertDoesNotExist()
+        // A retry reads from the first page, so a take gone since then leaves the list.
+        reveal("retry").performClick()
+        reveal("name-two").assertTextEquals(title("two"))
+        node("name-one").assertDoesNotExist()
+        node("error").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(3, calls) }
+    }
+
     @Test fun cancelledOldSearchCannotReplaceNewResultsAndOverlongQueryIsNotSubmitted() {
         val oldEntered = CompletableDeferred<Unit>()
         val releaseOld = CompletableDeferred<Unit>()

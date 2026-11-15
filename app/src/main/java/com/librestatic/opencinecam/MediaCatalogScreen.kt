@@ -318,10 +318,14 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     val currentTask by rememberUpdatedState(task)
     val cached = cache[key]
     val reading = load.request == request && load.loading
+    val readFailed = load.request == request && load.failed
     // This request's list once it has takes or has finished; until then the last list read for this search, shown
     // while it is read again (as it is unless a newer generation or the source's token says otherwise); else nothing yet.
-    val visible = load.takeIf { it.request == request && (it.takes.isNotEmpty() || !it.loading) }
-        ?: cached?.let { GalleryLoad(request, it.takes, it.next, loading = reading || it.generation != request.generation, encodings = it.encodings) }
+    // A read that failed before its first page keeps that last list up, under the error, rather than an empty one; a
+    // retry reads from the first page again, so the list it shows never mixes the two reads.
+    val visible = load.takeIf { it.request == request && (it.takes.isNotEmpty() || (!it.loading && !(it.failed && cached != null))) }
+        ?: cached?.let { GalleryLoad(request, it.takes, it.next, loading = reading || (!readFailed && it.generation != request.generation),
+            failed = readFailed && !reading, encodings = it.encodings) }
         ?: GalleryLoad(request)
     LaunchedEffect(source, task) {
         val previous = load.takeIf { it.request == request } ?: run {
