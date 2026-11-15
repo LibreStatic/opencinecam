@@ -361,7 +361,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
         } catch (failure: Exception) {
             if (currentTask == task) {
                 android.util.Log.w("MediaCatalog", "Catalog read failed; existing results retained", failure)
-                load = previous.copy(next = cursor, loading = false, failed = true, paging = false)
+                // A read that has listed nothing yet retries from its first page: a take that appeared before the
+                // empty pages it skipped would otherwise be missed. A list already shown carries on where it stopped.
+                load = previous.copy(next = if (previous.takes.isEmpty()) null else cursor, loading = false, failed = true, paging = false)
             }
         }
     }
