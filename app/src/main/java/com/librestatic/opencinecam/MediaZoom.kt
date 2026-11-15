@@ -15,6 +15,9 @@ import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -191,29 +194,60 @@ internal fun mediaZoomBoundsFit(contentWidth: Float, contentHeight: Float, areaW
     return Offset(max(0f, (contentWidth * fit * scale - areaWidth) / 2f), max(0f, (contentHeight * fit * scale - areaHeight) / 2f))
 }
 
-/** Pan bounds for a box scaled by [scale] around its centre inside itself: `size · (scale − 1) / 2` per axis. */
-internal fun mediaZoomBoundsBox(width: Float, height: Float, scale: Float): Offset {
-    val half = max(0f, scale - 1f) / 2f
-    return Offset(max(0f, width) * half, max(0f, height) * half)
+/**
+ * Pan bounds for a [width] x [height] box centred in an [areaWidth] x [areaHeight] area and scaled by [scale]
+ * around its centre: `max(0, (size · scale − area) / 2)` per axis. The box's edge never comes inside the area
+ * while it is larger, and an axis it does not overflow stays locked, so a zoomed video crops to the area.
+ */
+internal fun mediaZoomBoundsBox(width: Float, height: Float, areaWidth: Float, areaHeight: Float, scale: Float): Offset =
+    Offset(max(0f, (max(0f, width) * scale - max(0f, areaWidth)) / 2f), max(0f, (max(0f, height) * scale - max(0f, areaHeight)) / 2f))
+
+/**
+ * The zoom at which a [width] x [height] picture centred in the area covers all of it, cropping the axis
+ * that overflows; 1 while either size is unknown, never above [maxScale].
+ */
+internal fun mediaFillScale(width: Float, height: Float, areaWidth: Float, areaHeight: Float, maxScale: Float = MEDIA_MAX_ZOOM): Float {
+    if (width <= 0f || height <= 0f || areaWidth <= 0f || areaHeight <= 0f) return 1f
+    return max(areaWidth / width, areaHeight / height).coerceIn(1f, maxScale.coerceAtLeast(1f))
 }
 
 /**
  * The review stage's zoom: [pan] plus the sizes its bounds come from. [area] is the gesture area (whose
- * centre is the zoom's pivot); [content] is the picture's own pixel size when [fitContent] (a photo fitted
- * to the area), otherwise the box the picture fills (a video's fitted surface rectangle). The sizes are
- * plain fields: the owner keeps them current, and only gestures and animations read them.
+ * centre is the zoom's pivot, and which clips the picture); [content] is the picture's own pixel size when
+ * [fitContent] (a photo fitted to the area), otherwise the box the picture fills (a video's fitted rectangle,
+ * centred in the area). The owner keeps the sizes current; they are snapshot state so the fill key can follow.
  */
 internal class MediaZoomState(density: Density) {
-    var area: IntSize = IntSize.Zero
-    var content: Size = Size.Zero
-    var fitContent: Boolean = false
+    var area: IntSize by mutableStateOf(IntSize.Zero)
+    var content: Size by mutableStateOf(Size.Zero)
+    var fitContent: Boolean by mutableStateOf(false)
     val pan = ZoomPanState(density) { maxOffsets(it) }
 
     val center: Offset get() = Offset(area.width / 2f, area.height / 2f)
 
+    /** The picture's size at 1x inside the area: the fitted photo, or the video's box. */
+    val displayed: Size get() {
+        val areaWidth = area.width.toFloat()
+        val areaHeight = area.height.toFloat()
+        if (!fitContent) return content
+        if (content.width <= 0f || content.height <= 0f || areaWidth <= 0f || areaHeight <= 0f) return Size.Zero
+        val fit = min(areaWidth / content.width, areaHeight / content.height)
+        return Size(content.width * fit, content.height * fit)
+    }
+
     fun maxOffsets(scale: Float): Offset =
         if (fitContent) mediaZoomBoundsFit(content.width, content.height, area.width.toFloat(), area.height.toFloat(), scale)
-        else mediaZoomBoundsBox(content.width, content.height, scale)
+        else mediaZoomBoundsBox(content.width, content.height, area.width.toFloat(), area.height.toFloat(), scale)
+
+    /** The zoom that fills the area with the picture (see [mediaFillScale]). */
+    fun fillScale(maxScale: Float = MEDIA_MAX_ZOOM): Float =
+        displayed.let { mediaFillScale(it.width, it.height, area.width.toFloat(), area.height.toFloat(), maxScale) }
+
+    /** True when filling would crop something: the picture leaves bars of more than 1 % on some axis. */
+    val canFill: Boolean get() = fillScale() > FILL_THRESHOLD
+
+    /** True while at the fill zoom (within 1 %), wherever it is panned. */
+    val filled: Boolean get() = canFill && abs(pan.scale.value / fillScale() - 1f) < FILL_THRESHOLD - 1f
 
     /** True while away from 1x or off centre, however slightly. */
     val moved: Boolean get() = pan.scale.value != 1f || pan.offsetX.value != 0f || pan.offsetY.value != 0f
@@ -223,10 +257,21 @@ internal class MediaZoomState(density: Density) {
         if (moved) pan.zoomTo(center, 1f, null, maxScale)
     }
 
+    /** Animates to the zoom that fills the area, centred, cropping the overflowing axis; 1x when nothing would be cropped. */
+    suspend fun fill(maxScale: Float = MEDIA_MAX_ZOOM) {
+        if (!canFill) return reset(maxScale)
+        pan.zoomTo(center, fillScale(maxScale), null, maxScale)
+    }
+
     /** Double tap: back to 1x when zoomed, else to [MEDIA_DOUBLE_TAP_ZOOM] (capped) toward [position]. */
     suspend fun toggle(position: Offset, maxScale: Float = MEDIA_MAX_ZOOM) {
         if (pan.isZoomed) pan.zoomTo(center, 1f, null, maxScale)
         else pan.zoomTo(center, min(MEDIA_DOUBLE_TAP_ZOOM, maxScale), position, maxScale)
+    }
+
+    private companion object {
+        /** Bars thinner than 1 % of the area are not worth a fill, and a zoom within 1 % of the fill counts as filled. */
+        const val FILL_THRESHOLD = 1.01f
     }
 }
 

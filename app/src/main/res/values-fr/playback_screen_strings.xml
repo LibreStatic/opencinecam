@@ -6,6 +6,7 @@
     <string name="playback_screen_take_position">%1$d sur %2$d</string>
     <string name="playback_screen_take_position_more">%1$d sur %2$d+</string>
     <string name="playback_screen_fullscreen">Plein écran</string>
+    <string name="playback_screen_fill">Remplir l\'écran</string>
     <string name="playback_screen_fullscreen_exit">Quitter le plein écran</string>
     <string name="playback_screen_frame_counter">Image %1$d/%2$d</string>
     <string name="playback_screen_monitoring">LUT de monitoring</string>
