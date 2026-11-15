@@ -15,4 +15,8 @@
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>
     <string name="audio_meter_hold_value">Hold %1$s</string>
+    <string name="audio_meter_clip_input">Microphone input clipped</string>
+    <string name="audio_meter_clip_recorded">Recorded audio clipped</string>
+    <string name="audio_meter_clip_both">Microphone input and recorded audio clipped</string>
+    <string name="audio_meter_clip_help">CLIP IN: the microphone itself reached full scale, before the equaliser, AGC and gain; the recording may still sound fine. CLIP REC: the audio that is recorded reached full scale.</string>
 </resources>

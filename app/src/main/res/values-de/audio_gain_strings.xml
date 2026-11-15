@@ -7,6 +7,7 @@
     <string name="audio_gain_agc_requested">Automatische Verstärkungsregelung (AGC) anfordern</string>
     <string name="audio_gain_agc_suspended">Der manuelle Modus setzt AGC aus, auch bei 0 dB. Die AGC-Einstellung bleibt erhalten, bis der manuelle Modus deaktiviert wird.</string>
     <string name="audio_gain_agc_backend">AGC ist eine Anforderung, kein Nachweis der Anwendung. Hardware-Effekte und Software-AGC hängen vom aktiven Aufnahme-Backend und PCM-Format ab; MediaRecorder stellt diese Steuerung nicht bereit.</string>
+    <string name="audio_gain_agc_low_latency">Mit dem Eingang mit niedriger Latenz ist die AGC der Plattform nicht verfügbar; ist AGC an, wendet die App ihre Software-AGC an.</string>
     <string name="audio_gain_pending">Änderungen der Aufnahmeverstärkung sind für den nächsten Take vorgemerkt. Dieser Take behält seine übernommene Verstärkungs- und AGC-Konfiguration.</string>
     <string name="audio_gain_aac_backend">Bei AAC regelt der Encoder des Telefons die Verstärkung. Manuelle Verstärkung und automatische Pegelregelung brauchen WAV oder FLAC.</string>
     <string name="audio_gain_no_receipt">Kein aktueller Beleg über die PCM-Verstärkung. Der konfigurierte Wert ist nur eine Anforderung.</string>

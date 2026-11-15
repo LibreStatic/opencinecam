@@ -168,20 +168,21 @@ class RecordingDestinationWiringTest {
     }
 
     @Test fun theFallbackNoticeNamesItsReasonAndJoinsTheWarningLineLast() {
-        val notConnected = "USB drive not connected: recording to the phone"
         val lost = "Access to the USB drive was lost: recording to the phone"
         val starting = "USB drive starting: recording to the phone"
         val renamed = "Choose USB folder again: recording to the phone"
-        assertNull(destinationFallbackNotice(null, notConnected, lost, starting, renamed))
-        assertEquals(notConnected, destinationFallbackNotice(DestinationFallback.DRIVE_NOT_CONNECTED, notConnected, lost, starting, renamed))
-        assertEquals(lost, destinationFallbackNotice(DestinationFallback.PERMISSION_LOST, notConnected, lost, starting, renamed))
-        // A take that began while the drive was spinning up says so rather than "not connected".
-        assertEquals(starting, destinationFallbackNotice(DestinationFallback.DRIVE_STARTING, notConnected, lost, starting, renamed))
+        assertNull(destinationFallbackNotice(null, lost, starting, renamed))
+        // A drive that is just not plugged in is no warning: the destination chip already says the phone.
+        assertNull(destinationFallbackNotice(DestinationFallback.DRIVE_NOT_CONNECTED, lost, starting, renamed))
+        assertEquals(lost, destinationFallbackNotice(DestinationFallback.PERMISSION_LOST, lost, starting, renamed))
+        assertEquals(starting, destinationFallbackNotice(DestinationFallback.DRIVE_STARTING, lost, starting, renamed))
         // A drive vold mounted under another volume name says the folder must be chosen again.
-        assertEquals(renamed, destinationFallbackNotice(DestinationFallback.DRIVE_RENAMED, notConnected, lost, starting, renamed))
-        assertEquals(notConnected, recordingWarningLine(null, null, null, listOfNotNull(destinationFallbackNotice(DestinationFallback.DRIVE_NOT_CONNECTED, notConnected, lost, starting, renamed))))
-        assertEquals("Storage unknown · Cadence · $notConnected", recordingWarningLine("Storage unknown", null, null,
-            listOf("Cadence") + listOfNotNull(destinationFallbackNotice(DestinationFallback.DRIVE_NOT_CONNECTED, notConnected, lost, starting, renamed))))
+        assertEquals(renamed, destinationFallbackNotice(DestinationFallback.DRIVE_RENAMED, lost, starting, renamed))
+        assertEquals(starting, recordingWarningLine(null, null, null, listOfNotNull(destinationFallbackNotice(DestinationFallback.DRIVE_STARTING, lost, starting, renamed))))
+        assertEquals("Storage unknown · Cadence · $lost", recordingWarningLine("Storage unknown", null, null,
+            listOf("Cadence") + listOfNotNull(destinationFallbackNotice(DestinationFallback.PERMISSION_LOST, lost, starting, renamed))))
+        assertEquals("Cadence", recordingWarningLine(null, null, null,
+            listOf("Cadence") + listOfNotNull(destinationFallbackNotice(DestinationFallback.DRIVE_NOT_CONNECTED, lost, starting, renamed))))
     }
 
     @Test fun theStatusDescribesTheResolvedDestinationWithoutUris() {

@@ -124,6 +124,8 @@
     <string name="audio_source_unprocessed">Sin procesar</string>
     <string name="audio_source_voice_recognition">Reconocimiento de voz</string>
     <string name="audio_source_microphone">Micrófono estándar</string>
+    <string name="audio_source_camcorder">Videocámara</string>
+    <string name="audio_source_low_latency">Baja latencia</string>
     <string name="anamorphic">Anamórfico</string>
     <string name="anamorphic_summary">Descomprime la imagen de una lente adaptadora en la vista previa y el archivo.</string>
     <string name="anamorphic_output">Salida</string>
@@ -924,7 +926,6 @@
     <string name="stop_reason_audio_input">se desconectó la entrada de audio</string>
     <string name="stop_reason_other">se alcanzó un límite de seguridad</string>
     <string name="stop_reason_drive_disconnected">se desconectó la unidad USB</string>
-    <string name="recording_drive_fallback_not_connected">Unidad USB no conectada: grabando en el teléfono</string>
     <string name="recording_drive_fallback_starting">Unidad USB arrancando: grabando en el teléfono</string>
     <string name="recording_drive_fallback_renamed">Reelegir la carpeta USB: grabando en el teléfono</string>
     <string name="recording_drive_fallback_permission_lost">Se perdió el acceso a la unidad USB: grabando en el teléfono</string>
@@ -969,7 +970,8 @@
     <string name="recording_drive_continue_unavailable_high_speed">Seguir en el teléfono no está disponible en tomas de alta velocidad</string>
     <string name="recording_drive_continue_unavailable_raw">Esta configuración RAW no está calificada en el teléfono, así que la toma no siguió allí</string>
     <string name="recording_drive_continue_unavailable_space">No hay espacio suficiente en el teléfono para seguir la toma</string>
-    <string name="capture_destination_phone_chip">TELÉFONO</string>
+    <string name="capture_destination_usb">Almacenamiento USB</string>
+    <string name="capture_destination_internal">Memoria interna</string>
     <string name="capture_destination_drive_description">Grabando en la unidad USB</string>
     <string name="capture_destination_phone_description">Grabando en el teléfono: no se puede usar la unidad USB</string>
     <string name="runtime_notice_monitoring_reduced">Calor o poco almacenamiento: monitoreo reducido</string>
@@ -1021,6 +1023,8 @@
     <string name="caps_quirk_high_speed_physical">La captura de alta velocidad abre la cámara física que posee el modo</string>
     <string name="caps_quirk_moto_keys">Claves de cámara lenta de Motorola en las solicitudes de alta velocidad</string>
     <string name="caps_quirk_qti_raw_fps">RAW por encima del límite declarado de fps (Qualcomm)</string>
+    <string name="caps_quirk_audio_low_latency_default">Entrada de micrófono de baja latencia por defecto, con el ecualizador de este teléfono</string>
+    <string name="caps_quirk_audio_unprocessed_clips">La fuente de audio sin procesar satura; no se ofrece</string>
     <string name="caps_section_main10">Última comprobación de archivo Main10</string>
     <string name="caps_main10_none">Aún no se ha comprobado ninguna toma HLG o LOG.</string>
     <string name="caps_main10_summary">Toma %1$s, comprobada %2$s</string>

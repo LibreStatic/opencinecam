@@ -124,6 +124,8 @@
     <string name="audio_source_unprocessed">Non traité</string>
     <string name="audio_source_voice_recognition">Reconnaissance vocale</string>
     <string name="audio_source_microphone">Microphone standard</string>
+    <string name="audio_source_camcorder">Caméscope</string>
+    <string name="audio_source_low_latency">Faible latence</string>
     <string name="anamorphic">Anamorphique</string>
     <string name="anamorphic_summary">Désanamorphose un objectif adaptateur dans l\'aperçu et le fichier de sortie.</string>
     <string name="anamorphic_output">Sortie</string>
@@ -924,7 +926,6 @@
     <string name="stop_reason_audio_input">l’entrée audio a été déconnectée</string>
     <string name="stop_reason_other">une limite de sécurité a été atteinte</string>
     <string name="stop_reason_drive_disconnected">le disque USB a été déconnecté</string>
-    <string name="recording_drive_fallback_not_connected">Disque USB non connecté : enregistrement sur le téléphone</string>
     <string name="recording_drive_fallback_starting">Disque USB en démarrage : enregistrement sur le téléphone</string>
     <string name="recording_drive_fallback_renamed">Dossier USB à rechoisir : enregistrement sur le téléphone</string>
     <string name="recording_drive_fallback_permission_lost">Accès au disque USB perdu : enregistrement sur le téléphone</string>
@@ -969,7 +970,8 @@
     <string name="recording_drive_continue_unavailable_high_speed">Continuer sur le téléphone n’est pas disponible pour les prises à haute vitesse</string>
     <string name="recording_drive_continue_unavailable_raw">Cette configuration RAW n’est pas qualifiée sur le téléphone, la prise n’y a donc pas continué</string>
     <string name="recording_drive_continue_unavailable_space">Pas assez d’espace sur le téléphone pour continuer la prise</string>
-    <string name="capture_destination_phone_chip">TÉLÉPHONE</string>
+    <string name="capture_destination_usb">Stockage USB</string>
+    <string name="capture_destination_internal">Stockage interne</string>
     <string name="capture_destination_drive_description">Enregistrement sur le disque USB</string>
     <string name="capture_destination_phone_description">Enregistrement sur le téléphone : le disque USB est inutilisable</string>
     <string name="runtime_notice_monitoring_reduced">Chaleur ou stockage faible : monitoring réduit</string>
@@ -1021,6 +1023,8 @@
     <string name="caps_quirk_high_speed_physical">La capture haute vitesse ouvre la caméra physique qui possède le mode</string>
     <string name="caps_quirk_moto_keys">Clés de ralenti Motorola sur les requêtes haute vitesse</string>
     <string name="caps_quirk_qti_raw_fps">RAW au-delà de la limite de fréquence d’images déclarée (Qualcomm)</string>
+    <string name="caps_quirk_audio_low_latency_default">Entrée micro à faible latence par défaut, avec l\'égaliseur de ce téléphone</string>
+    <string name="caps_quirk_audio_unprocessed_clips">La source audio non traitée sature ; non proposée</string>
     <string name="caps_section_main10">Dernier contrôle de fichier Main10</string>
     <string name="caps_main10_none">Aucune prise HLG ou LOG n’a encore été contrôlée.</string>
     <string name="caps_main10_summary">Prise %1$s, contrôlée %2$s</string>

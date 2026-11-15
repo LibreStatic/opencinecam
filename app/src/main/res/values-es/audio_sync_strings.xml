@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Desfase de sincronía del audio</string>
+    <string name="audio_sync_offset_help">Desplaza el audio grabado respecto de la imagen, para micrófonos cuyo retardo la app no puede medir, como los Bluetooth y algunos USB. Si el sonido llega antes que la imagen, hay que mover el audio más tarde; si llega después, más temprano. Conviene comprobarlo con una palmada o una claqueta en una toma de prueba.</string>
+    <string name="audio_sync_offset_none">Sin desfase</string>
+    <string name="audio_sync_offset_later">Audio %1$d ms más tarde</string>
+    <string name="audio_sync_offset_earlier">Audio %1$d ms antes</string>
+    <string name="audio_sync_offset_minus">1 ms antes</string>
+    <string name="audio_sync_offset_plus">1 ms más tarde</string>
+    <string name="audio_sync_offset_reset">Restablecer</string>
+    <string name="audio_sync_offset_scope">Se aplica al audio incluido en el video y al video RAW. Los archivos WAV y FLAC separados no se desplazan; el desfase queda guardado en el registro de la toma.</string>
+    <string name="audio_sync_offset_pending">El nuevo desfase se aplica desde la próxima toma. Esta toma conserva el desfase con el que comenzó.</string>
+</resources>

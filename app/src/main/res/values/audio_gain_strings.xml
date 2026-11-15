@@ -7,6 +7,7 @@
     <string name="audio_gain_agc_requested">Request automatic gain control (AGC)</string>
     <string name="audio_gain_agc_suspended">Manual mode suspends AGC, including at 0 dB. The AGC preference is retained for when manual mode is disabled.</string>
     <string name="audio_gain_agc_backend">AGC is a request, not proof of application. Hardware effects and software AGC depend on the active recording backend and PCM format; MediaRecorder does not expose this control.</string>
+    <string name="audio_gain_agc_low_latency">With the low-latency input the platform AGC is not available; when AGC is on, the app applies its software AGC.</string>
     <string name="audio_gain_pending">Recording gain changes are pending for the next take. This take keeps its admitted gain and AGC configuration.</string>
     <string name="audio_gain_aac_backend">With AAC, the phone\'s encoder sets the gain. Manual gain and automatic gain control need WAV or FLAC.</string>
     <string name="audio_gain_no_receipt">No current PCM gain application receipt. The configured value is only a request.</string>

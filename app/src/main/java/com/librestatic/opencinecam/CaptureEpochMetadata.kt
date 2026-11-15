@@ -25,6 +25,8 @@ internal fun captureEpochJson(report: CaptureEpochReport): JSONObject = JSONObje
     .put("codecInputFrames", if (report.audioStorage == "EMBEDDED_AAC") Math.addExact(report.submittedPcmFrames, report.audioDrainPaddingFrames) else JSONObject.NULL)
     .put("audioPresentationOffsetUs", report.audioPresentationOffsetUs ?: JSONObject.NULL)
     .put("capturedPcmFrames", report.capturedPcmFrames)
+    // The manual sync offset the audio's placement applied (PLAN-074 decision 12); the anchors above stay measured.
+    .put("audioSyncOffsetUs", report.audioSyncOffsetUs)
     .put("sharedPause", report.sharedPause?.let { pause -> JSONObject()
         .put("policy", "SHARED_BOOTTIME_PCM_GRID_V1").put("sampleRateHz", pause.sampleRateHz)
         .put("audioFrameZeroNs", pause.audioFrameZeroNs).put("stopFrame", pause.stopFrame ?: JSONObject.NULL)

@@ -112,4 +112,51 @@ class CaptureEpochClockTest {
         assertTrue(worstCaseQueued>=OpenCineLogGpuPipeline.MIN_PENDING_MUX_SAMPLES-2)
         assertTrue(OpenCineLogGpuPipeline.maxPendingMuxSamples(60,48000,3840)>worstCaseQueued)
     }
+
+    @Test
+    fun readEstimateKeepsTheEarliestFrameZeroOfTheFirstSecond() {
+        val estimate = PcmReadEpochEstimate(48_000)
+        assertEquals(null, estimate.frameZeroNs())
+        estimate.observeRead(0, 5_000_000_000L)
+        assertEquals(null, estimate.frameZeroNs())
+        // A backlog drained late, then reads that return as their last frame arrives, one of them 4 ms late.
+        estimate.observeRead(4_800, 5_180_000_000L)
+        assertEquals(5_080_000_000L, estimate.frameZeroNs())
+        estimate.observeRead(9_600, 5_270_000_000L)
+        assertEquals(5_070_000_000L, estimate.frameZeroNs())
+        estimate.observeRead(14_400, 5_374_000_000L)
+        assertEquals(5_070_000_000L, estimate.frameZeroNs())
+        // After the window a fast audio clock no longer pulls the estimate earlier.
+        estimate.observeRead(96_000, 7_000_000_000L)
+        assertEquals(5_070_000_000L, estimate.frameZeroNs())
+    }
+
+    @Test fun theManualSyncOffsetMovesTheAudioPlacementButNotTheMeasuredAnchor() {
+        val video = 2_000_000_000L
+        // Audio measured 30 ms after the video, and 50 ms before it.
+        for (audioZero in listOf(video + 30_000_000L, video - 50_000_000L)) for (offsetMs in listOf(-200L, -20L, 0L, 40L, 300L)) {
+            val clock = CaptureEpochClock(cameraRealtime = true, sampleRateHz = 48_000, audioSyncOffsetNs = offsetMs * 1_000_000L)
+            clock.videoInput(video); clock.audioInput(AudioCaptureEpoch(audioZero, true))
+            val placed = audioZero + offsetMs * 1_000_000L
+            val origin = minOf(video, placed)
+            assertEquals("$audioZero $offsetMs", (video - origin) / 1000, clock.offsetUs(true))
+            assertEquals("$audioZero $offsetMs", (placed - origin) / 1000, clock.offsetUs(false))
+            // The audio sits offsetMs later than it would without the offset, against the video.
+            assertEquals(Math.subtractExact(audioZero, video) / 1000 + offsetMs * 1000, clock.offsetUs(false) - clock.offsetUs(true))
+            val report = clock.report(null, null, null)
+            assertEquals(audioZero, report.audioFrameZeroNs)
+            assertEquals(video, report.videoFrameZeroNs)
+            assertEquals(origin, report.sharedOriginNs)
+            assertEquals(offsetMs * 1000, report.audioSyncOffsetUs)
+            assertEquals("SHARED_BOOTTIME_CAPTURE_ANCHORS", report.policy)
+        }
+    }
+    @Test fun theManualSyncOffsetStillMovesTheAudioWithoutComparableAnchors() {
+        val later = CaptureEpochClock(cameraRealtime = false, audioSyncOffsetNs = 60_000_000L)
+        assertEquals(0L, later.offsetUs(true)); assertEquals(60_000L, later.offsetUs(false))
+        val earlier = CaptureEpochClock(cameraRealtime = false, audioSyncOffsetNs = -60_000_000L)
+        assertEquals(60_000L, earlier.offsetUs(true)); assertEquals(0L, earlier.offsetUs(false))
+        val none = CaptureEpochClock(cameraRealtime = false)
+        assertEquals(0L, none.offsetUs(true)); assertEquals(0L, none.offsetUs(false)); assertEquals(0L, none.report(null, null, null).audioSyncOffsetUs)
+    }
 }

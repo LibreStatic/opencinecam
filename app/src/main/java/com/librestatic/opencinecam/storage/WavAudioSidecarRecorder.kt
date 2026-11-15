@@ -3,6 +3,8 @@
 
 package com.librestatic.opencinecam.storage
 
+import com.librestatic.opencinecam.appliedAudioEqCurve
+import com.librestatic.opencinecam.appliedAudioEqProfileId
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.camera.offerListening
 
@@ -12,6 +14,14 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import com.librestatic.opencinecam.camera.PcmInputEvidence
+import com.librestatic.opencinecam.camera.inputEqualizerFor
+import com.librestatic.opencinecam.camera.pcmInputEvidence
+import com.librestatic.opencinecam.media.audio.PcmFormatCheck
+import com.librestatic.opencinecam.media.audio.PcmInput
+import com.librestatic.opencinecam.media.audio.PcmInputRequest
+import com.librestatic.opencinecam.media.audio.PcmInputs
+import com.librestatic.opencinecam.media.audio.audioRouting
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.AutomaticGainControl
@@ -53,7 +63,8 @@ class WavAudioSidecarRecorder private constructor(
     val uri: Uri,
     override val displayName: String,
     private val settings: CameraSettings,
-    private val audioRecord: AudioRecord,
+    private val input: PcmInput,
+    private val inputEvidence: PcmInputEvidence,
     private val descriptor: ParcelFileDescriptor,
     private val output: FileOutputStream,
     private val preferredInput: AudioDeviceInfo?,
@@ -63,12 +74,13 @@ class WavAudioSidecarRecorder private constructor(
     private val listeningSink: PcmListeningSink?,
     private val inputGuard: AudioInputRouteGuard?,
 ) : AudioSidecarRecorder {
+    override val inputFallbackReason: String? get() = inputEvidence.inputFallbackReason
     private val running = AtomicBoolean(false)
     // ADR-0037: on a drive the descriptor is registered, so a leaving drive closes it at once (vold kills a holder);
     // the writer thread then fails its next write and stops, as on ENODEV.
     private val fileCloser = CloseOnce(output, descriptor)
     private val driveHandle = DriveDescriptors.registerDocument(uri, fileCloser)
-    private val capturedSampleRateHz = audioRecord.sampleRate
+    private val capturedSampleRateHz = input.sampleRateHz
     private val captureTiming = SidecarCaptureTiming(capturedSampleRateHz, settings.audioChannels * settings.audioBitDepth.bits / 8, captureClock)
     override fun liveCaptureTiming() = runCatching { captureTiming.report() }.getOrNull()
     override val writerFailed: Boolean get() = writerFailure != null
@@ -99,6 +111,8 @@ class WavAudioSidecarRecorder private constructor(
     }.apply { add(uri) }
     private var softAgc: SoftAgc? = null
     private val levelMeter = AudioLevelMeter(settings.audioBitDepth.toMeterEncoding(), settings.audioChannels, sampleRateHz = capturedSampleRateHz)
+    // Only the writer thread runs it; null when the curve is flat, so the bytes stay untouched.
+    private val equalizer = inputEqualizerFor(settings.appliedAudioEqCurve, capturedSampleRateHz, settings.audioChannels)
 
     private var salvaging = false
     private var incompleteReasons: List<String>? = null
@@ -111,10 +125,9 @@ class WavAudioSidecarRecorder private constructor(
         output.channel.write(createWavHeader(0, settings.audioSampleRateHz, settings.audioBitDepth.bits, settings.audioChannels, settings.audioBitDepth == AudioBitDepth.PCM_FLOAT))
         attachEffects()
         startedAtElapsedNs = SystemClock.elapsedRealtimeNanos()
-        audioRecord.startRecording()
-        check(audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord did not enter RECORDING state." }
-        routedInputDeviceId = audioRecord.routedDevice?.id
-        inputGuard?.attach(audioRecord, AudioCapturePath.AUDIO_RECORD)
+        input.start()
+        routedInputDeviceId = input.routedDeviceId
+        inputGuard?.attach(input.audioRouting(context), AudioCapturePath.AUDIO_RECORD)
         running.set(true)
         writerThread = Thread(::writeLoop, "OpenCineCamWavWriter").apply { start() }
     }
@@ -182,6 +195,35 @@ class WavAudioSidecarRecorder private constructor(
             abortAfterFailure(failure)
             throw failure
         }
+    }
+
+    /**
+     * PLAN-074 decision 10: the prepared audio was appended to the take's video, so this file and its metadata go and
+     * the take publishes without them. False when nothing could be removed: the audio is still prepared and publishes
+     * beside the video.
+     */
+    @Synchronized fun withdrawPrepared(): Boolean {
+        check(preparedOutput != null && finishedResult == null && !aborted) { "Only prepared, unpublished audio withdraws" }
+        try {
+            if (!recoveryMember.withdraw()) return false
+        } catch (failure: Throwable) {
+            // Half removed: nothing of it can be published any more.
+            aborted = true
+            preparedOutput = null
+            preparedMetadataUri = null
+            throw failure
+        }
+        aborted = true
+        preparedOutput = null
+        preparedMetadataUri = null
+        return true
+    }
+
+    /** Runs [block] on the prepared WAV, opened for reading; on a drive the descriptor is released with it (ADR-0037). */
+    @Synchronized internal fun <T> readPrepared(block: (java.io.FileDescriptor) -> T): T {
+        check(preparedOutput != null && !aborted) { "The audio is not prepared" }
+        val mark = DriveDescriptors.releaseMark(uri)
+        return requireNotNull(context.contentResolver.openFileDescriptor(uri, "r")).useOnDrive(uri, mark) { block(it.fileDescriptor) }
     }
 
     @Synchronized override fun finish(success: Boolean): AudioSidecarRecordingResult? {
@@ -256,11 +298,11 @@ class WavAudioSidecarRecorder private constructor(
         val retirement = retireAudioWorkers(
             workers = listOfNotNull(writerThread),
             timeoutMs = 3_000,
-            stop = { if (audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING) audioRecord.stop() },
+            stop = { input.stop() },
             release = {
                 inputGuard?.detach()
                 releaseAudioResources(effects.map { effect -> { effect.release() } } +
-                    listOf({ audioRecord.release() }))
+                    listOf({ input.close() }))
                 effects.clear()
                 nativeRetired = true
             },
@@ -321,16 +363,18 @@ class WavAudioSidecarRecorder private constructor(
         try {
             while (running.get()) {
                 buffer.clear()
-                val read = audioRecord.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
+                val read = input.read(buffer, buffer.capacity())
                 if (read <= 0 && !running.get()) break
-                if (read == AudioRecord.ERROR_DEAD_OBJECT || read == AudioRecord.ERROR_INVALID_OPERATION || read == AudioRecord.ERROR_BAD_VALUE) {
+                if (read == PcmInput.ERROR_DEAD || read == PcmInput.ERROR_INVALID) {
                     error("AudioRecord read failed with code $read")
                 }
                 if (read <= 0) continue
+                captureTiming.readReturned(read, SystemClock.elapsedRealtimeNanos())
                 val observedAtMs = SystemClock.elapsedRealtime()
                 val observedEffects = observeEffects(observedAtMs)
                 inputGuard?.silenceIfMuted(buffer, read)
                 levelMeter.observeInput(buffer, read)
+                equalizer?.process(buffer, read, settings.audioBitDepth.toMeterEncoding())
                 when (settings.audioBitDepth) {
                     AudioBitDepth.PCM_16 -> softAgc?.processPcm16(buffer, read)
                     AudioBitDepth.PCM_24 -> softAgc?.processPcm24(buffer, read)
@@ -341,7 +385,7 @@ class WavAudioSidecarRecorder private constructor(
                 levelMeter.analyze(buffer, read, observedAtMs)?.let {
                     onAudioLevel?.invoke(it.copy(appliedRecordingGain = settings.audioRecordingGain, effects = observedEffects))
                 }
-                val retained = captureTiming.captured(audioRecord, buffer, read)
+                val retained = captureTiming.captured(input, buffer, read)
                 check(dataBytes + retained <= MAX_WAV_DATA_BYTES) { "WAV reached the 4 GiB RIFF limit." }
                 buffer.position(0)
                 buffer.limit(retained)
@@ -369,12 +413,15 @@ class WavAudioSidecarRecorder private constructor(
             return Configured(effect, advertised, failed,
                 AudioEffectObservationReader(requested, effect, advertised, failed))
         }
+        // An input without a session (the low-latency one) carries no platform effects: they read
+        // UNAVAILABLE, and software AGC stands in for the hardware one.
+        val session = input.audioSessionId
         val requestedAgc = settings.automaticGainControlEnabled
         val agc = if (settings.audioRecordingGain.enabled) {
-            val effect = createDisabledManualAgc(audioRecord.audioSessionId) { effects += it }
-            val available = runCatching { AutomaticGainControl.isAvailable() }.getOrNull()
+            val effect = session?.let { createDisabledManualAgc(it) { retained -> effects += retained } }
+            val available = if (session == null) false else runCatching { AutomaticGainControl.isAvailable() }.getOrNull()
             Configured(effect, available, false, AudioEffectObservationReader(requestedAgc, effect, available))
-        } else configure(requestedAgc, AutomaticGainControl::isAvailable) { AutomaticGainControl.create(audioRecord.audioSessionId) }
+        } else configure(requestedAgc, { session != null && AutomaticGainControl.isAvailable() }) { session?.let { AutomaticGainControl.create(it) } }
         hardwareAgcReader = agc.reader
         hasHardwareAgc = agc.effect != null
         // Float never runs SoftAgc: do not advertise a processor the writer does not execute.
@@ -383,9 +430,9 @@ class WavAudioSidecarRecorder private constructor(
             softAgc = SoftAgc(settings.audioSampleRateHz, settings.audioChannels)
         }
         effectReaders = Triple(
-            configure(settings.noiseSuppressorEnabled, NoiseSuppressor::isAvailable) { NoiseSuppressor.create(audioRecord.audioSessionId) }.reader,
+            configure(settings.noiseSuppressorEnabled, { session != null && NoiseSuppressor.isAvailable() }) { session?.let { NoiseSuppressor.create(it) } }.reader,
             if (softAgc == null) agc.reader else AudioEffectObservationReader(requestedAgc, agc.effect, agc.available, agc.failed, softwareEnabled = true),
-            configure(settings.acousticEchoCancelerEnabled, AcousticEchoCanceler::isAvailable) { AcousticEchoCanceler.create(audioRecord.audioSessionId) }.reader,
+            configure(settings.acousticEchoCancelerEnabled, { session != null && AcousticEchoCanceler.isAvailable() }) { session?.let { AcousticEchoCanceler.create(it) } }.reader,
         )
     }
 
@@ -415,6 +462,7 @@ class WavAudioSidecarRecorder private constructor(
         startedAtElapsedNs = startedAtElapsedNs,
         stoppedAtElapsedNs = stoppedAtElapsedNs,
         captureTiming = captureTiming.report(),
+        readEstimatedFrameZeroNs = captureTiming.readEstimatedFrameZeroNs(),
         preferredInputDeviceId = preferredInput?.id,
         routedInputDeviceId = routedInputDeviceId,
         source = settings.audioSource.name,
@@ -424,6 +472,7 @@ class WavAudioSidecarRecorder private constructor(
         recordingGain = settings.audioRecordingGain,
         audioEffects = lastEffects,
         audioEffectsObservedAtElapsedRealtimeMs = effectsObservedAtMs,
+        inputEvidence = inputEvidence,
     )
 
     private fun writeMetadata(result: AudioSidecarRecordingResult): Uri {
@@ -441,6 +490,8 @@ class WavAudioSidecarRecorder private constructor(
             .put("dataBytes", result.dataBytes)
             .put("startedAtElapsedRealtimeNs", result.startedAtElapsedNs)
             .put("stoppedAtElapsedRealtimeNs", result.stoppedAtElapsedNs)
+            // The manual sync offset (PLAN-074 decision 12) is recorded, not applied: this file is not shifted.
+            .put("syncOffsetMs", settings.audioSyncOffsetMs)
             .put("captureTiming", result.captureTiming?.let(::pcmSourceTimingJson) ?: JSONObject.NULL)
             .put("sharedTiming", captureClock?.report(null, null, null)?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_WAV")?.let { com.librestatic.opencinecam.captureEpochJson(it) } ?: JSONObject.NULL)
             .put("source", result.source)
@@ -452,7 +503,8 @@ class WavAudioSidecarRecorder private constructor(
             .put("recordingGain", recordingGainJson(result.recordingGain))
             .put("audioEffects", result.audioEffects?.let { audioEffectsJson(it, requireNotNull(result.audioEffectsObservedAtElapsedRealtimeMs)) } ?: JSONObject.NULL)
             .put("acousticEchoCancelerEnabled", result.acousticEchoCancelerEnabled)
-            .put("disclosure", "Public AudioRecord state; OEM signal processing outside public APIs may still exist.")
+            .putPcmInputEvidence(result.inputEvidence)
+            .put("disclosure", audioInputDisclosure(result.inputEvidence))
         incompleteReasons?.let { json.putIncompleteMarker(it) }
         val metadataName = displayName.removeSuffix(".wav") + ".audio.json"
         val resolver = context.contentResolver
@@ -507,7 +559,7 @@ class WavAudioSidecarRecorder private constructor(
             val resolver = appContext.contentResolver
             val recoveryMember = (recoveryGroup ?: RecordingCaptureRecovery.begin(appContext, destination))
                 .member(RecordingMemberKind.AUDIO)
-            var record: AudioRecord? = null
+            var record: PcmInput? = null
             var descriptor: ParcelFileDescriptor? = null
             var output: FileOutputStream? = null
             try {
@@ -515,25 +567,23 @@ class WavAudioSidecarRecorder private constructor(
                 val mask = channelMask(settings.audioChannels)
                 val minimum = AudioRecord.getMinBufferSize(settings.audioSampleRateHz, mask, settings.audioBitDepth.androidEncoding)
                 require(minimum > 0) { "Unsupported WAV configuration." }
-                record = AudioRecord.Builder()
-                    .setAudioSource(settings.audioSource.androidSource)
-                    .setAudioFormat(AudioFormat.Builder()
-                        .setSampleRate(settings.audioSampleRateHz)
-                        .setEncoding(settings.audioBitDepth.androidEncoding)
-                        .setChannelMask(mask)
-                        .build())
-                    .setBufferSizeInBytes(frameAlignedBufferBytes(minimum, settings.audioChannels * settings.audioBitDepth.bits / 8))
-                    .build()
-                check(record.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed." }
-                check(record.sampleRate == settings.audioSampleRateHz && record.channelCount == settings.audioChannels &&
-                    record.audioFormat == settings.audioBitDepth.androidEncoding) { "AudioRecord actual PCM format differs from requested lossless format." }
                 val preferred = settings.audioInputDeviceId?.let { requestedId ->
                     appContext.getSystemService(AudioManager::class.java)
                         .getDevices(AudioManager.GET_DEVICES_INPUTS)
                         .firstOrNull { it.id == requestedId }
                         ?: error("Requested audio input $requestedId is no longer connected.")
                 }
-                if (preferred != null) check(record.setPreferredDevice(preferred)) { "AudioRecord rejected audio input ${preferred.id}." }
+                val opened = PcmInputs.open(PcmInputRequest(
+                    source = settings.audioSource,
+                    sampleRateHz = settings.audioSampleRateHz,
+                    channels = settings.audioChannels,
+                    encoding = settings.audioBitDepth.androidEncoding,
+                    bufferBytes = frameAlignedBufferBytes(minimum, settings.audioChannels * settings.audioBitDepth.bits / 8),
+                    preferredDevice = preferred,
+                    formatCheck = PcmFormatCheck.EXACT,
+                ))
+                record = opened.input
+                val evidence = pcmInputEvidence(settings.audioSource.name, opened, settings.appliedAudioEqCurve, settings.appliedAudioEqProfileId)
                 descriptor = requireNotNull(resolver.openFileDescriptor(uri, "rw"))
                 val stream = FileOutputStream(descriptor.fileDescriptor).also { output = it }
                 return WavAudioSidecarRecorder(
@@ -541,7 +591,8 @@ class WavAudioSidecarRecorder private constructor(
                     uri,
                     displayName,
                     settings,
-                    record,
+                    opened.input,
+                    evidence,
                     descriptor,
                     stream,
                     preferred,
@@ -559,7 +610,7 @@ class WavAudioSidecarRecorder private constructor(
                         if (problem !== failure) failure.addSuppressed(problem)
                     }
                 }
-                cleanup { record?.release() }
+                cleanup { record?.close() }
                 cleanup { output?.close() }
                 cleanup { descriptor?.close() }
                 // The group retains ownership when native/descriptor cleanup cannot be confirmed.
@@ -575,6 +626,8 @@ class WavAudioSidecarRecorder private constructor(
 interface AudioSidecarRecorder : AutoCloseable {
     val displayName: String
     val captureClock: com.librestatic.opencinecam.camera.CaptureEpochClock? get() = null
+    /** Why the microphone open is not the low-latency input asked for, or null (PLAN-074 decision 4). */
+    val inputFallbackReason: String? get() = null
     /** A thread-safe look at the capture clocks while the take runs; null before any timestamp or when unsupported. */
     fun liveCaptureTiming(): com.librestatic.opencinecam.camera.PcmSourceTimingReport? = null
     /** The writer thread stopped on a failure (e.g. ENODEV once a USB drive is pulled); the take goes on without audio. */
@@ -618,9 +671,13 @@ data class AudioSidecarRecordingResult(
     val automaticGainControlEnabled: Boolean,
     val acousticEchoCancelerEnabled: Boolean,
     val captureTiming: com.librestatic.opencinecam.camera.PcmSourceTimingReport? = null,
+    /** Frame zero on the boot-time clock estimated from when the reads returned; null when nothing was read. */
+    val readEstimatedFrameZeroNs: Long? = null,
     val recordingGain: DigitalRecordingGain = DigitalRecordingGain(),
     val audioEffects: AudioEffectsSnapshot? = null,
     val audioEffectsObservedAtElapsedRealtimeMs: Long? = null,
+    /** PLAN-074 decision 11: the microphone path that delivered the PCM; null when not recorded. */
+    val inputEvidence: PcmInputEvidence? = null,
 )
 
 internal fun createWavHeader(

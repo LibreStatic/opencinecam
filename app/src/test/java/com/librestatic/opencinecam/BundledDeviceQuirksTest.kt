@@ -68,13 +68,16 @@ class BundledDeviceQuirksTest {
     }
 
     @Test
-    fun theRazrRearCameraGetsBothHighSpeedQuirksAndTheRawFrameRateOverride() {
+    fun theRazrRearCameraGetsBothHighSpeedQuirksTheRawFrameRateOverrideAndTheAudioInputQuirks() {
         val resolution = razr().resolve("0")
         assertEquals(ProfileStatus.ACTIVE, resolution.status)
         assertEquals(ProfileBuildCheck.VERIFIED, resolution.buildCheck)
         assertTrue(resolution.applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA))
         assertTrue(resolution.applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS))
         assertTrue(resolution.applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE))
+        assertTrue(resolution.applies(QuirkEffect.AUDIO_DEFAULT_LOW_LATENCY_INPUT))
+        assertTrue(resolution.applies(QuirkEffect.AUDIO_UNPROCESSED_SOURCE_CLIPS))
+        assertEquals(QuirkEffect.entries.toSet(), resolution.quirks.map { it.effect }.toSet())
         assertEquals(emptyList<String>(), resolution.warnings)
     }
 
@@ -85,6 +88,7 @@ class BundledDeviceQuirksTest {
         assertEquals(ProfileBuildCheck.NOT_VERIFIED_ON_THIS_BUILD, resolution.buildCheck)
         assertTrue(resolution.applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA))
         assertTrue(resolution.applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS))
+        assertTrue(resolution.applies(QuirkEffect.AUDIO_DEFAULT_LOW_LATENCY_INPUT))
         assertTrue(resolution.warnings.single().contains("not verified on this build"))
     }
 
@@ -95,6 +99,8 @@ class BundledDeviceQuirksTest {
             assertFalse(resolution.applies(QuirkEffect.HIGH_SPEED_PREFER_PHYSICAL_CAMERA))
             assertFalse(resolution.applies(QuirkEffect.MOTO_HIGH_SPEED_SESSION_KEYS))
             assertFalse(resolution.applies(QuirkEffect.QTI_RAW_FRAME_RATE_OVERRIDE))
+            assertFalse(resolution.applies(QuirkEffect.AUDIO_DEFAULT_LOW_LATENCY_INPUT))
+            assertFalse(resolution.applies(QuirkEffect.AUDIO_UNPROCESSED_SOURCE_CLIPS))
         }
     }
 

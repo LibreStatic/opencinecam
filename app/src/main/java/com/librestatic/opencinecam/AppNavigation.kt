@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 
 internal enum class AppSection { CAPTURE, MEDIA, SETTINGS }
 
-internal enum class SettingsPage { MAIN, ABOUT, CAPABILITIES, STORAGE_BENCHMARK, LENS_CALIBRATION, NETWORK_DRIVE }
+internal enum class SettingsPage { MAIN, ABOUT, CAPABILITIES, STORAGE_BENCHMARK, LENS_CALIBRATION, NETWORK_DRIVE, INPUT_EQUALIZER }
 
 /** How Media and Settings offer the way to the other sections. */
 internal enum class ShellNavigation { NONE, BOTTOM_BAR, RAIL }

@@ -16,6 +16,12 @@ enum class SettingsCategory(val title: Int, val summary: Int) {
     DIAGNOSTICS(R.string.settings_category_diagnostics, R.string.settings_summary_diagnostics),
 }
 
+/** The manual audio sync offset row; it sits in the professional audio card, after the recording gain. */
+internal const val AUDIO_SYNC_OFFSET_SETTING_ID = "audio-sync-offset"
+
+/** The input equaliser row; it sits in the professional audio card, after the sync offset, and opens its own page. */
+internal const val AUDIO_EQ_SETTING_ID = "audio-eq"
+
 data class SettingEntry(val id: String, val category: SettingsCategory, val title: Int, val keywords: String)
 
 object SettingsCatalog {
@@ -53,6 +59,8 @@ object SettingsCatalog {
         SettingEntry("audio", SettingsCategory.AUDIO, R.string.audio_recording, "mic microphone microfono permiso permission"),
         SettingEntry("audio-permission", SettingsCategory.AUDIO, R.string.grant_microphone, "mic microphone microfono permiso permission"),
         SettingEntry("audio-format", SettingsCategory.AUDIO, R.string.professional_audio, "AAC WAV FLAC PCM formato format entrada input source ganancia gain digital manual decibeles dB medidor meter VU PPM RMS peak pico balística referencia hold escucha listening auriculares headphones bluetooth altavoz speaker AGC NS AEC frecuencia sample rate profundidad depth canales channels dispositivo device bitrate"),
+        SettingEntry(AUDIO_SYNC_OFFSET_SETTING_ID, SettingsCategory.AUDIO, R.string.audio_sync_offset_title, "sync sincronia sincronizacion offset desfase retardo delay latencia latency labios lip bluetooth usb microfono microphone audio adelantar earlier atrasar later ms milisegundos milliseconds Versatz Verzogerung Latenz decalage retard latence ritardo sfasamento latenza atraso latencia deslocamento desvio"),
+        SettingEntry(AUDIO_EQ_SETTING_ID, SettingsCategory.AUDIO, R.string.input_eq_title, "eq equalizer equaliser equalisation equalization ecualizador ecualizacion equalizador equalizacao egaliseur egalisation equalizzatore equalizzazione entzerrer equalizer klang curva curve kurve courbe filtro filter filtre bell campana glocke cloche shelf shelving paso alto high pass low pass notch graves agudos bass treble aigus bassi acuti hohen tiefen spectrum espectro spektrum spectre spettro perfil profile profil profilo microfono microphone mikrofon microphone tono tone"),
         SettingEntry("burst", SettingsCategory.RECORDING, R.string.burst_count, "rafaga burst photo fotografia"),
         SettingEntry("recording-policy", SettingsCategory.RECORDING, R.string.recording_policy_title, "strict estricto adaptive adaptativo politica policy detener stop degradar degrade aviso warning termico thermal almacenamiento storage espacio space deriva drift cadencia cadence toma take"),
         SettingEntry(RECORDING_DESTINATION_SETTING_ID, SettingsCategory.RECORDING, R.string.recording_destination_title, "destination destino storage almacenamiento ssd usb usb-c drive disco unidad external externo externa exfat fat32 folder carpeta phone telefono movil memoria memory pendrive hdd grabar record save guardar"),

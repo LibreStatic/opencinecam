@@ -42,6 +42,18 @@ enum class QuirkEffect(val id: String) {
      * vendor keys that lift the limit and override the sensor frame duration to 1/fps.
      */
     QTI_RAW_FRAME_RATE_OVERRIDE("qti-raw-frame-rate-override"),
+
+    /**
+     * Default the audio input to the native low-latency input with the device's bundled equaliser
+     * profile (PLAN-074 decision 1). The quirk is read from camera "0".
+     */
+    AUDIO_DEFAULT_LOW_LATENCY_INPUT("audio-default-low-latency-input"),
+
+    /**
+     * The vendor's `UNPROCESSED` source clips before the app sees it: a stored `UNPROCESSED` loads as
+     * the low-latency input (or Camcorder), and `UNPROCESSED` is not offered (PLAN-074 decision 1).
+     */
+    AUDIO_UNPROCESSED_SOURCE_CLIPS("audio-unprocessed-source-clips"),
     ;
 
     companion object {

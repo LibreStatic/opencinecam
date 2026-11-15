@@ -51,8 +51,15 @@ A quirk names its effect by a stable id from a closed set (`QuirkEffect`):
   the physical camera that owns the high-speed mode.
 - `moto-high-speed-session-keys`: supply the Motorola slow-motion session keys
   on constrained high-speed requests.
+- `qti-raw-frame-rate-override`: run RAW video above the RAW stream's declared
+  frame-rate limit on a Qualcomm CamX HAL, through its manual-exposure vendor keys.
+- `audio-default-low-latency-input`: make the native low-latency input the
+  default audio source, with the device's bundled equaliser profile.
+- `audio-unprocessed-source-clips`: the vendor's `UNPROCESSED` source clips
+  before the app sees it; it is not offered, and a stored choice loads as the
+  low-latency input (or Camcorder without it).
 
-An id this build does not know is ignored with a warning and never applied.
+The audio effects are read from camera `0`. An id this build does not know is ignored with a warning and never applied.
 Capability rules that do not depend on device identity are not quirks.
 
 ## Policy and bundled assets

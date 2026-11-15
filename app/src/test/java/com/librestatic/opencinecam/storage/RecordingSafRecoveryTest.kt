@@ -158,6 +158,32 @@ class RecordingSafRecoveryTest {
         assertEquals(6, takeDir().list()!!.size)
     }
 
+    @Test fun aWithdrawnAudioMemberLeavesTheTakeToCommitWithItsVideoAlone() {
+        val group = journal().start(destination)
+        val video = group.member(RecordingMemberKind.VIDEO)
+        val audio = group.member(RecordingMemberKind.AUDIO)
+        val mp4 = video.insert("A001.mp4", "video/mp4", metadata = false).also { write(it, ByteArray(64) { 1 }) }
+        val wav = audio.insert("A001.wav", "audio/wav", metadata = false).also { write(it, ByteArray(16)) }
+        val audioJson = audio.insert("A001.audio.json", "application/json", metadata = true).also { write(it, "{}".toByteArray()) }
+        // Only prepared audio withdraws.
+        assertThrows(IllegalStateException::class.java) { audio.withdraw() }
+        audio.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.AUDIO, wav.toString(), "A001.wav"),
+            PreparedCaptureArtifact(CaptureArtifactRole.AUDIO_METADATA, audioJson.toString(), "A001.audio.json")))
+
+        assertTrue(audio.withdraw())
+        assertEquals(setOf("A001.mp4", SafRecordingRows.MARKER), takeDir().list()!!.toSet())
+        // Its owner's late cleanup discards nothing.
+        audio.abort()
+        assertEquals(64L, File(takeDir(), "A001.mp4").length())
+
+        video.prepared(listOf(PreparedCaptureArtifact(CaptureArtifactRole.VIDEO, mp4.toString(), "A001.mp4")))
+        video.publish(mp4, "publication failed")
+        video.published()
+        assertEquals(setOf("A001.mp4"), takeDir().list()!!.toSet())
+        assertTrue(entries().isEmpty())
+        assertEquals(RecordingRecoveryReport(), journal().recover())
+    }
+
     @Test fun preparationRequiresTheMarkerAndASecondTakeGetsItsOwnFolder() {
         val first = journal().start(destination)
         val member = first.member(RecordingMemberKind.VIDEO)

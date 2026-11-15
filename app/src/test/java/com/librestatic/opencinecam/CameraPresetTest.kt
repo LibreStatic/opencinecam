@@ -32,11 +32,19 @@ class CameraPresetTest {
         for (secret in listOf(original.id, "12345", "private script", "private cue", "audio-input-device-id", "Private Lavalier", "audio-input-key", "audio-input-loss-policy")) assertFalse(text.contains(secret))
         assertEquals(original.mode, decoded.mode); assertEquals(original.focusDiopters, decoded.focusDiopters); assertEquals(original.zoomRatio, decoded.zoomRatio)
         assertFalse(text.contains("timecode-remember-position")); assertFalse(text.contains("timecode-reset-revision"))
-        assertEquals(184, CameraPresetCodec.portableKeys.size)
+        assertEquals(186, CameraPresetCodec.portableKeys.size)
         assertFalse(text.contains("video-codec")); assertFalse(text.contains("proxy-max-long-edge")); assertFalse(text.contains("proxy-video-bitrate-mbps"))
         val memory = PresetPreferences(); CameraSettingsStore(memory).save(CameraSettings())
-        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "recording-policy-migrated-v1", "recording-policy", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "review-raw-playback", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo-mode", "video-low-light-fps", "video-fps-lock", "lens-correction-video", "lens-correction-photos", "lens-correction-alignment", "lens-lock", "smooth-lens-switch", "rotate-when-locked") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
+        assertEquals(memory.all.keys - setOf("audio-input-device-id", "audio-input-key", "audio-input-loss-policy", "audio-listening-output-device-id", "subject-script", "subject-cue", "audio-aac-log-migrated-v1", "mode-selector-carousel-migrated-v1", "recording-policy-migrated-v1", "recording-policy", "timecode-remember-position", "timecode-reset-revision", "geotagging-enabled", "proxy-max-long-edge", "proxy-video-bitrate-mbps", "log-grey-reference", "video-codec", "review-log-view", "review-native-surface", "review-raw-playback", "gyroflow-log-enabled", "zero-shutter-lag", "hdr-video-format", "low-light-boost", "image-saturation", "image-sharpness", "night-photo-mode", "video-low-light-fps", "video-fps-lock", "lens-correction-video", "lens-correction-photos", "lens-correction-alignment", "lens-lock", "smooth-lens-switch", "rotate-when-locked", "audio-sync-offset-ms") - subjectFeatureKeys, CameraPresetCodec.portableKeys)
         println("PRESET_V20_KEYS=" + CameraPresetCodec.portableKeys.size)
+    }
+    @Test fun audioSyncOffsetStaysOnThisDeviceWhenAPresetIsApplied() {
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Look", settings = CameraSettings(audioSyncOffsetMs = 120)))
+        assertFalse(text.contains("audio-sync-offset-ms")); assertFalse("audio-sync-offset-ms" in CameraPresetCodec.portableKeys)
+        assertEquals(0, CameraPresetCodec.decode(text).settings.audioSyncOffsetMs)
+        assertEquals(29, CameraPresetCodec.VERSION)
+        val current = CameraSettings(audioSyncOffsetMs = -80)
+        assertEquals(-80, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, current).audioSyncOffsetMs)
     }
     @Test fun pictureProfileIsPortableFromV22AndSurvivesAPresetRoundTrip() {
         assertTrue("image-picture-profile" in CameraPresetCodec.portableKeys)
@@ -155,7 +163,7 @@ class CameraPresetTest {
         assertFalse("slow-motion-take-length-s" in CameraPresetCodec.portableKeysFor(27))
         assertTrue("slow-motion-take-length-s" in CameraPresetCodec.portableKeysFor(28))
         val text = CameraPresetCodec.encode(CameraPreset(name = "Slow 10", settings = CameraSettings(videoOffSpeed = true, slowMotionTakeLengthSeconds = 10)))
-        assertTrue(text.contains("\"version\":28"))
+        assertTrue(text.contains("\"version\":${CameraPresetCodec.VERSION}"))
         assertEquals(10, CameraPresetCodec.decode(text).settings.slowMotionTakeLengthSeconds)
         assertEquals(10, CameraPresetCodec.mergeLocal(CameraPresetCodec.decode(text).settings, CameraSettings()).slowMotionTakeLengthSeconds)
         invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("slow-motion-take-length-s" to JsonPrimitive(7))) })
@@ -168,6 +176,37 @@ class CameraPresetTest {
         assertEquals(0, CameraPresetCodec.decode(v27).settings.slowMotionTakeLengthSeconds)
         // A V27 payload that already carries the V28 key is not a V27 payload.
         invalid(document { it["version"] = JsonPrimitive(27) })
+    }
+    @Test fun equaliserCurveAndProfileArePortableFromV29AndRoundTrip() {
+        val keys = setOf("audio-eq-curve", "audio-eq-profile-id")
+        assertTrue(CameraPresetCodec.portableKeys.containsAll(keys))
+        assertTrue(CameraPresetCodec.portableKeysFor(28).none { it in keys })
+        assertTrue(CameraPresetCodec.portableKeysFor(29).containsAll(keys))
+        // A full curve is longer than the 128 characters other strings may carry.
+        val curve = EqCurve(points = List(EqCurve.MAX_POINTS) { EqPoint(EqFilterType.BELL, 100.0 + it * 500.0, -3.5, 1.25) }, trimDb = -1.5)
+        val text = CameraPresetCodec.encode(CameraPreset(name = "Razr", settings = CameraSettings(audioEqCurve = curve, audioEqProfileId = "bundled-motorola-blanc")))
+        assertTrue(text.contains("\"version\":29"))
+        assertTrue(curve.toJson().length > 128)
+        val decoded = CameraPresetCodec.decode(text).settings
+        assertEquals(curve, decoded.audioEqCurve)
+        assertEquals("bundled-motorola-blanc", decoded.audioEqProfileId)
+        assertEquals(curve, CameraPresetCodec.mergeLocal(decoded, CameraSettings()).audioEqCurve)
+        // No profile travels as an empty string and comes back as none.
+        assertNull(CameraPresetCodec.decode(CameraPresetCodec.encode(CameraPreset(name = "Flat", settings = CameraSettings()))).settings.audioEqProfileId)
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("audio-eq-profile-id" to JsonPrimitive("../escape"))) })
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("audio-eq-curve" to JsonPrimitive("x".repeat(4_097)))) })
+        invalid(document { it["settings"] = JsonObject(it.getValue("settings").jsonObject + ("audio-eq-curve" to JsonPrimitive("not a curve"))) })
+    }
+    @Test fun v28PayloadWithoutTheEqualiserDecodesFlatWithNoProfile() {
+        val v28 = document {
+            it["version"] = JsonPrimitive(28)
+            it["settings"] = JsonObject(it.getValue("settings").jsonObject.filterKeys { key -> key in CameraPresetCodec.portableKeysFor(28) })
+        }
+        val settings = CameraPresetCodec.decode(v28).settings
+        assertEquals(EqCurve(), settings.audioEqCurve)
+        assertNull(settings.audioEqProfileId)
+        // A V28 payload that already carries the V29 keys is not a V28 payload.
+        invalid(document { it["version"] = JsonPrimitive(28) })
     }
     @Test fun malformedRawVideoConfigIsRejectedNotNormalised() {
         for (bad in listOf("full", "4080x3060", "full@0", "0x10@30", "full@30 ", "FULL@30", "1920x1080@60@60")) {
@@ -294,5 +333,5 @@ class CameraPresetTest {
     }
 }
 
-// Keys newer than preset V19 (V20 to V28), so the historical-document tests can strip them.
-internal val PRESET_V20_KEYS = setOf("slow-motion-take-length-s", "operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")
+// Keys newer than preset V19 (V20 to V29), so the historical-document tests can strip them.
+internal val PRESET_V20_KEYS = setOf("audio-eq-curve", "audio-eq-profile-id", "slow-motion-take-length-s", "operator-volume-up-long", "operator-volume-down-long", "operator-volume-up-double", "operator-volume-down-double", "operator-volume-both", "operator-volume-pair", "operator-volume-pair-inverted", "translucent-chrome", "viewfinder-scale", "chrome-opacity", "subject-split-preview-modes", "subject-fill-light-preview-level", "image-picture-profile", "haptic-level", "haptic-capture", "haptic-controls", "haptic-focus-exposure", "haptic-navigation", "haptic-mute-during-take", "raw-video-config", "scroll-long-text", "raw-video-near-lossless")

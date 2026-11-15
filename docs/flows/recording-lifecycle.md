@@ -92,7 +92,7 @@ sequenceDiagram
 
 1. The service checks storage with `admitRecordingStorage` against the projected bytes per minute. Then it starts the foreground service and creates the pending MediaStore row through `VideoOutput.create`, which also opens a `RecordingRecoveryGroup` in the recovery journal.
 2. `dispatchTransferCapture` records the take in `DispatchedTakeAdmission` and sends `PrepareRecording`.
-3. `startVideo` picks the route. Plain VIDEO and time-lapse go to `startGpuVideo`, and LOG and HLG go to `startOpenCineLogVideo`; both record through `OpenCineLogGpuPipeline`. A constrained high-speed take with no LUT, sidecar audio, gain or squeeze reaches the encoder surface directly through `MediaRecorder`.
+3. `startVideo` picks the route. Plain VIDEO and time-lapse go to `startGpuVideo`, and LOG and HLG go to `startOpenCineLogVideo`; both record through `OpenCineLogGpuPipeline`. A constrained high-speed take with no LUT or squeeze reaches the encoder surface directly through `MediaRecorder`; with AAC audio at real speed the recorder takes video only and the app captures the audio into a WAV member of the take (PLAN-074, `appendsHighSpeedAudio`). A WAV or FLAC sidecar, or manual gain without that append, sends the take to the GPU route.
 4. In the pipeline, `RecordingPreparation` makes one terminal decision: commit or cancel. The drain thread (`OpenCineLogCodecDrain`) touches no native resource until the owner commits.
 5. `onRecordingStarted` latches `activeRecordingPolicy`, arms the cadence guard with `setRecordingCadencePolicy`, and starts the 500 ms `recordingTicker`.
 
@@ -144,6 +144,7 @@ sequenceDiagram
 6. On the `MediaRecorder` route, `stopVideo` stops the repeating request, waits for the session to drain (up to 500 ms), calls `MediaRecorder.stop`, then rebuilds the preview session.
 7. Publication runs on the storage executor. `VideoOutput.prepareOwned` validates the file geometry with `VideoFileGeometryValidator`, writes the metadata sidecar and the `<videoStem>.clip.json` sidecar while they are pending, and records the artifacts in the journal. `publishOwned` clears `IS_PENDING` on the motion log, the sidecar and the clip sidecar, and on the video last. A gallery never sees the video without its sidecars.
 8. A published LOG or HLG take is queued for `Main10FileCheckScheduler`.
+9. A complete high-speed take whose audio the app captured gets it appended before step 7: `appendWavAsAac` encodes the WAV and `Mp4AudioAppender` adds the track to the MP4 in place, at the offset `placeAppendedAudio` derives from the engine's `DirectRecorderTiming`. The WAV is then withdrawn from the recovery group and the take publishes as one MP4. If the append fails the WAV is published beside the video.
 
 ## Failure and edge cases
 

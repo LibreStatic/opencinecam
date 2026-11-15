@@ -6,6 +6,7 @@
     <string name="audio_effect_aec">Acoustic echo cancellation (AEC)</string>
     <string name="audio_effect_help">Only the current PCM producer reports these observations. Availability and requests do not prove application. Without a PCM receipt, including MediaRecorder, processing is not observed; backend parity is not assumed.</string>
     <string name="audio_effect_request_help">Request for the next audio configuration; observed state is shown separately.</string>
+    <string name="audio_effect_not_with_input">Not available with this input.</string>
     <string name="audio_effect_manual">Manual recording gain suspends the AGC request for the next configuration. The current receipt may still describe the frozen take.</string>
     <string name="audio_effect_yes">Yes</string>
     <string name="audio_effect_no">No</string>

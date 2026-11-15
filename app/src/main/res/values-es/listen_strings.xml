@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Escucha por auriculares</string>
+    <string name="listen_key_on">activada</string>
+    <string name="listen_key_connecting">conectando</string>
+    <string name="listen_key_off">desactivada</string>
+    <string name="listen_key_open_panel">Salida y volumen</string>
+    <string name="listen_panel_title">AURICULARES</string>
+    <string name="listen_panel_hint">Se escucha lo que queda grabado</string>
+    <string name="listen_panel_no_output">Conectar auriculares USB-C o Bluetooth</string>
+    <string name="listen_panel_raw_video">En video RAW el micrófono se escucha al empezar la toma</string>
+    <string name="listen_exit_title">¿Seguir escuchando?</string>
+    <string name="listen_exit_body">La escucha sigue activa (%1$s).</string>
+    <string name="listen_exit_keep">Seguir escuchando</string>
+    <string name="listen_exit_stop">Detener</string>
+</resources>

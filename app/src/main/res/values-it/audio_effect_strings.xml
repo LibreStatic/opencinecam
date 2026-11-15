@@ -6,6 +6,7 @@
     <string name="audio_effect_aec">Cancellazione dell\'eco acustico (AEC)</string>
     <string name="audio_effect_help">Solo il produttore PCM corrente segnala queste osservazioni. Disponibilità e richieste non dimostrano l\'applicazione. Senza una ricevuta PCM, incluso MediaRecorder, l\'elaborazione non viene osservata; la parità tra backend non è presunta.</string>
     <string name="audio_effect_request_help">Richiesta per la prossima configurazione audio; lo stato osservato è mostrato separatamente.</string>
+    <string name="audio_effect_not_with_input">Non disponibile con questo ingresso.</string>
     <string name="audio_effect_manual">Il guadagno di registrazione manuale sospende la richiesta AGC per la prossima configurazione. La ricevuta corrente può ancora descrivere la ripresa bloccata.</string>
     <string name="audio_effect_yes">Sì</string>
     <string name="audio_effect_no">No</string>

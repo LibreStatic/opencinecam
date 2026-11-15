@@ -1,0 +1,16 @@
+{
+  "schema": "opencinecam-eq-profile-v1",
+  "id": "bundled-motorola-blanc",
+  "name": "Razr Fold microphones",
+  "bundled": true,
+  "device": "blanc",
+  "curve": {
+    "enabled": true,
+    "trimDb": 0.0,
+    "points": [
+      { "type": "BELL", "frequencyHz": 10000.0, "gainDb": -9.5, "q": 1.1, "enabled": true },
+      { "type": "BELL", "frequencyHz": 8100.0, "gainDb": -9.5, "q": 1.8, "enabled": true },
+      { "type": "HIGH_SHELF", "frequencyHz": 13500.0, "gainDb": -3.5, "q": 0.9, "enabled": true }
+    ]
+  }
+}

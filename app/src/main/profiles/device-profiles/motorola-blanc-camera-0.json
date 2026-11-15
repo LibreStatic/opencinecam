@@ -16,7 +16,7 @@
   "signature": {
     "algorithm": "SHA-256",
     "keyId": "release",
-    "digest": "0e7bba83bbbbab1f8ae17e5fe03a23073bac1bb73dfb2c593b244cef295eb4ed"
+    "digest": "b4499b0cc5c3eb606a56ae90d06ecc8dfe48a57b62a900519980fc6d0074be09"
   },
   "quirks": [
     {
@@ -32,6 +32,16 @@
     {
       "quirkId": "OCC-QUIRK-0003",
       "effect": "qti-raw-frame-rate-override",
+      "enabled": true
+    },
+    {
+      "quirkId": "OCC-QUIRK-0004",
+      "effect": "audio-default-low-latency-input",
+      "enabled": true
+    },
+    {
+      "quirkId": "OCC-QUIRK-0005",
+      "effect": "audio-unprocessed-source-clips",
       "enabled": true
     }
   ]

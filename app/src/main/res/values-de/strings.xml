@@ -124,6 +124,8 @@
     <string name="audio_source_unprocessed">Unverarbeitet</string>
     <string name="audio_source_voice_recognition">Spracherkennung</string>
     <string name="audio_source_microphone">Standardmikrofon</string>
+    <string name="audio_source_camcorder">Camcorder</string>
+    <string name="audio_source_low_latency">Niedrige Latenz</string>
     <string name="anamorphic">Anamorph</string>
     <string name="anamorphic_summary">Entzerrt ein Adapterobjektiv in der Vorschau und in der Ausgabedatei.</string>
     <string name="anamorphic_output">Ausgabe</string>
@@ -924,7 +926,6 @@
     <string name="stop_reason_audio_input">der Audioeingang wurde getrennt</string>
     <string name="stop_reason_other">eine Sicherheitsgrenze wurde erreicht</string>
     <string name="stop_reason_drive_disconnected">das USB-Laufwerk wurde getrennt</string>
-    <string name="recording_drive_fallback_not_connected">USB-Laufwerk nicht verbunden: Aufnahme auf das Telefon</string>
     <string name="recording_drive_fallback_starting">USB-Laufwerk startet: Aufnahme auf das Telefon</string>
     <string name="recording_drive_fallback_renamed">USB-Ordner erneut wählen: Aufnahme auf das Telefon</string>
     <string name="recording_drive_fallback_permission_lost">Zugriff auf das USB-Laufwerk verloren: Aufnahme auf das Telefon</string>
@@ -969,7 +970,8 @@
     <string name="recording_drive_continue_unavailable_high_speed">Fortsetzen auf dem Telefon ist bei Zeitlupenaufnahmen nicht verfügbar</string>
     <string name="recording_drive_continue_unavailable_raw">Diese RAW-Konfiguration ist auf dem Telefon nicht qualifiziert, daher lief die Aufnahme dort nicht weiter</string>
     <string name="recording_drive_continue_unavailable_space">Nicht genug Speicher auf dem Telefon, um die Aufnahme fortzusetzen</string>
-    <string name="capture_destination_phone_chip">TELEFON</string>
+    <string name="capture_destination_usb">USB-Speicher</string>
+    <string name="capture_destination_internal">Interner Speicher</string>
     <string name="capture_destination_drive_description">Aufnahme auf das USB-Laufwerk</string>
     <string name="capture_destination_phone_description">Aufnahme auf das Telefon: Das USB-Laufwerk kann nicht genutzt werden</string>
     <string name="runtime_notice_monitoring_reduced">Hitze oder wenig Speicher: Überwachung reduziert</string>
@@ -1021,6 +1023,8 @@
     <string name="caps_quirk_high_speed_physical">Highspeed-Aufnahme öffnet die physische Kamera, die den Modus besitzt</string>
     <string name="caps_quirk_moto_keys">Motorola-Zeitlupenschlüssel bei Highspeed-Anfragen</string>
     <string name="caps_quirk_qti_raw_fps">RAW über der angegebenen Bildratengrenze (Qualcomm)</string>
+    <string name="caps_quirk_audio_low_latency_default">Mikrofoneingang mit niedriger Latenz als Standard, mit dem Equalizer dieses Telefons</string>
+    <string name="caps_quirk_audio_unprocessed_clips">Unverarbeitete Audioquelle übersteuert; nicht angeboten</string>
     <string name="caps_section_main10">Letzte Main10-Dateiprüfung</string>
     <string name="caps_main10_none">Noch keine HLG- oder LOG-Aufnahme geprüft.</string>
     <string name="caps_main10_summary">%1$s-Aufnahme, geprüft %2$s</string>

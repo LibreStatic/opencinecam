@@ -40,6 +40,8 @@ import com.librestatic.opencinecam.camera.OpenCineLogGreyReference
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 
 import com.librestatic.opencinecam.camera.StillPhotoFormat
+import com.librestatic.opencinecam.camera.decodeEqCurve
+import com.librestatic.opencinecam.camera.toJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -56,6 +58,9 @@ const val DEFAULT_CHROME_OPACITY = 0.55f
 
 /** Capture-time lengths, in seconds, a slow-motion take can stop by itself after; 0 leaves it unbounded. */
 val SLOW_MOTION_TAKE_LENGTHS = (0..60 step 5).toList()
+
+/** Milliseconds the manual audio sync offset may shift captured audio by, either way (PLAN-074 decision 12). */
+val AUDIO_SYNC_OFFSET_RANGE_MS = -500..500
 
 /** Keeps the floating chrome legible and the image visible; non-finite values fall back to the default. */
 fun clampChromeOpacity(value: Float): Float =
@@ -76,8 +81,8 @@ data class CameraSettings(
     val audioOutputFormat: AudioOutputFormat = AudioOutputFormat.AAC_MP4,
     val audioSampleRateHz: Int = 48_000,
     val audioBitDepth: AudioBitDepth = AudioBitDepth.PCM_24,
-    val audioChannels: Int = 1,
-    val audioBitrateKbps: Int = 128,
+    val audioChannels: Int = 2,
+    val audioBitrateKbps: Int = 320,
     /**
      * Runtime only: the live device id the selection resolves to on this connection, or null for
      * the platform default. Derived by [normalizedFor]; never persisted, because it changes on
@@ -102,11 +107,22 @@ data class CameraSettings(
     val playback: PlaybackSettings = PlaybackSettings(),
     val proxy: ProxySettings = ProxySettings(),
     val audioListeningOutputDeviceId: Int? = null,
-    val audioSource: AudioSourceSelection = AudioSourceSelection.UNPROCESSED,
+    /** Camcorder, the source the phone maker tunes for video; a device profile may default to the low-latency input (PLAN-074). */
+    val audioSource: AudioSourceSelection = AudioSourceSelection.CAMCORDER,
     val noiseSuppressorEnabled: Boolean = false,
     val automaticGainControlEnabled: Boolean = true,
     val audioRecordingGain: com.librestatic.opencinecam.camera.DigitalRecordingGain = com.librestatic.opencinecam.camera.DigitalRecordingGain(),
     val acousticEchoCancelerEnabled: Boolean = false,
+    /** The input equaliser every PCM read loop applies (PLAN-074 decision 6); flat by default. */
+    val audioEqCurve: com.librestatic.opencinecam.camera.EqCurve = com.librestatic.opencinecam.camera.EqCurve(),
+    /** The equaliser profile [audioEqCurve] was copied from (PLAN-074 decision 8); null when none. */
+    val audioEqProfileId: String? = null,
+    /**
+     * Device-local manual sync offset (PLAN-074 decision 12), for microphones whose latency the app
+     * cannot measure: positive places the audio later on the take's timeline, negative earlier.
+     * Applied where audio is placed, never to the measured capture epoch; read at take start.
+     */
+    val audioSyncOffsetMs: Int = 0,
     val burstCount: Int = 5,
     val bracket: com.librestatic.opencinecam.camera.BracketSelection = com.librestatic.opencinecam.camera.BracketSelection(),
     val accumulation: com.librestatic.opencinecam.camera.AccumulationSelection = com.librestatic.opencinecam.camera.AccumulationSelection(),
@@ -217,6 +233,8 @@ data class CameraSettings(
         require(audioSampleRateHz in setOf(44_100, 48_000, 88_200, 96_000, 192_000))
         require(audioChannels in 1..2)
         require(audioBitrateKbps in setOf(64, 96, 128, 160, 192, 256, 320))
+        require(audioEqProfileId == null || com.librestatic.opencinecam.camera.isValidEqProfileId(audioEqProfileId))
+        require(audioSyncOffsetMs in AUDIO_SYNC_OFFSET_RANGE_MS)
         require(videoWidth > 0 && videoHeight > 0 && videoFps > 0)
         require(logWidth > 0 && logHeight > 0 && logFps > 0)
         require(focusPullDurationMs in 500L..10_000L)
@@ -269,7 +287,12 @@ fun CameraSettings.audioInputUnavailable(capabilities: ProfessionalAudioCapabili
 fun CameraSettings.normalizedFor(capabilities: ProfessionalAudioCapabilities): CameraSettings {
     if (!capabilities.permissionGranted || capabilities.formats.isEmpty()) return this
     val format = audioOutputFormat.takeIf { it in capabilities.formats } ?: capabilities.formats.first()
-    val source = audioSource.takeIf { it in capabilities.sources } ?: capabilities.sources.firstOrNull() ?: AudioSourceSelection.MIC
+    // A source that is not offered falls back to the device's preferred one (the low-latency input
+    // where the profile makes it the default), then to Camcorder, not to whatever the list leads with.
+    val source = audioSource.takeIf { it in capabilities.sources }
+        ?: capabilities.preferredSource?.takeIf { it in capabilities.sources }
+        ?: AudioSourceSelection.CAMCORDER.takeIf { it in capabilities.sources }
+        ?: capabilities.sources.firstOrNull() ?: AudioSourceSelection.MIC
     // A legacy id is only meaningful on the connection it was saved on; migrate it if it still matches.
     val inputKey = audioInputKey ?: legacyAudioInputDeviceId?.let { legacy -> capabilities.inputs.firstOrNull { it.id == legacy }?.key }
     val resolution = copy(audioInputKey = inputKey).resolveAudioInputSelection(capabilities.inputs)
@@ -283,7 +306,7 @@ fun CameraSettings.normalizedFor(capabilities: ProfessionalAudioCapabilities): C
             audioChannels = audioChannels.takeIf { it in capabilities.aacChannelCounts }
                 ?: capabilities.aacChannelCounts.firstOrNull() ?: 1,
             audioBitrateKbps = audioBitrateKbps.takeIf { it in capabilities.aacBitratesKbps }
-                ?: capabilities.aacBitratesKbps.minByOrNull { kotlin.math.abs(it - 128) } ?: 128,
+                ?: capabilities.aacBitratesKbps.maxOrNull() ?: 320,
             audioInputDeviceId = inputId,
             audioInputKey = inputKey,
             legacyAudioInputDeviceId = null,
@@ -333,7 +356,32 @@ class CameraSettingsStore internal constructor(private val preferences: android.
     }
 
     /** The policy is settled first: the other migrations write keys, which would make a fresh install look used. */
-    override fun load(): CameraSettings = loadStored(migratedRecordingPolicy())
+    override fun load(): CameraSettings {
+        // Read before anything is saved: a save writes every key, which would make a fresh install look chosen.
+        if (!audioInputRead) {
+            audioInputRead = true
+            pendingAudioInput = if (preferences.getBoolean(KEY_AUDIO_INPUT_MIGRATED, false)) null else storedAudioInput()
+        }
+        return loadStored(migratedRecordingPolicy())
+    }
+
+    @Volatile private var audioInputRead = false
+
+    /** The stored audio keys as the first [load] found them, until [markAudioInputMigrated]. */
+    @Volatile private var pendingAudioInput: StoredAudioInput? = null
+
+    override fun pendingAudioInputMigration(): StoredAudioInput? = pendingAudioInput
+
+    override fun markAudioInputMigrated() {
+        pendingAudioInput = null
+        preferences.edit().putBoolean(KEY_AUDIO_INPUT_MIGRATED, true).apply()
+    }
+
+    private fun storedAudioInput() = StoredAudioInput(
+        source = preferences.getString(KEY_AUDIO_SOURCE, null)?.let { saved -> AudioSourceSelection.entries.firstOrNull { it.name == saved } },
+        channels = if (preferences.contains(KEY_AUDIO_CHANNELS)) preferences.getInt(KEY_AUDIO_CHANNELS, 0) else null,
+        bitrateKbps = if (preferences.contains(KEY_AUDIO_BITRATE)) preferences.getInt(KEY_AUDIO_BITRATE, 0) else null,
+    )
 
     private fun loadStored(recordingPolicy: PolicyMode): CameraSettings = CameraSettings(
         haptics = HapticPreferences(
@@ -431,9 +479,9 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         audioSampleRateHz = preferences.getInt(KEY_AUDIO_SAMPLE_RATE, 48_000)
             .takeIf { it in setOf(44_100, 48_000, 88_200, 96_000, 192_000) } ?: 48_000,
         audioBitDepth = enumPreference(KEY_AUDIO_BIT_DEPTH, AudioBitDepth.PCM_24),
-        audioChannels = preferences.getInt(KEY_AUDIO_CHANNELS, 1).coerceIn(1, 2),
-        audioBitrateKbps = preferences.getInt(KEY_AUDIO_BITRATE, 128)
-            .takeIf { it in setOf(64, 96, 128, 160, 192, 256, 320) } ?: 128,
+        audioChannels = preferences.getInt(KEY_AUDIO_CHANNELS, 2).coerceIn(1, 2),
+        audioBitrateKbps = preferences.getInt(KEY_AUDIO_BITRATE, 320)
+            .takeIf { it in setOf(64, 96, 128, 160, 192, 256, 320) } ?: 320,
         audioInputKey = preferences.getString(KEY_AUDIO_INPUT_KEY, null)?.let(::decodeAudioInputKey),
         legacyAudioInputDeviceId = if (preferences.contains(KEY_AUDIO_INPUT_KEY)) null
             else preferences.getInt(KEY_AUDIO_INPUT, NO_DEVICE).takeUnless { it == NO_DEVICE },
@@ -449,11 +497,16 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         playback = loadPlayback(),
         proxy = loadProxy(),
         audioListeningOutputDeviceId = preferences.getInt("audio-listening-output-device-id", NO_DEVICE).takeIf { it > 0 },
-        audioSource = enumPreference(KEY_AUDIO_SOURCE, AudioSourceSelection.UNPROCESSED),
+        audioSource = enumPreference(KEY_AUDIO_SOURCE, AudioSourceSelection.CAMCORDER),
         noiseSuppressorEnabled = preferences.getBoolean(KEY_AUDIO_NS, false),
         automaticGainControlEnabled = preferences.getBoolean(KEY_AUDIO_AGC, true),
         audioRecordingGain = loadRecordingGain(),
         acousticEchoCancelerEnabled = preferences.getBoolean(KEY_AUDIO_AEC, false),
+        audioEqCurve = preferences.getString(KEY_AUDIO_EQ_CURVE, null)
+            ?.let { decodeEqCurve(it) } ?: com.librestatic.opencinecam.camera.EqCurve(),
+        audioEqProfileId = preferences.getString(KEY_AUDIO_EQ_PROFILE_ID, null)
+            ?.takeIf { com.librestatic.opencinecam.camera.isValidEqProfileId(it) },
+        audioSyncOffsetMs = preferences.getInt(KEY_AUDIO_SYNC_OFFSET_MS, 0).coerceIn(AUDIO_SYNC_OFFSET_RANGE_MS),
         accumulation = loadAccumulation(),
         photoAspect = loadPhotoAspect(),
         zeroShutterLag = preferences.getBoolean("zero-shutter-lag", true),
@@ -679,6 +732,10 @@ class CameraSettingsStore internal constructor(private val preferences: android.
             .putBoolean(KEY_AUDIO_RECORDING_GAIN_ENABLED, settings.audioRecordingGain.enabled)
             .putInt(KEY_AUDIO_RECORDING_GAIN_DB, settings.audioRecordingGain.decibels)
             .putBoolean(KEY_AUDIO_AEC, settings.acousticEchoCancelerEnabled)
+            .putString(KEY_AUDIO_EQ_CURVE, settings.audioEqCurve.toJson())
+            // An empty string stores "no profile", as the input key stores "Auto".
+            .putString(KEY_AUDIO_EQ_PROFILE_ID, settings.audioEqProfileId.orEmpty())
+            .putInt(KEY_AUDIO_SYNC_OFFSET_MS, settings.audioSyncOffsetMs)
             .putInt(KEY_BURST, settings.burstCount)
             .putInt(KEY_BITRATE, settings.videoBitrateMbps)
             .putString(KEY_VIDEO_CODEC, settings.videoCodec.name)
@@ -964,6 +1021,11 @@ class CameraSettingsStore internal constructor(private val preferences: android.
         const val KEY_AUDIO_RECORDING_GAIN_ENABLED = "audio-recording-gain-enabled"
         const val KEY_AUDIO_RECORDING_GAIN_DB = "audio-recording-gain-db"
         const val KEY_AUDIO_AEC = "audio-acoustic-echo-canceler"
+        const val KEY_AUDIO_EQ_CURVE = "audio-eq-curve"
+        const val KEY_AUDIO_EQ_PROFILE_ID = "audio-eq-profile-id"
+        const val KEY_AUDIO_SYNC_OFFSET_MS = "audio-sync-offset-ms"
+        /** Set once the PLAN-074 audio input migration has run, whatever it decided. */
+        const val KEY_AUDIO_INPUT_MIGRATED = "audio-input-migrated-v1"
         const val KEY_BURST = "burst-count"
         const val KEY_BITRATE = "video-bitrate-mbps"
         const val KEY_VIDEO_CODEC = "video-codec"

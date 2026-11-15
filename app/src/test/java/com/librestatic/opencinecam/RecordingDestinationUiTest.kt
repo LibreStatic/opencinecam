@@ -53,18 +53,27 @@ class RecordingDestinationUiTest {
     @Test fun chipShowsTheDriveOrTheFallback() {
         assertEquals(CaptureDestinationChipKind.DRIVE, captureDestinationChip(CaptureMode.VIDEO, onDrive))
         assertEquals(CaptureDestinationChipKind.DRIVE, captureDestinationChip(CaptureMode.PHOTO, onDrive))
-        assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.LOG, notConnected))
+        // A drive merely unplugged: the phone, in the neutral colour; the others need the operator.
+        assertEquals(CaptureDestinationChipKind.PHONE, captureDestinationChip(CaptureMode.LOG, notConnected))
         assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.VIDEO, starting))
         assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.VIDEO, renamed))
         assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.VIDEO, accessLost))
     }
 
     @Test fun rawVideoShowsTheDriveLikeEveryMode() {
-        // PLAN-072 Delivery 3: RAW takes go to the drive too, so the chip and the fallback notice show in RAW video.
+        // PLAN-072 Delivery 3: RAW takes go to the drive too, so the chip and the fallback notices show in RAW video.
         assertEquals(CaptureDestinationChipKind.DRIVE, captureDestinationChip(CaptureMode.RAW_VIDEO, onDrive))
-        assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.RAW_VIDEO, notConnected))
-        assertEquals(R.string.recording_drive_fallback_not_connected,
-            captureDestinationFallbackText(CameraUiState(selectedMode = CaptureMode.RAW_VIDEO, recordingDestination = notConnected), recording = false))
+        assertEquals(CaptureDestinationChipKind.PHONE, captureDestinationChip(CaptureMode.RAW_VIDEO, notConnected))
+        assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.RAW_VIDEO, starting))
+        assertEquals(R.string.recording_drive_fallback_starting,
+            captureDestinationFallbackText(CameraUiState(selectedMode = CaptureMode.RAW_VIDEO, recordingDestination = starting), recording = false))
+    }
+
+    @Test fun aContinuedTakeOutranksAnUnpluggedDrive() {
+        // The drive lost mid-take is unplugged too, but the continued take still wants the amber chip.
+        val continued = notConnected.copy(continuedOnPhone = true)
+        assertEquals(CaptureDestinationChipKind.PHONE_FALLBACK, captureDestinationChip(CaptureMode.VIDEO, continued))
+        assertNull(captureDestinationFallbackText(CameraUiState(selectedMode = CaptureMode.VIDEO, recordingDestination = continued), recording = false))
     }
 
     @Test fun aContinuedTakeShowsThePhoneAndItsNoticeWhileItRecords() {
@@ -83,9 +92,10 @@ class RecordingDestinationUiTest {
 
     @Test fun fallbackNoticeOnlyWhenIdle() {
         val idle = CameraUiState(selectedMode = CaptureMode.VIDEO, recordingDestination = notConnected)
-        assertEquals(R.string.recording_drive_fallback_not_connected, captureDestinationFallbackText(idle, recording = false))
+        // An unplugged drive gets no notice: the chip already says the takes go to internal storage.
+        assertNull(captureDestinationFallbackText(idle, recording = false))
         // A running take says it in its recording warning already.
-        assertNull(captureDestinationFallbackText(idle, recording = true))
+        assertNull(captureDestinationFallbackText(idle.copy(recordingDestination = accessLost), recording = true))
         assertEquals(R.string.recording_drive_fallback_permission_lost,
             captureDestinationFallbackText(idle.copy(recordingDestination = accessLost), recording = false))
         assertNull(captureDestinationFallbackText(idle.copy(recordingDestination = onDrive), recording = false))

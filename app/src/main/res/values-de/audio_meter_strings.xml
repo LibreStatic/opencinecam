@@ -15,4 +15,8 @@
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>
     <string name="audio_meter_hold_value">Hold %1$s</string>
+    <string name="audio_meter_clip_input">Mikrofoneingang übersteuert</string>
+    <string name="audio_meter_clip_recorded">Aufgenommener Ton übersteuert</string>
+    <string name="audio_meter_clip_both">Mikrofoneingang und aufgenommener Ton übersteuert</string>
+    <string name="audio_meter_clip_help">CLIP IN: Das Mikrofon selbst hat Vollaussteuerung erreicht, vor Equalizer, AGC und Gain; die Aufnahme kann trotzdem gut klingen. CLIP REC: Der aufgenommene Ton hat Vollaussteuerung erreicht.</string>
 </resources>

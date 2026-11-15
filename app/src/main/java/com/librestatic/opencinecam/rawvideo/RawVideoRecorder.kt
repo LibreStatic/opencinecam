@@ -337,6 +337,9 @@ class RawVideoRecorder(
     /** The running take's audio channel count, or null when it records no sound. */
     fun liveAudioChannels(): Int? = take?.audioMetadata?.get(RawAudioKeys.CHANNELS)?.toIntOrNull()
 
+    /** Why the running take's microphone is not the low-latency input asked for, or null (PLAN-074 decision 4). */
+    fun liveAudioInputFallbackReason(): String? = take?.audioMetadata?.get(RawAudioKeys.INPUT_FALLBACK_REASON)
+
     /**
      * Allocates the ring for [config]: as many frame slots as fit in [ringBytes] (at least
      * [RawRingBudget.MIN_SLOTS]). If memory runs out part way, the slots already allocated are kept

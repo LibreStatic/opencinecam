@@ -75,6 +75,9 @@ internal enum class CineIcon {
     SPEECH,
     SLATE,
     EDIT,
+    USB_DRIVE,
+    PHONE,
+    HEADPHONES,
 }
 
 @Composable
@@ -346,6 +349,24 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             // A pencil.
             poly(.20f to .80f, .24f to .62f, .66f to .20f, .80f to .34f, .38f to .76f)
             line(.58f, .28f, .72f, .42f)
+        }
+        CineIcon.USB_DRIVE -> {
+            // A USB stick: the plug and its two contacts over the body.
+            box(.36f, .08f, .64f, .34f)
+            box(.42f, .16f, .47f, .22f, filled = true); box(.53f, .16f, .58f, .22f, filled = true)
+            drawRoundRect(color, Offset(w * .24f, h * .34f), Size(w * .52f, h * .58f), CornerRadius(w * .08f), style = stroke)
+        }
+        CineIcon.PHONE -> {
+            // A handset: the slab and its home bar.
+            drawRoundRect(color, Offset(w * .26f, h * .08f), Size(w * .48f, h * .84f), CornerRadius(w * .10f), style = stroke)
+            line(.42f, .80f, .58f, .80f)
+        }
+        CineIcon.HEADPHONES -> {
+            // Over-ear headphones: the headband arc and an ear cup at each end.
+            drawArc(color, 180f, 180f, false, Offset(w * .16f, h * .14f), Size(w * .68f, h * .68f), style = stroke)
+            line(.16f, .48f, .16f, .62f); line(.84f, .48f, .84f, .62f)
+            drawRoundRect(color, Offset(w * .10f, h * .54f), Size(w * .20f, h * .34f), CornerRadius(w * .07f))
+            drawRoundRect(color, Offset(w * .70f, h * .54f), Size(w * .20f, h * .34f), CornerRadius(w * .07f))
         }
         CineIcon.EXPAND -> poly(.20f to .36f, .50f to .66f, .80f to .36f, close = false)
         CineIcon.COLLAPSE -> poly(.20f to .64f, .50f to .34f, .80f to .64f, close = false)

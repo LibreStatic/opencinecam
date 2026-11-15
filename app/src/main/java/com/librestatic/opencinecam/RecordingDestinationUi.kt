@@ -21,6 +21,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -92,8 +97,12 @@ internal fun recordingDriveConnection(status: RecordingDestinationStatus): Recor
     else -> RecordingDriveConnection.CONNECTED
 }
 
-/** The HUD's destination chip: the drive in use, or the phone standing in for a configured drive. */
-internal enum class CaptureDestinationChipKind { DRIVE, PHONE_FALLBACK }
+/**
+ * The HUD's destination chip: the drive in use; the phone, plainly, while the configured drive is not connected; or
+ * [PHONE_FALLBACK], the phone in amber when the drive needs the operator (starting, renamed, access lost, or a take
+ * continued on the phone).
+ */
+internal enum class CaptureDestinationChipKind { DRIVE, PHONE, PHONE_FALLBACK }
 
 /**
  * Null with no drive configured, so the HUD stays as it was for operators without one. Every recording mode, RAW video
@@ -102,8 +111,12 @@ internal enum class CaptureDestinationChipKind { DRIVE, PHONE_FALLBACK }
 @Suppress("UNUSED_PARAMETER")
 internal fun captureDestinationChip(mode: CaptureMode, status: RecordingDestinationStatus): CaptureDestinationChipKind? = when {
     status.onDrive -> CaptureDestinationChipKind.DRIVE
+    !status.configuredDrive -> null
     // A continuation (PLAN-072 Delivery 4) records on the phone in place of the drive it lost.
-    status.configuredDrive && (status.fallback != null || status.continuedOnPhone) -> CaptureDestinationChipKind.PHONE_FALLBACK
+    status.continuedOnPhone -> CaptureDestinationChipKind.PHONE_FALLBACK
+    // An unplugged drive is the operator's own doing: the chip says where takes go, nothing more.
+    status.fallback == DestinationFallback.DRIVE_NOT_CONNECTED -> CaptureDestinationChipKind.PHONE
+    status.fallback != null -> CaptureDestinationChipKind.PHONE_FALLBACK
     else -> null
 }
 
@@ -380,33 +393,64 @@ internal fun RecordingDriveDisconnectSettings(policy: DriveDisconnectPolicy, ena
     }
 }
 
-/** The status line's destination chip: `USB` on the drive (never `SSD`: the drive may be a hard disk or a stick), an amber `PHONE` when a configured drive cannot be used. */
+/**
+ * The status line's destination chip: an icon and "USB storage" (never `SSD`: the drive may be a hard disk or a stick)
+ * or "Internal storage", amber when a configured drive needs the operator. Where the status line has no room for it,
+ * [labelled] false leaves the icon, the description still saying where takes go.
+ */
 @Composable
-internal fun CaptureDestinationChip(state: CameraUiState, modifier: Modifier = Modifier) {
+internal fun CaptureDestinationChip(state: CameraUiState, modifier: Modifier = Modifier, labelled: Boolean = true) {
     val kind = captureDestinationChip(state.selectedMode, state.recordingDestination) ?: return
     val drive = kind == CaptureDestinationChipKind.DRIVE
-    val description = if (drive) stringResource(R.string.capture_destination_drive_description)
-        else stringResource(R.string.capture_destination_phone_description)
-    Text(
-        if (drive) "USB" else stringResource(R.string.capture_destination_phone_chip),
-        color = if (drive) MaterialTheme.colorScheme.onSurface else LocalCineColors.current.pending,
-        fontSize = 12.sp,
-        lineHeight = 14.sp,
-        fontWeight = if (drive) FontWeight.SemiBold else FontWeight.Bold,
-        maxLines = 1,
-        modifier = modifier
+    val description = stringResource(when (kind) {
+        CaptureDestinationChipKind.DRIVE -> R.string.capture_destination_drive_description
+        // Nothing is wrong with an unplugged drive: the description is the label.
+        CaptureDestinationChipKind.PHONE -> R.string.capture_destination_internal
+        CaptureDestinationChipKind.PHONE_FALLBACK -> R.string.capture_destination_phone_description
+    })
+    val color = if (kind == CaptureDestinationChipKind.PHONE_FALLBACK) LocalCineColors.current.pending else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier
             .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.85f).chromePanel(), RoundedCornerShape(6.dp))
             .padding(horizontal = 6.dp, vertical = 3.dp)
-            .semantics { contentDescription = description }
+            .semantics(mergeDescendants = true) { contentDescription = description }
             .testTag("capture-destination-chip"),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        CineGlyph(if (drive) CineIcon.USB_DRIVE else CineIcon.PHONE, color, Modifier.size(14.dp))
+        if (labelled) Text(
+            stringResource(if (drive) R.string.capture_destination_usb else R.string.capture_destination_internal),
+            color = color,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            // A narrow column breaks the label between its words rather than cutting one short.
+            maxLines = 2,
+        )
+    }
 }
 
-/** Why the next take goes to the phone, idle only: a running take says it in its recording warning. */
+/** The width of the labelled [CaptureDestinationChip], for a status line deciding whether it has room for the label; zero with no chip. */
+@Composable
+internal fun captureDestinationChipLabelledWidth(state: CameraUiState): Dp {
+    val kind = captureDestinationChip(state.selectedMode, state.recordingDestination) ?: return 0.dp
+    val label = stringResource(if (kind == CaptureDestinationChipKind.DRIVE) R.string.capture_destination_usb else R.string.capture_destination_internal)
+    val measurer = rememberTextMeasurer()
+    val style = LocalTextStyle.current.merge(TextStyle(fontSize = 12.sp, lineHeight = 14.sp, fontWeight = FontWeight.SemiBold))
+    val text = remember(label, style) { measurer.measure(label, style, maxLines = 1).size.width }
+    // Icon, gap and the chip's horizontal padding.
+    return with(LocalDensity.current) { text.toDp() } + 14.dp + 4.dp + 12.dp
+}
+
+/**
+ * Why the next take goes to the phone, idle only: a running take says it in its recording warning. A drive that is
+ * simply not connected gets no notice: the chip already says the takes go to internal storage.
+ */
 internal fun captureDestinationFallbackText(state: CameraUiState, recording: Boolean): Int? {
     if (recording || captureDestinationChip(state.selectedMode, state.recordingDestination) != CaptureDestinationChipKind.PHONE_FALLBACK) return null
     return when (state.recordingDestination.fallback) {
-        DestinationFallback.DRIVE_NOT_CONNECTED -> R.string.recording_drive_fallback_not_connected
+        DestinationFallback.DRIVE_NOT_CONNECTED -> null
         DestinationFallback.DRIVE_STARTING -> R.string.recording_drive_fallback_starting
         DestinationFallback.DRIVE_RENAMED -> R.string.recording_drive_fallback_renamed
         DestinationFallback.PERMISSION_LOST -> R.string.recording_drive_fallback_permission_lost

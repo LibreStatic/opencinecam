@@ -126,6 +126,8 @@
     <string name="audio_source_unprocessed">Unprocessed</string>
     <string name="audio_source_voice_recognition">Voice recognition</string>
     <string name="audio_source_microphone">Standard microphone</string>
+    <string name="audio_source_camcorder">Camcorder</string>
+    <string name="audio_source_low_latency">Low latency</string>
     <string name="anamorphic">Anamorphic</string>
     <string name="anamorphic_summary">De-squeeze an adapter lens in the preview and output file.</string>
     <string name="anamorphic_output">Output</string>
@@ -931,7 +933,6 @@
     <string name="stop_reason_audio_input">the audio input was disconnected</string>
     <string name="stop_reason_other">a safety limit was reached</string>
     <string name="stop_reason_drive_disconnected">the USB drive was disconnected</string>
-    <string name="recording_drive_fallback_not_connected">USB drive not connected: recording to the phone</string>
     <string name="recording_drive_fallback_starting">USB drive starting: recording to the phone</string>
     <string name="recording_drive_fallback_renamed">Choose USB folder again: recording to the phone</string>
     <string name="recording_drive_fallback_permission_lost">Access to the USB drive was lost: recording to the phone</string>
@@ -976,7 +977,8 @@
     <string name="recording_drive_continue_unavailable_high_speed">Continuing on the phone is not available for high-speed takes</string>
     <string name="recording_drive_continue_unavailable_raw">This RAW configuration is not qualified on the phone, so the take did not continue there</string>
     <string name="recording_drive_continue_unavailable_space">Not enough space on the phone to continue the take</string>
-    <string name="capture_destination_phone_chip">PHONE</string>
+    <string name="capture_destination_usb">USB storage</string>
+    <string name="capture_destination_internal">Internal storage</string>
     <string name="capture_destination_drive_description">Recording to the USB drive</string>
     <string name="capture_destination_phone_description">Recording to the phone: the USB drive cannot be used</string>
     <string name="runtime_notice_monitoring_reduced">Heat or low storage: monitoring reduced</string>
@@ -1028,6 +1030,8 @@
     <string name="caps_quirk_high_speed_physical">High-speed capture opens the physical camera that owns the mode</string>
     <string name="caps_quirk_moto_keys">Motorola slow-motion keys on high-speed requests</string>
     <string name="caps_quirk_qti_raw_fps">RAW above the declared frame-rate limit (Qualcomm)</string>
+    <string name="caps_quirk_audio_low_latency_default">Low-latency microphone input by default, with this phone\'s equaliser</string>
+    <string name="caps_quirk_audio_unprocessed_clips">Unprocessed audio source clips; not offered</string>
     <string name="caps_section_main10">Latest Main10 file check</string>
     <string name="caps_main10_none">No HLG or LOG take has been checked yet.</string>
     <string name="caps_main10_summary">%1$s take, checked %2$s</string>

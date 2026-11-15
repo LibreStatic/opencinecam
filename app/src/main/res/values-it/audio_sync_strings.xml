@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="audio_sync_offset_title">Sfasamento sincronia audio</string>
+    <string name="audio_sync_offset_help">Sposta l\'audio registrato rispetto all\'immagine, per i microfoni di cui l\'app non può misurare il ritardo, come quelli Bluetooth e alcuni USB. Se il suono arriva prima dell\'immagine, sposta l\'audio più tardi; se arriva dopo, più presto. Verificalo con un battito di mani o un ciak in una ripresa di prova.</string>
+    <string name="audio_sync_offset_none">Nessuno sfasamento</string>
+    <string name="audio_sync_offset_later">Audio %1$d ms più tardi</string>
+    <string name="audio_sync_offset_earlier">Audio %1$d ms prima</string>
+    <string name="audio_sync_offset_minus">1 ms prima</string>
+    <string name="audio_sync_offset_plus">1 ms più tardi</string>
+    <string name="audio_sync_offset_reset">Ripristina</string>
+    <string name="audio_sync_offset_scope">Si applica all\'audio incorporato nel video e al video RAW. I file WAV e FLAC separati non vengono spostati; lo sfasamento è salvato nel registro della ripresa.</string>
+    <string name="audio_sync_offset_pending">Il nuovo sfasamento si applica dalla prossima ripresa. Questa ripresa mantiene lo sfasamento con cui è iniziata.</string>
+</resources>

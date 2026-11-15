@@ -147,6 +147,22 @@ class ProxySidecarMetadataTest {
         reject(f.text(1, " ".repeat(512 * 1024 + 1)))
         reject(f.copy(docs = listOf(f.docs[0], f.docs[1].copy(text = audio + " "))))
     }
+    @Test fun theSyncOffsetKeyIsOptionalAndRoundTripsButOtherKeysStillReject() {
+        // Records written before PLAN-074 decision 12 have no audioSyncOffsetUs; the fixture is one of them.
+        val old = fixture()
+        val written = old.change(0, "avTiming", "audioSyncOffsetUs", value = JsonPrimitive(0))
+            .change(1, "sharedTiming", "audioSyncOffsetUs", value = JsonPrimitive(0))
+        assertEquals(old.select().timeline, written.select().timeline)
+        assertEquals(0L, written.select().observation.sharedTiming.audioSyncOffsetUs)
+        val recorded = old.change(0, "avTiming", "audioSyncOffsetUs", value = JsonPrimitive(40_000))
+            .change(1, "sharedTiming", "audioSyncOffsetUs", value = JsonPrimitive(40_000))
+        assertEquals(40_000L, recorded.select().observation.sharedTiming.audioSyncOffsetUs)
+        // Read into the report, so the two documents must agree on it like every other field.
+        reject(old.change(0, "avTiming", "audioSyncOffsetUs", value = JsonPrimitive(40_000)))
+        reject(written.change(1, "sharedTiming", "audioSyncOffsetUs", value = JsonPrimitive("0")))
+        reject(old.change(1, "sharedTiming", "audioSyncOffsetMs", value = JsonPrimitive(0))
+            .change(0, "avTiming", "audioSyncOffsetMs", value = JsonPrimitive(0)))
+    }
     @Test fun stableVideoAudioAnchorsCountsAndPauseMustAgree() {
         val f = fixture(paused = true)
         reject(f.change(0, "avTiming", "videoFrameZeroNs", value = JsonPrimitive(1_000_001_000)))

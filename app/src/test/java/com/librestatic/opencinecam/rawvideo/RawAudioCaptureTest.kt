@@ -65,6 +65,20 @@ class RawAudioCaptureTest {
     }
 
     @Test
+    fun theManualSyncOffsetShiftsEveryChunkButNotTheMeasuredEpoch() {
+        for (offsetNs in listOf(-120_000_000L, 0L, 45_000_000L)) {
+            val chunker = RawPcmChunker(48_000, 1, startReceiptBoottimeNs = 1, chunkFrames = 480, syncOffsetNs = offsetNs)
+            chunker.observeTimestamp(480, 5_010_000_000L)
+            val out = chunker.append(ByteBuffer.allocate(480 * 2 * 2), 480 * 2 * 2) + chunker.flush()
+            assertEquals(listOf(5_000_000_000L + offsetNs, 5_010_000_000L + offsetNs), out.map { it.firstSampleBoottimeNs })
+            // A later timestamp 1 ms off the fixed epoch: the residual is measured against the unshifted one.
+            chunker.observeTimestamp(960, 5_021_000_000L)
+            assertEquals(1_000_000L, chunker.maxResidualNs)
+            assertEquals(offsetNs, chunker.syncOffsetNs)
+        }
+    }
+
+    @Test
     fun aFlushCarriesTheLastPartialChunk() {
         val chunker = RawPcmChunker(48_000, 1, startReceiptBoottimeNs = 1, chunkFrames = 100)
         chunker.observeTimestamp(0, 1_000_000_000L)
@@ -113,5 +127,17 @@ class RawAudioCaptureTest {
         assertEquals(RawTakeAudio.NONE, RawTakeAudio.decide(audioRequested = false, microphoneGranted = false))
         assertEquals(RawTakeAudio.RECORD, RawTakeAudio.decide(audioRequested = true, microphoneGranted = true))
         assertEquals(RawTakeAudio.REFUSE_PERMISSION, RawTakeAudio.decide(audioRequested = true, microphoneGranted = false))
+    }
+
+    @Test
+    fun withoutTimestampsTheEpochComesFromWhenTheReadsReturned() {
+        val chunker = RawPcmChunker(48_000, 1, startReceiptBoottimeNs = 7_000_000_000L, chunkFrames = 480, maxPendingChunks = 2)
+        // The first sample arrived 70 ms after the input started; the second read returned 3 ms late.
+        chunker.observeRead(480 * 2 * 2, 7_090_000_000L)
+        assertTrue(chunker.append(ByteBuffer.allocate(480 * 2 * 2), 480 * 2 * 2).isEmpty())
+        chunker.observeRead(480 * 2, 7_103_000_000L)
+        val out = chunker.append(ByteBuffer.allocate(480 * 2), 480 * 2)
+        assertEquals(listOf(7_070_000_000L, 7_080_000_000L, 7_090_000_000L), out.map { it.firstSampleBoottimeNs })
+        assertFalse(chunker.timestampBacked)
     }
 }

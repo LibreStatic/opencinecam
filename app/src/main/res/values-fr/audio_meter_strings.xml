@@ -15,4 +15,8 @@
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>
     <string name="audio_meter_hold_value">Maintien %1$s</string>
+    <string name="audio_meter_clip_input">Entrée du micro saturée</string>
+    <string name="audio_meter_clip_recorded">Audio enregistré saturé</string>
+    <string name="audio_meter_clip_both">Entrée du micro et audio enregistré saturés</string>
+    <string name="audio_meter_clip_help">CLIP IN : le micro lui-même a atteint la pleine échelle, avant l\'égaliseur, l\'AGC et le gain ; l\'enregistrement peut tout de même sonner correctement. CLIP REC : l\'audio enregistré a atteint la pleine échelle.</string>
 </resources>

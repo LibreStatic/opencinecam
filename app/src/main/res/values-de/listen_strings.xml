@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Mithören über Kopfhörer</string>
+    <string name="listen_key_on">ein</string>
+    <string name="listen_key_connecting">verbindet</string>
+    <string name="listen_key_off">aus</string>
+    <string name="listen_key_open_panel">Ausgang und Lautstärke</string>
+    <string name="listen_panel_title">KOPFHÖRER</string>
+    <string name="listen_panel_hint">Zu hören ist, was aufgenommen wird</string>
+    <string name="listen_panel_no_output">USB-C- oder Bluetooth-Kopfhörer anschließen</string>
+    <string name="listen_panel_raw_video">Bei RAW-Video ist das Mikrofon erst ab Beginn des Takes zu hören</string>
+    <string name="listen_exit_title">Weiter mithören?</string>
+    <string name="listen_exit_body">Das Mithören ist noch aktiv (%1$s).</string>
+    <string name="listen_exit_keep">Weiter mithören</string>
+    <string name="listen_exit_stop">Beenden</string>
+</resources>

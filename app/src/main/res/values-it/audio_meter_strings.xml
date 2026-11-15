@@ -15,4 +15,8 @@
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>
     <string name="audio_meter_hold_value">Hold %1$s</string>
+    <string name="audio_meter_clip_input">Ingresso del microfono saturato</string>
+    <string name="audio_meter_clip_recorded">Audio registrato saturato</string>
+    <string name="audio_meter_clip_both">Ingresso del microfono e audio registrato saturati</string>
+    <string name="audio_meter_clip_help">CLIP IN: il microfono stesso ha raggiunto il fondo scala, prima di equalizzatore, AGC e guadagno; la registrazione può comunque suonare bene. CLIP REC: l\'audio registrato ha raggiunto il fondo scala.</string>
 </resources>

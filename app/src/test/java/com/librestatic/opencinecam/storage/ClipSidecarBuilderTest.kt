@@ -214,4 +214,31 @@ class ClipSidecarBuilderTest {
     @Test fun nameOfTheSidecarFollowsTheVideoStem() {
         assertEquals("OCC_take.clip.json", clipSidecarName("OCC_take.mp4"))
     }
+
+    @Test fun embeddedAudioRecordsItsInputPathAndEqualiser() {
+        val curve = com.librestatic.opencinecam.camera.EqCurve(
+            points = listOf(com.librestatic.opencinecam.camera.EqPoint.coerced(com.librestatic.opencinecam.camera.EqFilterType.HIGH_PASS, 80.0, 0.0, 0.7071)))
+        val embedded = sdrGraph.copy(audioStorage = "EMBEDDED_AAC", audioContainer = null, audioSampleRateHz = null, audioBitDepth = null,
+            audioInput = com.librestatic.opencinecam.camera.PcmInputEvidence("LOW_LATENCY", "AUDIO_RECORD", "external-input", 16, curve))
+        val audio = assertValid(encoded(facts(embedded), context())).resolvedGraph.getValue("audio").jsonObject
+        assertEquals("EMBEDDED_AAC", audio.getValue("storage").jsonPrimitive.content)
+        assertEquals("LOW_LATENCY", audio.getValue("source").jsonPrimitive.content)
+        assertEquals("AUDIO_RECORD", audio.getValue("inputPath").jsonPrimitive.content)
+        assertEquals("external-input", audio.getValue("inputFallbackReason").jsonPrimitive.content)
+        assertEquals(16, audio.getValue("captureBitDepth").jsonPrimitive.content.toInt())
+        assertEquals(curve, com.librestatic.opencinecam.camera.decodeEqCurve(audio.getValue("equaliser").jsonObject))
+        // A curve without a profile (a custom one) names none.
+        assertFalse("equaliserProfileId" in audio)
+        val profiled = embedded.copy(audioInput = embedded.audioInput!!.copy(equaliserProfileId = "bundled-blanc"))
+        val named = assertValid(encoded(facts(profiled), context())).resolvedGraph.getValue("audio").jsonObject
+        assertEquals("bundled-blanc", named.getValue("equaliserProfileId").jsonPrimitive.content)
+
+        val flat = embedded.copy(audioInput = com.librestatic.opencinecam.camera.PcmInputEvidence("CAMCORDER", "AUDIO_RECORD", null, 16, null))
+        val plain = assertValid(encoded(facts(flat), context())).resolvedGraph.getValue("audio").jsonObject
+        assertEquals(kotlinx.serialization.json.JsonNull, plain.getValue("inputFallbackReason"))
+        assertEquals(kotlinx.serialization.json.JsonNull, plain.getValue("equaliser"))
+        assertFalse("equaliserProfileId" in plain)
+        // Without evidence (a separate file, or an engine that did not report) the block is unchanged.
+        assertFalse("inputPath" in assertValid(encoded(facts(), context())).resolvedGraph.getValue("audio").jsonObject)
+    }
 }

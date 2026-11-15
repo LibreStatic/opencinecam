@@ -51,6 +51,8 @@ internal data class ClipFactsInput(
     val nativeRetired: Boolean,
     /** The camera settings [ClipCameraTracker] sampled while the take recorded; null when it did not run. */
     val camera: ClipCameraSettings? = null,
+    /** PLAN-074 decision 11: what the embedded AAC path opened; written only for an embedded-audio take. */
+    val embeddedAudioInput: com.librestatic.opencinecam.camera.PcmInputEvidence? = null,
 )
 
 internal fun clipDeviceProfileOf(resolution: QuirkResolution): ClipDeviceProfile = ClipDeviceProfile(
@@ -97,6 +99,7 @@ internal fun assembleClipFacts(input: ClipFactsInput): ClipTakeFacts {
         audioContainer = input.separateAudio?.container,
         audioSampleRateHz = input.separateAudio?.sampleRateHz,
         audioBitDepth = input.separateAudio?.bitDepthBits,
+        audioInput = input.embeddedAudioInput?.takeIf { input.separateAudio == null && input.embeddedAudio },
         deviceProfile = input.deviceProfile,
         camera = input.camera,
     )

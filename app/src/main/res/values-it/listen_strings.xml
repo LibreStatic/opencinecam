@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="listen_key">Ascolto in cuffia</string>
+    <string name="listen_key_on">attivo</string>
+    <string name="listen_key_connecting">connessione</string>
+    <string name="listen_key_off">disattivo</string>
+    <string name="listen_key_open_panel">Uscita e volume</string>
+    <string name="listen_panel_title">CUFFIE</string>
+    <string name="listen_panel_hint">Senti ciò che viene registrato</string>
+    <string name="listen_panel_no_output">Collega cuffie USB-C o Bluetooth</string>
+    <string name="listen_panel_raw_video">In video RAW il microfono si sente quando inizia la ripresa</string>
+    <string name="listen_exit_title">Continuare l’ascolto?</string>
+    <string name="listen_exit_body">L’ascolto è ancora attivo (%1$s).</string>
+    <string name="listen_exit_keep">Continua ad ascoltare</string>
+    <string name="listen_exit_stop">Interrompi</string>
+</resources>

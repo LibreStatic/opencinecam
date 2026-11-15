@@ -31,10 +31,20 @@ enum class AudioBitDepth(val bits: Int, val androidEncoding: Int, val label: Str
     PCM_FLOAT(32, AudioFormat.ENCODING_PCM_FLOAT, "32-bit float"),
 }
 
+/**
+ * The capture source of a take. [androidSource] is the `AudioRecord`/`MediaRecorder` source; for
+ * [LOW_LATENCY] it is the source used when the native low-latency input cannot be (PLAN-074
+ * decision 2): an external input, a refused stream, or a recorder that only takes a platform source.
+ */
 enum class AudioSourceSelection(val androidSource: Int, val label: String) {
     UNPROCESSED(MediaRecorder.AudioSource.UNPROCESSED, "Unprocessed"),
     VOICE_RECOGNITION(MediaRecorder.AudioSource.VOICE_RECOGNITION, "Reconocimiento de voz"),
     MIC(MediaRecorder.AudioSource.MIC, "Standard microphone"),
+    CAMCORDER(MediaRecorder.AudioSource.CAMCORDER, "Camcorder"),
+    LOW_LATENCY(MediaRecorder.AudioSource.CAMCORDER, "Low latency");
+
+    /** True for the native low-latency input, which [PcmInputs.open] opens through AAudio. */
+    val lowLatency: Boolean get() = this == LOW_LATENCY
 }
 
 data class SelectableAudioInput(
@@ -80,6 +90,11 @@ data class ProfessionalAudioCapabilities(
     val probedInputKey: AudioInputKey? = null,
     /** False when the probed input refused to route a started capture to itself. */
     val probedInputRouteConfirmed: Boolean? = null,
+    /**
+     * The source a choice that is not in [sources] falls back to, ahead of Camcorder; null for none.
+     * The probe never sets it: the app does, from the device profile (PLAN-074 decision 1).
+     */
+    val preferredSource: AudioSourceSelection? = null,
 ) {
     val losslessAvailable: Boolean get() = formats.any { it != AudioOutputFormat.AAC_MP4 }
 }
@@ -150,6 +165,8 @@ class AndroidProfessionalAudioProbe(private val context: Context) {
             aacChannelCounts = aac?.channelCounts.orEmpty(),
             aacBitratesKbps = aacBitrates,
             sources = buildList {
+                if (lowLatencyInputAvailable()) add(AudioSourceSelection.LOW_LATENCY)
+                add(AudioSourceSelection.CAMCORDER)
                 if (unprocessed) add(AudioSourceSelection.UNPROCESSED)
                 add(AudioSourceSelection.VOICE_RECOGNITION)
                 add(AudioSourceSelection.MIC)

@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam.service
 
+import com.librestatic.opencinecam.appliedAudioEqCurve
+import com.librestatic.opencinecam.audioInputFallbackShown
+import com.librestatic.opencinecam.appliedAudioEqProfileId
 import com.librestatic.opencinecam.camera.CapturedAccumulation
 import com.librestatic.opencinecam.camera.CapturedBurst
 import com.librestatic.opencinecam.camera.CapturedBracket
@@ -70,6 +73,7 @@ import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.TimeLapseLimitMode
 import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.forDevice
 import com.librestatic.opencinecam.toSpec
 import com.librestatic.opencinecam.VideoGeometryPolicy
 import com.librestatic.opencinecam.R
@@ -261,6 +265,10 @@ class CaptureService : Service() {
     private val stateCommands = CaptureStateCommands(OWNER_ID)
     private val cameraState = MutableStateFlow(CameraUiState())
     private val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.LensCalibrationUiState())
+    /** The equaliser editor's live spectrum from the preview monitor (PLAN-074 decision 13); null when not wanted or none runs. Declared before the binder, which wraps it as it is built. */
+    private val audioSpectrum = MutableStateFlow<com.librestatic.opencinecam.camera.AudioSpectrum?>(null)
+    /** The equaliser editor's snippet audition; declared before the binder for the same reason. */
+    private val eqAuditionState = MutableStateFlow(EqAuditionState())
     private val localBinder = LocalBinder()
     private val foreground = RecordingForegroundController(this)
     private val previewEngine by lazy { CaptureStartup.adoptEngine(this) }
@@ -439,9 +447,11 @@ class CaptureService : Service() {
         val intent = takeClipIntent
         val codecMime = takeClipCodecMime
         val mediaRecorder = takeClipMediaRecorder
+        val audioInput = takeClipAudioInput
         val state = cameraState.value
         val camera = takeCameraTracker?.also { it.sample(state) }?.result()
         takeClipMediaRecorder = null
+        takeClipAudioInput = null
         takeClipStartedAt = null
         takeClipIntent = null
         takeClipCodecMime = null
@@ -456,6 +466,7 @@ class CaptureService : Service() {
             noticeCodes = listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { it.name.lowercase().replace('_', '-') },
             hardwareWarnings = emptyList(), stopReason = reasons.firstOrNull(), durationMs = activeRecordingElapsedMs(),
             encodedFrames = encodedFrames, success = false, nativeRetired = false, camera = camera,
+            embeddedAudioInput = audioInput,
         )).copy(continuation = continuation)
         return clipSidecarProvider { facts }
     }
@@ -586,6 +597,8 @@ class CaptureService : Service() {
     // Report-only A/V clock drift of the last separate WAV/FLAC take (ADAPTIVE; never stops a take).
     @Volatile private var lastSeparateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? = null
     private var previewAudioMonitor: PreviewAudioMonitor? = null
+    /** Main thread: the audio input has been settled for this phone (PLAN-074 decision 1); see onCreate. */
+    private var audioInputSettled = false
     private var audioInputMonitor: AudioInputMonitor? = null
     /** Only the newest guard may publish [CameraUiState.activeAudioInput]; retired guards may still post. */
     private var audioRouteOwner: AudioInputRouteGuard? = null
@@ -603,6 +616,36 @@ class CaptureService : Service() {
     /** The HUD state when the take began, so the sidecar lists only what the take itself saw. */
     @Volatile private var takeStartHardwareTruth = HardwareTruthHudState()
     private val audioLevelEpoch = java.util.concurrent.atomic.AtomicLong()
+    /** Main thread: holds [CameraUiState.audioInputOverloaded] after the last flagged snapshot (PLAN-074 decision 14). */
+    private val audioOverloadHold = AudioOverloadHold()
+    private val audioOverloadClear = object : Runnable {
+        override fun run() {
+            if (serviceDestroyed) return
+            val wait = audioOverloadHold.clearsInMs(android.os.SystemClock.elapsedRealtime())
+            if (wait != null) mainHandler.postDelayed(this, wait) else cameraState.update { it.copy(audioInputOverloaded = false) }
+        }
+    }
+    /** Main thread: an editor asked for [audioSpectrum]; applied to every monitor that starts. */
+    private var audioSpectrumWanted = false
+    /** Main thread: the editor's snippet audition (PLAN-074 decision 13); while it plays, the preview monitor rests. */
+    private val eqSnippetAudition = EqAudition(eqAuditionState, { mainHandler.post(it) }, object : EqAudition.Hooks {
+        override fun allowed() = eqAuditionAllowed()
+        override fun monitor() = previewAudioMonitor
+        override fun monitorEligible() = previewAudioEligible()
+        override fun stopMonitor() { stopPreviewAudioMonitor(clearLevels = false, endEqAudition = false) }
+        override fun restartMonitor() = startPreviewAudioMonitorIfEligible()
+        override fun startPlayer(snippet: EqSnippet, onProgress: () -> Unit, onFailure: (Throwable) -> Unit): EqSnippetPlayback {
+            // The playback is the level producer now: its meters latch the clip as the monitor's would.
+            val onLevel = newAudioLevelConsumer()
+            val applied = cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings
+            return EqSnippetPlayer(snippet, applied.appliedAudioEqCurve, applied.audioRecordingGain,
+                newAudioSpectrumConsumer(audioLevelEpoch.get()), onLevel, onProgress, onFailure).also { it.start() }
+        }
+        override fun playbackStopped() {
+            retireAudioLevelConsumer(clearLevels = true)
+            audioSpectrum.value = null
+        }
+    })
     @Volatile private var recordingStartedAtMs = 0L
     /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
     private val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
@@ -1216,6 +1259,12 @@ class CaptureService : Service() {
     @Volatile private var takeClipStartedAt: java.time.Instant? = null
     @Volatile private var takeClipCodecMime: String? = null
     @Volatile private var takeClipMediaRecorder: Boolean? = null
+    /** What the take's embedded AAC path opened (PLAN-074 decision 11); set by the engine as it opens the input. */
+    @Volatile private var takeClipAudioInput: com.librestatic.opencinecam.camera.PcmInputEvidence? = null
+    /** The AAC bitrate of a take whose audio is appended when it ends (PLAN-074 decision 10); null for any other take. */
+    @Volatile private var takeAppendedAudioBitrateBps: Int? = null
+    /** The manual sync offset of that appended audio (PLAN-074 decision 12), read at take start; nanoseconds. */
+    @Volatile private var takeAppendedAudioSyncOffsetNs: Long = 0
     /** Samples the running take's camera settings from [cameraState] for the clip sidecar; null outside a take. */
     @Volatile private var takeCameraTracker: ClipCameraTracker? = null
     /** Stable code of a Strict encoder refusal reported by the engine, consumed by the failed-start branch. */
@@ -1295,7 +1344,7 @@ class CaptureService : Service() {
         return recordingWarningLine(admissionWarning, takeSoftwareEncoder?.let { getString(R.string.software_video_encoder_warning, it) },
             getString(R.string.video_codec_fallback_warning).takeIf { takeCodecFallback },
             listOfNotNull(runtimeNotice, avNotice, cadenceNotice).map { getString(runtimeNoticeText(it)) } +
-                listOfNotNull(destinationFallbackNotice(takeDestination?.fallback, getString(R.string.recording_drive_fallback_not_connected),
+                listOfNotNull(destinationFallbackNotice(takeDestination?.fallback,
                     getString(R.string.recording_drive_fallback_permission_lost), getString(R.string.recording_drive_fallback_starting),
                     getString(R.string.recording_drive_fallback_renamed))))
     }
@@ -1425,6 +1474,18 @@ class CaptureService : Service() {
         repository.update { it.forOperatorStartup() }
         localBinder.applySettings(repository.states.value)
         settingsScope.launch { repository.states.collect { localBinder.applySettings(it) } }
+        // PLAN-074 decision 1: the audio input default comes from the device profile, which reads assets, so it is
+        // resolved off the main thread; the preview audio monitor waits for it (previewAudioEligible), so it never
+        // opens the pre-migration source. The settle goes through the repository, so the UI and applySettings follow.
+        settingsScope.launch {
+            val policy = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.librestatic.opencinecam.AudioInputPolicies.get(this@CaptureService)
+            }
+            if (serviceDestroyed) return@launch
+            repository.settleAudioInput(policy)
+            audioInputSettled = true
+            startPreviewAudioMonitorIfEligible()
+        }
         // The network drive (PLAN-071 §8) never runs while a take prepares, records or finalises.
         settingsScope.launch { cameraState.collect { com.librestatic.opencinecam.share.NetworkShare.reportTakeActive(it.reviewBlockedByTake()) } }
         // The clip sidecar's camera block follows the reported exposure, white balance and zoom while a take records.
@@ -1486,13 +1547,44 @@ class CaptureService : Service() {
         val epoch = audioLevelEpoch.get()
         return { snapshot ->
             mainHandler.post {
-                if (!serviceDestroyed && audioLevelEpoch.get() == epoch) cameraState.update { current ->
-                    if (serviceDestroyed || audioLevelEpoch.get() != epoch) current else current.copy(
-                        audioLevels = snapshot,
-                        audioClipLatched = current.audioClipLatched || snapshot.clipped,
-                        audioMonitoringActive = true,
-                    )
+                if (!serviceDestroyed && audioLevelEpoch.get() == epoch) {
+                    val overloaded = audioOverloadHold.observe(snapshot.inputOverloaded, snapshot.capturedAtElapsedRealtimeMs)
+                    // Re-armed by each flagged snapshot, so it never fires while the input is still overloading.
+                    if (snapshot.inputOverloaded) {
+                        mainHandler.removeCallbacks(audioOverloadClear)
+                        mainHandler.postDelayed(audioOverloadClear,
+                            audioOverloadHold.clearsInMs(android.os.SystemClock.elapsedRealtime()) ?: 0L)
+                    }
+                    cameraState.update { current ->
+                        if (serviceDestroyed || audioLevelEpoch.get() != epoch) current else current.copy(
+                            audioLevels = snapshot,
+                            audioClipLatched = current.audioClipLatched || snapshot.clipped,
+                            audioInputClipLatched = current.audioInputClipLatched || snapshot.inputClipped,
+                            audioRecordedClipLatched = current.audioRecordedClipLatched || snapshot.recordedClipped,
+                            audioInputOverloaded = overloaded,
+                            audioMonitoringActive = true,
+                        )
+                    }
                 }
+            }
+        }
+    }
+
+    /** Main thread: the clip latches are reset, and the overload notice goes with them. */
+    private fun resetAudioOverload() {
+        audioOverloadHold.reset()
+        mainHandler.removeCallbacks(audioOverloadClear)
+    }
+
+    /**
+     * A take's opened microphone says whether the low-latency input fell back (PLAN-074 decision 4); like the
+     * level consumer, only the current PCM producer may say it. Create it after [newAudioLevelConsumer].
+     */
+    private fun newTakeInputFallbackReporter(): (String?) -> Unit {
+        val epoch = audioLevelEpoch.get()
+        return { reason ->
+            mainHandler.post {
+                if (!serviceDestroyed && audioLevelEpoch.get() == epoch) cameraState.update { it.copy(audioInputFallback = audioInputFallbackShown(reason)) }
             }
         }
     }
@@ -1516,13 +1608,17 @@ class CaptureService : Service() {
         previewAudioRetirement = CompletableFuture.allOf(previewAudioRetirement, receipt).thenApply { Unit }
     }
 
-    private fun stopPreviewAudioMonitor(clearLevels: Boolean = false): CompletableFuture<Unit> {
+    /**
+     * [endEqAudition]: whatever needs the audio (a take, a qualification, a camera opening) also ends the editor's
+     * snippet audition; only the monitor's own restarts and the audition itself pass false.
+     */
+    private fun stopPreviewAudioMonitor(clearLevels: Boolean = false, endEqAudition: Boolean = true): CompletableFuture<Unit> {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             // Fence queued PCM immediately; native owner changes remain serialized on main.
             retireAudioLevelConsumer(clearLevels)
             val receipt = CompletableFuture<Unit>()
             mainHandler.post {
-                stopPreviewAudioMonitor(clearLevels).whenComplete { _, failure ->
+                stopPreviewAudioMonitor(clearLevels, endEqAudition).whenComplete { _, failure ->
                     if (failure == null) receipt.complete(Unit) else receipt.completeExceptionally(failure)
                 }
             }
@@ -1531,6 +1627,9 @@ class CaptureService : Service() {
         previewAudioGeneration++
         val monitor = previewAudioMonitor
         previewAudioMonitor = null
+        eqSnippetAudition.onMonitorStopped(monitor)
+        if (endEqAudition) eqSnippetAudition.end(keepSnippet = true)
+        audioSpectrum.value = null
         if (monitor != null || clearLevels) retireAudioLevelConsumer(clearLevels)
         if (monitor != null) rememberPreviewAudioRetirement(monitor.closeAsync())
         cameraState.update { it.copy(
@@ -1541,11 +1640,31 @@ class CaptureService : Service() {
         return previewAudioRetirement.thenApply { Unit }
     }
 
+    /**
+     * The equaliser editor is open away from the viewfinder (PLAN-074 decision 13): the monitor runs for its spectrum
+     * (and the headphones) in any mode, as long as no take, still or qualification has the camera.
+     */
+    private fun editorAuditionEligible(current: CameraUiState): Boolean = attachedPreviewSurface == null && editorHasAudio(current)
+
+    /** The editor is showing and no take, still or qualification has the camera. */
+    private fun editorHasAudio(current: CameraUiState): Boolean =
+        audioSpectrumWanted && rawQualificationSession == null && rawTake == null &&
+            current.phase != CameraUiPhase.RECORDING && current.phase != CameraUiPhase.CAPTURING && !current.structuralSettingsFrozen
+
+    /**
+     * The editor's snippet audition may record or play. A viewfinder surface still attached behind the editor does
+     * not matter: the editor is what is on screen, and the playback rests whichever monitor runs.
+     */
+    private fun eqAuditionAllowed(): Boolean = !serviceDestroyed && audioInputSettled && editorHasAudio(cameraState.value) &&
+        transferCapture.get() == null && !transferWaiting && !recordingWbPreparing && settings.audioEnabled
+
     private fun previewAudioEligible(): Boolean {
         val current = cameraState.value
-        return !serviceDestroyed && attachedPreviewSurface?.isValid == true &&
+        val viewfinder = attachedPreviewSurface?.isValid == true &&
             current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) &&
-            current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG) &&
+            current.selectedMode in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG)
+        // The snippet audition plays on the speaker, which the microphone would pick up.
+        return !serviceDestroyed && audioInputSettled && (viewfinder || editorAuditionEligible(current)) && !eqSnippetAudition.playing &&
             transferCapture.get() == null && !transferWaiting && !recordingWbPreparing &&
             settings.audioEnabled &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -1556,11 +1675,13 @@ class CaptureService : Service() {
             mainHandler.post { startPreviewAudioMonitorIfEligible() }
             return
         }
-        val retirement = stopPreviewAudioMonitor(clearLevels = false)
+        val retirement = stopPreviewAudioMonitor(clearLevels = false, endEqAudition = false)
+        // Every reason the monitor may not run for the editor also ends its audition.
+        if (!eqAuditionAllowed()) eqSnippetAudition.end(keepSnippet = true)
         val generation = previewAudioGeneration
         if (!previewAudioEligible()) {
             if (!settings.audioEnabled || cameraState.value.selectedMode !in setOf(CaptureMode.VIDEO, CaptureMode.LOG, CaptureMode.HLG)) {
-                cameraState.update { it.copy(audioLevels = null, audioMonitoringActive = false, activeAudioInput = null) }
+                cameraState.update { it.copy(audioLevels = null, audioMonitoringActive = false, activeAudioInput = null, audioInputFallback = false) }
             }
             return
         }
@@ -1568,7 +1689,8 @@ class CaptureService : Service() {
             mainHandler.post {
                 if (generation != previewAudioGeneration || !previewAudioEligible()) return@post
                 if (retiredFailure != null) {
-                    cameraState.update { it.copy(audioMonitoringActive = false,
+                    eqSnippetAudition.onMonitorUnavailable()
+                    cameraState.update { it.copy(audioMonitoringActive = false, audioInputFallback = false,
                         message = getString(R.string.audio_retirement_failed)) }
                     return@post
                 }
@@ -1589,22 +1711,34 @@ class CaptureService : Service() {
                             mainHandler.post failedAudio@ {
                                 if (serviceDestroyed || audioLevelEpoch.get() != epoch) return@failedAudio
                                 stopPreviewAudioMonitor(clearLevels = false)
-                                cameraState.update { it.copy(audioMonitoringActive = false,
+                                cameraState.update { it.copy(audioMonitoringActive = false, audioInputFallback = false,
                                     message = getString(R.string.capture_audio_monitor_unavailable, failure.message ?: failure.javaClass.simpleName)) }
                             }
                         },
                         listeningSink = newAudioListeningSink(),
                         inputGuard = newAudioRouteGuard(monitorSettings, AudioInputLossAction.IGNORE),
+                        onSpectrum = newAudioSpectrumConsumer(epoch),
                     )
+                    monitor.spectrumWanted = audioSpectrumWanted
                     previewAudioMonitor = monitor
                     monitor.start()
+                    eqSnippetAudition.onMonitorStarted(monitor)
+                    cameraState.update { it.copy(audioInputFallback = audioInputFallbackShown(monitor.inputFallbackReason)) }
                 } catch (failure: Throwable) {
                     if (failure is PreviewAudioMonitorCreationFailure) rememberPreviewAudioRetirement(failure.retirement)
+                    eqSnippetAudition.onMonitorUnavailable()
                     stopPreviewAudioMonitor(clearLevels = false)
-                    cameraState.update { it.copy(audioMonitoringActive = false,
+                    cameraState.update { it.copy(audioMonitoringActive = false, audioInputFallback = false,
                         message = getString(R.string.capture_audio_monitor_unavailable, failure.message ?: failure.javaClass.simpleName)) }
                 }
             }
+        }
+    }
+
+    /** The editor's spectrum, from the monitor or the snippet playback; only the current PCM producer may publish it. */
+    private fun newAudioSpectrumConsumer(epoch: Long): (com.librestatic.opencinecam.camera.AudioSpectrum) -> Unit = { spectrum ->
+        mainHandler.post {
+            if (!serviceDestroyed && audioLevelEpoch.get() == epoch && audioSpectrumWanted) audioSpectrum.value = spectrum
         }
     }
 
@@ -2791,6 +2925,7 @@ class CaptureService : Service() {
                 getString(if (rawArmedRing?.nearLossless == true) R.string.raw_video_label_near_lossless else R.string.raw_video_label_compressed)),
                 kotlin.math.round(option.megabytesPerSecond).toLong()) +
                 " · " + rawTakeAudioLabel(),
+            audioInputFallback = audioInputFallbackShown(rawRecorder.liveAudioInputFallbackReason()),
             recordingElapsedMs = 0L,
             recordingPauseStatus = null,
             recordingAvTiming = null,
@@ -3634,9 +3769,18 @@ class CaptureService : Service() {
             val clipIntent = takeClipIntent?.copy(timecodeEnabled = timecodeReport?.config?.enabled == true)
             val clipCodecMime = takeClipCodecMime
             val clipMediaRecorder = takeClipMediaRecorder
+            val clipAudioInput = takeClipAudioInput
             val clipState = cameraState.value
             val clipCamera = takeCameraTracker?.also { it.sample(clipState) }?.result()
+            // PLAN-074 decision 10: the frame anchors of a take whose audio is appended below.
+            val appendBitrateBps = takeAppendedAudioBitrateBps
+            val appendSyncOffsetNs = takeAppendedAudioSyncOffsetNs
+            val directTiming = previewEngine.consumeDirectRecorderTiming()
+            val sensorRealtime = clipState.descriptor?.timestampSourceRealtime == true
+            takeAppendedAudioBitrateBps = null
+            takeAppendedAudioSyncOffsetNs = 0
             takeClipMediaRecorder = null
+            takeClipAudioInput = null
             takeClipStartedAt = null
             takeClipIntent = null
             takeClipCodecMime = null
@@ -3661,7 +3805,6 @@ class CaptureService : Service() {
             val finishTake = Runnable {
                 try {
                     val requestedAudioFailure = take.audioStartFailure
-                    val audioOutput = take.audio
                     // HLG takes run through the same graph but are standard HDR video: no OCLog sidecar.
                     val hlgEvidence = graphEvidence?.takeIf { HdrVideoFormat.fromCurve(it.curve) != null }
                     val logEvidence = graphEvidence?.takeUnless { HdrVideoFormat.fromCurve(it.curve) != null }
@@ -3678,6 +3821,44 @@ class CaptureService : Service() {
                     }
                     val finalizedSuccess = incompleteReasons.isEmpty()
                     val geometry = take.geometry
+                    // PLAN-074 decision 10: a complete take's WAV becomes the MP4's AAC track and leaves the take. Any
+                    // failure leaves the video as it was and the WAV to be published beside it by the steps below.
+                    var appendedAudioInput: com.librestatic.opencinecam.camera.PcmInputEvidence? = null
+                    var audioAppended = false
+                    var audioWithdrawn = false
+                    val takeWav = take.audio as? WavAudioSidecarRecorder
+                    if (appendBitrateBps != null && takeWav != null && output != null && finalizedSuccess) try {
+                        val result = takeWav.prepareCompletion()?.result
+                        if (result != null) {
+                            var placement: com.librestatic.opencinecam.camera.AppendedAudioPlacement? = null
+                            val anchors = directTiming
+                                ?: com.librestatic.opencinecam.camera.DirectRecorderTiming(result.startedAtElapsedNs, null, null, 0, drained = false)
+                            val appended = takeWav.readPrepared { wav ->
+                                com.librestatic.opencinecam.storage.appendWavAsAac(output.descriptor.fileDescriptor, wav, appendBitrateBps, { video ->
+                                    com.librestatic.opencinecam.camera.placeAppendedAudio(anchors, sensorRealtime, video.lastSampleTimeUs,
+                                        result.captureTiming?.epoch, result.readEstimatedFrameZeroNs ?: result.startedAtElapsedNs,
+                                        audioSyncOffsetNs = appendSyncOffsetNs)
+                                        .also { placement = it }.startOffsetUs
+                                })
+                            }
+                            // From here the file has the audio, whatever becomes of the WAV.
+                            audioAppended = true
+                            appendedAudioInput = result.inputEvidence
+                            avTiming = appendedAudioEpochReport(requireNotNull(placement), sensorRealtime, result.captureTiming?.epoch,
+                                appended.primingFrames, appended.pcmFrames, appended.accessUnits)
+                            android.util.Log.i("CaptureService", "Take audio appended: ${appended.pcmFrames} frames, ${appended.accessUnits} units, " +
+                                "offset ${appended.startOffsetUs} us" +
+                                (placement?.audioSyncOffsetUs?.takeIf { it != 0L }?.let { " (manual sync offset $it us)" } ?: "") +
+                                ", ${avTiming?.policy}, ${appended.encoderName}, first read " +
+                                "${result.readEstimatedFrameZeroNs?.let { (it - result.startedAtElapsedNs) / 1_000L }} us after the input started")
+                            audioWithdrawn = true
+                            // False: the WAV could not be removed, so it is published beside the video as well.
+                            audioWithdrawn = takeWav.withdrawPrepared()
+                        }
+                    } catch (failure: Throwable) {
+                        android.util.Log.e("CaptureService", "Take audio not appended; the WAV stays beside the video", failure)
+                    }
+                    val audioOutput = take.audio.takeUnless { audioWithdrawn }
                     var registrationCreationFailed = transferPublication == null || transferPublication.registrationFailed
                     val publicationObserver = transferPublication?.observer ?: try { CapturePublicationJournal(this@CaptureService) }
                         catch (problem: Throwable) {
@@ -3742,12 +3923,13 @@ class CaptureService : Service() {
                                 lutBaked = bakedEvidence != null, timelapse = timing != null,
                                 mediaRecorder = clipMediaRecorder, recorderCodecMime = clipCodecMime, softwareEncoderName = clipSoftwareEncoder,
                                 sharedPause = avTiming?.sharedPause, separateAudio = clipSeparateAudio,
-                                embeddedAudio = clipIntent?.audioEnabled == true && audioOutput == null &&
+                                embeddedAudio = audioAppended || clipIntent?.audioEnabled == true && audioOutput == null &&
                                     requestedAudioFailure == null && takeAudioLabel != "no audio",
                                 deviceProfile = clipDeviceProfile, noticeCodes = clipNoticeCodes,
                                 hardwareWarnings = hardwareTruth?.warnings.orEmpty(), stopReason = clipStopReason,
                                 durationMs = durationMs, encodedFrames = encodedFrames,
                                 success = success, nativeRetired = nativeRetired, camera = clipCamera,
+                                embeddedAudioInput = clipAudioInput ?: appendedAudioInput,
                             )).copy(continuation = continuedFrom?.link)
                         }
                     }
@@ -4194,6 +4376,50 @@ class CaptureService : Service() {
 
         val states: StateFlow<CaptureState> = state.asStateFlow()
         val cameraStates: StateFlow<CameraUiState> = cameraState.asStateFlow()
+        /** The preview monitor's spectrum before and after the equaliser, while [setAudioSpectrumWanted] is on (PLAN-074 decision 13). */
+        val audioSpectra: StateFlow<com.librestatic.opencinecam.camera.AudioSpectrum?> = audioSpectrum.asStateFlow()
+
+        /**
+         * The equaliser editor is showing: the preview monitor (this one and each later one) computes [audioSpectra].
+         * With no viewfinder attached, the monitor runs for the editor alone and stops with it.
+         */
+        fun setAudioSpectrumWanted(wanted: Boolean) {
+            if (Looper.myLooper() != Looper.getMainLooper()) { mainHandler.post { setAudioSpectrumWanted(wanted) }; return }
+            if (serviceDestroyed) return
+            audioSpectrumWanted = wanted
+            previewAudioMonitor?.spectrumWanted = wanted
+            if (wanted) {
+                // Away from the viewfinder no monitor runs: the editor starts one for itself.
+                if (previewAudioMonitor == null) startPreviewAudioMonitorIfEligible()
+            } else {
+                // The page left: the snippet is the user's voice, so it goes with it.
+                eqSnippetAudition.end(keepSnippet = false)
+                audioSpectrum.value = null
+                if (previewAudioMonitor != null && !previewAudioEligible()) stopPreviewAudioMonitor(clearLevels = true)
+            }
+        }
+
+        /** The equaliser editor's snippet audition (PLAN-074 decision 13), held in memory only. */
+        val eqAudition: StateFlow<EqAuditionState> = eqAuditionState.asStateFlow()
+
+        /** Records the raw input for up to [EQ_SNIPPET_MAX_MS], replacing any kept snippet; refused when no monitor runs for the editor. */
+        fun startEqSnippetRecording() = onMainForEqAudition { startRecording() }
+
+        /** Keeps what was recorded, unless it is shorter than half a second. */
+        fun stopEqSnippetRecording() = onMainForEqAudition { stopRecording() }
+
+        /** Loops the kept snippet through the applied curve until stopped; the microphone rests meanwhile. */
+        fun playEqSnippet() = onMainForEqAudition { play() }
+
+        fun stopEqSnippetPlayback() = onMainForEqAudition { stopPlayback() }
+
+        fun discardEqSnippet() = onMainForEqAudition { discard() }
+
+        private fun onMainForEqAudition(action: EqAudition.() -> Unit) {
+            if (Looper.myLooper() != Looper.getMainLooper()) { mainHandler.post { onMainForEqAudition(action) }; return }
+            if (!serviceDestroyed) eqSnippetAudition.action()
+        }
+
         val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
 
         /**
@@ -4504,7 +4730,11 @@ class CaptureService : Service() {
             val requestedInput = settings.audioInputKey
             try {
                 storageExecutor.execute {
-                    val capabilities = runCatching { AndroidProfessionalAudioProbe(this@CaptureService).probe(requestedInput) }
+                    // The device profile drops a source that clips and names the fallback (PLAN-074 decision 1).
+                    val capabilities = runCatching {
+                        AndroidProfessionalAudioProbe(this@CaptureService).probe(requestedInput)
+                            .forDevice(com.librestatic.opencinecam.AudioInputPolicies.get(this@CaptureService))
+                    }
                         .getOrElse {
                             val message = getString(R.string.capture_audio_probe_failed, it.message ?: it.javaClass.simpleName)
                             mainHandler.post {
@@ -4589,9 +4819,12 @@ class CaptureService : Service() {
             if (surface != null && attachedPreviewSurface !== surface && parkedPreviewSurface !== surface) return
             cancelCountdown()
             cancelRecordingWhiteBalancePreparation()
-            stopPreviewAudioMonitor(clearLevels = true)
+            // Settings changes detach an absent viewfinder too; the editor's snippet audition carries on.
+            stopPreviewAudioMonitor(clearLevels = true, endEqAudition = false)
             attachedPreviewSurface = null
             parkedPreviewSurface = null
+            // The equaliser editor opened before the viewfinder's surface went: it keeps a monitor of its own.
+            if (audioSpectrumWanted) startPreviewAudioMonitorIfEligible()
             // The capture screen went away under a qualification (the app left): stop it.
             if (rawQualificationSession != null) {
                 cancelRawVideoQualification(RawQualificationStopReasons.PREVIEW_LOST)
@@ -5314,12 +5547,18 @@ class CaptureService : Service() {
                     }
                     syncRawVideoArm()
                 }
-                val onlyAudioDisplayChanged = previous.copy(audioListening = settings.audioListening,
-                    audioListeningOutputDeviceId = settings.audioListeningOutputDeviceId,
-                    audioMeter = settings.audioMeter, productionSlate = settings.productionSlate,
-                    gallery = settings.gallery, mediaSharing = settings.mediaSharing) == settings
+                val audioUpdate = previewAudioUpdate(previous, settings)
                 if (previous.audioInputKey != settings.audioInputKey && !takeInProgress()) refreshAudioCapabilities()
-                if (!onlyAudioDisplayChanged || previewAudioMonitor == null) startPreviewAudioMonitorIfEligible()
+                val monitor = previewAudioMonitor
+                // An equaliser being edited updates the running monitor; reopening the microphone at each drag would drop it.
+                // While the snippet plays no monitor may run; a curve dragged meanwhile must not clear the levels.
+                if ((monitor == null && !eqSnippetAudition.playing) || audioUpdate == PreviewAudioUpdate.RESTART) startPreviewAudioMonitorIfEligible()
+                else if (audioUpdate == PreviewAudioUpdate.EQ_CURVE)
+                    monitor?.setEqCurve((cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings).appliedAudioEqCurve)
+                // The snippet plays through the curve being edited, live, with the gain the monitor would apply.
+                (cameraState.value.audioCapabilities?.let(settings::normalizedFor) ?: settings).let { applied ->
+                    eqSnippetAudition.updatePlayback(applied.appliedAudioEqCurve, applied.audioRecordingGain)
+                }
             }
         }
 
@@ -5381,7 +5620,9 @@ class CaptureService : Service() {
         }
 
         fun resetAudioClip() {
-            cameraState.value = cameraState.value.copy(audioClipLatched = false)
+            resetAudioOverload()
+            cameraState.value = cameraState.value.copy(audioClipLatched = false, audioInputClipLatched = false, audioRecordedClipLatched = false,
+                audioInputOverloaded = false)
         }
 
         fun setManualExposure(iso: Int?, exposureTimeNs: Long?) {
@@ -5888,7 +6129,9 @@ class CaptureService : Service() {
                 CaptureMode.VIDEO -> {
                     try {
                         stopPreviewAudioMonitor(clearLevels = false)
-                        cameraState.value = cameraState.value.copy(audioClipLatched = false, audioLevels = null)
+                        resetAudioOverload()
+                        cameraState.value = cameraState.value.copy(audioClipLatched = false, audioInputClipLatched = false, audioRecordedClipLatched = false,
+                            audioInputOverloaded = false, audioLevels = null)
                         val requestedAudioEnabled = !settings.videoOffSpeed && (audioForThisTake ?: settings.audioEnabled)
                         val orientation = recordingOrientationDegrees()
                         val descriptor = current.descriptor
@@ -5920,7 +6163,22 @@ class CaptureService : Service() {
                         activeRecordingGain = audioSettings.audioRecordingGain.takeIf { audioRequested }
                         val onAudioLevel = newAudioLevelConsumer()
                         val listeningSink = newAudioListeningSink()
-                        val embeddedAudio = if (audioRequested && audioSettings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
+                        val reportInputFallback = newTakeInputFallbackReporter()
+                        takeClipAudioInput = null
+                        val recordingLutForTake = frozenRecordingLut()
+                        // PLAN-074 decision 10: the recorder takes video only; the audio is captured here and appended
+                        // to the MP4 when the take ends.
+                        val appendsAudio = appendsHighSpeedAudio(
+                            constrainedHighSpeed = current.activeVideoProfile?.constrainedHighSpeed == true,
+                            offSpeed = settings.videoOffSpeed,
+                            audioRequested = audioRequested,
+                            format = audioSettings.audioOutputFormat,
+                            recordingLut = recordingLutForTake != null,
+                            anamorphic = settings.anamorphicSqueeze.isActive,
+                        )
+                        takeAppendedAudioBitrateBps = (audioSettings.audioBitrateKbps * 1_000).takeIf { appendsAudio }
+                        takeAppendedAudioSyncOffsetNs = if (appendsAudio) audioSettings.audioSyncOffsetMs * 1_000_000L else 0
+                        val embeddedAudio = if (audioRequested && !appendsAudio && audioSettings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
                             Camera2EmbeddedAudioConfig(
                                 source = audioSettings.audioSource.androidSource,
                                 sampleRateHz = audioSettings.audioSampleRateHz,
@@ -5934,6 +6192,11 @@ class CaptureService : Service() {
                                 onAudioLevel = onAudioLevel,
                                 listeningSink = listeningSink,
                                 inputGuard = takeInput.guard,
+                                sourceSelection = audioSettings.audioSource,
+                                eqCurve = audioSettings.appliedAudioEqCurve,
+                                eqProfileId = audioSettings.appliedAudioEqProfileId,
+                                onInputOpened = { evidence -> takeClipAudioInput = evidence; reportInputFallback(evidence.inputFallbackReason) },
+                                syncOffsetNs = audioSettings.audioSyncOffsetMs * 1_000_000L,
                             )
                         } else null
                         when (val start = foreground.start(audioRequested)) {
@@ -5948,19 +6211,23 @@ class CaptureService : Service() {
                         val output = createTakeOutput(admittedSlate, captureNames)
                         videoOutput = output
                         admitTransferPublication()
-                        val separateClock = if (embeddedAudio == null) com.librestatic.opencinecam.camera.CaptureEpochClock(
+                        val separateClock = if (embeddedAudio == null && !appendsAudio) com.librestatic.opencinecam.camera.CaptureEpochClock(
                             current.descriptor?.timestampSourceRealtime == true, audioSettings.audioSampleRateHz) else null
                         audioSidecarRecorder = when {
                             !audioRequested -> null
+                            // The take's own WAV until the append: 16-bit, what the AAC encoder takes.
+                            appendsAudio ->
+                                WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate, audioBitDepth = com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_16), captureClock = null, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             audioSettings.audioOutputFormat == AudioOutputFormat.WAV_PCM ->
                                 WavAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             audioSettings.audioOutputFormat == AudioOutputFormat.FLAC ->
                                 FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             else -> null
                         }
+                        audioSidecarRecorder?.let { reportInputFallback(it.inputFallbackReason) }
                         activeRecordingAudioLabel = when {
                             !audioRequested -> getString(R.string.capture_no_audio)
-                            embeddedAudio != null -> "AAC ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
+                            embeddedAudio != null || appendsAudio -> "AAC ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
                             else -> "${audioSettings.audioOutputFormat.name.substringBefore('_')} ${audioSettings.audioBitDepth.bits}-bit · ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioChannels} ch"
                         }
                         cameraState.update { it.copy(phase = CameraUiPhase.CAPTURING, recordingProjectRate = settings.videoProjectRate.takeIf { settings.videoOffSpeed },
@@ -5970,10 +6237,10 @@ class CaptureService : Service() {
                         // Constrained high-speed takes must reach the encoder surface directly: the GPU
                         // path's camera texture only receives the 30 fps preview share of each batch.
                         // Off-speed then plays the high-speed capture back at the project rate.
-                        val recordingLutForTake = frozenRecordingLut()
+                        // Audio the app appends afterwards (and its gain) never touches the recorder.
                         val directHighSpeed = current.activeVideoProfile?.constrainedHighSpeed == true &&
-                            recordingLutForTake == null && audioSidecarRecorder == null &&
-                            activeRecordingGain?.enabled != true &&
+                            recordingLutForTake == null && (appendsAudio || audioSidecarRecorder == null &&
+                            activeRecordingGain?.enabled != true) &&
                             !settings.anamorphicSqueeze.isActive
                         // The encoder then stores the sensor raster and the MP4 matrix rotates it,
                         // so the take is described (and validated) as native raster.
@@ -6035,7 +6302,9 @@ class CaptureService : Service() {
                     try {
                         val hlgTake = current.selectedMode == CaptureMode.HLG
                         stopPreviewAudioMonitor(clearLevels = false)
-                        cameraState.value = cameraState.value.copy(audioClipLatched = false, audioLevels = null)
+                        resetAudioOverload()
+                        cameraState.value = cameraState.value.copy(audioClipLatched = false, audioInputClipLatched = false, audioRecordedClipLatched = false,
+                            audioInputOverloaded = false, audioLevels = null)
                         val requestedAudioEnabled = audioForThisTake ?: settings.audioEnabled
                         val orientation = recordingOrientationDegrees()
                         val descriptor = current.descriptor
@@ -6066,6 +6335,8 @@ class CaptureService : Service() {
                         activeRecordingGain = audioSettings.audioRecordingGain.takeIf { requestedAudioEnabled }
                         val onAudioLevel = newAudioLevelConsumer()
                         val listeningSink = newAudioListeningSink()
+                        val reportInputFallback = newTakeInputFallbackReporter()
+                        takeClipAudioInput = null
                         val embeddedAudio = if (requestedAudioEnabled && audioSettings.audioOutputFormat == AudioOutputFormat.AAC_MP4) {
                             Camera2EmbeddedAudioConfig(
                                 source = audioSettings.audioSource.androidSource,
@@ -6080,6 +6351,11 @@ class CaptureService : Service() {
                                 onAudioLevel = onAudioLevel,
                                 listeningSink = listeningSink,
                                 inputGuard = takeInput.guard,
+                                sourceSelection = audioSettings.audioSource,
+                                eqCurve = audioSettings.appliedAudioEqCurve,
+                                eqProfileId = audioSettings.appliedAudioEqProfileId,
+                                onInputOpened = { evidence -> takeClipAudioInput = evidence; reportInputFallback(evidence.inputFallbackReason) },
+                                syncOffsetNs = audioSettings.audioSyncOffsetMs * 1_000_000L,
                             )
                         } else null
                         when (val start = foreground.start(requestedAudioEnabled)) {
@@ -6104,6 +6380,7 @@ class CaptureService : Service() {
                                 FlacAudioSidecarRecorder.create(this@CaptureService, output.displayName, audioSettings.copy(productionSlate = admittedSlate), captureClock = separateClock, onAudioLevel = onAudioLevel, recoveryGroup = output.recoveryGroup, listeningSink = listeningSink, inputGuard = takeInput.guard)
                             else -> error("Unsupported LOG audio format ${audioSettings.audioOutputFormat}.")
                         }
+                        audioSidecarRecorder?.let { reportInputFallback(it.inputFallbackReason) }
                         activeRecordingAudioLabel = when {
                             !requestedAudioEnabled -> getString(R.string.capture_no_audio)
                             embeddedAudio != null -> "AAC ${kiloHertzText(audioSettings.audioSampleRateHz, messageLocale)} kHz · ${audioSettings.audioBitrateKbps} kbps · ${audioSettings.audioChannels} ch"
@@ -6312,6 +6589,7 @@ class CaptureService : Service() {
         foldClosureTracker?.close()
         settingsScope.cancel()
         mainHandler.removeCallbacksAndMessages(null)
+        eqSnippetAudition.end(keepSnippet = false)
         stopPreviewAudioMonitor(clearLevels = true)
         audioListeningController?.let { audioListeningRetirement = it.closeAsync() }
         foreground.stop()
@@ -6555,7 +6833,7 @@ class CaptureService : Service() {
     private fun captureEpochLabel(report: com.librestatic.opencinecam.camera.CaptureEpochReport?): String = report?.let {
         " · " + getString(when (it.policy) {
             "SHARED_BOOTTIME_CAPTURE_ANCHORS" -> if (it.audioSourceWindow != null) R.string.av_epoch_capture_anchors_calibrated else R.string.av_epoch_capture_anchors
-            "BOOTTIME_ESTIMATED_AUDIO_START" -> R.string.av_epoch_estimated
+            "BOOTTIME_ESTIMATED_AUDIO_START", com.librestatic.opencinecam.camera.AppendedAudioPlacement.ESTIMATED_VIDEO_START -> R.string.av_epoch_estimated
             else -> R.string.av_epoch_unknown
         }) + if (it.audioSourceWindow != null) " · " + getString(R.string.aac_source_window_applied) else ""
     }.orEmpty()

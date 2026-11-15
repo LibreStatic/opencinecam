@@ -3,22 +3,33 @@
 
 package com.librestatic.opencinecam.rawvideo
 
+import com.librestatic.opencinecam.appliedAudioEqCurve
+import com.librestatic.opencinecam.appliedAudioEqProfileId
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.AudioTimestamp
 import android.os.SystemClock
 import com.librestatic.opencinecam.CameraSettings
 import com.librestatic.opencinecam.camera.AudioLevelMeter
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
 import com.librestatic.opencinecam.camera.PcmCaptureEpoch
+import com.librestatic.opencinecam.camera.InputEqualizer
+import com.librestatic.opencinecam.camera.inputEqualizerFor
+import com.librestatic.opencinecam.camera.pcmInputEvidence
+import com.librestatic.opencinecam.camera.toJson
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.camera.PcmMeterEncoding
 import com.librestatic.opencinecam.camera.offerListening
 import com.librestatic.opencinecam.camera.pcmFrameDurationNs
 import com.librestatic.opencinecam.media.audio.AudioCapturePath
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
+import com.librestatic.opencinecam.media.audio.PcmFormatCheck
+import com.librestatic.opencinecam.media.audio.PcmInput
+import com.librestatic.opencinecam.media.audio.PcmInputRequest
+import com.librestatic.opencinecam.media.audio.PcmInputTimestamp
+import com.librestatic.opencinecam.media.audio.PcmInputs
+import com.librestatic.opencinecam.media.audio.audioRouting
 import com.librestatic.opencinecam.storage.AudioRetirementGate
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -72,6 +83,18 @@ object RawAudioKeys {
     const val MAX_RESIDUAL_NS = "audioMaxResidualNs"
     /** Why the sound ended before the take did. */
     const val ERROR = "audioError"
+    /** PLAN-074 decision 11: the API that delivered the PCM, a `PcmInputPath` name. */
+    const val INPUT_PATH = "audioInputPath"
+    /** Why the input is not the one the source asked for; absent when it is. */
+    const val INPUT_FALLBACK_REASON = "audioInputFallbackReason"
+    /** Bits per sample the microphone path delivered. */
+    const val CAPTURE_BIT_DEPTH = "audioCaptureBitDepth"
+    /** The equaliser curve applied, as its JSON object; absent when the curve is flat. */
+    const val EQUALISER = "audioEqualiser"
+    /** The id of the profile [EQUALISER] came from; absent for a custom curve or no equaliser. */
+    const val EQUALISER_PROFILE_ID = "audioEqualiserProfileId"
+    /** PLAN-074 decision 12: the manual sync offset already added to every chunk time, in ns; positive is later. */
+    const val SYNC_OFFSET_NS = "audioSyncOffsetNs"
 
     const val CLOCK_BOOTTIME = "boottime"
     const val CLOCK_MONOTONIC_OFFSET = "monotonic-offset"
@@ -124,7 +147,9 @@ enum class RawTakeAudio {
  * of its first sample. The times come from one fixed epoch (as [PcmCaptureEpoch] does for video):
  * the first AudioRecord timestamp fixes frame zero, later ones only measure drift. Until the first
  * timestamp arrives completed chunks wait; after [maxPendingChunks] of them (or at [flush]) the epoch
- * is estimated from [startReceiptBoottimeNs], the boot time when recording started.
+ * is estimated from when the reads returned ([observeRead]), or with no read from [startReceiptBoottimeNs], the
+ * boot time when recording started. [syncOffsetNs], the manual sync offset (PLAN-074 decision 12), is
+ * added to every chunk's time and never to the epoch, so [maxResidualNs] stays measured.
  *
  * Not thread-safe: one capture thread.
  */
@@ -134,6 +159,7 @@ internal class RawPcmChunker(
     private val startReceiptBoottimeNs: Long,
     private val chunkFrames: Int = defaultChunkFrames(sampleRateHz),
     private val maxPendingChunks: Int = MAX_PENDING_CHUNKS,
+    val syncOffsetNs: Long = 0,
 ) {
     class Chunk(val firstSampleBoottimeNs: Long, val payload: ByteArray, val frames: Int)
 
@@ -144,6 +170,8 @@ internal class RawPcmChunker(
 
     private val frameBytes = channels * 2
     private val epoch = PcmCaptureEpoch(sampleRateHz)
+    private val readEpoch = com.librestatic.opencinecam.camera.PcmReadEpochEstimate(sampleRateHz)
+    private var readFrames = 0L
     private val pending = ArrayDeque<Pair<Long, ByteArray>>()
     private var chunk = ByteArray(chunkFrames * frameBytes)
     private var fill = 0
@@ -155,6 +183,12 @@ internal class RawPcmChunker(
     /** An AudioRecord timestamp: [framePosition] was captured at [boottimeNs]. Bad ones are ignored. */
     fun observeTimestamp(framePosition: Long, boottimeNs: Long) {
         runCatching { epoch.observe(framePosition, boottimeNs) }
+    }
+
+    /** A read of [bytes] (whole frames) returned at [boottimeNs]; call it before [append] for the same read. */
+    fun observeRead(bytes: Int, boottimeNs: Long) {
+        readFrames += bytes / frameBytes
+        readEpoch.observeRead(readFrames, boottimeNs)
     }
 
     /** Appends [bytes] (whole frames) from [src]'s position, which is left unchanged; returns the chunks now timed. */
@@ -190,13 +224,13 @@ internal class RawPcmChunker(
     private fun release(force: Boolean): List<Chunk> {
         if (pending.isEmpty()) return emptyList()
         if (epoch.current() == null && (force || pending.size > maxPendingChunks)) {
-            epoch.estimate(startReceiptBoottimeNs.coerceAtLeast(1))
+            epoch.estimate(readEpoch.frameZeroNs() ?: startReceiptBoottimeNs.coerceAtLeast(1))
         }
         val zero = epoch.current()?.frameZeroNs ?: return emptyList()
         val out = ArrayList<Chunk>(pending.size)
         while (pending.isNotEmpty()) {
             val (start, data) = pending.removeFirst()
-            out += Chunk(zero + pcmFrameDurationNs(start, sampleRateHz), data, data.size / frameBytes)
+            out += Chunk(zero + pcmFrameDurationNs(start, sampleRateHz) + syncOffsetNs, data, data.size / frameBytes)
         }
         return out
     }
@@ -209,8 +243,9 @@ internal class RawPcmChunker(
 }
 
 /**
- * [RawAudioSource] over an [AudioRecord] with the take's audio settings: source, sample rate, channels,
- * the preferred input device and its loss guard, and the manual digital gain. Always PCM16. It feeds
+ * [RawAudioSource] over the take's [PcmInput] (an [AudioRecord], or the low-latency input) with the
+ * take's audio settings: source, sample rate, channels, the preferred input device and its loss guard,
+ * the equaliser and the manual digital gain. Always PCM16. It feeds
  * the level meters and the listening output like the video recorders do. Hardware effects (AGC, noise
  * suppression, echo cancelling) are not attached.
  */
@@ -228,7 +263,7 @@ class AudioRecordRawAudioSource(
     private val stopped = AtomicBoolean(false)
     @Volatile private var running = false
     @Volatile private var readFailure: String? = null
-    private var record: AudioRecord? = null
+    private var record: PcmInput? = null
     private var thread: Thread? = null
     private var chunker: RawPcmChunker? = null
     private var sink: RawAudioSink? = null
@@ -245,54 +280,64 @@ class AudioRecordRawAudioSource(
         val minimum = AudioRecord.getMinBufferSize(rate, mask, AudioFormat.ENCODING_PCM_16BIT)
         require(minimum > 0) { "Unsupported PCM16 configuration" }
         val chunkBytes = RawPcmChunker.defaultChunkFrames(rate) * frameBytes
-        val built = AudioRecord.Builder()
-            .setAudioSource(settings.audioSource.androidSource)
-            .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(mask).build())
-            .setBufferSizeInBytes(maxOf(minimum * 2, chunkBytes * 4) / frameBytes * frameBytes)
-            .build()
+        val device = settings.audioInputDeviceId?.let { id ->
+            AudioInputRouteGuard.inputDevice(appContext, id) ?: error("Requested audio input $id is no longer connected")
+        }
+        val opened = PcmInputs.open(PcmInputRequest(
+            source = settings.audioSource,
+            sampleRateHz = rate,
+            channels = channels,
+            encoding = AudioFormat.ENCODING_PCM_16BIT,
+            bufferBytes = maxOf(minimum * 2, chunkBytes * 4) / frameBytes * frameBytes,
+            preferredDevice = device,
+            formatCheck = PcmFormatCheck.RATE_AND_CHANNELS,
+            initializationFailure = "AudioRecord initialization failed",
+        ))
+        val built = opened.input
         try {
-            check(built.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed" }
-            check(built.sampleRate == rate && built.channelCount == channels) { "AudioRecord PCM format differs from the request" }
-            settings.audioInputDeviceId?.let { id ->
-                val device = AudioInputRouteGuard.inputDevice(appContext, id) ?: error("Requested audio input $id is no longer connected")
-                check(built.setPreferredDevice(device)) { "AudioRecord rejected audio input $id" }
-            }
             clock = RawAudioClock.measure(sensorTimestampRealtime)
             val receipt = SystemClock.elapsedRealtimeNanos()
-            built.startRecording()
-            check(built.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord did not enter RECORDING state" }
-            chunker = RawPcmChunker(rate, channels, receipt)
+            built.start()
+            chunker = RawPcmChunker(rate, channels, receipt, syncOffsetNs = settings.audioSyncOffsetMs * 1_000_000L)
         } catch (problem: Throwable) {
             runCatching { built.stop() }
-            runCatching { built.release() }
+            runCatching { built.close() }
             throw problem
         }
         record = built
         this.sink = sink
-        runCatching { inputGuard?.attach(built, AudioCapturePath.AUDIO_RECORD) }
+        runCatching { inputGuard?.attach(built.audioRouting(appContext), AudioCapturePath.AUDIO_RECORD) }
         running = true
-        thread = Thread({ captureLoop(built, chunkBytes) }, "occ-raw-audio").apply {
+        val equalizer = inputEqualizerFor(settings.appliedAudioEqCurve, built.sampleRateHz, channels)
+        thread = Thread({ captureLoop(built, chunkBytes, equalizer) }, "occ-raw-audio").apply {
             priority = Thread.MAX_PRIORITY
             start()
         }
+        val evidence = pcmInputEvidence(settings.audioSource.name, opened, settings.appliedAudioEqCurve, settings.appliedAudioEqProfileId)
         return linkedMapOf(
-            RawAudioKeys.SAMPLE_RATE to built.sampleRate.toString(),
-            RawAudioKeys.CHANNELS to built.channelCount.toString(),
+            RawAudioKeys.SAMPLE_RATE to built.sampleRateHz.toString(),
+            RawAudioKeys.CHANNELS to built.channels.toString(),
             RawAudioKeys.SOURCE to settings.audioSource.name,
             RawAudioKeys.CLOCK to clock.label,
-        )
+            RawAudioKeys.INPUT_PATH to evidence.inputPath,
+            RawAudioKeys.CAPTURE_BIT_DEPTH to evidence.captureBitDepth.toString(),
+        ).apply {
+            evidence.inputFallbackReason?.let { put(RawAudioKeys.INPUT_FALLBACK_REASON, it) }
+            evidence.equaliser?.let { put(RawAudioKeys.EQUALISER, it.toJson()) }
+            evidence.equaliserProfileId?.let { put(RawAudioKeys.EQUALISER_PROFILE_ID, it) }
+        }
     }
 
-    private fun captureLoop(audio: AudioRecord, chunkBytes: Int) {
+    private fun captureLoop(audio: PcmInput, chunkBytes: Int, equalizer: InputEqualizer?) {
         val buffer = ByteBuffer.allocateDirect(chunkBytes).order(ByteOrder.LITTLE_ENDIAN)
-        val timestamp = AudioTimestamp()
-        val meter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels, sampleRateHz = audio.sampleRate)
+        val timestamp = PcmInputTimestamp()
+        val meter = AudioLevelMeter(PcmMeterEncoding.PCM_16, channels, sampleRateHz = audio.sampleRateHz)
         val gain = settings.audioRecordingGain
         val chunker = requireNotNull(chunker)
         try {
             while (true) {
                 buffer.clear()
-                val read = audio.read(buffer, buffer.capacity(), AudioRecord.READ_BLOCKING)
+                val read = audio.read(buffer, buffer.capacity())
                 if (read < 0) {
                     if (running) readFailure = "audio-read-$read"
                     break
@@ -303,13 +348,15 @@ class AudioRecordRawAudioSource(
                 }
                 val bytes = read / frameBytes * frameBytes
                 if (bytes == 0) continue
-                if (audio.getTimestamp(timestamp, AudioTimestamp.TIMEBASE_BOOTTIME) == AudioRecord.SUCCESS) {
+                chunker.observeRead(bytes, SystemClock.elapsedRealtimeNanos())
+                if (audio.timestamp(timestamp)) {
                     chunker.observeTimestamp(timestamp.framePosition, timestamp.nanoTime)
                 }
                 inputGuard?.silenceIfMuted(buffer, bytes)
                 meter.observeInput(buffer, bytes)
+                equalizer?.process(buffer, bytes, PcmMeterEncoding.PCM_16)
                 gain.process(buffer, bytes, PcmMeterEncoding.PCM_16, channels)
-                listeningSink.offerListening(buffer, bytes, PcmMeterEncoding.PCM_16, audio.sampleRate, channels)
+                listeningSink.offerListening(buffer, bytes, PcmMeterEncoding.PCM_16, audio.sampleRateHz, channels)
                 onAudioLevel?.let { publish ->
                     meter.analyze(buffer, bytes, SystemClock.elapsedRealtime())?.let { publish(it.copy(appliedRecordingGain = gain)) }
                 }
@@ -339,13 +386,13 @@ class AudioRecordRawAudioSource(
         if (worker?.isAlive == true) {
             // Releasing under a blocked read could crash the capture thread; leave the record to it.
             readFailure = readFailure ?: "audio-thread-stalled"
-            android.util.Log.e(TAG, "RAW audio thread still reading at stop; AudioRecord not released")
+            android.util.Log.e(TAG, "RAW audio thread still reading at stop; PCM input not released")
             sink = null
             return
         }
         chunker?.flush()?.forEach(::deliver)
         sink = null
-        runCatching { audio.release() }
+        runCatching { audio.close() }
     }
 
     override fun finalMetadata(): Map<String, String> {
@@ -353,6 +400,7 @@ class AudioRecordRawAudioSource(
         chunker?.let { timing ->
             values[RawAudioKeys.TIMESTAMP_BACKED] = timing.timestampBacked.toString()
             timing.maxResidualNs?.let { values[RawAudioKeys.MAX_RESIDUAL_NS] = it.toString() }
+            values[RawAudioKeys.SYNC_OFFSET_NS] = timing.syncOffsetNs.toString()
         }
         return values
     }

@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
+import com.librestatic.opencinecam.camera.toJsonObject
 import com.librestatic.opencinecam.core.model.ClipSidecarDocument
 import com.librestatic.opencinecam.core.model.SchemaEvidence
 import com.librestatic.opencinecam.core.model.encodeClipSidecar
 import java.time.Instant
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -105,6 +107,8 @@ internal data class ClipGraph(
     val audioContainer: String? = null,
     val audioSampleRateHz: Int? = null,
     val audioBitDepth: Int? = null,
+    /** PLAN-074 decision 11: the microphone path of embedded AAC; null when unknown or not embedded. */
+    val audioInput: com.librestatic.opencinecam.camera.PcmInputEvidence? = null,
     val deviceProfile: ClipDeviceProfile? = null,
     /** The camera settings sampled while the take recorded; null when none were sampled. */
     val camera: ClipCameraSettings? = null,
@@ -289,6 +293,14 @@ private fun graphJson(graph: ClipGraph): JsonObject = buildJsonObject {
         graph.audioContainer?.let { put("container", it) }
         graph.audioSampleRateHz?.let { put("sampleRateHz", it) }
         graph.audioBitDepth?.let { put("bitDepth", it) }
+        graph.audioInput?.let { input ->
+            put("source", input.source)
+            put("inputPath", input.inputPath)
+            put("inputFallbackReason", input.inputFallbackReason?.let(::JsonPrimitive) ?: JsonNull)
+            put("captureBitDepth", input.captureBitDepth)
+            put("equaliser", input.equaliser?.toJsonObject() ?: JsonNull)
+            input.equaliserProfileId?.let { put("equaliserProfileId", it) }
+        }
     })
     put("deviceProfile", graph.deviceProfile?.let { profile ->
         known(buildJsonObject {

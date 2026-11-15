@@ -15,4 +15,8 @@
     <string name="audio_meter_vu_value">%1$s VU</string>
     <string name="audio_meter_ppm_value">%1$s dBFS</string>
     <string name="audio_meter_hold_value">Retenido %1$s</string>
+    <string name="audio_meter_clip_input">Saturó la entrada del micrófono</string>
+    <string name="audio_meter_clip_recorded">Saturó el audio grabado</string>
+    <string name="audio_meter_clip_both">Saturaron la entrada del micrófono y el audio grabado</string>
+    <string name="audio_meter_clip_help">CLIP IN: el micrófono llegó al máximo, antes del ecualizador, el AGC y la ganancia; la grabación puede sonar bien igual. CLIP REC: llegó al máximo el audio que se graba.</string>
 </resources>

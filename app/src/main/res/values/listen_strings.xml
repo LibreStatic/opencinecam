@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The listen key's label under its headphones glyph, as on an audio desk. -->
+    <string name="listen_key_short" translatable="false">MON</string>
+    <string name="listen_key">Headphone monitoring</string>
+    <string name="listen_key_on">on</string>
+    <string name="listen_key_connecting">connecting</string>
+    <string name="listen_key_off">off</string>
+    <string name="listen_key_open_panel">Output and volume</string>
+    <string name="listen_panel_title">HEADPHONES</string>
+    <string name="listen_panel_hint">You hear what is recorded</string>
+    <string name="listen_panel_no_output">Connect USB-C or Bluetooth headphones</string>
+    <string name="listen_panel_raw_video">In RAW video the microphone is heard once a take starts</string>
+    <string name="listen_exit_title">Keep listening?</string>
+    <string name="listen_exit_body">Monitoring is still on (%1$s).</string>
+    <string name="listen_exit_keep">Keep listening</string>
+    <string name="listen_exit_stop">Stop</string>
+</resources>

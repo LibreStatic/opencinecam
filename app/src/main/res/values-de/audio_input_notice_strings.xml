@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PLAN-074: capture notices about the microphone input, under the zoom. -->
+    <string name="audio_input_overload">Mikrofon übersteuert: Pegel oder Eingang ändern</string>
+    <string name="audio_input_fallback">Rohes Mikrofon fehlt: Standardeingang aktiv</string>
+</resources>

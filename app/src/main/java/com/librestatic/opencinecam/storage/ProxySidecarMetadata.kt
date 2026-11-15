@@ -116,7 +116,8 @@ private fun parseSidecarPcm(json: JsonObject): PcmSourceTimingReport {
 }
 
 private fun parseSidecarShared(json: JsonObject): CaptureEpochReport {
-    require(json.keys == setOf("audioStorage", "sourceAudioMinusVideoNs", "policy", "cameraRealtime", "videoFrameZeroNs",
+    // audioSyncOffsetUs (PLAN-074 decision 12) is absent from records written before it, which read as no offset.
+    require(json.keys - "audioSyncOffsetUs" == setOf("audioStorage", "sourceAudioMinusVideoNs", "policy", "cameraRealtime", "videoFrameZeroNs",
         "audioFrameZeroNs", "sharedOriginNs", "audioTimestampBacked", "audioMaxResidualNs", "videoEncoderFirstPtsUs",
         "audioEncoderFirstPtsUs", "audioEncoderDelayFrames", "waveformAlignmentVerified", "submittedPcmFrames", "encodedAudioPackets",
         "aacCalibration", "audioSourceWindow", "audioDrainPaddingFrames", "codecInputFrames", "audioPresentationOffsetUs", "capturedPcmFrames", "sharedPause"))
@@ -143,5 +144,6 @@ private fun parseSidecarShared(json: JsonObject): CaptureEpochReport {
     return CaptureEpochReport(p.string("policy"), true, video, audio, p.long("sharedOriginNs"), true,
         p.long("audioMaxResidualNs"), p.nullableLong("videoEncoderFirstPtsUs"), null, null,
         submittedPcmFrames = p.long("submittedPcmFrames"), capturedPcmFrames = p.long("capturedPcmFrames"),
-        sharedPause = pause, audioStorage = p.string("audioStorage"))
+        sharedPause = pause, audioStorage = p.string("audioStorage"),
+        audioSyncOffsetUs = if ("audioSyncOffsetUs" in json) p.long("audioSyncOffsetUs") else 0L)
 }
