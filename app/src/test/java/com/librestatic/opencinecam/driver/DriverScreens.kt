@@ -121,6 +121,7 @@ import com.librestatic.opencinecam.TakeTechnicalDetails
 import com.librestatic.opencinecam.buildTakeDetails
 import com.librestatic.opencinecam.detailText
 import org.robolectric.RuntimeEnvironment
+import com.librestatic.opencinecam.GalleryCatalogCache
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.HistogramMode
 import com.librestatic.opencinecam.HorizonRollMath
@@ -158,6 +159,7 @@ import com.librestatic.opencinecam.ui.theme.OpenCineCamTheme
 import java.io.IOException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import androidx.compose.material3.Text
@@ -165,6 +167,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalDensity
 import com.librestatic.opencinecam.MediaZoomState
+import com.librestatic.opencinecam.CineIcon
+import com.librestatic.opencinecam.CineIconButton
 import com.librestatic.opencinecam.PlaybackObservation
 import com.librestatic.opencinecam.PlaybackPhase
 import com.librestatic.opencinecam.PlaybackStageArea
@@ -1398,6 +1402,27 @@ fun GalleryLoading() = GalleryWith(object : MediaCatalogSource {
     override suspend fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = null
 })
 
+/**
+ * The gallery reopened after something changed: the list read on the last visit stays while the catalog is read again,
+ * and the refresh key is the spinner (`gallery-refreshing`).
+ */
+@Composable
+fun GalleryRefreshing() {
+    val catalog = remember { FakeCatalog(SampleTakes) }
+    val cache = remember {
+        GalleryCatalogCache().apply {
+            val settings = GallerySettings()
+            this[GalleryCatalogCache.Key(settings.kind, settings.newestFirst, settings.goodTakesOnly, "")] = GalleryCatalogCache.Entry(
+                SampleTakes.map { it.take }, null, SampleTakes.mapNotNull { sample -> sample.encoding?.let { sample.take.id to it } }.toMap(),
+                token = null, generation = -1)
+        }
+    }
+    GalleryWith(object : MediaCatalogSource by catalog {
+        override suspend fun page(settings: GallerySettings, query: String, cursor: LocalMediaCursor?, limit: Int): LocalMediaPage =
+            awaitCancellation()
+    }, cache = cache)
+}
+
 /** The media catalog after MediaStore failed to answer. */
 @Composable
 fun GalleryError() = GalleryWith(object : MediaCatalogSource {
@@ -1497,10 +1522,10 @@ private fun CaptureChrome(
 
 @Composable
 internal fun GalleryWith(source: MediaCatalogSource, initialSelection: String? = null,
-    exports: CinemaDngExportControl? = null) = DriverTheme {
+    exports: CinemaDngExportControl? = null, cache: GalleryCatalogCache? = null) = DriverTheme {
     MediaCatalogContent(GallerySettings(), onSettings = {}, source = source, onShare = {}, onDelete = {},
         onRename = {}, onReview = {}, onProxy = {}, onProxyCatalog = {}, initialSelection = initialSelection,
-        exports = exports, onExport = {}, onOpen = {})
+        exports = exports, onExport = {}, cache = cache ?: remember(source) { GalleryCatalogCache() }, onOpen = {})
 }
 
 internal class FakeCatalog(private val takes: List<SampleTake>,
@@ -1956,9 +1981,7 @@ private fun NetworkDriveRunningScreen(revealed: Boolean) = DriverTheme {
 }
 
 /** A 4:3 test chart: a gradient under a 12x9 grid with a ring in the middle, so zoom and pan read at a glance. */
-private fun zoomChart(): Bitmap {
-    val width = 1200
-    val height = 900
+private fun zoomChart(width: Int = 1200, height: Int = 900): Bitmap {
     val bitmap = gradientThumbnail(7).let { Bitmap.createScaledBitmap(it, width, height, true) }
     val canvas = Canvas(bitmap)
     val line = Paint().apply { color = android.graphics.Color.WHITE; strokeWidth = 3f; isAntiAlias = true }
@@ -1991,6 +2014,38 @@ fun PlaybackPhotoZoom() = DriverTheme(forceDark = true) {
         onTap = { taps++ }, onSurfaceView = {}, onSurfaceCreated = {}, onSurfaceChanged = { _, _, _ -> }, onSurfaceDestroyed = {}) {
         Text("scale=%.2f x=%.0f y=%.0f taps=%d".format(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value, taps),
             Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
+    }
+}
+
+/**
+ * The review's video stage with a 16:9 frame (a 1600x900 chart standing in for a 1920x1080 take), letterboxed
+ * and centred in the window over black. The dialog's *Fill screen* key (`media-playback-fill`, drawn here over the
+ * stage) zooms the frame until it covers the stage and crops the overflowing axis, and back; pinch, drag and double
+ * tap work as in [PlaybackPhotoZoom].
+ * The readout (`media-playback-zoom-readout`) shows the scale, the pan and whether the stage is filled. Use
+ * `phone` for the portrait case the fill is for, `landscape` for one with nothing to crop.
+ */
+@Composable
+fun PlaybackVideoFill() = DriverTheme(forceDark = true) {
+    val chart = remember { zoomChart(1600, 900) }
+    val density = LocalDensity.current
+    val zoom = remember { MediaZoomState(density) }
+    val scope = rememberCoroutineScope()
+    var fill by remember { mutableStateOf(false) }
+    PlaybackStageArea(Modifier.fillMaxSize().testTag("media-playback-zoom-area"),
+        artifact(9002, "VID_20261114_211500.mp4", "video/mp4", 240_000_000, 1_793_000_000), video = true, photo = false,
+        aspect = 16f / 9f, state = PlaybackObservation(phase = PlaybackPhase.PAUSED, bitmap = chart, videoWidth = 1920, videoHeight = 1080),
+        shown = chart, poster = null, fullscreen = false, zoom = zoom, zoomScope = scope, zoomEnabled = true, surfaceZoom = true,
+        onTap = null, onSurfaceView = {}, onSurfaceCreated = {},
+        onSurfaceChanged = { _, _, _ -> }, onSurfaceDestroyed = {}, fill = fill) {
+        Text("scale=%.2f x=%.0f y=%.0f fill=%s filled=%s".format(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value,
+            fill, zoom.filled), Modifier.align(Alignment.TopStart).padding(8.dp).testTag("media-playback-zoom-readout"), color = Color.White)
+        if (zoom.canFill) CineIconButton("media-playback-fill", CineIcon.ZOOM_FILL, "Fill screen", Modifier.align(Alignment.TopEnd),
+            selected = zoom.filled) {
+            val filled = zoom.filled
+            fill = !filled
+            scope.launch { if (filled) zoom.reset() else zoom.fill() }
+        }
     }
 }
 

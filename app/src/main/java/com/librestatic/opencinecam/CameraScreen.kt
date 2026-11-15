@@ -311,6 +311,8 @@ fun CameraRootScreen(splash: SplashHandoff = SplashHandoff(onScreen = false), on
     }
     LaunchedEffect(foldDisplays, settings.subjectDisplay.brightness) { foldDisplays?.applyBrightness() }
     var section by rememberSaveable { mutableStateOf(AppSection.CAPTURE) }
+    // Every published capture, on the phone or the recording drive, changes what the gallery lists.
+    LaunchedEffect(state.lastSavedUri) { GalleryCatalogCache.shared.invalidate() }
     var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
     val settingsStateHolder = rememberSaveableStateHolder()
 

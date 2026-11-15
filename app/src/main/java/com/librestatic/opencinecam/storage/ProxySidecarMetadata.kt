@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.HARDWARE_TRUTH_SCHEMA
 import com.librestatic.opencinecam.parseProductionSlateJson
 import kotlinx.serialization.json.*
 
@@ -48,7 +49,7 @@ internal fun selectProxySidecar(take: LocalMediaTake, documents: List<MetadataDo
     val v = SidecarFields(videoDoc.second)
     require(v.string("schema") in setOf("opencinecam.recording.v1", "opencinecam.av-timing.v1",
         "opencinecam.recording-color.v1", "opencinecam.recording-audio.v1", "opencinecam.recording-timing.v1",
-        "opencinecam.timecode.v1", "opencinecam-oclog-sidecar-v2")) { "Unknown sidecar video metadata schema" }
+        "opencinecam.timecode.v1", "opencinecam-oclog-sidecar-v2", "opencinecam.hdr-video.v1", HARDWARE_TRUTH_SCHEMA)) { "Unknown sidecar video metadata schema" }
     // A drive take's references are bound by document id, as the catalog binds them (PLAN-072).
     require(sameTakeMemberUri(v.string("videoUri"), take.primary.uri) && v.string("bundleId") == take.id.removePrefix("take:"))
     require(sameTakeMemberUri(a.string("audioUri"), audio.uri) && a.string("file") == audio.name && a.string("container") == container.name)

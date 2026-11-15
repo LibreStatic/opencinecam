@@ -63,6 +63,7 @@ internal enum class CineIcon {
     FRAME_FORWARD,
     FULLSCREEN,
     FULLSCREEN_EXIT,
+    ZOOM_FILL,
     EXPAND,
     COLLAPSE,
     CHEVRON_LEFT,
@@ -317,6 +318,13 @@ private fun DrawScope.drawCineGlyph(icon: CineIcon, color: Color) {
             poly(.64f to .14f, .64f to .36f, .86f to .36f, close = false)
             poly(.86f to .64f, .64f to .64f, .64f to .86f, close = false)
             poly(.36f to .86f, .36f to .64f, .14f to .64f, close = false)
+        }
+        CineIcon.ZOOM_FILL -> {
+            // A screen with the picture pushed out to its sides: zoom to fill, cropping.
+            box(.10f, .24f, .90f, .76f)
+            line(.28f, .50f, .72f, .50f)
+            poly(.38f to .40f, .28f to .50f, .38f to .60f, close = false)
+            poly(.62f to .40f, .72f to .50f, .62f to .60f, close = false)
         }
         CineIcon.SCRIPT -> {
             // A page of lines: the teleprompter.

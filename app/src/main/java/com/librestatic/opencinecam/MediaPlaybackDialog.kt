@@ -89,6 +89,26 @@ internal data class MediaReviewSelection(val takes: List<LocalMediaTake>, val ar
 internal fun playbackToggleAction(pauseIntent: Boolean, play: () -> Unit, pause: () -> Unit): () -> Unit =
     if (pauseIntent) pause else play
 
+/** What a Play the operator already pressed does next; see [pendingPlayStep]. */
+internal enum class PendingPlay { IDLE, WAIT, ISSUE, DONE }
+
+/**
+ * Play never waits for the reader: a press while it is still opening is kept and goes through as soon as
+ * [canPlay] allows it. Once issued, it is over when playback starts or fails, or when a later observation
+ * ([newer]) rests again (the session paused it, say on losing audio focus). The RAW frame viewer has no Play.
+ */
+internal fun pendingPlayStep(starting: Boolean, issued: Boolean, newer: Boolean, phase: PlaybackPhase, canPlay: Boolean,
+    rawFrames: Boolean): PendingPlay = when {
+    !starting -> PendingPlay.IDLE
+    phase == PlaybackPhase.PLAYING || phase == PlaybackPhase.ERROR || phase == PlaybackPhase.CLOSED || rawFrames -> PendingPlay.DONE
+    !issued -> if (canPlay && phase in PLAY_FROM) PendingPlay.ISSUE else PendingPlay.WAIT
+    newer && (phase == PlaybackPhase.PAUSED || phase == PlaybackPhase.ENDED) -> PendingPlay.DONE
+    else -> PendingPlay.WAIT
+}
+
+// SEEKING: the CPU-frames session lets Play through a slow exact decode, and says so through canPlay.
+private val PLAY_FROM = setOf(PlaybackPhase.PAUSED, PlaybackPhase.ENDED, PlaybackPhase.SEEKING)
+
 /** "HH:MM:SS:FF" on the nominal (rounded) frame rate; without one, whole seconds of [positionUs] with FF 00. */
 internal fun playbackTimecode(positionUs: Long, frame: Long?, fps: Double?): String {
     val base = fps?.takeIf { it.isFinite() && it > 0 }?.roundToInt()?.coerceAtLeast(1)
@@ -151,6 +171,8 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
     var pageBusy by remember { mutableStateOf(false) }
     var pageError by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
+    // Kept across takes and full screen: once the operator fills the screen, the next take fills it too.
+    var fill by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     // Kept across takes, so the facts stay open while the operator steps through the review.
     var detailsOpen by rememberSaveable { mutableStateOf(false) }
@@ -245,8 +267,8 @@ internal fun MediaPlaybackDialog(selection: MediaReviewSelection, settings: Play
                     facts = { PlaybackFacts(take, members, memberIndex, title, subtitle, reviewPosition) })
                 key(member.uri) {
                     MediaPlaybackView(take, member, settings, onSettings, layout, keyboard, fullscreen,
-                        onFullscreen = { fullscreen = it; if (it) detailsOpen = false }, detailsOpen, { detailsOpen = it },
-                        onDismiss, chrome, settingsOpen) { settingsOpen = it }
+                        onFullscreen = { fullscreen = it; if (it) detailsOpen = false }, fill, { fill = it }, detailsOpen,
+                        { detailsOpen = it }, onDismiss, chrome, settingsOpen) { settingsOpen = it }
                 }
             }
         }
@@ -345,7 +367,7 @@ private fun DetailsSection(label: Int, content: @Composable () -> Unit) {
 @Composable
 private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact, settings: PlaybackSettings,
     onSettings: (PlaybackSettings) -> Unit, layout: PlaybackLayout, keyboard: Boolean, fullscreen: Boolean,
-    onFullscreen: (Boolean) -> Unit, detailsOpen: Boolean, onDetailsOpen: (Boolean) -> Unit, onClose: () -> Unit,
+    onFullscreen: (Boolean) -> Unit, fill: Boolean, onFill: (Boolean) -> Unit, detailsOpen: Boolean, onDetailsOpen: (Boolean) -> Unit, onClose: () -> Unit,
     chrome: PlaybackChrome, settingsOpen: Boolean, onSettingsOpen: (Boolean) -> Unit) {
     val context = LocalContext.current
     // A RAW take (PLAN-071 §7) plays through its own session and GL stage: no sidecar, probe, poster or filmstrip.
@@ -465,8 +487,9 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val maximum = (state.timeline?.timestampsUs?.lastOrNull() ?: state.durationUs).coerceAtLeast(1)
     val durationUs = metadata?.durationUs ?: state.durationUs
     // Thumbnails wait for the reader's first answer so they never compete with opening the clip.
+    // The player is ready before the exact first frame, so that frame (or playback) is the answer.
     var started by remember(artifact) { mutableStateOf(false) }
-    LaunchedEffect(ready) { if (ready) started = true }
+    LaunchedEffect(ready, firstFrame) { if (ready && firstFrame) started = true }
     var filmstrip by remember(artifact) { mutableStateOf(emptyList<Bitmap>()) }
     val stripHeight = with(LocalDensity.current) { SEEK_HEIGHT.roundToPx() }
     LaunchedEffect(artifact, started, logClip, settings.logView, durationUs > 0) {
@@ -497,13 +520,16 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
         val controller = session
         if (stage == null && controller == null) return@LaunchedEffect
         snapshotFlow { Triple(zoom.pan.scale.value, zoom.pan.offsetX.value, zoom.pan.offsetY.value) }.collect { (scale, x, y) ->
-            val box = zoom.content
-            val fractionX = if (box.width > 0f) x / box.width else 0f
-            val fractionY = if (box.height > 0f) y / box.height else 0f
+            // A GL stage's surface covers the whole area (see PlaybackStage), so the pan is a fraction of it.
+            val area = zoom.area
+            val fractionX = if (area.width > 0) x / area.width else 0f
+            val fractionY = if (area.height > 0) y / area.height else 0f
             stage?.setZoom(scale, fractionX, fractionY)
             controller?.setZoom(scale, fractionX, fractionY)
         }
     }
+    // Its surface covers the whole stage, so the GL stage letterboxes the picture itself.
+    LaunchedEffect(renderer, state.videoWidth, state.videoHeight) { renderer?.setFrameSize(state.videoWidth, state.videoHeight) }
     if (fullscreen && !(video || photo)) LaunchedEffect(Unit) { onFullscreen(false) }
     LaunchedEffect(state.phase == PlaybackPhase.ERROR) { if (state.phase == PlaybackPhase.ERROR) onFullscreen(false) }
 
@@ -518,10 +544,39 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     val stepping = video && paused && exact != null && timestamps != null
     val canStepBack = stepping && exact!! > 0
     val canStepForward = stepping && exact!! < timestamps!!.lastIndex
-    val seekable = ready && (video || state.canPlay)
-    val canTogglePlay = !photo && ready && (pauseIntent || state.canPlay)
+    // A video seeks through its exact index, which may still be building after the player is ready.
+    val seekable = ready && (if (video) timestamps != null else state.canPlay)
+    // Play is never held back while the reader opens: the press is kept, the key turns to Pause with a busy ring,
+    // and pressing again cancels it. Opening (sidecar, player preparation) and the seek to start take a moment.
+    var starting by remember(artifact) { mutableStateOf(false) }
+    var issuedFrom by remember(session) { mutableStateOf<PlaybackObservation?>(null) }
+    // Leaving the app drops a press still waiting: a reader not yet prepared ignores suspendOutput's pause, so the
+    // press would otherwise start playback in the background once it is.
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) { starting = false; issuedFrom = null }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(session, starting, state, rawFrames) {
+        val controller = session ?: return@LaunchedEffect
+        val current = state
+        when (pendingPlayStep(starting, issuedFrom != null, current !== issuedFrom, current.phase, current.canPlay, rawFrames)) {
+            PendingPlay.IDLE -> issuedFrom = null
+            PendingPlay.ISSUE -> { issuedFrom = current; controller.play() }
+            PendingPlay.DONE -> { starting = false; issuedFrom = null }
+            PendingPlay.WAIT -> Unit
+        }
+    }
+    val canTogglePlay = !photo && state.phase != PlaybackPhase.ERROR && state.phase != PlaybackPhase.CLOSED
     val toggleSession = session
-    val togglePlay = playbackToggleAction(pauseIntent, { toggleSession?.play() }, { toggleSession?.pause() })
+    val togglePlay = playbackToggleAction(pauseIntent || starting, { starting = true }, {
+        // Cancelling a Play still waiting for the reader needs nothing from it; one already issued is paused.
+        val issued = issuedFrom != null
+        if (starting) { starting = false; issuedFrom = null }
+        if (pauseIntent || issued) toggleSession?.pause()
+    })
     val logAvailable = logClip != null
     fun toggleLogView() = onSettings(settings.copy(logView =
         if (settings.logView == PreciseLogView.FLAT_LOG) PreciseLogView.REC709 else PreciseLogView.FLAT_LOG))
@@ -570,13 +625,14 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     /** The reader's own words; a photo only says something while it loads or when it fails. */
     @Composable fun Status(modifier: Modifier = Modifier) {
         if (photo && state.phase != PlaybackPhase.LOADING && state.phase != PlaybackPhase.ERROR) return
-        FitText(stringResource(when (state.phase) {
-            PlaybackPhase.LOADING, PlaybackPhase.SEEKING -> R.string.media_playback_loading
-            PlaybackPhase.PAUSED -> R.string.media_playback_paused
-            PlaybackPhase.PLAYING -> R.string.media_playback_playing
-            PlaybackPhase.ENDED -> R.string.media_playback_ended
-            PlaybackPhase.ERROR -> R.string.media_playback_error
-            PlaybackPhase.CLOSED -> R.string.media_playback_closed
+        FitText(stringResource(when {
+            starting -> R.string.media_playback_starting
+            state.phase == PlaybackPhase.LOADING || state.phase == PlaybackPhase.SEEKING -> R.string.media_playback_loading
+            state.phase == PlaybackPhase.PAUSED -> R.string.media_playback_paused
+            state.phase == PlaybackPhase.PLAYING -> R.string.media_playback_playing
+            state.phase == PlaybackPhase.ENDED -> R.string.media_playback_ended
+            state.phase == PlaybackPhase.ERROR -> R.string.media_playback_error
+            else -> R.string.media_playback_closed
         }), modifier.testTag("media-playback-status"), color = SettingsMuted, fontSize = 12.sp, maxLines = 1)
     }
     @Composable fun TimecodeRow() {
@@ -605,14 +661,23 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
             // The RAW frame viewer has no real-time play; it offers to try real time instead.
             if (rawFrames) SettingsPill(stringResource(R.string.raw_playback_try_realtime), "media-playback-try-realtime", role = Role.Button) {
                 (session as? RawPlaybackSession)?.tryRealtime()
-            } else PlaybackKey("media-playback-play-pause", if (pauseIntent) CineIcon.PAUSE else CineIcon.PLAY,
-                stringResource(if (pauseIntent) R.string.media_playback_pause else R.string.media_playback_play),
-                ShortcutAction.PLAY_PAUSE, keyboard, canTogglePlay, primary, togglePlay)
+            } else PlaybackKey("media-playback-play-pause", if (pauseIntent || starting) CineIcon.PAUSE else CineIcon.PLAY,
+                stringResource(if (pauseIntent || starting) R.string.media_playback_pause else R.string.media_playback_play),
+                ShortcutAction.PLAY_PAUSE, keyboard, canTogglePlay, primary, busy = starting, onClick = togglePlay)
             if (video) PlaybackKey("media-playback-next-frame", CineIcon.FRAME_FORWARD, stringResource(R.string.media_playback_next_frame),
                 ShortcutAction.FRAME_FORWARD, keyboard, canStepForward) { session?.step(1) }
             PlaybackKey("media-playback-end", CineIcon.SKIP_END, stringResource(R.string.media_playback_end), null, keyboard, seekable) {
                 session?.seek(maximum)
             }
+        }
+    }
+    /** Zooms the picture until it covers the stage, cropping what overflows; again goes back to the whole picture. */
+    @Composable fun FillButton() {
+        if (!zoomEnabled || !zoom.canFill) return
+        val filled = zoom.filled
+        CineIconButton("media-playback-fill", CineIcon.ZOOM_FILL, stringResource(R.string.playback_screen_fill), selected = filled) {
+            onFill(!filled)
+            zoomScope.launch { if (filled) zoom.reset() else zoom.fill() }
         }
     }
     @Composable fun FullscreenButton() {
@@ -712,10 +777,12 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                         if (!fullscreen && layout != PlaybackLayout.SIDE_COLUMN) chrome.members()
                         Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                             PlaybackStageArea(
-                                if (stacked && !fullscreen) Modifier.weight(1f, fill = false).aspectRatio(stageAspect ?: if (video || photo) 16f / 9f else 3f)
+                                // The picture takes all the height the controls leave, centred in it, so the controls sit at
+                                // the bottom; only a take without a picture keeps a short banner over them.
+                                if (stacked && !fullscreen && !(video || photo)) Modifier.weight(1f, fill = false).aspectRatio(stageAspect ?: 3f)
                                 else Modifier.weight(1f).fillMaxWidth(),
                                 artifact, video, photo, stageAspect, state, shown, poster.takeIf { video && !firstFrame && !firstFrameNow }, fullscreen,
-                                zoom, zoomScope, zoomEnabled, surfaceZoom = !glZoom && PLAIN_VIDEO_SURFACE_ZOOM,
+                                zoom, zoomScope, zoomEnabled, surfaceZoom = !glZoom && PLAIN_VIDEO_SURFACE_ZOOM, glSurface = glZoom, fill = fill,
                                 // In full screen a tap shows or hides the chrome; a double tap zooms.
                                 onTap = if (fullscreen) ({ currentToggleChrome() }) else null,
                                 onSurfaceView = { surfaceView = it },
@@ -755,7 +822,9 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                         val overlay = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
                                         Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing
                                             .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)).padding(8.dp)
-                                            .clip(RoundedCornerShape(12.dp)).background(overlay)) { FullscreenButton() }
+                                            .clip(RoundedCornerShape(12.dp)).background(overlay)) {
+                                            Row { FillButton(); FullscreenButton() }
+                                        }
                                         if (!photo) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(overlay)
                                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                                             .padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -779,7 +848,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                         verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
                                         Views()
                                         Spacer(Modifier.weight(1f))
-                                        FullscreenButton()
+                                        Row { FillButton(); FullscreenButton() }
                                     }
                                 }
                                 // Two short rows under the picture: the timeline, then the transport with the reader's status.
@@ -798,6 +867,7 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
                                             Counter()
                                             Status()
                                         }
+                                        FillButton()
                                         FullscreenButton()
                                     }
                                 }
@@ -875,10 +945,10 @@ private fun DetailsHeader(title: String, icon: CineIcon, onClose: () -> Unit) {
 /** A transport key whose name carries its keyboard shortcut, shown as a tooltip, while a keyboard is attached. */
 @Composable
 private fun PlaybackKey(tag: String, icon: CineIcon, label: String, shortcut: ShortcutAction?, keyboard: Boolean, enabled: Boolean,
-    primary: Dp? = null, onClick: () -> Unit) {
+    primary: Dp? = null, busy: Boolean = false, onClick: () -> Unit) {
     val spoken = if (keyboard && shortcut != null) withShortcut(label, shortcut) else label
     ShortcutTooltip(spoken.takeIf { keyboard && shortcut != null }) {
-        TransportButton(tag, icon, spoken, enabled, primary = primary != null, primarySize = primary ?: 64.dp, onClick = onClick)
+        TransportButton(tag, icon, spoken, enabled, primary = primary != null, primarySize = primary ?: 64.dp, busy = busy, onClick = onClick)
     }
 }
 
@@ -893,20 +963,23 @@ private fun ShortcutTooltip(label: String?, content: @Composable () -> Unit) {
 private val SEEK_HEIGHT = 40.dp
 
 /**
- * The picture sized to its own aspect inside [modifier]'s area: a 4:3 photo never sits in a 16:9 black box and
- * a 16:9 clip fills a 16:9 screen edge to edge. [overlay] covers the whole area (error card, full-screen chrome).
+ * The picture sized to its own aspect and centred in [modifier]'s area, which is black around it: a 4:3 photo
+ * never sits in a 16:9 black box and a 16:9 clip fills a 16:9 screen edge to edge. [overlay] covers the whole
+ * area (error card, full-screen chrome).
  *
- * The whole area takes the zoom gestures ([mediaZoomGestures], with [onTap] for a single tap) while [zoomEnabled].
- * A photo zooms against the whole area and is clipped to it; a video is clipped to its fitted rectangle (see
- * [PlaybackStage]). A new area size (full screen, rotation) settles the zoom back to 1x.
+ * The whole area takes the zoom gestures ([mediaZoomGestures], with [onTap] for a single tap) while [zoomEnabled],
+ * and clips the zoomed picture, so a zoom can crop it to fill the area. A new area size (full screen, rotation)
+ * settles the zoom back to 1x, or with [fill] to the zoom that fills the area ([MediaZoomState.fill]), which a new
+ * picture size also applies. [glSurface] puts the surface over the whole area for a GL stage (see [PlaybackStage]).
  */
 @Composable
 internal fun PlaybackStageArea(modifier: Modifier, artifact: LocalMediaArtifact, video: Boolean, photo: Boolean, aspect: Float?,
     state: PlaybackObservation, shown: Bitmap?, poster: Bitmap?, fullscreen: Boolean, zoom: MediaZoomState,
     zoomScope: kotlinx.coroutines.CoroutineScope, zoomEnabled: Boolean, surfaceZoom: Boolean, onTap: (() -> Unit)?,
     onSurfaceView: (SurfaceView) -> Unit, onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit,
-    onSurfaceDestroyed: () -> Unit, overlay: @Composable BoxScope.() -> Unit) {
-    BoxWithConstraints(modifier.background(if (fullscreen) Color.Black else Color.Transparent).clipToBounds()
+    onSurfaceDestroyed: () -> Unit, glSurface: Boolean = false, fill: Boolean = false, overlay: @Composable BoxScope.() -> Unit) {
+    val picture = video || photo
+    BoxWithConstraints(modifier.background(if (fullscreen || picture) Color.Black else Color.Transparent).clipToBounds()
         .mediaZoomGestures(zoom, zoomScope, zoomEnabled, onTap)) {
         val area = IntSize(constraints.maxWidth, constraints.maxHeight)
         SideEffect {
@@ -914,66 +987,69 @@ internal fun PlaybackStageArea(modifier: Modifier, artifact: LocalMediaArtifact,
             zoom.fitContent = photo
             if (photo) zoom.content = shown?.let { Size(it.width.toFloat(), it.height.toFloat()) } ?: Size.Zero
         }
-        LaunchedEffect(zoom, area) { zoom.reset() }
+        val filling by rememberUpdatedState(fill && zoomEnabled)
+        LaunchedEffect(zoom, area) { if (filling) zoom.fill() else zoom.reset() }
+        // The picture's size arrives after the area (a video's from its decoder): fill once it is known.
+        val displayed = zoom.displayed.let { IntSize(it.width.roundToInt(), it.height.roundToInt()) }
+        LaunchedEffect(zoom, displayed) { if (filling && !zoom.filled) zoom.fill() }
         LaunchedEffect(zoom, zoomEnabled) { if (!zoomEnabled) zoom.reset() }
-        val (width, height) = fitInside(if (video || photo) aspect else null, maxWidth.value, maxHeight.value)
-        Box(Modifier.align(Alignment.Center).size(width.dp, height.dp).background(if (video || photo) Color.Black else SettingsSurface)) {
-            if (video || photo) PlaybackStage(artifact, video, state, shown, poster, zoom, surfaceZoom, onSurfaceView, onSurfaceCreated,
-                onSurfaceChanged, onSurfaceDestroyed)
-            else Text(artifact.name, Modifier.align(Alignment.Center).padding(16.dp), color = SettingsMuted, fontSize = 13.sp,
-                textAlign = TextAlign.Center)
+        if (picture) PlaybackStage(artifact, video, aspect, state, shown, poster, zoom, surfaceZoom, glSurface, onSurfaceView,
+            onSurfaceCreated, onSurfaceChanged, onSurfaceDestroyed)
+        else {
+            val (width, height) = fitInside(null, maxWidth.value, maxHeight.value)
+            Box(Modifier.align(Alignment.Center).size(width.dp, height.dp).background(SettingsSurface)) {
+                Text(artifact.name, Modifier.align(Alignment.Center).padding(16.dp), color = SettingsMuted, fontSize = 13.sp,
+                    textAlign = TextAlign.Center)
+            }
         }
         overlay()
     }
 }
 
 /**
- * Video fitted inside the black stage; photos fill it with their own fit. Every bitmap takes the zoom as a
- * graphics layer. A video's layers sit in a box of its fitted rectangle, clipped to it and bounding the pan,
- * so the bitmaps match what a GL stage draws zoomed into the surface; with [surfaceZoom] (plain video) the
- * SurfaceView itself takes the layer too.
+ * The picture over the whole stage area; photos fill it with their own fit. Every bitmap takes the zoom as a
+ * graphics layer over its fitted rectangle, centred in the area, which clips them, so a zoom crops to the area
+ * rather than to the picture. With [surfaceZoom] (plain video) the SurfaceView keeps the fitted rectangle, since
+ * the decoder scales into it, and takes the layer too. With [glSurface] (OCLog2, RAW) it covers the area and
+ * its GL stage letterboxes and zooms the picture itself, matching the bitmaps.
  */
 @Composable
-private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean, state: PlaybackObservation, shown: Bitmap?,
-    poster: Bitmap?, zoom: MediaZoomState, surfaceZoom: Boolean, onSurfaceView: (SurfaceView) -> Unit,
-    onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit, onSurfaceDestroyed: () -> Unit) {
+private fun BoxScope.PlaybackStage(artifact: LocalMediaArtifact, video: Boolean, aspect: Float?, state: PlaybackObservation,
+    shown: Bitmap?, poster: Bitmap?, zoom: MediaZoomState, surfaceZoom: Boolean, glSurface: Boolean,
+    onSurfaceView: (SurfaceView) -> Unit, onSurfaceCreated: (SurfaceHolder) -> Unit, onSurfaceChanged: (SurfaceHolder, Int, Int) -> Unit,
+    onSurfaceDestroyed: () -> Unit) {
     val created by rememberUpdatedState(onSurfaceCreated)
     val changed by rememberUpdatedState(onSurfaceChanged)
     val destroyed by rememberUpdatedState(onSurfaceDestroyed)
     BoxWithConstraints(Modifier.matchParentSize()) {
-        val density = LocalDensity.current
-        val scale = playbackFitScale(state.videoWidth, state.videoHeight,
-            with(density) { maxWidth.roundToPx() }, with(density) { maxHeight.roundToPx() })
         if (video) {
-            val fittedWidth = maxWidth * scale.first
-            val fittedHeight = maxHeight * scale.second
-            val box = with(density) { Size(fittedWidth.toPx(), fittedHeight.toPx()) }
+            // The decoder's oriented display size wins over the stage's guess from the poster or the sidecar.
+            val (width, height) = fitInside(pictureAspect(state.videoWidth, state.videoHeight) ?: aspect, maxWidth.value, maxHeight.value)
+            val fitted = Modifier.align(Alignment.Center).size(width.dp, height.dp)
+            val box = with(LocalDensity.current) { Size(width.dp.toPx(), height.dp.toPx()) }
             SideEffect { zoom.content = box }
-            Box(Modifier.align(Alignment.Center).size(fittedWidth, fittedHeight).clipToBounds()) {
-                // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
-                // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
-                AndroidView(factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        tag = "media-playback-native-surface"
-                        onSurfaceView(this)
-                        holder.addCallback(object : SurfaceHolder.Callback {
-                            override fun surfaceCreated(holder: SurfaceHolder) = created(holder)
-                            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(holder, width, height)
-                            override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
-                        })
-                    }
-                }, modifier = Modifier.fillMaxSize().then(if (surfaceZoom) Modifier.mediaZoomLayer(zoom) else Modifier)
-                    .testTag("media-playback-surface"))
-                poster?.let {
-                    Image(it.asImageBitmap(), null, Modifier.fillMaxSize().mediaZoomLayer(zoom).testTag("media-playback-poster"),
-                        contentScale = ContentScale.Fit)
+            // SurfaceView preserves the decoder/compositor HDR path; TextureView can flatten it
+            // to SDR. The SurfaceHolder owns its Surface, so never release that Surface ourselves.
+            AndroidView(factory = { ctx ->
+                SurfaceView(ctx).apply {
+                    tag = "media-playback-native-surface"
+                    onSurfaceView(this)
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) = created(holder)
+                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = changed(holder, width, height)
+                        override fun surfaceDestroyed(holder: SurfaceHolder) = destroyed()
+                    })
                 }
-                shown?.let {
-                    // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
-                    // so non-square pixels stretch exactly once.
-                    Image(it.asImageBitmap(), artifact.name, Modifier.fillMaxSize().mediaZoomLayer(zoom).testTag("media-playback-frame"),
-                        contentScale = ContentScale.FillBounds)
-                }
+            }, modifier = (if (glSurface) Modifier.fillMaxSize() else fitted).then(if (surfaceZoom) Modifier.mediaZoomLayer(zoom) else Modifier)
+                .testTag("media-playback-surface"))
+            poster?.let {
+                Image(it.asImageBitmap(), null, fitted.mediaZoomLayer(zoom).testTag("media-playback-poster"), contentScale = ContentScale.Fit)
+            }
+            shown?.let {
+                // Video bitmap bytes already carry crop/rotation. Fill the fitted display rect
+                // so non-square pixels stretch exactly once.
+                Image(it.asImageBitmap(), artifact.name, fitted.mediaZoomLayer(zoom).testTag("media-playback-frame"),
+                    contentScale = ContentScale.FillBounds)
             }
         } else shown?.let {
             // A photo keeps its own fit; it zooms against the whole area, which clips it.

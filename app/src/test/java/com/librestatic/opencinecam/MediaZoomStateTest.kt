@@ -151,10 +151,17 @@ class MediaZoomStateTest {
     }
 
     @Test
-    fun boxBoundsAreHalfTheGrowthOnEachAxis() {
-        assertEquals(Offset(160f, 90f), mediaZoomBoundsBox(320f, 180f, 2f))
-        assertEquals(Offset.Zero, mediaZoomBoundsBox(320f, 180f, 1f))
-        assertEquals(Offset.Zero, mediaZoomBoundsBox(320f, 180f, 0.5f))
+    fun boxBoundsCropToTheAreaAndLockTheAxisThatStillFits() {
+        // A 320x180 video box in a 320x180 area: half the growth on each axis.
+        assertEquals(Offset(160f, 90f), mediaZoomBoundsBox(320f, 180f, 320f, 180f, 2f))
+        assertEquals(Offset.Zero, mediaZoomBoundsBox(320f, 180f, 320f, 180f, 1f))
+        assertEquals(Offset.Zero, mediaZoomBoundsBox(320f, 180f, 320f, 180f, 0.5f))
+        // The same box letterboxed in a 320x640 portrait area: at 2x it is 640x360, which overflows only the width.
+        assertEquals(Offset(160f, 0f), mediaZoomBoundsBox(320f, 180f, 320f, 640f, 2f))
+        // Past the fill zoom (640 / 180 ≈ 3.56x) the height overflows too.
+        val deep = mediaZoomBoundsBox(320f, 180f, 320f, 640f, 4f)
+        assertEquals(480f, deep.x, 0.001f)
+        assertEquals(40f, deep.y, 0.001f)
     }
 
     @Test
@@ -163,8 +170,48 @@ class MediaZoomStateTest {
         assertEquals(Offset(200f, 100f), zoom.maxOffsets(2f))
         zoom.fitContent = false
         zoom.content = Size(400f, 300f)
-        assertEquals(Offset(200f, 150f), zoom.maxOffsets(2f))
+        assertEquals(Offset(200f, 100f), zoom.maxOffsets(2f))
         assertEquals(Offset(200f, 200f), zoom.center)
+    }
+
+    @Test
+    fun fillScaleCoversTheAreaWithinTheCeiling() {
+        // A 16:9 video letterboxed across a 1080x1920 portrait stage: 1080x607.5 fills it at 1920 / 607.5.
+        assertEquals(1920f / 607.5f, mediaFillScale(1080f, 607.5f, 1080f, 1920f), 0.0001f)
+        // A 21:9 take in the same stage would need more than the ceiling.
+        assertEquals(2f, mediaFillScale(1080f, 400f, 1080f, 1920f, maxScale = 2f), 0f)
+        // Nothing to crop, or nothing known yet.
+        assertEquals(1f, mediaFillScale(1080f, 1920f, 1080f, 1920f), 0f)
+        assertEquals(1f, mediaFillScale(0f, 0f, 1080f, 1920f), 0f)
+    }
+
+    @Test
+    fun fillZoomsToCoverAndCountsAsFilled() = runZoomPanTest {
+        val zoom = MediaZoomState(density).apply { area = IntSize(100, 200); content = Size(100f, 50f) }
+        assertTrue(zoom.canFill)
+        assertFalse(zoom.filled)
+        zoom.fill()
+        assertEquals(4f, zoom.pan.currentScale, 0.001f)
+        assertTrue(zoom.filled)
+        // At 4x the 400x200 picture covers the 100x200 area: it pans sideways only.
+        assertEquals(Offset(150f, 0f), zoom.maxOffsets(4f))
+        zoom.reset()
+        assertEquals(1f, zoom.pan.currentScale, 0f)
+        assertFalse(zoom.filled)
+    }
+
+    @Test
+    fun aPhotoFillsFromItsFittedSize() = runZoomPanTest {
+        // A 4:3 photo fitted to a 300x600 area shows 300x225.
+        val zoom = MediaZoomState(density).apply { area = IntSize(300, 600); content = Size(4000f, 3000f); fitContent = true }
+        assertEquals(300f, zoom.displayed.width, 0.001f)
+        assertEquals(225f, zoom.displayed.height, 0.001f)
+        assertEquals(600f / 225f, zoom.fillScale(), 0.0001f)
+        // A picture already filling the area offers no fill.
+        zoom.content = Size(3000f, 6000f)
+        assertFalse(zoom.canFill)
+        zoom.fill()
+        assertEquals(1f, zoom.pan.currentScale, 0f)
     }
 
     @Test

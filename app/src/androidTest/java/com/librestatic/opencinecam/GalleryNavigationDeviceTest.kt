@@ -133,7 +133,11 @@ class GalleryNavigationDeviceTest {
             for (uri in related.map(Uri::parse)+original) context.contentResolver.query(uri,arrayOf("_id"),null,null,null)!!.use { assertFalse(it.moveToFirst()) }
             compose.onNodeWithTag("media-delete-cancel",useUnmergedTree = true).performClick()
             compose.onNodeWithTag("media-delete-dialog",useUnmergedTree = true).assertDoesNotExist()
-            compose.waitUntil(15_000) { compose.onAllNodesWithTag("gallery-loading").fetchSemanticsNodes().isEmpty() }
+            // The list read before the delete stays up, under the refresh spinner, until the catalog is read again. The
+            // spinner sits in the controls, which may have scrolled out of composition, so the read again is what is
+            // waited for: the deleted take's card going away. A card that stays fails here or on the assertion below.
+            runCatching { compose.waitUntil(15_000) { compose.onAllNodesWithTag("gallery-take-${take.id}").fetchSemanticsNodes().isEmpty() } }
+            compose.waitForIdle()
             compose.onNodeWithTag("gallery-take-${take.id}").assertDoesNotExist()
             assertTrue(LocalMediaRepository(context).page(GallerySettings(),token).takes.isEmpty())
             compose.runOnIdle {

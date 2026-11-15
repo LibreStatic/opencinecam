@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.GallerySettings
+import com.librestatic.opencinecam.HARDWARE_TRUTH_SCHEMA
 import com.librestatic.opencinecam.GalleryMediaKind
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.parseProductionSlateJson
@@ -335,7 +336,7 @@ private fun JsonObject.label(key: String): String? =
 private val recordingSchemas = setOf("opencinecam-audio-sidecar-v1", "opencinecam.recording.v1",
     "opencinecam.timecode.v1", "opencinecam.av-timing.v1", "opencinecam.recording-color.v1",
     "opencinecam.recording-audio.v1", "opencinecam.recording-timing.v1", "opencinecam-oclog-sidecar-v2",
-    "opencinecam.timelapse-timing.v1")
+    "opencinecam.timelapse-timing.v1", "opencinecam.hdr-video.v1", HARDWARE_TRUTH_SCHEMA)
 internal fun jsonNestingWithinBound(text: String): Boolean {
     var depth = 0; var quoted = false; var escaped = false
     for (char in text) {

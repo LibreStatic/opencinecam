@@ -28,7 +28,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -45,6 +45,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -90,6 +98,11 @@ internal interface MediaCatalogSource {
     suspend fun probedCodec(artifact: LocalMediaArtifact): CodecBadge? = null
     /** The inspector's grouped file, video, colour, audio, camera, RAW and recording facts; null when unknown. */
     suspend fun details(take: LocalMediaTake): TakeTechnicalDetails? = null
+    /**
+     * A token that changes whenever the catalog may have: a list read under an equal, non-null token is still current,
+     * so reopening the gallery reuses it. Null when the source cannot tell, which reads the catalog again every time.
+     */
+    suspend fun freshness(): Any? = null
 }
 
 @Composable
@@ -131,6 +144,7 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
                 probeClipMetadata(app, artifact.uri, log = null)?.let { probedCodecBadge(it.codec, it.bitDepth) }
             }
             override suspend fun details(take: LocalMediaTake) = withContext(Dispatchers.IO) { readTakeDetails(app, take) }
+            override suspend fun freshness(): Any? = withContext(Dispatchers.IO) { repository.freshness() }
             // The queue for work in flight, the receipts (listed once per page load) for proxies already made.
             override fun proxyStates(ids: Set<String>): Flow<Map<String, TakeProxyState>> = if (ids.isEmpty()) flowOf(emptyMap())
                 else combine(queue.states, flow { emit(committedProxyTakes(app, ids)) }.flowOn(Dispatchers.IO)) { state, committed ->
@@ -142,7 +156,7 @@ internal fun MediaCatalogScreen(settings: GallerySettings, onSettings: (GalleryS
     MediaCatalogContent(settings, onSettings, source, onShare = { take -> if (take.kind == LocalMediaKind.RAW_VIDEO) shareRawTake(context, take) else sharingTake = take },
         onDelete = { deletingTake = it }, onRename = { renamingTake = it }, refreshGeneration = deletionRefresh,
         onReview = { deletedTakeIds = emptySet(); review = it }, onProxy = { proxyTake = it }, onProxyCatalog = { proxyCatalog = true },
-        exports = CinemaDngExportRuntime, onExport = { exportingTake = it }) { artifact ->
+        exports = CinemaDngExportRuntime, onExport = { exportingTake = it }, cache = GalleryCatalogCache.shared) { artifact ->
         context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(artifact.uri.toUri(), artifact.mimeType)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
     }
@@ -259,10 +273,11 @@ internal fun GalleryFacts?.mergedWith(other: GalleryFacts?): GalleryFacts? = whe
 /** A RAW take's codec as its file says, once read, over the kind's placeholder. */
 private fun TakeBadges.withFacts(facts: GalleryFacts?): TakeBadges = facts?.codec?.let { copy(codec = it) } ?: this
 
-private data class GalleryRequest(val kind: GalleryMediaKind, val newestFirst: Boolean, val goodTakesOnly: Boolean, val query: String, val refresh: Int, val externalRefresh: Int)
+private data class GalleryRequest(val key: GalleryCatalogCache.Key, val generation: Int)
+/** [paging] is a read of the next page under takes already listed; [token] is the source's freshness when the read began. */
 private data class GalleryLoad(val request: GalleryRequest? = null, val takes: List<LocalMediaTake> = emptyList(),
     val next: LocalMediaCursor? = null, val loading: Boolean = true, val failed: Boolean = false,
-    val encodings: Map<String, LocalMediaEncoding> = emptyMap())
+    val encodings: Map<String, LocalMediaEncoding> = emptyMap(), val paging: Boolean = false, val token: Any? = null)
 
 @Composable
 internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (GallerySettings) -> Unit,
@@ -271,6 +286,7 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     onRename: ((LocalMediaTake) -> Unit)? = null, onReview: ((MediaReviewSelection) -> Unit)? = null,
     onProxy: ((LocalMediaTake) -> Unit)? = null, onProxyCatalog: (() -> Unit)? = null,
     initialSelection: String? = null, exports: CinemaDngExportControl? = null, onExport: ((LocalMediaTake) -> Unit)? = null,
+    cache: GalleryCatalogCache = remember(source) { GalleryCatalogCache() },
     onOpen: (LocalMediaArtifact) -> Unit) {
     val reducedMotion = LocalReducedMotion.current
     val idleExports = remember { MutableStateFlow<CinemaDngExportState>(CinemaDngExportState.Idle) }
@@ -288,17 +304,40 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     var typedQuery by rememberSaveable { mutableStateOf("") }
     var filters by rememberSaveable { mutableStateOf(false) }
     var help by rememberSaveable { mutableStateOf(false) }
-    var refresh by remember { mutableIntStateOf(0) }
     var batch by remember { mutableIntStateOf(0) }
     var load by remember(source) { mutableStateOf(GalleryLoad()) }
     var openFailed by remember { mutableStateOf(false) }
-    val request = GalleryRequest(settings.kind, settings.newestFirst, settings.goodTakesOnly, query, refresh, refreshGeneration)
+    // A delete, rename or drive event while the gallery is open; the value it had on arrival changed nothing.
+    val seenRefresh = remember { intArrayOf(refreshGeneration) }
+    LaunchedEffect(refreshGeneration) {
+        if (refreshGeneration != seenRefresh[0]) { seenRefresh[0] = refreshGeneration; cache.invalidate() }
+    }
+    val key = GalleryCatalogCache.Key(settings.kind, settings.newestFirst, settings.goodTakesOnly, query)
+    val request = GalleryRequest(key, cache.generation)
     val task = request to batch
     val currentTask by rememberUpdatedState(task)
-    val visible = load.takeIf { it.request == request } ?: GalleryLoad()
+    val cached = cache[key]
+    val reading = load.request == request && load.loading
+    val readFailed = load.request == request && load.failed
+    // This request's list once it has takes or has finished; until then the last list read for this search, shown
+    // while it is read again (as it is unless a newer generation or the source's token says otherwise); else nothing yet.
+    // A read that failed before its first page keeps that last list up, under the error, rather than an empty one; a
+    // retry reads from the first page again, so the list it shows never mixes the two reads.
+    val visible = load.takeIf { it.request == request && (it.takes.isNotEmpty() || (!it.loading && !(it.failed && cached != null))) }
+        ?: cached?.let { GalleryLoad(request, it.takes, it.next, loading = reading || (!readFailed && it.generation != request.generation),
+            failed = readFailed && !reading, encodings = it.encodings) }
+        ?: GalleryLoad(request)
     LaunchedEffect(source, task) {
-        val previous = load.takeIf { it.request == request } ?: GalleryLoad(request = request)
-        load = previous.copy(loading = true, failed = false)
+        val previous = load.takeIf { it.request == request } ?: run {
+            val token = try { source.freshness() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+            val entry = cache[key]
+            if (entry != null && entry.generation == request.generation && token != null && token == entry.token) {
+                load = GalleryLoad(request, entry.takes, entry.next, loading = false, encodings = entry.encodings, token = token)
+                return@LaunchedEffect
+            }
+            GalleryLoad(request = request, token = token)
+        }
+        load = previous.copy(loading = true, failed = false, paging = previous.takes.isNotEmpty())
         var cursor = previous.next
         try {
             var page: LocalMediaPage
@@ -314,13 +353,17 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             val merged = linkedMapOf<String, LocalMediaTake>()
             previous.takes.forEach { merged[it.id] = it }
             page.takes.forEach { merged[it.id] = it }
-            load = GalleryLoad(request, merged.values.toList(), cursor, loading = false, encodings = previous.encodings + page.encodings)
+            load = GalleryLoad(request, merged.values.toList(), cursor, loading = false, encodings = previous.encodings + page.encodings,
+                token = previous.token)
+            cache[key] = GalleryCatalogCache.Entry(load.takes, load.next, load.encodings, previous.token, request.generation)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             if (currentTask == task) {
                 android.util.Log.w("MediaCatalog", "Catalog read failed; existing results retained", failure)
-                load = previous.copy(next = cursor, loading = false, failed = true)
+                // A read that has listed nothing yet retries from its first page: a take that appeared before the
+                // empty pages it skipped would otherwise be missed. A list already shown carries on where it stopped.
+                load = previous.copy(next = if (previous.takes.isEmpty()) null else cursor, loading = false, failed = true, paging = false)
             }
         }
     }
@@ -338,14 +381,14 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             selectedId = null; detailsOpen = false
         }
     }
-    val facts = remember(source) { mutableMapOf<String, GalleryFacts>() }
-    val probedCodecs = remember(source) { mutableMapOf<String, CodecBadge?>() }
-    val takeDetails = remember(source) { mutableMapOf<String, TakeTechnicalDetails?>() }
+    val facts = cache.facts
+    val probedCodecs = cache.probedCodecs
+    val takeDetails = cache.takeDetails
     val proxies by remember(source, visible.takes) { source.proxyStates(visible.takes.mapTo(HashSet()) { it.id }) }
         .collectAsState(emptyMap())
     fun badges(take: LocalMediaTake) = TakeBadges(codecBadge(take, visible.encodings[take.id]), proxies[take.id] ?: TakeProxyState.NONE,
         visible.encodings[take.id]?.incompleteReasons.orEmpty(), onDrive = take.onDrive)
-    val thumbnails = remember(source) { GalleryThumbnailCache() }
+    val thumbnails = cache.thumbnails
     val groups = remember(visible.takes) { groupByTakeDay(visible.takes, ZoneId.systemDefault()) { it.primary.modifiedSeconds } }
     val gridState = rememberLazyGridState()
 
@@ -380,7 +423,9 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                     fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 onProxyCatalog?.let { action -> CineIconButton("gallery-proxy-catalog", CineIcon.PROXY, R.string.proxy_catalog_title, onClick = action) }
                 CineIconButton("gallery-filters", CineIcon.FILTER, R.string.gallery_filters, selected = filters) { filters = !filters }
-                CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { refresh++; openFailed = false }
+                // Reading the catalog again under a list already shown: the refresh key turns into the spinner.
+                if (visible.loading && !visible.paging && visible.takes.isNotEmpty()) GalleryBusy("gallery-refreshing", Modifier.size(48.dp), 28.dp)
+                else CineIconButton("gallery-refresh", CineIcon.REFRESH, R.string.gallery_refresh) { cache.invalidate(); openFailed = false }
                 CineIconButton("gallery-help-toggle", CineIcon.INFO, if (help) R.string.settings_help_hide else R.string.settings_help_show,
                     selected = help) { help = !help }
             }
@@ -412,26 +457,20 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
     val status: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Full height: a wavy indicator clipped to a strip looks like the old flat bar.
-            AnimatedVisibility(
-                visible = visible.loading,
-                enter = if (reducedMotion) EnterTransition.None else fadeIn() + expandVertically(),
-                exit = if (reducedMotion) ExitTransition.None else fadeOut(tween(400)) + shrinkVertically(tween(500, delayMillis = 150)),
-            ) {
-                Column(Modifier.fillMaxWidth().testTag("gallery-loading"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearWavyProgressIndicator(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest)
-                    Text(stringResource(R.string.gallery_loading), Modifier.fillMaxWidth(), color = SettingsMuted, fontSize = 13.sp)
-                }
-            }
             when {
                 visible.failed -> {
                     Text(stringResource(R.string.gallery_load_failed), Modifier.fillMaxWidth().testTag("gallery-error"), color = GalleryWarning)
                     GalleryButton("retry", R.string.gallery_retry) { load = load.copy(loading = true); batch++ }
                 }
-                visible.takes.isEmpty() -> Text(stringResource(R.string.gallery_empty), Modifier.fillMaxWidth().testTag("gallery-empty"), color = SettingsMuted)
+                // Only a finished read says there is nothing: while reading, the spinner holds the list's place.
+                !visible.loading && visible.takes.isEmpty() ->
+                    Text(stringResource(R.string.gallery_empty), Modifier.fillMaxWidth().testTag("gallery-empty"), color = SettingsMuted)
             }
-            if (!visible.loading && !visible.failed && visible.next != null) {
+            if (visible.loading && visible.paging) {
+                Box(Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+                    GalleryBusy("gallery-loading-more", Modifier.size(48.dp))
+                }
+            } else if (!visible.loading && !visible.failed && visible.next != null) {
                 GalleryButton("more", R.string.gallery_more) { load = load.copy(loading = true); batch++ }
             } else if (!visible.loading && !visible.failed && visible.takes.isNotEmpty()) {
                 Text(stringResource(R.string.gallery_no_more), Modifier.fillMaxWidth().testTag("gallery-end"),
@@ -452,6 +491,8 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
             progress = exportProgress(take), technical = technical)
     }
 
+    // Nothing to show yet: one spinner where the list will be, never the empty message.
+    val busy = visible.loading && visible.takes.isEmpty()
     val coordinator = LocalFoldDisplayCoordinator.current
     val foldFallback = remember { MutableStateFlow(FoldDisplayState()) }
     val fold by (coordinator?.states ?: foldFallback).collectAsState()
@@ -494,17 +535,17 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
                 val gridWidth = grid.width.toDp().value
                 GalleryGrid(Modifier.absoluteOffset(grid.left.toDp(), grid.top.toDp()).size(grid.width.toDp(), grid.height.toDp()),
                     galleryColumns(gridWidth, windowWidthClass(gridWidth), windowHeightClass(grid.height.toDp().value)),
-                    gridState, groups, controls, status, card)
+                    gridState, groups, controls, status, card, busy)
                 inspector(Modifier.absoluteOffset(pane.left.toDp(), pane.top.toDp()).size(pane.width.toDp(), pane.height.toDp()).padding(12.dp))
             }
             side -> Row(Modifier.fillMaxSize()) {
                 val inspectorWidth = mediaInspectorWidthDp(areaWidth)
                 GalleryGrid(Modifier.weight(1f).fillMaxHeight(), galleryColumns(areaWidth - inspectorWidth, widthClass, heightClass),
-                    gridState, groups, controls, status, card)
+                    gridState, groups, controls, status, card, busy)
                 inspector(Modifier.width(inspectorWidth.dp).padding(top = 12.dp, end = 12.dp, bottom = 12.dp))
             }
             else -> GalleryGrid(Modifier.fillMaxSize(), galleryColumns(areaWidth, widthClass, heightClass), gridState, groups,
-                controls, status, card)
+                controls, status, card, busy)
         }
         if (!side && detailsOpen) selectedTake?.let { take ->
             MediaInspectorSheet(take, mediaDetailsAsBottomSheet(widthClass, landscape), onDismiss = { detailsOpen = false }) { shown, modifier, close ->
@@ -514,12 +555,15 @@ internal fun MediaCatalogContent(settings: GallerySettings, onSettings: (Gallery
     }
 }
 
-/** Controls, then the takes under a header per shooting day, then the paging status. */
+/** Controls, then the takes under a header per shooting day, then the paging status; [busy] centres a spinner under the controls. */
 @Composable
 private fun GalleryGrid(modifier: Modifier, columns: Int, state: LazyGridState, groups: List<Pair<LocalDate, List<LocalMediaTake>>>,
-    controls: @Composable () -> Unit, status: @Composable () -> Unit, card: @Composable (LocalMediaTake, Modifier) -> Unit) {
+    controls: @Composable () -> Unit, status: @Composable () -> Unit, card: @Composable (LocalMediaTake, Modifier) -> Unit,
+    busy: Boolean) {
     val entrance = rememberGridEntrance(state, columns) { groups.isNotEmpty() }
-    LazyVerticalGrid(GridCells.Fixed(columns), modifier.testTag("gallery-list"), state,
+    val reducedMotion = LocalReducedMotion.current
+    Box(modifier) {
+    LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize().testTag("gallery-list"), state,
         contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         item(key = "controls", span = { GridItemSpan(maxLineSpan) }, contentType = "controls") { controls() }
@@ -534,6 +578,27 @@ private fun GalleryGrid(modifier: Modifier, columns: Int, state: LazyGridState, 
             index = first + takes.size
         }
         item(key = "status", span = { GridItemSpan(maxLineSpan) }, contentType = "status") { status() }
+    }
+    AnimatedVisibility(busy, Modifier.align(Alignment.Center).offset {
+        // The middle of the space under the controls, kept on screen when they fill most of it.
+        val viewport = state.layoutInfo.viewportSize.height
+        val controlsBottom = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "controls" }
+            ?.let { it.offset.y + it.size.height } ?: 0
+        IntOffset(0, (controlsBottom / 2).coerceAtMost(viewport / 2 - 48.dp.roundToPx()).coerceAtLeast(0))
+    }, enter = if (reducedMotion) EnterTransition.None else fadeIn(), exit = if (reducedMotion) ExitTransition.None else fadeOut()) {
+        GalleryBusy("gallery-loading", Modifier.size(72.dp))
+    }
+    }
+}
+
+/** The shape-morphing indicator for a catalog read, announced as one; still under reduced motion. */
+@Composable
+private fun GalleryBusy(tag: String, modifier: Modifier = Modifier, size: Dp = Dp.Unspecified) {
+    val label = stringResource(R.string.gallery_loading)
+    Box(modifier.semantics { contentDescription = label }.testTag(tag), contentAlignment = Alignment.Center) {
+        val indicator = if (size == Dp.Unspecified) Modifier.fillMaxSize() else Modifier.size(size)
+        if (LocalReducedMotion.current) LoadingIndicator({ 0.6f }, indicator, color = MaterialTheme.colorScheme.primary)
+        else LoadingIndicator(indicator, color = MaterialTheme.colorScheme.primary)
     }
 }
 

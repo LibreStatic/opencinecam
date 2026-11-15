@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.core.net.toUri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Size
@@ -36,12 +37,28 @@ class LocalMediaRepository(context: Context) {
         limit: Int = 60): LocalMediaPage {
         require(limit in 1..60)
         require(query.length <= 512)
+        val seen = mutableListOf<CatalogRow>()
+        // Every kind's candidates are listed before the first take is read, so the batch knows the page's order.
+        val batch by lazy { NamespaceBatch(seen.sortedWith(catalogComparator(settings.newestFirst))
+            .mapNotNull { row -> row.namespace?.takeIf { row.eligible } }.distinct()) }
         return catalogPage(settings, query, cursor, limit,
-            candidates = { kind, position -> candidates(kind, position, settings.newestFirst) },
+            candidates = { kind, position -> candidates(kind, position, settings.newestFirst).also { seen += it } },
             drive = { drive.entries(refresh = cursor == null) },
             blocked = ::uncommittedNamespaces,
-            readTake = { namespace, candidate, onEncoding -> readTake(namespace, candidate, onEncoding = onEncoding) })
+            readTake = { namespace, candidate, onEncoding ->
+                readTake(namespace, candidate, onEncoding = onEncoding, rowsOf = batch::rows) })
     }
+
+    /**
+     * Changes whenever MediaStore changes on any volume, a volume comes or goes, or another recording drive is chosen:
+     * a gallery list read under the same token is still current. Null below Android 11, where MediaStore has no
+     * generation, and on any failure: the list is then read again.
+     */
+    fun freshness(): Any? = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) null else runCatching {
+        MediaStore.getExternalVolumeNames(context).sorted().map { volume ->
+            Triple(volume, MediaStore.getVersion(context, volume), MediaStore.getGeneration(context, volume))
+        } to RecordingDestinationStore(context).configured()
+    }.getOrNull()
 
     /** A drive file has no MediaStore thumbnail: it is decoded from the file, through a disk cache. */
     fun thumbnail(artifact: LocalMediaArtifact): Bitmap? = runCatching {
@@ -186,11 +203,12 @@ class LocalMediaRepository(context: Context) {
 
     private fun readTake(namespace: MediaNamespace, candidate: CatalogRow,
         captureDocuments: ((List<MetadataDocument>) -> Unit)? = null,
-        onEncoding: ((LocalMediaEncoding) -> Unit)? = null): LocalMediaTake? {
+        onEncoding: ((LocalMediaEncoding) -> Unit)? = null,
+        rowsOf: (MediaNamespace, String, Uri, LocalMediaKind?, Int) -> List<CatalogRow> = ::namespaceRows): LocalMediaTake? {
         var incomplete = false
         val kinds = if (namespace.recording) listOf(LocalMediaKind.VIDEO, LocalMediaKind.AUDIO) else listOf(LocalMediaKind.PHOTO)
         val members = kinds.flatMap { kind ->
-            val found = namespaceRows(namespace, root(kind), collection(kind), kind, MEMBER_BOUND + 1)
+            val found = rowsOf(namespace, root(kind), collection(kind), kind, MEMBER_BOUND + 1)
             if (found.size > MEMBER_BOUND) incomplete = true
             found.take(MEMBER_BOUND)
         }.toMutableList()
@@ -199,7 +217,7 @@ class LocalMediaRepository(context: Context) {
             members += candidate
             incomplete = true
         }
-        val metadata = namespaceRows(namespace, "Download",
+        val metadata = rowsOf(namespace, "Download",
             MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), null, METADATA_BOUND + 1)
         if (metadata.size > METADATA_BOUND) incomplete = true
         val bounded = metadata.take(METADATA_BOUND)
@@ -216,6 +234,54 @@ class LocalMediaRepository(context: Context) {
         "owner_package_name = ? AND is_pending = 0 AND relative_path LIKE ?",
         arrayOf(context.packageName, escapeLike(namespace.path(root)) + "%"), "_id ASC", bound,
         escapePath = true).filter { it.eligible && it.namespace == namespace }
+
+    /**
+     * The member and metadata rows of a page's namespaces, read [NAMESPACE_BATCH] namespaces at a time in [order]:
+     * one MediaStore scan per collection instead of three per take, which held a 60-take page for ~6.6 s on the
+     * Razr. Per namespace it answers what [namespaceRows] would: the first `bound` rows of its folder by `_id`, then
+     * the eligible ones. A batch that reaches its row cap could hide a namespace's rows, so its namespaces fall back
+     * to their own queries.
+     */
+    private inner class NamespaceBatch(private val order: List<MediaNamespace>) {
+        private val read = HashMap<Pair<MediaNamespace, Uri>, List<CatalogRow>>()
+        private val loaded = HashSet<MediaNamespace>()
+        private val singles = HashSet<MediaNamespace>()
+
+        fun rows(namespace: MediaNamespace, root: String, uri: Uri, kind: LocalMediaKind?, bound: Int): List<CatalogRow> {
+            if (namespace !in loaded && namespace !in singles) load(namespace)
+            if (namespace in singles) return namespaceRows(namespace, root, uri, kind, bound)
+            return read[namespace to uri].orEmpty().take(bound).filter { it.eligible }
+        }
+
+        private fun load(first: MediaNamespace) {
+            val index = order.indexOf(first)
+            val chunk = (if (index < 0) listOf(first) else listOf(first) + order.drop(index + 1)
+                .filter { it !in loaded && it !in singles }).take(NAMESPACE_BATCH)
+            val recordings = chunk.filter { it.recording }
+            val stills = chunk.filterNot { it.recording }
+            val complete = listOf(
+                Triple(recordings, LocalMediaKind.VIDEO, MEMBER_BOUND + 1),
+                Triple(recordings, LocalMediaKind.AUDIO, MEMBER_BOUND + 1),
+                Triple(stills, LocalMediaKind.PHOTO, MEMBER_BOUND + 1),
+                Triple(chunk, null, METADATA_BOUND + 1),
+            ).all { (namespaces, kind, bound) -> namespaces.isEmpty() || query(namespaces, kind, bound) }
+            if (complete) loaded += chunk else singles += chunk
+        }
+
+        private fun query(namespaces: List<MediaNamespace>, kind: LocalMediaKind?, bound: Int): Boolean {
+            val root = kind?.let(::root) ?: "Download"
+            val uri = kind?.let(::collection) ?: MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val cap = bound * namespaces.size
+            val found = rows(uri, kind, "owner_package_name = ? AND is_pending = 0 AND (" +
+                namespaces.joinToString(" OR ") { "relative_path LIKE ? ESCAPE '\\'" } + ")",
+                (listOf(context.packageName) + namespaces.map { escapeLike(it.path(root)) + "%" }).toTypedArray(),
+                "_id ASC", cap)
+            if (found.size >= cap) return false
+            val wanted = namespaces.toSet()
+            found.groupBy { it.namespace }.forEach { (namespace, rows) -> if (namespace in wanted) read[namespace!! to uri] = rows }
+            return true
+        }
+    }
 
     private fun rows(collection: Uri, kind: LocalMediaKind?, selection: String, args: Array<String>,
         order: String, bound: Int, escapePath: Boolean = false): List<CatalogRow> {
@@ -317,6 +383,7 @@ class LocalMediaRepository(context: Context) {
     companion object {
         private const val MEMBER_BOUND = 16
         private const val METADATA_BOUND = 4
+        private const val NAMESPACE_BATCH = 40
         private const val METADATA_BYTES = 512 * 1024
         private val PROJECTION = arrayOf("_id", "_display_name", "mime_type", "_size", "date_modified",
             "relative_path", "owner_package_name", "is_pending")

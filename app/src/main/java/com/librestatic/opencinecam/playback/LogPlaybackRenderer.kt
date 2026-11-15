@@ -44,6 +44,9 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
     private var view = view
     private var width = 0
     private var height = 0
+    /** The picture's display size (crop and rotation applied); 0 draws it over the whole surface. */
+    private var frameWidth = 0
+    private var frameHeight = 0
     private var zoomScale = 1f
     private var zoomX = 0f
     private var zoomY = 0f
@@ -68,6 +71,14 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
      */
     fun setZoom(scale: Float, offsetX: Float, offsetY: Float) {
         handler.post { if (!closed) { zoomScale = scale; zoomX = offsetX; zoomY = offsetY; draw() } }
+    }
+
+    /**
+     * Letterboxes the picture at [width] x [height] (its display size) inside the surface, which covers the
+     * whole review stage so a zoomed picture can fill it; 0 for either draws over the whole surface.
+     */
+    fun setFrameSize(width: Int, height: Int) {
+        handler.post { if (!closed) { frameWidth = width; frameHeight = height; draw() } }
     }
 
     /** Blocks until the EGL window surface is gone, so the SurfaceHolder may destroy its Surface afterwards. */
@@ -163,7 +174,8 @@ internal class LogPlaybackRenderer(output: Surface, private val signal: PreciseL
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uViewGain"), signal.viewGain.toFloat())
         GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uLegacyBt709"), if (signal.legacyBt709Primaries) 1 else 0)
         GLES30.glUniform4fv(GLES30.glGetUniformLocation(program, "uZoom"), 1,
-            zoomedQuad(intArrayOf(0, 0, width, height), width, height, zoomScale, zoomX, zoomY), 0)
+            zoomedQuad(if (frameWidth > 0 && frameHeight > 0) RawDevelop.letterbox(frameWidth, frameHeight, width, height)
+                else intArrayOf(0, 0, width, height), width, height, zoomScale, zoomX, zoomY), 0)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, QUAD)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)

@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,6 +58,7 @@ import com.librestatic.opencinecam.SettingsMuted
 import com.librestatic.opencinecam.SettingsSurface
 import com.librestatic.opencinecam.SettingsSurfaceRaised
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
+import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 
 private val Disabled: Color @Composable get() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
@@ -203,7 +205,7 @@ internal fun CollapsibleErrorCard(title: String, message: String, detail: String
  */
 @Composable
 internal fun TransportButton(tag: String, icon: CineIcon, label: String, enabled: Boolean, primary: Boolean = false,
-    modifier: Modifier = Modifier, primarySize: Dp = 64.dp, onClick: () -> Unit) {
+    modifier: Modifier = Modifier, primarySize: Dp = 64.dp, busy: Boolean = false, onClick: () -> Unit) {
     val glyph = when {
         !enabled -> if (primary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f) else Disabled
         primary -> MaterialTheme.colorScheme.onPrimary
@@ -222,5 +224,14 @@ internal fun TransportButton(tag: String, icon: CineIcon, label: String, enabled
             .semantics { contentDescription = label }
             .testTag(tag),
         contentAlignment = Alignment.Center,
-    ) { CineGlyph(icon, glyph, Modifier.size(if (primary) 28.dp else 22.dp)) }
+    ) {
+        // Accepted but not started yet: the reader is still opening or seeking to start. Reduced motion holds a still arc.
+        if (busy) {
+            val ring = Modifier.matchParentSize().padding(3.dp).testTag("$tag-busy")
+            if (LocalReducedMotion.current) CircularProgressIndicator({ 0.3f }, ring, color = glyph, strokeWidth = 2.5.dp,
+                trackColor = Color.Transparent, gapSize = 0.dp)
+            else CircularProgressIndicator(ring, color = glyph, strokeWidth = 2.5.dp)
+        }
+        CineGlyph(icon, glyph, Modifier.size(if (primary) 28.dp else 22.dp))
+    }
 }
