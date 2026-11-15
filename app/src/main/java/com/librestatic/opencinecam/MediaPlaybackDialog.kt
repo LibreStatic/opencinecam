@@ -550,6 +550,15 @@ private fun MediaPlaybackView(take: LocalMediaTake, artifact: LocalMediaArtifact
     // and pressing again cancels it. Opening (sidecar, player preparation) and the seek to start take a moment.
     var starting by remember(artifact) { mutableStateOf(false) }
     var issuedFrom by remember(session) { mutableStateOf<PlaybackObservation?>(null) }
+    // Leaving the app drops a press still waiting: a reader not yet prepared ignores suspendOutput's pause, so the
+    // press would otherwise start playback in the background once it is.
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) { starting = false; issuedFrom = null }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(session, starting, state, rawFrames) {
         val controller = session ?: return@LaunchedEffect
         val current = state
