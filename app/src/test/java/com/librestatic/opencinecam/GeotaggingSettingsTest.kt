@@ -6,6 +6,8 @@ import com.librestatic.opencinecam.settings.CameraPresetCodec
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.settings.CameraSettingsStore
 import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.settings.SettingsCatalog
 import com.librestatic.opencinecam.settings.SettingsCategory
 import com.librestatic.opencinecam.settings.SettingsPersistence

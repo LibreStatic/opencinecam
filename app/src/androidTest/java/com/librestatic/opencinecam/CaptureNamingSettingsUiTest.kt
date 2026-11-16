@@ -14,6 +14,10 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CAPTURE_NAMING_EXAMPLE_UUID
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.CaptureNamingSettingsControls
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

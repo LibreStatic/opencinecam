@@ -17,6 +17,7 @@ import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
 import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*

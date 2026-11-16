@@ -107,7 +107,7 @@ import com.librestatic.opencinecam.onboarding.TwoPaneMaxWidth
 import com.librestatic.opencinecam.R
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.librestatic.opencinecam.service.CaptureService
-import com.librestatic.opencinecam.HingeSafeSettingsPane
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 import com.librestatic.opencinecam.ui.AdaptiveWindow
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon

@@ -16,6 +16,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.gallery.ProxySettingsControls
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsScreen
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

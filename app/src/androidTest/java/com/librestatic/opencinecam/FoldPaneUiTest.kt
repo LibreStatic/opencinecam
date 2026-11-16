@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.fold.FoldHinge
 import com.librestatic.opencinecam.fold.FoldPosture
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test

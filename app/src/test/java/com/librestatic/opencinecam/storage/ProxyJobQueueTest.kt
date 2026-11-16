@@ -520,7 +520,7 @@ class ProxyJobQueueTest {
                 val invalid = listOf(
                     selected.copy(id = take(2).id), selected.copy(kind = LocalMediaKind.AUDIO),
                     selected.copy(relationStatus = LocalMediaRelationStatus.DECLARED),
-                    selected.copy(slate = com.librestatic.opencinecam.ProductionSlateSettings()),
+                    selected.copy(slate = com.librestatic.opencinecam.settings.ProductionSlateSettings()),
                     selected.copy(primary = alien, originals = listOf(alien)),
                     selected.copy(originals = listOf(selected.primary, alien)),
                     selected.copy(metadata = listOf(alien)),

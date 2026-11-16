@@ -3,13 +3,13 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.appliedAudioEqCurve
-import com.librestatic.opencinecam.appliedAudioEqProfileId
+import com.librestatic.opencinecam.settings.appliedAudioEqCurve
+import com.librestatic.opencinecam.settings.appliedAudioEqProfileId
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 import com.librestatic.opencinecam.camera.TimelapseCapture
 
-import com.librestatic.opencinecam.fpsLockActive
-import com.librestatic.opencinecam.lowLightFpsActive
+import com.librestatic.opencinecam.settings.fpsLockActive
+import com.librestatic.opencinecam.settings.lowLightFpsActive
 import com.librestatic.opencinecam.subject.reviewBlockedByTake
 import com.librestatic.opencinecam.capture.OperatorAction
 import com.librestatic.opencinecam.capture.forOperatorStartup
@@ -42,9 +42,9 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Size
 import android.view.Surface
-import com.librestatic.opencinecam.timelapseProjectRate
-import com.librestatic.opencinecam.videoProjectRate
-import com.librestatic.opencinecam.projectLabel
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.videoProjectRate
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
@@ -54,7 +54,7 @@ import com.librestatic.opencinecam.logProfilesFor
 import com.librestatic.opencinecam.usesLogGraph
 import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.settings.normalizedFor
-import com.librestatic.opencinecam.forDevice
+import com.librestatic.opencinecam.settings.forDevice
 import com.librestatic.opencinecam.capture.toSpec
 import com.librestatic.opencinecam.capture.VideoGeometryPolicy
 import com.librestatic.opencinecam.R
@@ -85,7 +85,7 @@ import com.librestatic.opencinecam.media.audio.AvClockDiagnostics
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.core.model.CaptureStateMachine
 import com.librestatic.opencinecam.core.model.SerializedCaptureActor
-import com.librestatic.opencinecam.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
 import com.librestatic.opencinecam.storage.StillImageSaver
 import com.librestatic.opencinecam.capture.RawVideoConfigKeys
 import com.librestatic.opencinecam.camera.RawVideoConfig
@@ -113,7 +113,7 @@ import com.librestatic.opencinecam.media.audio.AndroidProfessionalAudioProbe
 import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.media.audio.AudioInputKey
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
-import com.librestatic.opencinecam.AudioListeningStatus
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
@@ -126,7 +126,7 @@ import androidx.annotation.StringRes
 import com.librestatic.opencinecam.settings.CameraPreset
 import com.librestatic.opencinecam.settings.CameraPresetCodec
 import com.librestatic.opencinecam.settings.withLivePreferencesFrom
-import com.librestatic.opencinecam.LutLibraries
+import com.librestatic.opencinecam.settings.LutLibraries
 import com.librestatic.opencinecam.camera.monitorLutIdentity
 import com.librestatic.opencinecam.camera.MonitorLut
 import com.librestatic.opencinecam.camera.OperatorLutStatus
@@ -487,7 +487,7 @@ class CaptureService : Service() {
     @Volatile internal var currentOperatorLut: MonitorLut? = null
     @Volatile private var currentSubjectLut: MonitorLut? = null
     @Volatile private var currentRecordingLut: MonitorLut? = null
-    @Volatile private var recordingLutLibrary: com.librestatic.opencinecam.LutLibrary? = null
+    @Volatile private var recordingLutLibrary: com.librestatic.opencinecam.settings.LutLibrary? = null
     /**
      * [continuation]: set when this take is a continuation on the phone (PLAN-072 Delivery 4); its output reads it.
      * [admittedDestination]: where the storage admission measured the take; the start admits again if it changed.
@@ -580,7 +580,7 @@ class CaptureService : Service() {
         // opens the pre-migration source. The settle goes through the repository, so the UI and applySettings follow.
         settingsScope.launch {
             val policy = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.librestatic.opencinecam.AudioInputPolicies.get(this@CaptureService)
+                com.librestatic.opencinecam.settings.AudioInputPolicies.get(this@CaptureService)
             }
             if (serviceDestroyed) return@launch
             repository.settleAudioInput(policy)
@@ -1282,7 +1282,7 @@ class CaptureService : Service() {
                     // The device profile drops a source that clips and names the fallback (PLAN-074 decision 1).
                     val capabilities = runCatching {
                         AndroidProfessionalAudioProbe(this@CaptureService).probe(requestedInput)
-                            .forDevice(com.librestatic.opencinecam.AudioInputPolicies.get(this@CaptureService))
+                            .forDevice(com.librestatic.opencinecam.settings.AudioInputPolicies.get(this@CaptureService))
                     }
                         .getOrElse {
                             val message = getString(R.string.capture_audio_probe_failed, it.message ?: it.javaClass.simpleName)

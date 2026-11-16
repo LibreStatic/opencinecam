@@ -42,10 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraSettings
-import com.librestatic.opencinecam.captureDestinationContinued
-import com.librestatic.opencinecam.CaptureDestinationContinuedNotice
-import com.librestatic.opencinecam.CaptureDestinationFallbackNotice
-import com.librestatic.opencinecam.captureDestinationFallbackText
+import com.librestatic.opencinecam.settings.captureDestinationContinued
+import com.librestatic.opencinecam.settings.CaptureDestinationContinuedNotice
+import com.librestatic.opencinecam.settings.CaptureDestinationFallbackNotice
+import com.librestatic.opencinecam.settings.captureDestinationFallbackText
 import com.librestatic.opencinecam.settings.HistogramMode
 
 @Composable

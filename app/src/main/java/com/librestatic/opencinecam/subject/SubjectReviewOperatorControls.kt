@@ -30,8 +30,8 @@ import com.librestatic.opencinecam.fold.DisplayOperation
 import com.librestatic.opencinecam.fold.DisplaySessionPhase
 import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsSurface
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsSurface
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import com.librestatic.opencinecam.storage.readOcLogClip

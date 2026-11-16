@@ -19,6 +19,8 @@ import com.librestatic.opencinecam.gallery.MediaShareMetadata
 import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.LutLibrary
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.util.UUID

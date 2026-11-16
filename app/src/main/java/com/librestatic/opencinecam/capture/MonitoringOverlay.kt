@@ -14,7 +14,7 @@ import com.librestatic.opencinecam.camera.MonitoringSignalDomain
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.liveCameraState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.compositionGridModeTitle
+import com.librestatic.opencinecam.settings.compositionGridModeTitle
 import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon

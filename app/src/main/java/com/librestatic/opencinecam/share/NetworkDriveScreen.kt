@@ -45,13 +45,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsCard
-import com.librestatic.opencinecam.SettingsHeading
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsSwitchRow
-import com.librestatic.opencinecam.SettingsTopBar
-import com.librestatic.opencinecam.settingsSideGutterDp
+import com.librestatic.opencinecam.settings.SettingsCard
+import com.librestatic.opencinecam.settings.SettingsHeading
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsSwitchRow
+import com.librestatic.opencinecam.settings.SettingsTopBar
+import com.librestatic.opencinecam.settings.settingsSideGutterDp
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 
 /** The Network drive page, bound to [NetworkShare]. */

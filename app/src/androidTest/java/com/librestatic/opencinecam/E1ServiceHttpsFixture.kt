@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.WebDavTransferSettingsSection
 import com.librestatic.opencinecam.storage.PreparedCaptureArtifact
 import com.librestatic.opencinecam.transfers.*
 import java.io.File

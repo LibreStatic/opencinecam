@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import com.librestatic.opencinecam.camera.*
 import kotlinx.serialization.json.*

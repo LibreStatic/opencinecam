@@ -19,8 +19,13 @@ import com.librestatic.opencinecam.settings.CameraPreset
 import com.librestatic.opencinecam.settings.CameraPresetCodec
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.settings.compatibilityIssues
+import com.librestatic.opencinecam.settings.presetIssueText
 import com.librestatic.opencinecam.settings.PresetPersistence
+import com.librestatic.opencinecam.settings.PresetQuickAccess
 import com.librestatic.opencinecam.settings.PresetRepository
+import com.librestatic.opencinecam.settings.PresetReviewDialog
+import com.librestatic.opencinecam.settings.PresetSettings
+import com.librestatic.opencinecam.settings.readPresetDocument
 import com.librestatic.opencinecam.settings.SettingsCatalog
 import org.junit.Assert.*
 import org.junit.Rule

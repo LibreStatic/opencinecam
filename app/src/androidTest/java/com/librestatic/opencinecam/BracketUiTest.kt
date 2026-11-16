@@ -13,6 +13,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.settings.BracketCaptureProgress
+import com.librestatic.opencinecam.settings.BracketSettings
 import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Rule

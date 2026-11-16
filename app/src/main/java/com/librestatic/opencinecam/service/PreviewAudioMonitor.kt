@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.appliedAudioEqCurve
+import com.librestatic.opencinecam.settings.appliedAudioEqCurve
 import com.librestatic.opencinecam.media.audio.AudioCapturePath
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import android.Manifest

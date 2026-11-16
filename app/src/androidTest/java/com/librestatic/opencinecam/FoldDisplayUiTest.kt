@@ -12,6 +12,7 @@ import com.librestatic.opencinecam.fold.FoldDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsScreen
 import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import org.junit.Rule
 import org.junit.Test

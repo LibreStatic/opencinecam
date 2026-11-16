@@ -8,9 +8,11 @@ import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
 import com.librestatic.opencinecam.settings.HapticLevel
 import com.librestatic.opencinecam.settings.HapticPreferences
 import com.librestatic.opencinecam.settings.MAX_CHROME_OPACITY
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.settings.SettingsRepository
 import com.librestatic.opencinecam.settings.ViewfinderScale
 import org.junit.Assert.*

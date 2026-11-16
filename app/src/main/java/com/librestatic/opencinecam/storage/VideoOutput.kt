@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.captureFileStem
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import org.json.JSONObject
-import com.librestatic.opencinecam.CaptureLocationSnapshot
-import com.librestatic.opencinecam.captureLocationJson
+import com.librestatic.opencinecam.settings.CaptureLocationSnapshot
+import com.librestatic.opencinecam.settings.captureLocationJson
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -343,7 +343,7 @@ class VideoOutput private constructor(
         /**
          * PLAN-072: the take, its sidecars and any audio member that joins its group are written to [destination].
          * [stem] replaces the usual `captureFileStem(group.id, captureNames)`: a continuation on the phone is named
-         * after the drive take it continues ([com.librestatic.opencinecam.continuationFileStem]), not its own bundle id.
+         * after the drive take it continues ([com.librestatic.opencinecam.settings.continuationFileStem]), not its own bundle id.
          */
         internal fun create(context: Context, productionSlate: ProductionSlateSettings?,
             captureNames: CaptureNameSnapshot?, destination: RecordingDestination, stem: String? = null): VideoOutput {

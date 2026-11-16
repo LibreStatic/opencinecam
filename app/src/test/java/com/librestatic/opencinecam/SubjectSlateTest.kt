@@ -4,6 +4,7 @@ package com.librestatic.opencinecam
 import com.librestatic.opencinecam.camera.TimecodeRate
 import com.librestatic.opencinecam.fold.SubjectSlateField
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.subject.boundedSyncFailure
 import com.librestatic.opencinecam.subject.parseSmpteLabel
 import com.librestatic.opencinecam.subject.parseSubjectSyncMarkerJson

@@ -297,7 +297,7 @@ private fun storeAudio(): com.librestatic.opencinecam.media.audio.ProfessionalAu
 /** The settings hub with the microphone permission granted and a lossless-capable microphone, so the audio page shows its controls. */
 @Composable
 fun StoreSettings() = DriverTheme {
-    com.librestatic.opencinecam.SettingsScreen(
+    com.librestatic.opencinecam.settings.SettingsScreen(
         CameraUiState(phase = com.librestatic.opencinecam.CameraUiPhase.PREVIEWING, audioCapabilities = storeAudio()),
         CameraSettings(audioOutputFormat = com.librestatic.opencinecam.media.audio.AudioOutputFormat.WAV_PCM, audioSampleRateHz = 48_000,
             audioBitDepth = com.librestatic.opencinecam.media.audio.AudioBitDepth.PCM_24, audioChannels = 2),

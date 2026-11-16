@@ -4,8 +4,8 @@
 package com.librestatic.opencinecam.service
 
 import android.media.AudioDeviceInfo
-import com.librestatic.opencinecam.AudioListeningDevice
-import com.librestatic.opencinecam.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningOutput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

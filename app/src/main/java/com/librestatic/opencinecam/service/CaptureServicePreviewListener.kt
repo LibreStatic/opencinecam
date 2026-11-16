@@ -13,8 +13,8 @@ import com.librestatic.opencinecam.metadata.recordingTimecodeJson
 import com.librestatic.opencinecam.metadata.captureEpochJson
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 import android.os.Looper
-import com.librestatic.opencinecam.timelapseProjectRate
-import com.librestatic.opencinecam.projectLabel
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.projectLabel
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.capture.HardwareTruthHudState
 import com.librestatic.opencinecam.metadata.hardwareTruthTake
@@ -40,8 +40,8 @@ import com.librestatic.opencinecam.camera.TapFocusState
 import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.media.audio.AvClockDiagnostics
 import com.librestatic.opencinecam.media.video.softwareVideoEncoderDisclosure
-import com.librestatic.opencinecam.CaptureNameSnapshot
-import com.librestatic.opencinecam.continuationFileStem
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.continuationFileStem
 import com.librestatic.opencinecam.storage.RecordingDestination
 import com.librestatic.opencinecam.storage.releaseDriveDescriptors
 import com.librestatic.opencinecam.storage.IncompleteTake

@@ -8,32 +8,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.librestatic.opencinecam.ActiveEqProfile
-import com.librestatic.opencinecam.AudioListeningDevice
-import com.librestatic.opencinecam.AudioListeningPhase
-import com.librestatic.opencinecam.AudioListeningStatus
+import com.librestatic.opencinecam.settings.ActiveEqProfile
+import com.librestatic.opencinecam.settings.AudioListeningDevice
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningStatus
 import com.librestatic.opencinecam.settings.CameraSettings
-import com.librestatic.opencinecam.EqSnippetPhase
-import com.librestatic.opencinecam.EqSnippetUiState
-import com.librestatic.opencinecam.EQ_GRAPH_SAMPLE_RATE_HZ
-import com.librestatic.opencinecam.InputEqualizerContent
-import com.librestatic.opencinecam.InputEqualizerUiState
-import com.librestatic.opencinecam.activeEqProfile
-import com.librestatic.opencinecam.eqListenUiState
+import com.librestatic.opencinecam.settings.EqSnippetPhase
+import com.librestatic.opencinecam.settings.EqSnippetUiState
+import com.librestatic.opencinecam.settings.EQ_GRAPH_SAMPLE_RATE_HZ
+import com.librestatic.opencinecam.settings.InputEqualizerContent
+import com.librestatic.opencinecam.settings.InputEqualizerUiState
+import com.librestatic.opencinecam.settings.activeEqProfile
+import com.librestatic.opencinecam.settings.eqListenUiState
 import com.librestatic.opencinecam.camera.AudioSpectrum
 import com.librestatic.opencinecam.camera.EqCurve
 import com.librestatic.opencinecam.camera.EqFilterType
 import com.librestatic.opencinecam.camera.EqPoint
 import com.librestatic.opencinecam.camera.EqProfile
 import com.librestatic.opencinecam.camera.responseDb
-import com.librestatic.opencinecam.withDeletedEqProfile
-import com.librestatic.opencinecam.withEditedEqCurve
-import com.librestatic.opencinecam.withListenStart
-import com.librestatic.opencinecam.withListenStop
-import com.librestatic.opencinecam.withListenVolume
-import com.librestatic.opencinecam.withEqProfile
-import com.librestatic.opencinecam.withResetEq
-import com.librestatic.opencinecam.withSavedEqProfile
+import com.librestatic.opencinecam.settings.withDeletedEqProfile
+import com.librestatic.opencinecam.settings.withEditedEqCurve
+import com.librestatic.opencinecam.settings.withListenStart
+import com.librestatic.opencinecam.settings.withListenStop
+import com.librestatic.opencinecam.settings.withListenVolume
+import com.librestatic.opencinecam.settings.withEqProfile
+import com.librestatic.opencinecam.settings.withResetEq
+import com.librestatic.opencinecam.settings.withSavedEqProfile
 import kotlin.math.exp
 import kotlin.math.log2
 import kotlin.math.pow
@@ -93,9 +93,9 @@ internal fun driverPeaks(spectrum: AudioSpectrum, clipped: Boolean = false): Lis
 internal const val DRIVER_SNIPPET_MS = 7_000
 
 /** The USB-C headset and Bluetooth earbuds of the listen screens, and the phone's speaker the card must not offer. */
-internal val DriverUsbHeadset = AudioListeningDevice(21, "USB-C Headset", com.librestatic.opencinecam.AudioListeningOutput.WIRED_USB)
-internal val DriverBluetoothBuds = AudioListeningDevice(34, "Pixel Buds Pro", com.librestatic.opencinecam.AudioListeningOutput.BLUETOOTH)
-internal val DriverPhoneSpeaker = AudioListeningDevice(2, "Phone speaker", com.librestatic.opencinecam.AudioListeningOutput.SPEAKER)
+internal val DriverUsbHeadset = AudioListeningDevice(21, "USB-C Headset", com.librestatic.opencinecam.settings.AudioListeningOutput.WIRED_USB)
+internal val DriverBluetoothBuds = AudioListeningDevice(34, "Pixel Buds Pro", com.librestatic.opencinecam.settings.AudioListeningOutput.BLUETOOTH)
+internal val DriverPhoneSpeaker = AudioListeningDevice(2, "Phone speaker", com.librestatic.opencinecam.settings.AudioListeningOutput.SPEAKER)
 
 /**
  * The input equaliser page over its own settings and a fake profile list, applying the page's real editing rules

@@ -208,6 +208,13 @@ Add a zero-argument `@Composable fun` to `DriverScreens.kt`. Follow these rules:
 - Robolectric lacks a few framework services. `ShadowThermalPowerManager` covers the thermal listener the capture HUD registers; add similar test-only shadows rather than changing production code.
 - Fonts, shadows and blur come from Robolectric's native graphics. They are close to a device but not pixel-identical, so do final visual sign-off on a device.
 
+## Code layout
+
+- `:app` groups code by feature under `com.librestatic.opencinecam`. Keep the root package to the application and activity classes the manifest names (`OpenCineCamApplication`, `MainActivity`, `UsbDriveAttachAlias`), the root screen (`CameraScreen.kt`), its navigation state (`CameraRootState.kt`, `AppNavigation.kt`), `CameraUiState`, `LiveCameraState` and `ActivityContinuity`. New code goes into the feature package it belongs to: `capture` (the capture chrome, its panes, dials, HUD and operator keys), `settings` (`CameraSettings`, the repository, presets and settings screens), `gallery` (the media catalog, playback, sharing and proxies), `subject` and `fold` (cover-screen modes and the fold display coordinator), `calibration` (lens calibration), `onboarding` (the first-run wizard and splash art), `diagnostics` (capability report, storage benchmark, device profiles), `metadata` (sidecar JSON fragments) or `ui` (shared widgets), next to `service`, `storage`, `transfers`, `playback`, `rawvideo`, `export` and `share`. Tests mirror the package of what they test.
+- Put UI logic that decides something (navigation, mode switches, settings rules) in a plain state holder or a pure function beside the composable, and test it there; `CameraRootNavigation` and `planModeSwitch` are the examples.
+- `Camera2PreviewEngine` and `CaptureService` keep their state, lifecycle and public API in their own file; their internal steps live in extension files grouped by responsibility (`Camera2*.kt` in `:camera`, `CaptureService*.kt` in `service`). Add a step to the file that matches it rather than to the class.
+- After moving or splitting code that runs at startup or in the capture chrome, the baseline profile names classes that no longer exist; regenerate it (see below).
+
 ## Baseline profile and startup benchmarks
 
 - Why: Compose is unbundled, so a fresh install runs interpreted until ART compiles it; the baseline profile (`app/src/main/generated/baselineProfiles/`, merged into `:app`) precompiles startup, the capture chrome, the mode sheet and the gallery. Debug is interpreted and has Live Literals, so never judge performance on a debug build. Android Studio and `adb install` skip profiles, so measure with the benchmark tasks below or `adb shell cmd package compile -m speed-profile -f <pkg>`.

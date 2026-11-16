@@ -46,11 +46,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsAccent
-import com.librestatic.opencinecam.SettingsBorder
-import com.librestatic.opencinecam.SettingsMuted
-import com.librestatic.opencinecam.SettingsSurface
-import com.librestatic.opencinecam.SettingsSurfaceRaised
+import com.librestatic.opencinecam.settings.SettingsAccent
+import com.librestatic.opencinecam.settings.SettingsBorder
+import com.librestatic.opencinecam.settings.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsSurface
+import com.librestatic.opencinecam.settings.SettingsSurfaceRaised
 import com.librestatic.opencinecam.storage.LocalMediaArtifact
 import com.librestatic.opencinecam.storage.LocalMediaKind
 import com.librestatic.opencinecam.storage.LocalMediaRelationStatus

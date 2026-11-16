@@ -35,10 +35,10 @@ import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.settings.CameraSettings
-import com.librestatic.opencinecam.SettingsChips
-import com.librestatic.opencinecam.SettingsHelpText
-import com.librestatic.opencinecam.SettingsSectionTitle
-import com.librestatic.opencinecam.SettingsSliderRow
+import com.librestatic.opencinecam.settings.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsHelpText
+import com.librestatic.opencinecam.settings.SettingsSectionTitle
+import com.librestatic.opencinecam.settings.SettingsSliderRow
 import com.librestatic.opencinecam.subject.SubjectFillLightSettings
 import com.librestatic.opencinecam.subject.SubjectInterviewSettings
 import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar

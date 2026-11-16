@@ -8,6 +8,7 @@ import com.librestatic.opencinecam.gallery.MediaShareContent
 import com.librestatic.opencinecam.gallery.mediaShareFix
 import com.librestatic.opencinecam.gallery.MediaShareMetadata
 import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import org.junit.Assert.*
 import org.junit.Test

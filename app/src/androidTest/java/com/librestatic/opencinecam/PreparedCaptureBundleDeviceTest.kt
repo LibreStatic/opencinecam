@@ -16,6 +16,12 @@ import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.captureFileStem
+import com.librestatic.opencinecam.settings.CaptureNameSnapshot
+import com.librestatic.opencinecam.settings.CaptureNamingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.transfers.*
 import java.io.File

@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsOptionRow
+import com.librestatic.opencinecam.settings.SettingsOptionRow
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.FitText

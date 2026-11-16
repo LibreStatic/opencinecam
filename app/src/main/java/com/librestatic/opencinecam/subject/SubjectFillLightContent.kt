@@ -49,7 +49,7 @@ import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsChips
 import kotlin.math.roundToInt
 
 /**

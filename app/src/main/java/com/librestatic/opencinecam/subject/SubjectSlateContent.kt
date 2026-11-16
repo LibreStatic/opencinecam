@@ -49,8 +49,8 @@ import com.librestatic.opencinecam.fold.FoldToggle
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectSlateField
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.SettingsHelp
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.SettingsHelp
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.util.Locale
 

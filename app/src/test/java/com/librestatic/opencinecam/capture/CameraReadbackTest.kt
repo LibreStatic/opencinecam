@@ -15,12 +15,12 @@ import com.librestatic.opencinecam.diagnostics.lensFocalSuffix
 import com.librestatic.opencinecam.settings.CameraPresetCodec
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.settings.CameraSettingsStore
-import com.librestatic.opencinecam.PictureControlBlock
-import com.librestatic.opencinecam.pictureControlBlock
-import com.librestatic.opencinecam.pictureControlDeviceValue
-import com.librestatic.opencinecam.pictureControlSelection
+import com.librestatic.opencinecam.settings.PictureControlBlock
+import com.librestatic.opencinecam.settings.pictureControlBlock
+import com.librestatic.opencinecam.settings.pictureControlDeviceValue
+import com.librestatic.opencinecam.settings.pictureControlSelection
 import com.librestatic.opencinecam.settings.PresetPreferences
-import com.librestatic.opencinecam.templateSharpness
+import com.librestatic.opencinecam.settings.templateSharpness
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

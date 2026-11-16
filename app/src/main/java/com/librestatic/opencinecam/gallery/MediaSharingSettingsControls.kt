@@ -13,10 +13,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsChips
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsSectionTitle
-import com.librestatic.opencinecam.SettingsSwitchRow
+import com.librestatic.opencinecam.settings.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsSectionTitle
+import com.librestatic.opencinecam.settings.SettingsSwitchRow
 
 @Composable
 internal fun MediaSharingSettingsControls(settings: MediaSharingSettings, onSettings: (MediaSharingSettings) -> Unit,

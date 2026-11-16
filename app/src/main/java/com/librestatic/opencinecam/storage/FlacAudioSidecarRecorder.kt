@@ -3,8 +3,8 @@
 
 package com.librestatic.opencinecam.storage
 
-import com.librestatic.opencinecam.appliedAudioEqCurve
-import com.librestatic.opencinecam.appliedAudioEqProfileId
+import com.librestatic.opencinecam.settings.appliedAudioEqCurve
+import com.librestatic.opencinecam.settings.appliedAudioEqProfileId
 import com.librestatic.opencinecam.camera.PcmListeningSink
 import com.librestatic.opencinecam.camera.offerListening
 

@@ -15,7 +15,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsMuted
+import com.librestatic.opencinecam.settings.SettingsMuted
 import com.librestatic.opencinecam.storage.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch

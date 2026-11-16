@@ -11,9 +11,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsChips
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsSwitchRow
+import com.librestatic.opencinecam.settings.SettingsChips
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsSwitchRow
 
 /** Shared by settings and the viewer; the caller updates the same preference repository. */
 @Composable

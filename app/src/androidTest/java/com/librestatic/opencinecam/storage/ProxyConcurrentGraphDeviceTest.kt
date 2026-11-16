@@ -12,7 +12,7 @@ import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.gallery.GallerySettings
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.SubjectPreviewGpuTest
 import com.librestatic.opencinecam.camera.CaptureEpochClock

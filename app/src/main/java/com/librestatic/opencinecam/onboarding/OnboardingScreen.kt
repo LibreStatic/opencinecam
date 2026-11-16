@@ -144,9 +144,9 @@ import com.librestatic.opencinecam.capture.RawQualificationBackdrop
 import com.librestatic.opencinecam.capture.RawVideoQualificationInfo
 import com.librestatic.opencinecam.fold.FoldHinge
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.AboutScreen
-import com.librestatic.opencinecam.HingeSafeSettingsPane
-import com.librestatic.opencinecam.loadThirdPartyComponents
+import com.librestatic.opencinecam.settings.AboutScreen
+import com.librestatic.opencinecam.settings.HingeSafeSettingsPane
+import com.librestatic.opencinecam.settings.loadThirdPartyComponents
 import com.librestatic.opencinecam.ui.AdaptiveWindow
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon

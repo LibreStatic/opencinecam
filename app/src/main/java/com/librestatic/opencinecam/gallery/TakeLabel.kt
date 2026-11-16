@@ -3,7 +3,7 @@ package com.librestatic.opencinecam.gallery
 
 import android.content.Context
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.LocalMediaTake
 import java.time.Instant
 import java.time.LocalDate

@@ -23,10 +23,14 @@ import com.librestatic.opencinecam.settings.CameraPresetCodec
 import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.settings.CameraSettingsStore
 import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.ProjectTimingSettings
 import com.librestatic.opencinecam.settings.SettingsCatalog
 import com.librestatic.opencinecam.settings.SettingsCategory
 import com.librestatic.opencinecam.settings.SettingsRepository
 import com.librestatic.opencinecam.settings.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.timelapseProjectRate
+import com.librestatic.opencinecam.settings.TimelapseSettings
+import com.librestatic.opencinecam.settings.videoProjectRate
 import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import org.junit.Assert.*
 import org.junit.Rule

@@ -5,7 +5,7 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.gallery.GalleryMediaKind
 import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.metadata.HARDWARE_TRUTH_SCHEMA
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import org.junit.Assert.*

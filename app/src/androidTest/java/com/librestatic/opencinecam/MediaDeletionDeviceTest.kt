@@ -12,6 +12,7 @@ import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.MediaShareContent
 import com.librestatic.opencinecam.gallery.MediaSharingSettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.io.IOException

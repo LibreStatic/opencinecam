@@ -28,7 +28,13 @@ import com.librestatic.opencinecam.media.audio.AudioSourceSelection
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.service.PreviewAudioMonitor
 import com.librestatic.opencinecam.service.PreviewAudioMonitorCreationFailure
+import com.librestatic.opencinecam.settings.AudioListeningOutput
+import com.librestatic.opencinecam.settings.AudioListeningPhase
+import com.librestatic.opencinecam.settings.AudioListeningSettings
+import com.librestatic.opencinecam.settings.AudioMeterMode
+import com.librestatic.opencinecam.settings.AudioMeterSettings
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.AudioRetirementGate
 import java.util.concurrent.CompletableFuture

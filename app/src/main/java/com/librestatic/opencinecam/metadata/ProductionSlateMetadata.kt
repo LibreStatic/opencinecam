@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.metadata
 
-import com.librestatic.opencinecam.ProductionSlateLocation
-import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.ProductionSlateTimeOfDay
+import com.librestatic.opencinecam.settings.ProductionSlateLocation
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateTimeOfDay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull

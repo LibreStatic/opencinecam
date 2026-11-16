@@ -20,7 +20,7 @@ import com.librestatic.opencinecam.media.audio.AudioInputLossAction
 import com.librestatic.opencinecam.media.audio.AudioInputLossPolicy
 import com.librestatic.opencinecam.media.audio.AudioInputRouteGuard
 import com.librestatic.opencinecam.media.audio.audioInputKind
-import com.librestatic.opencinecam.audioInputTypeLabel
+import com.librestatic.opencinecam.settings.audioInputTypeLabel
 import com.librestatic.opencinecam.settings.audioInputUnavailable
 import com.librestatic.opencinecam.settings.resolveAudioInputSelection
 import com.librestatic.opencinecam.camera.PcmListeningSink

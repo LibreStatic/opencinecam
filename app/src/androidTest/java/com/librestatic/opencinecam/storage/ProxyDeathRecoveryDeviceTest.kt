@@ -11,7 +11,7 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.gallery.GallerySettings
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.gallery.ProxySettings
 import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File

@@ -18,6 +18,7 @@ import com.librestatic.opencinecam.gallery.MediaShareMetadata
 import com.librestatic.opencinecam.gallery.MediaSharePreparation
 import com.librestatic.opencinecam.gallery.MediaShareSource
 import com.librestatic.opencinecam.gallery.MediaSharingSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.io.IOException

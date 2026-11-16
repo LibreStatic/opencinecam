@@ -34,10 +34,10 @@ import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.settings.CameraSettings
-import com.librestatic.opencinecam.captureStatusFreeBytes
-import com.librestatic.opencinecam.SettingsHelp
-import com.librestatic.opencinecam.SettingsOptionRow
-import com.librestatic.opencinecam.SettingsRowLabel
+import com.librestatic.opencinecam.settings.captureStatusFreeBytes
+import com.librestatic.opencinecam.settings.SettingsHelp
+import com.librestatic.opencinecam.settings.SettingsOptionRow
+import com.librestatic.opencinecam.settings.SettingsRowLabel
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel

@@ -32,7 +32,7 @@ import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import com.librestatic.opencinecam.fold.SubjectSessionCues
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.ProductionSlateSettings
+import com.librestatic.opencinecam.settings.ProductionSlateSettings
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.util.Locale
 

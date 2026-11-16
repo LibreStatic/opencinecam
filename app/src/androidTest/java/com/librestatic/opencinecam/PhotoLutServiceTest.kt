@@ -27,6 +27,7 @@ import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.StartupMode
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.LutLibraries
 import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.StillPublication
 import java.security.MessageDigest
