@@ -126,9 +126,10 @@ class FlacAudioSidecarRecorder private constructor(
     @Volatile private var inputOverruns = 0
 
     /** After each read, and once more when the input stops: an overrun after the last read shows only then, and a closed input counts none. */
-    private fun sampleInputOverruns() {
+    private fun sampleInputOverruns() = synchronized(overrunLock) {
         inputOverruns = maxOf(inputOverruns, input.overrunCount - overrunBaseline)
     }
+    private val overrunLock = Any()
 
     @Synchronized override fun start() {
         AudioRetirementGate.requireIdle()
