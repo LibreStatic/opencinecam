@@ -267,7 +267,6 @@ internal fun AdaptiveCaptureChrome(
     }
     // A cutout can leave the safe area shorter than the status bar; the top bar starts below both.
     val extraTop = statusBarClearance()
-    val reducedMotion = LocalReducedMotion.current
 
     // The modes alone; resolution is the RES slot's.
     val modesContent: @Composable (onClose: (() -> Unit)?) -> Unit = { onClose ->
@@ -297,6 +296,20 @@ internal fun AdaptiveCaptureChrome(
     val currentPinchBinder by rememberUpdatedState(binder)
     // The running ratio of the pinch under the fingers; not state, nothing draws it.
     val pinchRatio = remember { mutableFloatStateOf(1f) }
+    // Built here so the layout lambda below captures one value for the card instead of its state and callbacks:
+    // ART rejects that lambda once it captures a few more values, which only a launch on a device shows.
+    val lensCalibrationCard: (@Composable (Modifier, Dp) -> Unit)? =
+        if (lensCalibration.phase == LensCalibrationPhase.IDLE) null
+        else { modifier, maxHeight ->
+            LensCalibrationCard(
+                state = lensCalibration,
+                onCancel = onLensCalibrationCancel,
+                onSave = onLensCalibrationSave,
+                onDiscard = onLensCalibrationDiscard,
+                modifier = modifier,
+                maxHeight = maxHeight,
+            )
+        }
     CompositionLocalProvider(LocalModeSelection provides modeSelection) {
     Box(
         Modifier
@@ -335,6 +348,7 @@ internal fun AdaptiveCaptureChrome(
             .padding(top = extraTop),
     ) {
         val density = LocalDensity.current
+        val reducedMotion = LocalReducedMotion.current
         val layoutDirection = LocalLayoutDirection.current
         val rightToLeft = layoutDirection == LayoutDirection.Rtl
         fun Dp.px(): Float = with(density) { toPx() }
@@ -1155,12 +1169,8 @@ internal fun AdaptiveCaptureChrome(
         // Over the viewfinder, above the deck: a run needs the scene in view, and the card is inert to touches.
         // Its end edge keeps the instruments' end inset, so it stops short of the zoom rocker and, in the
         // stacked layouts, the F-key column standing over the frame's end edge.
-        if (lensCalibration.phase != LensCalibrationPhase.IDLE) LensCalibrationCard(
-            state = lensCalibration,
-            onCancel = onLensCalibrationCancel,
-            onSave = onLensCalibrationSave,
-            onDiscard = onLensCalibrationDiscard,
-            modifier = Modifier.align(Alignment.BottomCenter)
+        lensCalibrationCard?.invoke(
+            Modifier.align(Alignment.BottomCenter)
                 .padding(
                     bottom = deckHeight + (if (scopeTray) scopeTrayHeight else 0.dp) + 8.dp,
                     start = (if (sideRails || inspector) CAPTURE_RAIL_WIDTH_DP.dp else 0.dp) + 12.dp,
@@ -1169,7 +1179,7 @@ internal fun AdaptiveCaptureChrome(
                 .widthIn(max = 420.dp).fillMaxWidth(),
             // Its top stops under the instruments' first row (the zoom anchors and the lock keys
             // beside them), so a tall result scrolls instead of running over them.
-            maxHeight = minOf(
+            minOf(
                 maxHeight - deckHeight - topBar - 24.dp,
                 with(density) { (height - instrumentTop).toDp() } - CALIBRATION_CARD_TOP_CLEARANCE -
                     deckHeight - (if (scopeTray) scopeTrayHeight else 0.dp) - 8.dp,
