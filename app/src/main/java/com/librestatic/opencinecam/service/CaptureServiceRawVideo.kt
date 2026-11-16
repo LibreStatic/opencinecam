@@ -451,11 +451,13 @@ internal fun CaptureService.recordRawQualificationResult(session: RawQualificati
         return
     }
     val codes = result.optJSONArray("reasonCodes")?.let { array -> (0 until array.length()).map(array::optString) }
+    val burstSeconds = if (result.isNull("burstSeconds")) null else result.optLong("burstSeconds")
+    // Classified on the effective burst (the measured one, else the estimate from the stored figures), as the stored rows are.
+    val effectiveBurst = if (result.has("effectiveBurstSeconds") && !result.isNull("effectiveBurstSeconds")) result.optLong("effectiveBurstSeconds") else burstSeconds
     val status = rawQualificationRunStatus(result.optString("status"), result.optString("reasonCode").ifEmpty { null },
-        codes ?: listOfNotNull(result.optString("reasonCode").ifEmpty { null }))
+        codes ?: listOfNotNull(result.optString("reasonCode").ifEmpty { null }), effectiveBurst)
     // The skip row carries the figure the qualifier decided on; otherwise the same timing gives it.
     val needed = result.optLong("neededBytes", config?.let { RawQualificationTiming().neededBytes(it) } ?: 0L)
-    val burstSeconds = if (result.isNull("burstSeconds")) null else result.optLong("burstSeconds")
     val achievedFps = result.optDouble("achievedFps").takeIf { !it.isNaN() }
     session.items = rawQualificationItemsWith(session.items, spec, status,
         config?.let { RawVideoConfigOption.of(it).label } ?: spec, needed, burstSeconds, achievedFps)

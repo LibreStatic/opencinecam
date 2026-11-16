@@ -278,18 +278,23 @@ internal val RAW_QUALIFICATION_SWEEP_REASONS: Set<String> =
  * ([RAW_QUALIFICATION_SWEEP_REASONS]: measured without the camera, so the heat does not explain it)
  * STORAGE_LIMIT, any other failure the heat caused SKIPPED_HEAT, any other FAIL failed, a
  * skip for space SKIPPED_SPACE, a skip for heat SKIPPED_HEAT (never judged, so not "not
- * qualified"), any other skip NOT_QUALIFIED. [reasonCodes] defaults to [reasonCode] alone.
+ * qualified"), any other skip NOT_QUALIFIED. [reasonCodes] defaults to [reasonCode] alone. A storage-only FAIL
+ * whose known [burstSeconds] is under [RawQualificationRisk.MIN_RISKY_BURST_SECONDS] is STORAGE_LIMIT, not RISKY;
+ * with the burst not known (null) it reads RISKY, which is what a run still in progress shows.
  */
 internal fun rawQualificationRunStatus(
     status: String?,
     reasonCode: String?,
     reasonCodes: List<String> = listOfNotNull(reasonCode),
+    burstSeconds: Long? = null,
 ): RawQualificationItemStatus = when {
     status == "PASS" -> RawQualificationItemStatus.PASSED
     reasonCode == RAW_QUALIFICATION_SPACE_SKIP -> RawQualificationItemStatus.SKIPPED_SPACE
     reasonCode == RAW_QUALIFICATION_THERMAL_SKIP -> RawQualificationItemStatus.SKIPPED_HEAT
     reasonCode == RawQualificationFrameRate.REASON_CAMERA_FPS_LIMIT -> RawQualificationItemStatus.CAMERA_LIMIT
-    status == "FAIL" && RawQualificationRisk.isStorageOnly(reasonCodes) -> RawQualificationItemStatus.RISKY
+    status == "FAIL" && RawQualificationRisk.isStorageOnly(reasonCodes) ->
+        if (burstSeconds != null && burstSeconds < RawQualificationRisk.MIN_RISKY_BURST_SECONDS) RawQualificationItemStatus.STORAGE_LIMIT
+        else RawQualificationItemStatus.RISKY
     RawQualificationStaging.REASON_THERMAL_LIMIT in reasonCodes ->
         if (reasonCodes.any { it in RAW_QUALIFICATION_SWEEP_REASONS }) RawQualificationItemStatus.STORAGE_LIMIT else RawQualificationItemStatus.SKIPPED_HEAT
     status == "FAIL" -> RawQualificationItemStatus.FAILED

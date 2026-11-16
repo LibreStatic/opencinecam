@@ -976,6 +976,7 @@ class RawVideoQualifier(
                 .put("reasonCode", q.reasonCodes.first())
                 .put("reasonCodes", JSONArray(q.reasonCodes))
                 .put("burstSeconds", updated.burstSeconds ?: JSONObject.NULL)
+                .put("effectiveBurstSeconds", RawQualificationRisk.effectiveBurstSeconds(updated) ?: JSONObject.NULL)
                 .put("sustainedSource", RawStorageCliff.SOURCE_LONG_RUNS)
             if (row.has("record")) row.put("record", JSONObject(RawVideoQualificationCodec.encodeRecord(updated).toString()))
             emit(row)
@@ -1015,6 +1016,7 @@ class RawVideoQualifier(
         val index = records.indexOfFirst { it === record }
         if (index >= 0) records[index] = updated
         json.put("burstSeconds", updated.burstSeconds ?: JSONObject.NULL)
+            .put("effectiveBurstSeconds", RawQualificationRisk.effectiveBurstSeconds(updated) ?: JSONObject.NULL)
             .put("achievedFps", achievedFps ?: JSONObject.NULL)
         return reclassified
     }
@@ -1088,6 +1090,7 @@ class RawVideoQualifier(
             .put("coveredBy", verdict.coveredBy?.let { specOf[it] ?: RawVideoConfigKeys.key(it) } ?: JSONObject.NULL)
             .put("neededBytes", neededBytes)
             .put("burstSeconds", record?.burstSeconds ?: JSONObject.NULL)
+            .put("effectiveBurstSeconds", record?.let(RawQualificationRisk::effectiveBurstSeconds) ?: JSONObject.NULL)
             .put("achievedFps", record?.achievedFps ?: JSONObject.NULL)
             .put("record", record?.let { JSONObject(RawVideoQualificationCodec.encodeRecord(it).toString()) } ?: JSONObject.NULL)
     }
@@ -2187,6 +2190,7 @@ class RawVideoQualifier(
             .put("storageBytesPerSecond", storageBytesPerSecond)
             .put("burstRatio", burstRatio)
             .put("burstSeconds", stored.burstSeconds ?: JSONObject.NULL)
+            .put("effectiveBurstSeconds", RawQualificationRisk.effectiveBurstSeconds(stored) ?: JSONObject.NULL)
             .put("framesWritten", framesWritten)
             .put("highWaterReached", state.highWaterReached)
             .put("copyMaxMs", round2(state.copyMaxNs / 1e6))
