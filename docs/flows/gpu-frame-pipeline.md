@@ -13,7 +13,7 @@ fix-ups, and the synchronisation the code relies on. Read it before you change
 | Concern | File |
 |---|---|
 | GL thread, shaders, encoder, readbacks | [`OpenCineLogGpuPipeline.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/OpenCineLogGpuPipeline.kt) |
-| Session graphs and pipeline choice | [`Camera2PreviewEngine.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2PreviewEngine.kt) (`startPreview`, `configureGpuPreviewSession`, `configureLogSession`) |
+| Session graphs and pipeline choice | [`Camera2PreviewEngine.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2PreviewEngine.kt) (`startPreview`), [`Camera2SessionGraphs.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/Camera2SessionGraphs.kt) (`configureGpuPreviewSession`, `configureLogSession`) |
 | When the viewfinder goes through the GPU | [`service/CaptureService.kt`](../../app/src/main/java/com/librestatic/opencinecam/service/CaptureService.kt) (`desiredGpuViewfinder`) |
 | Shared EGL display | [`GpuEglDisplayLease.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/GpuEglDisplayLease.kt) |
 | Cover display output | [`SubjectPreviewOutput.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/SubjectPreviewOutput.kt), [`LatestFrameExchange.kt`](../../camera/src/main/java/com/librestatic/opencinecam/camera/LatestFrameExchange.kt) |
