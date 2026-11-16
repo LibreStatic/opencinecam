@@ -59,6 +59,7 @@ import androidx.core.net.toUri
 import com.librestatic.opencinecam.playback.RawThumbnails
 import com.librestatic.opencinecam.playback.probeClipMetadata
 import com.librestatic.opencinecam.storage.*
+import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
 import com.librestatic.opencinecam.ui.theme.LocalReducedMotion
 import java.time.LocalDate
 import java.time.ZoneId
@@ -74,6 +75,9 @@ import com.librestatic.opencinecam.export.CinemaDngExportProgressRow
 import com.librestatic.opencinecam.export.CinemaDngExportRuntime
 import com.librestatic.opencinecam.export.CinemaDngExportState
 import com.librestatic.opencinecam.export.rememberCinemaDngExportEnvironment
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.foldPanes
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine

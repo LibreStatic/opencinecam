@@ -49,7 +49,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.storage.LocalMediaRepository
+import com.librestatic.opencinecam.subject.OutOfFrameHudChip
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.fold.DisplayOperation
+import com.librestatic.opencinecam.fold.DisplaySessionPhase
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.camera.Camera2LogProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers

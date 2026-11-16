@@ -7,7 +7,7 @@ import com.librestatic.opencinecam.camera.resolve
 import com.librestatic.opencinecam.projectLabel
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.DeviceQuirksProvider
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.RecordingGeometry

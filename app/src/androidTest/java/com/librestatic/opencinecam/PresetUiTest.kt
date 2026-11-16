@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

@@ -10,7 +10,7 @@ import com.librestatic.opencinecam.camera.TimelapseCapture
 
 import com.librestatic.opencinecam.fpsLockActive
 import com.librestatic.opencinecam.lowLightFpsActive
-import com.librestatic.opencinecam.reviewBlockedByTake
+import com.librestatic.opencinecam.subject.reviewBlockedByTake
 import com.librestatic.opencinecam.OperatorAction
 import com.librestatic.opencinecam.forOperatorStartup
 import com.librestatic.opencinecam.startupCaptureMode
@@ -24,10 +24,10 @@ import com.librestatic.opencinecam.camera.resolve
 import com.librestatic.opencinecam.CaptureActionTicket
 import com.librestatic.opencinecam.CaptureCountdown
 
-import com.librestatic.opencinecam.SubjectPreviewPort
-import com.librestatic.opencinecam.SubjectSurfaceRegistry
-import com.librestatic.opencinecam.subjectPreviewBlock
-import com.librestatic.opencinecam.wantsCameraPreview
+import com.librestatic.opencinecam.subject.SubjectPreviewPort
+import com.librestatic.opencinecam.subject.SubjectSurfaceRegistry
+import com.librestatic.opencinecam.subject.subjectPreviewBlock
+import com.librestatic.opencinecam.fold.wantsCameraPreview
 import com.librestatic.opencinecam.camera.SubjectPreviewOptions
 import com.librestatic.opencinecam.camera.SubjectPreviewStatus
 
@@ -177,7 +177,7 @@ class CaptureService : Service() {
     private val state = MutableStateFlow<CaptureState>(CaptureState.Stopped)
     internal val stateCommands = CaptureStateCommands(OWNER_ID)
     internal val cameraState = MutableStateFlow(CameraUiState())
-    internal val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.LensCalibrationUiState())
+    internal val lensCalibrationState = MutableStateFlow(com.librestatic.opencinecam.calibration.LensCalibrationUiState())
     /** The equaliser editor's live spectrum from the preview monitor (PLAN-074 decision 13); null when not wanted or none runs. Declared before the binder, which wraps it as it is built. */
     internal val audioSpectrum = MutableStateFlow<com.librestatic.opencinecam.camera.AudioSpectrum?>(null)
     /** The equaliser editor's snippet audition; declared before the binder for the same reason. */
@@ -280,7 +280,7 @@ class CaptureService : Service() {
     })
     @Volatile internal var recordingStartedAtMs = 0L
     /** OCC-PLAN-068 U6: optional operator-side sync-marker evidence for the active take's sidecar. */
-    internal val subjectSyncMarkers = com.librestatic.opencinecam.SubjectSyncMarkerSlot()
+    internal val subjectSyncMarkers = com.librestatic.opencinecam.subject.SubjectSyncMarkerSlot()
     internal var timelapseAutoStopRunnable: Runnable? = null
     internal var takeLengthAutoStopRunnable: Runnable? = null
     internal var attachedPreviewSurface: Surface? = null
@@ -300,7 +300,7 @@ class CaptureService : Service() {
     internal var pendingStatusMessage: String? = null
     internal val perCameraZoom = mutableMapOf<String, Float>()
     internal val timecodeTracker by lazy { TimecodeTracker(
-        continuationStore = com.librestatic.opencinecam.TimecodeContinuationFile(java.io.File(filesDir, "timecode-continuation.json"))) }
+        continuationStore = com.librestatic.opencinecam.metadata.TimecodeContinuationFile(java.io.File(filesDir, "timecode-continuation.json"))) }
     internal var settings = CameraSettings()
     private var operatorStartupPending = true
     private var foldClosureTracker: FoldClosureTracker? = null
@@ -969,7 +969,7 @@ class CaptureService : Service() {
             if (!serviceDestroyed) eqSnippetAudition.action()
         }
 
-        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
+        val lensCalibrationStates: StateFlow<com.librestatic.opencinecam.calibration.LensCalibrationUiState> = lensCalibrationState.asStateFlow()
 
         /**
          * Locks the selected logical camera to [physicalId] (one of `CameraUiState.lensLock.options`),
@@ -1006,7 +1006,7 @@ class CaptureService : Service() {
                 calibrationStartDeadlineMs = 0L
                 mainHandler.removeCallbacks(calibrationStartRetry)
                 lensCalibrationState.update {
-                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                    it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
                 }
             }
             val run = calibrationRun ?: return
@@ -1024,10 +1024,10 @@ class CaptureService : Service() {
             val current = cameraState.value
             val cameraId = current.selectedCameraId
             val lenses = calibrationLensesOf(current.descriptor)
-            fun refuse(reason: com.librestatic.opencinecam.LensCalibrationFailure) {
+            fun refuse(reason: com.librestatic.opencinecam.calibration.LensCalibrationFailure) {
                 calibrationPending = null
                 lensCalibrationState.update {
-                    it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, logicalCameraId = cameraId,
+                    it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED, logicalCameraId = cameraId,
                         referencePhysicalId = null, lenses = emptyList(), failure = reason)
                 }
             }
@@ -1037,7 +1037,7 @@ class CaptureService : Service() {
                     return
                 }
                 calibrationStartDeadlineMs = 0L
-                refuse(com.librestatic.opencinecam.LensCalibrationFailure.NO_MULTI_CAMERA)
+                refuse(com.librestatic.opencinecam.calibration.LensCalibrationFailure.NO_MULTI_CAMERA)
                 return
             }
             val idle = current.phase in setOf(CameraUiPhase.PREVIEWING, CameraUiPhase.SAVED) && !current.structuralSettingsFrozen &&
@@ -1046,15 +1046,15 @@ class CaptureService : Service() {
             if (!idle || attachedPreviewSurface?.isValid != true) {
                 val waiting = current.phase !in setOf(CameraUiPhase.RECORDING, CameraUiPhase.CAPTURING) && !current.structuralSettingsFrozen
                 if (waiting && android.os.SystemClock.elapsedRealtime() < calibrationStartDeadlineMs) {
-                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
-                        it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
+                    if (lensCalibrationState.value.phase != com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING) lensCalibrationState.update {
+                        it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING, logicalCameraId = cameraId,
                             referencePhysicalId = null, lenses = emptyList(), failure = null)
                     }
                     mainHandler.postDelayed(calibrationStartRetry, 250L)
                     return
                 }
                 calibrationStartDeadlineMs = 0L
-                refuse(com.librestatic.opencinecam.LensCalibrationFailure.UNSUPPORTED_MODE)
+                refuse(com.librestatic.opencinecam.calibration.LensCalibrationFailure.UNSUPPORTED_MODE)
                 return
             }
             calibrationStartDeadlineMs = 0L
@@ -1066,12 +1066,12 @@ class CaptureService : Service() {
             calibrationPending = null
             lensCalibrationState.update {
                 it.copy(
-                    phase = com.librestatic.opencinecam.LensCalibrationPhase.PREPARING,
+                    phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.PREPARING,
                     logicalCameraId = cameraId,
                     referencePhysicalId = null,
                     lenses = lenses.sortedBy { lens -> lens.nominalRatio }.map { lens ->
-                        com.librestatic.opencinecam.LensCalibrationLensRow(lens.physicalId, lens.nominalRatio,
-                            com.librestatic.opencinecam.LensCalibrationLensStatus.PENDING)
+                        com.librestatic.opencinecam.calibration.LensCalibrationLensRow(lens.physicalId, lens.nominalRatio,
+                            com.librestatic.opencinecam.calibration.LensCalibrationLensStatus.PENDING)
                     },
                     failure = null,
                     illuminantMismatch = false,
@@ -1102,17 +1102,17 @@ class CaptureService : Service() {
         /** Saves the run's result for this build and camera, and applies it when the correction is on. */
         fun saveLensCalibration() {
             val set = calibrationPending ?: return
-            if (calibrationRun != null || lensCalibrationState.value.phase != com.librestatic.opencinecam.LensCalibrationPhase.RESULT) return
+            if (calibrationRun != null || lensCalibrationState.value.phase != com.librestatic.opencinecam.calibration.LensCalibrationPhase.RESULT) return
             calibrationPending = null
             try {
                 storageExecutor.execute {
-                    val saved = runCatching { com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService).save(set) }.isSuccess
+                    val saved = runCatching { com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this@CaptureService).save(set) }.isSuccess
                     mainHandler.post {
                         if (serviceDestroyed) return@post
                         lensCalibrationCache = null
                         lensCalibrationState.update {
-                            if (saved) it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
-                            else it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED, failure = com.librestatic.opencinecam.LensCalibrationFailure.INTERNAL)
+                            if (saved) it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                            else it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED, failure = com.librestatic.opencinecam.calibration.LensCalibrationFailure.INTERNAL)
                         }
                         refreshSavedCalibration(cameraState.value.descriptor)
                         refreshLensCorrection()
@@ -1127,7 +1127,7 @@ class CaptureService : Service() {
             if (calibrationRun != null) return
             calibrationPending = null
             lensCalibrationState.update {
-                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
+                it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.IDLE, referencePhysicalId = null, lenses = emptyList(), failure = null)
             }
         }
 
@@ -1138,7 +1138,7 @@ class CaptureService : Service() {
             try {
                 storageExecutor.execute {
                     runCatching {
-                        com.librestatic.opencinecam.LensCalibrationStore.forContext(this@CaptureService)
+                        com.librestatic.opencinecam.calibration.LensCalibrationStore.forContext(this@CaptureService)
                             .delete(Build.FINGERPRINT, cameraId, com.librestatic.opencinecam.core.model.CalibrationSessionKind.LOGICAL)
                     }
                     mainHandler.post {
@@ -1154,7 +1154,7 @@ class CaptureService : Service() {
         val separateAudioAvDrift: com.librestatic.opencinecam.media.audio.AvDiagnosticSnapshot? get() = lastSeparateAudioAvDrift
 
         /** OCC-PLAN-068 U6 evidence for the active take's sidecar. Not a capture command: it never starts, stops or delays a take. */
-        fun recordSubjectSyncMarker(report: com.librestatic.opencinecam.SubjectSyncMarkerReport): Boolean =
+        fun recordSubjectSyncMarker(report: com.librestatic.opencinecam.subject.SubjectSyncMarkerReport): Boolean =
             !serviceDestroyed && subjectSyncMarkers.offer(report, android.os.SystemClock.elapsedRealtimeNanos())
 
         /** Returns false when the bounded actor queue is full or the service is shutting down. */
@@ -3122,8 +3122,8 @@ class CaptureService : Service() {
             run.thread?.interrupt()
             calibrationRun = null
             lensCalibrationState.update {
-                it.copy(phase = com.librestatic.opencinecam.LensCalibrationPhase.FAILED,
-                    failure = com.librestatic.opencinecam.LensCalibrationFailure.CAMERA_LOST)
+                it.copy(phase = com.librestatic.opencinecam.calibration.LensCalibrationPhase.FAILED,
+                    failure = com.librestatic.opencinecam.calibration.LensCalibrationFailure.CAMERA_LOST)
             }
             cameraState.update { it.copy(lensCalibrationRunning = false) }
         }

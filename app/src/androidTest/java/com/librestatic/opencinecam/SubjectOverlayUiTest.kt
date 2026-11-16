@@ -14,6 +14,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
 import com.librestatic.opencinecam.camera.AudioChannelLevel
 import com.librestatic.opencinecam.camera.AudioLevelSnapshot
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectPreviewGuide
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectSelfMonitorOverlay
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

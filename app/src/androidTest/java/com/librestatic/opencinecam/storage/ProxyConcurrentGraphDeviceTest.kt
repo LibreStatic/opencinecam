@@ -22,7 +22,7 @@ import com.librestatic.opencinecam.camera.RecordingGeometryMode
 import com.librestatic.opencinecam.camera.TimelapsePauseStatus
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList

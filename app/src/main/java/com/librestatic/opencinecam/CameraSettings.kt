@@ -5,6 +5,12 @@ package com.librestatic.opencinecam
 
 import android.content.Context
 import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTION_LENGTH
+import com.librestatic.opencinecam.fold.SUBJECT_INTERVIEW_MAX_QUESTIONS
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectPreviewGuide
+import com.librestatic.opencinecam.fold.SubjectSlateField
 import com.librestatic.opencinecam.camera.MonitoringOptions
 import com.librestatic.opencinecam.camera.MonitorColor
 import com.librestatic.opencinecam.camera.FalseColorPalette

@@ -4,6 +4,8 @@ package com.librestatic.opencinecam
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.After

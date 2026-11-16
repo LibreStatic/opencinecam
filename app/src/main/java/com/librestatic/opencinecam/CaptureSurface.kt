@@ -70,7 +70,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.librestatic.opencinecam.calibration.LensCalibrationUiState
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.FoldPane
+import com.librestatic.opencinecam.fold.foldPanes
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.subject.InterviewOperatorControl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.absoluteOffset

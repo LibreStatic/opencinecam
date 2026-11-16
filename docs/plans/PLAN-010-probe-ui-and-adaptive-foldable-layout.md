@@ -148,6 +148,6 @@ Mark individual criteria, update `manifest.yaml`, `TRACEABILITY.md`, affected sc
 - Completed: 2026-08-20T04:57:00-03:00
 - Executor: GPT-5.6 Luna
 - Commits: Not applicable (working tree has no Git metadata)
-- Evidence: `evidence/plan-010/gradle-build.log`, `evidence/plan-010/connected-check.log`, `evidence/plan-010/adb-devices.txt`, `evidence/plan-010/format.log`, `app/src/main/java/com/librestatic/opencinecam/ProbeScreen.kt`, `app/src/test/java/com/librestatic/opencinecam/ProbeScreenTest.kt`
+- Evidence: `evidence/plan-010/gradle-build.log`, `evidence/plan-010/connected-check.log`, `evidence/plan-010/adb-devices.txt`, `evidence/plan-010/format.log`, `app/src/main/java/com/librestatic/opencinecam/diagnostics/ProbeScreen.kt`, `app/src/test/java/com/librestatic/opencinecam/diagnostics/ProbeScreenTest.kt`
 - Deviations: The foldable mode is represented by an explicit separating-fold input; no vendor cover-display API or physical foldable claim is assumed. Connected UI testing remains not-run without a device.
 - Follow-up plans: No direct blockers; M3 storage/export plans consume the probe UI state.

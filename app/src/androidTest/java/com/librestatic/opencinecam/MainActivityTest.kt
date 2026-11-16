@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.core.content.ContextCompat
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 import org.junit.Rule
 import org.junit.rules.ExternalResource
 import org.junit.Test

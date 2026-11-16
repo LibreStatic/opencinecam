@@ -33,6 +33,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import com.librestatic.opencinecam.media.video.VideoCodecPreference
+import com.librestatic.opencinecam.subject.SubjectFillLightSettings
+import com.librestatic.opencinecam.subject.SubjectInterviewSettings
+import com.librestatic.opencinecam.subject.SubjectOutOfFrameSettings
+import com.librestatic.opencinecam.subject.SubjectSelfMonitorSettings
+import com.librestatic.opencinecam.subject.SubjectSlateSettings
+import com.librestatic.opencinecam.subject.SubjectTallySettings
 import com.librestatic.opencinecam.media.video.hevcSdrSupported
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
+import com.librestatic.opencinecam.diagnostics.benchmarkRequiredBytesPerSecond
+import com.librestatic.opencinecam.fold.FoldDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics

@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import com.librestatic.opencinecam.core.model.QuirkEffect
 import com.librestatic.opencinecam.core.model.QuirkResolution
+import com.librestatic.opencinecam.diagnostics.DeviceQuirksProvider
 import com.librestatic.opencinecam.media.audio.lowLatencyInputAvailable
 
 /** The camera whose device profile carries the audio quirks: they describe the phone, not a camera. */

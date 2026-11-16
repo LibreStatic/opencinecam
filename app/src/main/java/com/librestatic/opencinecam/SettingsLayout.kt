@@ -13,6 +13,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.librestatic.opencinecam.diagnostics.label
 import kotlin.math.max
 
 /** Width of the categories column when Settings shows two panes. */

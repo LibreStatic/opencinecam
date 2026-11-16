@@ -11,6 +11,7 @@ import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.diagnostics.label
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

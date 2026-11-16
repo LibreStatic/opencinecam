@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.diagnostics.ProbeLayoutMode
+import com.librestatic.opencinecam.diagnostics.probeLayoutMode
+
 enum class RecordingContinuity { IDLE, RECORDING }
 enum class ActivityContinuityAction { KEEP_RECORDING, REATTACH_PREVIEW, DETACH_PREVIEW, REFLOW_UI, REQUIRE_CAMERA_SELECTION, IGNORE_STALE_SURFACE }
 

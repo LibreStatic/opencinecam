@@ -3,6 +3,11 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.metadata.HARDWARE_TRUTH_SCHEMA
+import com.librestatic.opencinecam.metadata.hardwareTruthFields
+import com.librestatic.opencinecam.metadata.hardwareTruthTake
+import com.librestatic.opencinecam.metadata.TakeVideoEncoder
+import com.librestatic.opencinecam.metadata.withHardwareTruth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

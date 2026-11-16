@@ -18,6 +18,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.metadata.recordingLutJson
 import java.io.File
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList

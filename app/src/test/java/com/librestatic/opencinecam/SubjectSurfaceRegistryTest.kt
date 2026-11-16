@@ -1,6 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.subject.SubjectPreviewBlock
+import com.librestatic.opencinecam.subject.subjectPreviewBlock
+import com.librestatic.opencinecam.subject.subjectPreviewFrameRate
+import com.librestatic.opencinecam.subject.SubjectSurfaceRegistry
 import org.junit.Assert.*
 import org.junit.Test
 

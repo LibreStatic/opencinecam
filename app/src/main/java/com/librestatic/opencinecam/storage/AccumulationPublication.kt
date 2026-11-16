@@ -6,7 +6,7 @@ import com.librestatic.opencinecam.CaptureLocationSnapshot
 import com.librestatic.opencinecam.captureLocationJson
 import com.librestatic.opencinecam.captureFileStem
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 
 import com.librestatic.opencinecam.camera.AccumulationMode
 import com.librestatic.opencinecam.camera.CapturedAccumulation

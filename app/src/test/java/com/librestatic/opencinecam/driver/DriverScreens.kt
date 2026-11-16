@@ -66,29 +66,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import com.librestatic.opencinecam.DisplayCapability
-import com.librestatic.opencinecam.FoldDisplaySettings
-import com.librestatic.opencinecam.FoldDisplayState
-import com.librestatic.opencinecam.FoldPosture
-import com.librestatic.opencinecam.LocalFoldDisplayStateWithoutCoordinator
+import com.librestatic.opencinecam.fold.DisplayCapability
+import com.librestatic.opencinecam.fold.FoldDisplaySettings
+import com.librestatic.opencinecam.fold.FoldDisplayState
+import com.librestatic.opencinecam.fold.FoldPosture
+import com.librestatic.opencinecam.fold.LocalFoldDisplayStateWithoutCoordinator
 import com.librestatic.opencinecam.SelfCaptureChrome
-import com.librestatic.opencinecam.SubjectDisplayMode
-import com.librestatic.opencinecam.SubjectDisplayScreen
-import com.librestatic.opencinecam.SubjectDisplaySettings
-import com.librestatic.opencinecam.SubjectSessionCues
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSessionCues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.AboutScreen
-import com.librestatic.opencinecam.CameraCapabilitiesScreen
-import com.librestatic.opencinecam.StorageBenchmarkContent
-import com.librestatic.opencinecam.LensCalibrationContent
-import com.librestatic.opencinecam.LensCalibrationFailure
-import com.librestatic.opencinecam.LensCalibrationLensRow
-import com.librestatic.opencinecam.LensCalibrationLensStatus
-import com.librestatic.opencinecam.LensCalibrationPhase
-import com.librestatic.opencinecam.LensCalibrationUiState
+import com.librestatic.opencinecam.diagnostics.CameraCapabilitiesScreen
+import com.librestatic.opencinecam.diagnostics.StorageBenchmarkContent
+import com.librestatic.opencinecam.calibration.LensCalibrationContent
+import com.librestatic.opencinecam.calibration.LensCalibrationFailure
+import com.librestatic.opencinecam.calibration.LensCalibrationLensRow
+import com.librestatic.opencinecam.calibration.LensCalibrationLensStatus
+import com.librestatic.opencinecam.calibration.LensCalibrationPhase
+import com.librestatic.opencinecam.calibration.LensCalibrationUiState
 import com.librestatic.opencinecam.core.model.CalibrationFlag
 import com.librestatic.opencinecam.camera.CameraInventory
 import com.librestatic.opencinecam.camera.CharacteristicEntry
@@ -144,11 +144,11 @@ import com.librestatic.opencinecam.LocalOperatorActions
 import com.librestatic.opencinecam.MediaCatalogContent
 import com.librestatic.opencinecam.MediaCatalogSource
 import com.librestatic.opencinecam.MonitoringOverlay
-import com.librestatic.opencinecam.OnboardingScreen
+import com.librestatic.opencinecam.onboarding.OnboardingScreen
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.SettingsScreen
-import com.librestatic.opencinecam.SplashHandoff
+import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.TakeProxyState
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.MonitoringOptions
@@ -1307,7 +1307,7 @@ fun CapabilitiesMain10() = DriverTheme {
 fun CapabilitiesDeviceProfile() = DriverTheme {
     val documents = java.io.File("src/main/profiles/device-profiles").listFiles { file -> file.extension == "json" }
         .orEmpty().sortedBy { it.name }.associate { it.name to it.readText() }
-    val quirks = com.librestatic.opencinecam.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
+    val quirks = com.librestatic.opencinecam.diagnostics.BundledDeviceQuirks.fromDocuments(documents, "blanc", "motorola/blanc_g/blanc:16/NEXT.1/1:user/release-keys")
     CameraCapabilitiesScreen(listOf(DriverCamera), "0", onBack = {}, loadInventory = { FakeInventory }, loadCodecAudio = { _, _ -> null },
         loadMain10Check = { null }, loadDeviceProfile = { _, cameraId -> quirks.resolve(cameraId) })
 }

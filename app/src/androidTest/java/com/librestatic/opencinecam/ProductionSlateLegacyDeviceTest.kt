@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.storage.StillImageSaver
 import kotlinx.serialization.json.*
 import org.junit.Assert.*

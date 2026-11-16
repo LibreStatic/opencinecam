@@ -16,6 +16,7 @@ import com.librestatic.opencinecam.camera.ImageProcessingDefaults
 import com.librestatic.opencinecam.camera.PictureControlReadback
 import com.librestatic.opencinecam.camera.ResolvedExposure
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
+import com.librestatic.opencinecam.diagnostics.shutter
 import kotlin.math.abs
 
 /** One value the camera reported back differently from what OpenCineCam asked for. */
