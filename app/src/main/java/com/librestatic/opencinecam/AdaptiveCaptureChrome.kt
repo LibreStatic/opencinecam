@@ -254,32 +254,16 @@ internal fun AdaptiveCaptureChrome(
             )
             return@ModeSelection
         }
-        // Slow motion is VIDEO recording off-speed; Video is the same path at normal speed.
-        val slow = mode == CaptureMode.SLOW_MOTION
-        val leavingSlowMotion = mode == CaptureMode.VIDEO && settings.videoOffSpeed
-        if (slow && !settings.videoOffSpeed && state.targetFps < SLOW_MOTION_MIN_FPS) normalVideoFps = state.targetFps
-        val profile = if (slow) state.descriptor?.let { descriptor ->
-            slowMotionProfile(descriptor.videoProfiles.map { it.toSpec() }, state.targetVideoWidth, state.targetVideoHeight)
-        } else null
-        val offSpeed = when (mode) {
-            CaptureMode.SLOW_MOTION -> true
-            CaptureMode.VIDEO -> false
-            else -> settings.videoOffSpeed
-        }
-        // Size and rate are settled before the mode changes, so a switch from another mode opens
-        // the camera once, directly in the high-speed session, instead of reopening it per step.
-        val updated = settings.copy(videoOffSpeed = offSpeed).let { base ->
-            profile?.let { base.copy(videoWidth = it.width, videoHeight = it.height, videoFps = it.fps) }
-                ?: if (leavingSlowMotion) base.copy(videoFps = normalVideoFps) else base
-        }
-        if (updated != settings) {
+        val plan = planModeSwitch(mode, state, settings, normalVideoFps)
+        normalVideoFps = plan.normalVideoFps
+        plan.settings?.let { updated ->
             onSettingsChanged(updated)
             binder?.applySettings(updated)
         }
-        val pipelineMode = if (slow) CaptureMode.VIDEO else mode
-        if (pipelineMode != state.selectedMode) binder?.selectMode(pipelineMode)
-        else if (profile != null) binder?.selectTargetFps(profile.fps)
-        else if (leavingSlowMotion) binder?.selectTargetFps(normalVideoFps)
+        val pipelineMode = plan.pipelineMode
+        val targetFps = plan.targetFps
+        if (pipelineMode != null) binder?.selectMode(pipelineMode)
+        else if (targetFps != null) binder?.selectTargetFps(targetFps)
     }
     // A cutout can leave the safe area shorter than the status bar; the top bar starts below both.
     val extraTop = statusBarClearance()
