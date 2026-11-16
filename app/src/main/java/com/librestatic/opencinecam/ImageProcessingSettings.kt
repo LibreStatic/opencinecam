@@ -20,6 +20,7 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.capture.CameraReportsLine
 import com.librestatic.opencinecam.capture.imageProcessingReadbackDifferences
 import com.librestatic.opencinecam.capture.pictureControlReadbackDifferences
+import com.librestatic.opencinecam.settings.CameraSettings
 
 @Composable
 internal fun ImageProcessingSettings(state: CameraUiState, settings: CameraSettings, onChange: (CameraSettings) -> Unit) {

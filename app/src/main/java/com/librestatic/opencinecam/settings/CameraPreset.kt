@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
+import com.librestatic.opencinecam.CaptureMode
 import kotlinx.serialization.json.*
 import java.util.UUID
 

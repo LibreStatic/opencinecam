@@ -6,7 +6,7 @@ import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ZoomMath
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt

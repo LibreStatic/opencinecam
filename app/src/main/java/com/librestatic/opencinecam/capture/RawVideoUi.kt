@@ -33,7 +33,7 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.ModeGateState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.captureStatusFreeBytes
 import com.librestatic.opencinecam.SettingsHelp
 import com.librestatic.opencinecam.SettingsOptionRow

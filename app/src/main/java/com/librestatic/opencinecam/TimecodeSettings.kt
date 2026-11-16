@@ -11,6 +11,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.withTimecodeRate
 
 internal fun parseTimecodeStartInput(hours: String, minutes: String, seconds: String, frames: String, rate: TimecodeRate): SmpteTimecode? {
     val fields = listOf(hours, minutes, seconds, frames)

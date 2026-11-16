@@ -34,7 +34,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.SettingsChips
 import com.librestatic.opencinecam.SettingsHelpText
 import com.librestatic.opencinecam.SettingsSectionTitle

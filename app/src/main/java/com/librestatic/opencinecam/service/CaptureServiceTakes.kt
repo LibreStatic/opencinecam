@@ -34,7 +34,7 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.RejectedExecutionException
 import com.librestatic.opencinecam.camera.monitorLutIdentity
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import com.librestatic.opencinecam.service.CaptureService.DetachedTake
 import com.librestatic.opencinecam.service.CaptureService.StillRecoveryRequest

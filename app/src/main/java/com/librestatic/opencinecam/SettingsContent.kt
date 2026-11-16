@@ -33,6 +33,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import com.librestatic.opencinecam.media.video.VideoCodecPreference
+import com.librestatic.opencinecam.settings.AUDIO_EQ_SETTING_ID
+import com.librestatic.opencinecam.settings.AUDIO_SYNC_OFFSET_SETTING_ID
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.clampChromeOpacity
+import com.librestatic.opencinecam.settings.HapticLevel
+import com.librestatic.opencinecam.settings.MAX_CHROME_OPACITY
+import com.librestatic.opencinecam.settings.MIN_CHROME_OPACITY
+import com.librestatic.opencinecam.settings.ModeSelectorStyle
+import com.librestatic.opencinecam.settings.ViewfinderScale
 import com.librestatic.opencinecam.subject.SubjectFillLightSettings
 import com.librestatic.opencinecam.subject.SubjectInterviewSettings
 import com.librestatic.opencinecam.subject.SubjectOutOfFrameSettings

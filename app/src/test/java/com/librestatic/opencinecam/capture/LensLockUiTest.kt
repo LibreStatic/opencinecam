@@ -5,8 +5,8 @@ import com.librestatic.opencinecam.camera.ZoomAnchor
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.SettingsCatalog
-import com.librestatic.opencinecam.SettingsCategory
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
 import com.librestatic.opencinecam.ui.viewfinder.zoomAnchorLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

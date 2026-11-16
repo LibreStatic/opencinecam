@@ -10,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.capture.CaptureButton
 import com.librestatic.opencinecam.capture.SelfCaptureChrome
 import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import org.junit.Rule
 import org.junit.Test

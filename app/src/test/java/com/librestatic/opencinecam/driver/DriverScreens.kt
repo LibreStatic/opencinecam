@@ -35,7 +35,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.settings.normalizedFor
 import com.librestatic.opencinecam.withSimpleGain
 import com.librestatic.opencinecam.withEqProfile
 import com.librestatic.opencinecam.withListenStart
@@ -99,7 +99,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.librestatic.opencinecam.capture.AdaptiveCaptureChrome
 import com.librestatic.opencinecam.ui.AdaptiveWindow
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.capture.OperatorAction
 import com.librestatic.opencinecam.capture.OperatorPreferences
@@ -137,7 +137,7 @@ import com.librestatic.opencinecam.gallery.detailText
 import org.robolectric.RuntimeEnvironment
 import com.librestatic.opencinecam.gallery.GalleryCatalogCache
 import com.librestatic.opencinecam.gallery.GallerySettings
-import com.librestatic.opencinecam.HistogramMode
+import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.capture.HorizonRollMath
 import com.librestatic.opencinecam.ui.LocalAdaptiveWindow
 import com.librestatic.opencinecam.capture.LocalOperatorActions

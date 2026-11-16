@@ -1,7 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.CameraUiState
+import com.librestatic.opencinecam.CaptureMode
+import com.librestatic.opencinecam.logProfilesFor
+import com.librestatic.opencinecam.ModeGateState
 
 /** Review is recomputed against the currently selected lens; no imported hardware identifier is used. */
 fun CameraPreset.compatibilityIssues(state: CameraUiState): List<String> = buildList {

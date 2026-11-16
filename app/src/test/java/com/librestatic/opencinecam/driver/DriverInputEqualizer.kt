@@ -12,7 +12,7 @@ import com.librestatic.opencinecam.ActiveEqProfile
 import com.librestatic.opencinecam.AudioListeningDevice
 import com.librestatic.opencinecam.AudioListeningPhase
 import com.librestatic.opencinecam.AudioListeningStatus
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.EqSnippetPhase
 import com.librestatic.opencinecam.EqSnippetUiState
 import com.librestatic.opencinecam.EQ_GRAPH_SAMPLE_RATE_HZ

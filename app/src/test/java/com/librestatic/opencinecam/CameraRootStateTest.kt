@@ -5,6 +5,8 @@ package com.librestatic.opencinecam
 
 import androidx.compose.runtime.saveable.SaverScope
 import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.PresetPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame

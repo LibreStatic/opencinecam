@@ -14,6 +14,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.gallery.PlaybackSettingsControls
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

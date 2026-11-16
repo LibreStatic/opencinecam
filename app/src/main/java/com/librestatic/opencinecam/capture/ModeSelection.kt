@@ -6,7 +6,7 @@ import com.librestatic.opencinecam.camera.CaptureFrameRate
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.ModeGateState
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /**
  * Slow motion is the video pipeline recording off-speed: a high-speed capture rate conformed to the

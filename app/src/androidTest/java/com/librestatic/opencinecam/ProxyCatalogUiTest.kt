@@ -19,6 +19,7 @@ import com.librestatic.opencinecam.gallery.GallerySettings
 import com.librestatic.opencinecam.gallery.MediaCatalogScreen
 import com.librestatic.opencinecam.gallery.ProxyPolicies
 import com.librestatic.opencinecam.gallery.ProxySettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.security.MessageDigest

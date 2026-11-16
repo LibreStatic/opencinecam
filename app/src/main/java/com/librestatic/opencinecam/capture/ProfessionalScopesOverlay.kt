@@ -43,7 +43,7 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.liveCameraState
 import com.librestatic.opencinecam.R
-import com.librestatic.opencinecam.HistogramMode
+import com.librestatic.opencinecam.settings.HistogramMode
 import com.librestatic.opencinecam.ui.CineGlyph
 import com.librestatic.opencinecam.ui.CineIcon
 import com.librestatic.opencinecam.ui.CineIconButton

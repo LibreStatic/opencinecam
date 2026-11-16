@@ -3,6 +3,8 @@ package com.librestatic.opencinecam
 
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
 import com.librestatic.opencinecam.storage.DestinationFallback
 import com.librestatic.opencinecam.storage.DriveDisconnectPolicy
 import com.librestatic.opencinecam.storage.DriveSpeed

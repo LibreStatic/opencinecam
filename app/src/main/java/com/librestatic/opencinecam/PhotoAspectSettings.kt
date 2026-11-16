@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.camera.PhotoAspectSelection
 import com.librestatic.opencinecam.camera.StillPhotoFormat
+import com.librestatic.opencinecam.settings.CameraSettings
 
 internal fun photoAspectHeicProcessing(mode: CaptureMode, settings: CameraSettings): Boolean =
     settings.photoAspect.enabled && mode == CaptureMode.PHOTO && settings.photoFormat == StillPhotoFormat.HEIC

@@ -25,7 +25,7 @@ import com.librestatic.opencinecam.capture.routeTruthOf
 import com.librestatic.opencinecam.capture.readbackSamples
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.usesLogGraph
-import com.librestatic.opencinecam.TimeLapseLimitMode
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.Camera2PreviewListener
@@ -59,7 +59,7 @@ import com.librestatic.opencinecam.camera.BakedLutEvidence
 import com.librestatic.opencinecam.metadata.recordingLutJson
 import com.librestatic.opencinecam.camera.OperatorLutStatus
 import com.librestatic.opencinecam.camera.OperatorLutState
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 

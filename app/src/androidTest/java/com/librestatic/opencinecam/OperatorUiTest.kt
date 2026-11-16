@@ -25,6 +25,12 @@ import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.capture.OperatorSettings
 import com.librestatic.opencinecam.capture.OperatorUnavailableReason
 import com.librestatic.opencinecam.capture.StartupMode
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.SettingsRepository
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test

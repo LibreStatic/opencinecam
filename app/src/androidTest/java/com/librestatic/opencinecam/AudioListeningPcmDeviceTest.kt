@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.media.audio.*
 import com.librestatic.opencinecam.service.AudioListeningController
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.storage.*
 import java.io.ByteArrayOutputStream
 import java.io.File

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import android.content.SharedPreferences
 

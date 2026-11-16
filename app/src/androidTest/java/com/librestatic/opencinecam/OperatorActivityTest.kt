@@ -11,6 +11,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.capture.OperatorAction
 import com.librestatic.opencinecam.capture.OperatorPreferences
 import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*

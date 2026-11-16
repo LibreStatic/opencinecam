@@ -80,7 +80,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.AccumulationCaptureProgress
 import com.librestatic.opencinecam.BracketCaptureProgress
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.captureWantsAudio
 import com.librestatic.opencinecam.currentListenStarter
 import com.librestatic.opencinecam.fpsLockKeyVisible

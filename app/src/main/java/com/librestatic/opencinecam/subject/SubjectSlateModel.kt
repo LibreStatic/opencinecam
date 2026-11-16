@@ -4,7 +4,7 @@ package com.librestatic.opencinecam.subject
 import com.librestatic.opencinecam.camera.SmpteTimecode
 import com.librestatic.opencinecam.camera.TimecodeRate
 import com.librestatic.opencinecam.fold.SubjectSlateField
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ProductionSlateSettings
 
 /** One visible slate cell. Values are display text only; nothing here feeds take numbering. */

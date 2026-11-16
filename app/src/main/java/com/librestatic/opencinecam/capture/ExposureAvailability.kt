@@ -7,7 +7,7 @@ import com.librestatic.opencinecam.camera.ExposureMode
 import com.librestatic.opencinecam.camera.ExposureSelection
 import com.librestatic.opencinecam.camera.ShutterUnit
 import com.librestatic.opencinecam.CameraUiState
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /**
  * Which exposure controls a camera really gives the operator. Settings and the capabilities page

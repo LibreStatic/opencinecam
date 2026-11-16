@@ -8,11 +8,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
 import android.os.Build
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CameraUiPhase
 import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
-import com.librestatic.opencinecam.normalizedFor
+import com.librestatic.opencinecam.settings.normalizedFor
 import com.librestatic.opencinecam.R
 import com.librestatic.opencinecam.core.model.StableFailure
 import com.librestatic.opencinecam.CaptureNameSnapshot
@@ -42,7 +42,7 @@ import com.librestatic.opencinecam.storage.releaseDriveDescriptors
 import com.librestatic.opencinecam.storage.ClipContinuation
 import java.util.concurrent.RejectedExecutionException
 import java.util.Locale
-import com.librestatic.opencinecam.SettingsRepositories
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import kotlinx.coroutines.flow.update
 import org.json.JSONObject
 import com.librestatic.opencinecam.ModeGateState

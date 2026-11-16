@@ -2,6 +2,11 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.ZoomLensSwitchMode
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
 import org.junit.Assert.*
 import org.junit.Test
 

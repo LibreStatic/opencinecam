@@ -30,7 +30,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import com.librestatic.opencinecam.camera.createDisabledManualAgc
 import com.librestatic.opencinecam.metadata.recordingGainJson

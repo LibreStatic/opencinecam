@@ -2,6 +2,7 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.CaptureFrameRate
+import com.librestatic.opencinecam.settings.CameraSettings
 
 val fractionalProjectRates = listOf(CaptureFrameRate(24000, 1001), CaptureFrameRate(30000, 1001), CaptureFrameRate(60000, 1001))
 fun validProjectRate(numerator: Int, denominator: Int): Boolean =

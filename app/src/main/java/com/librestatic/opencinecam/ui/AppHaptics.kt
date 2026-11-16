@@ -7,11 +7,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import com.librestatic.opencinecam.allows
-import com.librestatic.opencinecam.HapticCategory
-import com.librestatic.opencinecam.HapticLevel
-import com.librestatic.opencinecam.HapticPreferences
-import com.librestatic.opencinecam.HapticWeight
+import com.librestatic.opencinecam.settings.allows
+import com.librestatic.opencinecam.settings.HapticCategory
+import com.librestatic.opencinecam.settings.HapticLevel
+import com.librestatic.opencinecam.settings.HapticPreferences
+import com.librestatic.opencinecam.settings.HapticWeight
 
 /** Every haptic the UI can play; the category and weight feed [allows], the type is the platform effect. */
 enum class HapticEvent(val category: HapticCategory, val weight: HapticWeight, val type: HapticFeedbackType) {

@@ -7,6 +7,7 @@ import android.os.IBinder
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.StillPhotoFormat
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

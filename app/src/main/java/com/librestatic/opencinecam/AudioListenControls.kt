@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.capture.PanelColumn
 import com.librestatic.opencinecam.capture.PanelHeader
 import com.librestatic.opencinecam.capture.PanelNote
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import kotlin.math.roundToInt
 

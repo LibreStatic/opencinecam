@@ -21,6 +21,8 @@ import com.librestatic.opencinecam.camera.FocusPullEasing
 import com.librestatic.opencinecam.camera.SmpteTimecode
 import com.librestatic.opencinecam.camera.TimecodeMode
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 
 enum class CameraUiPhase {
     PERMISSION_REQUIRED,

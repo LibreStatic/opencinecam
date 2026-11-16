@@ -3,6 +3,11 @@ package com.librestatic.opencinecam
 
 import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

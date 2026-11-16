@@ -25,6 +25,10 @@ import com.librestatic.opencinecam.media.audio.AudioOutputFormat
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 import com.librestatic.opencinecam.transfers.*
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*

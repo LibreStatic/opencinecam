@@ -1,8 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-package com.librestatic.opencinecam
+package com.librestatic.opencinecam.settings
 
 import com.librestatic.opencinecam.diagnostics.label
 import com.librestatic.opencinecam.gallery.label
+import com.librestatic.opencinecam.R
+import com.librestatic.opencinecam.RECORDING_DESTINATION_SETTING_ID
+import com.librestatic.opencinecam.RECORDING_DRIVE_DISCONNECT_SETTING_ID
 import java.text.Normalizer
 import java.util.Locale
 

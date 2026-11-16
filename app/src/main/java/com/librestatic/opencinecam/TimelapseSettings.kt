@@ -11,6 +11,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.TimeLapseLimitMode
 
 /** One canonical editor, reused in Settings and the capture interval panel. */
 @Composable

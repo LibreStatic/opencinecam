@@ -3,7 +3,7 @@
 
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 
 /** What a settings change does to a running preview audio monitor. */
 internal enum class PreviewAudioUpdate {

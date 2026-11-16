@@ -24,6 +24,7 @@ import com.librestatic.opencinecam.capture.isoReading
 import com.librestatic.opencinecam.capture.timeReading
 import com.librestatic.opencinecam.capture.whiteBalanceReadbackDifferences
 import com.librestatic.opencinecam.diagnostics.shutter
+import com.librestatic.opencinecam.settings.CameraSettings
 import java.util.Locale
 import kotlin.math.log10
 import kotlin.math.pow

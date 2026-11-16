@@ -10,6 +10,7 @@ import com.librestatic.opencinecam.camera.EqPoint
 import com.librestatic.opencinecam.camera.EqProfile
 import com.librestatic.opencinecam.service.EqAuditionPhase
 import com.librestatic.opencinecam.service.EqAuditionState
+import com.librestatic.opencinecam.settings.CameraSettings
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -15,6 +15,11 @@ import com.librestatic.opencinecam.media.audio.AudioSourceSelection.UNPROCESSED
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection.VOICE_RECOGNITION
 import com.librestatic.opencinecam.media.audio.PcmAudioConfiguration
 import com.librestatic.opencinecam.media.audio.ProfessionalAudioCapabilities
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.normalizedFor
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

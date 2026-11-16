@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.capture.CaptureButton
 import com.librestatic.opencinecam.capture.LocalOperatorActions
 import com.librestatic.opencinecam.capture.OperatorActions
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

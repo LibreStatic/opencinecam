@@ -3,6 +3,11 @@ package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.gallery.PlaybackSettings
 import com.librestatic.opencinecam.gallery.RawPlaybackMode
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals

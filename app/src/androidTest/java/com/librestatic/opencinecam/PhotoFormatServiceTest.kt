@@ -27,6 +27,8 @@ import com.librestatic.opencinecam.gallery.MediaPlaybackDialog
 import com.librestatic.opencinecam.gallery.MediaReviewSelection
 import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.SettingsRepositories
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

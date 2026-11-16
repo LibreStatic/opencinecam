@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.HdrVideoFormat
 import com.librestatic.opencinecam.camera.OpenCineLogSourcePath
+import com.librestatic.opencinecam.settings.CameraSettings
 
 internal const val HDR_FORMAT_SETTING_ID = "hdr-format"
 

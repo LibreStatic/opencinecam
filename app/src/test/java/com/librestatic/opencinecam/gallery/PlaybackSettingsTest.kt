@@ -1,19 +1,19 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.gallery
 
-import com.librestatic.opencinecam.CameraPreset
-import com.librestatic.opencinecam.CameraPresetCodec
-import com.librestatic.opencinecam.CameraSettings
-import com.librestatic.opencinecam.CameraSettingsStore
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
 import com.librestatic.opencinecam.CaptureNamingSettings
-import com.librestatic.opencinecam.PRESET_V20_KEYS
-import com.librestatic.opencinecam.PresetPreferences
+import com.librestatic.opencinecam.settings.PRESET_V20_KEYS
+import com.librestatic.opencinecam.settings.PresetPreferences
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.SettingsCatalog
-import com.librestatic.opencinecam.SettingsCategory
-import com.librestatic.opencinecam.SettingsPersistence
-import com.librestatic.opencinecam.SettingsRepository
-import com.librestatic.opencinecam.withLivePreferencesFrom
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.SettingsPersistence
+import com.librestatic.opencinecam.settings.SettingsRepository
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

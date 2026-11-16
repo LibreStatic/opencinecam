@@ -3,6 +3,7 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.settings.CameraSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

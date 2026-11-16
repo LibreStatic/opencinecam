@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.librestatic.opencinecam.service
 
-import com.librestatic.opencinecam.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettings
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.camera.RecordingDataRate
 import com.librestatic.opencinecam.timelapseProjectRate

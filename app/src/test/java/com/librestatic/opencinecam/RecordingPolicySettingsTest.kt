@@ -2,6 +2,14 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.core.model.PolicyMode
+import com.librestatic.opencinecam.settings.CameraPreset
+import com.librestatic.opencinecam.settings.CameraPresetCodec
+import com.librestatic.opencinecam.settings.CameraSettings
+import com.librestatic.opencinecam.settings.CameraSettingsStore
+import com.librestatic.opencinecam.settings.PresetPreferences
+import com.librestatic.opencinecam.settings.SettingsCatalog
+import com.librestatic.opencinecam.settings.SettingsCategory
+import com.librestatic.opencinecam.settings.withLivePreferencesFrom
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
