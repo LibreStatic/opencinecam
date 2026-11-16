@@ -453,7 +453,7 @@ internal fun formatIntervalShort(intervalMs: Long): String {
 internal fun formatShutter(exposureTimeNs: Long): String {
     if (exposureTimeNs <= 0L) return "—"
     val denominator = 1_000_000_000.0 / exposureTimeNs
-    return if (denominator >= 1.0) "1/${denominator.toInt()}" else "${exposureTimeNs / 1_000_000}ms"
+    return if (denominator >= 1.0) "1/${denominator.roundToInt()}" else "${exposureTimeNs / 1_000_000}ms"
 }
 
 /** Formats an EV value (e.g. −1.33, +0.5, 0). Returns "0" for null/zero. */
