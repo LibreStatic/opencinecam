@@ -149,6 +149,11 @@ data class RawTakeResult(
     val recovered: Boolean,
     /** Set when publishing or discarding the output failed; the row then stays pending for recovery. */
     val outputError: String?,
+    /**
+     * True when the writer made no progress for the join timeout, so the take was neither published nor
+     * discarded: it stays live in this process (writer thread running) and is recovered at the next start.
+     */
+    val writerStalled: Boolean = false,
     val writerStats: OcrawStreamStats?,
     /** The configured encoding, [RawVideoConfig.encoding]. */
     val encoding: String = RawVideoConfig.ENCODING_RAW10,
@@ -311,6 +316,12 @@ class RawVideoRecorder(
         val unmatchedResults = AtomicLong()
         lateinit var thread: Thread
 
+        /** Set by the writer, under this take's monitor, once it has ended (after its last write). */
+        var writerFinished = false
+
+        /** Set by [stop] under this take's monitor when it gave up on a live writer: the writer then finalises the take. */
+        var abandoned = false
+
         /** First failure wins; returns true when this call set it. */
         fun fail(reason: String): Boolean {
             if (!failure.compareAndSet(null, reason)) return false
@@ -322,8 +333,20 @@ class RawVideoRecorder(
     private val control = Any()
     private var armed: Armed? = null
 
-    /** A writer that outlived [stop]; its slot memory must not be freed while it runs. */
-    private var stalledWriter: Thread? = null
+    /**
+     * A writer that outlived [stop]; its slot memory must not be freed while it runs. Atomic because the
+     * writer clears it when it ends, and it must never take [control] ([stop] and [disarm] join it under that lock).
+     */
+    private val stalledWriterRef = AtomicReference<Thread?>(null)
+    private var stalledWriter: Thread?
+        get() = stalledWriterRef.get()
+        set(value) = stalledWriterRef.set(value)
+
+    /**
+     * Called on the writer thread with the result of a take [stop] had given up on ([RawTakeResult.writerStalled])
+     * once that writer ended and finalised it itself (published, discarded or left pending for recovery).
+     */
+    @Volatile var onAbandonedTakeFinished: ((RawTakeResult) -> Unit)? = null
 
     @Volatile private var take: Take? = null
 
@@ -436,7 +459,7 @@ class RawVideoRecorder(
             val ring = RawVideoRing(current.state.slotBytes, current.buffers.size) { current.buffers[next++] }
             current.compressor?.reset()
             val started = Take(output, info, current.state, ring, clock(), onTakeMustEnd, current.compressor, audioQueueChunks)
-            started.thread = Thread({ runWriter(started) }, "occ-raw-writer").apply {
+            started.thread = Thread({ try { runWriter(started) } finally { writerEnded(started) } }, "occ-raw-writer").apply {
                 priority = Thread.MAX_PRIORITY - 1
             }
             take = started
@@ -473,7 +496,9 @@ class RawVideoRecorder(
 
     /**
      * Ends the take: no more frames are accepted, the writer drains the ring and closes the file,
-     * and the output is published (or discarded when it holds no frame). Blocks until then.
+     * and the output is published (or discarded when it holds no frame). Blocks until then. The wait has no
+     * absolute cap: a writer still advancing (frames or bytes written) on a slow drive is given the time to
+     * drain the ring; only [writerJoinTimeoutMs] without progress declares it stalled ([RawTakeResult.writerStalled]).
      */
     fun stop(): RawTakeResult = synchronized(control) {
         val current = checkNotNull(take) { "no take is recording" }
@@ -483,14 +508,33 @@ class RawVideoRecorder(
             current.stopped = true
             current.ring.close()
         }
-        current.thread.join(writerJoinTimeoutMs)
-        if (current.thread.isAlive) {
+        awaitWriter(current)
+        // Handshake with writerEnded: either the writer already finished (take the normal path) or it is abandoned
+        // here and finalises the take itself when it ends.
+        val abandoned = synchronized(current) {
+            if (current.writerFinished) false else {
+                current.abandoned = true
+                stalledWriter = current.thread
+                true
+            }
+        }
+        if (abandoned) {
             current.fail(RawTakeReasons.WRITER_STALLED)
-            stalledWriter = current.thread
             take = null
             return@synchronized result(current, uri = null, framesOnDisk = current.framesWritten, recovered = false,
-                outputError = "writer still running; the file stays pending for recovery")
+                outputError = "writer stopped making progress; the file stays pending for recovery at the next start")
+                .copy(writerStalled = true)
         }
+        current.thread.join()
+        take = null
+        finaliseTake(current, writerStalled = false)
+    }
+
+    /**
+     * Repairs the file when the writer did not close it cleanly, then publishes it (or discards it when it holds no
+     * frame). Runs on [stop]'s thread, or on the writer's for an abandoned take; touches neither the ring nor the encoder.
+     */
+    private fun finaliseTake(current: Take, writerStalled: Boolean): RawTakeResult {
         val clean = current.writerError == null && current.writerStats?.endWritten == true
         var framesOnDisk = current.framesWritten
         var recovered = false
@@ -507,8 +551,49 @@ class RawVideoRecorder(
             outputError = "${problem.javaClass.simpleName}: ${problem.message.orEmpty().take(160)}"
             android.util.Log.e(TAG, "RAW take output could not be finalised", problem)
         }
-        take = null
-        result(current, uri, framesOnDisk, recovered, outputError)
+        return result(current, uri, framesOnDisk, recovered, outputError).copy(writerStalled = writerStalled)
+    }
+
+    /** Writer thread, last act: marks the writer finished and, for an abandoned take, finalises it and tells the listener. */
+    private fun writerEnded(current: Take) {
+        val abandoned = synchronized(current) {
+            current.writerFinished = true
+            current.abandoned
+        }
+        if (!abandoned) return
+        try {
+            val result = finaliseTake(current, writerStalled = true)
+            runCatching { onAbandonedTakeFinished?.invoke(result) }
+        } catch (problem: Throwable) {
+            android.util.Log.e(TAG, "RAW abandoned take could not be finalised", problem)
+        } finally {
+            // The tail is over, so the take is no longer protected by this thread; compareAndSet keeps a newer value.
+            stalledWriterRef.compareAndSet(current.thread, null)
+        }
+    }
+
+    /**
+     * Joins the writer in short slices, for as long as it makes progress. [Take.framesWritten] and
+     * [Take.bytesWritten] are @Volatile and only written by the writer, so reading them here is safe; the
+     * no-progress clock restarts whenever either moves.
+     */
+    private fun awaitWriter(current: Take) {
+        val sliceMs = minOf(1000L, writerJoinTimeoutMs).coerceAtLeast(1L)
+        var frames = current.framesWritten
+        var bytes = current.bytesWritten
+        var lastProgressNs = clock()
+        while (true) {
+            current.thread.join(sliceMs)
+            if (!current.thread.isAlive) return
+            val nowFrames = current.framesWritten
+            val nowBytes = current.bytesWritten
+            val now = clock()
+            if (nowFrames != frames || nowBytes != bytes) {
+                frames = nowFrames
+                bytes = nowBytes
+                lastProgressNs = now
+            } else if ((now - lastProgressNs) / 1_000_000L >= writerJoinTimeoutMs) return
+        }
     }
 
     private fun result(current: Take, uri: Uri?, framesOnDisk: Long, recovered: Boolean, outputError: String?) =
@@ -855,6 +940,7 @@ class RawVideoRecorder(
          * cost a few hundred bytes of timestamps and leave room for that.
          */
         const val RESULT_WINDOW_FRAMES = 256
+        /** The longest the writer may go without progress before [stop] declares it stalled. */
         const val WRITER_JOIN_TIMEOUT_MS = 30_000L
         const val FINAL_RESULT_WAIT_MS = 100L
         private const val RESULT_INBOX = 256

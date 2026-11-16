@@ -64,6 +64,7 @@ import com.librestatic.opencinecam.CameraUiState
 import com.librestatic.opencinecam.CaptureMode
 import com.librestatic.opencinecam.liveCameraState
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.service.projectedTakeBytesPerMinute
 import com.librestatic.opencinecam.settings.audioClipLabel
 import com.librestatic.opencinecam.settings.audioInputTypeLabel
 import com.librestatic.opencinecam.settings.AudioMeterMode
@@ -211,7 +212,9 @@ internal fun StatusInfoBar(state: CameraUiState, settings: CameraSettings) {
             add("${settings.videoBitrateMbps} Mbps")
             add(if (silent) stringResource(R.string.status_audio_off)
                 else audioOutputLabel(settings.audioOutputFormat) + " " + formatAudioRate(settings.audioSampleRateHz))
-            recordTimeLeftMs(captureStatusFreeBytes(state), settings.videoBitrateMbps)?.let {
+            // The projection of the take that would start, not the setting's 30 fps reference bitrate.
+            recordTimeLeftMs(captureStatusFreeBytes(state), projectedTakeBytesPerMinute(
+                state.selectedMode, settings, state.targetFps, state.activeVideoProfile?.constrainedHighSpeed == true, !silent))?.let {
                 add(stringResource(R.string.status_time_left, formatRecordTimeLeft(it)))
             }
         }

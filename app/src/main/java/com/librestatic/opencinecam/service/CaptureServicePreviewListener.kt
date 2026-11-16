@@ -557,6 +557,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
             recordingHeight = height,
             availableStorageBytes = recordingVolumeFreeBytes(),
             recordingWarning = recordingWarningText(),
+            takePendingRecovery = false,
             errorCode = null,
         )
         activeRecordingPolicy = settings.recordingPolicy
@@ -921,6 +922,7 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                         else if (driveContinuation.isPending) CameraUiPhase.PREVIEWING else CameraUiPhase.ERROR,
                     recordingFinalizing = false,
                     recordingWarning = null,
+                    takePendingRecovery = false,
                     recordingPauseStatus = timing,
                     recordingAvTiming = avTiming,
                     recordingPausePending = false,
@@ -963,11 +965,17 @@ internal fun CaptureService.newPreviewListener(): Camera2PreviewListener = objec
                 // end of a drive take, not an error: its folder stays pending for recovery when the drive returns, and
                 // a continuation, if armed, must find the preview back rather than an error phase.
                 val driveGone = takeDrive != null && mountedRecordingVolumes().none { it.equals(takeDrive.volumeId, ignoreCase = true) }
+                // Recovery on the drive's return says so, not that the process died. The take's own stop reason
+                // decides, before the release in finally: the drive may already be back by now.
+                if (takeDrive != null && (driveGone || stopReason?.component == RECORDING_DRIVE_COMPONENT)) {
+                    runCatching { output?.recoveryGroup?.leaveForRecovery(com.librestatic.opencinecam.storage.IncompleteTake.DRIVE_DISCONNECTED) }
+                }
                 if (driveGone) {
                     android.util.Log.w("RecordingDestination", "Drive take left for recovery: ${failure.message}")
                     val outcome = getString(R.string.capture_video_not_finalised_drive)
                     cameraState.update { current -> current.copy(
                         phase = CameraUiPhase.SAVED,
+                        takePendingRecovery = true,
                         recordingFinalizing = false,
                         recordingWarning = null,
                         recordingPausePending = false,

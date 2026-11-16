@@ -784,6 +784,7 @@ internal fun CaptureService.rawTakeStarted(session: RawTakeSession) {
         recordingHeight = config.cropHeight,
         availableStorageBytes = free,
         recordingWarning = null,
+        takePendingRecovery = false,
         errorCode = null,
         rawVideoRingPercent = 0,
         rawVideoFramesWritten = 0L,
@@ -843,6 +844,49 @@ internal fun CaptureService.rawVideoTakeStopped(engineReason: String?) {
     if (!rawControlExecute(finish)) finish.run()
 }
 
+/** A RAW take whose writer [CaptureService.finishRawTake] reported as stalled: its file name, and whether it was on a drive. */
+internal class StalledRawTake(val displayName: String, val onDrive: Boolean)
+
+/**
+ * Main: a stalled writer ended on its own and finalised its take ([RawVideoRecorder.onAbandonedTakeFinished]).
+ * Replaces the "still being written" message with the outcome, without disturbing a take that began since.
+ */
+internal fun CaptureService.finishAbandonedRawTake(result: RawTakeResult) {
+    android.util.Log.i("CaptureService", "RAW stalled take ${result.displayName} finalised late: uri=${result.uri} " +
+        "frames=${result.framesWritten} captured=${result.framesCaptured} error=${result.outputError}")
+    val stalled = stalledRawTake
+    if (stalled?.displayName != result.displayName) {
+        // Posted before finishRawTake reported the stall: kept for it, which applies it once the stall message shows.
+        earlyAbandonedRawResult = result
+        return
+    }
+    stalledRawTake = null
+    // Not published: for a drive take the journalled file is now relinquished, so a pass can repair it.
+    if (result.uri == null && result.outputError != null && stalled.onDrive) queueRecordingRecovery("a stalled RAW take on a drive was left pending")
+    val outcome = abandonedRawTakeOutcome(result, stalled.onDrive)
+    val stalledText = getString(R.string.raw_video_writer_stalled)
+    cameraState.update { state ->
+        if (state.phase != CameraUiPhase.PREVIEWING && state.phase != CameraUiPhase.SAVED) return@update state
+        // Only while the stalled take's message still shows: the operator has not moved on to anything else, and a take
+        // saved since keeps its review target.
+        val message = state.message?.takeIf { it.contains(stalledText) } ?: return@update state
+        val lastSavedUri = result.uri?.toString() ?: state.lastSavedUri
+        // The stop reason ("Take stopped: …") stays; only the outcome changes.
+        state.copy(phase = if (result.uri != null) CameraUiPhase.SAVED else state.phase, lastSavedUri = lastSavedUri,
+            message = message.replace(stalledText, outcome))
+    }
+}
+
+/** The outcome a stalled take's late result reports in place of "still being written". */
+private fun CaptureService.abandonedRawTakeOutcome(result: RawTakeResult, onDrive: Boolean): String = when {
+    result.uri != null -> getString(R.string.raw_video_saved, result.framesWritten,
+        String.format(java.util.Locale.getDefault(), "%.1f", result.mediaDurationNs / 1e9)) + rawSavedAudioSuffix(result)
+    result.outputError != null || result.framesWritten > 0 ->
+        getString(if (onDrive) R.string.raw_video_not_finalised_drive else R.string.raw_video_not_finalised)
+    // A writer that had no frames discarded its output.
+    else -> getString(R.string.raw_video_empty)
+}
+
 /** Main: publishes the end of the take, with its reason when it ended early. */
 internal fun CaptureService.finishRawTake(result: RawTakeResult?, engineReason: String?) {
     val session = rawTake
@@ -857,9 +901,12 @@ internal fun CaptureService.finishRawTake(result: RawTakeResult?, engineReason: 
     submitCaptureState(stateCommands.takeEnded())
     val reason = rawTakeEndReason(result?.reason, engineReason, null)
     val onDrive = session.destination.destination is RecordingDestination.UsbFolder
+    stalledRawTake = if (result?.writerStalled == true) StalledRawTake(result.displayName, onDrive) else null
     // A drive take its output relinquished stays journalled; a pass of a drive that mounted again meanwhile skipped
     // it while it was live, so queue one now instead of waiting for the next mount, as relinquishTake does.
-    if (onDrive && result != null && result.uri == null && result.outputError != null) {
+    // A stalled writer is still running and keeps the take live in this process, so a pass would only skip it.
+    val relinquished = result?.outputError != null && result.uri == null && !result.writerStalled
+    if (onDrive && relinquished) {
         queueRecordingRecovery("a RAW take on a drive was left pending")
     }
     // PLAN-072 Delivery 4: the volume event and a writer's ENODEV both end here with the drive's reason, once per take.
@@ -872,6 +919,7 @@ internal fun CaptureService.finishRawTake(result: RawTakeResult?, engineReason: 
             rawConfigKey = RawVideoConfigKeys.key(session.config))
     }
     val outcome = when {
+        result?.writerStalled == true -> getString(R.string.raw_video_writer_stalled)
         result?.uri != null -> getString(R.string.raw_video_saved, result.framesWritten,
             String.format(java.util.Locale.getDefault(), "%.1f", result.mediaDurationNs / 1e9)) + rawSavedAudioSuffix(result)
         // A drive take left unfinished stays journalled on the drive and is repaired when the drive is mounted again.
@@ -903,10 +951,16 @@ internal fun CaptureService.finishRawTake(result: RawTakeResult?, engineReason: 
         messageTransient = false,
         errorCode = reason,
         recordingWarning = null,
+        takePendingRecovery = false,
         rawVideoRingPercent = null,
         rawVideoFramesWritten = null,
     ) }
     clearTakeDestination()
+    // The writer may have finished just after stop gave up on it, its result posted before this one.
+    earlyAbandonedRawResult?.let { early ->
+        earlyAbandonedRawResult = null
+        if (stalledRawTake?.displayName == early.displayName) finishAbandonedRawTake(early)
+    }
     // As for an encoded take, a pending continuation keeps the foreground service through the gap.
     if (!driveContinuation.isPending) foreground.stop()
     if (session.continuation != null) refreshRawGate()

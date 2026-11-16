@@ -688,13 +688,14 @@ internal enum class RecordButtonState(val label: Int) {
     RECORDING(R.string.rec_state_recording),
     FINALIZING(R.string.rec_state_finalizing),
     SAVED(R.string.rec_state_saved),
+    PENDING(R.string.rec_state_pending),
     UNAVAILABLE(R.string.rec_state_unavailable),
 }
 
 internal val RecordButtonState.color: Color
     @Composable @ReadOnlyComposable get() = when (this) {
         RecordButtonState.READY -> Color.White
-        RecordButtonState.PREPARING, RecordButtonState.FINALIZING -> Amber
+        RecordButtonState.PREPARING, RecordButtonState.FINALIZING, RecordButtonState.PENDING -> Amber
         RecordButtonState.RECORDING -> RecordRed
         RecordButtonState.SAVED -> OkGreen
         RecordButtonState.UNAVAILABLE -> Muted
@@ -706,6 +707,7 @@ internal fun recordButtonState(state: CameraUiState): RecordButtonState? {
         state.recordingFinalizing -> RecordButtonState.FINALIZING
         state.phase == CameraUiPhase.RECORDING -> RecordButtonState.RECORDING
         state.phase == CameraUiPhase.CAPTURING -> RecordButtonState.PREPARING
+        state.phase == CameraUiPhase.SAVED && state.takePendingRecovery -> RecordButtonState.PENDING
         state.phase == CameraUiPhase.SAVED -> RecordButtonState.SAVED
         state.phase == CameraUiPhase.PREVIEWING -> RecordButtonState.READY
         else -> RecordButtonState.UNAVAILABLE

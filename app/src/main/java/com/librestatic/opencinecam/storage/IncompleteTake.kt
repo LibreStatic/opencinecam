@@ -32,6 +32,9 @@ internal object IncompleteTake {
     const val ENCODER_FAILED = "encoder-failed"
     const val MUXER_NOT_FINALIZED = "muxer-not-finalized"
     const val PROCESS_DEATH = "process-death"
+
+    /** The take's USB drive was pulled while it recorded: the file waited for recovery on the drive's return. */
+    const val DRIVE_DISCONNECTED = "drive-disconnected"
     const val RECORDING_INTERRUPTED = "recording-interrupted"
 
     /** The microphone input overran while the take was written: the audio has gaps the reads never saw. */

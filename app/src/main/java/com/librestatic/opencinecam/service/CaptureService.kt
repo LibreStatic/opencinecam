@@ -783,7 +783,13 @@ class CaptureService : Service() {
     }
 
     // OCC-PLAN-071 RAW video. Main-thread state unless marked otherwise.
-    internal val rawRecorder by lazy { RawVideoRecorder() }
+    internal val rawRecorder by lazy {
+        RawVideoRecorder().also { recorder -> recorder.onAbandonedTakeFinished = { result -> mainHandler.post { if (!serviceDestroyed) finishAbandonedRawTake(result) } } }
+    }
+    /** The RAW take [finishRawTake] last reported as stalled, for [finishAbandonedRawTake]; null otherwise. */
+    internal var stalledRawTake: StalledRawTake? = null
+    /** A stalled take's late result that reached main before [finishRawTake] reported the stall; applied by it. */
+    internal var earlyAbandonedRawResult: com.librestatic.opencinecam.rawvideo.RawTakeResult? = null
     /** Serialises arming, disarming, take start and take stop (which joins the writer) off main. */
     internal val rawControl = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-raw-control") }
     internal val rawQualificationStore by lazy { RawVideoQualificationStore.forContext(this) }

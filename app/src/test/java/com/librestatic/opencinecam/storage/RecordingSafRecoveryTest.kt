@@ -112,9 +112,11 @@ class RecordingSafRecoveryTest {
         // The MediaStore take cannot be resolved here (no primary volume under Robolectric): it is kept, not discarded.
         assertEquals(RecordingRecoveryReport(unresolvedGroups = 1), journal().recover())
         assertEquals(listOf(listOf(id, "0", null, null, null)), entries())
-        assertEquals(2, database { it.version })
+        assertEquals(3, database { it.version })
+        // Version 3 added the reason column, empty for the migrated rows.
+        assertEquals(listOf<String?>(null), database { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(id)).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } } })
 
-        database { it.version = 3 }
+        database { it.version = 4 }
         val before = databaseFile.readBytes()
         assertThrows(IllegalStateException::class.java) { journal().recover() }
         assertArrayEquals(before, databaseFile.readBytes())
@@ -232,6 +234,25 @@ class RecordingSafRecoveryTest {
         assertEquals(listOf(IncompleteTake.PROCESS_DEATH), IncompleteTake.reasonsOf(File(takeDir(), "A001.audio.incomplete.json").readText()))
         assertTrue(entries().none { it[0] == id })
         assertEquals(RecordingRecoveryReport(), journal().recover())
+    }
+
+    @Test fun aTakeLeftForRecoveryKeepsItsReasonAndTheSidecarSaysIt() {
+        val id = interrupted("A001.mp4" to ByteArray(100) { 2 }, "A001.timing.json" to """{"schema":"opencinecam.recording.v1"}""".toByteArray())
+        journal().markLeft(id, IncompleteTake.DRIVE_DISCONNECTED)
+        assertEquals(IncompleteTake.DRIVE_DISCONNECTED, database { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(id)).use { it.moveToFirst(); it.getString(0) } })
+
+        assertEquals(RecordingRecoveryReport(incompleteGroups = 1), journal().recover())
+
+        val timing = File(takeDir(), "A001.timing.json").readText()
+        assertEquals(listOf(IncompleteTake.DRIVE_DISCONNECTED), IncompleteTake.reasonsOf(timing))
+        assertTrue(timing.contains("USB drive was disconnected"))
+    }
+
+    @Test fun theGroupRecordsWhyItWasLeftForRecovery() {
+        val group = journal().start(destination)
+        group.leaveForRecovery(IncompleteTake.DRIVE_DISCONNECTED)
+        assertEquals(listOf(IncompleteTake.DRIVE_DISCONNECTED), database { db -> db.rawQuery("SELECT reason FROM captures WHERE id = ?", arrayOf(group.id)).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } } })
+        group.relinquish()
     }
 
     @Test fun aSidecarTheDriveDoesNotLetBeReadIsNeverReplacedAndTheTakeStaysJournalled() {

@@ -775,6 +775,104 @@ class RawVideoRecorderTest {
         assertEquals(0, result.framesWritten)
     }
 
+    @Test
+    fun aSlowWriterThatKeepsProgressingIsWaitedForPastTheJoinTimeout() {
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 300)
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 32)
+        val output = FileOutput(wrap = { SlowFrameChannel(it, 60) })
+        recorder.start(output, info())
+        for (index in 0 until 25) assertTrue(recorder.onFrame(plane(index % 7), STRIDE, WIDTH, HEIGHT, ts(index)))
+
+        val started = System.nanoTime()
+        val result = recorder.stop()
+        // The drain takes about 1.5 s, five times the timeout, but never goes 300 ms without a frame.
+        assertTrue(System.nanoTime() - started > 1_000_000_000L)
+        assertFalse(result.writerStalled)
+        assertNotNull(result.uri)
+        assertEquals(25, result.framesWritten)
+        assertTrue(output.published)
+        assertEquals(25, scan(output.file).frameCount)
+    }
+
+    @Test
+    fun aWriterThatMakesNoProgressIsDeclaredStalledAfterTheTimeoutAndLeftPending() {
+        val gate = CountDownLatch(1)
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 300)
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val output = FileOutput(wrap = { GatedChannel(it, gate) })
+        recorder.start(output, info())
+        assertTrue(recorder.onFrame(plane(0), STRIDE, WIDTH, HEIGHT, ts(0)))
+
+        val started = System.nanoTime()
+        val result = recorder.stop()
+        val waitedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("waited $waitedMs ms", waitedMs in 250..5_000)
+        assertTrue(result.writerStalled)
+        assertNull(result.uri)
+        assertEquals(RawTakeReasons.WRITER_STALLED, result.reason)
+        assertFalse(output.published)
+        assertFalse(output.discarded)
+
+        gate.countDown()
+        recorder.disarm() // joins the stalled writer
+    }
+
+    @Test
+    fun anAbandonedWriterThatLaterEndsFinalisesTheTakeItself() {
+        val gate = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val results = CopyOnWriteArrayList<RawTakeResult>()
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 300)
+        recorder.onAbandonedTakeFinished = { results += it; finished.countDown() }
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val output = FileOutput(wrap = { GatedChannel(it, gate) })
+        recorder.start(output, info())
+        assertTrue(recorder.onFrame(plane(0), STRIDE, WIDTH, HEIGHT, ts(0)))
+        assertTrue(recorder.onFrame(plane(1), STRIDE, WIDTH, HEIGHT, ts(1)))
+
+        val stalled = recorder.stop()
+        assertTrue(stalled.writerStalled)
+        assertFalse(output.published)
+        assertTrue(results.isEmpty())
+
+        gate.countDown()
+        assertTrue("the writer must report", finished.await(10, TimeUnit.SECONDS))
+        val result = results.single()
+        assertNotNull(result.uri)
+        assertEquals(2, result.framesWritten)
+        assertTrue(output.published)
+        assertFalse(output.discarded)
+        assertEquals(2, scan(output.file).frameCount)
+        recorder.disarm()
+    }
+
+    @Test
+    fun anAbandonedWriterThatEndedWithoutFramesDiscardsTheTake() {
+        val gate = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val results = CopyOnWriteArrayList<RawTakeResult>()
+        val recorder = RawVideoRecorder(slotMemoryFactory = { HeapSlots() }, finalResultWaitMs = 0, writerJoinTimeoutMs = 300)
+        recorder.onAbandonedTakeFinished = { results += it; finished.countDown() }
+        recorder.arm(CONFIG, ringBytes = CONFIG.bytesPerFrame * 8)
+        val output = FileOutput(wrap = { GatedChannel(it, gate) })
+        recorder.start(output, info())
+
+        assertTrue(recorder.stop().writerStalled)
+        gate.countDown()
+        assertTrue(finished.await(10, TimeUnit.SECONDS))
+        assertNull(results.single().uri)
+        assertTrue(output.discarded)
+        assertFalse(output.published)
+        recorder.disarm()
+    }
+
+    /** Delays every frame-sized write by [delayMs], like a drive far slower than the stream. */
+    private class SlowFrameChannel(delegate: FileChannel, private val delayMs: Long) : DelegatingChannel(delegate) {
+        override fun beforeWrite(bytes: Long) {
+            if (bytes >= CONFIG.bytesPerFrame) Thread.sleep(delayMs)
+        }
+    }
+
     /** Blocks every write until [gate] opens. */
     private class GatedChannel(delegate: FileChannel, private val gate: CountDownLatch) : DelegatingChannel(delegate) {
         override fun beforeWrite(bytes: Long) {

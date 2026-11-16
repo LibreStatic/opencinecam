@@ -11,10 +11,16 @@ import com.librestatic.opencinecam.camera.AnamorphicSqueeze
  * being shown as a dash, so the lines only ever say something the operator can act on.
  */
 
-/** Recording time [freeBytes] holds at [bitrateMbps], or null when either is unknown. */
-fun recordTimeLeftMs(freeBytes: Long?, bitrateMbps: Int): Long? =
-    if (freeBytes == null || freeBytes <= 0L || bitrateMbps <= 0) null
-    else freeBytes * 8L * 1_000L / (bitrateMbps * 1_000_000L)
+/**
+ * Recording time [freeBytes] holds at [bytesPerMinute] (the take's projection, `projectedTakeBytesPerMinute`: the
+ * encoder's real bitrate with its frame rate, audio and mode, not the 30 fps reference of the setting), or null when
+ * either is unknown. Computed in Double: bytes times 60 000 can pass a Long on a large drive.
+ */
+fun recordTimeLeftMs(freeBytes: Long?, bytesPerMinute: Long?): Long? {
+    val free = freeBytes?.takeIf { it > 0L } ?: return null
+    val perMinute = bytesPerMinute?.takeIf { it > 0L } ?: return null
+    return (free.toDouble() * 60_000.0 / perMinute).toLong()
+}
 
 /** "2 h 15 min", "3 h", "45 min", "< 1 min". Minutes round down, so the card never runs out early. */
 fun formatRecordTimeLeft(durationMs: Long): String {

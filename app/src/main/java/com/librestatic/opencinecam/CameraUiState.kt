@@ -173,6 +173,8 @@ data class CameraUiState(
     val availableStorageBytes: Long? = null,
     /** A degraded-but-recording condition the Adaptive policy keeps on screen for the rest of the take. */
     val recordingWarning: String? = null,
+    /** The take just ended is not finalised: its drive went, and it waits in the recovery journal for the drive's return. */
+    val takePendingRecovery: Boolean = false,
     val accumulationFrames: Int = 0,
     val accumulationElapsedMs: Long = 0,
     val accumulationTargetMs: Long = 0,
