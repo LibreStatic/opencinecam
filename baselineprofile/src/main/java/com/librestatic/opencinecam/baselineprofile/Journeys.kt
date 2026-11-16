@@ -35,6 +35,8 @@ fun MacrobenchmarkScope.startToCamera() {
     // A fresh install gets the system's one-time "Viewing full screen" notice over the app.
     device.wait(Until.findObject(By.res("com.android.systemui", "ok")), ShortWaitMillis)?.click()
     device.wait(Until.findObject(By.res("onboarding-skip")), ShortWaitMillis)?.click()
+    // Skipping ends at the wizard's RAW video question on a camera that can qualify; "Later" leaves it.
+    device.wait(Until.findObject(By.res("onb-raw-later")), ShortWaitMillis)?.click()
     // The gallery thumbnail on the capture chrome is a reliable "chrome is up" signal. Failing
     // here keeps a stuck journey from silently recording a profile of the wrong screen.
     check(device.wait(Until.hasObject(By.res("media-action")), ChromeWaitMillis)) { "capture chrome never showed" }
