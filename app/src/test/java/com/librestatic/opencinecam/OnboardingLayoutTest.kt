@@ -3,6 +3,9 @@
 
 package com.librestatic.opencinecam
 
+import com.librestatic.opencinecam.onboarding.onboardingCardColumns
+import com.librestatic.opencinecam.onboarding.OnboardingLayout
+import com.librestatic.opencinecam.onboarding.onboardingLayout
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

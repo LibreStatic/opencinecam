@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.camera.AudioEffectState
 import com.librestatic.opencinecam.media.audio.*
+import com.librestatic.opencinecam.metadata.audioEffectsJson
 import com.librestatic.opencinecam.storage.*
 import org.json.JSONObject
 import org.junit.Assert.*

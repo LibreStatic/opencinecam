@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
 import com.librestatic.opencinecam.camera.RawVideoConfig
+import com.librestatic.opencinecam.diagnostics.label
 import com.librestatic.opencinecam.rawvideo.RawQualificationFrameRate
 import com.librestatic.opencinecam.rawvideo.RawQualificationPhase
 import com.librestatic.opencinecam.rawvideo.RawQualificationProgress

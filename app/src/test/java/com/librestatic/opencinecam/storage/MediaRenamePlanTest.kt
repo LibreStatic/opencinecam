@@ -2,7 +2,7 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import com.librestatic.opencinecam.camera.*
 import kotlinx.serialization.json.*
 import org.junit.Assert.*

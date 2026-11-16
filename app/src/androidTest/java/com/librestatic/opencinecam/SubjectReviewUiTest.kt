@@ -8,6 +8,14 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectSessionCues
+import com.librestatic.opencinecam.subject.LocalSubjectReviewFeed
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectReviewFeed
+import com.librestatic.opencinecam.subject.SubjectReviewOperatorBar
+import com.librestatic.opencinecam.subject.SubjectReviewPick
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals

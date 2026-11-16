@@ -80,6 +80,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.camera.AfLockBehavior
 import com.librestatic.opencinecam.camera.LockState
+import com.librestatic.opencinecam.diagnostics.label
 import kotlin.math.abs
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle

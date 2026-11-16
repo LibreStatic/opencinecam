@@ -8,6 +8,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.fold.FoldDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
 import org.junit.Rule
 import org.junit.Test
 

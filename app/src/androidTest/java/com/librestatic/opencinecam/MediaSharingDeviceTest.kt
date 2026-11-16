@@ -13,6 +13,8 @@ import androidx.core.net.toUri
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.LutSignalDomain
 import com.librestatic.opencinecam.camera.LutTransformKind
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import com.librestatic.opencinecam.storage.*
 import java.io.File
 import java.util.UUID

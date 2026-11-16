@@ -43,10 +43,10 @@ import com.librestatic.opencinecam.camera.AudioEffectsSnapshot
 import com.librestatic.opencinecam.camera.AudioEffectState
 import com.librestatic.opencinecam.camera.AudioEffectObservationReader
 import com.librestatic.opencinecam.camera.requireExclusiveAgcObservation
-import com.librestatic.opencinecam.audioEffectsJson
+import com.librestatic.opencinecam.metadata.audioEffectsJson
 import com.librestatic.opencinecam.camera.DigitalRecordingGain
 import com.librestatic.opencinecam.camera.createDisabledManualAgc
-import com.librestatic.opencinecam.recordingGainJson
+import com.librestatic.opencinecam.metadata.recordingGainJson
 import com.librestatic.opencinecam.camera.SoftAgc
 import java.io.FileOutputStream
 import com.librestatic.opencinecam.media.audio.AudioCapturePath
@@ -561,7 +561,7 @@ class FlacAudioSidecarRecorder private constructor(
     private fun writeMetadata(result: AudioSidecarRecordingResult): Uri {
         val json = JSONObject()
             .put("schema", "opencinecam-audio-sidecar-v1")
-            .put("productionSlate", JSONObject(com.librestatic.opencinecam.productionSlateJson(settings.productionSlate).toString()))
+            .put("productionSlate", JSONObject(com.librestatic.opencinecam.metadata.productionSlateJson(settings.productionSlate).toString()))
             .put("audioUri", result.uri.toString())
             .put("file", result.displayName)
             .put("container", result.container)
@@ -576,7 +576,7 @@ class FlacAudioSidecarRecorder private constructor(
             // The manual sync offset (PLAN-074 decision 12) is recorded, not applied: this file is not shifted.
             .put("syncOffsetMs", settings.audioSyncOffsetMs)
             .put("captureTiming", result.captureTiming?.let(::pcmSourceTimingJson) ?: JSONObject.NULL)
-            .put("sharedTiming", captureClock?.report(null, null, null)?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_FLAC")?.let { com.librestatic.opencinecam.captureEpochJson(it) } ?: JSONObject.NULL)
+            .put("sharedTiming", captureClock?.report(null, null, null)?.copy(submittedPcmFrames = result.frames, audioStorage = "SEPARATE_FLAC")?.let { com.librestatic.opencinecam.metadata.captureEpochJson(it) } ?: JSONObject.NULL)
             .put("source", result.source)
             .put("preferredInputDeviceId", result.preferredInputDeviceId ?: JSONObject.NULL)
             .put("routedInputDeviceId", result.routedInputDeviceId ?: JSONObject.NULL)

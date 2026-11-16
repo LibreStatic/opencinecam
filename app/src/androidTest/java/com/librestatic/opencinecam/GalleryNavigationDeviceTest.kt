@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 import com.librestatic.opencinecam.storage.LocalMediaRepository
 import com.librestatic.opencinecam.storage.StillImageSaver
 import java.util.UUID

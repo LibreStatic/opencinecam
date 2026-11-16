@@ -9,6 +9,7 @@ import com.librestatic.opencinecam.camera.PictureControlRange
 import com.librestatic.opencinecam.camera.PictureControlReadback
 import com.librestatic.opencinecam.camera.ResolvedExposure
 import com.librestatic.opencinecam.camera.WhiteBalanceSelection
+import com.librestatic.opencinecam.diagnostics.lensFocalSuffix
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

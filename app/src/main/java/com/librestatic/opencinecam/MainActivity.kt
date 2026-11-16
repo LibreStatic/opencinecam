@@ -35,6 +35,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.librestatic.opencinecam.fold.FoldDisplayCoordinator
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
+import com.librestatic.opencinecam.onboarding.OnboardingStore
+import com.librestatic.opencinecam.onboarding.SplashHandoff
 import com.librestatic.opencinecam.service.CaptureStartup
 import com.librestatic.opencinecam.storage.RecordingDestinationStore
 import com.librestatic.opencinecam.ui.theme.AppTheme

@@ -6,6 +6,10 @@ import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.FaceDetectGraph
 import com.librestatic.opencinecam.camera.FramingEdge
 import com.librestatic.opencinecam.camera.SubjectFramingStatus
+import com.librestatic.opencinecam.subject.faceDetectGraphFor
+import com.librestatic.opencinecam.subject.operatorExitArrow
+import com.librestatic.opencinecam.subject.outOfFrameCapable
+import com.librestatic.opencinecam.subject.subjectReturnArrow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -13,7 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.GallerySettings
 import com.librestatic.opencinecam.ProductionSlateSettings
 import com.librestatic.opencinecam.ProxySettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch

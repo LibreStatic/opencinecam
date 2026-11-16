@@ -4,6 +4,7 @@
 package com.librestatic.opencinecam
 
 import androidx.compose.runtime.saveable.SaverScope
+import com.librestatic.opencinecam.onboarding.OnboardingStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame

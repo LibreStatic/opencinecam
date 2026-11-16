@@ -4,7 +4,7 @@ package com.librestatic.opencinecam.storage
 import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.captureFileStem
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import kotlinx.serialization.json.*
 import org.json.JSONObject
 import com.librestatic.opencinecam.CaptureLocationSnapshot

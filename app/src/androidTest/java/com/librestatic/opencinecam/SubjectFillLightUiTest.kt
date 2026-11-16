@@ -9,6 +9,14 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.test.platform.app.InstrumentationRegistry
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.subject.FillLightNotice
+import com.librestatic.opencinecam.subject.FillLightOutput
+import com.librestatic.opencinecam.subject.FillLightPreset
+import com.librestatic.opencinecam.subject.LocalSubjectFillLightOutput
+import com.librestatic.opencinecam.subject.SubjectDisplayScreen
+import com.librestatic.opencinecam.subject.SubjectFillLightSettings
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

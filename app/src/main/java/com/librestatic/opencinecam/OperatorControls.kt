@@ -39,6 +39,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.fold.DisplayCapability
+import com.librestatic.opencinecam.fold.DisplayOperation
+import com.librestatic.opencinecam.fold.DisplaySessionPhase
+import com.librestatic.opencinecam.fold.FoldDisplayCoordinator
+import com.librestatic.opencinecam.fold.FoldDisplayState
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.ui.viewfinder.chromePanel
 

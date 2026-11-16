@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.platform.app.InstrumentationRegistry
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
 import com.librestatic.opencinecam.service.CaptureService
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*

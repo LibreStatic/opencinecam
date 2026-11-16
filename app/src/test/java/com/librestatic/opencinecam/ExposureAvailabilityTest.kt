@@ -5,6 +5,10 @@ import android.util.Size
 import com.librestatic.opencinecam.camera.Camera2CameraDescriptor
 import com.librestatic.opencinecam.camera.ExposureCapabilities
 import com.librestatic.opencinecam.camera.ExposureMode
+import com.librestatic.opencinecam.diagnostics.AppFeature
+import com.librestatic.opencinecam.diagnostics.AppFeatureFinding
+import com.librestatic.opencinecam.diagnostics.AppFeatureStatus
+import com.librestatic.opencinecam.diagnostics.auditCameraCapabilities
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

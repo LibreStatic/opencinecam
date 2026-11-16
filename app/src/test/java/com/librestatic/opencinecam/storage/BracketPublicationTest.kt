@@ -5,7 +5,7 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.CaptureNameSnapshot
 import com.librestatic.opencinecam.CaptureNamingSettings
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import java.io.IOException
 import kotlinx.serialization.json.*
 import org.junit.Assert.*

@@ -2,8 +2,8 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.ProxySettings
-import com.librestatic.opencinecam.parseProductionSlateJson
-import com.librestatic.opencinecam.productionSlateJson
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.productionSlateJson
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.serialization.json.*

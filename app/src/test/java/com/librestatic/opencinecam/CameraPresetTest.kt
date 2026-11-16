@@ -2,6 +2,10 @@
 package com.librestatic.opencinecam
 
 import com.librestatic.opencinecam.camera.*
+import com.librestatic.opencinecam.fold.SubjectDisplayMode
+import com.librestatic.opencinecam.fold.SubjectDisplaySettings
+import com.librestatic.opencinecam.fold.SubjectPreviewGuide
+import com.librestatic.opencinecam.fold.SubjectSlateField
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test

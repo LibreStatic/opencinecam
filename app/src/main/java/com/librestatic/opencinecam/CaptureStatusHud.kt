@@ -57,6 +57,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.librestatic.opencinecam.service.CaptureService
+import com.librestatic.opencinecam.subject.OutOfFrameHudChip
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import androidx.compose.ui.text.rememberTextMeasurer

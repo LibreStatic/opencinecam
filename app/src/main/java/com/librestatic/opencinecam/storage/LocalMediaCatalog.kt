@@ -2,10 +2,10 @@
 package com.librestatic.opencinecam.storage
 
 import com.librestatic.opencinecam.GallerySettings
-import com.librestatic.opencinecam.HARDWARE_TRUTH_SCHEMA
+import com.librestatic.opencinecam.metadata.HARDWARE_TRUTH_SCHEMA
 import com.librestatic.opencinecam.GalleryMediaKind
 import com.librestatic.opencinecam.ProductionSlateSettings
-import com.librestatic.opencinecam.parseProductionSlateJson
+import com.librestatic.opencinecam.metadata.parseProductionSlateJson
 import java.util.Locale
 import java.util.UUID
 import kotlinx.serialization.json.*

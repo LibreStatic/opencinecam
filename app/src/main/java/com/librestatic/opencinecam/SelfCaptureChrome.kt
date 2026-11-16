@@ -21,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.librestatic.opencinecam.diagnostics.facingLabel
+import com.librestatic.opencinecam.diagnostics.lensFocalSuffix
+import com.librestatic.opencinecam.fold.LocalFoldDisplayCoordinator
 import com.librestatic.opencinecam.service.CaptureService
 import com.librestatic.opencinecam.ui.theme.LocalCineColors
 import java.util.Locale

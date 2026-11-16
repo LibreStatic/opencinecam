@@ -11,6 +11,7 @@ import com.librestatic.opencinecam.camera.*
 import com.librestatic.opencinecam.storage.*
 import com.librestatic.opencinecam.media.audio.AudioBitDepth
 import com.librestatic.opencinecam.media.audio.AudioSourceSelection
+import com.librestatic.opencinecam.metadata.captureEpochJson
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
