@@ -2226,7 +2226,13 @@ class CaptureService : Service() {
     }
 
     // OCC-PLAN-071 RAW video. Main-thread state unless marked otherwise.
-    private val rawRecorder by lazy { RawVideoRecorder() }
+    private val rawRecorder by lazy {
+        RawVideoRecorder().also { recorder -> recorder.onAbandonedTakeFinished = { result -> mainHandler.post { if (!serviceDestroyed) finishAbandonedRawTake(result) } } }
+    }
+
+    /** Whether the RAW take [finishRawTake] reported as stalled was on a drive, for [finishAbandonedRawTake]. */
+    private var stalledRawTakeOnDrive = false
+
     /** Serialises arming, disarming, take start and take stop (which joins the writer) off main. */
     private val rawControl = java.util.concurrent.Executors.newSingleThreadExecutor { task -> Thread(task, "occ-raw-control") }
     private val rawQualificationStore by lazy { RawVideoQualificationStore.forContext(this) }
@@ -3003,6 +3009,30 @@ class CaptureService : Service() {
         if (!rawControlExecute(finish)) finish.run()
     }
 
+    /**
+     * Main: a stalled writer ended on its own and finalised its take ([RawVideoRecorder.onAbandonedTakeFinished]).
+     * Replaces the "still being written" message with the saved text, without disturbing a take that began since.
+     */
+    private fun finishAbandonedRawTake(result: RawTakeResult) {
+        android.util.Log.i("CaptureService", "RAW stalled take ${result.displayName} finalised late: uri=${result.uri} " +
+            "frames=${result.framesWritten} captured=${result.framesCaptured} error=${result.outputError}")
+        if (result.uri == null) {
+            // Not published: for a drive take the journalled file is now relinquished, so a pass can repair it.
+            if (result.outputError != null && stalledRawTakeOnDrive) queueRecordingRecovery("a stalled RAW take on a drive was left pending")
+            return
+        }
+        val stalledText = getString(R.string.raw_video_writer_stalled)
+        cameraState.update { state ->
+            if (state.phase != CameraUiPhase.PREVIEWING && state.phase != CameraUiPhase.SAVED) return@update state
+            // Only while the stalled take's message still shows: the operator has not moved on to anything else.
+            val message = state.message?.takeIf { it.contains(stalledText) } ?: return@update state.copy(lastSavedUri = result.uri.toString())
+            val saved = getString(R.string.raw_video_saved, result.framesWritten,
+                String.format(java.util.Locale.getDefault(), "%.1f", result.mediaDurationNs / 1e9)) + rawSavedAudioSuffix(result)
+            // The stop reason ("Take stopped: …") stays; only the outcome changes.
+            state.copy(phase = CameraUiPhase.SAVED, lastSavedUri = result.uri.toString(), message = message.replace(stalledText, saved))
+        }
+    }
+
     /** Main: publishes the end of the take, with its reason when it ended early. */
     private fun finishRawTake(result: RawTakeResult?, engineReason: String?) {
         val session = rawTake
@@ -3017,9 +3047,11 @@ class CaptureService : Service() {
         submitCaptureState(stateCommands.takeEnded())
         val reason = rawTakeEndReason(result?.reason, engineReason, null)
         val onDrive = session.destination.destination is RecordingDestination.UsbFolder
+        stalledRawTakeOnDrive = result?.writerStalled == true && onDrive
         // A drive take its output relinquished stays journalled; a pass of a drive that mounted again meanwhile skipped
         // it while it was live, so queue one now instead of waiting for the next mount, as relinquishTake does.
-        if (onDrive && result != null && result.uri == null && result.outputError != null) {
+        // A stalled writer is still running and keeps the take live in this process, so a pass would only skip it.
+        if (onDrive && result != null && result.uri == null && result.outputError != null && !result.writerStalled) {
             queueRecordingRecovery("a RAW take on a drive was left pending")
         }
         // PLAN-072 Delivery 4: the volume event and a writer's ENODEV both end here with the drive's reason, once per take.
@@ -3034,6 +3066,7 @@ class CaptureService : Service() {
         val outcome = when {
             result?.uri != null -> getString(R.string.raw_video_saved, result.framesWritten,
                 String.format(java.util.Locale.getDefault(), "%.1f", result.mediaDurationNs / 1e9)) + rawSavedAudioSuffix(result)
+            result?.writerStalled == true -> getString(R.string.raw_video_writer_stalled)
             // A drive take left unfinished stays journalled on the drive and is repaired when the drive is mounted again.
             result == null || result.framesWritten > 0 || result.outputError != null ->
                 getString(if (onDrive) R.string.raw_video_not_finalised_drive else R.string.raw_video_not_finalised)
